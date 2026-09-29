@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Sideways availability failover must skip a disabled executor
-status: todo
+status: done
 template: issue
 created_at: 2026-09-28T23:16:57.820Z
-updated_at: "2026-09-28T23:26:07.308Z"
+updated_at: "2026-09-28T23:50:54.994Z"
 feature_id: B21
 
 ac_altitude: task-local
@@ -40,15 +40,15 @@ Evidence (0982 session, `packages/app/tests/services/agent-service.test.ts`): a 
 
 ### Requirements
 
-- [ ] R1. The sideways availability failover candidate filter excludes disabled executors (`executorDisabled`).
-- [ ] R2. The failover's semantics beyond that filter are unchanged: same tier, different binary, not the failed executor, not an exhausted binary, not excluded, and array order.
-- [ ] R3. A regression test pins a disabled same-tier candidate being skipped (and a live same-tier candidate still being chosen), so the hole cannot reopen.
+- [x] R1. The sideways availability failover candidate filter excludes disabled executors (`executorDisabled`).
+- [x] R2. The failover's semantics beyond that filter are unchanged: same tier, different binary, not the failed executor, not an exhausted binary, not excluded, and array order.
+- [x] R3. A regression test pins a disabled same-tier candidate being skipped (and a live same-tier candidate still being chosen), so the hole cannot reopen.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — A disabled same-tier, different-binary executor is never dispatched on a resource-exhaustion failover (req: R1)
-- [ ] AC2 — An eligible same-tier candidate is still chosen, in array order, and the existing failover/exhaustion tests pass unchanged (req: R2)
-- [ ] AC3 — The regression test fails against the current filter and passes with the fix (req: R3)
+- [x] AC1 — A disabled same-tier, different-binary executor is never dispatched on a resource-exhaustion failover (req: R1)
+- [x] AC2 — An eligible same-tier candidate is still chosen, in array order, and the existing failover/exhaustion tests pass unchanged (req: R2)
+- [x] AC3 — The regression test fails against the current filter and passes with the fix (req: R3)
 
 ### Q&A
 
@@ -64,9 +64,9 @@ Pick the fixture agents so the sideways filter is actually reachable: both candi
 
 ### Plan
 
-- [ ] Add the `executorDisabled` term to the sideways filter.
-- [ ] Add the regression test (disabled candidate never dispatched; live candidate still chosen) and confirm it fails before the fix.
-- [ ] Run `(cd packages/app && bun test tests/services/agent-service.test.ts tests/services/executor-tier.test.ts tests/services/fleet-service.test.ts)` and `bun run spur-check`.
+- [x] Add the `executorDisabled` term to the sideways filter.
+- [x] Add the regression test (disabled candidate never dispatched; live candidate still chosen) and confirm it fails before the fix.
+- [x] Run `(cd packages/app && bun test tests/services/agent-service.test.ts tests/services/executor-tier.test.ts tests/services/fleet-service.test.ts)` and `bun run spur-check`. Result 2026-09-28: focused suites 265 pass / 0 fail; `bun run spur-check` lint + typecheck + 49 rules pass, tests 9391 pass / 1 fail — the one failure is `apps/cli/tests/commands/feature.test.ts` fixture `git init`, blocked by the agent sandbox (nested `.git/` write denied), file untouched by this task.
 
 ### Root Cause
 
@@ -91,15 +91,41 @@ The rule is enforced where the extracted helper is used, not at this inline filt
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| Change (`file:line`) | Rationale |
+|---|---|
+| `packages/app/src/services/agent-service.ts:2031` | The sideways availability failover filter now starts with `!executorDisabled(e)`, matching the fallback-tier path's `cheapestEligibleExecutors`. All other predicates and array order unchanged. |
+| `packages/app/tests/services/agent-service.test.ts:3160` | Regression: a disabled same-tier different-binary executor listed first is skipped; the first live same-tier candidate (`claude`) wins over a later one. Fails before the fix (`Received: ["pi", "codex"]`). |
 
 ### Testing
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/services/agent-service.ts:2031` `!executorDisabled(e)` in the sideways availability failover filter; `packages/app/tests/services/agent-service.test.ts:3160` |
+| R2 | MET | Other predicates untouched at `packages/app/src/services/agent-service.ts:2031`; existing `packages/app/tests/services/agent-service.test.ts:3108` still dispatches `['pi', 'claude', 'codex']`; `(cd packages/app && bun test tests/services/agent-service.test.ts tests/services/executor-tier.test.ts)` → 229 pass / 0 fail |
+| R3 | MET | `packages/app/tests/services/agent-service.test.ts:3160` failed before the fix (`Received: ["pi", "codex"]`) and passes after |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | `packages/app/tests/services/agent-service.test.ts:3160` disabled `codex` same-tier candidate is never dispatched |
+| AC2 | MET | test | `packages/app/tests/services/agent-service.test.ts:3160` first live candidate `claude` chosen over later `gemini`; `packages/app/tests/services/agent-service.test.ts:3108` unchanged and passing; no removed `expect(` lines |
+| AC3 | MET | test | `packages/app/tests/services/agent-service.test.ts:3160` red on the pre-fix filter, green after |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
+| P4 | residual-sweep | — | blocking=0 deferrable=0 advisory=2 housekeeping=0 |
 
 ### References
 
@@ -109,3 +135,8 @@ The rule is enforced where the extracted helper is used, not at this inline filt
 - Related tasks: 0890 (availability ownership rule, feature B6), 0965 (extracted `executor-tier.ts`, B21), 0982 (routed the remaining reads through `executorDisabled`, B21 — commit `cd2f0572f`; this hole was its review finding P3)
 
 ### History
+
+- 2026-09-28T23:43:11.326Z todo → wip (system)
+- 2026-09-28T23:50:54.658Z wip → testing (system)
+- 2026-09-28T23:50:54.994Z testing → done (system)
+

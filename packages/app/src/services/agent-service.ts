@@ -2028,6 +2028,7 @@ export class AgentService {
                 const sideways = executors.filter((e) => {
                     const canonical = resolveAgentName(e.agent);
                     return (
+                        !executorDisabled(e) &&
                         e.name !== fromExecutor &&
                         getExecutorTier(e) === failedTier &&
                         canonical !== failedCanonical &&

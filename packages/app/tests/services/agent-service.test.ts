@@ -3156,6 +3156,44 @@ describe('AgentService automatic tier escalation (0407)', () => {
         expect(dispatchedAgents).toEqual(['pi', 'claude', 'codex']);
         expect(errors.some((e) => e.includes('Failover:'))).toBe(true);
     });
+
+    test('0995: sideways exhaustion failover skips a disabled same-tier executor and keeps array order', async () => {
+        const config: AgentConfig = {
+            executors: [
+                { name: 'std-exec', agent: 'pi', tier: 'standard', disabled: false },
+                // Disabled, same tier, different binary, first in order: must never be dispatched.
+                { name: 'std-disabled', agent: 'codex', tier: 'standard', disabled: true },
+                { name: 'std-live', agent: 'claude', tier: 'standard', disabled: false },
+                { name: 'std-live-later', agent: 'gemini', tier: 'standard', disabled: false },
+            ],
+        };
+        const svc = makeService({}, captureOutput().output, config);
+        const results: AgentRunResult[] = [
+            makeRunResult({ exitCode: 1, stderr: 'rate limit exceeded' }),
+            makeRunResult({ exitCode: 0 }),
+        ];
+        let callIndex = 0;
+        const runPromptCommand = mock((_agent: string) =>
+            Promise.resolve(results[Math.min(callIndex++, results.length - 1)] as AgentRunResult),
+        );
+        const deps = {
+            runner: { runPromptCommand } as unknown as AgentRunDeps['runner'],
+            detector: {
+                detectOne: mock(() =>
+                    Promise.resolve({ name: 'pi', installed: true, version: '1.0.0', channels: [], error: null }),
+                ),
+            } as unknown as AgentRunDeps['detector'],
+            doctorRunner: {
+                runOne: mock(() => Promise.resolve(mockDoctorResult({ usable: true }))),
+            } as unknown as AgentRunDeps['doctorRunner'],
+        };
+
+        const code = await svc.run('Implement the task', { agent: 'auto', stage: 'implement', json: false }, deps);
+
+        expect(code).toBe(0);
+        // The first eligible live same-tier candidate in array order wins; codex never runs.
+        expect(runPromptCommand.mock.calls.map((c) => c[0] as string)).toEqual(['pi', 'claude']);
+    });
 });
 
 // ---------------------------------------------------------------------------
