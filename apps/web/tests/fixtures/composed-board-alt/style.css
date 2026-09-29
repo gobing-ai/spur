@@ -1,0 +1,8 @@
+/* Stylesheet declared by the SECOND project's module (task 0992 R2, AC3).
+   Same class name and path as the first project's stylesheet, a different colour: if the Board
+   reused the first project's catalog or served a stale stylesheet, the computed colour would not
+   change when the origin does. */
+.composed-probe {
+    color: rgb(10, 150, 60);
+    padding: 8px;
+}

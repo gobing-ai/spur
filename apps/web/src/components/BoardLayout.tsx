@@ -24,19 +24,16 @@ export default function BoardLayout() {
     const location = useLocation();
     const { registry, hostDiagnostics } = useBoardRegistry();
 
-    // Resolve active module from the current route segment
-    // Resolve module from the segment immediately after /board/, so both
-    // /board/tasks and /board/tasks/0016 resolve to the 'tasks' module.
+    // Resolve the active module by its ROUTE — the same key the sidebar links and the router
+    // mount with. Built-in routes are their bare id (`tasks`); downstream modules are mounted one
+    // segment deeper at `/board/modules/<id>`, so the route is reassembled from that segment.
     const activeModule = (() => {
         const parts = location.pathname.split('/');
         const boardIdx = parts.indexOf('board');
         const seg = boardIdx >= 0 ? parts[boardIdx + 1] : undefined;
-        // Downstream modules are mounted at /board/modules/<id>; the segment after /board/ is
-        // 'modules', so the native route is reassembled from the following segment.
-        if (seg === 'modules' && parts[boardIdx + 2]) {
-            return registry.getModule(`modules/${parts[boardIdx + 2]}`);
-        }
-        return registry.getModule(seg ?? '');
+        if (!seg) return undefined;
+        const route = seg === 'modules' && parts[boardIdx + 2] ? `modules/${parts[boardIdx + 2]}` : seg;
+        return registry.modules.find((mod) => mod.route === route);
     })();
 
     useLayoutEffect(() => {

@@ -1,4 +1,6 @@
 import { describe, expect, test } from 'bun:test';
+import { readFile } from 'node:fs/promises';
+import { parse } from 'yaml';
 import { z } from 'zod';
 import {
     BOARD_MODULE_ID_PATTERN,
@@ -164,5 +166,52 @@ describe('cross-declaration rules (R2)', () => {
         expect(isBoardModuleConfigError(loaderFailure)).toBe(true);
         expect(isBoardModuleConfigError(new Error('Failed to parse project config: tabs'))).toBe(false);
         expect(isBoardModuleConfigError(new BoardModuleConfigError(0, 'kanban', 'was not found'))).toBe(true);
+    });
+});
+
+// Task 0992 R5 — the published author guide's declaration example is a fixture of this test, so a
+// described shape that the schema would reject cannot ship as guidance.
+
+/** Repo-relative path to the published authoring guide. */
+const AUTHORING_GUIDE = new URL('../../../docs/design/downstream-board-modules.md', import.meta.url);
+
+/** The guide's fenced YAML blocks explicitly marked as the shipped declaration contract. */
+function authoringExamples(markdown: string): string[] {
+    return [...markdown.matchAll(/```yaml\n([\s\S]*?)```/g)]
+        .map((match) => match[1] ?? '')
+        .filter((block) => block.includes('# board-modules-authoring-example'));
+}
+
+describe('published authoring examples (R5)', () => {
+    test('the guide’s declaration example parses against the shipped schema and host rules', async () => {
+        const guide = await readFile(AUTHORING_GUIDE, 'utf8');
+        const blocks = authoringExamples(guide);
+        expect(blocks).toHaveLength(1);
+
+        const config = spurConfigSchema.parse(parse(blocks[0] ?? ''));
+        const modules = config.bootstrap?.modules ?? [];
+        expect(modules).toHaveLength(2);
+        expect(modules[0]).toMatchObject({
+            id: 'team-board',
+            type: 'react',
+            directory: 'board/team-board/dist',
+            entry: 'index.js',
+            styles: ['index.css'],
+            order: 10,
+            enabled: true,
+        });
+        expect(modules[1]).toMatchObject({
+            id: 'docs',
+            type: 'iframe',
+            url: 'https://docs.example.test/',
+            order: 20,
+            enabled: true,
+        });
+        // The published example must also clear the cross-declaration rules against the host inventory.
+        expect(validateBoardModuleDeclarations(modules, reserved)).toBe(modules);
+    });
+
+    test('the published default is an empty module list', () => {
+        expect(parseBoardModuleDeclarations(undefined)).toEqual([]);
     });
 });

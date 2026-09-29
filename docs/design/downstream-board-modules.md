@@ -12,7 +12,7 @@ tags: [contract, A8, web, config]
 
 ## 1. Issue and scope
 
-The installed Board discovers only built-in modules through its build-time Vite glob. Downstream projects need explicit project-owned extensions without modifying Spur's checkout. Native React contributions are the selected primary direction; an iframe adapter can put existing embeddable applications into the same navigation. This design is accepted and unimplemented. See [A8](../features/A8_downstream-spur-board-modules-and-embedded-resources.md), [the investigation](../plans/2026-09-27-dynamic-board-modules-brainstorm.md), and [ADR-128](../00_ADR.md#adr-128-project-owned-board-contributions-share-one-host-registry).
+The installed Board discovers only built-in modules through its build-time Vite glob. Downstream projects need explicit project-owned extensions without modifying Spur's checkout. Native React contributions are the selected primary direction; an iframe adapter can put existing embeddable applications into the same navigation. This design is accepted and implemented by feature A8 (tasks 0988–0992); the authored surfaces below are the shipped contract, and their proof status is recorded in §5. See [A8](../features/A8_downstream-spur-board-modules-and-embedded-resources.md), [the investigation](../plans/2026-09-27-dynamic-board-modules-brainstorm.md), and [ADR-128](../00_ADR.md#adr-128-project-owned-board-contributions-share-one-host-registry).
 
 This scope includes compiled React libraries and iframe URLs. It excludes server entry imports, external manifests, process management/proxying, iframe-directory hosting, automatic cross-document messaging, simultaneous split views, and live configuration replacement. One selected module occupies the Board workspace at a time. UI rules belong to [root DESIGN.md](../../DESIGN.md#product-ui--downstream-board-modules-proposed).
 
@@ -50,19 +50,17 @@ bootstrap:
       name: Catalog
       icon: "📦"
       type: react
-      web:
-        directory: ./board/catalog/dist
-        entry: ./index.js
-        styles: [./index.css]
+      directory: board/catalog/dist
+      entry: index.js
+      styles: [index.css]
     - id: documentation
       name: Documentation
       icon: "📚"
       type: iframe
-      source:
-        url: https://docs.example.test/
+      url: https://docs.example.test/
 ```
 
-These examples are proposed and are not accepted by today's schema. `docs.example.test` is an illustrative URL, not a verified embeddable resource.
+This is the shipped flat declaration shape: type-specific fields sit directly on the declaration (there is no nested `web:` or `source:` object), and every declaration is `.strict()`, so an unknown field is a configuration error. `docs.example.test` is an illustrative URL, not a verified embeddable resource. The live declaration contract, with the examples a test parses, is in §6.
 
 ### 4.1 Shared fields and validation
 
@@ -86,7 +84,7 @@ export interface BoardModuleContribution {
 
 The entry exports `webModule` conforming to this shape. Metadata is exclusively in YAML. TSX is authoring syntax; the browser receives compiled ESM. A contribution exports components and does not call createRoot. Keep the public contract derived from existing WebModule fields rather than exposing private Board contexts.
 
-Publish this declaration as a proposed **type-only** `@gobing-ai/spur/board` package export. It is not a runtime SDK. The implementation should generate its declaration artifact from the authoring type, include it in the CLI package's exports/files, and prove resolution from a separately installed downstream fixture. React type imports are supplied by the consumer's documented compatible development dependencies; no React value import is introduced into the CLI or plugin standalone surfaces.
+Publish this declaration as the shipped **type-only** `@gobing-ai/spur/board` package export. It is not a runtime SDK. The implementation generates its declaration artifact from the authoring type, includes it in the CLI package's exports/files, and proves resolution from a separately installed downstream fixture. React type imports are supplied by the consumer's documented compatible development dependencies; no React value import is introduced into the CLI or plugin standalone surfaces.
 
 web.directory resolves relative to the project root selected by the existing serve invocation, independent of shell cwd. entry and styles resolve inside that canonical directory; entry is required and styles defaults to an empty list. Reject absolute/escaping entry/style paths and traversal or symlink escape at request time. A declared root may point to a separate built asset tree; it is an explicit trusted configuration choice, not permission to expose the entire project. JS responses have correct MIME types; missing JS/CSS/chunks return real errors rather than HTML. In v1 use no-store for these project-owned module assets and require restart/reload after a rebuild; immutable asset generations are unnecessary without hot replacement.
 
@@ -120,8 +118,127 @@ No downstream server entry is required or imported. Native components may call e
 | Iframe-only catalog | Independent runtimes and minimal loader | Weaker native shell/context/right-panel integration | Rejected as the sole rendering model |
 | Project-specific Board build | One build graph naturally shares dependencies | Portable build kit and full Board rebuild for module changes | Fallback if native distribution proof fails |
 
-First prove a separately built hook-bearing native module in the actual installed CLI Board, including another local React installation, scoped styles/chunks, deep links, an optional right panel, incompatible exports and error containment. Use a build-known adapter injected only into a temporary test build, independently served fixture ESM and the actual installed renderer; this proof must not depend on a not-yet-built generic config/catalog loader. Do not ship test routes or adapters in the production package. Prove the exported authoring type from that installed package. Also exercise an owned URL app that permits framing, an app that rejects framing, external-open behavior, child navigation and mobile/focus/scrolling. A denied frame must not be misreported as ready; cross-origin failure detection is not promised. Neither frontend proof has been run yet.
+First prove a separately built hook-bearing native module in the actual installed CLI Board, including another local React installation, scoped styles/chunks, deep links, an optional right panel, incompatible exports and error containment. This ran as the 0988 browser proof (build-known adapter in a temporary proof build, independently served fixture ESM, the actual installed renderer); no test route or adapter ships in the production package, and the exported authoring type resolves from the installed package. The owned URL app that permits framing, the app that rejects framing, external-open behavior, child navigation and mobile/focus/scrolling ran as the 0988 frame proof; a denied frame is never misreported as ready.
 
-Only after those proofs should production config/catalog, restricted assets and browser composition be implemented through the normal task pipeline. Authoring docs and portable config examples must be updated alongside implemented surfaces; until then, examples remain proposed. Live data bridges, split views and module process lifecycle await explicit requirements.
+The composition chain `composeBoardModules` -> `BoardRegistryProvider` -> router `ModuleErrorBoundary` -> `FramedResource` is now driven end to end in real Chromium against a production-shaped Board build served with a real catalog and real `/modules/:id/*` asset trees (task 0992, `apps/web/tests/modules/composed-board-browser.test.ts`) — the 0988/0990/0991 slices had proven it only by unit tests or through a route-identity adapter. That proof also fixes a real defect it exposed: the shell resolved the active module by registry id while downstream entries carry `route: modules/<id>`, so their right panel and framed-workspace treatment never activated on the real path.
+
+Only after those proofs are the production config/catalog, restricted assets and browser composition implemented. Authoring docs and portable config examples are published alongside the implemented surfaces (§6); the project config seed carries the empty default.
 
 Sources: [React shared-instance requirement](https://react.dev/warnings/invalid-hook-call-warning#duplicate-react), [Vite library mode](https://vite.dev/guide/build#library-mode), [import maps](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/script/type/importmap), [CSP frame-ancestors](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/frame-ancestors), [postMessage](https://developer.mozilla.org/en-US/docs/Web/API/Window/postMessage), [iframe event behavior](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/iframe#error_and_load_event_behavior).
+
+## 6. Authoring guide
+
+Everything an author needs to ship a project Board module. Every fact here is one of the shipped
+surfaces: declarations in `packages/config/src/board-modules.ts`, the loader in
+`apps/web/src/modules/compose.ts`, the runtime manifest in `apps/web/src/modules/runtime/manifest.ts`
+and the frame adapter in `apps/web/src/components/FramedResource.tsx`. The examples below are parsed
+by `packages/config/tests/board-modules.test.ts`, so they cannot drift from the schema.
+
+### 6.1 The declaration contract (opt in)
+
+Add declarations under `bootstrap.modules` in the project's `.spur/config.yaml`. A fresh project
+seeds `modules: []`: the default is built-ins only, and nothing is rendered until you declare it.
+Both variants accept `id`, `name`, `icon`, `sidebarLabel` (optional), `description` (optional),
+`order` (optional) and `enabled` (optional, defaults `true`). Unknown fields, `id`s that do not match
+`^[a-z][a-z0-9-]*$`, duplicate ids and ids/routes that collide with a host module or a retired route
+are configuration errors — including for `enabled: false` declarations.
+
+```yaml
+# board-modules-authoring-example
+bootstrap:
+  modules:
+    - id: team-board
+      name: Team board
+      icon: "🧭"
+      type: react
+      directory: board/team-board/dist
+      entry: index.js
+      styles: [index.css]
+      order: 10
+    - id: docs
+      name: Documentation
+      icon: "📚"
+      type: iframe
+      url: https://docs.example.test/
+      order: 20
+```
+
+A `react` declaration uses `directory` (project-relative asset directory), `entry` (project-relative
+entry inside it) and optional `styles` (project-relative stylesheets applied in order). An `iframe`
+declaration uses `url` instead. A declaration may not carry the other variant's fields.
+
+### 6.2 The native contribution
+
+The **only** authoring export is `webModule`, typed against the declaration-only
+`@gobing-ai/spur/board` export of the installed package:
+
+```ts
+import type { BoardModuleContribution } from '@gobing-ai/spur/board';
+
+export const webModule: BoardModuleContribution = {
+    apiVersion: 1,
+    component: MyTool,
+    rightPanelComponent: MyPanel, // optional
+};
+```
+
+`apiVersion` must be `1` and `component` must be a function; anything else is an `export`/`version`
+diagnostic on the module's own route rather than a thrown error. Import React through the bare
+specifiers the Board advertises, never a bundled copy — the Board resolves them to its own instances
+via the document import map.
+
+### 6.3 Vite library setup
+
+Build an ESM library with an explicit CSS entry. Externalize exactly the bare specifiers from the
+installed `web/board-runtime.json` (`react`, `react/jsx-runtime`, `react/jsx-dev-runtime`,
+`react-dom`, `react-dom/client`, `react-router`, `react-router/dom`); there is no wildcard, so bundling
+any other dependency into your output is the supported path. Non-JS assets referenced from CSS need
+their own emitted files. Scope your CSS — no global resets, no shell-wide output — and prefer classes
+you own.
+
+### 6.4 Runtime and versions
+
+The shipped host advertises `board-runtime.json` at the Board distribution root: `manifestVersion: 1`,
+`catalogVersion: 1`, `contributionApiVersion: 1`, the React / React DOM / React Router versions and the
+explicit `imports` map. A project whose enabled modules need a host with a different
+`contributionApiVersion` fails **before the server listens**, not at render time.
+
+### 6.5 Paths and transport
+
+`directory`, `entry` and `styles` resolve relative to the selected project root (independent of shell
+cwd) and must stay inside their module directory; absolute paths, traversal and symlink escapes are
+refused. Assets are served read-only under `/modules/<id>/*` with correct MIME types and `no-store`; a
+missing asset is a real 404, never the Board document. There is **no server entry**: the Board never
+imports or starts downstream backend code.
+
+### 6.6 Trust and style boundaries
+
+A declared module is trusted, compiled browser code: importing its entry necessarily evaluates its
+top-level code, so declare only code you trust. Beyond that, failures are contained — a module that
+fails to load or throws while rendering is replaced by a diagnostic on its own route, and the built-in
+modules stay navigable. The Board shares its React instance but not its context objects: define your
+own context and do not assume host context is available.
+
+### 6.7 Frame limits
+
+An `iframe` `url` must be an absolute `http(s)` URL without embedded credentials. Spur neither starts
+nor proxies the framed application: browser framing policy (`frame-ancestors` / `X-Frame-Options`), the
+host `frame-src`, mixed-content, cookie and popup rules all still apply, and a cross-origin app cannot
+be forced to embed. The adapter frames the URL verbatim, sets no `sandbox`, establishes no messaging
+bridge and **never treats the frame's `load` event as readiness**. Switching away unmounts the frame;
+the child owns its own navigation and state.
+
+### 6.8 Restart, migration and troubleshooting
+
+- **Restart to change selection.** Config and native builds are read once before the listener opens.
+  After editing `.spur/config.yaml` or rebuilding a module, restart `spur serve` and reload the browser;
+  there is no watcher or live replacement in v1.
+- **Disabled declarations load nothing.** `enabled: false` skips the module before any IO, but the
+  declaration is still validated, so an ambiguous or colliding id is still an error.
+- **Migrating from an earlier draft.** The shipped shape is flat: use `directory`/`entry`/`styles` and
+  `url` directly; there is no nested `web:` or `source:` object.
+- **A module does not appear.** Check the sidebar for a diagnostic on its route; the usual causes are a
+  `webModule` export that is missing or whose `apiVersion`/`component` is wrong, an entry/style that
+  did not load, or a catalog that could not be read (shown as a banner above the workspace).
+- **A frame stays blank.** The framed app refused framing. The always-available **Open externally**
+  link is the supported fallback; the Board does not retry, proxy or relax the child's policy.

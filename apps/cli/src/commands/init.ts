@@ -331,6 +331,9 @@ export function registerInitCommand(program: Command, context: CliContext, optio
                 '    enabled: false',
                 '  scheduler:',
                 '    enabled: false',
+                '  # Downstream Board modules — opt-in, empty means built-ins only.',
+                '  # See docs/design/downstream-board-modules.md for the react/iframe schema.',
+                '  modules: []',
             ].join('\n')}\n`;
 
             await context.fs.ensureDir(join(context.cwd, CLI_CONFIG.configDir));

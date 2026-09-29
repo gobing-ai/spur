@@ -1,0 +1,7 @@
+/* Stylesheet declared alongside the native module (task 0992 R1).
+   The Board loads declared styles BEFORE the entry is displayed, so the computed colour is
+   observable on the first paint of the contribution. */
+.composed-probe {
+    color: rgb(20, 90, 200);
+    padding: 8px;
+}

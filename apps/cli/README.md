@@ -113,6 +113,33 @@ spur status
 
 Every command supports `--json` for machine-readable output.
 
+### Extending the Spur Board
+
+A project can add its own Board modules — a compiled React tool or an embedded URL app — without
+editing this package. An installed Board reads them from a fresh project's `.spur/config.yaml`:
+
+```yaml
+bootstrap:
+  modules:
+    - id: team-board
+      name: Team board
+      icon: "🧭"
+      type: react
+      directory: board/team-board/dist
+      entry: index.js
+      styles: [index.css]
+    - id: docs
+      name: Documentation
+      icon: "📚"
+      type: iframe
+      url: https://docs.example.test/
+```
+
+`spur init` seeds `modules: []` (built-ins only); change selection with a config edit, then restart
+`spur serve` and reload. The full authoring contract — the declaration union, the
+`@gobing-ai/spur/board` type export, the Vite library setup and the frame/trust limits — is in the
+[downstream Board modules design](https://github.com/gobing-ai/spur/blob/main/docs/design/downstream-board-modules.md).
+
 ## Documentation
 
 Full docs, architecture, and the complete command surface live in the
