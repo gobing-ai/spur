@@ -3891,3 +3891,12 @@ Batch: task 0999 (feature A8). Base `7e442aab`, head `e1c89fa33`. Diff was test-
 - Verification after the prose repair: `(cd packages/config && bun test tests/board-modules.test.ts)` —
   15 pass / 0 fail (no YAML fence added, so the all-fences test is unaffected).
 - Scope note: only the design satellite was edited. Task/feature corpus was not written.
+## 2026-09-29
+
+- 1009: `quality-gate.ts run` needs `wbs` + `qualityGateCmd="bun run spur-check"` + `proofDigest` env or it silently skips the gate (false PASS). Proof digest = fingerprint BEFORE implement; digest bracket (before/after gate) is the tamper check.
+- 1009: `task verdict --from-answer` requires every AC row to carry executable evidence unless the AC id is tagged `[advisory]`/`[non-core]`/`[docs-only]` (`task-verdict.ts` `applyAcceptanceCriteriaEvidenceRule`); `doc` normalizes to `static-ref`.
+- 1009: `residual-scan fold` is downgrade-only (PASS→PARTIAL when blocking>0). Write residual deferrals BEFORE the first fold; recovery = re-run `task verdict --from-answer`, re-bind proof jq, re-fold.
+- 1010: NEVER append `## Review` to a task file by hand — `task record` writes `### Review` from the verdict file (wrong order → duplicate top-level sections → record fails; worse, a folded verdict's findings get rendered into the corpus and re-parsed by the next scan = PARTIAL feedback loop). Recovery: `task verdict --from-answer` → proof-bind jq → `task record` (rewrites Testing+Review from clean verdict) → then scan/fold.
+- 1010/1011: `testing→done` requires `task run-link <wbs> --source task-pipeline --run-id <rid>` first; else "No pipeline run recorded". `record-feature-sync.ts` needs env `wbs=<n>`.
+- 1011: batch tail order that works: record → feature-sync → residual scan → fold → settle → strict-core check → run-link → done → driver commit.
+
