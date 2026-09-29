@@ -169,26 +169,29 @@ describe('cross-declaration rules (R2)', () => {
     });
 });
 
-// Task 0992 R5 — the published author guide's declaration example is a fixture of this test, so a
-// described shape that the schema would reject cannot ship as guidance.
+// Task 0992 R5, hardened by 0999 — every fenced YAML block in the published author guide is a config
+// example and a fixture of these tests, so a described shape that the schema would reject cannot ship
+// as guidance, whether or not it carries the authoring-example sentinel. Non-config snippets in the
+// guide must use a different fence language (e.g. ```text).
 
 /** Repo-relative path to the published authoring guide. */
 const AUTHORING_GUIDE = new URL('../../../docs/design/downstream-board-modules.md', import.meta.url);
 
-/** The guide's fenced YAML blocks explicitly marked as the shipped declaration contract. */
-function authoringExamples(markdown: string): string[] {
-    return [...markdown.matchAll(/```yaml\n([\s\S]*?)```/g)]
-        .map((match) => match[1] ?? '')
-        .filter((block) => block.includes('# board-modules-authoring-example'));
+/** Every fenced YAML block in the guide, with its 1-based opening-fence line. */
+function yamlFences(markdown: string): { line: number; body: string }[] {
+    return [...markdown.matchAll(/^```ya?ml[^\n]*\n([\s\S]*?)^```/gm)].map((match) => ({
+        line: markdown.slice(0, match.index).split('\n').length,
+        body: match[1] ?? '',
+    }));
 }
 
 describe('published authoring examples (R5)', () => {
     test('the guide’s declaration example parses against the shipped schema and host rules', async () => {
         const guide = await readFile(AUTHORING_GUIDE, 'utf8');
-        const blocks = authoringExamples(guide);
+        const blocks = yamlFences(guide).filter((fence) => fence.body.includes('# board-modules-authoring-example'));
         expect(blocks).toHaveLength(1);
 
-        const config = spurConfigSchema.parse(parse(blocks[0] ?? ''));
+        const config = spurConfigSchema.parse(parse(blocks[0]?.body ?? ''));
         const modules = config.bootstrap?.modules ?? [];
         expect(modules).toHaveLength(2);
         expect(modules[0]).toMatchObject({
@@ -209,6 +212,23 @@ describe('published authoring examples (R5)', () => {
         });
         // The published example must also clear the cross-declaration rules against the host inventory.
         expect(validateBoardModuleDeclarations(modules, reserved)).toBe(modules);
+    });
+
+    test('every YAML fence in the guide is a valid declaration example (R1)', async () => {
+        const guide = await readFile(AUTHORING_GUIDE, 'utf8');
+        const fences = yamlFences(guide);
+        expect(fences.length).toBeGreaterThan(0);
+
+        const failures: string[] = [];
+        for (const fence of fences) {
+            try {
+                const config = spurConfigSchema.parse(parse(fence.body));
+                validateBoardModuleDeclarations(config.bootstrap?.modules ?? [], reserved);
+            } catch (thrown) {
+                failures.push(`downstream-board-modules.md:${fence.line}: ${(thrown as Error).message}`);
+            }
+        }
+        expect(failures).toEqual([]);
     });
 
     test('the published default is an empty module list', () => {
