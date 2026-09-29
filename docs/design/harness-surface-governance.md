@@ -3,16 +3,16 @@ kind: design
 title: "Harness surface governance"
 status: accepted
 created_at: 2026-08-21
-updated_at: 2026-09-24
-related: [G64, "0613", "0614", "0617", "0625", "0670", "0693"]
+updated_at: 2026-09-28
+related: [G64, A9, "0613", "0614", "0617", "0625", "0670", "0693"]
 tags: [contract, G64, plugin, cli]
 ---
 
 # Harness surface governance
 
 **Area:** the composition measures (shell actions, shell guards, agent.run), their warn and error
-tiers and enforcement posture, and the four-surface script placement table with dated
-operator-consent applications.
+tiers and enforcement posture, and the script placement table with dated
+operator-consent applications. The §2 table became six rows under ADR-130 (feature A9, 2026-09-28).
 **Status:** authority landed (ADR-069 amendment + promotion, ADR-051 amendment); advisory tooling is
 sibling tasks 0614/0615; consent record updated by task 0695 on 2026-08-27. The ADR-115 tiers in §1
 are accepted (feature I21; §4 consent of 2026-09-10). The §2 `plugins/sp/scripts` row records the
@@ -80,18 +80,23 @@ evidence, like a `pipeline-budgets` raise.
 Runtime budgets (step duration, idle gaps, cache hits) are not validate findings; `sp:spur-doctor`
 judges them from step profiles ([workflow composition](workflow-composition-contract.md#composition-budgets-adr-115)).
 
-## 2. Four-surface script placement (ADR-051 R4 amendment)
+## 2. Script placement (ADR-051 R4 amendment, ADR-130)
 
 | Surface | Hosts | Selection condition |
 | --- | --- | --- |
-| `apps/cli/src/commands` | public `spur` verbs | a Spur **end user** runs it on any Spur-managed project — each addition needs the consent gate |
-| `scripts/commands` | internal spur-dev commands | **Spur self-dev only** — packaging/release, building Spur, monorepo gates (one module per command, `bundle-*`-style naming, test sibling) |
+| `apps/cli/src/commands` (+ `packages/app`) | public `spur` verbs; the logic lives in `packages/app` | a Spur **end user** runs it on any Spur-managed project, or it reads/validates/mutates Spur's own nouns (task, feature, workflow run, history, self). Placed under the **owning existing noun**; each new noun, verb or flag needs the consent gate (§3–4). A new noun additionally records why no existing noun can own the action |
+| `scripts/commands` | internal spur-dev commands | **Spur self-dev only** — packaging/release, building Spur, monorepo gates, including gates that validate the plugin's shipped surface (one module per command, test sibling). No logic a consumer project needs |
 | `package.json` scripts | repo-wide developer entrypoints | a **repo developer** invokes it by name (`bun run …`); it composes existing binaries, adds no logic, and its name is the contract |
-| `plugins/sp/scripts` | plugin-shipped scripts and their repo-only gate siblings | the action must run on **agent machines that only have the plugin**, or validates that shipped surface as a repo-only gate — entrypoint contract owned by ADR-065 (`.mjs` twins, declaration in `config/plugin-scripts.json`, no repo-relative paths; `repo-only` entries stay on `bun` and are monorepo/gate-only, [configuration contracts §2.6](configuration-contracts.md#26-plugin-script-contract-manifest--gate-task-0600-adr-065)), cross-referenced, not restated |
+| `plugins/sp/scripts` | plugin glue | sequences `spur` calls, git/gh, and run-scoped files for an sp skill, command or pipeline; must run on **agent machines that only have the plugin** — entrypoint contract owned by ADR-065 (`.mjs` twins, `config/plugin-scripts.json`, no repo-relative paths, [configuration contracts §2.6](configuration-contracts.md#26-plugin-script-contract-manifest--gate-task-0600-adr-065)). Does not re-implement a rule owned by a `spur` verb |
+| `plugins/sp/hooks` | host hook glue | normalizes a host event and calls a hook core or a `spur` verb; the ADR-129 ledger/session cores are the only hook-resident logic |
+| `plugins/sp/lib` | code shared by ≥2 plugin glue files | `env.ts` and generated bundles of `packages/app` code (`bundle-plugin-lib`); a plugin that must run without the monorepo imports the app implementation from here instead of forking it. Nothing outside the plugin imports it |
 
-Decision procedure for a new script: identify the **audience** (end user / self-dev / repo
-developer / plugin-only agent machine / plugin-surface gate); the audience selects the surface; only
-the first surface crosses the consent gate.
+Decision procedure for a new script: (1) does it touch Spur's own nouns or rules? → a flag/verb on
+the owning noun (consent gate); (2) self-dev or plugin-surface gate? → `scripts/commands`; (3) plugin
+sequencing a `spur`/git/gh flow? → `plugins/sp/scripts` or `hooks`, reusing `lib` bundles for any
+app logic it needs. **Glue budget:** a plugin script or hook over 250 LOC, or one that opens the
+database or parses corpus files itself, is a placement finding (`sp-script-placement` rule,
+existing files listed in a shrinking baseline).
 
 ## 3. Consent record (ADR-051 R5 amendment, feature A3)
 
@@ -131,6 +136,7 @@ without one, the command stays internal under `scripts/commands/`.
 | 2026-09-17 | 0892 | `spur agent usage` — new verb under the existing `agent` noun. `--dry-run` (prints would-be executor changes; writes nothing), `--source <name>` (default `codexbar`), `--json`. One run-once pass: capture provider usage, record `owner: quota` availability observations, drain them through the single availability writer; an external scheduler (cron/launchd) owns invocation — `spur serve` never runs it (asserted by test) | Refresh executor availability from provider quota data per `session-pinned-dispatch.md` §3.4 (feature B6): one run-once command instead of a serve-side poller, per the no-hidden-automation posture. Rejected shape recorded at the gate: `spur agent doctor --refresh-usage` (doctor is read-only readiness; mutation belongs to an explicit producer verb). Operator consent granted at the B6 design approval, 2026-09-17 (ADR-051). |
 | 2026-09-23 | 0930 | `spur workflow trace` adds `--timeout <ms>` (requires `--follow`; positive-integer milliseconds, else `VALIDATION_FAILED`): a non-terminal run at the deadline — including the `Run not found` retry window — stops the follow with one checkpoint line naming run id + last observed status and exits 1; the run is never cancelled or relaunched | Give batch drivers/watchers one caller deadline per watch (`spur workflow trace <run-id> --follow --timeout 600000`), replacing the ambiguous "10 minutes or 20 polls" guidance. Flag on an existing verb reusing `SHARED_OPTIONS.timeout` (prior art: `spur message send --wait`); no new verb, no output-shape change beyond the checkpoint line. Operator consent recorded in the task Q&A 2026-09-22/23 (feature H53). |
 | 2026-09-24 | 0932 | `spur workflow continue` adds `--answer-text <text>` (mutually exclusive with `--answer`; empty text rejected): a headless operator can answer a pending `hitl.input` gate — the text is injected into the gate's answer var (`options.var`, else `__hitlInput`) before guards re-evaluate. Answer flags are validated against the pending gate kind before any resume claim (`--answer` for confirm/select, `--answer-text` for input; mismatch → `VALIDATION_FAILED` exit 2, run stays paused); `--answer` now honors the gate's `options.var` instead of hard-coding `__hitlAnswer`. Headless guard accepts either flag and names both. `--async` validates first, then forwards the flag to the worker. | Input gates were unanswerable headless (`continue` carried only the yes/no/cancel enum), and a mismatched `--answer` silently wrote the wrong var. Flag on an existing verb; gate-kind matching lives in `WorkflowService.pendingGate` so the async worker shares the rule. Operator consent for `--answer-text` granted 2026-09-22 (feature H1 R27/R28). |
+| 2026-09-28 | A9 (W2–W3 tasks) | C1 `spur task check <wbs> --precheck`; C2 `spur task verdict` lints the answer and folds residual findings (output change); C3 `spur feature check <id> --inventory <report>`; C4 `spur feature sync` no-ops when linked task states are unchanged and writes verification steps (output change); C5 `spur workflow progress <run-id> --profile`; C6 `spur history report --anatomy` | Move plugin-resident task/feature/workflow/history logic behind existing nouns per ADR-130 (plan `docs/plans/A9-script-placement-migration.md` §2.1). No new noun or verb. Operator consent granted at the A9 design approval, 2026-09-28. Refinement narrowed use: C2 lints only (residual fold stays in `record`); C4 suppresses only a repeated BLOCKED sync (verification steps stay in `feature-verification-steps`); C5/C6 unexercised (no fit; logic moves via lib bundles) — a future verb needs fresh consent. |
 
 The 2026-08-21 grant changes only refresh breadth selection. It does not change the `## Tasks` marker format,
 the deterministic global `INDEX.md` regeneration, or lifecycle status; those shapes are in
