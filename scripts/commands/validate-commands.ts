@@ -609,7 +609,7 @@ export function renderHelp(): string {
     return [
         'validate-commands — enforce the thin-wrapper contract on plugins/sp/commands/*.md',
         '',
-        'Usage: bun plugins/sp/scripts/validate-commands.ts [--json]',
+        'Usage: bun scripts/commands/validate-commands.ts [--json]',
         '',
         'Options:',
         '  --json    Output JSON (default: human-readable)',

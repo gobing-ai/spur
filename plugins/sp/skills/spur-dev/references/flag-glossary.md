@@ -43,7 +43,7 @@ as a follow-up, not quietly left inconsistent.
 `implementAgent` override, objective triggers, and surface-derivation logic — lives in
 [cross-cutting.md](cross-cutting.md#inline-default-execution-surface).
 The value table below is the C3a cross-file parity surface (kept in lockstep with the SSOT by
-`validate-flag-contracts.ts`), not an independent restatement.
+`scripts/commands/validate-flag-contracts.ts`), not an independent restatement.
 
 | Value                           | Who does the work                                                           | Derived surface                                                             |
 | ------------------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------- |

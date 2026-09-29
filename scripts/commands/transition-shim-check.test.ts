@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const SCRIPT = join(import.meta.dir, '..', 'scripts', 'transition-shim-check.ts');
+const SCRIPT = join(import.meta.dir, 'transition-shim-check.ts');
 
 /** A manifest entry with every field present — R1 requires all five. */
 function entry(overrides: Record<string, string> = {}): Record<string, string> {

@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: W1 delete stage-registry-adapter and move repo-only gates to scripts/commands
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-29T06:25:03.417Z
-updated_at: "2026-09-29T06:49:16.473Z"
+updated_at: "2026-09-29T12:22:33.654Z"
 feature_id: A9
 priority: P2
 tags:
@@ -33,19 +33,19 @@ Source: ADR-130, harness-surface-governance §2, docs/plans/A9-script-placement-
 
 ### Requirements
 
-- [ ] R1. Delete `plugins/sp/scripts/stage-registry-adapter.ts`, its `config/plugin-scripts.json` row, its `plugins/sp/README.md` row, and the tests `stage-registry-adapter.test.ts`, `stage-registry-parity.test.ts`, `routing-checkpoint.test.ts`, `routing-table-parity.test.ts`; remove the adapter import and the "R8: stage-registry-adapter floors" block from `roles.test.ts`; reword the comment at `packages/app/src/workflow/checkpoint-contract.ts:14` so it names no deleted file.
-- [ ] R2. Move `surface-drift-inventory`, `validate-flag-contracts`, `validate-commands`, `inline-pipeline-parity-check` and `transition-shim-check` (each `.ts`) into `scripts/commands/` with `git mv`, preserving exports and behavior.
-- [ ] R3. Move each moved gate's dedicated test (`surface-drift-inventory`, `inline-pipeline-parity-check`, `transition-shim-check`, `flag-contract-parity`, `inline-execution-contract`, `command-contract`) to `scripts/commands/<name>.test.ts` and fix their import paths; tests keep passing unchanged in assertions.
-- [ ] R4. Repoint `package.json` script entries (`transition-shim-check`, `inline-pipeline-parity-check`, `validate-commands`) to `scripts/commands/`; the `spur-check-feature`, `spur-check:full` and `spur-check-new:full` chains keep the same members and order.
-- [ ] R5. Remove the five gates' rows from `config/plugin-scripts.json`, run `bun run --filter @gobing-ai/spur build:bundle` so `apps/cli/plugins/sp/scripts/` no longer carries them, and update `scripts/commands/bundle-plugins.test.ts:90` to a path that still exists.
-- [ ] R6. Update every prose reference to a moved or deleted path: `plugins/sp/README.md` (rows at ~272/402/405/514/517), `plugins/sp/skills/spur-dev/references/cross-cutting.md:25`, `flag-glossary.md:46`, `inline-pipeline-driver.md`, `gate-checklists.md`, `config/workflow-candidates.json:87`, and `feature-verification-scope.test.ts:26,28`.
-- [ ] R7. Delete the six moved/deleted paths' entries from `config/script-placement-baseline.json` (seeded by 1000); `spur rule run --rule sp-script-placement` passes.
+- [x] R1. Delete `plugins/sp/scripts/stage-registry-adapter.ts`, its `config/plugin-scripts.json` row, its `plugins/sp/README.md` row, and the tests `stage-registry-adapter.test.ts`, `stage-registry-parity.test.ts`, `routing-checkpoint.test.ts`, `routing-table-parity.test.ts`; remove the adapter import and the "R8: stage-registry-adapter floors" block from `roles.test.ts`; reword the comment at `packages/app/src/workflow/checkpoint-contract.ts:14` so it names no deleted file.
+- [x] R2. Move `surface-drift-inventory`, `validate-flag-contracts`, `validate-commands`, `inline-pipeline-parity-check` and `transition-shim-check` (each `.ts`) into `scripts/commands/` with `git mv`, preserving exports and behavior.
+- [x] R3. Move each moved gate's dedicated test (`surface-drift-inventory`, `inline-pipeline-parity-check`, `transition-shim-check`, `flag-contract-parity`, `inline-execution-contract`, `command-contract`) to `scripts/commands/<name>.test.ts` and fix their import paths; tests keep passing unchanged in assertions.
+- [x] R4. Repoint `package.json` script entries (`transition-shim-check`, `inline-pipeline-parity-check`, `validate-commands`) to `scripts/commands/`; the `spur-check-feature`, `spur-check:full` and `spur-check-new:full` chains keep the same members and order.
+- [x] R5. Remove the five gates' rows from `config/plugin-scripts.json`, run `bun run --filter @gobing-ai/spur build:bundle` so `apps/cli/plugins/sp/scripts/` no longer carries them, and update `scripts/commands/bundle-plugins.test.ts:90` to a path that still exists.
+- [x] R6. Update every prose reference to a moved or deleted path: `plugins/sp/README.md` (rows at ~272/402/405/514/517), `plugins/sp/skills/spur-dev/references/cross-cutting.md:25`, `flag-glossary.md:46`, `inline-pipeline-driver.md`, `gate-checklists.md`, `config/workflow-candidates.json:87`, and `feature-verification-scope.test.ts:26,28`.
+- [x] R7. Delete the six moved/deleted paths' entries from `config/script-placement-baseline.json` (seeded by 1000); `spur rule run --rule sp-script-placement` passes.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Refactor lands in independently revertible waves (req: R2, R3, R4, R5)
-- [ ] AC2 — Duplicated and overengineered scripts are deleted (req: R1, R7)
-- [ ] AC3 — sp skills, commands and workflows track every CLI move (req: R6)
+- [x] AC1 — Refactor lands in independently revertible waves (req: R2, R3, R4, R5)
+- [x] AC2 — Duplicated and overengineered scripts are deleted (req: R1, R7)
+- [x] AC3 — sp skills, commands and workflows track every CLI move (req: R6)
 
 Task-local observability: AC1 by `bun run spur-check` + `bun run spur-check-feature` green with the gates at their new paths and `git revert` of the single task commit restoring the old layout; AC2 by `test ! -e plugins/sp/scripts/stage-registry-adapter.ts` and `rg -l stage-registry-adapter plugins packages apps/cli/src config` returning nothing; AC3 by `rg 'plugins/sp/scripts/(surface-drift-inventory|validate-flag-contracts|validate-commands|inline-pipeline-parity-check|transition-shim-check|stage-registry-adapter)' --glob '!docs/**' --glob '!apps/cli/plugins/**'` returning nothing.
 
@@ -87,18 +87,83 @@ Task-local observability: AC1 by `bun run spur-check` + `bun run spur-check-feat
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `packages/app/src/workflow/checkpoint-contract.ts:0` |
+| `packages/app/src/workflow/checkpoint-contract.ts:14` |
+| `plugins/sp/tests/roles.test.ts:0` |
+| `plugins/sp/tests/roles.test.ts:16` |
+| `plugins/sp/tests/roles.test.ts:292` |
+| `plugins/sp/tests/task-size-precheck.test.ts:94` |
+| `scripts/commands/bundle-plugins.test.ts:90` |
+| `scripts/commands/command-contract.test.ts:14` |
+| `scripts/commands/command-contract.test.ts:16` |
+| `scripts/commands/flag-contract-parity.test.ts:18` |
+| `scripts/commands/flag-contract-parity.test.ts:33` |
+| `scripts/commands/inline-execution-contract.test.ts:139` |
+| `scripts/commands/inline-execution-contract.test.ts:4` |
+| `scripts/commands/inline-execution-contract.test.ts:6` |
+| `scripts/commands/inline-pipeline-parity-check.test.ts:5` |
+| `scripts/commands/inline-pipeline-parity-check.ts:24` |
+| `scripts/commands/surface-drift-inventory.test.ts:48` |
+| `scripts/commands/surface-drift-inventory.ts:26` |
+| `scripts/commands/surface-drift-inventory.ts:42` |
+| `scripts/commands/surface-drift-inventory.ts:44` |
+| `scripts/commands/surface-drift-inventory.ts:743` |
+| `scripts/commands/surface-drift-inventory.ts:875` |
+| `scripts/commands/transition-shim-check.test.ts:6` |
+| `scripts/commands/transition-shim-check.ts:118` |
+| `scripts/commands/transition-shim-check.ts:31` |
+| `scripts/commands/validate-commands.ts:612` |
+| `scripts/commands/validate-flag-contracts.ts:738` |
+| `scripts/commands/validate-flag-contracts.ts:811` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | test ! -e plugins/sp/scripts/stage-registry-adapter.ts (gone); 4 adapter tests deleted; roles.test.ts "R8: stage-registry-adapter floors" block + import removed (20/20 pass); manifest + README rows removed; checkpoint-contract.ts:14 comment reworded; rg -l stage-registry-adapter plugins packages apps/cli/src config scripts -> empty |
+| R2 | MET | git status: 5 gates RM -> scripts/commands/ (surface-drift-inventory, validate-flag-contracts, validate-commands, inline-pipeline-parity-check, transition-shim-check); anchors repointed (surface-drift-inventory.ts:44 REPO_ROOT two levels; validate-flag-contracts.ts:738 MODULE_ROOT join(SCRIPT_DIR,'..','..')); bun run validate-commands exit 0 |
+| R3 | MET | 6 tests RM -> scripts/commands/<name>.test.ts; bun test scripts/commands/{surface-drift-inventory,inline-pipeline-parity-check,transition-shim-check,flag-contract-parity,inline-execution-contract,command-contract}.test.ts -> 219 pass / 0 fail; cli-surface helper import ../../plugins/sp/tests/helpers/cli-surface |
+| R4 | MET | package.json:93 transition-shim-check, validate-commands + inline-pipeline-parity-check entries -> bun scripts/commands/<name>.ts; spur-check-feature / spur-check:full / spur-check-new:full chains byte-identical (same members, same order) |
+| R5 | MET | 5 gate rows removed from config/plugin-scripts.json; bun run --filter @gobing-ai/spur build:bundle ran; ls apps/cli/plugins/sp/scripts -> clean (no moved gates); bundle-plugins.test.ts:90 path updated, bun test scripts/commands/bundle-plugins.test.ts pass |
+| R6 | MET | plugins/sp/README.md rows 272/402/405/514/517 + :274,:418 command-contract refs updated; cross-cutting.md:25, flag-glossary.md:46, inline-pipeline-driver.md updated; workflow-candidates.json + gate-checklists.md scanned -> no stale refs; rg 'plugins/sp/scripts/(...)' sweep non-docs -> only CHANGELOG.md (historical, Q&A closed: no rewrite); feature-verification-scope.test.ts refs updated |
+| R7 | MET | config/script-placement-baseline.json: 6 old-path entries removed; rg count of moved/deleted names in baseline -> 0; spur rule run --rule sp-script-placement -> "All 1 rule passed" exit 0 |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | command | bun run spur-check exit 0 (9474 pass / 0 fail, log .spur/run/1001-test-gate.log); bun run spur-check-feature exit 0 end-to-end (re-reviewer fresh run); single-commit layout -> git revert restores |
+| AC-1 | MET | command | bun run spur-check exit 0 + spur-check-feature exit 0 with gates at scripts/commands paths |
+| AC2 | MET | command | test ! -e plugins/sp/scripts/stage-registry-adapter.ts exit 0; rg -l stage-registry-adapter plugins packages apps/cli/src config scripts -> empty; baseline + manifest rows purged |
+| AC-2 | MET | command | rg -l stage-registry-adapter sweep empty; sp-script-placement rule exit 0 |
+| AC3 | MET | command | rg 'plugins/sp/scripts/(surface-drift-inventory |
+| AC-3 | MET | command | same sweep -> empty outside CHANGELOG; feature-verification-scope.test.ts pass |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-09-29T10:52:16.135Z todo → wip (system)
+- 2026-09-29T12:22:00.201Z wip → testing (system)
+- 2026-09-29T12:22:33.654Z testing → done (system)
+

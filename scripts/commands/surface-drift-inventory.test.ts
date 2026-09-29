@@ -45,7 +45,7 @@ import {
     sweepScriptArgv,
     sweepWorkflows,
     walk,
-} from '../scripts/surface-drift-inventory';
+} from './surface-drift-inventory';
 
 describe('parseInvocation — noun/verb/flag extraction', () => {
     test('splits a plain invocation into noun, verb, and flags', () => {

@@ -2,7 +2,7 @@
 name: inline-pipeline-driver
 description: "Interactive host-session interpreter for Spur state-machine pipelines: execute the existing FSM without a workflow agent subprocess while preserving actions, guards, artifacts, and provenance."
 owner: spur-dev-maintainers
-retirement-criterion: "The per-task interpreter retires once the engine covers per-task execution for /sp:dev-runall with real terminal runs and the parity check (plugins/sp/scripts/inline-pipeline-parity-check.ts) is green (D8 decision D7). Batch orchestration wrapper may remain."
+retirement-criterion: "The per-task interpreter retires once the engine covers per-task execution for /sp:dev-runall with real terminal runs and the parity check (scripts/commands/inline-pipeline-parity-check.ts) is green (D8 decision D7). Batch orchestration wrapper may remain."
 see_also:
   - spur-dev
   - execution-workflow
@@ -18,7 +18,7 @@ see_also:
 ## Supported action and guard set (0755 R2 parity contract)
 
 The action and guard kinds this driver implements. The parity check
-(`plugins/sp/scripts/inline-pipeline-parity-check.ts`) compares this set against
+(`scripts/commands/inline-pipeline-parity-check.ts`) compares this set against
 the resolved actions and guards of every `.spur/workflows/*.yaml`; any element present
 in one and absent in the other fails the check. Add a new kind here when the driver
 implements it; remove the entry when the corresponding kind is dropped from the YAML.

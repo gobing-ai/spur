@@ -28,7 +28,7 @@
  * no workspace imports.
  *
  * Usage:
- *   bun plugins/sp/scripts/transition-shim-check.ts
+ *   bun scripts/commands/transition-shim-check.ts
  *     [--manifest <path>]           default: config/transition-shims.json
  *     [--roots <a,b,c>]             default: apps,packages,plugins,config,scripts,tooling
  *
@@ -115,6 +115,9 @@ function scanMarkers(cwd: string, roots: string[]): Map<string, Set<string>> {
                 continue;
             }
             if (!st.isFile()) continue;
+            // Test files legitimately embed shim markers as fixtures; the gate's own
+            // test lives beside it since the W1 relocation (1001).
+            if (/\.test\.tsx?$/.test(name)) continue;
             let text: string;
             try {
                 text = readFileSync(abs, 'utf8');

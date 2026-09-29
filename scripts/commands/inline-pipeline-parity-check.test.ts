@@ -2,8 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 
-const REPO_ROOT = join(import.meta.dir, '../../..');
-const SCRIPT = join(REPO_ROOT, 'plugins/sp/scripts/inline-pipeline-parity-check.ts');
+const REPO_ROOT = join(import.meta.dir, '..', '..');
+const SCRIPT = join(REPO_ROOT, 'scripts/commands/inline-pipeline-parity-check.ts');
 
 function runCheck(cwd: string): { status: number; stdout: string; stderr: string } {
     const res = spawnSync('bun', [SCRIPT], { cwd, encoding: 'utf8' });

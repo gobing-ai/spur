@@ -11,9 +11,9 @@ import { describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { bootMain, parseCliArgs, renderHelp, runCli, validate } from '../scripts/validate-commands';
+import { bootMain, parseCliArgs, renderHelp, runCli, validate } from './validate-commands';
 
-const ROOT = join(import.meta.dir, '..', '..', '..');
+const ROOT = join(import.meta.dir, '..', '..');
 const COMMANDS_DIR = join(ROOT, 'plugins', 'sp', 'commands');
 const SKILLS_DIR = join(ROOT, 'plugins', 'sp', 'skills');
 

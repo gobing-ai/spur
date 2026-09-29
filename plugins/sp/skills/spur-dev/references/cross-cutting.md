@@ -22,7 +22,7 @@ not redefine it.
 > precedence chain, and the `implementAgent` override.** Every other reference (flag-glossary,
 > execution-workflow, execution-batch, dev-operations, cmd_agent, cmd_workflow) links here and
 > does not restate the contract. The value table below is authoritative; parity with it is
-> enforced by `validate-flag-contracts.ts` (C3a/C3b).
+> enforced by `scripts/commands/validate-flag-contracts.ts` (C3a/C3b).
 
 ### The one rule
 

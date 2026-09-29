@@ -2,20 +2,14 @@
     "schemaVersion": 1,
     "description": "ADR-130 placement baseline (task 1000, seeded from plan §2 inventory). Entries suppress sp-script-placement findings; kinds[] rows are migration-ledger entries for plan §2 rows with no current findings. Baseline can only shrink: a listed kind the file no longer produces is a stale-baseline finding. Tasks 1001-1007 delete their entries in the same commit as the move.",
     "entries": {
-        "plugins/sp/scripts/stage-registry-adapter.ts": { "kinds": ["budget"], "reason": "Delete W1 (plan §2)" },
         "plugins/sp/scripts/history-anatomy-cache.ts": {
             "kinds": ["budget"],
             "reason": "logic → packages/app + history-anatomy lib bundle; script ≤250 glue, W3 (plan §2)"
-        },
-        "plugins/sp/scripts/surface-drift-inventory.ts": {
-            "kinds": ["budget", "corpus-parse"],
-            "reason": "→scripts W1 (plan §2)"
         },
         "plugins/sp/scripts/pr-reviewing.ts": {
             "kinds": ["budget"],
             "reason": "Keep, sp-owned git/gh loop; cited exemption (plan §2)"
         },
-        "plugins/sp/scripts/validate-flag-contracts.ts": { "kinds": ["budget"], "reason": "→scripts W1 (plan §2)" },
         "plugins/sp/scripts/inline-run-setup.ts": {
             "kinds": ["budget"],
             "reason": "Keep as glue; run-identity → inline-run lib bundle, aim ≤250, W3 (plan §2)"
@@ -24,7 +18,6 @@
             "kinds": ["budget"],
             "reason": "logic → packages/app + quality-gate lib bundle; script ≤250 glue, W3 (plan §2)"
         },
-        "plugins/sp/scripts/validate-commands.ts": { "kinds": ["budget"], "reason": "→scripts W1 (plan §2)" },
         "plugins/sp/scripts/residual-scan.ts": {
             "kinds": ["budget", "corpus-parse"],
             "reason": "logic → packages/app + residual-scan lib bundle; script ≤250, W2 (plan §2)"
@@ -51,10 +44,6 @@
             "reason": "Keep (budget exemption; reviewed W4) (plan §2)",
             "exempt": true
         },
-        "plugins/sp/scripts/inline-pipeline-parity-check.ts": {
-            "kinds": ["budget", "corpus-parse"],
-            "reason": "→scripts W1 (plan §2)"
-        },
         "plugins/sp/scripts/feature-verification-steps.ts": {
             "kinds": ["budget"],
             "reason": "Keep (ADR-119 receipt writer; budget exemption) (plan §2)",
@@ -65,7 +54,6 @@
             "reason": "Keep (glue over capture file; budget exemption) (plan §2)",
             "exempt": true
         },
-        "plugins/sp/scripts/transition-shim-check.ts": { "kinds": [], "reason": "→scripts W1 (plan §2)" },
         "plugins/sp/scripts/task-size-precheck.ts": {
             "kinds": [],
             "reason": "Move→CLI: spur task check --precheck (C1); delete, W2 (plan §2)"

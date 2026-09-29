@@ -269,9 +269,9 @@ plugins/sp/
 │                                    # + careful-guard.{ts,test.ts} + context-hooks.test.ts + token-estimate.test.ts
 │                                    # + shared policy modules: agent-hint.ts, destructive-policy.{ts,test.ts}, task-file-policy.{ts,test.ts}
 │                                    # + pi/guard-extension.{ts,test.ts} (plugin.json `extensions.pi` entry point)
-├── scripts/                         # Executable helpers, split from prompts (ADR-031) — validate-commands.ts (thin-wrapper validator), batch-preflight.ts + scripts/<skill>/
+├── scripts/                         # Executable helpers, split from prompts (ADR-031) — batch-preflight.ts + scripts/<skill>/
 │                                    # (daily-summary: {daily-summary, logger}.ts; dogfood-testing: {detect-pipeline-driving, validate-report}.ts)
-├── tests/                           # Plugin tests — command-contract.test.ts + skill-structure.test.ts + batch-preflight.test.ts + per-skill suites
+├── tests/                           # Plugin tests — skill-structure.test.ts + batch-preflight.test.ts + per-skill suites (command-contract moved to scripts/commands/)
 ├── evals/                           # Skill behavioral eval harness (scenarios + judge + run-eval runner)
 ├── plugin.json                      # Marketplace entry
 └── README.md                        # This file
@@ -399,7 +399,7 @@ hand-editable source for the operator command surface. Per-platform adapters are
 output** owned by `superskill` (`superskill install sp`) and never committed here. Plugin `sp` ships
 no per-platform artifacts — only the platform-independent thin wrappers.
 
-**Thin-wrapper contract** is enforced by `scripts/validate-commands.ts`:
+**Thin-wrapper contract** is enforced by `scripts/commands/validate-commands.ts`:
 
 ```bash
 bun run validate-commands            # validate all 39 commands
@@ -415,7 +415,7 @@ gate (a) is strengthened: the ordered three-heading set `## Argument Flags` → 
 `## Implementation` is required, and gate (e) checks the `argument-hint` is syntax-only (no
 Markdown links), the `## Argument Flags` table has exactly `Flag | Description | Default` columns,
 the command carries exactly one glossary reference, and canonical hint tokens have bidirectional
-parity with table rows. The same gates are tested in `tests/command-contract.test.ts` and
+parity with table rows. The same gates are tested in `scripts/commands/command-contract.test.ts` and
 `tests/command-flag-parity.test.ts`. See
 `docs/design/dev-command-argument-contract.md` for the full contract.
 
@@ -511,10 +511,9 @@ hold `SKILL.md` and prompt-side companions only.
 | `scripts/dogfood-testing/validate-report.ts`         | Pure `validateReport(md)` — footer-mandatory + 7-check finalize-or-abort contract with stable error codes                                                                                                                                                                                         |
 | `scripts/daily-summary/{daily-summary,logger}.ts`    | ccusage + git-history orchestration helpers for `sp:daily-summary`                                                                                                                                                                                                                                |
 | `scripts/feature-sync-bounded.ts`                    | Bounded retry-suppression wrapper for `spur feature sync` during batch/wrap-up runs — suppresses identical L4-blocked repeats                                                                                                              |
-| `scripts/stage-registry-adapter.ts`                  | dev-next golden-path adapter over the canonical stage registry — TABLE A/B/C resolution bridge for the status-aware facade                                                                                                                |
 | `scripts/task-size-precheck.ts`                      | Pipeline size precheck guard (R2) — evaluates R-item/Plan-count limits to PASS/FAIL                                                                                                              |
 | `scripts/task-diffstat.ts`                           | 0943 triage-lane diffstat producer — numstat + untracked scan vs the run base; writes `<wbs>-diffstat.json` with the sensitive-path flag; fails safe (sensitive)                                                       |
-| `scripts/validate-flag-contracts.ts`                 | Mechanical consistency gate — compares flag claims across command files, flag-glossary, cross-cutting, dev-operations, and ADR; reports disagreements                                                                                    |
+| `scripts/commands/validate-flag-contracts.ts`        | Mechanical consistency gate — compares flag claims across command files, flag-glossary, cross-cutting, dev-operations, and ADR; reports disagreements                                                                                    |
 | `*.test.ts`                                          | Unit suites — in `hooks/` for guards, in `tests/<skill>/` per ADR-031 pairing                                                                                                                                                                                                                     |
 
 **Design principle:** Scripts are **deterministic enforcement**. Unlike skills (which are advisory

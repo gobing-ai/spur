@@ -92,7 +92,6 @@ test('count-only since 0723: no executor flag, no doctor call site remains', () 
     expect(plugin).not.toContain('--executor');
     expect(plugin).not.toContain('agent doctor');
     expect(plugin).not.toContain('capabilityTier');
-    expect(plugin).not.toContain('stage-registry-adapter');
     expect(plugin).not.toContain('LARGE_TASK');
 });
 

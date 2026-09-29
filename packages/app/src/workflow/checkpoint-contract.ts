@@ -11,10 +11,7 @@ import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
  * emitted: `schema_version`, `status`, `source_commit`, `digest`, `artifacts`.
  *
  * Consumers:
- * - resume / next-router gating (`plugins/sp/scripts/stage-registry-adapter.ts`
- *   keeps a self-contained lean copy of this semantics — the plugin installs
- *   into foreign repos and cannot import workspace packages; the parity test
- *   pins the two together).
+ * - resume / next-router gating.
  * - bounded cleanup (`WorkflowService.cleanCheckpoints`).
  */
 

@@ -14,7 +14,6 @@ import { describe, expect, test } from 'bun:test';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import YAML from 'yaml';
-import { REGISTERED_STAGES, STAGE_FLOOR_TIER } from '../scripts/stage-registry-adapter';
 
 const REPO_ROOT = join(import.meta.dir, '..', '..', '..');
 const ROLES_FILE = join(REPO_ROOT, 'plugins', 'sp', 'references', 'roles.md');
@@ -288,24 +287,6 @@ describe('roles — R7: no tier literal survives in plugin prose (0538 R4)', () 
         };
         scan(join(REPO_ROOT, 'plugins', 'sp'));
         expect(offenders, 'tier literal outside roles.md — re-express via a role pointer to roles.md').toEqual([]);
-    });
-});
-
-describe('roles — R8: stage-registry-adapter floors read from Layer 1 (0538 R4)', () => {
-    test('every folded stage min_tier equals the roles.md stage→role→tier mapping', () => {
-        const mismatches = REGISTERED_STAGES.filter((s) => STAGE_FLOOR_TIER.has(s.id))
-            .filter((s) => s.model_policy.min_tier !== STAGE_FLOOR_TIER.get(s.id))
-            .map(
-                (s) => `${s.id}: adapter floor '${s.model_policy.min_tier}', roles.md '${STAGE_FLOOR_TIER.get(s.id)}'`,
-            );
-        expect(mismatches, 'adapter floor drifted from roles.md — fix the adapter, not this test').toEqual([]);
-    });
-
-    test('unfolded adapter stages keep a standard floor (no accidental capable gate)', () => {
-        const unfolded = REGISTERED_STAGES.filter((s) => !STAGE_FLOOR_TIER.has(s.id)).filter(
-            (s) => s.id !== 'changelog' && s.model_policy.min_tier !== 'standard',
-        );
-        expect(unfolded.map((s) => s.id)).toEqual([]);
     });
 });
 

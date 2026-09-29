@@ -15,7 +15,7 @@
  * hermetic and prove the gate binds rather than whatever the tree currently says.
  */
 import { describe, expect, test } from 'bun:test';
-import type { FlagValidationResult } from '../scripts/validate-flag-contracts';
+import type { FlagValidationResult } from './validate-flag-contracts';
 import {
     bootMain,
     checkAgentSsotIntegrity,
@@ -30,7 +30,7 @@ import {
     renderHelp,
     runCli,
     validate,
-} from '../scripts/validate-flag-contracts';
+} from './validate-flag-contracts';
 
 // ─── Fixture 1 (C3a): --agent auto cross-file contradiction ─────────────────
 

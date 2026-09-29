@@ -66,10 +66,6 @@
             "contract": "repo-only"
         },
         {
-            "rel": "inline-pipeline-parity-check.ts",
-            "contract": "repo-only"
-        },
-        {
             "rel": "pr-reviewing.ts",
             "contract": "standard",
             "twin": "pr-reviewing.mjs"
@@ -95,14 +91,6 @@
             "twin": "script-root.mjs"
         },
         {
-            "rel": "stage-registry-adapter.ts",
-            "contract": "repo-only"
-        },
-        {
-            "rel": "surface-drift-inventory.ts",
-            "contract": "repo-only"
-        },
-        {
             "rel": "task-diffstat.ts",
             "contract": "standard",
             "twin": "task-diffstat.mjs"
@@ -117,18 +105,6 @@
         },
         {
             "rel": "verify-answer-lint.ts",
-            "contract": "repo-only"
-        },
-        {
-            "rel": "transition-shim-check.ts",
-            "contract": "repo-only"
-        },
-        {
-            "rel": "validate-commands.ts",
-            "contract": "repo-only"
-        },
-        {
-            "rel": "validate-flag-contracts.ts",
             "contract": "repo-only"
         },
         {

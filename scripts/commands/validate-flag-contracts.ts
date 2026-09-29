@@ -735,7 +735,7 @@ export function checkSsotAnchorsResolve(crossCuttingRaw: string, files: Readonly
 
 // ── R4: module-relative default so validate() is CWD-independent ──
 const SCRIPT_DIR: string = typeof import.meta.dir === 'string' ? import.meta.dir : join(__dirname);
-const MODULE_ROOT: string = join(SCRIPT_DIR, '..', '..', '..');
+const MODULE_ROOT: string = join(SCRIPT_DIR, '..', '..');
 
 export function validate(root: string = MODULE_ROOT): FlagValidationResult {
     const commandsDir = join(root, 'plugins', 'sp', 'commands');
@@ -808,7 +808,7 @@ export function renderHelp(): string {
     return [
         'validate-flag-contracts — cross-surface flag parity gate for the sp contract surfaces',
         '',
-        'Usage: bun plugins/sp/scripts/validate-flag-contracts.ts [--json]',
+        'Usage: bun scripts/commands/validate-flag-contracts.ts [--json]',
         '',
         'Options:',
         '  --json    Output JSON (default: human-readable)',

@@ -1,13 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import {
-    checkAgentValueTables,
-    extractTriggerTable,
-    extractValueBehaviorTable,
-} from '../scripts/validate-flag-contracts';
+import { checkAgentValueTables, extractTriggerTable, extractValueBehaviorTable } from './validate-flag-contracts';
 
-const ROOT = join(import.meta.dir, '..', '..', '..');
+const ROOT = join(import.meta.dir, '..', '..');
 const COMMANDS_DIR = join(ROOT, 'plugins', 'sp', 'commands');
 const CROSS_CUTTING = join(ROOT, 'plugins', 'sp', 'skills', 'spur-dev', 'references', 'cross-cutting.md');
 const EXECUTION_WORKFLOW = join(ROOT, 'plugins', 'sp', 'skills', 'spur-dev', 'references', 'execution-workflow.md');
@@ -140,7 +136,10 @@ describe('task 0406 / H82 — unified --agent execution-surface contract', () =>
 
     test('0718 regression baseline records the three failed external attempts before inline recovery', () => {
         const attempts = JSON.parse(
-            readFileSync(join(import.meta.dir, 'fixtures', '0718-planning-attempts.json'), 'utf8'),
+            readFileSync(
+                join(import.meta.dir, '..', '..', 'plugins', 'sp', 'tests', 'fixtures', '0718-planning-attempts.json'),
+                'utf8',
+            ),
         ) as Array<{ runId: string; workflowDurationMs: number; plannerStageDurationMs: number | null }>;
 
         expect(attempts).toHaveLength(3);
