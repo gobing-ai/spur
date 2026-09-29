@@ -4,12 +4,13 @@ import { Button } from '@/ui';
 import { loadLayoutState, saveLayoutState } from '../lib/layout-state';
 import { ConversationDraftProvider } from '../modules/projects/drafts';
 import { ProjectProvider } from '../modules/projects/useProjectContext';
-import { getModule } from '../modules/registry';
+import { useBoardRegistry } from '../modules/RegistryProvider';
 import type { WebModule } from '../modules/types';
 import ApiErrorToast from './ApiErrorToast';
 import GlobalAgentBar from './GlobalAgentBar';
 import LeftSidebar from './LeftSidebar';
 import MainWorkspace from './MainWorkspace';
+import { BoardDiagnosticsBanner, ModuleErrorBoundary } from './ModuleErrorBoundary';
 import ResizeHandle from './ResizeHandle';
 import RightPanel from './RightPanel';
 
@@ -21,6 +22,7 @@ export default function BoardLayout() {
     const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
     const [mobilePanelOpen, setMobilePanelOpen] = useState(false);
     const location = useLocation();
+    const { registry, hostDiagnostics } = useBoardRegistry();
 
     // Resolve active module from the current route segment
     // Resolve module from the segment immediately after /board/, so both
@@ -29,7 +31,12 @@ export default function BoardLayout() {
         const parts = location.pathname.split('/');
         const boardIdx = parts.indexOf('board');
         const seg = boardIdx >= 0 ? parts[boardIdx + 1] : undefined;
-        return getModule(seg ?? '');
+        // Downstream modules are mounted at /board/modules/<id>; the segment after /board/ is
+        // 'modules', so the native route is reassembled from the following segment.
+        if (seg === 'modules' && parts[boardIdx + 2]) {
+            return registry.getModule(`modules/${parts[boardIdx + 2]}`);
+        }
+        return registry.getModule(seg ?? '');
     })();
 
     useLayoutEffect(() => {
@@ -149,6 +156,7 @@ export default function BoardLayout() {
                         />
                         <ResizeHandle targetVar="--sidebar-w" onResizeEnd={onSidebarResize} />
                         <MainWorkspace mobileHeader={mobileHeader}>
+                            <BoardDiagnosticsBanner diagnostics={hostDiagnostics} />
                             <Outlet />
                         </MainWorkspace>
                         <ResizeHandle targetVar="--rightpanel-w" onResizeEnd={onRightPanelResize} />
@@ -157,7 +165,17 @@ export default function BoardLayout() {
                             onToggle={toggleRightPanel}
                             onMobileClose={closeMobile}
                         >
-                            {RightPanelContent ? <RightPanelContent /> : null}
+                            {RightPanelContent ? (
+                                activeModule &&
+                                (activeModule.contributionType === 'react' ||
+                                    activeModule.contributionType === 'iframe') ? (
+                                    <ModuleErrorBoundary moduleId={activeModule.id} category="panel">
+                                        <RightPanelContent />
+                                    </ModuleErrorBoundary>
+                                ) : (
+                                    <RightPanelContent />
+                                )
+                            ) : null}
                         </RightPanel>
                     </ActiveModuleContext.Provider>
                 </div>

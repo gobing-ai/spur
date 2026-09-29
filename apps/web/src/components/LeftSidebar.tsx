@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { NavLink } from 'react-router';
 import { Button, Tooltip } from '@/ui';
 import { fetchWithTimeout, resolveApiUrl } from '../lib/rpc-client';
-import { modules } from '../modules/registry';
+import { useBoardRegistry } from '../modules/RegistryProvider';
 import ProjectSwitcher from './ProjectSwitcher';
 import ThemeToggle from './ThemeToggle';
 
@@ -120,6 +120,7 @@ interface Props {
 
 export default function LeftSidebar({ collapsed, onToggle, onMobileClose }: Props) {
     const projectName = useProjectName();
+    const { registry } = useBoardRegistry();
 
     return (
         <aside
@@ -152,7 +153,7 @@ export default function LeftSidebar({ collapsed, onToggle, onMobileClose }: Prop
             )}
 
             <nav className={`flex-1 ${collapsed ? 'overflow-visible' : 'overflow-y-auto'}`}>
-                {modules
+                {registry.modules
                     .filter((mod) => mod.id !== 'settings')
                     .map((mod) => {
                         const label = mod.sidebarLabel ?? mod.name;
