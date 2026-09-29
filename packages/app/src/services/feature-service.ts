@@ -348,8 +348,10 @@ export class FeatureService {
      *                           features into the working tree alongside scoped work.
      * @returns the rendered INDEX content, the count of features whose Tasks
      *          region actually changed, and the features skipped during the
-     *          Tasks-region pass (missing section / missing marker region —
-     *          R4, task 1008; previously silent).
+     *          Tasks-region pass as `{id, reason}`, reason one of
+     *          `unclosed-code-fence` | `duplicate-sections` |
+     *          `missing-tasks-section` | `no-tasks-marker-region`
+     *          (R4, task 1008; classified by root cause in 1009).
      */
     async refresh(options?: {
         featureId?: string;
@@ -394,7 +396,10 @@ export class FeatureService {
             }
             try {
                 doc.replaceMarkerRegion('Tasks', table);
-            } catch {
+            } catch (err) {
+                // Only the marker-missing guard is a skip; any other domain guard is a new
+                // failure mode and must surface, not be mislabeled as a missing region.
+                if (!(err instanceof Error && err.message.startsWith('No marker region found'))) throw err;
                 skipped.push({ id: feature.id, reason: 'no-tasks-marker-region' });
                 continue;
             }

@@ -1,7 +1,8 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { MarkdownDocument } from '@gobing-ai/spur-domain';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { FeatureService } from '../../src/services/feature-service';
 import type { SectionMatrix } from '../../src/services/planning-check-base';
@@ -388,6 +389,19 @@ describe('FeatureService', () => {
             const { skipped } = await s.refresh();
             cleanup();
             expect(skipped).toContainEqual({ id: 'A', reason: 'no-tasks-marker-region' });
+        });
+
+        test('an unexpected replaceMarkerRegion error surfaces instead of mislabeling as no-tasks-marker-region', async () => {
+            const { svc: s, cleanup } = await seedRefreshCorpus();
+            const spy = spyOn(MarkdownDocument.prototype, 'replaceMarkerRegion').mockImplementation(() => {
+                throw new Error('some future domain guard');
+            });
+            try {
+                await expect(s.refresh()).rejects.toThrow('some future domain guard');
+            } finally {
+                spy.mockRestore();
+                cleanup();
+            }
         });
 
         test('skip reason: balanced doc with no Tasks heading → missing-tasks-section', async () => {
