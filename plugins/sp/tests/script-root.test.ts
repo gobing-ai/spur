@@ -152,7 +152,18 @@ test('main reads --run-id and rejects an unknown flag', () => {
         expect(JSON.parse(readFileSync(join(cwd, '.spur', 'run', 'r-main-script-root.json'), 'utf8')).mode).toBe(
             'source-repo',
         );
-        expect(main(['--bogus'], { __runId: 'r' }, { cwd })).toBe(2);
+        const writes: string[] = [];
+        const original = process.stderr.write;
+        process.stderr.write = ((chunk: Uint8Array | string): boolean => {
+            writes.push(typeof chunk === 'string' ? chunk : new TextDecoder().decode(chunk));
+            return true;
+        }) as typeof process.stderr.write;
+        try {
+            expect(main(['--bogus'], { __runId: 'r' }, { cwd })).toBe(2);
+        } finally {
+            process.stderr.write = original;
+        }
+        expect(writes).toEqual([`${SCRIPT_ROOT_USAGE}\n`]);
         expect(SCRIPT_ROOT_USAGE).toContain('--run-id');
     } finally {
         cleanup(cwd);
