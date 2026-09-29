@@ -3,7 +3,7 @@ kind: design
 title: Downstream Board module configuration and contributions
 status: accepted
 created_at: 2026-09-27
-updated_at: 2026-09-27
+updated_at: 2026-09-28
 related: [A8, docs/plans/2026-09-27-dynamic-board-modules-brainstorm.md]
 tags: [contract, A8, web, config]
 ---
@@ -122,7 +122,10 @@ First prove a separately built hook-bearing native module in the actual installe
 
 The composition chain `composeBoardModules` -> `BoardRegistryProvider` -> router `ModuleErrorBoundary` -> `FramedResource` is now driven end to end in real Chromium against a production-shaped Board build served with a real catalog and real `/modules/:id/*` asset trees (task 0992, `apps/web/tests/modules/composed-board-browser.test.ts`) — the 0988/0990/0991 slices had proven it only by unit tests or through a route-identity adapter. That proof also fixes a real defect it exposed: the shell resolved the active module by registry id while downstream entries carry `route: modules/<id>`, so their right panel and framed-workspace treatment never activated on the real path.
 
-Only after those proofs are the production config/catalog, restricted assets and browser composition implemented. Authoring docs and portable config examples are published alongside the implemented surfaces (§6); the project config seed carries the empty default.
+The production config/catalog, restricted asset transport and browser composition are implemented
+and covered by the task-local and feature-wide gates recorded in A8's task records. The installed
+package proof is in place (§5); §6 documents the shipped authoring surface and tested config
+example. The project config seed carries the empty default.
 
 Sources: [React shared-instance requirement](https://react.dev/warnings/invalid-hook-call-warning#duplicate-react), [Vite library mode](https://vite.dev/guide/build#library-mode), [import maps](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/script/type/importmap), [CSP frame-ancestors](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/frame-ancestors), [postMessage](https://developer.mozilla.org/en-US/docs/Web/API/Window/postMessage), [iframe event behavior](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/iframe#error_and_load_event_behavior).
 

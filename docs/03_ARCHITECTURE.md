@@ -2,7 +2,7 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.60.0
+version: 1.61.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
 updated_at: 2026-09-28
@@ -1166,20 +1166,18 @@ unit:
 Driver contract, marker lifecycle and the retained-worktree resume/discard commands:
 [execution-batch.md](../plugins/sp/skills/spur-dev/references/execution-batch.md).
 
-## 30. Downstream Board Composition — accepted design, unimplemented (ADR-128)
+## 30. Downstream Board Composition (ADR-128)
 
-Current browser discovery remains the build-time Vite glob and static registry/router snapshots;
-project bootstrap does not yet load external Board modules. The accepted local Bun composition
-loads validated project declarations through packages/config, resolves a safe catalog and native
-asset roots in packages/app, and exposes DTOs through packages/contracts and thin server handlers.
-Fixed catalog/asset handlers are composed before the SPA fallback. Browser composition resolves
-native contributions and Board-owned frame adapters before constructing one registry/router used
-by navigation and layout. No live Hono route mutation or downstream server-code import is required.
+Project configuration declares downstream React modules and URL-backed frames. `packages/config`
+validates declarations; `packages/app` resolves the catalog and contained native asset roots;
+`packages/contracts` defines the catalog DTO; thin server handlers expose it and serve fixed
+catalog/asset routes before the SPA fallback. Browser composition loads native contributions and
+Board-owned frame adapters before building the single registry/router used by navigation and
+layout. No live Hono route mutation or downstream server-code import is required.
 
-Native libraries share runtime facades emitted from the Board renderer's client build graph;
-iframe resources retain independent documents and browser embedding policies. Distribution ships
-the facade manifest and public authoring declarations with the existing CLI/web assets. The
-installed-package shared-runtime proof remains a prerequisite, not an observed capability.
-Configuration and native asset changes require server restart and browser reload. Worker
+Native libraries share runtime facades emitted from the Board renderer's client build graph. The
+CLI distribution includes the runtime manifest and declaration-only authoring export. Installed
+package identity, native rendering, frame policy, and the composed catalog path have real-browser
+proofs. Configuration and native asset changes require server restart and browser reload. Worker
 deployments do not acquire project-filesystem loading. Exact declarations, lifecycle rules and
-alternatives: [downstream Board module contract](design/downstream-board-modules.md).
+compatibility limits: [downstream Board module contract](design/downstream-board-modules.md).

@@ -2,10 +2,10 @@
 doc: 04_DESIGN
 owns: SURFACE — index of non-UI CLI, API, config, schema and boundary contracts
 authority: derived
-version: 1.84.0
+version: 1.85.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
-updated_at: 2026-09-27
+updated_at: 2026-09-28
 read_before: changing a command, flag, env var, or schema
 edit_rules: 99 §6.5
 sync: [T3, T9]
@@ -29,7 +29,7 @@ Root [DESIGN.md](../DESIGN.md) owns visual and interaction design;
 | History CLI and refresh contracts | [history-cli-contracts](design/history-cli-contracts.md) |
 | Feature sync and agent command contracts | [planning-command-contracts](design/planning-command-contracts.md) |
 | Configuration and asset contracts | [configuration-contracts](design/configuration-contracts.md) |
-| Downstream Board modules — embedded config, native React contributions and iframe URLs — accepted design | [downstream-board-modules](design/downstream-board-modules.md) |
+| Downstream Board modules — embedded config, native React contributions and iframe URLs | [downstream-board-modules](design/downstream-board-modules.md) |
 | Data and output contracts | [data-output-contracts](design/data-output-contracts.md) |
 | Server bootstrap and scheduler contracts | [server-contracts](design/server-contracts.md) |
 | Planning records and lifecycle contracts | [planning-record-contracts](design/planning-record-contracts.md) |

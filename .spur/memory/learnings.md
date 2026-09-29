@@ -3657,3 +3657,46 @@ Updated ADR-003 and the architecture and gate contracts; the `04` index already 
 
 - When changing `plugins/sp/scripts/*.ts`, regenerate committed `.mjs` twins with `bun run build:scripts`; do not hand-edit generated twins. Type-only edits may leave them unchanged, but the contract check determines parity.
 - Include plugin tests in the strict plugin TypeScript config: stale test contracts exposed real type errors, and test files are part of the shipped repository gate.
+Repaired the stale A8 status in [00_ADR.md](/Users/robin/xprojects/spur-new-runall-A8-ccef/docs/00_ADR.md), [03_ARCHITECTURE.md](/Users/robin/xprojects/spur-new-runall-A8-ccef/docs/03_ARCHITECTURE.md), [04_DESIGN.md](/Users/robin/xprojects/spur-new-runall-A8-ccef/docs/04_DESIGN.md), and [downstream-board-modules.md](/Users/robin/xprojects/spur-new-runall-A8-ccef/docs/design/downstream-board-modules.md). `git diff --check` passed; no tests or task/feature corpus writes.
+
+The requested artifact is [.spur/run/3499f03b-8d13-426f-8269-2985de5d0373-wrapup-learnings.md](/Users/robin/xprojects/spur-new-runall-A8-ccef/.spur/run/3499f03b-8d13-426f-8269-2985de5d0373-wrapup-learnings.md). Its raw Markdown follows.
+
+# Working learnings — 2026-09-28
+
+## 0988 — Prove and package the Board shared runtime and downstream authoring contract
+
+- React version equality does not prove a shared runtime. Verify object/function identity in the installed renderer with a real browser and an independently installed consumer.
+- A native entry needs the host import map before the entry is evaluated, and its React/JSX facades must resolve to the renderer's actual client-build modules. Generate explicit supported specifiers; a wildcard or standalone React bundle can claim more than the host can guarantee.
+- Keep the authoring type in one source and emit a declaration-only package export. This gives consumers a public type seam without adding a React runtime dependency to the CLI.
+- A production CJS interop boundary can hide named exports from Rollup's static `export *` analysis. Derive facade exports from measured runtime bindings and prove the packaged result instead of trusting source syntax.
+- Run the post-check through its normal gate context: standalone coverage rules can fail when the coverage report they consume has not been produced.
+
+## 0989 — Load and serve validated project module catalogs and restricted assets
+
+- Validate the declaration union strictly, then run cross-entry checks separately: disabled entries still need structurally valid, unique, non-colliding identities even though they should cause no asset IO.
+- Resolve enabled assets before listening and check both lexical containment and real paths. Recheck request paths at the asset boundary; a safe-looking relative path can still escape through a symlink.
+- Mount fixed module asset routes before static and SPA fallback routes. Missing JavaScript or CSS must return an actual error instead of the Board's `index.html`.
+- Keep server filesystem roots private in the catalog DTO. Publish only safe URLs and metadata; ordinary CLI config reads should not probe downstream assets.
+- A green assertion count can still accompany a failed gate: this task's first run stopped at Biome with export-order and formatting errors, before typecheck or tests. Fix the earliest gate failure, then rerun the required chain.
+
+## 0990 — Render native downstream modules through one Board registry
+
+- Resolve the catalog once, then pass that same composed registry to routes, sidebar, active-module lookup, and layout. Parallel snapshots or mutable registration make these surfaces disagree.
+- Turn a failed contribution into a navigable diagnostic entry so one broken module does not silently disappear or take built-ins down. Bound entry and stylesheet loading independently.
+- Unit tests can pass while the production path remains unproven. A route-identity adapter and a real catalog path exercise different seams; keep an installed, real-browser composition proof for the final integration.
+- Coverage gates measure executed behavior, not just asserted shape. A component function that is only checked for existence may leave its source branch below the per-file threshold.
+
+## 0991 — Embed URL resources in the Board workspace
+
+- An iframe `load` event does not establish that the child app is usable; browsers can fire it for blocked content. Do not expose readiness state from that event. Keep the external-open action available.
+- A plain frame adapter can preserve browser policy with little code: pass the configured URL through, set an accessible title, and leave sandboxing and messaging absent unless a concrete contract requires them.
+- DOM test environments may navigate a rendered iframe and trigger real network failures. Use a non-navigating URL for adapter-only tests and reserve framing-policy assertions for a real browser.
+- Keep framed-workspace layout derived from the active module, so temporary panel/overlay changes do not mutate or overwrite saved Board preferences.
+
+## 0992 — Validate downstream installs and publish module authoring guidance
+
+- The composed browser proof caught a mismatch between module identity and route identity: downstream entries use `id: <id>` and `route: modules/<id>`, so active-module layout lookup must use the route key. Unit fixtures that alias the two can mask this class of bug.
+- Test the shipped composition path with its real catalog and asset routes, without the earlier proof adapter. It verifies the actual interaction between import-map loading, registry provider, router, error boundary, frame adapter, and layout.
+- CDP event collections are asynchronous snapshots. For expected events, wait with a bounded timeout; for forbidden events, assert absence immediately. One-shot reads can pass in isolation and flake under the full suite.
+- Make documentation examples executable evidence: extract the marked config example and parse it through the production schema/validator, and assert that initialization keeps the default module list empty.
+- Keep unproven integration paths explicit. Per-origin catalog isolation and fresh-load behavior do not by themselves prove driving the project switcher or a changed-selection restart end to end.
