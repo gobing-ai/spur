@@ -745,14 +745,32 @@ export const SummaryTab: React.FC<SummaryTabProps> = memo(
                         </div>
                     </div>
 
-                    {/* Token by Agent Source */}
+                    {/* Token by Agent */}
                     <div className="bg-base-200 rounded-xl shadow-sm border border-base-content/10 p-5">
-                        <h4 className="font-bold text-sm mb-3">Token by Agent Source</h4>
+                        <h4 className="font-bold text-sm mb-3">Token by Agent</h4>
                         <div className="flex flex-col gap-3">
                             {topSources.map((s) => (
                                 <TokenBreakdownBar key={s.id} item={s} maxTotal={tokenBarMax} />
                             ))}
                         </div>
+                    </div>
+
+                    {/* Cache Efficiency By Model */}
+                    <div className="bg-base-200 rounded-xl shadow-sm border border-base-content/10 p-5">
+                        <h4 className="font-bold text-sm mb-3">Cache Efficiency By Model</h4>
+                        {cacheEfficiency.byModel && cacheEfficiency.byModel.length > 0 && (
+                            <CacheEfficiencyBars
+                                items={cacheEfficiency.byModel.map((m) => ({
+                                    id: m.model,
+                                    label: m.modelName,
+                                    color: m.color,
+                                    hitRatio: m.hitRatio,
+                                    savedTokens: m.savedTokens,
+                                    totalRead: m.totalRead,
+                                    billedTokens: m.billedTokens,
+                                }))}
+                            />
+                        )}
                     </div>
 
                     {/* Cache Efficiency By Agent */}
@@ -780,24 +798,6 @@ export const SummaryTab: React.FC<SummaryTabProps> = memo(
                                     savedTokens: s.savedTokens,
                                     totalRead: s.totalRead,
                                     billedTokens: s.billedTokens,
-                                }))}
-                            />
-                        )}
-                    </div>
-
-                    {/* Cache Efficiency By Model */}
-                    <div className="bg-base-200 rounded-xl shadow-sm border border-base-content/10 p-5">
-                        <h4 className="font-bold text-sm mb-3">Cache Efficiency By Model</h4>
-                        {cacheEfficiency.byModel && cacheEfficiency.byModel.length > 0 && (
-                            <CacheEfficiencyBars
-                                items={cacheEfficiency.byModel.map((m) => ({
-                                    id: m.model,
-                                    label: m.modelName,
-                                    color: m.color,
-                                    hitRatio: m.hitRatio,
-                                    savedTokens: m.savedTokens,
-                                    totalRead: m.totalRead,
-                                    billedTokens: m.billedTokens,
                                 }))}
                             />
                         )}
@@ -1114,7 +1114,7 @@ const activeSeriesFor = (skills: Array<{ id: string; label: string; color: strin
     skills.map((sk) => ({ id: sk.id, label: sk.label, color: sk.color }));
 
 /**
- * Stacked fresh / output billed token bar for the Token by Model / Token by Agent Source
+ * Stacked fresh / output billed token bar for the Token by Model / Token by Agent
  * cards. The bar width represents the billed token volume (fresh + output) scaled against the
  * universal maximum across both cards, while the footer displays the full fresh / cached / output
  * metrics.

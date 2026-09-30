@@ -1091,7 +1091,7 @@ describe('History Board components', () => {
         expect(view.getAllByText('80%').length).toBeGreaterThanOrEqual(3);
     });
 
-    test('Summary renders Token by Model / Token by Agent Source with fresh-cached-output breakdown and universal scale', () => {
+    test('Summary renders Token by Model / Token by Agent with fresh-cached-output breakdown and universal scale', () => {
         const asymmetricSummary: HistorySummaryResponse['data'] = {
             ...summary,
             topModels: [
@@ -1122,7 +1122,7 @@ describe('History Board components', () => {
         const view = render(<SummaryTab data={asymmetricSummary} />);
 
         expect(view.getByText('Token by Model')).toBeDefined();
-        expect(view.getByText('Token by Agent Source')).toBeDefined();
+        expect(view.getByText('Token by Agent')).toBeDefined();
         // Model has 50 billed tokens out of universal max (100) -> width: 50%
         // Source fresh has 100 billed tokens out of universal max (100) -> width: 100%
         const html = view.container.innerHTML;
