@@ -484,6 +484,49 @@ test('checkPlacement reports each finding kind once per file', () => {
     }
 });
 
+test('checkPlacement reports dynamic DB imports as db-import (task 1018 AC1)', () => {
+    const root = createPlacementFixture();
+    try {
+        writeFileSync(
+            join(root, 'plugins', 'sp', 'scripts', 'dyn-sqlite.ts'),
+            `export async function open() {\n    const { Database } = await import('bun:sqlite');\n    return Database;\n}\n`,
+        );
+        writeFileSync(
+            join(root, 'plugins', 'sp', 'scripts', 'dyn-drizzle.ts'),
+            `export async function open() {\n    const db = await import("drizzle-orm/bun-sqlite");\n    return db;\n}\n`,
+        );
+        const findings = checkPlacement({ repoRoot: root, baselinePath: join(root, 'config', 'missing.json') });
+        const sqlite = findings.filter((f) => f.file === 'plugins/sp/scripts/dyn-sqlite.ts');
+        expect(sqlite).toHaveLength(1);
+        expect(sqlite[0]?.kind).toBe('db-import');
+        expect(sqlite[0]?.detail).toBe('dynamic import of bun:sqlite');
+        const drizzle = findings.filter((f) => f.file === 'plugins/sp/scripts/dyn-drizzle.ts');
+        expect(drizzle).toHaveLength(1);
+        expect(drizzle[0]?.kind).toBe('db-import');
+        expect(drizzle[0]?.detail).toBe('dynamic import of drizzle-orm/bun-sqlite');
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('checkPlacement skips type imports, comment lines and bare string literals (task 1018 AC2)', () => {
+    const root = createPlacementFixture();
+    try {
+        const scripts = join(root, 'plugins', 'sp', 'scripts');
+        writeFileSync(
+            join(scripts, 'type-import.ts'),
+            `import type { Database } from 'bun:sqlite';\nexport const t = 1;\n`,
+        );
+        writeFileSync(join(scripts, 'line-comment.ts'), `// await import('bun:sqlite')\nexport const t = 1;\n`);
+        writeFileSync(join(scripts, 'jsdoc.ts'), `/**\n * import('bun:sqlite')\n */\nexport const t = 1;\n`);
+        writeFileSync(join(scripts, 'bare-literal.ts'), `const x = 'bun:sqlite';\nexport const t = x;\n`);
+        const findings = checkPlacement({ repoRoot: root, baselinePath: join(root, 'config', 'missing.json') });
+        expect(findings.filter((f) => f.kind === 'db-import').map((f) => f.file)).toEqual(['plugins/sp/scripts/db.ts']);
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
 test('baseline suppresses listed kinds and flags stale entries', () => {
     const root = createPlacementFixture();
     try {
@@ -628,4 +671,14 @@ test('placement baseline reconciles with plan §2 (task 1000 R7)', () => {
             'plugins/sp/scripts/wrapup-steps.ts',
         ].sort(),
     );
+});
+
+test('daily-summary dynamic db import is baselined and the real tree is clean (task 1018 AC3)', () => {
+    const repoRoot = join(import.meta.dir, '..', '..');
+    const baselinePath = join(repoRoot, 'config', 'script-placement-baseline.json');
+    const loaded = loadPlacementBaseline(baselinePath);
+    if (!loaded.baseline) throw new Error(loaded.error ?? 'placement baseline missing');
+    const entry = loaded.baseline.entries['plugins/sp/scripts/daily-summary/daily-summary.ts'];
+    expect(entry?.kinds).toEqual(['budget', 'db-import']);
+    expect(checkPlacement({ repoRoot, baselinePath })).toEqual([]);
 });

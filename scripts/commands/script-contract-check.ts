@@ -534,6 +534,7 @@ function placementLineCount(content: string): number {
 // ponytail: single line-shape regex; a value-import spread across statements in one
 // expression is not a real pattern. Widen only if a false negative is reported.
 const DB_IMPORT_RE = /import\s+(?!type\b)[^;]*?from\s+['"](bun:sqlite|drizzle-orm(?:\/[\w.-]+)?)['"]/;
+const DB_DYNAMIC_IMPORT_RE = /\bimport\(\s*['"](bun:sqlite|drizzle-orm(?:\/[\w.-]+)?)['"]\s*\)/;
 
 function collectPlacementTsFiles(dir: string, out: string[] = []): string[] {
     if (!existsSync(dir)) return out;
@@ -584,7 +585,21 @@ export function checkPlacement(opts: { repoRoot: string; baselinePath: string })
             const lines = placementLineCount(content);
             if (lines > GLUE_BUDGET_LINES) record(rel, 'budget', `${lines} lines > budget ${GLUE_BUDGET_LINES}`);
             const dbImport = DB_IMPORT_RE.exec(content);
-            if (dbImport) record(rel, 'db-import', `value-import of ${dbImport[1]}`);
+            if (dbImport) {
+                record(rel, 'db-import', `value-import of ${dbImport[1]}`);
+            } else {
+                // ponytail: per-line comment skip; trailing comments on code lines and
+                // template-string content are not handled — widen only on a false negative.
+                for (const line of content.split('\n')) {
+                    const trimmed = line.trim();
+                    if (trimmed.startsWith('//') || trimmed.startsWith('*')) continue;
+                    const dynamic = DB_DYNAMIC_IMPORT_RE.exec(line);
+                    if (dynamic) {
+                        record(rel, 'db-import', `dynamic import of ${dynamic[1]}`);
+                        break;
+                    }
+                }
+            }
             if (content.includes('docs/tasks') || content.includes('docs/features')) {
                 record(rel, 'corpus-parse', 'contains a docs/tasks or docs/features path literal (corpus parsing)');
             }
