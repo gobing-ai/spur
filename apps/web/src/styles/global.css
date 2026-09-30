@@ -110,16 +110,20 @@
 }
 
 [data-theme="light"] .task-kanban {
-    --color-spur-bg: #ffffff;
-    --color-spur-surface: #ffffff;
-    --color-spur-surface-2: #f8fafc;
-    --color-spur-surface-3: #f1f5f9;
+    --color-spur-bg: #f8fafc;
+    --color-spur-surface: #f1f5f9;
+    --color-spur-surface-2: #ffffff;
+    --color-spur-surface-3: #f8fafc;
     --color-spur-border: #e2e8f0;
     --color-spur-accent: #5e6ad2;
     --color-spur-accent-hover: #4f46e5;
     --color-spur-text: #0f172a;
     --color-spur-text-muted: #64748b;
     --color-spur-text-faint: #7c8699;
+    --color-primary: #5e6ad2;
+    --color-primary-content: #ffffff;
+    --color-accent: #5e6ad2;
+    --color-accent-content: #ffffff;
 }
 
 /* ── Inbox — DESIGN.md retoken (0422 R10/R11) ──
