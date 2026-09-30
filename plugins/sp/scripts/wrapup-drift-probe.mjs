@@ -11,6 +11,12 @@ function getEnvVars() {
   return process.env;
 }
 
+// plugins/sp/lib/spur-bin.ts
+function spurCommand(spurBin) {
+  const parts = (spurBin ?? "spur").trim().split(/\s+/).filter((p) => p.length > 0);
+  return { cmd: parts[0] ?? "spur", prefix: parts.slice(1) };
+}
+
 // plugins/sp/scripts/wrapup-drift-probe.ts
 var WORKFLOWS_GLOB = `${join("config", "workflows")}/**`;
 var DOC_OWNED_SURFACES = [
@@ -83,9 +89,9 @@ function driftReasonForPath(path) {
   return match ? `matches doc-owned surface ${match.glob}` : null;
 }
 function defaultSpurRunner(env, cwd) {
-  const parts = (env.spurBin ?? "spur").split(/\s+/).filter((part) => part.length > 0);
+  const { cmd, prefix } = spurCommand(env.spurBin);
   return (args) => {
-    const run = spawnSync(parts[0] ?? "spur", [...parts.slice(1), ...args], {
+    const run = spawnSync(cmd, [...prefix, ...args], {
       cwd,
       encoding: "utf8",
       env: getEnvVars()

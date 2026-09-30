@@ -174,13 +174,17 @@ export function runScriptRoot(env: ScriptRootEnv, options: ScriptRootOptions = {
     }
 }
 
-export const SCRIPT_ROOT_USAGE = 'usage: script-root --run-id <id>';
+export const SCRIPT_ROOT_USAGE = 'usage: script-root --run-id <id> [--spur-bin <path>]';
 
 export function main(argv: string[], env: ScriptRootEnv = getEnvVars(), options: ScriptRootOptions = {}): number {
     let runId = env.__runId ?? '';
     for (let i = 0; i < argv.length; i++) {
         if (argv[i] === '--run-id') {
             runId = argv[i + 1] ?? '';
+            i++;
+            continue;
+        }
+        if (argv[i] === '--spur-bin') {
             i++;
             continue;
         }

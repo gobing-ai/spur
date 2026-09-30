@@ -5,7 +5,7 @@
  * tier, command→role closure over the live `plugins/sp/commands/` directory, stage-floor agreement
  * with the canonical stage registry, and the layer boundary (no executor/model/vendor names).
  *
- * Same real-tree discipline as `stage-registry-parity.test.ts`: the canonical registry is read as
+ * Real-tree discipline: the canonical registry is read as
  * TEXT rather than imported, because the plugin installs into foreign repos and cannot resolve
  * `@gobing-ai/spur-domain`. `yaml` resolves from the monorepo root for the shipped file check.
  */
@@ -292,7 +292,7 @@ describe('roles — R7: no tier literal survives in plugin prose (0538 R4)', () 
 
 describe('roles — R9: roles.md projects config.global.yaml with fallback parity (0647)', () => {
     // The plugin tree cannot resolve @gobing-ai/spur-config (it installs into
-    // foreign repos — same discipline as stage-registry-parity.test.ts), so the
+    // foreign repos), so the
     // SSOT constant is read as text and its Map literal parsed, exactly like the
     // AGENT_ROLE_NAMES parity test in R1 above.
     const configSource = readFileSync(join(REPO_ROOT, 'packages', 'config', 'src', 'index.ts'), 'utf8');

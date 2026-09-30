@@ -96,12 +96,16 @@ function runScriptRoot(env, options = {}) {
     return write({ mode: "unresolved", error: `installed digest failed: ${String(error)}` });
   }
 }
-var SCRIPT_ROOT_USAGE = "usage: script-root --run-id <id>";
+var SCRIPT_ROOT_USAGE = "usage: script-root --run-id <id> [--spur-bin <path>]";
 function main(argv, env = getEnvVars(), options = {}) {
   let runId = env.__runId ?? "";
   for (let i = 0;i < argv.length; i++) {
     if (argv[i] === "--run-id") {
       runId = argv[i + 1] ?? "";
+      i++;
+      continue;
+    }
+    if (argv[i] === "--spur-bin") {
       i++;
       continue;
     }

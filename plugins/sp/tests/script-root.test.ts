@@ -149,7 +149,11 @@ test('main reads --run-id and rejects an unknown flag', () => {
         writeFileSync(join(cwd, SOURCE_REPO_MARKER), '{}\n');
         mkdirSync(join(cwd, PROJECT_SCRIPTS_DIR), { recursive: true });
         expect(main(['--run-id', 'r-main'], { __runId: '' }, { cwd })).toBe(0);
+        expect(main(['--run-id', 'r-main-bin', '--spur-bin', 'spur'], { __runId: '' }, { cwd })).toBe(0);
         expect(JSON.parse(readFileSync(join(cwd, '.spur', 'run', 'r-main-script-root.json'), 'utf8')).mode).toBe(
+            'source-repo',
+        );
+        expect(JSON.parse(readFileSync(join(cwd, '.spur', 'run', 'r-main-bin-script-root.json'), 'utf8')).mode).toBe(
             'source-repo',
         );
         const writes: string[] = [];
@@ -165,6 +169,7 @@ test('main reads --run-id and rejects an unknown flag', () => {
         }
         expect(writes).toEqual([`${SCRIPT_ROOT_USAGE}\n`]);
         expect(SCRIPT_ROOT_USAGE).toContain('--run-id');
+        expect(SCRIPT_ROOT_USAGE).toContain('--spur-bin');
     } finally {
         cleanup(cwd);
     }

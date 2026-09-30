@@ -515,6 +515,8 @@ test('baseline suppresses listed kinds and flags stale entries', () => {
 });
 
 test('--placement-only run() exits 1 with findings and 0 when fully suppressed', () => {
+    const logSpy = spyOn(console, 'log').mockImplementation(() => {});
+    const errSpy = spyOn(console, 'error').mockImplementation(() => {});
     const root = createPlacementFixture();
     try {
         expect(run(['--placement-only', '--repo-root', root, '--baseline', join(root, 'config', 'none.json')])).toBe(1);
@@ -534,6 +536,8 @@ test('--placement-only run() exits 1 with findings and 0 when fully suppressed',
         );
         expect(run(['--placement-only', '--repo-root', root, '--baseline', baselinePath])).toBe(0);
     } finally {
+        logSpy.mockRestore();
+        errSpy.mockRestore();
         rmSync(root, { recursive: true, force: true });
     }
 });
@@ -585,11 +589,16 @@ test('placement baseline reconciles with plan §2 (task 1000 R7)', () => {
         .filter((m) => m.name !== 'script-contract-check')
         // task 1005 R6 / 1006 R5: the W3 scripts' logic moved into packages/app lib bundles; the
         // ≤250 glue stays, so their plan-§2 rows left the baseline instead of their files.
+        // task 1007 R7: residual-scan (W2, same shape) leaves too — its row listed no kinds.
         .filter(
             (m) =>
-                !['history-anatomy-cache', 'workflow-step-profile', 'quality-gate', 'inline-run-setup'].includes(
-                    m.name,
-                ),
+                ![
+                    'history-anatomy-cache',
+                    'workflow-step-profile',
+                    'quality-gate',
+                    'inline-run-setup',
+                    'residual-scan',
+                ].includes(m.name),
         )
         .filter(
             (m) =>

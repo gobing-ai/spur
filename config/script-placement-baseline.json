@@ -6,10 +6,6 @@
             "kinds": ["budget"],
             "reason": "Keep, sp-owned git/gh loop; cited exemption (plan \u00a72)"
         },
-        "plugins/sp/scripts/residual-scan.ts": {
-            "kinds": [],
-            "reason": "migration ledger (plan \u00a72): logic \u2192 packages/app + residual-scan lib bundle; script slimmed to 246 LOC glue, W2"
-        },
         "plugins/sp/scripts/wrapup-steps.ts": {
             "kinds": ["budget"],
             "reason": "Keep (budget exemption), W2 (plan \u00a72)",

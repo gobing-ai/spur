@@ -28,6 +28,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { getEnvVars } from '../lib/env';
+import { spurCommand } from '../lib/spur-bin';
 
 export interface DriftProbeEnv {
     __runId?: string;
@@ -158,9 +159,9 @@ export function driftReasonForPath(path: string): string | null {
 }
 
 function defaultSpurRunner(env: DriftProbeEnv, cwd?: string): SpurRunner {
-    const parts = (env.spurBin ?? 'spur').split(/\s+/).filter((part) => part.length > 0);
+    const { cmd, prefix } = spurCommand(env.spurBin);
     return (args: string[]): SpurShowResult => {
-        const run = spawnSync(parts[0] ?? 'spur', [...parts.slice(1), ...args], {
+        const run = spawnSync(cmd, [...prefix, ...args], {
             cwd,
             encoding: 'utf8',
             env: getEnvVars(),
