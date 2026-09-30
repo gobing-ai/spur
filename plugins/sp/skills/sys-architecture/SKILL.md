@@ -73,8 +73,9 @@ codebase (or a named module tree) for **shallow modules and deepening opportunit
 them as candidates for the planning half. This is a *generator*, not a fixer — it never refactors;
 it produces a ranked candidate report an operator can turn into a task.
 
-**Not `/sp:dev-review`.** `/sp:dev-review` is a per-task DIFF review (a WBS, forward, findings written
-to the task's `## Review`, backed by `sp:code-verification`). The survey has no WBS and no diff — it
+**Not `/sp:dev-review`.** `/sp:dev-review` is a DIFF review of a task set (`--tasks`/`--feature`) or an advisory `--scope` path review
+(task targets: forward, findings written to each task's `## Review`; paths: advisory report, no task
+mutation; backed by `sp:code-verification`). The survey has no task set and no diff — it
 audits the standing codebase and feeds the planning half. Folding it into `dev-review` would overload
 that verb and pollute `code-verification` with a codebase scanner; it earns its own operation here.
 

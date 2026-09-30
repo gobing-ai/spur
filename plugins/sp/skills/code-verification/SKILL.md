@@ -36,7 +36,7 @@ It backs two commands:
 | Command | Mode | Input | Output |
 |---------|------|-------|--------|
 | `/sp:dev-verify <wbs>` | **verify** | a task WBS | `.spur/run/<wbs>-verdict.json`; `record` transcribes `## Testing` |
-| `/sp:dev-review <wbs>` | **review** (coordinator) | a task WBS (diff scope) | merged three-dimensional findings → `## Review` |
+| `/sp:dev-review --tasks <wbs>` | **review** (coordinator) | a task WBS (diff scope) | merged three-dimensional findings → `## Review` |
 
 The verify mode is the **completion gate's evidence source**: it emits a machine verdict the
 `task-pipeline.yaml` workflow reads before allowing `record → done`. A `PASS` clears the gate; a
@@ -96,27 +96,27 @@ no-op there; `--force` matters for re-auditing completed tasks.)
 
 ### Step 3 — Establish the change scope
 
-Determine which files the task changed (the evidence surface). This step is the SSOT scope recipe:
+Determine which files the task changed. This step is the SSOT scope recipe:
 `sp:functional-review` Step 3, `sp:code-improvement` Step 1, and `sp:super-reviewer` "Establish
 scope first" defer here and must not restate it.
 
 WBS mode — the union of files changed by the task's implementation commits, identified by the
-`(<wbs>)` subject tag ("commit per task"), excluding the task file itself:
+`(<wbs>)` subject tag, excluding the task file itself:
 
 ```bash
-TASK_FILE=$(spur task show <wbs> --json | jq -r .filePath)
-COMMITS=$(git log --format=%H --fixed-strings --grep="(<wbs>)")
+ROOT=$(git rev-parse --show-toplevel)
+TASK_FILE=$(cd "$ROOT" && spur task show <wbs> --json | jq -r .filePath)
+COMMITS=$(git log --format='%H %s' | grep -F "(<wbs>)" | cut -d' ' -f1)
 for c in $COMMITS; do git diff-tree --no-commit-id --name-only -r "$c"; done \
-  | sort -u | grep -vxF "${TASK_FILE#$PWD/}"
-# No tagged commit → fall back to the working-tree diff.
+  | sort -u | grep -vxF "${TASK_FILE#$ROOT/}"
+# Empty scope → working-tree diff.
 git status --porcelain
 ```
 
 - No file-extension filter — `.md`/`.yaml` are first-class harness surfaces. Generated/lock files
-  (`*.generated.mjs`, `bun.lock`) may be excluded by name, with the exclusion stated in the Scope
-  line.
-- A task without a tagged commit degrades visibly, never silently: state `working tree` (no tagged
-  commit) in the review Scope line.
+  (`*.generated.mjs`, `bun.lock`) may be excluded by name, stated in the Scope line.
+- Empty scope (no tagged commit, or tagged commits touch only the task file) degrades visibly:
+  state `working tree` and the reason in the Scope line.
 
 ### Step 3p — Path scope (review mode only)
 
@@ -127,7 +127,7 @@ path: the tracked files under it, with the file count reported in the Scope line
 git ls-files -- <path>
 ```
 
-Large scopes are fanned out by the coordinator (`sp:super-reviewer`), not here.
+Large scopes are fanned out by the review coordinator, not here.
 
 ### Step 4 — Requirements traceability gate (Phase 8)
 

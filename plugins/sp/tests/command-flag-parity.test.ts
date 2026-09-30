@@ -291,9 +291,14 @@ describe('task 1022 — dev-review contract hygiene', () => {
     test('R1 — each review skill receives the target exactly once (no doubled <wbs>/<path> prefix)', () => {
         expect(reviewRaw).not.toMatch(/args="<wbs> \$ARGUMENTS"/);
         expect(reviewRaw).not.toMatch(/args="<path> \$ARGUMENTS"/);
-        // The surviving dispatches forward the target once, inside $ARGUMENTS.
-        expect(reviewRaw).toContain('Skill(skill="sp:functional-review", args="$ARGUMENTS")');
-        expect(reviewRaw).toContain('Skill(skill="sp:code-improvement", args="$ARGUMENTS")');
+        // Post-1023, $ARGUMENTS carries the whole selector (`--tasks 1021,1022 …`), so each per-target
+        // leg forwards its one resolved target plus the non-selector flags — never raw $ARGUMENTS.
+        expect(reviewRaw).toContain('Skill(skill="sp:functional-review", args="<wbs> $FLAGS")');
+        expect(reviewRaw).toContain('Skill(skill="sp:code-verification", args="review <wbs> $FLAGS")');
+        expect(reviewRaw).toContain('Skill(skill="sp:code-improvement", args="<wbs> $FLAGS")');
+        expect(reviewRaw).toContain('Skill(skill="sp:code-verification", args="review <path> $FLAGS")');
+        expect(reviewRaw).toContain('Skill(skill="sp:code-improvement", args="<path> $FLAGS")');
+        expect(reviewRaw).not.toMatch(/Skill\(skill="sp:[a-z-]+", args="(review )?\$ARGUMENTS"\)/);
     });
 
     test('R2 — the invoking session is the coordinator and writes ## Review in WBS mode', () => {
@@ -325,13 +330,15 @@ describe('task 1022 — dev-review contract hygiene', () => {
     test('R5 — no live route recommends dev-review --fix or super-reviewer --next', () => {
         const routing = readFileSync(ROUTING_PATH, 'utf8');
         expect(routing).not.toMatch(/dev-review[^\n]*--fix/);
-        expect(routing).toContain('/sp:dev-review <wbs> --triage');
+        expect(routing).toContain('/sp:dev-review --tasks <wbs> --triage');
         const reviewer = readFileSync(REVIEWER_PATH, 'utf8');
         expect(reviewer).not.toContain('--next');
-        // code-verification's review-mode flag list drops --fix (scoping: only the
-        // section between '## Mode: review' and the next '---' separator).
+        // code-verification's review-mode flag list drops --fix. Slice from the anchored
+        // heading to the next H2 and require a non-empty section, so a moved heading fails
+        // loud instead of passing on '' (task 1032 R5).
         const cv = readFileSync(CV_PATH, 'utf8');
-        const reviewSection = cv.split('## Mode: review')[1]?.split('\n---')[0] ?? '';
+        const reviewSection = cv.match(/^## Mode: review[^\n]*\n([\s\S]*?)(?=^## )/m)?.[1] ?? '';
+        expect(reviewSection.length).toBeGreaterThan(0);
         expect(reviewSection).not.toContain('--fix');
         // dev-review keeps --fix only as the documented deprecated no-op, outside the hint.
         expect(extractFlags(argumentHint(reviewRaw)).has('--fix')).toBe(false);
@@ -431,5 +438,53 @@ describe('task 1023 — dev-review target selectors (--tasks / --feature / --sco
         }
         expect(reviewRaw).toMatch(/every target to resolve before the tree is cut/);
         expect(reviewRaw).toMatch(/`selector` = the full normalized target list/);
+    });
+});
+
+describe('task 1032 — dev-review P4 advisory sweep', () => {
+    const SKILLS = join(ROOT, 'plugins', 'sp', 'skills');
+    const cv = readFileSync(join(SKILLS, 'code-verification', 'SKILL.md'), 'utf8');
+    const reviewRaw = readFileSync(join(COMMANDS_DIR, 'dev-review.md'), 'utf8');
+    const step3 = cv.match(/^### Step 3 — [^\n]*\n([\s\S]*?)(?=^### )/m)?.[1] ?? '';
+
+    test('R1/R2 — scope recipe matches the subject only and is anchored at the repo root', () => {
+        expect(step3.length).toBeGreaterThan(0);
+        expect(step3).toContain("git log --format='%H %s'");
+        expect(step3).not.toContain('--grep=');
+        expect(step3).toContain('ROOT=$(git rev-parse --show-toplevel)');
+        expect(step3).toContain('TASK_FILE#$ROOT/}');
+        expect(step3).not.toContain('$PWD/');
+    });
+
+    test('R3 — tagged commits touching only the task file degrade visibly', () => {
+        expect(step3).toMatch(/touch only the task file/);
+    });
+
+    test('R4 — dev-review --focus row links the SSOT without restating the vocabulary', () => {
+        const focusRow = reviewRaw.split('\n').find((l) => l.startsWith('| `--focus`')) ?? '';
+        expect(focusRow).toContain('[code-verification/SKILL.md](../skills/code-verification/SKILL.md)');
+        expect(focusRow).not.toContain('all\\|functional');
+    });
+
+    test('R6 — no positional-only /sp:dev-review <wbs> example remains in routed docs', () => {
+        const docs = [
+            join(SKILLS, 'code-verification', 'SKILL.md'),
+            join(SKILLS, 'next-router', 'references', 'routing-table.md'),
+            join(SKILLS, 'spur-dev', 'references', 'execution-workflow.md'),
+            join(SKILLS, 'spur-dev', 'references', 'gate-checklists.md'),
+        ];
+        for (const doc of docs) expect(readFileSync(doc, 'utf8')).not.toContain('/sp:dev-review <wbs>');
+    });
+
+    test('R7 — sys-architecture describes task sets and advisory --scope review', () => {
+        const arch = readFileSync(join(SKILLS, 'sys-architecture', 'SKILL.md'), 'utf8');
+        const para = arch.split('\n').find((l) => l.includes('`/sp:dev-review` is')) ?? '';
+        expect(para).toContain('--tasks');
+        expect(para).toContain('--scope');
+    });
+
+    test('R8 — nested --scope collapses to the ancestor; positional beside a selector exits 2', () => {
+        expect(reviewRaw).toContain('`--scope apps,apps/cli` → `apps`');
+        expect(reviewRaw).toMatch(/positional beside an explicit selector[^\n]*exit 2/);
     });
 });
