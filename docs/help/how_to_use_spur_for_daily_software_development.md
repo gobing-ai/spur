@@ -91,10 +91,10 @@ spur agent list    # list detected agents
 Every project that uses Spur needs a one-time `init`:
 
 ```bash
-spur init                    # scaffold .spur/ with config, rules, workflows
-spur init --name my-project  # custom project name
-spur init --minimal          # only the minimal .spur scaffold (no rules/workflows)
-spur init --force            # recreate files that already exist
+spur self init                    # scaffold .spur/ with config, rules, workflows
+spur self init --name my-project  # custom project name
+spur self init --minimal          # only the minimal .spur scaffold (no rules/workflows)
+spur self init --force            # recreate files that already exist
 ```
 
 What `init` creates under `.spur/`:
@@ -108,15 +108,15 @@ What `init` creates under `.spur/`:
 | `spur.db` | SQLite database for run history, traces, planning events (WAL mode) |
 | `logs/spur.log` | Bootstrap logger output |
 
-> **Re-init guard:** `spur init` refuses (exit 1) when `.spur/config.yaml` already exists,
+> **Re-init guard:** `spur self init` refuses (exit 1) when `.spur/config.yaml` already exists,
 > unless `--force` is given — preventing a stray `init` from clobbering a configured project.
 
-On first run, `spur init` also seeds `~/.config/spur/` from the bundled package-root `config/` assets
+On first run, `spur self init` also seeds `~/.config/spur/` from the bundled package-root `config/` assets
 (existing files are never overwritten), so `spur rule run` resolves a real ruleset from any
 project. `--json` output:
 
 ```bash
-spur init --json
+spur self init --json
 # → { "ok": true, "project": "my-project", "config": ".spur/config.yaml",
 #      "created": [...], "skipped": [], "globalRulesSeeded": 0, "globalConfigSeeded": 1 }
 ```
@@ -124,8 +124,8 @@ spur init --json
 Verify initialization:
 
 ```bash
-spur status          # Project: ok, .spur: ok, Git: <branch>, AgentSpecs: [...]
-spur status <path>   # also inspect a specific file/dir
+spur self status          # Project: ok, .spur: ok, Git: <branch>, AgentSpecs: [...]
+spur self status <path>   # also inspect a specific file/dir
 ```
 
 ---
@@ -134,77 +134,95 @@ spur status <path>   # also inspect a specific file/dir
 
 ```
 # Project + utilities
-spur init           [--name <name>] [--force] [--minimal] [--json]
-spur status         [path] [--json]
-spur migrate        [--json]
-spur serve          [--port <n>] [--host <addr>] [--no-open] [--cwd <path>] [--json]
+spur self      init [--name <name>] [--force] [--minimal] [--adopt-global-config] [--json]
+spur self      maintain [--vacuum] [--json]
+spur self      migrate [--json]
+spur self      serve [--port <n>] [--host <addr>] [--no-open] [--cwd <path>] [--json]
+spur self      status [path] [--json]
 
 # Agent execution surface
-spur agent          run <prompt> [--agent <name>] [--continue] [--model <name>] [--mode <mode>] [--cwd <path>] [--drain] [--json]
-spur agent          wait <specId> [--run <runId>] [--until <state>...] [--timeout <ms>] [--json]
-spur agent          list [--specs] [--json]
-spur agent          doctor [agent] [--json]
-spur agent          create <id> --type <agent-type> [--name] [--workspace] [--purpose] [--tags <a,b>] [--model] [--autonomy] [--system-prompt] [--no-identity-preamble] [--auto-start] [--json]
-spur agent          edit <id>
-spur agent          delete <id> [--force]
+spur agent     list [--json] [--specs] [--server <url>]
+spur agent     status [--json] [--server <url>]
+spur agent     usage [--dry-run] [--source <source>] [--json]
+spur agent     doctor [agent] [--json] [--probe-health] [--force-refresh]
+spur agent     run <prompt> [--agent <name>] [--spec <id>] [--continue] [--model <name>] [--mode <mode>] [--cwd <path>] [--json] [--drain]
+spur agent     wait [specId] [--role <name>] [--run <runId>] [--until <state>] [--timeout <ms>] [--json]
+spur agent     start <spec-id> [--server <url>] [--json]
+spur agent     stop <spec-id> [--server <url>] [--json]
 
 # Rule engine
-spur rule           run [--preset <name>] [--file <path>] [--rule <id>] [--fail-on <s>] [--stop-on-first [<s>]] [--fix-mode <mode>] [--dry-run] [--verbose] [--json]
-spur rule           validate [--file <path>|--preset <name>|<path>] [--kind <type>] [--no-schema] [--json]
-spur rule           list [--preset <name>] [--json]
-spur rule           trace [run-id] [--preset <name>] [--status <s>] [--since <iso-date>] [--last <n>] [--json]
+spur rule      run [--preset <name>] [--file <path>] [--rule <id>] [--fail-on <severity>] [--stop-on-first [severity]] [--fix-mode <mode>] [--dry-run] [--verbose] [--json]
+spur rule      validate [file-or-preset] [--file <path>] [--preset <name>] [--kind <type>] [--no-schema] [--json]
+spur rule      list [--preset <name>] [--json]
+spur rule      trace [run-id] [--preset <name>] [--status <status>] [--since <iso-date>] [--last <n>] [--json]
 
 # Workflow orchestration
-spur workflow       validate <workflow.yaml> [--no-schema] [--json]
-spur workflow       run     <workflow.yaml> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan] [--detail <minimal|invocation|full>] [--json]
-spur workflow       continue [run-id] [--yes] [--json]
-spur workflow       list    [--json]
-spur workflow       trace   [run-id] [--workflow <name>] [--status <s>] [--since <iso-date>] [--last <n>] [--json]
-spur workflow       cancel  <run-id> [--json]
-spur workflow       clean   [--older-than <minutes>] [--force] [--dry-run] [--json]
+spur workflow  validate <file> [--no-schema] [--json]
+spur workflow  run <file> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan] [--quiet] [--silent] [--verbose] [--detail <level>] [--trace-file] [--no-log] [--steer] [--json]
+spur workflow  continue [run-id] [--yes] [--force] [--answer <yes|no|cancel>] [--answer-text <text>] [--async] [--no-log] [--json]
+spur workflow  clean [--older-than <minutes>] [--force] [--logs] [--dry-run] [--json]
+spur workflow  cancel <run-id> [--json]
+spur workflow  list [--json]
+spur workflow  show <file> [--format <name>] [--json]
+spur workflow  trace [run-id] [--workflow <name>] [--status <status>] [--since <iso-date>] [--last <n>] [--follow] [--poll <ms>] [--output] [--timeout <ms>] [--json]
+spur workflow  progress <run-id> [--json]
 
 # Task management
-spur task           create  <title> [--feature <id>] [--parent <wbs>] [--template <variant>] [--folder <path>] [--json]
-spur task           show    <wbs> [--folder <path>] [--json]
-spur task           update  <wbs> [status] [--section <name> --from-file <path>] [--feature <id>] [--priority <p>] [--no-lifecycle] [--folder <path>] [--json]
-spur task           list    [--status <s>] [--phase <p>] [--parent <wbs>] [--feature <id>] [--folder <path>] [--json]
-spur task           refresh [--folder <path>] [--json]
-spur task           refresh-roster <wbs> [--folder <path>] [--json]
-spur task           batch-create --file <json> [--folder <path>] [--json]
-spur task           record  <wbs> [--verdict-file <path>] [--solution-from-diff] [--transition <status>] [--folder <path>] [--json]
-spur task           verdict <wbs> [--from-answer <path>] [--folder <path>] [--json]
-spur task           check   [<wbs>] [--strict] [--strict-core] [--corpus] [--since <ref>] [--folder <path>] [--json]
-spur task           resolve <file-path> [--strict] [--folder <path>] [--json]
-spur task           path    <wbs> [--folder <path>] [--json]
-spur task           deps    <wbs> [--folder <path>] [--json]
-spur task           sections <wbs> [--folder <path>] [--json]
-spur task           run-link <wbs> [--source <id>] [--run-id <id>] [--json]   # pipeline provenance link (--next auto chains)
-spur task           migrate [--dry-run] [--folder <path>] [--json]            # A17 corpus normalization (now wired)
+spur task      create <title> [--feature <id>] [--parent <wbs>] [--template <variant>] [--folder <path>] [--dedupe-within <seconds>] [--allow-duplicate-name] [--skip-ready] [--agent <selector>] [--json]
+spur task      show <wbs> [--folder <path>] [--json]
+spur task      update <wbs> [status] [--section <name>] [--from-file <path>] [--feature <id>] [--priority <p>] [--ac-numbering <mode>] [--ac-altitude <mode>] [--estimate-hours <n>] [--no-lifecycle] [--assignee <spec-id>] [--force-done] [--reason <text>] [--provenance-bypass] [--verdict-dir <path>] [--folder <path>] [--json]
+spur task      deps <wbs> <op> [values...] [--folder <path>] [--json]
+spur task      sections <wbs> <op> [name] [--folder <path>] [--json]
+spur task      list [--status <s>] [--phase <p>] [--parent <wbs>] [--feature <id>] [--folder <path>] [--json]
+spur task      refresh [--folder <path>] [--json]
+spur task      migrate [--dry-run] [--folder <path>] [--json]
+spur task      migrate-anchors [--dry-run] [--json]
+spur task      refresh-roster <wbs> [--folder <path>] [--json]
+spur task      batch-create --file <path> [--skip-ready] [--agent <selector>] [--folder <path>] [--json]
+spur task      record <wbs> [--verdict-file <path>] [--solution-from-diff] [--transition <status>] [--no-lifecycle] [--folder <path>] [--json]
+spur task      verdict <wbs> [--from-answer <path>] [--folder <path>] [--json]
+spur task      verifyall-aggregate [--from-file <path>] [--json]
+spur task      check [wbs] [--corpus] [--precheck] [--since <ref>] [--strict] [--strict-core] [--as <status>] [--fix] [--folder <path>] [--json]
+spur task      resolve <file-path> [--folder <path>] [--strict] [--json]
+spur task      path <wbs> [--folder <path>] [--json]
+spur task      run-link <wbs> [--source <source>] [--run-id <id>] [--json]
+spur task      scaffold-tests <wbs> [--file <path>] [--folder <path>] [--json]
 
 # Feature management
-spur feature        create  <name> [--parent <id>] [--folder <path>] [--json]
-spur feature        show    <id> [--folder <path>] [--json]
-spur feature        update  <id> [status] [--field <k> --value <v>] [--section <name> --from-file <path>] [--folder <path>] [--json]
-spur feature        advance <id> [--to <status>] [--folder <path>] [--json]   # walk the legal forward lifecycle path
-spur feature        list    [--status <s>] [--priority <p>] [--folder <path>] [--json]
-spur feature        move    <id> [--parent <id>] [--dry-run] [--folder <path>] [--json]
-spur feature        sync    [<id>|--all] [--dry-run] [--force] [--folder <path>] [--json]   # derive/sync feature status from task states
-spur feature        refresh [--folder <path>] [--json]
-spur feature        check   [<id>] [--strict] [--folder <path>] [--json]
+spur feature   create <name> [--parent <id>] [--folder <path>] [--json]
+spur feature   show <id> [--folder <path>] [--json]
+spur feature   update <id> [status] [--field <key>] [--value <value>] [--section <name>] [--from-file <path>] [--folder <path>] [--json]
+spur feature   advance <id> [--to <status>] [--folder <path>] [--json]
+spur feature   list [--status <s>] [--priority <p>] [--folder <path>] [--json]
+spur feature   move <id> [--parent <id>] [--dry-run] [--folder <path>] [--json]
+spur feature   refresh [--feature <id>] [--all] [--folder <path>] [--json]
+spur feature   check [id] [--strict] [--as <status>] [--folder <path>] [--fix] [--inventory <report>] [--json]
+spur feature   sync [id] [--all] [--dry-run] [--force] [--folder <path>] [--json]
 
 # History analytics
-spur history        import  --source <source> [--file <path>|--root <path>] [--mode <mode>] [--dry-run] [--json]
-spur history        analyze [--since <iso>] [--until <iso>] [--task <wbs>] [--top <n>] [--json]
-spur history        report  [<path>] [--mode default|forensics] [--task <wbs>] [--top <n>] [--json]
-spur history        daily   [--since <iso>] [--until <iso>] [--json]
+spur history   import [--source <source>] [--file <path>] [--root <path>] [--mode <mode>] [--dry-run] [--source-timeout <ms|none>] [--json]
+spur history   analyze [--since <iso>] [--until <iso>] [--source <source>] [--session <id>] [--run <runId>] [--task <wbs>] [--top <n>] [--out <path>] [--json]
+spur history   reset [--yes] [--json]
+spur history   report [path] [--json] [--mode <name>] [--task <wbs>] [--top <n>]
+spur history   daily [--since <iso>] [--until <iso>] [--source-timeout <ms|none>] [--root <path>] [--json] [--mode <name>]
 
-# Team coordination
-spur message        send    <body> --to <id> [--from <id>] [--wait] [--until injected|invoke-exit] [--timeout <ms>] [--json]
-spur message        inbox   --agent <id> [--json]
-spur message        reply   <msg-id> <body> [--json]
-spur task           update  <wbs> --assignee <spec-id>      # assign a task to an agent spec
-spur agent          list    --specs [--server <url>] [--json]     # agent specs + live run status
-spur agent          start | stop  <spec-id> [--server <url>] [--json]   # supervised processes; requires spur serve
+# Inter-agent messaging
+spur message   send <body> [--to <id>] [--role <name>] [--from <id>] [--request-key <key>] [--wait] [--until <state>] [--timeout <ms>] [--json]
+spur message   inbox --agent <id> [--unresolved] [--json]
+spur message   reply <msg-id> <body> [--json]
+spur message   watch --agent <id> [--interval <ms>] [--json]
+
+# Multi-project registry
+spur projects  add <path> [--name <name>] [--json]
+spur projects  remove <target> [--json]
+spur projects  clean [--no-terminate-processes] [--json]
+spur projects  list [--json] [--fleet]
+spur projects  start <target> [--port <n>] [--json]
+spur projects  stop <target> [--json]
+
+# Release plumbing
+spur builder   bump-ver [target] [version] [--all] [--push] [--json]
+spur builder   drop-tags [target] [version] [--all] [--remote] [--json]
 ```
 
 Every command supports `--json` for machine-readable output.
@@ -288,7 +306,7 @@ spur task list --feature F71         # filter by linked feature (feature_id edge
 spur task check            # validate all tasks (4-layer check)
 spur task check 0089       # validate one task
 spur task check --strict   # elevate ALL warnings to failures
-spur task check --strict-core   # gate variant: fail only on hard-core errors (the testing→done guard)
+spur task check 0089 --as done   # evaluate the done row (the testing→done guard)
 
 # Re-scan the task corpus and report counts (kanban.md retired — board lives in the web UI)
 spur task refresh
@@ -363,15 +381,8 @@ spur agent doctor           # check readiness of all agents
 spur agent doctor claude    # check one agent
 spur agent doctor grok      # Grok: version + XAI_API_KEY / ~/.grok/auth.json
 
-# Create a team agent spec
-spur agent create reviewer --type codex --purpose "Code review specialist" --tags review,quality
-spur agent create builder --type grok --purpose "Implementation agent"
-
-# Edit a spec (opens $EDITOR, or prints the path)
-spur agent edit reviewer
-
-# Delete a spec (requires --force)
-spur agent delete reviewer --force
+# Agent specs under .spur/agents/ are materialized from the `agent.fleet` declaration in
+# .spur/config.yaml — there are no `agent create|edit|delete` verbs.
 ```
 
 > **Single LLM execution surface:** every model call in Spur routes through `spur agent run`.
@@ -564,19 +575,19 @@ spur message inbox --agent reviewer
 spur message reply msg-001 "Looks good, merging"
 ```
 
-> **Team mode:** `team assign` + `message send` + `agent run --spec <id> --drain`
+> **Team mode:** `task update <wbs> --assignee <spec-id>` + `message send` + `agent run --spec <id> --drain`
 > folds the spec's inbox into the prompt and resolves the spec's executor before dispatch.
-> `team start/stop` manage supervised agent processes through `spur serve` (the supervisor
+> `agent start|stop` manage supervised agent processes through `spur self serve` (the supervisor
 > runs each member's persistent `spur agent loop`).
 
 ### 5.7 Serving the Web UI
 
 ```bash
 # Start the Spur web server (local fallback)
-spur serve                         # default: localhost:3000, opens browser
-spur serve --port 8080 --host 0.0.0.0
-spur serve --no-open               # skip opening the browser
-spur serve --json                  # output { port, url, pid } and exit
+spur self serve                         # default: localhost:3000, opens browser
+spur self serve --port 8080 --host 0.0.0.0
+spur self serve --no-open               # skip opening the browser
+spur self serve --json                  # output { port, url, pid } and exit
 ```
 
 The web server is Hono on Bun.serve (local) or the Cloudflare Worker (production). UI
@@ -586,7 +597,7 @@ modules are auto-discovered at build time from `apps/web/src/modules/` — see
 ### 5.8 Migrations
 
 ```bash
-spur migrate    # apply CLI-owned schema migrations to .spur/spur.db
+spur self migrate    # apply CLI-owned schema migrations to .spur/spur.db
 ```
 
 ---
@@ -618,7 +629,7 @@ cat .spur/run/0089-verdict.json   # { "verdict": "PASS" }
 spur task record 0089 --verdict-file .spur/run/0089-verdict.json --solution-from-diff --transition testing
 
 # 5. Close: transition to done
-spur task update 0089 done          # guarded by `spur task check --strict-core`
+spur task update 0089 done          # guarded by `spur task check --as done`
 
 # 6. Wrap up: learnings, metrics, doc-sync, optional feature transition + branch cleanup
 spur workflow run .spur/workflows/wrapup-pipeline.yaml \
@@ -678,7 +689,7 @@ below is a parallel process.
 ### Morning: orient
 
 ```bash
-spur status                          # project + git facts (CLI)
+spur self status                          # project + git facts (CLI)
 spur task list --status wip          # what's already in flight (CLI)
 /sp:dev-next 0089                    # status-aware router: the single best next step
 /sp:dev-next --feature F71           # same, for a feature frontier
@@ -774,7 +785,7 @@ spur workflow run f.yaml --async --json     # → { runId, status: "started", wo
 spur agent list --json       # → { agents: [{name, installed, version, ...}] }
 spur agent doctor --json     # → { agents: [{agent, installed, authenticated, usable, tier, ...}] }
 spur agent run ... --json    # → { exitCode, stdout, stderr, durationMs }
-spur status --json           # → { ok, packageJson, spurConfig, git: {root, branch, dirty}, agentSpecs, path? }
+spur self status --json           # → { ok, packageJson, spurConfig, git: {root, branch, dirty}, agentSpecs, path? }
 spur agent list --specs --json   # → { specs: [{id, status, pid?, ...}] }
 spur message inbox --agent X --json   # → { messages: [...], count }
 ```
@@ -856,8 +867,8 @@ features:
 | `SPUR_TELEMETRY_ENDPOINT` | Telemetry endpoint |
 | `SPUR_LOG_LEVEL` | Log level (`debug`/`info`/`warn`/`error`) |
 | `SPUR_AGENT` | Read by `spur agent run --agent <name>` (explicit executor selector) |
-| `PORT` | Server port for `spur serve` (default: 3000) |
-| `HOST` | Bind address for `spur serve` (default: localhost) |
+| `PORT` | Server port for `spur self serve` (default: 3000) |
+| `HOST` | Bind address for `spur self serve` (default: localhost) |
 
 ---
 
@@ -867,12 +878,10 @@ features:
   `history daily`); it never touches the database. `--mode forensics`, `--task <wbs>`, and
   `--top <n>` narrow the already-loaded artifact.
 - **`spur agent start|stop`** manage supervised agent processes and require a reachable
-  `spur serve`; without it, use `agent run --spec <id> --drain` for store-and-forward runs.
+  `spur self serve`; without it, use `agent run --spec <id> --drain` for store-and-forward runs.
 - **`spur task migrate`** now runs the one-time **A17** task-corpus normalization pass
   (`--dry-run` previews, `--folder` scopes, `--json` for machine output). Run it once when
   adopting the A17 layout on an older corpus; it is not part of the daily loop.
-- **`spur feature migrate`** is reserved — a one-time feature-corpus normalization, not
-  yet wired.
 - **Concurrent SQLite access:** Spur uses SQLite in WAL mode with a 30-second busy timeout.
   Multiple spur processes can run concurrently against the same project DB, but heavy
   concurrent writes may still contend. For hermetic test runs, use `DATABASE_URL=:memory:`.

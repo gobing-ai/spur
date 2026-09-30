@@ -15,8 +15,8 @@
 | --- | --- | --- | --- |
 | `DATABASE_URL` | apps/cli (`context`, `serve`, `maintain`) | Postgres connection string for CLI storage; app workspaces otherwise default to file/SQLite | empty → file/SQLite |
 | `NODE_ENV` | config loader, apps/cli, apps/server | Standard Node mode flag; `production` hardens server behavior | `development` |
-| `PORT` | apps/cli (`serve`), apps/server | HTTP port for `spur serve` | `3111` |
-| `HOST` | apps/cli (`serve`), apps/server | Bind address for `spur serve` | `127.0.0.1` |
+| `PORT` | apps/cli (`serve`), apps/server | HTTP port for `spur self serve` | `3111` |
+| `HOST` | apps/cli (`serve`), apps/server | Bind address for `spur self serve` | `127.0.0.1` |
 | `SPUR_CORS_ORIGINS` | apps/server (pipeline middleware, worker app) | Comma-separated CORS allow-list for the served web app | empty = same-origin only |
 | `SPUR_LOG_LEVEL` | apps/cli, apps/server | Server log level (`trace`…`fatal`) | `info` |
 | `SPUR_TELEMETRY_ENABLED` | apps/cli | Anonymous usage telemetry opt-in | `false` |

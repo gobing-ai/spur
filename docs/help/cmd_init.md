@@ -1,4 +1,4 @@
-# spur init
+# spur self init
 
 > Scaffold a local Spur project. Writes `.spur/config.yaml` and, unless `--minimal`, scaffolds
 > `.spur/rules/` (with the `recommended-pre-check` + `recommended-post-check` presets) and
@@ -14,7 +14,7 @@
 ## Usage
 
 ```
-spur init [options]
+spur self init [options]
 ```
 
 ## Options
@@ -40,7 +40,7 @@ Under `.spur/`:
 | `spur.db` | SQLite database for run history, traces, planning events (WAL mode) |
 | `logs/spur.log` | Bootstrap logger output (path from `bootstrap.logging.filePath`) |
 
-> **Single config surface.** Per ADR-017, `spur init` writes **only** `.spur/config.yaml`. The
+> **Single config surface.** Per ADR-017, `spur self init` writes **only** `.spur/config.yaml`. The
 > legacy `.spur/config.json` project marker is retired; the bootstrap block is folded into the
 > same YAML (consumed by `@gobing-ai/ts-infra` `runNodeApplication`).
 
@@ -51,22 +51,22 @@ literals.
 
 ### Re-init guard
 
-A `spur init` that finds an existing `config.yaml` is **refused (exit 1)** unless `--force`
+A `spur self init` that finds an existing `config.yaml` is **refused (exit 1)** unless `--force`
 is given — preventing a stray `init` from clobbering a configured project:
 
 ```bash
-spur init                  # → "Already initialized: .spur/config.yaml. Use --force to overwrite." (exit 1)
-spur init --force          # → overwrites
+spur self init                  # → "Already initialized: .spur/config.yaml. Use --force to overwrite." (exit 1)
+spur self init --force          # → overwrites
 ```
 
 ## Examples
 
 ```bash
-spur init                        # scaffold with defaults
-spur init --name my-project      # custom project name
-spur init --minimal              # minimal scaffold only (no rules/workflows)
-spur init --force                # recreate existing files
-spur init --json                 # machine-readable output
+spur self init                        # scaffold with defaults
+spur self init --name my-project      # custom project name
+spur self init --minimal              # minimal scaffold only (no rules/workflows)
+spur self init --force                # recreate existing files
+spur self init --json                 # machine-readable output
 ```
 
 `--json` output shape:
@@ -86,12 +86,12 @@ spur init --json                 # machine-readable output
 ## Verification
 
 ```bash
-spur status   # should show "Project: ok, .spur: ok, Git: <branch>"
+spur self status   # should show "Project: ok, .spur: ok, Git: <branch>"
 spur agent doctor   # verify your installed agents
 ```
 
 ## See Also
 
 - [Daily Development Guide](./how_to_use_spur_for_daily_software_development.md) — §3 Project Initialization
-- `docs/04_DESIGN.md` — §1.1 `spur init` and §2.1 project config (ADR-017)
+- `docs/04_DESIGN.md` — §1.1 `spur self init` and §2.1 project config (ADR-017)
 - `docs/00_ADR.md` — ADR-017 single-config-surface decision

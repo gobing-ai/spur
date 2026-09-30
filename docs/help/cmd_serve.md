@@ -1,4 +1,4 @@
-# spur serve
+# spur self serve
 
 > Start the Spur web server (local fallback). Serves the task Kanban board and planning UI.
 > The server is **Hono on Bun.serve** locally (or the Cloudflare Worker for production);
@@ -12,7 +12,7 @@
 ## Usage
 
 ```
-spur serve [options]
+spur self serve [options]
 ```
 
 ## Options
@@ -28,11 +28,11 @@ spur serve [options]
 ## Examples
 
 ```bash
-spur serve                         # default: localhost:3000, opens browser
-spur serve --port 8080             # custom port
-spur serve --host 0.0.0.0          # bind to all interfaces
-spur serve --no-open               # skip opening the browser
-spur serve --json                  # output { port, url, pid } and exit (no server started)
+spur self serve                         # default: localhost:3000, opens browser
+spur self serve --port 8080             # custom port
+spur self serve --host 0.0.0.0          # bind to all interfaces
+spur self serve --no-open               # skip opening the browser
+spur self serve --json                  # output { port, url, pid } and exit (no server started)
 ```
 
 ## What It Serves
@@ -58,4 +58,4 @@ module touches one directory and zero wiring — see
 
 - [Daily Development Guide](./how_to_use_spur_for_daily_software_development.md) — §5.7 Serving
 - [How to Add a UI Module](./how_to_add_a_new_ui_module.md) — the board module contract
-- `docs/04_DESIGN.md` — §1.2 `spur serve` and `docs/design/server-side-adjustment-design.md`
+- `docs/04_DESIGN.md` — §1.2 `spur self serve` and `docs/design/server-side-adjustment-design.md`

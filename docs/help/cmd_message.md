@@ -149,7 +149,7 @@ spur message watch [options]
 
 Follows an agent's inbox and surfaces each new message exactly once as it arrives. Polls the
 store directly via `AgentCoordinationService` — no server required (serverless is the contract; SSE-follow
-when `spur serve` is up is a future optimization). `Ctrl-C` exits cleanly.
+when `spur self serve` is up is a future optimization). `Ctrl-C` exits cleanly.
 
 **Watch SURFACES, it never CONSUMES** — it does not mark messages read/delivered. Read-marking
 stays with `--drain` / explicit reads, which makes `watch` safe to run alongside a drain loop.

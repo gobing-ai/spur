@@ -1,11 +1,13 @@
-# spur maintain
+# spur self maintain
 
 > Run database maintenance: PRAGMA optimize, WAL checkpoint truncation, optional VACUUM compaction.
+>
+> **Canonical path:** `spur self maintain`. The legacy `spur maintain` top-level form remains a hidden alias.
 
 ## Usage
 
 ```
-spur maintain [options]
+spur self maintain [options]
 ```
 
 ## Options

@@ -1,4 +1,4 @@
-# spur status
+# spur self status
 
 > Show project health, Git context, and optional path metadata. A **verb-less** command —
 > accepts an optional `path` positional and flags directly.
@@ -8,7 +8,7 @@
 > is absent from `spur --help`.
 
 ```
-spur status [options] [path]
+spur self status [options] [path]
 ```
 
 | Argument | Description |
@@ -21,7 +21,7 @@ spur status [options] [path]
 
 ## Behavior
 
-`spur status` reports whether the project is healthy and exposes context for tooling:
+`spur self status` reports whether the project is healthy and exposes context for tooling:
 
 - **Project** — `package.json` and `.spur/config.yaml` presence.
 - **Git** — root, current branch, dirty/clean state.
@@ -35,9 +35,9 @@ spur status [options] [path]
 ## Example
 
 ```bash
-spur status                  # human-readable summary
-spur status src/auth         # adds file/dir metadata for the path
-spur status --json           # machine-readable envelope (see shape below)
+spur self status                  # human-readable summary
+spur self status src/auth         # adds file/dir metadata for the path
+spur self status --json           # machine-readable envelope (see shape below)
 ```
 
 ### JSON shape

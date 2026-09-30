@@ -14,8 +14,8 @@
 | `doctor [agent]` | Check agent readiness (usable, authenticated, version) |
 | `wait <specId>` | Identity-pinned wait for an occupant run to reach a lifecycle state |
 | `loop` | Supervisor-internal self-draining loop for an agent spec (hidden from `--help`) |
-| `start <spec-id>` | Start a supervised agent process (requires `spur serve`) |
-| `stop <spec-id>` | Stop a supervised agent process (requires `spur serve`) |
+| `start <spec-id>` | Start a supervised agent process (requires `spur self serve`) |
+| `stop <spec-id>` | Stop a supervised agent process (requires `spur self serve`) |
 
 ## spur agent run
 
@@ -111,7 +111,7 @@ spur agent usage [options]
 | `--json` | Output machine-readable JSON |
 
 Run-once provider usage capture (codexbar) that refreshes quota-owned executor
-availability. Schedule it externally (cron/launchd); `spur serve` never runs it.
+availability. Schedule it externally (cron/launchd); `spur self serve` never runs it.
 Healthy providers whose windows are exhausted disable their executors (owner
 `quota`); recovered headroom re-enables them. Providers matching no configured
 executor are listed as unmapped, never guessed. A missing or failing codexbar
@@ -147,7 +147,7 @@ spur agent list [options]
 | `--json` | Output machine-readable JSON |
 
 With `--specs`, each row carries live run status merged from the server's supervisor: trailing `status` column plus `pid=<n>` where a process exists, then the member session (`<mode>` + `id=<8-char short>`; `-` when none).
-When `spur serve` is unreachable, the listing falls back to all `stopped` with a stderr warning.
+When `spur self serve` is unreachable, the listing falls back to all `stopped` with a stderr warning.
 
 Detected agents (canonical ids from `ts-ai-runner` `DISPLAY_ORDER`, 0.4.8+): `claude`, `codex`,
 `gemini`, `pi`, `omp`, `opencode`, `antigravity-cli`, `openclaw`, `hermes`, `grok`.
@@ -249,7 +249,7 @@ spur agent loop [options]
 | `--spec <id>` | Agent spec id / message recipient (required) |
 | `--poll <ms>` | Wakeup backstop timeout in milliseconds (default `2000`) |
 
-Supervisor-internal: `spur serve` spawns one loop per started spec (`spur agent start`); not run by hand.
+Supervisor-internal: `spur self serve` spawns one loop per started spec (`spur agent start`); not run by hand.
 Each iteration: check the agent inbox → drain pending messages into a prompt → run the agent
 → wakes on ledger events (message sent, strategy/capacity change, completion receipt); `--poll` is the no-event backstop. Runs until `SIGINT` / `SIGTERM`.
 
@@ -264,7 +264,7 @@ spur agent loop --spec worker-1 --poll 1000
 spur agent start [options] <spec-id>
 ```
 
-Starts a supervised agent process via `spur serve`.
+Starts a supervised agent process via `spur self serve`.
 
 | Flag | Description |
 |---|---|
@@ -279,7 +279,7 @@ Exit `1` when the server is unreachable or the start fails.
 spur agent stop [options] <spec-id>
 ```
 
-Stops a supervised agent process via `spur serve`.
+Stops a supervised agent process via `spur self serve`.
 
 | Flag | Description |
 |---|---|

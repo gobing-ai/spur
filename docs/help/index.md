@@ -42,7 +42,7 @@ once rather than repeated per command: `--help` prints any command's usage, and
 
 | Command         | Purpose                                                           |
 | --------------- | ----------------------------------------------------------------- |
-| `spur self`     | Self-management verbs: `init` / `migrate` / `serve` / `status` (the legacy top-level nouns remain hidden aliases) |
+| `spur self`     | Self-management verbs: `init` / `maintain` / `migrate` / `serve` / `status` (the legacy top-level nouns remain hidden aliases) |
 | `spur builder`  | Release plumbing: `bump-ver` / `drop-tags` (promoted from `spur-dev`) |
 | `spur agent`    | Run and inspect coding agents, agent specs, supervised processes  |
 | `spur rule`     | Manage constraint rules and presets                               |
@@ -141,7 +141,7 @@ mechanics; the CLI guide points here for the 26-step view.
 
 | Command         | Reference                            |
 | --------------- | ------------------------------------ |
-| `spur init`     | [cmd_init.md](./cmd_init.md)         |
+| `spur self init`     | [cmd_init.md](./cmd_init.md)         |
 | `spur agent`    | [cmd_agent.md](./cmd_agent.md)       |
 | `spur history`  | [cmd_history.md](./cmd_history.md)   |
 | `spur rule`     | [cmd_rule.md](./cmd_rule.md)         |
@@ -150,9 +150,10 @@ mechanics; the CLI guide points here for the 26-step view.
 | `spur builder`  | [cmd_builder.md](./cmd_builder.md)   |
 | `spur feature`  | [cmd_feature.md](./cmd_feature.md)   |
 | `spur message`  | [cmd_message.md](./cmd_message.md)   |
-| `spur status`   | [cmd_status.md](./cmd_status.md)     |
-| `spur migrate`  | [cmd_migrate.md](./cmd_migrate.md)   |
-| `spur serve`    | [cmd_serve.md](./cmd_serve.md)       |
+| `spur self status`   | [cmd_status.md](./cmd_status.md)     |
+| `spur self migrate`  | [cmd_migrate.md](./cmd_migrate.md)   |
+| `spur self maintain` | [cmd_maintain.md](./cmd_maintain.md) |
+| `spur self serve`    | [cmd_serve.md](./cmd_serve.md)       |
 | `spur projects` | [cmd_projects.md](./cmd_projects.md) |
 
 ### References

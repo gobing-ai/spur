@@ -1,4 +1,4 @@
-# spur migrate
+# spur self migrate
 
 > Apply CLI-owned schema migrations to the local `.spur/spur.db`. A **verb-less** command.
 > The migrator only applies top-level `drizzle/*.sql` files carrying the `_spur_cli_` marker;
@@ -9,7 +9,7 @@
 > is absent from `spur --help`.
 
 ```
-spur migrate [--json]
+spur self migrate [--json]
 ```
 
 | Flag | Description |
@@ -18,7 +18,7 @@ spur migrate [--json]
 
 ## Behavior
 
-`spur migrate` is a temporary helper that applies the CLI-owned migration set against
+`spur self migrate` is a temporary helper that applies the CLI-owned migration set against
 `.spur/spur.db`. Per `docs/04_DESIGN.md §1.2`, it reports `{ ok, applied }` under `--json`.
 History-import and workflow-engine tables ship as static SQL composed by
 `packages/domain/src/migrations.ts` and run as part of the same set.
@@ -30,11 +30,11 @@ History-import and workflow-engine tables ship as static SQL composed by
 ## Example
 
 ```bash
-spur migrate         # apply pending migrations, text summary
-spur migrate --json  # { ok, applied: [...] }
+spur self migrate         # apply pending migrations, text summary
+spur self migrate --json  # { ok, applied: [...] }
 ```
 
 ## See Also
 
 - [Command index](./index.md)
-- `docs/04_DESIGN.md` — §1.2 `spur migrate` and the database / migrations section.
+- `docs/04_DESIGN.md` — §1.2 `spur self migrate` and the database / migrations section.

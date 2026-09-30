@@ -243,7 +243,7 @@ List available workflow YAML files across project (`.spur/workflows/`) and globa
 }
 ```
 
-### Bundled workflows (project `.spur/workflows/` after `spur init`)
+### Bundled workflows (project `.spur/workflows/` after `spur self init`)
 
 | Workflow | Purpose |
 |---|---|
@@ -393,5 +393,5 @@ Housekeeping **two scopes** (unless scoped by flag):
 - [End-to-end Workflow Design](../design/e2e-workflow-for-system-development.md) — pipeline contracts, HITL taxonomy
 - [Workflow Observability](../design/workflow-observability.md) — `--async` and the live progress stream
 - Plugin skill reference: `plugins/sp/skills/spur-cli/references/workflows.md`
-- `.spur/workflows/` — project workflow definitions after `spur init`
+- `.spur/workflows/` — project workflow definitions after `spur self init`
 - `docs/04_DESIGN.md` — §1.1 `spur workflow` family
