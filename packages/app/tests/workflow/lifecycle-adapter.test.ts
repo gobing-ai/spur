@@ -95,6 +95,26 @@ describe('LifecycleAdapter (engine integration)', () => {
         db.close();
     });
 
+    test('guards run the caller-resolved spurBin, not the one persisted by the first attach', async () => {
+        // A run first attached by another spur binary (e.g. a stale global install) persisted
+        // its spurBin in the snapshot vars; the engine merges snapshot vars over workflow.vars,
+        // so binding spurBin only into workflow.vars let the stale binary own every later guard.
+        const { adapter: first, db } = await makeAdapter('false');
+        const ref = makeRef('0012');
+        expect((await first.requestTransition(ref, 'backlog', 'todo')).allowed).toBe(true);
+        const second = new LifecycleAdapter({
+            profile: TASK_LIFECYCLE_PROFILE,
+            getDb: async () => db,
+            taskRunLinkDao: (adapter) => new TaskRunLinkDao(adapter),
+            workflowPath: WORKFLOW_PATH,
+            cwd: process.cwd(),
+            spurBin: 'true',
+        });
+        const result = await second.requestTransition(ref, 'wip', 'testing');
+        expect(result.allowed).toBe(true);
+        db.close();
+    });
+
     test('R2: every (from, to) pair in the lifecycle graph is declared exactly once', async () => {
         // The structural half of the same rule — it covers testing→done and every future edge
         // without paying for that hop's provenance and Review L3 gates.

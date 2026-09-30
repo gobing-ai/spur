@@ -216,7 +216,12 @@ export class LifecycleAdapter implements LifecyclePort {
         await svc.reseedRun(workflow, runId, currentStatus);
 
         // ── R2: request the transition; map the engine result to the port ──
-        const result = await svc.requestTransition(workflow, runId, to, { workdir: this.opts.cwd });
+        // Pass the bound vars as overrides: the engine merges snapshot vars over workflow.vars,
+        // so a run first attached by another spur binary would otherwise keep that binary.
+        const result = await svc.requestTransition(workflow, runId, to, {
+            workdir: this.opts.cwd,
+            vars: { [profile.varKey]: ref.id, spurBin: this.opts.spurBin },
+        });
         if (result.allowed) {
             // The engine's external hop does not run onEnter. Feature-lifecycle's
             // verifying caller is an onEnter shell (0948 R1/AC1); run it before the
