@@ -2,9 +2,9 @@
 doc: 00_ADR
 owns: WHY — lasting architectural choices, context and tradeoffs
 authority: authoritative
-version: 1.57.0
+version: 1.58.0
 owner: Robin Min
-updated_at: 2026-09-28
+updated_at: 2026-09-30
 read_before: any structural change; before diverging from a decision
 edit_rules: 99 §6.1
 sync: [T1, T2]
@@ -2008,7 +2008,7 @@ posture); [workflow composition](design/workflow-composition-contract.md#composi
 ## ADR-130: Spur Logic Lives in the CLI; Plugin Scripts, Hooks and Lib Are Thin Glue
 
 - **Status:** Accepted (design) · **Date:** 2026-09-28 · **Feature:** A9
-- **Decision:** Each script surface has one owner. Logic about Spur's own nouns (task, feature, workflow, history, self) lives in `packages/app` behind a verb or flag of an **existing** `spur` noun, with `apps/cli/src/commands` as the thin transport (ADR-021). `scripts/commands` holds Spur self-dev only. `plugins/sp/scripts` and `plugins/sp/hooks` are glue: they sequence CLI calls, git/gh, or host events for sp skills and pipelines, and do not re-implement a corpus, verdict or run-state rule. `plugins/sp/lib` holds only what those glue files share — `env.ts` and generated bundles of `packages/app` code (`bundle-plugin-lib`) — so a plugin that must run without the monorepo reuses the app implementation instead of forking it. Placement is checked by a `spur rule` backed by a shrinking baseline. Pipeline checks split into strict core gates (corpus validity, tests, verify verdict, plugin standalone/smoke) and advisory checks that record but never block or retry.
+- **Decision:** Each script surface has one owner. Logic about Spur's own nouns (task, feature, workflow, history, self) lives in `packages/app` behind a verb or flag of an **existing** `spur` noun, with `apps/cli/src/commands` as the thin transport (ADR-021). `scripts/commands` holds Spur self-dev only. `plugins/sp/scripts` and `plugins/sp/hooks` are glue: they sequence CLI calls, git/gh, or host events for sp skills and pipelines, and do not re-implement a corpus, verdict or run-state rule. `plugins/sp/lib` holds only what those glue files share — `env.ts`, the shared `spur-bin.ts` spur-CLI invocation helper, and generated bundles of `packages/app` code (`bundle-plugin-lib`) — so a plugin that must run without the monorepo reuses the app implementation instead of forking it. Placement is checked by a `spur rule` backed by a shrinking baseline. Pipeline checks split into strict core gates (corpus validity, tests, verify verdict, plugin standalone/smoke) and advisory checks that record but never block or retry.
 - **Why:** 13.6k LOC in `plugins/sp/scripts` grew by precedent: task/feature logic duplicated `packages/app` services (task-size-precheck), repo-only gates shipped inside the plugin, and a 1.5k-LOC adapter kept tests but no runtime consumer. Each copy is a second rule free to drift, and every pipeline paid for re-checking the same facts.
 - **Alternatives:** A new `spur plugin`/`spur dev` noun to host the moved scripts (rejected: flags on existing nouns cover every move; the operator's surface-consent rule applies per flag). Moving the scripts into `plugins/sp/lib` as a shared library (rejected: relocates the duplicate without removing it). Big-bang migration (rejected: plugin install compatibility needs per-wave smoke).
 - **Consequence:** Plugin pipelines require a `spur` CLI new enough to carry the moved flags. Spur releases every package in lockstep and an older CLI rejects an unknown flag, so a skewed install fails closed; each wave runs `plugin-smoke`. ADR-129's hook cores remain plugin-local — they are the host adapter boundary, not Spur domain logic.
