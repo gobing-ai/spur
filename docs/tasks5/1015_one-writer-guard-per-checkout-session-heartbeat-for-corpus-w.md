@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "One-writer guard: per-checkout session heartbeat for corpus-writing agents"
-status: todo
+status: cancelled
 template: issue
 created_at: 2026-09-30T13:44:22.688Z
-updated_at: "2026-09-30T14:00:40.363Z"
+updated_at: "2026-09-30T14:35:00.639Z"
 feature_id: A9
 
 ac_numbering: task-local
@@ -78,3 +78,6 @@ The one-writer rule existed as prose only. No runtime signal distinguished "anot
 - Session identity source: existing spur session/self surface (pick the id already used by run records).
 
 ### History
+
+- 2026-09-30T14:35:00.639Z todo → cancelled (system)
+

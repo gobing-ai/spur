@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Batch execution model: per-task subagent isolation with parallel fan-out"
-status: todo
+status: cancelled
 template: issue
 created_at: 2026-09-30T13:44:23.137Z
-updated_at: "2026-09-30T14:00:40.900Z"
+updated_at: "2026-09-30T14:35:21.811Z"
 feature_id: A9
 
 ac_numbering: task-local
@@ -80,3 +80,6 @@ Architectural: one long-lived host context accumulated eight pipelines' worth of
 - Public-surface governance: `docs/design/harness-surface-governance.md` (R8 constraint).
 
 ### History
+
+- 2026-09-30T14:35:21.811Z todo → cancelled (system)
+
