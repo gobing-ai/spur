@@ -130,6 +130,12 @@ type DelegateBehavior = 'ok' | 'refuse' | 'throw';
 
 function fixtureAppSource(behavior: DelegateBehavior, markerFile: string): string {
     const marker = JSON.stringify(markerFile);
+    // The real run-record writer, imported from the monorepo app source: the driver moved into
+    // the app service (task 1006 R3), so the stub mirrors `runInlineRunSetup`'s body around its
+    // counted DB while the record pair comes from the production writer.
+    const appService = JSON.stringify(
+        join(import.meta.dir, '..', '..', '..', 'packages', 'app', 'src', 'services', 'inline-run-setup'),
+    );
     const outcome =
         behavior === 'refuse'
             ? "    return { ok: false, error: 'fixture returned refusal' };"
@@ -137,6 +143,7 @@ function fixtureAppSource(behavior: DelegateBehavior, markerFile: string): strin
               ? "    throw new Error('fixture thrown failure');"
               : "    return { ok: true, attached: false, runId: input.runId, workflowName: 'fixture', definitionDigest: 'sha256:' + 'a'.repeat(64), workflowVersion: null, resolvedPath: 'fixture', layer: 'project', workdir: input.workdir, status: 'running' };";
     return `import { appendFileSync } from 'node:fs';
+import { writeInlineRunOutcome as writeOutcomeImpl } from ${appService};
 
 let closed = false;
 
@@ -154,6 +161,27 @@ export async function openInlineRunProjectDb(_workdir: string) {
 export async function createOrAttachInlineRun(input: { runId: string; workdir: string }) {
     appendFileSync(${marker}, 'setup\\n');
 ${outcome}
+}
+
+export async function runInlineRunSetup(input: { runId: string; file: string; inventory: unknown }) {
+    const projectDb = await openInlineRunProjectDb(process.cwd());
+    let exitCode = 0;
+    try {
+        const result = await createOrAttachInlineRun({ runId: input.runId, workdir: process.cwd() });
+        writeOutcomeImpl(input.runId, result);
+        if (!result.ok) {
+            console.error('inline-run-setup: FAIL for run ' + input.runId);
+            console.error('  ' + result.error);
+            exitCode = 1;
+        } else {
+            console.error(
+                'inline-run-setup: created run ' + input.runId + ' (fixture, layer project, status ' + result.status + ')',
+            );
+        }
+    } finally {
+        projectDb.close();
+    }
+    return exitCode;
 }
 `;
 }

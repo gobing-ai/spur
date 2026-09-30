@@ -291,8 +291,8 @@ Each pipeline run ends in one of two terminal states:
 `.spur/run/<wbs>-verify-answer.txt` AC table is exactly four columns:
 `| AC | Status | Evidence Type | Evidence |`. The evidence-type token
 (`test`, `command`, `static-ref`, `manual-review`, `llm-judge`, `n/a`, or a `+`
-compound) is isolated in cell 3. A token merged into the evidence cell fails
-`verify-answer-lint`.
+compound) is isolated in cell 3. A token merged into the evidence cell fails the
+`spur task verdict` answer lint.
 
 **Driver acceptance (0930 R3).** The trace row and `.spur/run/<wbs>-verdict.json` are accepted as
 terminal evidence only if BOTH hold:
@@ -328,40 +328,35 @@ node "$(superskill script path sp batch-preflight.mjs)" --wbs <wbs> --status <st
 Helper: `recoveryHint(status, wbs)` in `plugins/sp/scripts/batch-preflight.ts`. Tables remain SSOT
 in next-router; this only maps status → primary TABLE A hop for recovery.
 
-### 3.3c Bounded feature-sync retry suppression (task 0411)
+### 3.3c Feature-sync retry suppression (task 0411; 1004 R3 moved it into the sync service)
 
 During a batch, the per-task `record` step and the wrap-up `feature-transition` step each invoke
 feature status sync. When a feature is L4-gate-blocked (e.g. not all linked tasks are `done`), the
 identical blocked proposal repeats on every call with no intervening input change — in the H9
-dogfood, 4 redundant sync calls produced the same blocked result. The orchestration seam fixes
-this, not the engine.
+dogfood, 4 redundant sync calls produced the same blocked result. The service fixes this, not the
+engine.
 
 Both `task-pipeline.yaml` (`record` step) and `wrapup-pipeline.yaml` (`feature-transition` step)
-invoke the bounded wrapper instead of raw `feature sync`:
+invoke `spur feature sync <feature-id> --json` directly — retry suppression lives inside the
+`FeatureService.syncFeature` implementation:
 
-```bash
-node "$(superskill script path sp feature-sync-bounded.mjs)" <feature-id> --spur-bin "<spurBin>" --json
-```
-
-The wrapper:
-
-1. Reads an input fingerprint (feature file content hash, linked task statuses, verdict artifact
-   mtimes) **before** invoking `feature sync`.
-2. Classifies the structured result — `gateBlocked` checked first (a partial hop can have
-   `applied: true` while still gate-blocked), then `applied`, then `no-op`.
-3. On a **blocked** result, persists `.spur/run/feature-sync-blocked-<id>.json` and, on the next
-   call with an **identical fingerprint**, suppresses the redundant sync and replays the prior
-   blocked result.
-4. On **applied** or **no-op** results, passes through unchanged (no suppression).
-5. When the fingerprint **changes** (a task completed, a verdict file updated), suppression is
+1. On a **blocked** result (`gateBlocked` checked first — a partial hop can have `applied: true`
+   while still gate-blocked — then an unapplied from≠to deferral), the service persists
+   `.spur/run/feature-sync-blocked-<id>.json` keyed by an input fingerprint (feature file content
+   hash, linked task statuses, verdict artifact mtimes).
+2. On the next call with an **identical fingerprint**, the service suppresses the redundant sync
+   and replays the prior blocked result (`suppressed: true`) without re-deriving hops.
+3. On **applied** or **no-op** results, the state file is cleared (no suppression).
+4. When the fingerprint **changes** (a task completed, a verdict file updated), suppression is
    invalidated and a fresh sync runs.
+5. `--force` (and an explicit confirm re-attempt) bypass the replay and re-derive live; dry-run
+   never reads or writes the state.
 
-**Batch driver contract:** the orchestrator does **nothing extra** — the wrapper lives inside the
-pipeline's `record` step and the wrap-up's `feature-transition` step. The driver still launches
-`task-pipeline.yaml` verbatim (R4.1). Suppression is transparent: the wrapper emits the same
-`FeatureSyncResult` JSON shape as `feature sync --json`, so downstream report logic is unchanged.
-The only observable difference is fewer redundant `feature sync` invocations and a one-line
-`feature-sync-bounded:` annotation on stderr when a duplicate is suppressed.
+**Batch driver contract:** the orchestrator does **nothing extra** — the suppression lives inside
+the pipeline's `record` step and the wrap-up's `feature-transition` step. The driver still
+launches `task-pipeline.yaml` verbatim (R4.1). Suppression is transparent: the sync emits the same
+`FeatureSyncResult` JSON shape (`suppressed: true` added on replay), so downstream report logic is
+unchanged. The only observable difference is fewer redundant `feature sync` derivations.
 
 ### 3.4 Metadata-only host controller (R5, task 0510)
 
@@ -1156,11 +1151,11 @@ per-task with `/sp:dev-run <wbs> --worktree <branch>`.
 ### Generated regions — defer the sync, regenerate once (R5)
 
 The only per-task writer of feature files is the `record` step's post-record feature sync
-(`task-pipeline.yaml`, the `feature-sync-bounded` wrapper). Parallel launches set
+(`task-pipeline.yaml`). Parallel launches set
 the pipeline var `deferFeatureSync: "true"` (default `"false"`): the record step appends
 `feature sync deferred to batch integration` to the task report and skips the sync, so task
 branches never touch feature files or `docs/features/INDEX.md`. After the last integration, on the
-base ref, the orchestrator runs the same bounded wrapper plus `spur feature refresh --feature <f>`
+base ref, the orchestrator runs `spur feature sync <f> --json` (service-level suppression) plus `spur feature refresh --feature <f>`
 once per touched feature and commits the result as one `chore(corpus)` commit. Sequential and
 inline runs keep the default `"false"` and are unchanged. Any rebase conflict — on a generated
 path or any other — is an R4 `integration-conflict`; there is no path-based exception.

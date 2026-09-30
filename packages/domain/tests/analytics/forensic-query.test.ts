@@ -10,6 +10,7 @@ import {
     byTool,
     cacheWasteAggregate,
     consolidatedTimeline,
+    countToolCallArgsRaw,
     drift,
     loops,
     messageRollup,
@@ -903,6 +904,37 @@ describe('persisted tool identity (0739 R1/R2/R5/R6/R7)', () => {
         const mRollup = await messageRollup(db, ALL);
         expect(mRollup.find((r) => r.model === brandNewModel)).toBeDefined();
         expect(mRollup.find((r) => r.model === 'unknown')).toBeUndefined();
+
+        db.close();
+    });
+});
+
+describe('countToolCallArgsRaw (1002 R3 — evidence-channel precheck DB probe)', () => {
+    test('counts only rows of the requested source that preserved args_raw', async () => {
+        const db = await setup();
+
+        await db.run(
+            `INSERT INTO history_message (record_hash, source, source_file, source_line, session_id, seq, role, record_type, disposition, ts, model, input_tokens, output_tokens, provenance, imported_at)
+             VALUES ('m-1', 'pi', 'pi.jsonl', 1, 's-1', 1, 'assistant', 'message', 'ok', '2026-08-21T10:00:00Z', 'm', 1, 1, 'agent', '2026-08-21T12:00:00Z')`,
+        );
+        // pi row WITH args_raw → counted; pi row WITHOUT → not counted; claude row with args_raw → not counted.
+        await db.run(
+            `INSERT INTO history_tool_call (record_hash, message_hash, source, source_file, source_line, session_id, seq, tool_name, call_id, status, args_raw, imported_at)
+             VALUES ('tc-1', 'm-1', 'pi', 'pi.jsonl', 1, 's-1', 1, 'read', 'c1', 'success', '{"path":"x"}', '2026-08-21T12:00:00Z')`,
+        );
+        await db.run(
+            `INSERT INTO history_tool_call (record_hash, message_hash, source, source_file, source_line, session_id, seq, tool_name, call_id, status, imported_at)
+             VALUES ('tc-2', 'm-1', 'pi', 'pi.jsonl', 1, 's-1', 2, 'bash', 'c2', 'success', '2026-08-21T12:00:00Z')`,
+        );
+        await db.run(
+            `INSERT INTO history_tool_call (record_hash, message_hash, source, source_file, source_line, session_id, seq, tool_name, call_id, status, args_raw, imported_at)
+             VALUES ('tc-3', 'm-1', 'claude', 'claude.jsonl', 1, 's-1', 3, 'read', 'c3', 'success', '{}', '2026-08-21T12:00:00Z')`,
+        );
+
+        expect(await countToolCallArgsRaw(db, 'pi')).toBe(1);
+        expect(await countToolCallArgsRaw(db, 'claude')).toBe(1);
+        // A source with no rows at all returns 0 (not null) — zero-count is the precheck's fail-closed signal.
+        expect(await countToolCallArgsRaw(db, 'codex')).toBe(0);
 
         db.close();
     });

@@ -78,6 +78,12 @@ export const ALL_FINDING_CODES = [
     'L4.feature-receipt-run',
     'L4.feature-receipt-stale',
     'L4.feature-receipt-contract',
+    // Implement-readiness prechecks (1002 R1) — `task check <wbs> --precheck` only.
+    'precheck-size',
+    'precheck-evidence',
+    // Requirement-inventory ↔ AC coverage (1004 R1) — `feature check --inventory` only;
+    // ported from the deleted idea-pipeline coverage-checker script (0887/1004 R1).
+    'inventory-coverage',
 ] as const;
 
 /** Union type of all valid finding codes. */
@@ -171,4 +177,13 @@ export const FINDING_CODES = {
     L4_FEATURE_RECEIPT_RUN: 'L4.feature-receipt-run',
     L4_FEATURE_RECEIPT_STALE: 'L4.feature-receipt-stale',
     L4_FEATURE_RECEIPT_CONTRACT: 'L4.feature-receipt-contract',
+    // Implement-readiness prechecks (1002 R1): emitted by `task check --precheck` only.
+    // Error severity is fixed at emit time and the codes are unsuppressible — they gate
+    // the pipeline precheck→implement transition exactly as the deleted plugin scripts did.
+    PRECHECK_SIZE: 'precheck-size',
+    PRECHECK_EVIDENCE: 'precheck-evidence',
+    // Inventory ↔ AC coverage (1004 R1): `feature check --inventory` only; unsuppressible —
+    // it gates the idea-pipeline ac-generate boundary exactly as the deleted plugin
+    // pre-1004 coverage-checker script did.
+    INVENTORY_COVERAGE: 'inventory-coverage',
 } as const satisfies Record<string, FindingCode>;

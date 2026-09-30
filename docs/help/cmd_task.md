@@ -302,6 +302,7 @@ spur task check [options] [wbs]
 | `--strict-core` | Gate variant: fail only on hard-core errors (the `testing → done` guard) |
 | `--fix` | Repair structural findings in place (heading presence/level, section order, R-item checkboxes) — never authors content, never removes off-variant sections (task 0619) |
 | `--as <status>` | Evaluate the task AS if it were in `<status>` — the lifecycle guards pass the transition target so `testing → done` checks the done row. Omitted → current-status diagnostics |
+| `--precheck` | Also run the implement-readiness prechecks (size, evidence channel); failures are errors. Requires `wbs`; incompatible with `--corpus` |
 | `--corpus` | Explicit unsuppressed audit of active tasks and features; warnings are advisory |
 | `--since <ref>` | Scope the corpus fog comparison to changes since a git ref (requires `--corpus`) |
 | `--folder <path>` | Custom tasks folder |

@@ -28,8 +28,21 @@
 // with module-level imports"): the binding lives at module scope, not inside
 // `openInlineRunProjectDb`. The top-level-await dynamic form is deliberate — the standing
 // runtime-boundaries fs rule (recommended pre-check preset) forbids a static node:fs
-// import in application sources.
-const { mkdirSync, writeFileSync } = await import('node:fs');
+// import in application sources. Task 1006 R3 widens the destructure for the driver
+// bookkeeping moved here from plugins/sp/scripts/inline-run-setup.ts (run-record pair
+// writes, run-log appends).
+const {
+    appendFileSync,
+    closeSync,
+    existsSync,
+    mkdirSync,
+    openSync,
+    readFileSync,
+    renameSync,
+    unlinkSync,
+    writeFileSync,
+    writeSync,
+} = await import('node:fs');
 const { lstat, readFile } = await import('node:fs/promises');
 
 import { join, resolve } from 'node:path';
@@ -47,7 +60,9 @@ import {
     WorkflowService as EngineWorkflowService,
 } from '@gobing-ai/ts-dual-workflow-engine';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
+import { createWorkflowActionTraceWriter } from '../workflow/action-trace';
 import { DecideActionRunner, DecideOptionsSchema } from '../workflow/actions/decide';
+import { computeProofInputFingerprint, readProofInputContents } from '../workflow/proof-input-fingerprint';
 import { InvalidWorkflowRunIdError } from '../workflow/run-record';
 import { isBookkeepingWorkflow } from '../workflow/terminal-reason';
 import { assertInventoryIdentity, parseWorkflowInventory } from '../workflow/workflow-inventory';
@@ -659,4 +674,505 @@ export async function runDecideForInlineRun(input: InlineDecideInput): Promise<I
         resultFile: join(resolve(input.workdir), parsed.data.resultFile),
         durationMs: decision.durationMs,
     };
+}
+
+// ─── Inline driver bookkeeping (task 1006 R3) ────────────────────────────────
+// Moved verbatim from plugins/sp/scripts/inline-run-setup.ts: the run-record outcome
+// writer, the close/action status vocabularies, the run-record log path/append and the
+// ADR-117 trace emission. The plugin script is the argv/env delegate; these are the
+// operations it delegates to through the generated twin (INLINE_RUN_EXPORTS).
+
+/** Setup/driver outcome projected into the run-record state `.spur/run/<run-id>.state.json` (0927 R1). */
+export interface InlineRunStateOutcome {
+    readonly ok: boolean;
+    readonly runId?: string;
+    readonly attached?: boolean;
+    readonly definitionDigest?: string;
+    readonly workflowName?: string;
+    readonly workflowVersion?: string | null;
+    readonly resolvedPath?: string;
+    readonly layer?: string;
+    readonly workdir?: string;
+    readonly status?: string;
+    readonly error?: string;
+}
+
+/**
+ * Project the setup/driver outcome into the two-file run record (task 0927 R1): the machine
+ * state merges into `.spur/run/<run-id>.state.json` (atomic same-directory temp + rename, the
+ * 0925 R1 pattern) and `.spur/run/<run-id>.md` receives its run-start header exactly once.
+ * A re-setup of the same run id rewrites the state from the current outcome but keeps the
+ * prior `startedAt`. Identity/provenance fields only — never prompt bodies (0927 AC2).
+ */
+export function writeInlineRunOutcome(runId: string, outcome: InlineRunStateOutcome): void {
+    const runDir = join(process.cwd(), '.spur', 'run');
+    if (!existsSync(runDir)) mkdirSync(runDir, { recursive: true });
+    const statePath = join(runDir, `${runId}.state.json`);
+    const markdownPath = join(runDir, `${runId}.md`);
+    let prior: Record<string, unknown> = {};
+    try {
+        const parsed: unknown = JSON.parse(readFileSync(statePath, 'utf8'));
+        if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            prior = parsed as Record<string, unknown>;
+        }
+    } catch {
+        // No prior state (new run) or unreadable file — the outcome alone defines the state.
+    }
+    const at = new Date().toISOString();
+    const state = {
+        schemaVersion: 1 as const,
+        runId,
+        ...(outcome.workflowName !== undefined ? { workflowName: outcome.workflowName } : {}),
+        ...(outcome.status !== undefined ? { status: outcome.status } : {}),
+        startedAt: typeof prior.startedAt === 'string' ? prior.startedAt : at,
+        updatedAt: at,
+        ...(outcome.attached !== undefined ? { attached: outcome.attached } : {}),
+        ...(outcome.definitionDigest !== undefined ? { definitionDigest: outcome.definitionDigest } : {}),
+        ...(outcome.workflowVersion !== undefined ? { workflowVersion: outcome.workflowVersion } : {}),
+        ...(outcome.resolvedPath !== undefined ? { resolvedPath: outcome.resolvedPath } : {}),
+        ...(outcome.layer !== undefined ? { layer: outcome.layer } : {}),
+        ...(outcome.workdir !== undefined ? { workdir: outcome.workdir } : {}),
+        // 0948 R7: project the setup outcome itself, so the retired `-inline-setup.json`
+        // sidecar's `ok` is still readable from the pair, and a SUCCESSFUL re-setup
+        // explicitly drops any prior `error` — a stale failure message must not outlive
+        // the failure it described (the state object is rebuilt, never merged with `prior`).
+        ok: outcome.ok,
+        ...(outcome.ok === false && outcome.error !== undefined ? { error: outcome.error } : {}),
+    };
+    const temp = `${statePath}.tmp`;
+    try {
+        writeFileSync(temp, `${JSON.stringify(state, null, 4)}\n`);
+        renameSync(temp, statePath);
+    } catch {
+        // Best-effort: a failing record write must not wedge setup reporting — and never
+        // leaves `.tmp` residue behind (0926 R1).
+        try {
+            unlinkSync(temp);
+        } catch {
+            // Nothing to clean (temp was never created).
+        }
+    }
+    // 0948 R7: create the header with `wx` (O_EXCL) instead of `existsSync` → `appendFileSync`.
+    // The check-then-append pair could append a SECOND header when two setups raced, and it
+    // kept "header present" as a separate fact from the identity write. One exclusive create
+    // makes exactly-one-header atomic; EEXIST just means it is already there.
+    let headerFd: number | undefined;
+    try {
+        headerFd = openSync(markdownPath, 'wx');
+        writeSync(
+            headerFd,
+            `# spur inline run ${runId} — ${outcome.workflowName ?? 'unknown workflow'} — setup ${at}\n`,
+        );
+    } catch {
+        // EEXIST (already written) or an unwritable path — the human header is not the setup
+        // identity, so this stays best-effort exactly like the state write above.
+    } finally {
+        if (headerFd !== undefined) closeSync(headerFd);
+    }
+}
+
+/** Terminal statuses the inline driver may declare when closing its run row. */
+const CLOSE_STATUSES: ReadonlySet<string> = new Set<'done' | 'failed' | 'paused'>(['done', 'failed', 'paused']);
+
+/** Narrow an argv `--status` to the close vocabulary (`CLOSE_STATUSES`). */
+export function isInlineRunCloseStatus(status: string): status is 'done' | 'failed' | 'paused' {
+    return CLOSE_STATUSES.has(status);
+}
+
+/** Finalize statuses — a finish emission is terminal, so only done|failed are valid (0868 #4). */
+const ACTION_STATUSES: ReadonlySet<string> = new Set<'done' | 'failed'>(['done', 'failed']);
+
+/** Narrow an argv `--status` to the finalize vocabulary (`ACTION_STATUSES`). */
+export function isInlineRunActionStatus(status: string): status is 'done' | 'failed' {
+    return ACTION_STATUSES.has(status);
+}
+
+/** Input for the ADR-117 emission modes (`--action` / `--close`); the plugin delegate builds it from argv. */
+export interface InlineRunTraceInput {
+    readonly runId: string;
+    readonly close: boolean;
+    readonly node: string;
+    readonly kind: string;
+    /** Declared terminal reason (0937 R2) — validated against the closed enum before this point. */
+    readonly reason?: string;
+    /**
+     * Trace status: the finalize vocabulary plus the close-only `paused` (`CLOSE_STATUSES`).
+     * Both are assignable to the engine's `WorkflowStatus`.
+     */
+    readonly status: 'done' | 'failed' | 'paused';
+    readonly ok: boolean;
+    readonly durationMs: number;
+}
+
+/**
+ * The run-record file for appended driver lines (task 0927 R1): `.spur/run/<run-id>.md`
+ * for pair-based runs. A legacy run that predates the pair keeps appending to its declared
+ * `.spur/run/<run-id>.log` — the same precedence as `readWorkflowRunRecord` (the pair wins,
+ * legacy stays readable in place).
+ */
+export function inlineRunRecordLogPath(runDir: string, runId: string): string {
+    const markdownPath = join(runDir, `${runId}.md`);
+    const legacyLogPath = join(runDir, `${runId}.log`);
+    if (existsSync(legacyLogPath) && !existsSync(markdownPath)) return legacyLogPath;
+    return markdownPath;
+}
+
+/**
+ * Append one emission-failure/provenance line to the run record — `.spur/run/<run-id>.md`,
+ * the run log the inline driver already owns. Best-effort and synchronous (the process may
+ * exit immediately after), and never throws: an unwritable log must not wedge the run
+ * (ADR-117 R3).
+ */
+export function appendInlineRunLogLine(runId: string, detail: string): void {
+    try {
+        const runDir = join(process.cwd(), '.spur', 'run');
+        if (!existsSync(runDir)) mkdirSync(runDir, { recursive: true });
+        const safeRunId = runId.replace(/[^A-Za-z0-9._-]/g, '_');
+        const stamp = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+        appendFileSync(inlineRunRecordLogPath(runDir, safeRunId), `[${stamp}] ${detail}\n`);
+    } catch {
+        // Best-effort (R3): the run continues even when the failure cannot be recorded.
+    }
+}
+
+/**
+ * Emit one trace write through the SHARED `WorkflowActionTraceWriter` (task 0868 R5/R7).
+ * `--action` is best-effort: an emission failure is recorded to the run log and reported
+ * on stdout as `{"ok":false}`, and the caller exits 0 so the run still reaches its declared
+ * terminal state (R3/R12). `--close` is bookkeeping, so a missing run row or a persistence
+ * failure fails loudly with exit 1 (review findings #1/#4). Callable once per action — the
+ * inline driver loops it across the run's action boundaries (task 1007 handoff).
+ */
+export async function runInlineRunTrace(input: InlineRunTraceInput): Promise<number> {
+    const operation = input.close ? 'run.close' : 'action.finish';
+    const fail = (error: string): number => {
+        appendInlineRunLogLine(
+            input.runId,
+            `trace-emission-failed operation=${operation} run=${input.runId}` +
+                `${input.node === '' ? '' : ` node=${input.node}`}${input.kind === '' ? '' : ` kind=${input.kind}`}: ${error}`,
+        );
+        process.stdout.write(`${JSON.stringify({ ok: false, runId: input.runId, error })}\n`);
+        // The action boundary is best-effort (exit 0); the run-row closure fails loudly (exit 1).
+        return input.close ? 1 : 0;
+    };
+
+    let projectDb: { adapter: DbAdapter; close: () => void } | undefined;
+    try {
+        projectDb = await openInlineRunProjectDb(process.cwd());
+        const writer = createWorkflowActionTraceWriter(projectDb.adapter, (failure: unknown) => {
+            const detail = failure as { operation?: string; error?: string };
+            appendInlineRunLogLine(
+                input.runId,
+                `trace-emission-failed operation=${detail.operation ?? operation} run=${input.runId}: ${detail.error ?? 'unknown error'}`,
+            );
+        });
+        const result = (
+            input.close
+                ? await writer.closeRun(input.runId, input.status, undefined, input.reason)
+                : await writer.recordAction({
+                      runId: input.runId,
+                      node: input.node,
+                      kind: input.kind,
+                      status: input.status,
+                      ok: input.ok,
+                      durationMs: input.durationMs,
+                  })
+        ) as Record<string, unknown>;
+        if (result.ok !== true && result.failure !== undefined) {
+            // One stdout shape for emission failures (0868 finding #1): flatten the guard's
+            // nested failure object to the same `{ok, runId, error}` the direct paths emit.
+            const failure = result.failure as { error?: string };
+            return fail(failure.error ?? 'unknown trace emission failure');
+        }
+        if (input.close && input.status === 'done' && result.actionRows === 0) {
+            // A run finalized `done` with ZERO recorded action rows is a bookkeeping defect
+            // (task 0975 R2): the row is already terminal — closeRun ran above — but the
+            // driver must surface this instead of reporting a clean close, and must never
+            // backfill rows. Exit 1 with the named code; the run record carries the finding.
+            const error = `run ${input.runId} closed done with zero action_runs rows`;
+            appendInlineRunLogLine(input.runId, `trace-close-failed run=${input.runId}: ${error}`);
+            process.stdout.write(
+                `${JSON.stringify({ ok: false, runId: input.runId, error, code: 'NO_ACTION_ROWS', actionRows: 0 })}\n`,
+            );
+            return 1;
+        }
+        process.stdout.write(`${JSON.stringify({ ...result, runId: input.runId })}\n`);
+        return 0;
+    } catch (error) {
+        if (input.close && (error as { name?: string }).name === 'RunRowNotFoundError') {
+            // The run row must exist before --close can mark it terminal (R6); a missing row
+            // is a loud correctness failure, not a best-effort emission failure (finding #4).
+            const message = error instanceof Error ? error.message : String(error);
+            appendInlineRunLogLine(input.runId, `trace-close-failed run=${input.runId}: ${message}`);
+            process.stdout.write(
+                `${JSON.stringify({ ok: false, runId: input.runId, error: message, code: 'RUN_NOT_FOUND' })}\n`,
+            );
+            return 1;
+        }
+        return fail(error instanceof Error ? error.message : String(error));
+    } finally {
+        projectDb?.close();
+    }
+}
+
+/** One `--actions-file` batch row (1007 R5): the `--action` argv shape as JSON. */
+export interface InlineRunActionEntry {
+    readonly node: string;
+    readonly kind: string;
+    /** Finalize vocabulary only — a batch row never pauses or closes (0868 #4). */
+    readonly status: 'done' | 'failed';
+    readonly ok: boolean;
+    readonly durationMs: number;
+}
+
+/** Input for `runInlineRunTraceBatch` (`--actions-file`, 1007 R5). */
+export interface InlineRunTraceBatchInput {
+    readonly runId: string;
+    readonly actionsFile: string;
+}
+
+/**
+ * Batch trace emission (1007 R5): read a JSON array of `{node,kind,status,ok,durationMs}` rows
+ * and record one `action_runs` row per entry through the SAME `WorkflowActionTraceWriter` as
+ * `--action`. The whole file is parsed and validated BEFORE the database opens, so an
+ * unreadable file, invalid JSON, or a malformed row exits 1 with no partial writes. Accepted
+ * rows then emit best-effort (the `--action` contract): the first emission failure is logged
+ * to the run record, reported as `{ok:false,runId,recorded,error}`, and the driver exits 0 so
+ * the run still reaches its declared terminal state. Success: one stdout summary
+ * `{ok:true,runId,recorded}` exit 0.
+ */
+export async function runInlineRunTraceBatch(input: InlineRunTraceBatchInput): Promise<number> {
+    const batchFailed = (error: string): number => {
+        process.stdout.write(`${JSON.stringify({ ok: false, runId: input.runId, error })}\n`);
+        return 1;
+    };
+    let rows: unknown;
+    try {
+        rows = JSON.parse(readFileSync(input.actionsFile, 'utf8'));
+    } catch (error) {
+        return batchFailed(
+            `cannot read actions file ${input.actionsFile}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+    }
+    if (!Array.isArray(rows)) {
+        return batchFailed('actions file must be a JSON array of {node,kind,status,ok,durationMs}');
+    }
+    const entries: InlineRunActionEntry[] = [];
+    const rowError = (index: number, error: string): string => `actions[${index}]: ${error}`;
+    for (const [index, row] of rows.entries()) {
+        if (row === null || typeof row !== 'object' || Array.isArray(row)) {
+            return batchFailed(rowError(index, 'entry must be a JSON object'));
+        }
+        const record = row as Record<string, unknown>;
+        const { node, kind, status, ok, durationMs } = record;
+        if (typeof node !== 'string' || node.trim() === '') {
+            return batchFailed(rowError(index, 'node must be a non-empty string'));
+        }
+        if (typeof kind !== 'string' || kind.trim() === '') {
+            return batchFailed(rowError(index, 'kind must be a non-empty string'));
+        }
+        if (typeof status !== 'string' || !isInlineRunActionStatus(status)) {
+            return batchFailed(rowError(index, 'status must be "done" or "failed"'));
+        }
+        if (typeof ok !== 'boolean') return batchFailed(rowError(index, 'ok must be a boolean'));
+        if (typeof durationMs !== 'number' || !Number.isFinite(durationMs) || durationMs < 0) {
+            return batchFailed(rowError(index, 'durationMs must be a finite non-negative number'));
+        }
+        entries.push({ node, kind, status, ok, durationMs });
+    }
+    let projectDb: InlineRunProjectDb | undefined;
+    let recorded = 0;
+    const reportEmissionFailure = (node: string, kind: string, error: string): void => {
+        appendInlineRunLogLine(
+            input.runId,
+            `trace-emission-failed operation=action.finish run=${input.runId} node=${node} kind=${kind}: ${error}`,
+        );
+        process.stdout.write(`${JSON.stringify({ ok: false, runId: input.runId, recorded, error })}\n`);
+    };
+    try {
+        projectDb = await openInlineRunProjectDb(process.cwd());
+        const writer = createWorkflowActionTraceWriter(projectDb.adapter, (failure: unknown) => {
+            const detail = failure as { operation?: string; error?: string };
+            appendInlineRunLogLine(
+                input.runId,
+                `trace-emission-failed operation=${detail.operation ?? 'action.finish'} run=${input.runId}: ${detail.error ?? 'unknown error'}`,
+            );
+        });
+        for (const entry of entries) {
+            const result = (await writer.recordAction({
+                runId: input.runId,
+                node: entry.node,
+                kind: entry.kind,
+                status: entry.status,
+                ok: entry.ok,
+                durationMs: entry.durationMs,
+            })) as Record<string, unknown>;
+            if (result.ok === true) {
+                recorded += 1;
+                continue;
+            }
+            const failure = result.failure as { error?: string } | undefined;
+            reportEmissionFailure(entry.node, entry.kind, failure?.error ?? 'unknown trace emission failure');
+            return 0;
+        }
+        process.stdout.write(`${JSON.stringify({ ok: true, runId: input.runId, recorded })}\n`);
+        return 0;
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        appendInlineRunLogLine(input.runId, `trace-emission-failed run=${input.runId}: ${message}`);
+        process.stdout.write(`${JSON.stringify({ ok: false, runId: input.runId, recorded, error: message })}\n`);
+        return 0;
+    } finally {
+        projectDb?.close();
+    }
+}
+
+// ─── Driver mode runners (task 1006 R3) ──────────────────────────────────────
+// The per-mode bodies moved from plugins/sp/scripts/inline-run-setup.ts so the plugin script
+// stays within its ADR-130 glue budget (argv/env + entry resolution + dispatch). Each runner
+// preserves the script's stdout/exit-code contract byte-for-byte; the decide-enabled switch is
+// still resolved at the driver boundary and passed in as an explicit parameter (ADR-082).
+
+/** Input for `runInlineRunFingerprint` (`--fingerprint`, 0862 R5). */
+export interface InlineRunFingerprintInput {
+    readonly taskFile: string;
+    readonly featureFile?: string;
+}
+
+/** Print the engine's proof-input digest for the given spec files; create nothing. Exit code: 0 printed, 1 read/resolve failure. */
+export async function runInlineRunFingerprint(input: InlineRunFingerprintInput): Promise<number> {
+    const workdir = process.cwd();
+    // `undefined` fs takes readProofInputContents' node-filesystem default — the same default its
+    // sibling createGitAlternateTree applies, and the same Node FS the CLI's runner injects.
+    const contents = await readProofInputContents(undefined, workdir, {
+        taskFile: input.taskFile,
+        ...(input.featureFile !== undefined && input.featureFile.trim() !== ''
+            ? { featureFile: input.featureFile }
+            : {}),
+    });
+    if (!contents.ok) {
+        console.error(`inline-run-setup: FAIL — ${contents.error}`);
+        return 1;
+    }
+    const digest = await computeProofInputFingerprint({
+        cwd: workdir,
+        ...(contents.taskContent !== undefined ? { taskContent: contents.taskContent } : {}),
+        ...(contents.featureContent !== undefined ? { featureContent: contents.featureContent } : {}),
+    });
+    process.stdout.write(`${digest}\n`);
+    return 0;
+}
+
+/** Input for `runInlineRunDecide` (`--decide`, 0941 R5); `enabled` is resolved at the driver boundary (ADR-082). */
+export interface InlineRunDecideInput {
+    readonly runId: string;
+    readonly node: string;
+    readonly optionsFile: string;
+    readonly enabled: boolean;
+}
+
+/**
+ * Execute the non-pausing decide action through the same app runner the engine registers, then
+ * record the `action_runs` trace row (best-effort). Degraded outcomes are normal (`ok: true`,
+ * exit 0); a failed outcome or a throw is `{"ok":false}` + exit 1 (fail closed).
+ */
+export async function runInlineRunDecide(input: InlineRunDecideInput): Promise<number> {
+    const decideFailed = (error: string): number => {
+        process.stdout.write(`${JSON.stringify({ ok: false, runId: input.runId, error })}\n`);
+        return 1;
+    };
+    let outcome: InlineDecideOutcome;
+    try {
+        outcome = await runDecideForInlineRun({
+            workdir: process.cwd(),
+            optionsFile: input.optionsFile,
+            enabled: input.enabled,
+        });
+    } catch (error) {
+        return decideFailed(error instanceof Error ? error.message : String(error));
+    }
+    if (!outcome.ok) return decideFailed(outcome.error ?? 'decide failed without an error message');
+    process.stdout.write(`${JSON.stringify({ runId: input.runId, node: input.node, ...outcome, ok: true })}\n`);
+    // 0976 R2: the run log names the decision's provenance, so a declared-default fallback is
+    // never read as a model decision. Best-effort through the same run-log appender.
+    appendInlineRunLogLine(
+        input.runId,
+        `decide node=${input.node} value=${outcome.value ?? ''} source=${outcome.source ?? 'default'} reason=${outcome.reason ?? ''}`,
+    );
+    // Trace row is best-effort, exactly like --action: an emission failure never wedges the run.
+    return runInlineRunTrace({
+        runId: input.runId,
+        close: false,
+        node: input.node,
+        kind: 'decide',
+        status: 'done',
+        ok: true,
+        durationMs: outcome.durationMs ?? 0,
+    });
+}
+
+/** Input for `runInlineRunPersistOut` (`--persist-out`, 0975 R1). */
+export interface InlineRunPersistOutInput {
+    readonly from: string;
+    readonly taskFiles: readonly string[];
+}
+
+/** Copy the worktree's inline-run provenance into THIS tree; exit 1 on failure (driver routes to WT-5). */
+export async function runInlineRunPersistOut(input: InlineRunPersistOutInput): Promise<number> {
+    try {
+        const result = await persistWorktreeRuns({
+            fromWorkdir: input.from,
+            toWorkdir: process.cwd(),
+            ...(input.taskFiles.length > 0 ? { taskFiles: input.taskFiles } : {}),
+        });
+        process.stdout.write(`${JSON.stringify({ ok: true, persisted: result.persisted, skipped: result.skipped })}\n`);
+        return 0;
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        process.stdout.write(`${JSON.stringify({ ok: false, error: message })}\n`);
+        return 1;
+    }
+}
+
+/** Input for `runInlineRunSetup` (setup mode); `embeddedSchemas` rides along only in the portable layout. */
+export interface InlineRunSetupDriverInput {
+    readonly runId: string;
+    readonly file: string;
+    readonly inventory: unknown;
+    readonly embeddedSchemas?: ReadonlyMap<string, string>;
+}
+
+/**
+ * Create-or-attach the authoritative run row and project the outcome into the two-file run
+ * record. Exit 0 = identity ready (created or idempotently attached); 1 = fail closed — the
+ * driver must stop.
+ */
+export async function runInlineRunSetup(input: InlineRunSetupDriverInput): Promise<number> {
+    const workdir = process.cwd();
+    const projectDb = await openInlineRunProjectDb(workdir);
+    let exitCode = 0;
+    try {
+        const result = await createOrAttachInlineRun({
+            workdir,
+            getDb: async () => projectDb.adapter,
+            file: input.file,
+            runId: input.runId,
+            inventory: input.inventory,
+            ...(input.embeddedSchemas !== undefined ? { embeddedSchemas: input.embeddedSchemas } : {}),
+        });
+        writeInlineRunOutcome(input.runId, result);
+        if (!result.ok) {
+            console.error(`inline-run-setup: FAIL for run ${input.runId}`);
+            console.error(`  ${result.error}`);
+            exitCode = 1;
+        } else {
+            console.error(
+                `inline-run-setup: ${result.attached ? 'attached' : 'created'} run ${input.runId} ` +
+                    `(${result.workflowName}, layer ${result.layer}, digest ${result.definitionDigest}, status ${result.status})`,
+            );
+        }
+    } finally {
+        projectDb.close();
+    }
+    return exitCode;
 }

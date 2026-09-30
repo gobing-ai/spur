@@ -1,15 +1,16 @@
 #!/usr/bin/env node
-import { createRequire } from "node:module";
-var __require = /* @__PURE__ */ createRequire(import.meta.url);
+// @bun
 
 // plugins/sp/scripts/history-anatomy-cache.ts
-import { spawnSync } from "node:child_process";
+import { spawnSync } from "child_process";
+import { mkdirSync, readFileSync as readFileSync2, writeFileSync as writeFileSync2 } from "fs";
+
+// plugins/sp/lib/history-anatomy.generated.mjs
 import { createHash as createHash2 } from "node:crypto";
 import {
   closeSync,
   existsSync,
   fsyncSync,
-  mkdirSync,
   openSync,
   readdirSync,
   readFileSync,
@@ -19,8 +20,6 @@ import {
   writeFileSync
 } from "node:fs";
 import { join } from "node:path";
-
-// plugins/sp/lib/artifact-digest.generated.mjs
 import { createHash } from "node:crypto";
 var ARTIFACT_ARRAY_CLASSIFICATION = {
   byTool: "ranked",
@@ -63,8 +62,6 @@ function semanticArtifactDigest(artifactJson) {
   const material = JSON.stringify(canonicalize(artifactJson, "root"));
   return createHash("sha256").update(material).digest("hex");
 }
-
-// plugins/sp/scripts/history-anatomy-cache.ts
 var REPORT_SECTIONS = [
   "Scope and provenance",
   "Executive summary",
@@ -669,6 +666,8 @@ function diffPorcelain(before, now, expects) {
   const beforePaths = porcelainPaths(before);
   return [...porcelainPaths(now)].filter((p) => !beforePaths.has(p) && !expects.has(p)).sort();
 }
+
+// plugins/sp/scripts/history-anatomy-cache.ts
 var VALID_COMMANDS = "digest, check, paths, assert-clean, probe, stamp, refresh, publish";
 var PROBE_USAGE = "<script> probe --artifact <a.json> --target <report.md> [--baseline <b.json>] [--mode daily|ad-hoc] " + "[--date <YYYY-MM-DD>] [--recompute true] [--out <prov.json>] [--skill-dir <d>] [--contract <f>] [--workflow <f>] [--helper <f>]";
 function parseFlags(args) {
@@ -698,7 +697,7 @@ function runCacheCli(argv) {
       }
       let artifact;
       try {
-        artifact = JSON.parse(readFileSync(a, "utf8"));
+        artifact = JSON.parse(readFileSync2(a, "utf8"));
       } catch {
         return { exitCode: 1, stdout: "", stderr: `could not parse artifact at ${a}
 ` };
@@ -712,7 +711,7 @@ function runCacheCli(argv) {
         return { exitCode: 1, stdout: "", stderr: `usage: <script> check <report.md>
 ` };
       }
-      const result = checkReportStructure(readFileSync(a, "utf8"));
+      const result = checkReportStructure(readFileSync2(a, "utf8"));
       const stdout = `${result.ok ? "PASS" : "FAIL"}
 ${result.problems.map((p) => `- ${p}
 `).join("")}`;
@@ -751,7 +750,7 @@ ${result.problems.map((p) => `- ${p}
         return { exitCode: 0, stdout: "", stderr: `assert-clean: git unavailable; skipped
 ` };
       }
-      const undeclared = diffPorcelain(readFileSync(f.baseline, "utf8"), now, expects);
+      const undeclared = diffPorcelain(readFileSync2(f.baseline, "utf8"), now, expects);
       if (undeclared.length > 0) {
         return {
           exitCode: 1,
@@ -795,13 +794,13 @@ ${result.problems.map((p) => `- ${p}
         since: f.since,
         until: f.until
       });
-      writeFileSync(f.out, env);
+      writeFileSync2(f.out, env);
       if (f["run-id"] !== undefined && f["run-id"] !== "") {
         mkdirSync(".spur/run", { recursive: true });
         const envVars = Object.fromEntries(env.trim().split(`
 `).map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1)]));
         const tz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
-        writeFileSync(`.spur/run/${f["run-id"]}-selector.json`, `${JSON.stringify({
+        writeFileSync2(`.spur/run/${f["run-id"]}-selector.json`, `${JSON.stringify({
           mode: v.mode,
           date: envVars.HA_DATE ?? null,
           focus: v.focus,
@@ -843,7 +842,7 @@ ${result.problems.map((p) => `- ${p}
 ` };
       }
       if (f.out !== undefined)
-        writeFileSync(f.out, `${JSON.stringify(result.current, null, 2)}
+        writeFileSync2(f.out, `${JSON.stringify(result.current, null, 2)}
 `);
       const reasons = result.decision.reasons.map((r) => `- ${r}
 `).join("");
@@ -861,8 +860,8 @@ ${reasons}`, stderr: "" };
         };
       }
       try {
-        const p = JSON.parse(readFileSync(f.provenance, "utf8"));
-        writeFileSync(f.out, `${stampReport(readFileSync(f.candidate, "utf8"), p)}
+        const p = JSON.parse(readFileSync2(f.provenance, "utf8"));
+        writeFileSync2(f.out, `${stampReport(readFileSync2(f.candidate, "utf8"), p)}
 `);
       } catch {
         return { exitCode: 1, stdout: "", stderr: `stamp: could not read candidate or provenance
@@ -882,8 +881,8 @@ ${reasons}`, stderr: "" };
       }
       try {
         const disposition = f.disposition ?? "hit";
-        const refreshed = refreshReport(readFileSync(f.report, "utf8"), f["validated-at"] ?? new Date().toISOString(), disposition);
-        writeFileSync(f.out, refreshed.endsWith(`
+        const refreshed = refreshReport(readFileSync2(f.report, "utf8"), f["validated-at"] ?? new Date().toISOString(), disposition);
+        writeFileSync2(f.out, refreshed.endsWith(`
 `) ? refreshed : `${refreshed}
 `);
       } catch {
@@ -921,5 +920,7 @@ export {
   decideCache,
   checkReportStructure,
   buildProvenance,
-  bannerLine
+  bannerLine,
+  REPORT_SECTIONS,
+  FINDING_FIELDS
 };

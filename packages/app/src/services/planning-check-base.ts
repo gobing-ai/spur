@@ -90,6 +90,14 @@ const REQUIRED_FINDING_CODES: ReadonlySet<FindingCode> = new Set<FindingCode>([
     ...REQUIRED_REFERENCE_CODES,
     FINDING_CODES.L4_PREREQUISITE_CYCLE,
     ...COMPLETION_FINDING_CODES,
+    // 1002 R1: the implement-readiness prechecks gate the pipeline's precheck→implement
+    // transition exactly as the deleted plugin scripts did — fail closed, never droppable
+    // by severityOverrides or accepted-debt filtering.
+    FINDING_CODES.PRECHECK_SIZE,
+    FINDING_CODES.PRECHECK_EVIDENCE,
+    // 1004 R1: the inventory-coverage gate replaces the deleted coverage-checker script
+    // at the idea-pipeline ac-generate boundary — fail closed, never droppable.
+    FINDING_CODES.INVENTORY_COVERAGE,
 ]);
 
 /** Whether a finding's code is unsuppressible — its severity was fixed at emit time. */

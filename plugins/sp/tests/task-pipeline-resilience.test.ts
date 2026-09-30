@@ -133,12 +133,10 @@ describe('0503 task-pipeline resilience', () => {
         expect(Object.keys(probe?.roles ?? {}).sort()).toEqual(['coder', 'reviewer']);
         expect(probe?.resultFile).toContain('.spur/run/');
         expect(commands.join('\n')).not.toContain('agent doctor');
-        const size = commandFor('precheck', 3);
-        expect(size).toContain('task-size-precheck.ts');
-        expect(size).not.toContain('--executor');
-        // Fail closed: the missing-checker fallback writes FAIL, never PASS.
-        expect(size).toContain('"FAIL"');
-        expect(size).not.toContain('skipped');
+        // 1002 R4: the size/evidence prechecks fold into the precheck→implement guard as one
+        // `task check --precheck` call — no script invocation and no status-file reads remain.
+        expect(commands.join('\n')).not.toContain('precheck-size');
+        expect(commands.join('\n')).not.toContain('precheck-evidence');
         // Feature reactivation surfaces failure instead of swallowing it (no `|| true`).
         expect(commandFor('precheck', 2)).not.toContain('|| true');
     });
@@ -164,55 +162,6 @@ describe('0503 task-pipeline resilience', () => {
             });
             expect(result.exitCode).toBe(0);
             expect(readFileSync(ran, 'utf8')).toBe('node\n');
-        } finally {
-            rmSync(dir, { recursive: true, force: true });
-        }
-    });
-
-    test('precheck size gate fails closed when the checker script is absent (0723 R2)', () => {
-        const dir = mkdtempSync(join(tmpdir(), 'spur-0723-nosize-'));
-        try {
-            // Absent means unresolvable on BOTH branches: no repo-relative copy AND
-            // no staged copy. The stub mimics `superskill script path` on an
-            // unstaged script (stderr + exit 2), so the gate must write FAIL.
-            const bin = join(dir, 'bin');
-            mkdirSync(bin, { recursive: true });
-            executable(bin, 'superskill', 'echo "Script not found" >&2; exit 2');
-            const command = commandFor('precheck', 3);
-            const result = runShell(command, dir, {
-                wbs: '0723',
-                spurBin: 'spur',
-                PATH: `${bin}:${getEnvVar('PATH') ?? ''}`,
-            });
-            expect(result.exitCode).toBe(0);
-            expect(readFileSync(join(dir, '.spur/run/0723-precheck-size.status'), 'utf8')).toBe('FAIL\n');
-            expect(result.output).toContain('failed closed');
-        } finally {
-            rmSync(dir, { recursive: true, force: true });
-        }
-    });
-
-    test('precheck size gate runs the checker exactly once and carries PASS through (0723 R2)', () => {
-        const dir = mkdtempSync(join(tmpdir(), 'spur-0723-size-'));
-        try {
-            mkdirSync(join(dir, 'plugins', 'sp', 'scripts'), { recursive: true });
-            // 0960: the project-first probe is gated on the source-repo marker.
-            mkdirSync(join(dir, 'config'), { recursive: true });
-            writeFileSync(join(dir, 'config', 'plugin-scripts.json'), '{}\n');
-            const counter = join(dir, 'size-counter');
-            writeFileSync(
-                join(dir, 'plugins', 'sp', 'scripts', 'task-size-precheck.ts'),
-                `#!/usr/bin/env bun
-import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
-appendFileSync(process.argv[2] === "0723" ? "${counter}" : "/dev/null", "x\\n");
-mkdirSync(".spur/run", { recursive: true });
-writeFileSync(".spur/run/" + process.argv[2] + "-precheck-size.status", "PASS\\n");
-`,
-            );
-            const result = runShell(commandFor('precheck', 3), dir, { wbs: '0723', spurBin: 'spur' });
-            expect(result.exitCode).toBe(0);
-            expect(readFileSync(counter, 'utf8').split('\n').filter(Boolean).length).toBe(1);
-            expect(readFileSync(join(dir, '.spur/run/0723-precheck-size.status'), 'utf8')).toBe('PASS\n');
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
@@ -299,15 +248,16 @@ esac`,
     // 0823 (d): the gate shells are thin resolvers — quality-gate.ts owns the retry loop,
     // findings cap, bounded summary and status artifact (behavioral coverage lives in
     // plugins/sp/tests/quality-gate.test.ts). Here: resolution order and fail-closed shape.
-    test('gate shells resolve quality-gate.ts, fall back to superskill, and fail closed (0823 d)', () => {
+    test('gate shells resolve quality-gate through the script-root probe and fail closed (0823 d, 1007 R4)', () => {
         for (const [stateId, shellIndex, mode] of [
             ['test', 2, 'run'],
             ['test-recheck', 0, 'recheck'],
         ] as const) {
             const command = commandFor(stateId, shellIndex);
-            expect(command).toContain(`quality-gate.ts ${mode}`);
-            expect(command).toContain('superskill script path sp quality-gate.mjs');
-            expect(command).toContain(`node "$Q" ${mode}`);
+            expect(command).toContain('@sh"\\(.dir)/quality-gate.ts"+" RUNNER=bun"');
+            expect(command).toContain('@sh"\\(.dir)/quality-gate.mjs"+" RUNNER=node"');
+            expect(command).toContain(`"$RUNNER" "$S" ${mode}`);
+            expect(command).not.toContain('superskill script path');
             // Fail closed: an unresolvable gate writes FAIL (never PASS) and stays soft.
             expect(command).toContain('failed closed');
             expect(command).toContain(`printf 'FAIL\\n' > ".spur/run/$wbs-test-gate.status"`);
@@ -383,8 +333,10 @@ esac`,
         expect(foldIdx).toBe(cmds.length - 2); // followed only by the R5 re-record step
         // Hard action: no exit-0 blanket — a scanner crash must fail record closed.
         expect(cmds[foldIdx]?.trim().endsWith('exit 0')).toBe(false);
-        // Repo-first, then superskill twin, failing closed (quality-gate pattern).
-        expect(cmds[foldIdx]).toContain('superskill script path sp residual-scan.mjs');
+        // Resolves through the run-scoped script-root probe, failing closed (1007 R4).
+        expect(cmds[foldIdx]).toContain('@sh"\\(.dir)/residual-scan.ts"+" RUNNER=bun"');
+        expect(cmds[foldIdx]).toContain('@sh"\\(.dir)/residual-scan.mjs"+" RUNNER=node"');
+        expect(cmds[foldIdx]).not.toContain('superskill script path');
         // Fail-closed completion gate: the done guard still re-asserts PASS + proof digest,
         // so a fold-downgraded PARTIAL verdict can never certify done (0983 R3).
         const doneGuard = PIPELINE.transitions?.find((t) => t.from === 'record' && t.to === 'done')?.guard?.options
@@ -399,7 +351,8 @@ esac`,
         try {
             mkdirSync(join(dir, '.spur', 'run'), { recursive: true });
             // Stage the scanner exactly as the pipeline finds it in-repo. It imports
-            // ../lib/env (getEnvVars) — stage it too (self-contained node builtins).
+            // ../lib/env (getEnvVars) and ../lib/residual-scan.generated.mjs (1003 R5
+            // bundle twin) — stage both (self-contained node builtins).
             mkdirSync(join(dir, 'plugins', 'sp', 'scripts'), { recursive: true });
             mkdirSync(join(dir, 'plugins', 'sp', 'lib'), { recursive: true });
             // 0960: the project-first probe is gated on the source-repo marker.
@@ -410,6 +363,16 @@ esac`,
                 join(dir, 'plugins', 'sp', 'scripts', 'residual-scan.ts'),
             );
             copyFileSync(join(import.meta.dir, '..', 'lib', 'env.ts'), join(dir, 'plugins', 'sp', 'lib', 'env.ts'));
+            copyFileSync(
+                join(import.meta.dir, '..', 'lib', 'residual-scan.generated.mjs'),
+                join(dir, 'plugins', 'sp', 'lib', 'residual-scan.generated.mjs'),
+            );
+            // 1007 R4: the sweep resolves through the run-scoped script-root probe — stage
+            // the identity file the snippet reads (source-repo → the staged scripts dir).
+            writeFileSync(
+                join(dir, '.spur', 'run', '0983-script-root.json'),
+                `${JSON.stringify({ mode: 'source-repo', source: 'project', dir: join(dir, 'plugins', 'sp', 'scripts') })}\n`,
+            );
             const fold = shellCommands('record').find((c) => c.includes('residual-scan') && c.includes('fold'));
             if (fold === undefined) throw new Error('record sweep command missing');
             const verdict = { wbs: '0983', verdict: 'PASS', requirements: [], checks: [] };
@@ -421,7 +384,11 @@ esac`,
                 );
             // Pass path: post-record, every box flipped (record flipped the proven R/AC ones).
             writeFileSync(join(dir, '.spur', 'run', '0983-verdict.json'), `${JSON.stringify(verdict)}\n`);
-            const pass = runShell(fold, dir, { wbs: '0983', spurBin: stubFor('## Plan\n\n- [x] plan step\n') });
+            const pass = runShell(fold, dir, {
+                __runId: '0983',
+                wbs: '0983',
+                spurBin: stubFor('## Plan\n\n- [x] plan step\n'),
+            });
             expect(pass.exitCode).toBe(0);
             const kept = JSON.parse(readFileSync(join(dir, '.spur', 'run', '0983-verdict.json'), 'utf8')) as {
                 verdict: string;
@@ -433,7 +400,11 @@ esac`,
             // Fail path: one open Plan box stays blocking and downgrades PASS → PARTIAL —
             // no section becomes deferrable (0983 R2).
             writeFileSync(join(dir, '.spur', 'run', '0983-verdict.json'), `${JSON.stringify(verdict)}\n`);
-            const fail = runShell(fold, dir, { wbs: '0983', spurBin: stubFor('## Plan\n\n- [ ] open plan step\n') });
+            const fail = runShell(fold, dir, {
+                __runId: '0983',
+                wbs: '0983',
+                spurBin: stubFor('## Plan\n\n- [ ] open plan step\n'),
+            });
             expect(fail.exitCode).toBe(0);
             const folded = JSON.parse(readFileSync(join(dir, '.spur', 'run', '0983-verdict.json'), 'utf8')) as {
                 verdict: string;
@@ -494,17 +465,17 @@ esac`,
 
     // 0931 R5: parallel batches launch each pipeline with deferFeatureSync "true" so a task
     // branch never touches feature files; the record-step sync shell must skip cleanly. The
-    // default "false" keeps sequential/inline behavior unchanged — the sync is owned by
-    // record-feature-sync.ts (ADR-115 moved the old inline chain out of the shell).
+    // default "false" keeps sequential/inline behavior unchanged — 1004 R4 inlined the sync
+    // (repeated-BLOCKED suppression lives in the feature sync service now).
     test('deferFeatureSync "true" skips the record-step feature sync and notes the deferral (0931 R5)', () => {
         expect(PIPELINE.vars?.deferFeatureSync).toBe('false');
 
         const sync = commandFor('record', 0);
-        expect(sync.startsWith('S=plugins/sp/scripts/record-feature-sync.ts;')).toBe(true);
-        expect(sync).toContain('record-feature-sync.mjs');
         expect(sync).toContain('[ "$deferFeatureSync" = "true" ]');
         expect(sync).toContain('feature sync deferred to batch integration');
-        expect(sync).toContain('bun "$S" --spur-bin "$spurBin"');
+        expect(sync).toContain('$spurBin feature sync "$FID" --json');
+        // 1004 R4: no helper-script resolution — the shell is self-contained.
+        expect(sync).not.toContain('-feature-sync');
 
         // Behavioral: with deferFeatureSync=true the (canary) spurBin is never invoked.
         const dir = mkdtempSync(join(tmpdir(), 'spur-0931-defer-'));
@@ -526,24 +497,11 @@ esac`,
         }
     });
 
-    test('deferFeatureSync default delegates the sync to record-feature-sync (0931 R5 default)', () => {
+    test('deferFeatureSync default runs the bare feature sync for the linked feature (1004 R4)', () => {
         const dir = mkdtempSync(join(tmpdir(), 'spur-0931-default-'));
         try {
             mkdirSync(join(dir, '.spur', 'run'), { recursive: true });
-            // Stage the owner script exactly as the pipeline finds it in-repo, so the shell
-            // actually delegates. The script imports ../lib/env (getEnvVar) — stage it too
-            // (self-contained node builtins). Canary: `task show` yields a feature_id -> the
-            // owner runs the bare-spur last resort (no bounded wrapper / staged module here).
-            mkdirSync(join(dir, 'plugins', 'sp', 'scripts'), { recursive: true });
-            mkdirSync(join(dir, 'plugins', 'sp', 'lib'), { recursive: true });
-            // 0960: the project-first probe is gated on the source-repo marker.
-            mkdirSync(join(dir, 'config'), { recursive: true });
-            writeFileSync(join(dir, 'config', 'plugin-scripts.json'), '{}\n');
-            copyFileSync(
-                join(import.meta.dir, '..', 'scripts', 'record-feature-sync.ts'),
-                join(dir, 'plugins', 'sp', 'scripts', 'record-feature-sync.ts'),
-            );
-            copyFileSync(join(import.meta.dir, '..', 'lib', 'env.ts'), join(dir, 'plugins', 'sp', 'lib', 'env.ts'));
+            // Canary: `task show` yields a top-level feature_id -> the shell syncs it.
             const spurBin = executable(
                 dir,
                 'spur-bin-empty',
@@ -553,11 +511,36 @@ esac`,
 
             expect(result.exitCode).toBe(0);
             expect(result.output).not.toContain('deferred');
-            expect(result.output).toContain('SYNC feature sync F1');
+            expect(result.output).toContain('SYNC feature sync F1 --json');
             const reportPath = join(dir, '.spur', 'run', '0931-report.txt');
             if (existsSync(reportPath)) {
                 expect(readFileSync(reportPath, 'utf8')).not.toContain('Orphan task 0931');
             }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('record-step sync reads a frontmatter feature_id and notes an orphan task (1004 R4)', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-1004-sync-'));
+        try {
+            mkdirSync(join(dir, '.spur', 'run'), { recursive: true });
+            // Frontmatter-shaped feature_id (task show --json envelope).
+            const linked = executable(
+                dir,
+                'spur-bin-linked',
+                'if [ "$1" = "task" ]; then echo \'{"frontmatter":{"feature_id":"F9"}}\'; else echo "SYNC $*"; fi',
+            );
+            const linkedRun = runShell(commandFor('record', 0), dir, { wbs: '1004', spurBin: linked });
+            expect(linkedRun.exitCode).toBe(0);
+            expect(linkedRun.output).toContain('SYNC feature sync F9 --json');
+
+            // No feature_id anywhere -> orphan proposal note, best-effort exit 0.
+            const orphan = executable(dir, 'spur-bin-orphan', "echo '{}'");
+            const orphanRun = runShell(commandFor('record', 0), dir, { wbs: '1004', spurBin: orphan });
+            expect(orphanRun.exitCode).toBe(0);
+            const report = readFileSync(join(dir, '.spur', 'run', '1004-report.txt'), 'utf8');
+            expect(report).toContain('Orphan task 1004 — no feature_id linked');
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }

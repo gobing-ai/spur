@@ -222,6 +222,12 @@ describe('route reason writers are run-attributed (0758 R4/R5)', () => {
         // absent in CI) instead of the monorepo branch under test.
         mkdirSync(join(cwd, 'config'), { recursive: true });
         writeFileSync(join(cwd, 'config', 'plugin-scripts.json'), '{}\n');
+        // 1007 R4: stage the script-root identity the resolution snippet reads (per run id).
+        mkdirSync(join(cwd, '.spur/run'), { recursive: true });
+        writeFileSync(
+            join(cwd, '.spur/run', `${vars.__runId}-script-root.json`),
+            `${JSON.stringify({ mode: 'source-repo', source: 'project', dir: join(REPO_ROOT, 'plugins', 'sp', 'scripts') })}\n`,
+        );
         for (const cmd of command) {
             const res = spawnSync('sh', ['-c', cmd], { cwd, env: { ...getEnvVars(), ...vars, spurBin } });
             expect(res.status).toBe(0);

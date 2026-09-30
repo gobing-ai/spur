@@ -14,7 +14,7 @@
     ├── [done] **A6**: Harness trust and operational controls ([A6_harness-trust-and-operational-controls.md](./A6_harness-trust-and-operational-controls.md))
     ├── [done] **A7**: Spur Board layout optimization and global orchestrator agent interface ([A7_spur-board-layout-optimization-and-global-orchestrator-agent-interface.md](./A7_spur-board-layout-optimization-and-global-orchestrator-agent-interface.md))
     ├── [active] **A8**: Downstream Spur Board modules and embedded resources ([A8_downstream-spur-board-modules-and-embedded-resources.md](./A8_downstream-spur-board-modules-and-embedded-resources.md))
-    └── [backlog] **A9**: Script placement contract: CLI-owned logic, thin plugin glue, and pipeline check diet ([A9_script-placement-contract-cli-owned-logic-thin-plugin-glue-and-pipeline-check-diet.md](./A9_script-placement-contract-cli-owned-logic-thin-plugin-glue-and-pipeline-check-diet.md))
+    └── [active] **A9**: Script placement contract: CLI-owned logic, thin plugin glue, and pipeline check diet ([A9_script-placement-contract-cli-owned-logic-thin-plugin-glue-and-pipeline-check-diet.md](./A9_script-placement-contract-cli-owned-logic-thin-plugin-glue-and-pipeline-check-diet.md))
 [active] **B**: Agent execution ([B_agent-execution.md](./B_agent-execution.md))
     ├── [verifying] **B1**: Agent run hardening ([B1_agent-run-hardening.md](./B1_agent-run-hardening.md))
     ├── [done] **B2**: Invocation-agnostic executor selection: intention vocabulary, quality ordering, and one selector concept ([B2_invocation-agnostic-executor-selection-intention-vocabulary-quality-ordering-and-one-selector-concept.md](./B2_invocation-agnostic-executor-selection-intention-vocabulary-quality-ordering-and-one-selector-concept.md))

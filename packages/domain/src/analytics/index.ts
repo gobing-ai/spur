@@ -53,6 +53,7 @@ export {
     cacheWasteAggregate,
     consolidatedTimeline,
     countCheckpointsBySource,
+    countToolCallArgsRaw,
     countToolCallsSince,
     type DailyTokenRow,
     type DriftRow,

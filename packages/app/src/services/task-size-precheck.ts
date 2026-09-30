@@ -35,8 +35,7 @@ export const DEFAULT_TASK_SIZE_LIMITS: TaskSizeLimits = {
 /**
  * Requirement item: one list marker required, then an optional checkbox, then the R-number in the
  * house `- **R1** — <text>` or legacy `- [ ] R1. <text>` form. A bare `R1 <text>` line carries no
- * list marker and stays prose, not a requirement. Mirrored by the lockstep copy in
- * `plugins/sp/scripts/task-size-precheck.ts`.
+ * list marker and stays prose, not a requirement.
  */
 const R_ITEM_RE_SOURCE = '^\\s*[-*]\\s+(?:\\[[ xX]\\]\\s*)?[*_]{0,2}R(\\d+)\\.?[*_]{0,2}(?:\\s|$)';
 
@@ -97,15 +96,11 @@ export function evaluateTaskSize(content: string, limits: TaskSizeLimits = DEFAU
 
     const reasons: string[] = [];
     if (reqCount > limits.maxReqs) {
-        reasons.push(
-            `Task has ${reqCount} R-items (max ${limits.maxReqs}). ` +
-                `Consider decomposing into smaller tasks or raise maxImplementReqs via --vars.`,
-        );
+        reasons.push(`Task has ${reqCount} R-items (max ${limits.maxReqs}). Consider decomposing into smaller tasks.`);
     }
     if (planItemCount > limits.maxPlanItems) {
         reasons.push(
-            `Task has ${planItemCount} Plan items (max ${limits.maxPlanItems}). ` +
-                `Consider simplifying the plan or raise maxImplementPlanItems via --vars.`,
+            `Task has ${planItemCount} Plan items (max ${limits.maxPlanItems}). Consider simplifying the plan.`,
         );
     }
 

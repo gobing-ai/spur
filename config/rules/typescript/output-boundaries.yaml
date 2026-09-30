@@ -1,8 +1,9 @@
 # Output boundary rules — terminal writes go through the output seam
 # (apps/cli/src/output.ts → ts-utils echo/echoError), never raw console/stdout.
 # Absorbed from ts-libs/.spur/rules/typescript/no-raw-output.yaml, re-scoped to
-# the app-monorepo layout. Spur's only sanctioned sink is the ts-utils helper,
-# so no local exclusions are needed.
+# the app-monorepo layout. Spur's only sanctioned sink is the ts-utils helper;
+# narrow per-rule excludes exist only for moved driver code whose byte-stable
+# stdout contract must survive lib bundling under bare node (task 1006).
 include:
   - "apps/**/src/**/*.ts"
   - "packages/**/src/**/*.ts"
@@ -15,6 +16,11 @@ rules:
       type: rg
       config:
         pattern: "console\\.(log|error|warn|info|debug|dir|time|trace)"
+    # Task 1006 R3: the inline-run driver's fail-closed stderr lines moved here from the
+    # plugin script (byte-stable driver contract, emitted through the bundled lib under
+    # bare node); the output seam is a CLI-layer dependency the app service cannot take.
+    exclude:
+      - "packages/app/src/services/inline-run-setup.ts"
 
   - id: no-raw-stdout-stderr
     description: "Use the output seam (ts-utils echo/echoError) instead of process.stdout/stderr.write directly."
@@ -23,3 +29,10 @@ rules:
       type: rg
       config:
         pattern: "process\\.(stdout|stderr)\\.write"
+    # Tasks 1006 R1/R3: gate receipts (`check-receipt/v1`, one JSON line — the runner's parsed
+    # stdout contract) and the inline driver's stdout lines moved here from the plugin scripts.
+    # Both must stay byte-stable through the bundled libs under bare node; the seam would
+    # rewrite framing the CLI/tests parse. Mirrors the history-anatomy bundling exemptions.
+    exclude:
+      - "packages/app/src/services/quality-gate.ts"
+      - "packages/app/src/services/inline-run-setup.ts"

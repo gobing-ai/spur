@@ -27,11 +27,6 @@
             "twin": "dogfood-testing/validate-report.mjs"
         },
         {
-            "rel": "feature-sync-bounded.ts",
-            "contract": "standard",
-            "twin": "feature-sync-bounded.mjs"
-        },
-        {
             "rel": "idea-handoff.ts",
             "contract": "standard",
             "twin": "idea-handoff.mjs"
@@ -62,22 +57,9 @@
             "twin": "feature-verification-steps.mjs"
         },
         {
-            "rel": "idea-coverage-check.ts",
-            "contract": "repo-only"
-        },
-        {
-            "rel": "inline-pipeline-parity-check.ts",
-            "contract": "repo-only"
-        },
-        {
             "rel": "pr-reviewing.ts",
             "contract": "standard",
             "twin": "pr-reviewing.mjs"
-        },
-        {
-            "rel": "record-feature-sync.ts",
-            "contract": "standard",
-            "twin": "record-feature-sync.mjs"
         },
         {
             "rel": "quality-gate.ts",
@@ -90,50 +72,14 @@
             "twin": "residual-scan.mjs"
         },
         {
-            "rel": "script-contract-check.ts",
-            "contract": "repo-only"
-        },
-        {
             "rel": "script-root.ts",
             "contract": "standard",
             "twin": "script-root.mjs"
         },
         {
-            "rel": "stage-registry-adapter.ts",
-            "contract": "repo-only"
-        },
-        {
-            "rel": "surface-drift-inventory.ts",
-            "contract": "repo-only"
-        },
-        {
             "rel": "task-diffstat.ts",
             "contract": "standard",
             "twin": "task-diffstat.mjs"
-        },
-        {
-            "rel": "task-evidence-precheck.ts",
-            "contract": "repo-only"
-        },
-        {
-            "rel": "task-size-precheck.ts",
-            "contract": "repo-only"
-        },
-        {
-            "rel": "verify-answer-lint.ts",
-            "contract": "repo-only"
-        },
-        {
-            "rel": "transition-shim-check.ts",
-            "contract": "repo-only"
-        },
-        {
-            "rel": "validate-commands.ts",
-            "contract": "repo-only"
-        },
-        {
-            "rel": "validate-flag-contracts.ts",
-            "contract": "repo-only"
         },
         {
             "rel": "workflow-step-profile.ts",

@@ -75,7 +75,8 @@ describe('parseArgs', () => {
         );
         expect(workflow.match(/--since "\$prSince"/g)?.length).toBe(3);
         expect(workflow.match(/--head "\$prHead"/g)?.length).toBe(3);
-        expect(workflow).toContain('pr-reviewing.ts)" status --since "$prSince" --head "$prHead" --json');
+        // 1007 R4: status runs behind the script-root snippet resolution.
+        expect(workflow).toContain('"$RUNNER" "$S" status --since "$prSince" --head "$prHead" --json');
         expect(workflow).not.toContain('node -e');
         expect(workflow).toContain('-pr-status.json');
         expect(workflow).toContain('sh -c "$preReviewCmd"');

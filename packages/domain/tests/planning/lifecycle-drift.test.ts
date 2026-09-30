@@ -143,19 +143,19 @@ describe('task-pipeline.yaml structure (task 0062)', () => {
         expect(yaml.initialState).toBe('precheck');
     });
 
-    test('R1: precheck→implement is guarded by size status + `task check`, with fail-closed fall-through', () => {
+    test('R1: precheck→implement is guarded by `task check --precheck`, with fail-closed fall-through', () => {
         const toImpl = yaml.transitions.find((t) => t.from === 'precheck' && t.to === 'implement');
         expect(toImpl?.guard?.kind).toBe('shell');
-        // Deterministic size status file + task check.
-        // Guard command must reference a task check — whether literal `spur` or
-        // `${vars.spurBin}` (ADR-026 PATH-independent spur invocation).
+        // 1002 R4: one guard command — `task check --precheck` carries the size and
+        // evidence-channel gates inline (no status files). Whether literal `spur` or
+        // `$spurBin` (ADR-026 PATH-independent spur invocation).
         const passCmd = String(toImpl?.guard?.options?.command ?? '');
         expect(passCmd).toMatch(/task check/);
-        expect(passCmd).toMatch(/precheck-size\.status/);
+        expect(passCmd).toMatch(/--precheck/);
         expect(passCmd).not.toMatch(/precheck-doctor\.status/);
         // Declaration order: PASS first, then fail-closed `always` fall-through (soft probe
-        // pattern — size FAIL and/or task check red both land on `failed` without inverted
-        // shell guards that race set -e). `always` is safe only AFTER the PASS guard.
+        // pattern — precheck FAIL lands on `failed` without inverted shell guards that race
+        // set -e). `always` is safe only AFTER the PASS guard.
         const idxPass = yaml.transitions.findIndex((t) => t.from === 'precheck' && t.to === 'implement');
         const idxFail = yaml.transitions.findIndex((t) => t.from === 'precheck' && t.to === 'failed');
         expect(idxFail).toBeGreaterThan(idxPass);
@@ -167,9 +167,9 @@ describe('task-pipeline.yaml structure (task 0062)', () => {
         const cmds = (record?.onEnter ?? []).map((a) => String(a.options?.command ?? ''));
         // Proof certification + record step + post-record feature sync (task 0328 / ADR-0322,
         // task 0612 / ADR-071; 0785 R3 replaced the bare fingerprint compare with the bound
-        // run.artifact registration, which re-captures the proof inputs itself). 0931 R5 moved
-        // the sync chain into record-feature-sync.ts and added the deferFeatureSync guard in
-        // the shell; certification stays FIRST. 0983 appended the post-record residual sweep
+        // run.artifact registration, which re-captures the proof inputs itself). 0931 R5 added
+        // the deferFeatureSync guard to the shell; certification stays FIRST. 1004 R4 inlined
+        // the sync (service-level suppression). 0983 appended the post-record residual sweep
         // (+ the R5 Testing re-record) AFTER the sync, so the sweep reads the post-record
         // task file and folds before the done guard.
         expect(record?.onEnter ?? []).toHaveLength(5);
@@ -194,17 +194,10 @@ describe('task-pipeline.yaml structure (task 0062)', () => {
         expect(gateArgs).toContain('--solution-from-diff');
         expect(gateArgs).toContain('"--transition"');
         expect(gateArgs).toContain('"testing"');
-        // The post-record hop must still sync feature status, but the mechanism is free: task 0411
-        // routes it through `feature-sync-bounded.ts`, which wraps `spur feature sync --json` with
-        // retry suppression. Assert the intent (a feature-sync hop exists), not one spelling.
-        expect(
-            cmds.some(
-                (c) =>
-                    c.includes('feature sync') ||
-                    c.includes('feature-sync-bounded') ||
-                    c.includes('record-feature-sync'),
-            ),
-        ).toBe(true);
+        // The post-record hop must still sync feature status, but the mechanism is free: 0411's
+        // retry suppression moved into the feature sync service (1004 R3/R4), so the shell is a
+        // bare `feature sync`. Assert the intent (a feature-sync hop exists), not one spelling.
+        expect(cmds.some((c) => c.includes('feature sync'))).toBe(true);
     });
 
     test('R3: status transitions go through the normal verb (`spur task update <wbs> <status>`)', () => {
@@ -259,11 +252,11 @@ describe('task-pipeline.yaml structure (task 0062)', () => {
 
     test('R2 (task 0482): every `bun plugins/sp/scripts/...` step passes --spur-bin so spur resolves regardless of shell PATH', () => {
         // Regression for 0471's double precheck FAIL (`could not fetch task 0471 via spur`):
-        // task-size-precheck.ts already honors `--spur-bin` / `SPUR_BIN`, but the workflow
-        // invoked it without either, so the workflow shell (`/bin/sh -c`, no user PATH)
-        // could not resolve bare `spur`. Sibling steps (doctor, feature-sync) already pass
-        // `$spurBin`. Guard: any shell step that shells spur through a bundled script must
-        // hand it the resolved binary.
+        // the precheck shell could not resolve bare `spur`, so the workflow invoked a
+        // bundled checker without `--spur-bin` / `SPUR_BIN` and the shell (`/bin/sh -c`, no
+        // user PATH) failed the fetch. Sibling steps (doctor, feature-sync) pass `$spurBin`.
+        // Guard: any shell step that shells spur through a bundled script must hand it the
+        // resolved binary.
         const allCmds = yaml.states
             .flatMap((s) => s.onEnter ?? [])
             .filter((a) => a.kind === 'shell')
@@ -296,18 +289,26 @@ describe('task-pipeline.yaml structure (task 0062)', () => {
                 .map((a) => String(a.options?.command ?? ''));
 
         // 1. Both gate hops extract anchors into the digest file. 0823 (d): the extraction moved
-        // into quality-gate.ts — assert the wrappers delegate and the script owns the log and
+        // into quality-gate.ts; 1006 R1 moved the gate core into the app service (the script is
+        // dispatch glue) — assert the wrappers delegate and the app core owns the log and
         // findings artifacts with the bounded cap (MAX_FINDINGS = 20).
-        const gateScript = readFileSync(join(REPO_ROOT, 'plugins', 'sp', 'scripts', 'quality-gate.ts'), 'utf-8');
+        const gateCore = readFileSync(
+            join(REPO_ROOT, 'packages', 'app', 'src', 'services', 'quality-gate.ts'),
+            'utf-8',
+        );
         for (const gateState of ['test', 'test-recheck']) {
             const cmds = shellCmds(gateState).join('\n');
+            const verb = gateState === 'test' ? 'run' : 'recheck';
             expect(cmds, `${gateState}: gate hop must delegate to quality-gate.ts`).toContain(
-                `quality-gate.ts ${gateState === 'test' ? 'run' : 'recheck'}`,
+                'quality-gate.ts"+" RUNNER=bun',
+            );
+            expect(cmds, `${gateState}: gate hop must run the script via the resolver`).toContain(
+                `"$RUNNER" "$S" ${verb}`,
             );
         }
-        expect(gateScript).toContain('-test-gate.log');
-        expect(gateScript).toContain('-test-gate.findings');
-        expect(gateScript).toContain('MAX_FINDINGS = 20');
+        expect(gateCore).toContain('-test-gate.log');
+        expect(gateCore).toContain('-test-gate.findings');
+        expect(gateCore).toContain('MAX_FINDINGS = 20');
 
         // 2. test-fix projects the digest into a var (a vars template cannot shell out).
         const fixSteps = yaml.states.find((s) => s.id === 'test-fix')?.onEnter ?? [];

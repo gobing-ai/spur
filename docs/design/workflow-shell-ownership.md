@@ -203,6 +203,12 @@ predicates — the digest-locked measured-PASS comparison keeps its fail-closed 
 
 ### task-pipeline.yaml
 
+> The table below is the 0823 snapshot. Tasks 1002–1007 reshaped the inventory since (precheck
+> note dropped and base-sha merged into the hygiene shell, test-fix log-appends merged, triage
+> mode-fallback merged, done note dropped, plugin-script wrappers rerouted through the run-start
+> `script-root` resolver, and the verify lint folded into `spur task verdict`): indices and
+> shapes above are historical — `config/workflows/task-pipeline.yaml` is the authority.
+
 0823 rebuilt the over-budget programs under the ADR-115 caps: the three lifecycle transitions are
 now `command.gate` built-ins (option c), the quality gate is the `quality-gate.ts` extension
 (option d), and the remaining compounds are condensed in place (option e). Dispositions marked

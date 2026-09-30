@@ -7,7 +7,6 @@ import {
     type CheckReceipt,
     type CheckReceiptRow,
     lightScope,
-    main,
     planLightChecks,
     RECEIPT_SCHEMA_VERSION,
     readReceiptStatus,
@@ -15,7 +14,12 @@ import {
     runQualityGate,
     runShellCommand,
     shQuote,
-} from '../scripts/quality-gate';
+    // Task 1006 R1: the gate core lives in the app service (the script re-exports the bundled
+    // twin); behavioral tests import the source directly so coverage tracks the core, matching
+    // the 0823 port and the close-reason test's app-source import pattern.
+} from '../../../packages/app/src/services/quality-gate';
+// `main` is script glue (usage dispatch + status tee) and stays tested against the script.
+import { main } from '../scripts/quality-gate';
 
 /** Injected `exists` predicate over a fixed path set — keeps the scope helpers pure. */
 function existsFrom(paths: Iterable<string>): (p: string) => boolean {

@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "W0 placement contract enforcement: key-file pointers, glue-budget check and sp-script-placement rule"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-29T06:25:03.413Z
-updated_at: "2026-09-29T06:49:15.792Z"
+updated_at: "2026-09-29T10:47:50.470Z"
 feature_id: A9
 priority: P2
 tags:
@@ -32,23 +32,23 @@ Source: ADR-130, harness-surface-governance §2, docs/plans/A9-script-placement-
 
 ### Requirements
 
-- [ ] R1. `script-contract-check` lives at `scripts/commands/script-contract-check.ts` with a sibling `scripts/commands/script-contract-check.test.ts`; `package.json` `script-contract-check` runs it; `plugins/sp/scripts/script-contract-check.ts`, `plugins/sp/tests/script-contract-check.test.ts` and its `config/plugin-scripts.json` row are deleted. Existing rules 1–4 behave unchanged.
-- [ ] R2. A new `--placement-only` mode reports one finding per `plugins/sp/scripts/**/*.ts` or `plugins/sp/hooks/**/*.ts` file (tests and generated `.mjs` excluded) that exceeds 250 lines, value-imports `bun:sqlite` or `drizzle-orm`, or contains a `docs/tasks` / `docs/features` path literal (corpus parsing).
-- [ ] R3. `--placement-only` also reports a `scripts/commands/<name>.ts` whose basename equals an `apps/cli/src/commands/<name>.ts` basename (public noun clash).
-- [ ] R4. `config/script-placement-baseline.json` suppresses listed findings; a baseline entry whose file no longer produces that finding is itself a finding (the baseline can only shrink).
-- [ ] R5. `config/rules/boundary/sp-script-placement.yaml` (severity error, `exit-code` evaluator) runs `--placement-only`, and exits 0 with `SKIP: not the Spur source repo` when `scripts/commands/script-contract-check.ts` is absent.
-- [ ] R6. Root `AGENTS.md` "Public-surface consent" paragraph gains one sentence pointing at ADR-130 and governance §2 (no restated table).
-- [ ] R7. Every file in plan §2 marked Move/Delete/→scripts/over-budget-Keep appears in the seeded baseline, and every baseline entry appears in plan §2.
+- [x] R1. `script-contract-check` lives at `scripts/commands/script-contract-check.ts` with a sibling `scripts/commands/script-contract-check.test.ts`; `package.json` `script-contract-check` runs it; `plugins/sp/scripts/script-contract-check.ts`, `plugins/sp/tests/script-contract-check.test.ts` and its `config/plugin-scripts.json` row are deleted. Existing rules 1–4 behave unchanged.
+- [x] R2. A new `--placement-only` mode reports one finding per `plugins/sp/scripts/**/*.ts` or `plugins/sp/hooks/**/*.ts` file (tests and generated `.mjs` excluded) that exceeds 250 lines, value-imports `bun:sqlite` or `drizzle-orm`, or contains a `docs/tasks` / `docs/features` path literal (corpus parsing).
+- [x] R3. `--placement-only` also reports a `scripts/commands/<name>.ts` whose basename equals an `apps/cli/src/commands/<name>.ts` basename (public noun clash).
+- [x] R4. `config/script-placement-baseline.json` suppresses listed findings; a baseline entry whose file no longer produces that finding is itself a finding (the baseline can only shrink).
+- [x] R5. `config/rules/boundary/sp-script-placement.yaml` (severity error, `exit-code` evaluator) runs `--placement-only`, and exits 0 with `SKIP: not the Spur source repo` when `scripts/commands/script-contract-check.ts` is absent.
+- [x] R6. Root `AGENTS.md` "Public-surface consent" paragraph gains one sentence pointing at ADR-130 and governance §2 (no restated table).
+- [x] R7. Every file in plan §2 marked Move/Delete/→scripts/over-budget-Keep appears in the seeded baseline, and every baseline entry appears in plan §2.
 
 Out of scope: moving or deleting any other script (tasks 1001–1007); a new rule-engine evaluator; `config/templates/AGENTS.md`; changing rules 1–4 semantics.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Each script surface has one written owner and boundary (req: R6)
-- [ ] AC2 — New public spur surface requires operator confirmation at planning time (req: R6)
-- [ ] AC3 — Key project files state the placement contract (req: R6)
-- [ ] AC4 — A spur rule flags scripts placed on the wrong surface (req: R1, R2, R3, R5)
-- [ ] AC5 — Complete inventory classifies every existing script (req: R4, R7)
+- [x] AC1 — Each script surface has one written owner and boundary (req: R6)
+- [x] AC2 — New public spur surface requires operator confirmation at planning time (req: R6)
+- [x] AC3 — Key project files state the placement contract (req: R6)
+- [x] AC4 — A spur rule flags scripts placed on the wrong surface (req: R1, R2, R3, R5)
+- [x] AC5 — Complete inventory classifies every existing script (req: R4, R7)
 
 Task-local observability: AC1–AC3 are proven by `docs/design/harness-surface-governance.md` §2/§4 (already landed) plus the `AGENTS.md` sentence; AC4 by `scripts/commands/script-contract-check.test.ts` fixture cases (301-line plugin script, `bun:sqlite` import, `docs/tasks` literal, `task.ts` name clash → each one finding) and `spur rule run --rule sp-script-placement` exiting 0 on the real tree; AC5 by a test that diffs the baseline keys against plan §2 rows.
 
@@ -96,18 +96,69 @@ Task-local observability: AC1–AC3 are proven by `docs/design/harness-surface-g
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `scripts/commands/script-contract-check.test.ts:14` |
+| `scripts/commands/script-contract-check.test.ts:16` |
+| `scripts/commands/script-contract-check.test.ts:2` |
+| `scripts/commands/script-contract-check.test.ts:398` |
+| `scripts/commands/script-contract-check.test.ts:448` |
+| `scripts/commands/script-contract-check.test.ts:6` |
+| `scripts/commands/script-contract-check.test.ts:8` |
+| `scripts/commands/script-contract-check.ts:13` |
+| `scripts/commands/script-contract-check.ts:18` |
+| `scripts/commands/script-contract-check.ts:487` |
+| `scripts/commands/script-contract-check.ts:622` |
+| `scripts/commands/script-contract-check.ts:63` |
+| `scripts/commands/script-contract-check.ts:71` |
+| `scripts/commands/script-contract-check.ts:78` |
+| `scripts/commands/script-contract-check.ts:82` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | git diff c0bcd7af9 --name-status: rename to scripts/commands/script-contract-check.ts(+.test.ts); package.json:94 -> bun scripts/commands/script-contract-check.ts; config/plugin-scripts.json repo-only row deleted; rules 1-4 unchanged; bun test scripts/commands/script-contract-check.test.ts -> 23 pass / 0 fail |
+| R2 | MET | script-contract-check.ts:489 GLUE_BUDGET_LINES=250, :538 walk (excludes *.test.ts), :585 budget > 250, :587 db-import regex (bun:sqlite/drizzle-orm, type-imports excluded), :589 corpus-parse docs/tasks |
+| R3 | MET | :573 noun-clash vs apps/cli/src/commands basenames; task.ts clash fixture passes; real tree --placement-only -> 0 findings exit 0 |
+| R4 | MET | :510 loadPlacementBaseline, :612 stale-baseline finding, fail-closed load; config/script-placement-baseline.json 27 entries, 5 exempt:true; suppression + stale tests pass |
+| R5 | MET | config/rules/boundary/sp-script-placement.yaml severity error exit-code evaluator SKIP guard; rule run --rule sp-script-placement -> "All 1 rule passed" exit 0; SKIP verified from /tmp |
+| R6 | MET | AGENTS.md:209 one sentence: placement governed by ADR-130 + docs/design/harness-surface-governance.md section 2, enforced by sp-script-placement rule; no restated table |
+| R7 | MET | script-contract-check.test.ts:541 baseline reconciles with plan section 2 (both directions + 5 exempt rows); test passes (part of 23) |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | command | AGENTS.md:205-209 consent paragraph + ADR-130/section-2 pointer; governance doc section 2/4 pre-existing; rule run --rule sp-script-placement exit 0 |
+| AC-2 | MET | command | AGENTS.md:205 operator-consent sentence (plan-time confirmation contract); governance doc section 2; rule run exit 0 |
+| AC3 | MET | command | AGENTS.md:209 key file states placement contract and names enforcing rule; --placement-only -> 0 findings exit 0 |
+| AC4 | MET | command | rule run --rule sp-script-placement exit 0; --placement-only -> 0 findings exit 0; flagging proven by 23-test suite |
+| AC5 | MET | test | bun test scripts/commands/script-contract-check.test.ts -> 23 pass incl. baseline-plan reconcile and 5-exempt assertion |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-09-29T08:55:40.838Z todo → wip (system)
+- 2026-09-29T10:34:01.677Z wip → testing (system)
+- 2026-09-29T10:47:50.470Z testing → done (system)
+

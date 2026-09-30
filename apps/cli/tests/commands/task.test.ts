@@ -995,6 +995,96 @@ describe('spur task CLI', () => {
         expect(output.messages.join('')).toMatch(/\d{4}/);
     });
 
+    // ── check --precheck (1002 R1) ──
+
+    test('check --precheck fails a task over the size limits (exit 1, precheck-size code)', async () => {
+        // 11 R-items and 17 plan items exceed DEFAULT_TASK_SIZE_LIMITS (10/16).
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', '--skip-ready', 'Too big for precheck'], { cwd, output: cOut });
+        const wbs = createdWbs(cOut);
+        const reqBody = join(cwd, `req-${wbs}.md`);
+        await Bun.write(reqBody, Array.from({ length: 11 }, (_, i) => `- R${i + 1}. Requirement ${i + 1}.`).join('\n'));
+        await main(['task', 'update', wbs, '--section', 'Requirements', '--from-file', reqBody], {
+            cwd,
+            output: createCapturedOutput(),
+        });
+        const acBody = join(cwd, `ac-${wbs}.md`);
+        await Bun.write(acBody, '- [ ] Given a task / When checked / Then it is measured.\n');
+        await main(['task', 'update', wbs, '--section', 'Acceptance Criteria', '--from-file', acBody], {
+            cwd,
+            output: createCapturedOutput(),
+        });
+        const planBody = join(cwd, `plan-${wbs}.md`);
+        await Bun.write(planBody, Array.from({ length: 17 }, (_, i) => `- [ ] Step ${i + 1}.`).join('\n'));
+        await main(['task', 'update', wbs, '--section', 'Plan', '--from-file', planBody], {
+            cwd,
+            output: createCapturedOutput(),
+        });
+
+        // Without --precheck the plain four-layer check stays clean.
+        const plain = createCapturedOutput();
+        const plainExit = await main(['task', 'check', wbs, '--json'], { cwd, output: plain });
+        expect(plainExit).toBe(0);
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'check', wbs, '--precheck', '--json'], { cwd, output });
+        expect(exitCode).toBe(1);
+        const parsed = JSON.parse(lastMessage(output));
+        const codes = (parsed[0].findings as { code: string }[]).map((f) => f.code);
+        expect(codes).toContain('precheck-size');
+        // No evidence declaration on this task — the evidence precheck passed silently.
+        expect(codes).not.toContain('precheck-evidence');
+    });
+
+    test('check --precheck rejects --corpus and a missing WBS (exit 2)', async () => {
+        const corpus = createCapturedOutput();
+        const corpusExit = await main(['task', 'check', '--precheck', '--corpus'], { cwd, output: corpus });
+        expect(corpusExit).toBe(2);
+        expect(corpus.errors.join('\n')).toContain('--precheck requires a <wbs> argument');
+
+        const bare = createCapturedOutput();
+        const bareExit = await main(['task', 'check', '--precheck'], { cwd, output: bare });
+        expect(bareExit).toBe(2);
+        expect(bare.errors.join('\n')).toContain('--precheck requires a <wbs> argument');
+    });
+
+    test('check --precheck fails closed on an unknown evidence-channel declaration (exit 1)', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', '--skip-ready', 'Unknown evidence channel'], { cwd, output: cOut });
+        const wbs = createdWbs(cOut);
+        const reqBody = join(cwd, `req-${wbs}.md`);
+        await Bun.write(reqBody, 'R1. Real requirement.\n');
+        await main(['task', 'update', wbs, '--section', 'Requirements', '--from-file', reqBody], {
+            cwd,
+            output: createCapturedOutput(),
+        });
+        const acBody = join(cwd, `ac-${wbs}.md`);
+        await Bun.write(acBody, '- [ ] Given / When / Then.\n');
+        await main(['task', 'update', wbs, '--section', 'Acceptance Criteria', '--from-file', acBody], {
+            cwd,
+            output: createCapturedOutput(),
+        });
+        const planBody = join(cwd, `plan-${wbs}.md`);
+        await Bun.write(planBody, '- [ ] Step 1.\n');
+        await main(['task', 'update', wbs, '--section', 'Plan', '--from-file', planBody], {
+            cwd,
+            output: createCapturedOutput(),
+        });
+        const designBody = join(cwd, `design-${wbs}.md`);
+        await Bun.write(designBody, 'evidence-channel: not.a.real.channel[x]\n');
+        await main(['task', 'update', wbs, '--section', 'Design', '--from-file', designBody], {
+            cwd,
+            output: createCapturedOutput(),
+        });
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'check', wbs, '--precheck', '--json'], { cwd, output });
+        expect(exitCode).toBe(1);
+        const parsed = JSON.parse(lastMessage(output));
+        const codes = (parsed[0].findings as { code: string }[]).map((f) => f.code);
+        expect(codes).toContain('precheck-evidence');
+    });
+
     test('check with unknown WBS prints error and exits 1', async () => {
         const output = createCapturedOutput();
         const exitCode = await main(['task', 'check', '9999'], { cwd, output });
@@ -2397,6 +2487,31 @@ Only this section exists.
         expect(JSON.parse(lastMessage(output)).verdict).toBe('UNKNOWN');
     });
 
+    test('verdict lints the answer before deriving (1003 R2): malformed answer exits 1 with lintFindings', async () => {
+        // Real task fixture: the lint resolves the task corpus; a corpus-less answer skips the
+        // lint (fail-open mirrors the scenario-key gap posture), so the gate needs a task file.
+        const createOut = createCapturedOutput();
+        await main(['task', 'create', '--skip-ready', 'Lint fixture'], { cwd, output: createOut });
+        const wbs = createdWbs(createOut);
+        const artifactPath = join(process.cwd(), '.spur', 'run', `${wbs}-verdict.json`);
+        // Shared repo-root .spur/run: concurrent suite writers can transiently own this path (project
+        // root is discovered by walking up from the temp fixture) — clear it before the absence assert.
+        rmSync(artifactPath, { force: true });
+        const answerPath = join(cwd, `${wbs}-verify-answer.txt`);
+        await Bun.write(answerPath, 'no verdict line here\n');
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'verdict', wbs, '--from-answer', answerPath, '--json'], {
+            cwd,
+            output,
+        });
+        expect(exitCode).toBe(1);
+        const parsed = JSON.parse(lastMessage(output)) as { lintFindings: Array<{ line: number; message: string }> };
+        expect(parsed.lintFindings.length).toBeGreaterThan(0);
+        expect(parsed.lintFindings[0]?.message).toContain('`Verdict:`');
+        // The lint gate fires before any derivation write — no verdict artifact.
+        expect(existsSync(artifactPath)).toBe(false);
+    });
+
     test('verdict exits 1 with an error when the answer file is missing', async () => {
         const output = createCapturedOutput();
         const exitCode = await main(['task', 'verdict', '8004', '--from-answer', join(cwd, 'nope.txt')], {
@@ -3786,6 +3901,13 @@ describe('spur task CLI — verdict scenario-key gate (0958)', () => {
                 '',
                 '## 0961. Covering task',
                 '',
+                '### Requirements',
+                '',
+                // 1003 R2: `task verdict` owns the answer lint, so the fixture declares the
+                // requirement ids its answers key by (lint contract: exact `R<n>` tokens).
+                '- [ ] **R1. Envelope shape.** Fallback envelope shape.',
+                '- [ ] **R2. Contract honored.** Selection contract.',
+                '',
                 '### Acceptance Criteria',
                 '',
                 AC,
@@ -3807,10 +3929,13 @@ describe('spur task CLI — verdict scenario-key gate (0958)', () => {
             await writeFile(
                 answerPath,
                 [
+                    'Verdict: PASS',
+                    '',
+                    '### Per-Requirement Traceability',
                     '| Req | Status | Evidence |',
                     '|-----|--------|----------|',
-                    '| Req1 — envelope shape | MET | `src/x.ts:1` |',
-                    '| Req2 — contract honored | MET | `src/x.ts:2` |',
+                    '| R1 | MET | `src/x.ts:1` |',
+                    '| R2 | MET | `src/x.ts:2` |',
                 ].join('\n'),
             );
             const output = createCapturedOutput();
@@ -3822,7 +3947,7 @@ describe('spur task CLI — verdict scenario-key gate (0958)', () => {
             // Plain `--json` (raw mode) surfaces writeJsonError text on the error sink.
             const errorText = output.errors.join(' ');
             expect(errorText).toContain('D9');
-            expect(errorText).toContain('Req2 — contract honored');
+            expect(errorText).toContain('R2');
             expect(errorText).toContain('(feature R<n>)');
             // No artifact: the failure happens before certification.
             const artifactPath = join(process.cwd(), '.spur', 'run', '0961-verdict.json');
@@ -3840,10 +3965,20 @@ describe('spur task CLI — verdict scenario-key gate (0958)', () => {
             await writeFile(
                 answerPath,
                 [
+                    'Verdict: PASS',
+                    '',
+                    '### Per-Requirement Traceability',
                     '| Req | Status | Evidence |',
                     '|-----|--------|----------|',
-                    '| Req1 — envelope shape | MET | `src/x.ts:1` |',
-                    '| Req2 (feature R3) — contract honored | MET | `src/x.ts:2` |',
+                    '| R1 | MET | `src/x.ts:1` |',
+                    '| R2 | MET | `src/x.ts:2` |',
+                    '',
+                    // 1003 R2: scenario crediting rides an AC row keyed by the scenario title —
+                    // the lint's AC-identity contract — so the row clears the scenario-key gap.
+                    '### Acceptance Criteria Verification',
+                    '| AC | Status | Evidence Type | Evidence |',
+                    '| --- | --- | --- | --- |',
+                    '| Scenario: R3 — Explicit fallback list is honored in order | MET | test | `tests/fallback.test.ts:3` |',
                 ].join('\n'),
             );
             const output = createCapturedOutput();

@@ -408,7 +408,8 @@ committed) because ADR-065 forbids a monorepo import surviving into the script's
 consequently the domain module has exactly one consumer reached through a generated file, not an
 import. Consequences that are deliberate: no hand-maintained enumeration of artifact array keys may
 exist in `plugins/sp/scripts/`; the twin's bare-`node` fixture test (R2) backstops the twin-staleness
-hole (script-contract-check compares mtimes only against the direct source); and
+hole (script-contract-check regenerates each standard twin and compares it byte-for-byte — mtimes
+are never consulted, task 0970); and
 `REPORT_SECTIONS`/`FINDING_FIELDS` stay local to the script with `skill-structure.test.ts` requiring
 `report-contract.md` to name every entry of both — full single-owner treatment of the report
 vocabulary was deferred as it has never drifted.

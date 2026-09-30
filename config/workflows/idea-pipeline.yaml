@@ -190,16 +190,15 @@ states:
         options:
           path: .spur/run/${vars.__runId}-idea-feature-id.txt
           var: featureId
+      # 1007 R2: one shell persists both sections — the Goal and Scope updates share the
+      # artifact precondition, so the two update shells merged (original commands in order,
+      # same && fail-fast semantics).
       - kind: shell
         options:
           command: >-
             mkdir -p .spur/run &&
             test -s .spur/run/$__runId-idea-goal.md &&
-            $spurBin feature update "$featureId" --section Goal --from-file .spur/run/$__runId-idea-goal.md
-      - kind: shell
-        options:
-          command: >-
-            mkdir -p .spur/run &&
+            $spurBin feature update "$featureId" --section Goal --from-file .spur/run/$__runId-idea-goal.md &&
             test -s .spur/run/$__runId-idea-scope.md &&
             $spurBin feature update "$featureId" --section Scope --from-file .spur/run/$__runId-idea-scope.md
 
@@ -215,9 +214,10 @@ states:
       check records FAIL and routes through the capped retry loop via guards that consume the
       recorded result — it never fails the run (the engine's default onError policy is `fail`,
       so an in-action check failure would kill the run before the retry edges are evaluated).
-      Requirement coverage is MEASURED alongside it by the soft idea-coverage-check shell
-      (0887 R4): the recorded coverage status conjuncts into the profile=auto ac-generate
-      guards below so uncovered inventory items route through the same capped retry loop.
+      Requirement coverage is MEASURED by the same gate (1004 R2): the `idea-ac-check` args
+      carry `--inventory .spur/run/${vars.__runId}-idea-eval-report.md`, so uncovered
+      inventory items record FAIL on `idea-ac-check.status` and route through the same capped
+      retry loop via the guards below.
     onEnter:
       - kind: shell
         options:
@@ -255,33 +255,16 @@ states:
         options:
           id: idea-ac-check
           executable: "${vars.spurBin}"
-          args: ["feature", "check", "${vars.featureId}"]
+          args: ["feature", "check", "${vars.featureId}", "--inventory", ".spur/run/${vars.__runId}-idea-eval-report.md"]
           resultFile: .spur/run/${vars.__runId}-idea-ac-check.status
           softFail: true
           timeoutMs: 120000
-      # 0887 R4: requirement-inventory ↔ AC coverage, measured once at the same author/revise
-      # boundary. Soft shell (exit 0 always): the checker writes the PASS/FAIL status itself and
-      # the guards below consume the recorded result — never re-run the checker (0769 pattern).
-      # Repo-checkout path first, then the superskill-staged twin (handoff-finalize resolution
-      # shape); neither present fails closed to FAIL so readiness degrades visibly instead of
-      # silently skipping coverage.
-      - kind: shell
-        options:
-          command: >-
-            mkdir -p .spur/run &&
-            S=plugins/sp/scripts/idea-coverage-check.ts;
-            [ -f config/plugin-scripts.json -a -f "$S" ] || S="$(superskill script path sp idea-coverage-check.ts 2>/dev/null)";
-            if [ -n "$S" ] && [ -f "$S" ]; then
-              bun "$S" --run-id "$__runId" --report ".spur/run/$__runId-idea-eval-report.md" --ac ".spur/run/$__runId-idea-ac-content.md" || printf 'FAIL run=%s checker exited nonzero (bun missing or checker crash)\n' "$__runId" > ".spur/run/$__runId-idea-coverage.reason";
-            else
-              printf 'FAIL run=%s checker not found — run superskill install sp --marketplace gobing-ai/spur\n' "$__runId" | tee ".spur/run/$__runId-idea-coverage.reason" >&2;
-              printf 'FAIL\n' > ".spur/run/$__runId-idea-coverage.status";
-            fi
       # 0945 R2: derive the route facts ONCE at this boundary (0769 pattern) — guards read these
       # named files instead of re-deriving design×needs_design inline. The same command is
       # duplicated in feature-check's onEnter (YAML has no include); byte-equality is
       # test-pinned (idea-pipeline-routing.test.ts). Missing/corrupt needs-design JSON fails
-      # safe to `design`; readiness is PASS only when both recorded checks are PASS.
+      # safe to `design`; readiness is PASS only when the recorded check is PASS (1004 R2:
+      # coverage folds into idea-ac-check via --inventory).
       # (warn) 7 commands: two three-way `test && printf || printf` derivations over captured
       # signal files (ADR-115); no model hop, no CLI re-run.
       - kind: shell
@@ -291,7 +274,7 @@ states:
             { test "$design" = skip -o "$design" = auto -a "$(jq -r .needs_design .spur/run/$__runId-idea-needs-design.json 2>/dev/null)" = false &&
             printf 'skip\n' > .spur/run/$__runId-idea-design-route.txt ||
             printf 'design\n' > .spur/run/$__runId-idea-design-route.txt; } &&
-            { test "$(cat .spur/run/$__runId-idea-ac-check.status 2>/dev/null)" = PASS -a "$(cat .spur/run/$__runId-idea-coverage.status 2>/dev/null)" = PASS &&
+            { test "$(cat .spur/run/$__runId-idea-ac-check.status 2>/dev/null)" = PASS &&
             printf 'PASS\n' > .spur/run/$__runId-idea-ac-ready.status ||
             printf 'FAIL\n' > .spur/run/$__runId-idea-ac-ready.status; }
 
@@ -308,29 +291,19 @@ states:
       the transition guards route directly from ac-generate to the appropriate next
       state, so this state is only entered in interactive mode. On failure, the retry
       cap routes back to ac-generate (≤3 retries) or escalates to failed.
-      Requirement coverage (.spur/run/${vars.__runId}-idea-coverage.status, 0887 R4) is part of
-      the recorded results this gate surfaces: a FAIL there means some inventory items have no
-      covering scenario — answer no to route back to ac-generate for revision if needed.
+      Requirement coverage (1004 R2) folds into the recorded `idea-ac-check` result via the
+      gate's `--inventory` flag: a FAIL there can mean some inventory items have no covering
+      scenario — answer no to route back to ac-generate for revision if needed.
     pause: true
     onEnter:
       - kind: hitl.confirm
         options:
-          prompt: "Feature check for ${vars.featureId}. Review the AC and confirm to proceed? Requirement coverage status: $(cat .spur/run/${vars.__runId}-idea-coverage.status 2>/dev/null || echo unknown) — reason: $(cat .spur/run/${vars.__runId}-idea-coverage.reason 2>/dev/null || echo n/a) (.spur/run/${vars.__runId}-idea-coverage.status[.reason]). (Failures route back to ac-generate for revision, capped at 3 retries.)"
+          prompt: "Feature check for ${vars.featureId}. Review the AC and confirm to proceed? Recorded check status: $(cat .spur/run/${vars.__runId}-idea-ac-check.status 2>/dev/null || echo unknown) (.spur/run/${vars.__runId}-idea-ac-check.status — includes inventory-coverage findings, 1004 R2). (Failures route back to ac-generate for revision, capped at 3 retries.)"
           decision:
             mode: never
-      # 0945 R2: same writer as ac-generate's onEnter (byte-equal, test-pinned) — refreshes the
-      # derived route facts after the interactive gate so both entries into this boundary read
-      # consistent files; hitl.confirm only sets $__hitlAnswer.
-      - kind: shell
-        options:
-          command: >-
-            mkdir -p .spur/run &&
-            { test "$design" = skip -o "$design" = auto -a "$(jq -r .needs_design .spur/run/$__runId-idea-needs-design.json 2>/dev/null)" = false &&
-            printf 'skip\n' > .spur/run/$__runId-idea-design-route.txt ||
-            printf 'design\n' > .spur/run/$__runId-idea-design-route.txt; } &&
-            { test "$(cat .spur/run/$__runId-idea-ac-check.status 2>/dev/null)" = PASS -a "$(cat .spur/run/$__runId-idea-coverage.status 2>/dev/null)" = PASS &&
-            printf 'PASS\n' > .spur/run/$__runId-idea-ac-ready.status ||
-            printf 'FAIL\n' > .spur/run/$__runId-idea-ac-ready.status; }
+      # 1007 R2: the former post-confirm route-writer duplicate is deleted — ac-generate's
+      # writer is the single writer (0945 R2 pin updated); its inputs (design var, needs-design
+      # JSON, recorded ac-check status) cannot change across hitl.confirm.
 
   - id: system-design
     description: >
@@ -567,10 +540,8 @@ states:
       - kind: shell
         options:
           command: >-
-            if [ -f packages/app/src/workflow/idea-handoff-cli.ts ]; then
-              bun packages/app/src/workflow/idea-handoff-cli.ts;
-            elif H="$(superskill script path sp idea-handoff.mjs 2>/dev/null)" && [ -f "$H" ]; then
-              node "$H";
+            eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/idea-handoff.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/idea-handoff.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; if [ -f "$S" ]; then
+              "$RUNNER" "$S";
             else
               echo "idea handoff failed closed — idea-handoff script not found — run 'superskill install sp --marketplace gobing-ai/spur'" >&2;
               exit 1;
@@ -583,9 +554,8 @@ states:
       next command (ready-depth refineall when any task is unready, else auto
       runall). No task execution — the pipeline stops here.
     onEnter:
-      - kind: note
-        options:
-          message: "Idea pipeline handoff. Feature: ${vars.featureId}. See .spur/run/${vars.__runId}-idea-handoff.md for the created task list and recommended next command."
+      # 1007 R2: the handoff note is deleted — the run.artifact below carries the handoff
+      # (same path, the recommended-next-command report).
       - kind: run.artifact
         options:
           path: .spur/run/${vars.__runId}-idea-handoff.md
@@ -719,32 +689,32 @@ transitions:
           test "$profile" = auto &&
           test "$(cat .spur/run/$__runId-idea-ac-ready.status 2>/dev/null)" = PASS &&
           test "$(cat .spur/run/$__runId-idea-design-route.txt 2>/dev/null)" = skip
-  # Auto-skip 3: check or coverage failed, retry < 3 → loop back to ac-generate (self-loop)
+  # Auto-skip 3: check failed (incl. inventory coverage), retry < 3 → loop back to ac-generate (self-loop)
   - from: ac-generate
     to: ac-generate
-    description: "profile=auto, check or coverage failed, retry cap not reached — re-run ac-generate."
-    # (warn) 5 commands: one persistent multi-assignment line captures both statuses and the retry count
-    # (with its 0 fallback); the failed-check pair stays verbatim and the profile gate folds into the retry
-    # test via `test -a`; the retry loop is the smallest honest formulation of cap<3 routing (0769).
+    description: "profile=auto, check failed (incl. inventory coverage), retry cap not reached — re-run ac-generate."
+    # (warn) 4 commands: one persistent multi-assignment line captures the check status and the retry
+    # count (with its 0 fallback); the profile gate folds into the retry test via `test -a`; the retry
+    # loop is the smallest honest formulation of cap<3 routing (0769).
     guard:
       kind: shell
       options:
         command: >-
-          ac_status="$(cat .spur/run/$__runId-idea-ac-check.status 2>/dev/null)" cov_status="$(cat .spur/run/$__runId-idea-coverage.status 2>/dev/null)" retry="$(cat .spur/run/$__runId-idea-ac-retry-count 2>/dev/null || echo 0)";
-          { test "$ac_status" != PASS || test "$cov_status" != PASS; } && test "$profile" = auto -a "$retry" -lt 3
-  # Auto-skip 4: check or coverage failed, retry cap reached → escalate to failed
+          ac_status="$(cat .spur/run/$__runId-idea-ac-check.status 2>/dev/null)" retry="$(cat .spur/run/$__runId-idea-ac-retry-count 2>/dev/null || echo 0)";
+          test "$ac_status" != PASS && test "$profile" = auto -a "$retry" -lt 3
+  # Auto-skip 4: check failed (incl. inventory coverage), retry cap reached → escalate to failed
   - from: ac-generate
     to: failed
     terminalReason: retry-exhausted
-    description: "profile=auto, check or coverage failed after 3 retries — escalate to failed."
-    # (warn) 5 commands: mirror of the retry guard with cap>=3; keeping escalation and retry as one
+    description: "profile=auto, check failed (incl. inventory coverage) after 3 retries — escalate to failed."
+    # (warn) 4 commands: mirror of the retry guard with cap>=3; keeping escalation and retry as one
     # test-chain pair makes the cap boundary auditable in the diff (0769).
     guard:
       kind: shell
       options:
         command: >-
-          ac_status="$(cat .spur/run/$__runId-idea-ac-check.status 2>/dev/null)" cov_status="$(cat .spur/run/$__runId-idea-coverage.status 2>/dev/null)" retry="$(cat .spur/run/$__runId-idea-ac-retry-count 2>/dev/null || echo 0)";
-          { test "$ac_status" != PASS || test "$cov_status" != PASS; } && test "$profile" = auto -a "$retry" -ge 3
+          ac_status="$(cat .spur/run/$__runId-idea-ac-check.status 2>/dev/null)" retry="$(cat .spur/run/$__runId-idea-ac-retry-count 2>/dev/null || echo 0)";
+          test "$ac_status" != PASS && test "$profile" = auto -a "$retry" -ge 3
   # Interactive fallback: enter feature-check HITL gate
   - from: ac-generate
     to: feature-check

@@ -26,10 +26,10 @@ test('the script copies TERMINAL_REASONS exactly (no value import, parity held)'
         .map((entry) => entry.trim().replace(/^'|'$/g, ''))
         .filter((entry) => entry !== '');
     expect(copied).toEqual([...TERMINAL_REASONS]);
-    // And the script stays standalone: the app package appears only as a type import.
-    expect(source).toContain("import type { WorkflowActionTraceWriter } from '@gobing-ai/spur-app'");
-    // And the script stays standalone: no runtime value import of the app package.
-    expect(source).toMatch(/import type \{ WorkflowActionTraceWriter \} from '@gobing-ai\/spur-app'/);
+    // And the script stays standalone: the app package appears only as a type-only namespace
+    // import; no runtime value import exists.
+    expect(source).toContain("import type * as spurApp from '@gobing-ai/spur-app'");
+    expect(source).not.toMatch(/(^|\n)import (?!type )[^;\n]*'@gobing-ai\/spur-app'/);
 });
 
 test('R2: --close --status failed without --reason exits nonzero before any write', () => {

@@ -31,6 +31,7 @@ import {
 } from '../workflow/feature-verification-receipt';
 import { resolveWorkflowDefinition } from '../workflow/workflow-resolver';
 import { computeAggregate, readVerdictArtifact as readGuardVerdictArtifact } from './done-transition-guard';
+import { checkInventoryCoverage } from './feature-inventory';
 import {
     type CheckFindings,
     FINDING_CODES,
@@ -43,6 +44,7 @@ import {
 import { applyStructuralRepairs, type StructuralRepair } from './structural-repair';
 import { TaskLocator } from './task-locator';
 import { parseTesting } from './task-record';
+import { type AnswerLintFinding, lintVerifyAnswer } from './verify-answer-lint';
 import { aggregateVerifyVerdict } from './verify-verdict';
 
 // ─── Types ──────────────────────────────────────────────────────────────
@@ -204,6 +206,13 @@ export class FeatureCheckService extends PlanningCheckService {
             asStatus?: string;
             /** Repair structural findings (heading presence/level/order, R-item checkboxes) in place before validating (task 0619). */
             fix?: boolean;
+            /**
+             * Inventory-report text (1004 R1): cross-check the report's
+             * `## Requirement inventory` items against the feature's AC
+             * `# covers:` lines (rule `inventory-coverage`). Set by
+             * `feature check --inventory <report>`.
+             */
+            inventory?: string;
         },
     ): Promise<CheckFeatureResult> {
         const strict = options?.strict === true;
@@ -291,6 +300,12 @@ export class FeatureCheckService extends PlanningCheckService {
                   ? [options.tasksDir]
                   : [];
         await this.runL4(doc, featureId, effectiveStatus, taskScanDirs, dogfoodDir, runDir, findings);
+
+        // ── 1004 R1: requirement-inventory ↔ AC coverage (feature check --inventory) ──
+        if (typeof options?.inventory === 'string') {
+            const acText = doc.getSection('Acceptance Criteria') ?? '';
+            findings.push(...checkInventoryCoverage(options.inventory, acText));
+        }
 
         return {
             id: featureId,
@@ -1468,6 +1483,23 @@ export function isFeatureFile(name: string, id: string): boolean {
 }
 
 /**
+ * Raw markdown of `<featuresDir>/<featureId>_*.md`, or `null` on any miss — the single
+ * `<id>_<slug>.md` prefix-scan resolution shared with `task-service` (task 1003 R2 adds the
+ * full-file form for the answer lint; the AC-only form delegates here).
+ */
+export async function readFeatureBody(fs: FileSystem, featuresDir: string, featureId: string): Promise<string | null> {
+    try {
+        for (const name of await fs.readDir(featuresDir)) {
+            if (!isFeatureFile(name, featureId)) continue;
+            return await fs.readFile(`${featuresDir}/${name}`);
+        }
+    } catch {
+        // Features dir or file unreadable — no resolution; the done gate stays the backstop.
+    }
+    return null;
+}
+
+/**
  * Fence-stripped Acceptance Criteria of `<featuresDir>/<featureId>_*.md`, or `null` on any miss —
  * the single `<id>_<slug>.md` prefix-scan resolution shared with `task-service`.
  */
@@ -1476,15 +1508,46 @@ export async function readFeatureAcBody(
     featuresDir: string,
     featureId: string,
 ): Promise<string | null> {
+    const raw = await readFeatureBody(fs, featuresDir, featureId);
+    if (raw === null) return null;
     try {
-        for (const name of await fs.readDir(featuresDir)) {
-            if (!isFeatureFile(name, featureId)) continue;
-            const doc = MarkdownDocument.parse(await fs.readFile(`${featuresDir}/${name}`), 'feature');
-            const ac = stripAcFence(doc.getSection('Acceptance Criteria') ?? '');
-            return ac.trim().length > 0 ? ac : null;
-        }
+        const doc = MarkdownDocument.parse(raw, 'feature');
+        const ac = stripAcFence(doc.getSection('Acceptance Criteria') ?? '');
+        return ac.trim().length > 0 ? ac : null;
     } catch {
-        // Features dir or file unreadable — no resolution; the done gate stays the backstop.
+        return null;
     }
-    return null;
+}
+
+/**
+ * 1003 R2: run the verify-answer lint over one task's answer with corpus-resolved context.
+ * Resolution mirrors {@link verdictScenarioKeyGap}: an unresolvable task file or linked
+ * feature fails OPEN (no findings — checklist labels/scenario titles are simply unavailable)
+ * and the verdict derivation plus the done gate stay backstops.
+ */
+export async function lintVerifyAnswerForTask(
+    wbs: string,
+    answerText: string,
+    deps: VerdictScenarioKeyGapDeps,
+): Promise<AnswerLintFinding[]> {
+    let taskContent: string;
+    let featureId = '';
+    try {
+        const hit = await new TaskLocator({
+            fs: deps.fs,
+            tasksDir: deps.tasksDir,
+            ...(deps.foldersConfig !== undefined ? { foldersConfig: deps.foldersConfig } : {}),
+        }).findByWbs(wbs);
+        if (hit === null) return [];
+        taskContent = await deps.fs.readFile(hit.filePath);
+        const tfm = MarkdownDocument.parse(taskContent, 'task').frontmatterData ?? {};
+        featureId = (tfm.feature_id as string | undefined) ?? (tfm['feature-id'] as string | undefined) ?? '';
+    } catch {
+        return []; // unreadable corpus — fail open; the verdict derivation and done gate stay backstops
+    }
+    const featureContent =
+        featureId !== '' && deps.featuresDir !== undefined
+            ? await readFeatureBody(deps.fs, deps.featuresDir, featureId)
+            : null;
+    return lintVerifyAnswer(answerText, taskContent, featureContent);
 }

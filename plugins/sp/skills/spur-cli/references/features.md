@@ -181,10 +181,15 @@ planning reference, then apply accepted deterministic changes through `spur feat
 ## The gate — `check --json`
 
 ```bash
-spur feature check H2 --json        # one feature
-spur feature check --json           # whole tree
-spur feature check --strict --json  # warnings → failures
+spur feature check H2 --json                       # one feature
+spur feature check --json                          # whole tree
+spur feature check --strict --json                 # warnings → failures
+spur feature check H2 --inventory <eval-report.md> # also cross-check AC ↔ requirement inventory
 ```
+
+With `--inventory <report>`, the `inventory-coverage` finding (1004 R1, unsuppressible error layer)
+fails the check when a `## Requirement inventory` item has no covering scenario (`# covers: I<n>`)
+and is not `[deferred: ...]`; a missing/empty inventory section is itself an error.
 
 The 4-layer validator (frontmatter, AC syntax, children-limit/structure, L4 traceability) emits its
 verdict and findings as a JSON **array**, one entry per feature (`jq '.[0].pass'`, `.[0].findings[].code`),
@@ -207,15 +212,21 @@ see the proposed status hop.
 spur feature sync H2 --json                    # one feature
 spur feature sync H2 --dry-run --json          # propose only, no write
 spur feature sync --all --json                 # every feature with linked tasks
-spur feature sync H2 --force                   # apply a reopen proposal without confirmation
+spur feature sync H2 --force                   # re-derive live: bypass replay + apply a reopen without confirmation
 spur feature sync H2 --folder docs/custom-tasks --json   # non-default tasks folder
 ```
 
 - **`[id]`** syncs one feature; **`--all`** syncs every feature with linked tasks. One of the two is
   required - exit `2` if neither is given.
 - **`--dry-run`** reports proposed transitions without applying. **`--force`** applies a *reopen*
-  proposal (status moving backward) without interactive confirmation.
-- **`--json`** single-feature emits `{ proposal, applied, appliedHops[] }`; `--all` emits
+  proposal (status moving backward) without interactive confirmation **and** bypasses blocked-sync
+  replay (below).
+- **Blocked-sync suppression (1004 R3):** a BLOCKED outcome is persisted at
+  `.spur/run/feature-sync-blocked-<id>.json` with an input fingerprint (feature content, linked
+  task statuses, verdict mtimes); an identical next call replays the prior result
+  (`suppressed: true`) instead of re-deriving. A changed input, `--force`, or a non-blocked
+  outcome re-derives/clears. Dry-run never reads or writes the state.
+- **`--json`** single-feature emits `{ proposal, applied, appliedHops[], suppressed? }`; `--all` emits
   `{ totalFeatures, evaluated, updatedCount, results[] }` where each result is the single-feature
   shape. `proposal` is
   `{ featureId, from, to, reason, requiresConfirm?, gateBlocked?, gateFindings?, hops? }`.

@@ -1,0 +1,331 @@
+/**
+ * Residual scan — pure core of the task-leftover scanner (feature F96, ADR-071; task 1003 R5).
+ *
+ * Contract owner: docs/design/task-residual-sweep.md. The plugin script
+ * `plugins/sp/scripts/residual-scan.ts` keeps the IO glue (argv, git/spur spawning, file
+ * IO, the four scan/fold/settle/report modes) and calls into this module through the
+ * generated standalone bundle `plugins/sp/lib/residual-scan.generated.mjs` — node-builtin
+ * only, no workspace imports, so the bundle satisfies the plugin standalone contract.
+ *
+ * Everything here is pure: the script collects the base sha, added diff lines, staging
+ * residue paths and deferral entries, then calls {@link scanResiduals}.
+ */
+
+import { createHash } from 'node:crypto';
+
+/** Residual-scan item categories: review-table rows, TODO markers, unchecked boxes, staging residue. */
+export type ResidualCategory = 'review-finding' | 'diff-marker' | 'unchecked-box' | 'staging-residue';
+/** Severity class assigned by {@link classify}: blocking gates the sweep, deferrable has a reason, the rest are informational. */
+export type ResidualClass = 'blocking' | 'deferrable' | 'advisory' | 'housekeeping';
+
+/** One residual-scan finding with its stable identity and classification. */
+export interface ResidualItem {
+    id: string;
+    category: ResidualCategory;
+    class: ResidualClass;
+    priority?: string;
+    location: string;
+    text: string;
+}
+
+/** Scan artifact persisted for the residual-sweep step: what was scanned, the items, and class counts. */
+export interface ResidualArtifact {
+    wbs: string;
+    base: string | null;
+    scanned: Record<ResidualCategory, boolean>;
+    items: ResidualItem[];
+    counts: { blocking: number; deferrable: number; advisory: number; housekeeping: number };
+}
+
+/** A deferral entry: a P3 finding / diff marker reclassified as deferrable by its reason. */
+export interface Deferral {
+    id: string;
+    reason: string;
+}
+
+/** Inputs the script's IO glue collects before calling the pure scan core. */
+export interface ResidualScanInputs {
+    wbs: string;
+    /** Base ref from `<runDir>/<wbs>-base.sha`, or `null` when never captured. */
+    base: string | null;
+    taskContent: string;
+    /** Added lines (`<file>:<line>:<text>`) from `git diff --unified=0 <base>` + untracked files. */
+    addedLines: Array<{ file: string; line: number; text: string }>;
+    /** Regular files matching `<tmpDir>/<wbs>-*` (absolute paths). */
+    stagingResidue: string[];
+    /** File-declared deferrals plus in-table DEFER dispositions. */
+    deferrals: Deferral[];
+}
+
+const MARKER_PATTERN = /TODO|FIXME|XXX|HACK/;
+const PRIORITY_PATTERN = /^P[1-4]/;
+// Placeholder "no finding" cells, optionally with a trailing "(…)" note; "None of X…" is a real finding.
+const NONE_FINDING = /^(none( found)?|no (findings?|issues?)( found)?|—)\s*(\(.*\))?\.?$/i;
+const DISPOSITION_HEADER = /^(Disposition|Action|Status|Resolution|Fixed)$/i;
+const RESOLVED_DISPOSITION = /^(FIXED|RESOLVED|DONE)\b/i;
+const DEFERRED_DISPOSITION = /^DEFER(RED)?\b/i;
+const ANCHOR_PATTERN = /[A-Za-z0-9_./-]+\.[A-Za-z]+:[0-9]+/g;
+/** `path:12-18` range anchor → single-line `path:12`. */
+const RANGE_ANCHOR = /([A-Za-z0-9_./-]+\.[A-Za-z]+):([0-9]+)-[0-9]+/g;
+const EXCLUDED_PATHS = ['docs/tasks', 'docs/features/', '.spur/'];
+/** Inline marker that exempts a line from TODO-marker scanning. */
+export const ALLOW_PRAGMA = 'residual-scan:allow';
+
+/** Stable item id: sha256(category + location + normalized text), truncated to 8 hex chars. */
+export function makeItemId(category: ResidualCategory, location: string, text: string): string {
+    const normalized = text.trim().replace(/\s+/g, ' ');
+    const hex = createHash('sha256').update(`${location}${normalized}`).digest('hex');
+    return `${category}:${hex.slice(0, 8)}`;
+}
+
+/** `path:12-18` → `path:12` (anchor normalization from the design doc). */
+export function normalizeAnchor(location: string): string {
+    return location.replace(RANGE_ANCHOR, '$1:$2');
+}
+
+/** Normalize a finding cell to an anchor: Location column, else first backticked `path:line`. */
+export function locationOf(locationCell: string, finding: string): string {
+    const cell = locationCell.trim().replace(/`/g, '');
+    if (cell.length > 0 && cell !== '—') return normalizeAnchor(cell);
+    const backtick = finding.match(/`([^`]+)`/)?.[1];
+    return backtick === undefined ? '' : normalizeAnchor(backtick);
+}
+
+/**
+ * Extract review-finding rows: any `### Review` section table whose header carries a
+ * Priority column. Rows need `^P[1-4]` priority and a finding other than `none`/`—`.
+ * A disposition column (Disposition/Action/Status/Resolution/Fixed) is honored: `FIXED`/
+ * `RESOLVED`/`DONE` rows are dropped; `DEFER` rows carry the cell as an in-table deferral reason.
+ */
+export function parseReviewFindings(
+    taskContent: string,
+): Array<{ priority: string; location: string; text: string; deferral?: string }> {
+    const section = taskContent.split(/^### Review\b/m)[1];
+    if (section === undefined) return [];
+    const body = section.split(/^### /m)[0] ?? '';
+    const out: Array<{ priority: string; location: string; text: string; deferral?: string }> = [];
+    const lines = body.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (line === undefined || !line.trimStart().startsWith('|')) continue;
+        const header = splitRow(line);
+        const priorityCol = header.findIndex((h) => h.trim() === 'Priority');
+        if (priorityCol === -1) {
+            // Not a Priority table; skip its separator + body rows.
+            while (i + 1 < lines.length && lines[i + 1]?.trimStart().startsWith('|')) i++;
+            continue;
+        }
+        const findingCol = header.findIndex((h) => h.trim() === 'Finding');
+        const locationCol = header.findIndex((h) => h.trim() === 'Location');
+        const dispositionCol = header.findIndex((h) => DISPOSITION_HEADER.test(h.trim()));
+        i++; // skip header
+        const sep = lines[i];
+        if (sep !== undefined && /^\s*\|[\s:|-]+\|\s*$/.test(sep)) i++; // skip separator
+        while (i < lines.length) {
+            const row = lines[i];
+            if (row === undefined || !row.trimStart().startsWith('|')) break;
+            const cells = splitRow(row);
+            const priority = (cells[priorityCol] ?? '').trim();
+            const finding = (cells[findingCol] ?? '').trim();
+            const disposition = dispositionCol === -1 ? '' : (cells[dispositionCol] ?? '').trim();
+            if (
+                PRIORITY_PATTERN.test(priority) &&
+                !NONE_FINDING.test(finding) &&
+                finding.length > 0 &&
+                !RESOLVED_DISPOSITION.test(disposition)
+            ) {
+                const location = locationOf(cells[locationCol] ?? '', finding);
+                out.push(
+                    DEFERRED_DISPOSITION.test(disposition)
+                        ? { priority, location, text: finding, deferral: disposition }
+                        : { priority, location, text: finding },
+                );
+            }
+            i++;
+        }
+    }
+    return out;
+}
+
+function splitRow(line: string): string[] {
+    return line
+        .trim()
+        .replace(/^\|/, '')
+        .replace(/\|$/, '')
+        .split('|')
+        .map((c) => c.trim());
+}
+
+/** TODO/FIXME/XXX/HACK markers on added lines, honoring path exclusions + allow pragma. */
+export function parseDiffMarkers(
+    addedLines: Array<{ file: string; line: number; text: string }>,
+): Array<{ location: string; text: string }> {
+    return addedLines
+        .filter((l) => !EXCLUDED_PATHS.some((p) => l.file.startsWith(p)))
+        .filter((l) => !l.text.includes(ALLOW_PRAGMA))
+        .filter((l) => MARKER_PATTERN.test(l.text))
+        .map((l) => ({ location: `${l.file}:${l.line}`, text: l.text.trim() }));
+}
+
+/** `- [ ]` lines in the task file. */
+export function findUncheckedBoxes(taskContent: string): Array<{ location: string; text: string }> {
+    const path = 'task-file';
+    return taskContent
+        .split('\n')
+        .map((text, idx) => ({ text: text.trim(), line: idx + 1 }))
+        .filter((l) => l.text.startsWith('- [ ]'))
+        .map((l) => ({ location: `${path}:${l.line}`, text: l.text }));
+}
+
+/**
+ * Classification: P1–P3 findings, diff markers and unchecked boxes are blocking; P4 is
+ * advisory; staging residue is housekeeping. A deferral entry with a non-empty reason
+ * reclassifies a P3 finding or diff marker as deferrable — never P1/P2 or unchecked boxes.
+ */
+export function classify(
+    items: Array<Omit<ResidualItem, 'id' | 'class'> & { category: ResidualCategory }>,
+    deferrals: Deferral[],
+): ResidualItem[] {
+    const deferred = new Map(deferrals.map((d) => [d.id, d.reason]));
+    return items.map((item) => {
+        const id = makeItemId(item.category, item.location, item.text);
+        let klass: ResidualClass;
+        if (item.category === 'review-finding') klass = item.priority?.startsWith('P4') ? 'advisory' : 'blocking';
+        else if (item.category === 'staging-residue') klass = 'housekeeping';
+        else klass = 'blocking';
+        if (klass === 'blocking' && item.category !== 'unchecked-box') {
+            const p3Like =
+                item.category === 'diff-marker' ||
+                (item.category === 'review-finding' && (item.priority ?? '').startsWith('P3'));
+            const reason = deferred.get(id);
+            if (p3Like && reason !== undefined && reason.trim().length > 0) klass = 'deferrable';
+        }
+        return {
+            id,
+            category: item.category,
+            class: klass,
+            priority: item.priority,
+            location: item.location,
+            text: item.text,
+        };
+    });
+}
+
+/**
+ * Pure scan core: assemble the residual artifact from the script's collected inputs.
+ * `diff-marker` scanning is only claimed when a base sha was available.
+ */
+export function scanResiduals(inputs: ResidualScanInputs): ResidualArtifact {
+    const { wbs, base, taskContent, addedLines, stagingResidue, deferrals } = inputs;
+    const reviewRows = parseReviewFindings(taskContent);
+    const tableDeferrals = reviewRows.flatMap((r) =>
+        r.deferral === undefined ? [] : [{ id: makeItemId('review-finding', r.location, r.text), reason: r.deferral }],
+    );
+    const review = reviewRows.map((r) => ({
+        category: 'review-finding' as const,
+        priority: r.priority,
+        location: r.location,
+        text: r.text,
+    }));
+    const markers =
+        base === null
+            ? []
+            : parseDiffMarkers(addedLines).map((m) => ({
+                  category: 'diff-marker' as const,
+                  location: m.location,
+                  text: m.text,
+              }));
+    const boxes = findUncheckedBoxes(taskContent).map((b) => ({
+        category: 'unchecked-box' as const,
+        location: b.location,
+        text: b.text,
+    }));
+    const residue = stagingResidue.map((p) => ({
+        category: 'staging-residue' as const,
+        location: p,
+        text: p,
+    }));
+    const items = classify([...review, ...markers, ...boxes, ...residue], [...tableDeferrals, ...deferrals]);
+    const counts = { blocking: 0, deferrable: 0, advisory: 0, housekeeping: 0 };
+    for (const item of items) counts[item.class]++;
+    return {
+        wbs,
+        base,
+        scanned: {
+            'review-finding': true,
+            'diff-marker': base !== null,
+            'unchecked-box': true,
+            'staging-residue': true,
+        },
+        items,
+        counts,
+    };
+}
+
+/** Blocking locations that match the `file.ext:line` findings-anchor shape. */
+export function blockingAnchors(items: ResidualItem[]): string[] {
+    const anchors = new Set<string>();
+    for (const item of items) {
+        if (item.class !== 'blocking') continue;
+        for (const m of normalizeAnchor(item.location).matchAll(ANCHOR_PATTERN)) anchors.add(m[0]);
+    }
+    return [...anchors];
+}
+
+/** Result of folding a residual scan into the verify verdict. */
+export interface FoldResult {
+    verdict: 'PASS' | 'PARTIAL' | 'FAIL';
+    checks: Array<{ name: string; status: string; evidence: string }>;
+    findings: string;
+}
+
+/**
+ * Fold the scan into a verdict: replace the `residual-sweep` check (fail when blocking > 0),
+ * downgrade PASS→PARTIAL when blocking > 0 (PARTIAL/FAIL unchanged), and merge blocking
+ * anchors into the gate findings (unique, sorted, cap 20). Idempotent.
+ */
+export function foldVerdict(
+    verdict: { verdict: string; checks: Array<{ name: string; status: string; evidence: string }> },
+    scan: ResidualArtifact,
+    existingFindings: string,
+    maxFindings = 20,
+): FoldResult {
+    const blocking = scan.items.filter((i) => i.class === 'blocking');
+    const deferrable = scan.items.filter((i) => i.class === 'deferrable');
+    const evidence =
+        `blocking=${blocking.length} deferrable=${deferrable.length} advisory=${scan.counts.advisory} housekeeping=${scan.counts.housekeeping}` +
+        (blocking.length > 0 ? `; blocking ids: ${blocking.map((i) => i.id).join(', ')}` : '') +
+        (deferrable.length > 0 ? `; deferrable ids: ${deferrable.map((i) => i.id).join(', ')}` : '');
+    const checks = verdict.checks.filter((c) => c.name !== 'residual-sweep');
+    checks.push({ name: 'residual-sweep', status: blocking.length > 0 ? 'fail' : 'pass', evidence });
+    const merged = new Set([
+        ...existingFindings.split(/\s+/).filter((a) => a.length > 0),
+        ...blockingAnchors(scan.items),
+    ]);
+    const findings = [...merged]
+        .sort()
+        .slice(0, maxFindings)
+        .map((a) => `${a} `)
+        .join('');
+    let verdictStatus: FoldResult['verdict'] = verdict.verdict === 'PASS' ? 'PASS' : 'FAIL';
+    if (verdict.verdict === 'PARTIAL') verdictStatus = 'PARTIAL';
+    else if (verdict.verdict === 'FAIL') verdictStatus = 'FAIL';
+    else if (blocking.length > 0) verdictStatus = 'PARTIAL';
+    return { verdict: verdictStatus, checks, findings };
+}
+
+/** Render the recovery report for blocking items. */
+export function renderReport(wbs: string, items: ResidualItem[], attemptCount: number): string {
+    const lines = [
+        `# Residual report — ${wbs}`,
+        '',
+        `Attempt: ${attemptCount}`,
+        '',
+        '| Category | Class | Location | Text |',
+        '| --- | --- | --- | --- |',
+    ];
+    for (const item of items) {
+        lines.push(`| ${item.category} | ${item.class} | ${item.location} | ${item.text.replace(/\|/g, '\\|')} |`);
+    }
+    return `${lines.join('\n')}\n`;
+}

@@ -166,6 +166,12 @@ function stage(options: {
     }
     const runDir = join(cwd, '.spur/run');
     mkdirSync(runDir, { recursive: true });
+    // 1007 R4: shells resolve scripts through the run-scoped script-root probe — stage the
+    // identity file the snippet reads (source-repo → the staged scripts dir).
+    writeFileSync(
+        join(runDir, `${RUN_ID}-script-root.json`),
+        `${JSON.stringify({ mode: 'source-repo', source: 'project', dir: join(cwd, 'plugins/sp/scripts') })}\n`,
+    );
     if (options.triageDecision !== undefined && options.triageDecision !== null) {
         writeFileSync(join(runDir, `${WBS}-triage.decision`), `${JSON.stringify(options.triageDecision)}\n`);
     }

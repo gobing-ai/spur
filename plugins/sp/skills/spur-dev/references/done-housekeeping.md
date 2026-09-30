@@ -128,7 +128,7 @@ silently incomplete (H6 shipped at 23/48 that way, with one verdict carrying an 
 `acceptanceCriteria` array and still reading PASS). See `ac-style-guide.md` §
 "Verdict AC ↔ feature scenario linkage" for the id forms and evidence vocabulary.
 
-**Parser contract (verify-answer-lint + `task verdict`, 0817 re-verify findings):**
+**Parser contract (`spur task verdict` answer lint, 0817 re-verify findings):**
 
 1. The requirement id cell must be the **bare** id — `| R1 | MET | … |`. Suffixes (`R1 (AC1)`) or
    decoration (`**R1**`) fail the exact-match completeness check (`missing requirement row`).

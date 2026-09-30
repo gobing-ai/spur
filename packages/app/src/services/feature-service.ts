@@ -6,6 +6,7 @@
  * Parent is derived by dropping the last character.
  */
 
+import { createHash } from 'node:crypto';
 import {
     acquireCreateLock,
     atomicWriteAsync,
@@ -21,6 +22,14 @@ import {
     FeatureCheckService,
     findOtherP0InStatus,
 } from './feature-check';
+import {
+    blockedStateFile,
+    computeSyncFingerprint,
+    parseBlockedState,
+    readVerdictMtimeVector,
+    type SyncFingerprintInput,
+    serializeBlockedState,
+} from './feature-sync-suppression';
 import type { EntityRef, PlanningWriteService, WriteResult } from './planning-write-service';
 import { TaskLocator } from './task-locator';
 
@@ -47,6 +56,8 @@ export interface FeatureSyncProposal {
 export interface FeatureSyncOptions {
     dryRun?: boolean;
     forceConfirm?: boolean;
+    /** 1004 R3: bypass repeated-BLOCKED suppression — always run the live derivation. */
+    force?: boolean;
 }
 
 /** Result of a single feature status sync. */
@@ -60,6 +71,12 @@ export interface FeatureSyncResult {
      * conflict at the moment the lifecycle would have created it silently.
      */
     goalConflict?: { featureId: string; status: string };
+    /**
+     * 1004 R3: set when this result is the replayed prior BLOCKED outcome — the
+     * persisted suppression state matched the current input fingerprint, so the
+     * hops were not re-derived.
+     */
+    suppressed?: true;
 }
 
 /** Result of a bulk feature status sync over all features with linked tasks. */
@@ -556,8 +573,33 @@ export class FeatureService {
 
     /**
      * Sync a feature's status with its linked tasks.
+     *
+     * 1004 R3 (moved from the deleted bounded-sync wrapper script): a BLOCKED outcome is persisted with its
+     * input fingerprint; a later call with the identical fingerprint replays the prior result
+     * (`suppressed: true`) without re-deriving hops. `--force`/`forceConfirm` bypass the
+     * replay; dry-run stays read-only (never replays, never persists); a non-BLOCKED outcome
+     * or a one-active-goal conflict clears the state (conflicts are external corpus state the
+     * fingerprint cannot invalidate).
      */
     async syncFeature(featureId: string, options?: FeatureSyncOptions): Promise<FeatureSyncResult> {
+        // forceConfirm is an explicit re-attempt of a deferred hop — it must bypass the replay
+        // exactly like --force, or a confirmed reopen would replay the prior deferral.
+        const suppressible = options?.force !== true && options?.dryRun !== true && options?.forceConfirm !== true;
+        if (suppressible) {
+            const replay = await this.replaySuppressedBlocked(featureId);
+            if (replay) return { ...replay, suppressed: true };
+        }
+
+        const result = await this.runSyncFeature(featureId, options);
+        // State management runs on every fresh (non-dry-run) outcome: a forced non-blocked
+        // result must still clear a stale blocked state, and a forced blocked result
+        // re-persists with the fresh fingerprint (dry-run never touches the state).
+        if (options?.dryRun !== true) await this.recordBlockedSyncState(featureId, result);
+        return result;
+    }
+
+    /** Live derivation + application path (suppression wrapper lives in {@link syncFeature}). */
+    private async runSyncFeature(featureId: string, options?: FeatureSyncOptions): Promise<FeatureSyncResult> {
         const proposal = await this.deriveFeatureStatus(featureId);
 
         if (proposal.from === proposal.to) {
@@ -613,6 +655,78 @@ export class FeatureService {
         }
 
         return { proposal, applied: true, appliedHops };
+    }
+
+    /**
+     * 1004 R3: the prior BLOCKED outcome when its persisted fingerprint still matches the
+     * current inputs, else null. Never derives hops — the fingerprint inputs are read directly.
+     */
+    private async replaySuppressedBlocked(featureId: string): Promise<FeatureSyncResult | null> {
+        const statePath = blockedStateFile(featureId, defaultVerdictRunDir(this.ctx.tasksDir));
+        let prior: ReturnType<typeof parseBlockedState> = null;
+        try {
+            if (await this.ctx.fs.exists(statePath)) prior = parseBlockedState(await this.ctx.fs.readFile(statePath));
+        } catch {
+            return null;
+        }
+        if (!prior) return null;
+        const inputs = await this.syncFingerprintInputs(featureId);
+        if (inputs === null) return null;
+        return computeSyncFingerprint(inputs) === prior.inputFingerprint ? prior.result : null;
+    }
+
+    /**
+     * 1004 R3: persist a BLOCKED outcome keyed by its input fingerprint; clear the state on a
+     * non-BLOCKED outcome. Persistence is best-effort — a failed write degrades to the
+     * pre-1004 invoke-every-time behavior, never to a wrong result.
+     */
+    private async recordBlockedSyncState(featureId: string, result: FeatureSyncResult): Promise<void> {
+        const runDir = defaultVerdictRunDir(this.ctx.tasksDir);
+        const statePath = blockedStateFile(featureId, runDir);
+        // 0411 classification parity: gateBlocked wins (a partial hop can report applied:true
+        // and still be gate-blocked); then an unapplied from!==to (requiresConfirm deferral).
+        // A one-active-goal conflict is NEVER persisted: it reflects other features' corpus
+        // state, which the fingerprint inputs (this feature's content/tasks/verdict mtimes)
+        // cannot see — a persisted conflict would replay stale after the goal slot frees.
+        const blocked =
+            result.goalConflict === undefined &&
+            (result.proposal.gateBlocked === true || (!result.applied && result.proposal.from !== result.proposal.to));
+        if (!blocked) {
+            try {
+                if (await this.ctx.fs.exists(statePath)) await this.ctx.fs.deleteFile(statePath);
+            } catch {
+                // Best-effort clear.
+            }
+            return;
+        }
+        const inputs = await this.syncFingerprintInputs(featureId);
+        if (inputs === null) return;
+        const state = {
+            featureId: result.proposal.featureId,
+            inputFingerprint: computeSyncFingerprint(inputs),
+            proposal: result.proposal,
+            classification: 'blocked' as const,
+            result,
+            persistedAt: new Date().toISOString(),
+        };
+        try {
+            await this.ctx.fs.ensureDir(runDir);
+            await this.ctx.fs.writeFile(statePath, serializeBlockedState(state));
+        } catch {
+            // Best-effort persist — the live result is still correct.
+        }
+    }
+
+    /** Fingerprint inputs for the suppression state: feature content, task statuses, verdict mtimes. */
+    private async syncFingerprintInputs(featureId: string): Promise<SyncFingerprintInput | null> {
+        const feature = await this.show(featureId);
+        if (!feature) return null;
+        const tasks = (await this.collectTasksByFeature()).get(featureId) ?? [];
+        return {
+            featureContentHash: createHash('sha256').update(feature.content).digest('hex'),
+            taskStatusVector: tasks.map((t) => `${t.wbs}:${t.status}`),
+            verdictMtimeVector: await readVerdictMtimeVector(this.ctx.fs, defaultVerdictRunDir(this.ctx.tasksDir)),
+        };
     }
 
     /**

@@ -206,7 +206,7 @@ duplicate catalog ; the facade reference is the single parity authority.
 explicit operator consent with design context. Public commands live under existing nouns unless no
 noun can own the action. Internal self-development commands belong in `scripts/commands`; repo
 entrypoints compose existing binaries in `package.json`; plugin-only scripts follow ADR-065 in
-`plugins/sp/scripts`. Full governance: `docs/design/harness-surface-governance.md`.
+`plugins/sp/scripts`. Script placement across surfaces (plugin glue vs `scripts/commands` vs `packages/app`) is governed by ADR-130 and `docs/design/harness-surface-governance.md` §2, enforced by the `sp-script-placement` rule. Full governance: `docs/design/harness-surface-governance.md`.
 
 **Long-tail:** `/sp:dev-*` commands are indexed in `plugins/sp/README.md`.
 

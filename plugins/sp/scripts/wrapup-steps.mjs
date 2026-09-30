@@ -3,12 +3,18 @@
 
 // plugins/sp/scripts/wrapup-steps.ts
 import { spawnSync } from "child_process";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 
 // plugins/sp/lib/env.ts
 function getEnvVars() {
   return process.env;
+}
+
+// plugins/sp/lib/spur-bin.ts
+function spurCommand(spurBin) {
+  const parts = (spurBin ?? "spur").trim().split(/\s+/).filter((p) => p.length > 0);
+  return { cmd: parts[0] ?? "spur", prefix: parts.slice(1) };
 }
 
 // plugins/sp/scripts/wrapup-steps.ts
@@ -23,10 +29,6 @@ function jqText(value) {
   return typeof value === "string" ? value : JSON.stringify(value);
 }
 var WBS_PATTERN = /^[0-9]{4}$/;
-function spurCommand(spurBin) {
-  const parts = (spurBin ?? "spur").trim().split(/\s+/).filter((p) => p.length > 0);
-  return { cmd: parts[0] ?? "spur", prefix: parts.slice(1) };
-}
 function spur(env, args, options = {}) {
   const { cmd, prefix } = spurCommand(env.spurBin);
   const result = spawnSync(cmd, [...prefix, ...args], {
@@ -323,32 +325,9 @@ function runFeatureTransition(env, options = {}) {
   }
   let syncOutput = "";
   let syncRc = 1;
-  const boundedTs = join("plugins", "sp", "scripts", "feature-sync-bounded.ts");
-  const boundedArgs = [feature, "--spur-bin", env.spurBin ?? "spur", "--json"];
-  if (existsSync(cwd ? join(cwd, boundedTs) : boundedTs)) {
-    const result = spawnSync("bun", [boundedTs, ...boundedArgs], { cwd, encoding: "utf8" });
-    syncOutput = result.stdout ?? "";
-    syncRc = result.status ?? 1;
-    if (result.stderr !== null && result.stderr.length > 0)
-      process.stderr.write(result.stderr);
-  } else {
-    const probe = spawnSync("superskill", ["script", "path", "sp", "feature-sync-bounded.mjs"], {
-      cwd,
-      encoding: "utf8"
-    });
-    const twin = probe.status === 0 ? (probe.stdout ?? "").trim() : "";
-    if (twin.length > 0 && existsSync(twin)) {
-      const result = spawnSync("node", [twin, ...boundedArgs], { cwd, encoding: "utf8" });
-      syncOutput = result.stdout ?? "";
-      syncRc = result.status ?? 1;
-      if (result.stderr !== null && result.stderr.length > 0)
-        process.stderr.write(result.stderr);
-    } else {
-      const result = spur(env, ["feature", "sync", feature, "--json"], { cwd, stderr: "inherit" });
-      syncOutput = result.stdout;
-      syncRc = result.status;
-    }
-  }
+  const sync = spur(env, ["feature", "sync", feature, "--json"], { cwd, stderr: "inherit" });
+  syncOutput = sync.stdout;
+  syncRc = sync.status;
   process.stdout.write(`${syncOutput}
 `);
   const shown = spur(env, ["feature", "show", feature, "--json"], { cwd });
@@ -428,7 +407,6 @@ export {
   writeRouteReason,
   verdictFromTestingSection,
   taskStatusOf,
-  spurCommand,
   runMetrics,
   runFeatureTransition,
   resolveTasks,

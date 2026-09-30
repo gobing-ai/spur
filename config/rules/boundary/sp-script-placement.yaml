@@ -1,0 +1,18 @@
+# [boundary] ADR-130 script placement contract (task 1000). Runs the fast
+# --placement-only mode of the relocated script-contract-check on every
+# recommended-pre-check; SKIPs outside the Spur source repo (same pattern as
+# strict/rule-files-structural.yaml SKIP on missing yq). The full twin check
+# stays in spur-check-feature.
+rules:
+  - id: sp-script-placement
+    description: "Plugins/sp scripts must honor the ADR-130 placement contract (glue budget, no db imports, no corpus parsing, no noun clash); baseline config/script-placement-baseline.json can only shrink."
+    severity: error
+    evaluator:
+      type: exit-code
+      config:
+        command: sh
+        args:
+          - -c
+          - >-
+            [ -f scripts/commands/script-contract-check.ts ] || { echo "SKIP: not the Spur source repo"; exit 0; };
+            bun scripts/commands/script-contract-check.ts --placement-only

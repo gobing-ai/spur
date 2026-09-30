@@ -6,11 +6,16 @@
  * instead of re-deriving design×needs_design and dual status reads inline. Routing parity is the
  * whole risk, so the PRE-refactor guard commands are frozen below as the oracle and EXECUTED
  * against the live guards over the full cross product `profile|__hitlAnswer × design ×
- * needs_design × ac × coverage` — the regression proof that legibility changed nothing (closed
+ * needs_design × ac` — the regression proof that legibility changed nothing (closed
  * Q&A: the truth-table test is written before the rewrite and stays green through it).
  *
  * Parity per edge over all states + unchanged declaration order proves identical routing: the
  * engine takes the first passing edge, so equal guard booleans in equal order route identically.
+ *
+ * 1004 R2: requirement coverage folds into the recorded `idea-ac-check` status (the gate gained
+ * `--inventory`), so the standalone `-idea-coverage.status` file and the cov guard dimension are
+ * gone. The oracle pins the coverage conjunct to PASS — the check-status routing contract itself
+ * is unchanged.
  *
  * Dimension domains:
  * - `design` is enumerated over its declared contract values `auto|skip` (idea-pipeline.yaml var
@@ -57,29 +62,30 @@ function guardCommand(from: string, to: string): string {
 }
 
 /**
- * The 0945 R2 writer contract — one deterministic shell action, duplicated verbatim at the end
- * of BOTH ac-generate and feature-check onEnter (YAML has no include; byte-equality is
- * test-pinned). Fails safe: missing/corrupt needs-design JSON → `design`; any non-PASS or
- * missing check status → `FAIL`.
+ * The 0945 R2 writer contract — one deterministic shell action at the end of ac-generate
+ * onEnter. 1007 R2 deleted the former feature-check duplicate (its inputs cannot change across
+ * hitl.confirm), so ac-generate is the SINGLE writer. Fails safe: missing/corrupt needs-design
+ * JSON → `design`; any non-PASS or missing check status → `FAIL`.
  */
 export const IDEA_ROUTE_WRITER_COMMAND = [
     'mkdir -p .spur/run &&',
     '{ test "$design" = skip -o "$design" = auto -a "$(jq -r .needs_design .spur/run/$__runId-idea-needs-design.json 2>/dev/null)" = false &&',
     "printf 'skip\\n' > .spur/run/$__runId-idea-design-route.txt ||",
     "printf 'design\\n' > .spur/run/$__runId-idea-design-route.txt; } &&",
-    '{ test "$(cat .spur/run/$__runId-idea-ac-check.status 2>/dev/null)" = PASS -a "$(cat .spur/run/$__runId-idea-coverage.status 2>/dev/null)" = PASS &&',
+    '{ test "$(cat .spur/run/$__runId-idea-ac-check.status 2>/dev/null)" = PASS &&',
     "printf 'PASS\\n' > .spur/run/$__runId-idea-ac-ready.status ||",
     "printf 'FAIL\\n' > .spur/run/$__runId-idea-ac-ready.status; }",
 ].join(' ');
 
-/** The pre-0945 guard commands (frozen oracle — the routing contract the rewrite must preserve). */
+/** The pre-1004 guard commands (frozen oracle). Coverage folds into the recorded check status
+ * since 1004 R2, so the cov conjunct is pinned PASS — the check-status contract is unchanged. */
 const ORACLE_GUARDS: Record<string, string> = {
     'ac-generate→system-design': [
-        'ac_status="$(cat .spur/run/$__runId-idea-ac-check.status 2>/dev/null)" cov_status="$(cat .spur/run/$__runId-idea-coverage.status 2>/dev/null)";',
+        'ac_status="$(cat .spur/run/$__runId-idea-ac-check.status 2>/dev/null)" cov_status=PASS;',
         'test "$profile" = auto -a "$ac_status" = PASS && test "$cov_status" = PASS && test "$design" = auto -a "$(jq -r .needs_design .spur/run/$__runId-idea-needs-design.json 2>/dev/null)" != false',
     ].join(' '),
     'ac-generate→decompose':
-        'test "$profile" = auto && test "$(cat .spur/run/$__runId-idea-ac-check.status 2>/dev/null)" = PASS && test "$(cat .spur/run/$__runId-idea-coverage.status 2>/dev/null)" = PASS && test "$design" = skip -o "$design" = auto -a "$(jq -r .needs_design .spur/run/$__runId-idea-needs-design.json 2>/dev/null)" = false',
+        'test "$profile" = auto && test "$(cat .spur/run/$__runId-idea-ac-check.status 2>/dev/null)" = PASS && test "$design" = skip -o "$design" = auto -a "$(jq -r .needs_design .spur/run/$__runId-idea-needs-design.json 2>/dev/null)" = false',
     'feature-check→system-design': [
         'ac_status="$(cat .spur/run/$__runId-idea-ac-check.status 2>/dev/null)";',
         'test "$__hitlAnswer" = yes && test "$ac_status" = PASS && test "$design" = auto && test "$(jq -r .needs_design .spur/run/$__runId-idea-needs-design.json 2>/dev/null)" != false',
@@ -105,7 +111,6 @@ interface RouteState {
     vars: Record<string, string>;
     needs: string | null;
     ac: string | null;
-    cov: string | null;
 }
 
 function describeState(state: RouteState): string {
@@ -113,7 +118,6 @@ function describeState(state: RouteState): string {
         ...state.vars,
         needs_design: state.needs === null ? 'missing' : state.needs.trim(),
         ac: state.ac === null ? 'missing' : state.ac.trim(),
-        coverage: state.cov === null ? 'missing' : state.cov.trim(),
     });
 }
 
@@ -138,7 +142,6 @@ function evaluatePair(
         state.vars.design ?? '',
         state.needs === null ? 'missing' : state.needs.trim(),
         state.ac === null ? 'missing' : state.ac.trim(),
-        state.cov === null ? 'missing' : state.cov.trim(),
     ].join('|');
     let cwd = stateDirs.get(`${root}|${key}`);
     if (!cwd) {
@@ -147,7 +150,6 @@ function evaluatePair(
         mkdirSync(runDir, { recursive: true });
         if (state.needs !== null) writeFileSync(join(runDir, `${RUN_ID}-idea-needs-design.json`), state.needs, 'utf8');
         if (state.ac !== null) writeFileSync(join(runDir, `${RUN_ID}-idea-ac-check.status`), state.ac, 'utf8');
-        if (state.cov !== null) writeFileSync(join(runDir, `${RUN_ID}-idea-coverage.status`), state.cov, 'utf8');
         const result = spawnSync('/bin/sh', ['-c', `( ${writer} )`], {
             cwd,
             env: { ...state.vars, __runId: RUN_ID },
@@ -171,21 +173,20 @@ function shellActions(stateId: string): ActionDef[] {
 describe('idea-pipeline 0945 — route fact writer (R2)', () => {
     const cwd = mkdtempSync(join(tmpdir(), 'idea-routing-'));
 
-    test('the writer action is declared once at the end of BOTH ac-generate and feature-check onEnter, byte-equal', () => {
-        for (const stateId of ['ac-generate', 'feature-check']) {
-            const writer = shellActions(stateId).find((a) =>
-                (a.options?.command ?? '').includes('-idea-design-route.txt'),
-            );
-            expect(writer, `writer action missing from ${stateId} onEnter`).toBeDefined();
-            expect(writer?.options?.command).toBe(IDEA_ROUTE_WRITER_COMMAND);
-        }
+    test('the writer action is declared exactly once, at the end of ac-generate onEnter (1007 R2: single writer)', () => {
+        // Single writer: ac-generate owns it; feature-check has no route-writer shell.
+        const writers = ['ac-generate', 'feature-check'].filter((stateId) =>
+            shellActions(stateId).some((a) => (a.options?.command ?? '').includes('-idea-design-route.txt')),
+        );
+        expect(writers).toEqual(['ac-generate']);
         const acShells = shellActions('ac-generate').map((a) => a.options?.command ?? '');
+        const writer = acShells[acShells.length - 1];
+        expect(writer).toBe(IDEA_ROUTE_WRITER_COMMAND);
         // End of list: the writer runs AFTER the recorded checks it derives from.
-        expect(acShells[acShells.length - 1]).toBe(IDEA_ROUTE_WRITER_COMMAND);
-        expect(acShells[acShells.length - 1]).toContain('idea-coverage.status');
+        expect(writer).toContain('idea-ac-check.status');
     });
 
-    test('writer truth table: route folds design×needs_design fail-safe to design; readiness is PASS only when both checks PASS', () => {
+    test('writer truth table: route folds design×needs_design fail-safe to design; readiness mirrors the recorded check', () => {
         const expectRoute = (design: string, needs: { label: string; content: string | null }): string => {
             if (design === 'skip') return 'skip';
             if (design === 'auto' && needs.label === 'false') return 'skip';
@@ -194,12 +195,10 @@ describe('idea-pipeline 0945 — route fact writer (R2)', () => {
         for (const design of DESIGN_VALUES) {
             for (const needs of NEEDS_VALUES) {
                 const ac = { label: 'PASS', content: 'PASS\n' };
-                const cov = { label: 'FAIL', content: 'FAIL\n' };
                 const state: RouteState = {
                     vars: { design, profile: 'auto', __hitlAnswer: 'yes' },
                     needs: needs.content,
                     ac: ac.content,
-                    cov: cov.content,
                 };
                 const { oldPassed, newPassed, cellDir } = evaluatePair(
                     'exit 0',
@@ -215,34 +214,26 @@ describe('idea-pipeline 0945 — route fact writer (R2)', () => {
                     'utf8',
                 ).trim();
                 expect(route, `route for design=${design} needs=${needs.label}`).toBe(expectRoute(design, needs));
-                // Non-PASS coverage with PASS ac must fold to FAIL, never PASS.
+                // The recorded check is PASS here, so readiness must be PASS.
                 const ready = readFileSync(
                     join(cellDir, '.spur', 'run', `${RUN_ID}-idea-ac-ready.status`),
                     'utf8',
                 ).trim();
-                expect(ready).toBe('FAIL');
+                expect(ready).toBe('PASS');
             }
         }
     });
 
-    test('writer readiness is PASS only when both recorded checks are PASS (missing folds to FAIL)', () => {
+    test('writer readiness is PASS only when the recorded check is PASS (missing folds to FAIL)', () => {
         for (const ac of STATUS_VALUES) {
-            for (const cov of STATUS_VALUES) {
-                const state: RouteState = {
-                    vars: { design: 'auto', profile: 'auto', __hitlAnswer: 'yes' },
-                    needs: '{"needs_design": true}\n',
-                    ac: ac.content,
-                    cov: cov.content,
-                };
-                const { cellDir } = evaluatePair('exit 0', 'exit 0', IDEA_ROUTE_WRITER_COMMAND, state, cwd);
-                const ready = readFileSync(
-                    join(cellDir, '.spur', 'run', `${RUN_ID}-idea-ac-ready.status`),
-                    'utf8',
-                ).trim();
-                expect(ready, `ac=${ac.label} cov=${cov.label}`).toBe(
-                    ac.label === 'PASS' && cov.label === 'PASS' ? 'PASS' : 'FAIL',
-                );
-            }
+            const state: RouteState = {
+                vars: { design: 'auto', profile: 'auto', __hitlAnswer: 'yes' },
+                needs: '{"needs_design": true}\n',
+                ac: ac.content,
+            };
+            const { cellDir } = evaluatePair('exit 0', 'exit 0', IDEA_ROUTE_WRITER_COMMAND, state, cwd);
+            const ready = readFileSync(join(cellDir, '.spur', 'run', `${RUN_ID}-idea-ac-ready.status`), 'utf8').trim();
+            expect(ready, `ac=${ac.label}`).toBe(ac.label === 'PASS' ? 'PASS' : 'FAIL');
         }
     });
 });
@@ -290,32 +281,29 @@ describe('idea-pipeline 0945 — routing truth-table parity (R3)', () => {
         for (const design of DESIGN_VALUES) {
             for (const needs of NEEDS_VALUES) {
                 for (const ac of STATUS_VALUES) {
-                    for (const cov of STATUS_VALUES) {
-                        for (const c of cases) {
-                            for (const v of c.liveValues) {
-                                const cell: RouteState = {
-                                    vars: { design, [c.liveVar]: v, [c.inertVar]: c.fixed },
-                                    needs: needs.content,
-                                    ac: ac.content,
-                                    cov: cov.content,
-                                };
-                                const oracle = ORACLE_GUARDS[c.edge];
-                                if (oracle === undefined) throw new Error(`no oracle guard for edge ${c.edge}`);
-                                const live = guardCommand(c.from, c.to);
-                                const { oldPassed, newPassed } = evaluatePair(oracle, live, liveWriter, cell, cwd);
-                                expect(
-                                    newPassed === oldPassed,
-                                    `${c.edge} routing diverged (oracle=${oldPassed}, live=${newPassed}) for ${describeState(cell)}`,
-                                ).toBe(true);
-                                cells++;
-                            }
+                    for (const c of cases) {
+                        for (const v of c.liveValues) {
+                            const cell: RouteState = {
+                                vars: { design, [c.liveVar]: v, [c.inertVar]: c.fixed },
+                                needs: needs.content,
+                                ac: ac.content,
+                            };
+                            const oracle = ORACLE_GUARDS[c.edge];
+                            if (oracle === undefined) throw new Error(`no oracle guard for edge ${c.edge}`);
+                            const live = guardCommand(c.from, c.to);
+                            const { oldPassed, newPassed } = evaluatePair(oracle, live, liveWriter, cell, cwd);
+                            expect(
+                                newPassed === oldPassed,
+                                `${c.edge} routing diverged (oracle=${oldPassed}, live=${newPassed}) for ${describeState(cell)}`,
+                            ).toBe(true);
+                            cells++;
                         }
                     }
                 }
             }
         }
-        // 72 file states × (2 ac-generate edges × 3 profiles + 2 feature-check edges × 4 answers)
-        expect(cells).toBe(1008);
+        // 24 file states × (2 ac-generate edges × 3 profiles + 2 feature-check edges × 4 answers)
+        expect(cells).toBe(336);
     }, 25_000);
 
     test('the rewritten guards read the derived files, keep the one-var contract, and stay at 3 logical commands', () => {
@@ -339,8 +327,8 @@ describe('idea-pipeline 0945 — routing truth-table parity (R3)', () => {
             } else {
                 // One-letter 0945 deviation (driver decision 2026-09-25, parity-first): the
                 // interactive feature-check gate keeps reading the recorded ac-check status
-                // directly — the operator's answer governs coverage there (0887), and the
-                // derived ready file folds coverage in, which would change routing.
+                // directly — the operator's answer governs there (0887), and the derived
+                // ready file would change routing.
                 expect(command).toContain('-idea-ac-check.status');
                 expect(command).not.toContain('-idea-ac-ready.status');
                 expect(command).toContain(`test "$${varName}"`);

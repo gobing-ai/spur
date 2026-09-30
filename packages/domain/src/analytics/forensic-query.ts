@@ -1136,6 +1136,20 @@ export async function countToolCallsSince(db: DbAdapter, source: string, runStar
     return row?.cnt ?? 0;
 }
 
+/**
+ * Count `history_tool_call` rows for a source import that preserved tool-call `args_raw`
+ * (1002 R3 — the evidence-channel precheck's DB probe). It proves a live non-dry-run
+ * import wrote args_raw before implementation begins. Owned here so raw SQL stays in the
+ * domain layer (ADR-011) and `bun:sqlite` never leaks outside packages/domain.
+ */
+export async function countToolCallArgsRaw(db: DbAdapter, source: string): Promise<number> {
+    const row = await db.queryFirst<{ cnt: number }>(
+        'SELECT COUNT(*) AS cnt FROM history_tool_call WHERE args_raw IS NOT NULL AND source = ?',
+        source,
+    );
+    return row?.cnt ?? 0;
+}
+
 // ---------------------------------------------------------------------------
 // Per-step rankings (task 0581)
 // ---------------------------------------------------------------------------

@@ -108,8 +108,8 @@ For answer files, emit a matching parseable table:
 
 **Authoring contract under the pipeline (0726 R3).** The verifier owns the answer file: write
 `Verdict: PARTIAL` first, append one complete row at a time, and replace the first verdict line only
-after every row is certified. `verify-answer-lint.ts` gates the file before `spur task verdict
---from-answer` and rejects, with row-level diagnostics: missing/duplicate/unknown requirement IDs,
+after every row is certified. `spur task verdict --from-answer` lints the file before deriving the
+verdict and rejects, with row-level diagnostics: missing/duplicate/unknown requirement IDs,
 AC ids that do not resolve to one accepted identity — a task AC checklist label or its declared
 `AC-N`/checklist-token alias, or a linked feature scenario title, in the ac-style-guide forms
 (exact/bare title, `Scenario:` prefix, bracket tags, `AC-N`); paraphrases and ambiguous aliases
@@ -119,7 +119,7 @@ manual-review | llm-judge | n/a`, or a `+` compound), and empty evidence. Interr
 rows that pass the lint and complete only the missing IDs on retry.
 
 **Feature-credited AC ids are narrower than the lint's accepted set (task 0966 finding).** A row keyed
-by a bare checklist ordinal (`AC1`) passes `verify-answer-lint` — it resolves to the task's AC
+by a bare checklist ordinal (`AC1`) passes the `spur task verdict` answer lint — it resolves to the task's AC
 checklist label — but `feature-check.rowMatchesScenario` credits a linked feature scenario only by the
 scenario's normalized title or its `AC-N` ordinal alias. Such a row therefore carries a PASS verdict
 while crediting no scenario, and the feature's `verifying → done` gate denies with

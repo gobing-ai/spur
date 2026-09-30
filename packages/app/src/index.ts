@@ -236,6 +236,8 @@ export {
     DEFAULT_FEATURE_MATRIX,
     FeatureCheckService,
     isFeatureFile,
+    lintVerifyAnswerForTask,
+    readFeatureBody,
     summarizeRowIds,
     VERDICT_SCENARIO_KEY_FORMS,
     type VerdictScenarioKeyGap,
@@ -341,15 +343,30 @@ export type {
     InlineRunSetupSuccess,
 } from './services/inline-run-setup';
 export {
+    appendInlineRunLogLine,
     createOrAttachInlineRun,
     type InlineDecideInput,
     type InlineDecideOutcome,
+    type InlineRunActionEntry,
     type InlineRunProjectDb,
+    type InlineRunStateOutcome,
+    type InlineRunTraceBatchInput,
+    type InlineRunTraceInput,
+    inlineRunRecordLogPath,
+    isInlineRunActionStatus,
+    isInlineRunCloseStatus,
     openInlineRunProjectDb,
     type PersistWorktreeRunsInput,
     type PersistWorktreeRunsSuccess,
     persistWorktreeRuns,
     runDecideForInlineRun,
+    runInlineRunDecide,
+    runInlineRunFingerprint,
+    runInlineRunPersistOut,
+    runInlineRunSetup,
+    runInlineRunTrace,
+    runInlineRunTraceBatch,
+    writeInlineRunOutcome,
 } from './services/inline-run-setup';
 export {
     acquireExclusiveJob,
@@ -723,6 +740,8 @@ export type {
     TokenLedgerWatchListener,
 } from './services/token-ledger-watcher';
 export { TokenLedgerWatcher } from './services/token-ledger-watcher';
+export type { AnswerLintFinding } from './services/verify-answer-lint';
+export { ANSWER_LINT_MAX_FINDINGS, lintVerifyAnswer } from './services/verify-answer-lint';
 export type {
     CleanedRun,
     PausedRun,

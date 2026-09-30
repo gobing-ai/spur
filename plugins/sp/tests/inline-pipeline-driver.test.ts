@@ -238,40 +238,34 @@ function runInlineSmoke(
             }
             if (action.kind === 'shell') {
                 let command = expand(action.options?.command ?? '', vars);
-                if (command.includes('task-size-precheck.ts')) {
-                    command = 'mkdir -p .spur/run && printf "PASS\\n" > ".spur/run/$wbs-precheck-size.status"';
-                }
-                // 0726 R2: evidence precheck ships with the plugin; the smoke simulates its
-                // PASS outcome exactly like the size precheck above.
-                if (command.includes('task-evidence-precheck.ts')) {
-                    command = 'mkdir -p .spur/run && printf "PASS\\n" > ".spur/run/$wbs-precheck-evidence.status"';
-                }
-                // 0726 R3: lint semantics live in verify-answer-lint.test.ts; the smoke keeps
-                // only the file-must-exist coupling of the gate step.
-                if (command.includes('verify-answer-lint.ts')) {
-                    command = 'test -f ".spur/run/$wbs-verify-answer.txt"';
-                }
+                // 1002 R4: the precheck→implement guard is `$spurBin task check $wbs --precheck`;
+                // the fake spur handles `task check` (exit 0), so no status-file simulation remains.
+                // 1003 R2: the verify-stage lint gate is `spur task verdict` itself — the fake
+                // spur already handles `task verdict`, no separate lint step remains to simulate.
                 // 0823: the quality gate is a plugin script (quality-gate.ts run|recheck) the
                 // shell resolves like the other checkers, so the smoke simulates its verdict
                 // contract (plugins/sp/tests/quality-gate.test.ts owns the script): run resets
                 // the attempt counter and executes qualityGateCmd; recheck runs gateProbeCmd
                 // first (bun run lint is red in this sandbox, so the probe IS the recheck
                 // verdict, gate skipped). Both always leave status/findings/log for the guards.
-                if (command.includes('quality-gate.ts run')) {
+                if (command.includes('quality-gate.ts') && command.includes('"$RUNNER" "$S" run')) {
                     command =
                         'mkdir -p .spur/run; : > ".spur/run/$wbs-test-gate.log"; echo 0 > ".spur/run/$wbs-test-fix-attempt"; if $qualityGateCmd; then s=PASS; else s=FAIL; fi; printf "%s\\n" "$s" > ".spur/run/$wbs-test-gate.status"; : > ".spur/run/$wbs-test-gate.findings"; printf "proof-digest: %s\\n" "$proofDigest" >> ".spur/run/$wbs-test-gate.log"';
                 }
-                if (command.includes('quality-gate.ts recheck')) {
+                if (command.includes('quality-gate.ts') && command.includes('"$RUNNER" "$S" recheck')) {
                     command =
                         'mkdir -p .spur/run; : > ".spur/run/$wbs-test-gate.log"; if $gateProbeCmd; then s=PASS; else s=FAIL; fi; if [ "$s" = PASS ]; then if $qualityGateCmd; then s=PASS; else s=FAIL; fi; fi; printf "%s\\n" "$s" > ".spur/run/$wbs-test-gate.status"; : > ".spur/run/$wbs-test-gate.findings"; printf "proof-digest: %s\\n" "$proofDigest" >> ".spur/run/$wbs-test-gate.log"';
                 }
                 // F96 (0950): residual-scan is a plugin script like quality-gate — the smoke
                 // simulates its clean-tree contract (empty residual list, soft terminal
                 // actions); residual-scan.test.ts owns the script itself.
-                if (command.includes('residual-scan') && command.includes('fold')) {
+                if (command.includes('residual-scan.ts') && command.includes('"$S" fold')) {
                     command = 'mkdir -p .spur/run; printf "[]\\n" > ".spur/run/$wbs-residuals.json"';
                 }
-                if (command.includes('residual-scan') && (command.includes('settle') || command.includes('report'))) {
+                if (
+                    command.includes('residual-scan.ts') &&
+                    (command.includes('"$S" settle') || command.includes('"$S" report'))
+                ) {
                     command = 'exit 0';
                 }
                 command = command.replaceAll('sleep 2', 'sleep 0').replaceAll('sleep 10', 'sleep 0');

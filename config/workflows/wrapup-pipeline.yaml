@@ -154,10 +154,8 @@ states:
         options:
           command: >-
             mkdir -p .spur/run &&
-            if [ -f config/plugin-scripts.json -a -f plugins/sp/scripts/wrapup-steps.ts ]; then
-              bun plugins/sp/scripts/wrapup-steps.ts resolve;
-            elif W="$(superskill script path sp wrapup-steps.mjs 2>/dev/null)" && [ -f "$W" ]; then
-              node "$W" resolve;
+            eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/wrapup-steps.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/wrapup-steps.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; if [ -f "$S" ]; then
+              "$RUNNER" "$S" resolve;
             else
               echo "wrapup-steps failed closed — script not found — run 'superskill install sp --marketplace gobing-ai/spur'" >&2;
               printf 'FAIL\n' > ".spur/run/$__runId-wrapup-resolve.status";
@@ -174,13 +172,14 @@ states:
           command: >-
             if [ -n "$mode" ]; then
               printf '%s\n' "$mode" > ".spur/run/$__runId-mode.txt";
-            elif [ -f config/plugin-scripts.json -a -f plugins/sp/scripts/wrapup-drift-probe.ts ]; then
-              bun plugins/sp/scripts/wrapup-drift-probe.ts;
-            elif W="$(superskill script path sp wrapup-drift-probe.mjs 2>/dev/null)" && [ -f "$W" ]; then
-              node "$W";
             else
-              printf '{"clean":false,"reasons":["probe script not found"],"paths":[]}' > ".spur/run/$__runId-drift-probe.json";
-              printf '\n' > ".spur/run/$__runId-mode.txt";
+              eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/wrapup-drift-probe.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/wrapup-drift-probe.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)";
+              if [ -f "$S" ]; then
+                "$RUNNER" "$S";
+              else
+                printf '{"clean":false,"reasons":["probe script not found"],"paths":[]}' > ".spur/run/$__runId-drift-probe.json";
+                printf '\n' > ".spur/run/$__runId-mode.txt";
+              fi;
             fi
       - kind: file.read.into-var
         options:
@@ -201,10 +200,8 @@ states:
         options:
           command: >-
             mkdir -p .spur/run .spur/memory &&
-            if [ -f config/plugin-scripts.json -a -f plugins/sp/scripts/wrapup-steps.ts ]; then
-              bun plugins/sp/scripts/wrapup-steps.ts route-reason;
-            elif W="$(superskill script path sp wrapup-steps.mjs 2>/dev/null)" && [ -f "$W" ]; then
-              node "$W" route-reason;
+            eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/wrapup-steps.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/wrapup-steps.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; if [ -f "$S" ]; then
+              "$RUNNER" "$S" route-reason;
             else
               echo "wrapup-steps failed closed — script not found — run 'superskill install sp --marketplace gobing-ai/spur'" >&2;
               printf 'FAIL\n' > ".spur/run/$__runId-wrapup-resolve.status";
@@ -334,10 +331,8 @@ states:
         options:
           command: >-
             mkdir -p .spur/run &&
-            if [ -f config/plugin-scripts.json -a -f plugins/sp/scripts/wrapup-steps.ts ]; then
-              bun plugins/sp/scripts/wrapup-steps.ts metrics;
-            elif W="$(superskill script path sp wrapup-steps.mjs 2>/dev/null)" && [ -f "$W" ]; then
-              node "$W" metrics;
+            eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/wrapup-steps.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/wrapup-steps.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; if [ -f "$S" ]; then
+              "$RUNNER" "$S" metrics;
             else
               echo "wrapup-steps failed closed — script not found — run 'superskill install sp --marketplace gobing-ai/spur'" >&2;
               printf 'FAIL\n' > ".spur/run/$__runId-wrapup-metrics.status";
@@ -345,7 +340,8 @@ states:
 
   - id: feature-transition
     description: >
-      If vars.feature is set, sync feature status via bounded feature-sync-bounded
+      If vars.feature is set, sync feature status via `spur feature sync` (repeated-BLOCKED
+      suppression is built into the sync service, so no wrapper script is needed)
       (0411). The shell terminates `exit 0` so artifacts already landed are never
       discarded, but the outcome is truthful (0770 + 0783 R4): sync succeeds only
       with a valid proposal matching vars.feature, no gateBlocked/requiresConfirm
@@ -368,10 +364,8 @@ states:
         options:
           command: >-
             mkdir -p .spur/run &&
-            if [ -f config/plugin-scripts.json -a -f plugins/sp/scripts/wrapup-steps.ts ]; then
-              bun plugins/sp/scripts/wrapup-steps.ts feature-transition;
-            elif W="$(superskill script path sp wrapup-steps.mjs 2>/dev/null)" && [ -f "$W" ]; then
-              node "$W" feature-transition;
+            eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/wrapup-steps.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/wrapup-steps.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; if [ -f "$S" ]; then
+              "$RUNNER" "$S" feature-transition;
             else
               echo "wrapup-steps failed closed — script not found — run 'superskill install sp --marketplace gobing-ai/spur'" >&2;
               printf 'FAIL\n' > ".spur/run/$__runId-wrapup-sync.status";

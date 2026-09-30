@@ -2,7 +2,16 @@
 // @bun
 
 // plugins/sp/scripts/quality-gate.ts
-import { spawnSync } from "child_process";
+import { appendFileSync as appendFileSync2 } from "fs";
+import { join as join2 } from "path";
+
+// plugins/sp/lib/env.ts
+function getEnvVars() {
+  return process.env;
+}
+
+// plugins/sp/lib/quality-gate.generated.mjs
+import { spawnSync } from "node:child_process";
 import {
   appendFileSync,
   closeSync,
@@ -14,16 +23,9 @@ import {
   rmSync,
   statSync,
   writeFileSync
-} from "fs";
-import { tmpdir } from "os";
-import { join } from "path";
-
-// plugins/sp/lib/env.ts
-function getEnvVars() {
-  return process.env;
-}
-
-// plugins/sp/scripts/quality-gate.ts
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 var MAX_GATE_ATTEMPTS = 5;
 var MAX_FINDINGS = 20;
 var RETRY_DELAY_MS_DEFAULT = 1e4;
@@ -241,7 +243,7 @@ function runLightGate(env, options = {}) {
     if (priorRow !== undefined) {
       checks.push(priorRow);
       skipped++;
-      const line = `--- light ${plan.id}: check.reused \u2014 skipped (PASS at the same input digest)
+      const line = `--- light ${plan.id}: check.reused — skipped (PASS at the same input digest)
 `;
       process.stdout.write(line);
       appendFileSync(abs(logFile), line);
@@ -264,7 +266,7 @@ ${result.output}`);
     completedAt: new Date().toISOString()
   });
   if (preserveFullReceipt) {
-    appendFileSync(abs(logFile), `--- light receipt: not written \u2014 the full-tier receipt at the same input digest is preserved
+    appendFileSync(abs(logFile), `--- light receipt: not written — the full-tier receipt at the same input digest is preserved
 `);
     process.stdout.write(`light gate ${receipt.status} (${scope.files.length} changed files; checks: ${checks.length},` + ` skipped: ${skipped}; receipt: ${receiptFile} preserved (full tier); log: ${logFile})
 `);
@@ -319,7 +321,7 @@ function runQualityGate(mode, env, options = {}) {
   let gateAttempt = 0;
   const noProgressSkip = mode === "recheck" && receiptFailsAtDigest(readReceipt(abs(rel("-check-receipt.json"))), env.proofDigest ?? "");
   if (noProgressSkip) {
-    const line = `check.skipped-no-progress \u2014 full-tier FAIL receipt at input digest ${env.proofDigest ?? ""}; recheck skipped
+    const line = `check.skipped-no-progress — full-tier FAIL receipt at input digest ${env.proofDigest ?? ""}; recheck skipped
 `;
     process.stdout.write(line);
     appendFileSync(abs(logFile), line);
@@ -371,7 +373,7 @@ function runQualityGate(mode, env, options = {}) {
     process.stdout.write(`quality gate PASS (attempts: ${attemptsLabel}; log: ${logFile}; bytes: ${bytes})
 `);
   } else {
-    process.stdout.write(`quality gate FAIL \u2014 last 40 lines follow (full log: ${logFile})
+    process.stdout.write(`quality gate FAIL — last 40 lines follow (full log: ${logFile})
 `);
     process.stdout.write(tailLines(readFileSync(abs(logFile), "utf8"), 40));
   }
@@ -404,11 +406,13 @@ function runQualityGate(mode, env, options = {}) {
       writeFileSync(abs(receiptFile), `${JSON.stringify(receipt, null, 2)}
 `);
     } else {
-      appendFileSync(abs(logFile), "check-receipt: not written \u2014 env `proofDigest` is not set\n");
+      appendFileSync(abs(logFile), "check-receipt: not written — env `proofDigest` is not set\n");
     }
   }
   return { status, attempts: gateAttempt, logFile, findingsFile, statusFile, attemptFile, receiptFile };
 }
+
+// plugins/sp/scripts/quality-gate.ts
 var QUALITY_GATE_USAGE = "usage: quality-gate.ts <run|recheck|light|status>  (env: wbs, qualityGateCmd, gateProbeCmd, proofDigest, runId)";
 function main(argv, rawEnv = getEnvVars(), options = {}) {
   const mode = argv[0];
@@ -426,13 +430,13 @@ function main(argv, rawEnv = getEnvVars(), options = {}) {
   if (mode === "light") {
     runLightGate(env);
   } else if (mode === "status") {
-    const runDir = join(options.cwd ?? ".", ".spur", "run");
-    const verdict = readReceiptStatus(join(runDir, `${env.wbs}-check-receipt.json`), env.proofDigest ?? "");
+    const runDir = join2(options.cwd ?? ".", ".spur", "run");
+    const verdict = readReceiptStatus(join2(runDir, `${env.wbs}-check-receipt.json`), env.proofDigest ?? "");
     if (verdict.reuse) {
       const line = `check.reused \u2014 full-tier receipt reused for input digest ${env.proofDigest ?? ""}
 `;
       process.stdout.write(line);
-      appendFileSync(join(runDir, `${env.wbs}-test-gate.log`), line);
+      appendFileSync2(join2(runDir, `${env.wbs}-test-gate.log`), line);
     }
     process.stdout.write(`${JSON.stringify(verdict)}
 `);

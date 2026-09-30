@@ -1,0 +1,686 @@
+// packages/app/src/services/history-anatomy.ts
+import { createHash as createHash2 } from "node:crypto";
+import {
+  closeSync,
+  existsSync,
+  fsyncSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync
+} from "node:fs";
+import { join } from "node:path";
+
+// packages/domain/src/analytics/artifact-digest.ts
+import { createHash } from "node:crypto";
+var ARTIFACT_ARRAY_CLASSIFICATION = {
+  byTool: "ranked",
+  bySession: "ranked",
+  topStepsByTokens: "ranked",
+  topStepsByDuration: "ranked",
+  topSteps: "ranked",
+  bottlenecks: "ranked",
+  coverage: "set",
+  daily: "set",
+  loops: "set",
+  warnings: "set",
+  pairings: "set",
+  ladderSnapshot: "set",
+  stepSupport: "set",
+  phases: "set",
+  tools: "set",
+  skills: "set",
+  sources: "set",
+  models: "set"
+};
+var RANKED_ARTIFACT_KEYS = new Set(Object.entries(ARTIFACT_ARRAY_CLASSIFICATION).filter(([, kind]) => kind === "ranked").map(([key]) => key));
+function canonicalize(value, key) {
+  if (key === "generatedAt" || key === "validatedAt" || key === "baselineArtifactDigest")
+    return null;
+  if (Array.isArray(value)) {
+    const raw = value.map((v) => JSON.stringify(canonicalize(v, "")));
+    return RANKED_ARTIFACT_KEYS.has(key) ? raw : [...raw].sort();
+  }
+  if (value !== null && typeof value === "object") {
+    const out = {};
+    for (const k of Object.keys(value).sort()) {
+      out[k] = canonicalize(value[k], k);
+    }
+    return out;
+  }
+  return value;
+}
+function semanticArtifactDigest(artifactJson) {
+  const material = JSON.stringify(canonicalize(artifactJson, "root"));
+  return createHash("sha256").update(material).digest("hex");
+}
+
+// packages/app/src/services/history-anatomy.ts
+var REPORT_SECTIONS = [
+  "Scope and provenance",
+  "Executive summary",
+  "Baseline comparison",
+  "Findings",
+  "Recurrence ledger",
+  "Telemetry gaps",
+  "Remediation options",
+  "Performance analysis",
+  "Workflow and process improvements",
+  "Report-only advisories",
+  "Positive patterns",
+  "Evidence ledger"
+];
+var FINDING_FIELDS = [
+  "key",
+  "category",
+  "impact",
+  "trend",
+  "observation",
+  "inference",
+  "confidence",
+  "contradictions",
+  "evidenceAnchor",
+  "severity",
+  "reproCommand",
+  "ownerSurface"
+];
+function parseScalar(raw) {
+  const t = raw.trim();
+  if (t.startsWith('"') && t.endsWith('"'))
+    return t.slice(1, -1).replaceAll("\\\"", '"');
+  if (t === "null")
+    return null;
+  return t;
+}
+function parseBlock(text) {
+  const obj = {};
+  const lines = text.split(`
+`);
+  for (let i = 0;i < lines.length; i++) {
+    const line = lines[i] ?? "";
+    if (/^\s*$/.test(line) || /^\s*#/.test(line) || /^-\s+/.test(line.trim()))
+      continue;
+    const indent = line.search(/\S/);
+    const eq = line.indexOf(":");
+    if (eq === -1)
+      continue;
+    const key = line.slice(0, eq).trim();
+    const val = parseScalar(line.slice(eq + 1).trim());
+    let consumed = 0;
+    const next = lines[i + 1];
+    if ((val === "" || val === undefined) && /^\s*-\s+/.test(next ?? "")) {
+      const items = [];
+      let j = i + 1;
+      while (j < lines.length && /^\s*-\s+/.test(lines[j] ?? "")) {
+        const entry = {};
+        for (const part of (lines[j] ?? "").trim().replace(/^-\s+/, "").split(",")) {
+          const e = part.indexOf(":");
+          if (e === -1)
+            continue;
+          entry[part.slice(0, e).trim()] = parseScalar(part.slice(e + 1).trim());
+        }
+        items.push(entry);
+        j++;
+      }
+      obj[key] = items;
+      consumed = j - i - 1;
+    } else if (val === "" || val === undefined) {
+      const block = [];
+      let j = i + 1;
+      while (j < lines.length) {
+        const nl = lines[j] ?? "";
+        if (nl.trim() === "") {
+          block.push("");
+          j++;
+          continue;
+        }
+        const nind = nl.search(/\S/);
+        if (nind <= indent)
+          break;
+        block.push(nl);
+        j++;
+      }
+      obj[key] = parseBlock(block.join(`
+`));
+      consumed = j - i - 1;
+    } else {
+      obj[key] = val;
+    }
+    i += consumed;
+  }
+  return obj;
+}
+function readSourceName(s) {
+  if (s !== null && typeof s === "object")
+    return String(s.source ?? "");
+  return String(s);
+}
+var DISPOSITIONS = ["hit", "miss", "forced-recompute"];
+function optionalString(v) {
+  return v == null || v === "" ? undefined : String(v);
+}
+function parseProvenance(reportMarkdown) {
+  const match = reportMarkdown.match(/^---\n([\s\S]*?)\n---/);
+  if (match === null)
+    return null;
+  try {
+    const obj = parseBlock(match[1] ?? "");
+    const identity = obj.identity;
+    const coverage = obj.coverage;
+    if (identity === undefined || !Array.isArray(coverage))
+      return null;
+    const bounds = identity.bounds;
+    if (bounds === undefined || typeof bounds.since !== "string" || typeof bounds.until !== "string") {
+      return null;
+    }
+    return {
+      identity: {
+        contractVersion: String(identity.contractVersion ?? ""),
+        mode: identity.mode === "ad-hoc" ? "ad-hoc" : "daily",
+        date: String(identity.date ?? ""),
+        timezone: String(identity.timezone ?? ""),
+        bounds: { since: bounds.since, until: bounds.until },
+        sources: Array.isArray(identity.sources) ? identity.sources.map(readSourceName) : []
+      },
+      windowState: obj.windowState === "closed" ? "closed" : "provisional",
+      generatedAt: String(obj.generatedAt ?? ""),
+      validatedAt: String(obj.validatedAt ?? ""),
+      artifactDigest: String(obj.artifactDigest ?? ""),
+      baselineArtifactDigest: obj.baselineArtifactDigest == null ? null : String(obj.baselineArtifactDigest),
+      contractDigest: String(obj.contractDigest ?? ""),
+      skillDigest: String(obj.skillDigest ?? ""),
+      workflowDigest: String(obj.workflowDigest ?? ""),
+      helperDigest: String(obj.helperDigest ?? ""),
+      coverage: coverage.map((c) => ({
+        source: String(c.source ?? ""),
+        status: String(c.status ?? ""),
+        lastImportedAt: c.lastImportedAt == null ? null : String(c.lastImportedAt)
+      })),
+      runId: optionalString(obj.runId),
+      currentArtifactPath: optionalString(obj.currentArtifactPath),
+      baselineArtifactPath: obj.baselineArtifactPath == null ? null : String(obj.baselineArtifactPath),
+      spurVersion: optionalString(obj.spurVersion),
+      schemaVersion: obj.schemaVersion == null ? undefined : Number(obj.schemaVersion),
+      executor: optionalString(obj.executor),
+      model: optionalString(obj.model),
+      cacheDisposition: DISPOSITIONS.includes(obj.cacheDisposition) ? obj.cacheDisposition : undefined
+    };
+  } catch {
+    return null;
+  }
+}
+function decideCache(cached, current, opts) {
+  if (opts.recompute)
+    return { disposition: "forced-recompute", reasons: ["recompute"] };
+  if (cached === null)
+    return { disposition: "miss", reasons: ["no-cache"] };
+  const reasons = [];
+  const id = cached.identity;
+  const cur = current.identity;
+  if (id.contractVersion !== cur.contractVersion)
+    reasons.push("identity:contractVersion");
+  if (id.mode !== cur.mode)
+    reasons.push("identity:mode");
+  if (id.date !== cur.date)
+    reasons.push("identity:date");
+  if (id.timezone !== cur.timezone)
+    reasons.push("identity:timezone");
+  if (id.bounds.since !== cur.bounds.since || id.bounds.until !== cur.bounds.until)
+    reasons.push("identity:bounds");
+  if ([...id.sources].sort().join("\x00") !== [...cur.sources].sort().join("\x00"))
+    reasons.push("identity:sources");
+  if (cached.artifactDigest !== current.artifactDigest)
+    reasons.push("data-changed");
+  if (cached.contractDigest !== current.contractDigest)
+    reasons.push("logic-changed:contract");
+  if (cached.skillDigest !== current.skillDigest)
+    reasons.push("logic-changed:skill");
+  if (cached.workflowDigest !== current.workflowDigest)
+    reasons.push("logic-changed:workflow");
+  if (cached.helperDigest !== current.helperDigest)
+    reasons.push("logic-changed:helper");
+  const currentSources = new Set(current.coverage.map((c) => c.source));
+  if (cached.coverage.some((c) => !currentSources.has(c.source)))
+    reasons.push("coverage-degraded");
+  if (cached.windowState === "provisional" && opts.dayClosed)
+    reasons.push("window-closed");
+  return { disposition: reasons.length === 0 ? "hit" : "miss", reasons };
+}
+function escapeRe(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+var FINDING_CATEGORIES = [
+  "reliability",
+  "repetition",
+  "workflow",
+  "performance",
+  "coverage",
+  "telemetry",
+  "positive"
+];
+function checkReportStructure(reportMarkdown) {
+  const problems = [];
+  if (/TODO|PLACEHOLDER|FIXME|^\|\s*\|/im.test(reportMarkdown))
+    problems.push("placeholder-or-todo-present");
+  let lastIdx = -1;
+  for (const section of REPORT_SECTIONS) {
+    const re = new RegExp(`^#{2,3}\\s+${escapeRe(section)}\\s*$`, "m");
+    const m = reportMarkdown.match(re);
+    if (m === null || (m.index ?? -1) <= lastIdx) {
+      problems.push(`section-missing-or-out-of-order:${section}`);
+    } else if (m.index !== undefined) {
+      lastIdx = m.index;
+    }
+  }
+  const findingsIdx = reportMarkdown.search(/^##\s+Findings\s*$/im);
+  if (findingsIdx !== -1) {
+    const tail = reportMarkdown.slice(findingsIdx);
+    const nextSection = tail.slice(1).search(/^##\s+/im);
+    const findingsBody = nextSection === -1 ? tail : tail.slice(0, nextSection + 1);
+    const catAlt = FINDING_CATEGORIES.join("|");
+    const knownRows = findingsBody.match(new RegExp(`^\\|\\s*(?:${catAlt}):[^|]+`, "gm")) ?? [];
+    const invalidRows = findingsBody.match(/^\|\s*([^|:\s][^|:]*):[^|]+/gm) ?? [];
+    for (const row of [...new Set([...knownRows, ...invalidRows])]) {
+      const seg = row.match(/^\|\s*([^:|]+):/)?.[1];
+      if (seg !== undefined && !FINDING_CATEGORIES.includes(seg.trim())) {
+        problems.push(`finding-invalid-key-category:${seg.trim()}`);
+      }
+      const rowLower = row.toLowerCase();
+      for (const field of FINDING_FIELDS) {
+        if (!rowLower.includes(field.toLowerCase()))
+          problems.push(`finding-missing-field:${field}`);
+      }
+    }
+    const blocks = findingsBody.split(/^###\s+/m).slice(1);
+    for (const block of blocks) {
+      if (!block.includes("`key`") && !/\|\s*key\s*:/.test(block))
+        continue;
+      for (const field of FINDING_FIELDS) {
+        if (!block.includes(field))
+          problems.push(`finding-missing-field:${field}`);
+      }
+      if (!/(^|[\s`])P[123]([\s`.]|$)/.test(block) && !block.includes("symbolic-severity")) {
+        problems.push("finding-invalid-severity");
+      }
+      const catValue = block.match(/`category`\s*[:=]\s*`?([^`\n]+?)`?\s*(?:\n|$)/)?.[1];
+      if (catValue && !FINDING_CATEGORIES.includes(catValue.trim())) {
+        problems.push(`finding-invalid-category:${catValue.trim()}`);
+      }
+      const keyValue = block.match(/`key`\s*[:=]\s*`?([^`\n]+?)`?\s*(?:\n|$)/)?.[1] ?? "";
+      const firstSegment = keyValue.split(":")[0]?.trim() ?? "";
+      if (keyValue !== "" && !FINDING_CATEGORIES.includes(firstSegment)) {
+        problems.push(`finding-invalid-key-category:${firstSegment}`);
+      }
+    }
+  }
+  const ledgerIdx = reportMarkdown.search(/^#{2,3}\s+Evidence\s+ledger/im);
+  if (ledgerIdx !== -1) {
+    const ledgerSection = reportMarkdown.slice(ledgerIdx);
+    const sep = ledgerSection.match(/^\|[\s:|-]+\|[ \t]*$/m);
+    const body = sep?.index === undefined ? ledgerSection : ledgerSection.slice(sep.index + sep[0].length);
+    const claimRows = body.match(/^[|>]\s+\S.*$/gm) ?? [];
+    for (const row of claimRows) {
+      const hasAnchor = /`[^`]+:\d+`|`[^`]+\.(md|ts|json)`|[a-z][a-z0-9_-]*\/[a-z][a-z0-9_./-]*:[0-9]+/i.test(row);
+      if (!hasAnchor) {
+        problems.push("evidence-claim-without-anchor");
+        break;
+      }
+    }
+  }
+  return { ok: problems.length === 0, problems };
+}
+var NOT_AVAILABLE = "not available";
+function logicDigest(path) {
+  if (path === undefined || path === "" || !existsSync(path))
+    return NOT_AVAILABLE;
+  try {
+    const h = createHash2("sha256");
+    if (statSync(path).isDirectory()) {
+      const walk = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) => e.isDirectory() ? walk(join(dir, e.name)) : /\.(md|ya?ml)$/.test(e.name) ? [join(dir, e.name)] : []).sort();
+      for (const f of walk(path)) {
+        h.update(f.slice(path.length));
+        h.update(readFileSync(f));
+      }
+    } else {
+      h.update(readFileSync(path));
+    }
+    return h.digest("hex");
+  } catch {
+    return NOT_AVAILABLE;
+  }
+}
+function importedSnapshotAsOf(coverage) {
+  const stamps = coverage.map((c) => c.lastImportedAt).filter((v) => typeof v === "string" && v !== "");
+  if (stamps.length === 0 || stamps.length !== coverage.length)
+    return NOT_AVAILABLE;
+  return [...stamps].sort()[0] ?? NOT_AVAILABLE;
+}
+function localDay(tz, at = new Date) {
+  try {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: tz, dateStyle: "short" }).format(at);
+  } catch {
+    return at.toISOString().slice(0, 10);
+  }
+}
+function tzOffsetMs(tz, at) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    hour12: false,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
+  }).formatToParts(at).filter((p) => p.type !== "literal").map((p) => [p.type, p.value]));
+  const asUtc = Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day), parts.hour === "24" ? 0 : Number(parts.hour), Number(parts.minute), Number(parts.second));
+  const atSec = Math.floor(at.getTime() / 1000) * 1000;
+  return asUtc - atSec;
+}
+function zonedDayStart(tz, ymd) {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const utcMidnight = Date.UTC(y ?? 1970, (m ?? 1) - 1, d ?? 1);
+  const guess = new Date(utcMidnight - tzOffsetMs(tz, new Date(utcMidnight)));
+  return new Date(utcMidnight - tzOffsetMs(tz, guess));
+}
+function formatZonedIso(tz, at) {
+  const off = tzOffsetMs(tz, at);
+  const abs = Math.abs(off);
+  const pad = (n) => String(n).padStart(2, "0");
+  const offStr = `${off < 0 ? "-" : "+"}${pad(Math.floor(abs / 3600000))}:${pad(Math.floor(abs % 3600000 / 60000))}`;
+  return `${new Date(at.getTime() + off).toISOString().slice(0, 23)}${offStr}`;
+}
+function dayBounds(tz, ymd) {
+  const start = zonedDayStart(tz, ymd);
+  const nextYmd = localDay(tz, new Date(start.getTime() + 30 * 3600000));
+  return {
+    since: formatZonedIso(tz, start),
+    until: formatZonedIso(tz, new Date(zonedDayStart(tz, nextYmd).getTime() - 1))
+  };
+}
+function resolvePaths(opts) {
+  const m = opts.helper.match(/\/scripts\/(?:([^/]+)\/)?[^/]+$/);
+  const pluginRoot = m ? opts.helper.slice(0, m.index) : opts.helper;
+  const skill = `${pluginRoot}/skills/${m?.[1] ? `${m[1]}-history-anatomy` : "history-anatomy"}`;
+  const tz = opts.tz ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
+  const date = opts.date !== undefined && opts.date !== "" ? opts.date : localDay(tz, opts.now ?? new Date);
+  const target = opts.output !== undefined && opts.output !== "" ? opts.output : `${opts.reportDir}/${date}-history-anatomy.md`;
+  const adHoc = opts.mode === "ad-hoc" && !!opts.since && !!opts.until;
+  let env = `HA_HELPER=${opts.helper}
+HA_SKILL=${skill}
+HA_TARGET=${target}
+HA_DATE=${date}
+`;
+  if (adHoc) {
+    return `${env}HA_SINCE=${opts.since}
+HA_UNTIL=${opts.until}
+`;
+  }
+  const current = dayBounds(tz, date);
+  const baseline = dayBounds(tz, localDay(tz, new Date(zonedDayStart(tz, date).getTime() - 12 * 3600000)));
+  env += `HA_SINCE=${current.since}
+HA_UNTIL=${current.until}
+`;
+  env += `HA_BASELINE_SINCE=${baseline.since}
+HA_BASELINE_UNTIL=${baseline.until}
+`;
+  return env;
+}
+function isRealDate(ymd) {
+  const m = ymd.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m)
+    return false;
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const dt = new Date(Date.UTC(y, mo - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d;
+}
+function validateSelector(opts) {
+  const errors = [];
+  const has = (v) => v !== undefined && v !== "";
+  const val = (v) => has(v) ? v : null;
+  const mode = has(opts.mode) ? opts.mode : "daily";
+  if (mode !== "daily" && mode !== "ad-hoc") {
+    return { ok: false, errors: [`--mode must be "daily" or "ad-hoc", got "${opts.mode}"`] };
+  }
+  const recompute = opts.recompute ?? "";
+  if (recompute !== "" && recompute !== "true" && recompute !== "false") {
+    errors.push(`--recompute must be "true" or "false", got "${recompute}"`);
+  }
+  if (mode === "daily") {
+    for (const [flag, v] of [
+      ["--focus", opts.focus],
+      ["--since", opts.since],
+      ["--until", opts.until],
+      ["--output", opts.output]
+    ]) {
+      if (has(v))
+        errors.push(`daily mode rejects ${flag}`);
+    }
+    if (has(opts.date) && !isRealDate(opts.date)) {
+      errors.push(`--date must be a real YYYY-MM-DD calendar day, got "${opts.date}"`);
+    }
+  } else {
+    if (has(opts.date))
+      errors.push("ad-hoc mode rejects --date");
+    if (recompute === "true")
+      errors.push("ad-hoc mode rejects --recompute");
+    if (!has(opts.focus))
+      errors.push("ad-hoc mode requires a non-empty --focus");
+    const sinceOk = has(opts.since);
+    const untilOk = has(opts.until);
+    if (!sinceOk)
+      errors.push("ad-hoc mode requires --since (inclusive ISO instant)");
+    if (!untilOk)
+      errors.push("ad-hoc mode requires --until (inclusive ISO instant)");
+    if (sinceOk && untilOk) {
+      const since = new Date(opts.since ?? "");
+      const until = new Date(opts.until ?? "");
+      if (Number.isNaN(since.getTime()))
+        errors.push(`--since must be a parseable ISO instant, got "${opts.since}"`);
+      if (Number.isNaN(until.getTime()))
+        errors.push(`--until must be a parseable ISO instant, got "${opts.until}"`);
+      if (!Number.isNaN(since.getTime()) && !Number.isNaN(until.getTime()) && since.getTime() > until.getTime()) {
+        errors.push(`--since must not be after --until ("${opts.since}" > "${opts.until}")`);
+      }
+    }
+  }
+  if (errors.length)
+    return { ok: false, errors };
+  return {
+    ok: true,
+    mode,
+    date: val(opts.date),
+    focus: val(opts.focus),
+    since: val(opts.since),
+    until: val(opts.until)
+  };
+}
+function buildProvenance(opts) {
+  let raw;
+  try {
+    raw = JSON.parse(readFileSync(opts.artifact, "utf8"));
+  } catch (err) {
+    throw new Error(`could not parse fresh analyze artifact at ${opts.artifact}: ${err.message}`);
+  }
+  const coverage = (raw.coverage ?? []).map((c) => ({
+    source: String(c.source ?? ""),
+    status: String(c.status ?? ""),
+    lastImportedAt: c.lastImportedAt == null ? null : String(c.lastImportedAt)
+  }));
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
+  const now = opts.now ?? new Date;
+  const date = opts.date !== undefined && opts.date !== "" ? opts.date : localDay(tz, now);
+  const windowState = opts.mode === "ad-hoc" || date < localDay(tz, now) ? "closed" : "provisional";
+  const nowIso = now.toISOString();
+  return {
+    identity: {
+      contractVersion: opts.contractVersion ?? "1",
+      mode: opts.mode,
+      date,
+      timezone: tz,
+      bounds: { since: String(raw.selector?.since ?? ""), until: String(raw.selector?.until ?? "") },
+      sources: coverage.map((c) => c.source).sort()
+    },
+    windowState,
+    generatedAt: nowIso,
+    validatedAt: nowIso,
+    artifactDigest: semanticArtifactDigest(raw),
+    baselineArtifactDigest: (() => {
+      if (!(opts.baseline !== undefined && existsSync(opts.baseline)))
+        return null;
+      try {
+        return semanticArtifactDigest(JSON.parse(readFileSync(opts.baseline, "utf8")));
+      } catch (err) {
+        throw new Error(`could not parse baseline artifact at ${opts.baseline}: ${err.message}`);
+      }
+    })(),
+    contractDigest: logicDigest(opts.contractFile),
+    skillDigest: logicDigest(opts.skillDir),
+    workflowDigest: logicDigest(opts.workflowFile),
+    helperDigest: logicDigest(opts.helperFile),
+    coverage,
+    runId: opts.runId,
+    currentArtifactPath: opts.artifact,
+    baselineArtifactPath: opts.baseline ?? null,
+    spurVersion: opts.spurVersion ?? NOT_AVAILABLE,
+    schemaVersion: typeof raw.schemaVersion === "number" ? raw.schemaVersion : undefined,
+    executor: opts.executor ?? NOT_AVAILABLE,
+    model: opts.model ?? NOT_AVAILABLE
+  };
+}
+function probe(opts) {
+  const current = buildProvenance(opts);
+  const cachedText = existsSync(opts.target) ? readFileSync(opts.target, "utf8") : null;
+  const cached = cachedText === null ? null : parseProvenance(cachedText);
+  const decision = opts.mode === "ad-hoc" ? { disposition: "miss", reasons: ["ad-hoc-never-cached"] } : decideCache(cached, current, {
+    recompute: opts.recompute,
+    dayClosed: current.windowState === "closed"
+  });
+  current.cacheDisposition = decision.disposition;
+  return { decision, current };
+}
+var YAML_KEYS = [
+  "windowState",
+  "generatedAt",
+  "validatedAt",
+  "artifactDigest",
+  "baselineArtifactDigest",
+  "contractDigest",
+  "skillDigest",
+  "workflowDigest",
+  "helperDigest",
+  "runId",
+  "currentArtifactPath",
+  "baselineArtifactPath",
+  "spurVersion",
+  "schemaVersion",
+  "executor",
+  "model",
+  "cacheDisposition"
+];
+function yamlScalar(v) {
+  if (v === null || v === undefined)
+    return "null";
+  if (typeof v === "number" || typeof v === "boolean")
+    return String(v);
+  return `"${String(v).replaceAll('"', "\\\"")}"`;
+}
+function renderProvenanceFrontmatter(p) {
+  const lines = [
+    "---",
+    "identity:",
+    `  contractVersion: ${yamlScalar(p.identity.contractVersion)}`,
+    `  mode: ${p.identity.mode}`,
+    `  date: ${yamlScalar(p.identity.date)}`,
+    `  timezone: ${p.identity.timezone}`,
+    "  bounds:",
+    `    since: ${p.identity.bounds.since}`,
+    `    until: ${p.identity.bounds.until}`,
+    "  sources:"
+  ];
+  for (const s of p.identity.sources)
+    lines.push(`    - source: ${s}`);
+  for (const k of YAML_KEYS) {
+    if (p[k] === undefined)
+      continue;
+    lines.push(`${k}: ${yamlScalar(p[k])}`);
+  }
+  lines.push("coverage:");
+  for (const c of p.coverage) {
+    lines.push(`  - source: ${c.source}, status: ${c.status}, lastImportedAt: ${c.lastImportedAt ?? "null"}`);
+  }
+  lines.push("---");
+  return lines.join(`
+`);
+}
+function bannerLine(p) {
+  return `> imported snapshot as of ${importedSnapshotAsOf(p.coverage)} · window ${p.windowState} · cache ${p.cacheDisposition ?? NOT_AVAILABLE}`;
+}
+function stripHeader(md) {
+  const body = md.replace(/^---\n[\s\S]*?\n---\n?/, "").replace(/^\n+/, "");
+  return body.replace(/^> imported snapshot as of [^\n]*\n+/, "");
+}
+function stampReport(candidateMarkdown, p) {
+  return `${renderProvenanceFrontmatter(p)}
+
+${bannerLine(p)}
+
+${stripHeader(candidateMarkdown).replace(/^\n+/, "")}`;
+}
+function refreshReport(publishedMarkdown, validatedAt, disposition) {
+  const cached = parseProvenance(publishedMarkdown);
+  if (cached === null)
+    return publishedMarkdown;
+  const refreshed = { ...cached, validatedAt, cacheDisposition: disposition };
+  return stampReport(publishedMarkdown, refreshed);
+}
+function publishAtomically(candidatePath, targetPath) {
+  const tmpPath = `${targetPath}.tmp`;
+  try {
+    writeFileSync(tmpPath, readFileSync(candidatePath));
+    const fd = openSync(tmpPath, "r");
+    try {
+      fsyncSync(fd);
+    } finally {
+      closeSync(fd);
+    }
+    renameSync(tmpPath, targetPath);
+  } catch (err) {
+    try {
+      rmSync(tmpPath, { force: true });
+    } catch {}
+    throw err;
+  }
+}
+function porcelainPaths(text) {
+  return new Set(text.split(`
+`).map((line) => line.replace(/^\S+\s+/, "").trim()).filter((line) => line.length > 0));
+}
+function diffPorcelain(before, now, expects) {
+  const beforePaths = porcelainPaths(before);
+  return [...porcelainPaths(now)].filter((p) => !beforePaths.has(p) && !expects.has(p)).sort();
+}
+export {
+  validateSelector,
+  stampReport,
+  semanticArtifactDigest,
+  resolvePaths,
+  renderProvenanceFrontmatter,
+  refreshReport,
+  publishAtomically,
+  probe,
+  porcelainPaths,
+  parseProvenance,
+  logicDigest,
+  importedSnapshotAsOf,
+  diffPorcelain,
+  decideCache,
+  checkReportStructure,
+  buildProvenance,
+  bannerLine,
+  REPORT_SECTIONS,
+  FINDING_FIELDS
+};

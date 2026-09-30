@@ -437,3 +437,110 @@ test('0975 AC4: --close --status failed with zero action rows stays a clean clos
         p.cleanup();
     }
 }, 60_000);
+
+// ─── 1007 R5: `--actions-file` batch emission ───────────────────────────────
+
+/** The exact entry shape the inline driver's per-state batch JSON carries. */
+function actionsFile(entries: readonly unknown[]): string {
+    const path = join(tmpdir(), `actions-${Math.random().toString(36).slice(2)}.json`);
+    writeFileSync(path, `${JSON.stringify(entries)}\n`);
+    return path;
+}
+
+test('1007 R5: --actions-file records one action_runs row per entry through the --action writer', () => {
+    const p = makeProject();
+    const runId = 'run-1007-batch-e2e';
+    try {
+        const setup = runScript(p.workdir, ['--run-id', runId, '--file', '.spur/workflows/inline-smoke.yaml']);
+        expect(setup.status, setup.stderr).toBe(0);
+
+        const file = actionsFile([
+            { node: 'implement', kind: 'agent.run', status: 'done', ok: true, durationMs: 1234 },
+            { node: 'test', kind: 'shell', status: 'failed', ok: false, durationMs: 88 },
+        ]);
+        const batch = runScript(p.workdir, ['--actions-file', file, '--run-id', runId]);
+        expect(batch.status, batch.stderr).toBe(0);
+        expect(JSON.parse(batch.stdout)).toMatchObject({ ok: true, runId, recorded: 2 });
+
+        const db = new Database(join(p.workdir, '.spur', 'spur.db'), { readonly: true });
+        try {
+            const rows = db
+                .query<ActionRow, [string]>(
+                    'SELECT node, kind, status, duration_ms, ok FROM action_runs WHERE run_id = ?',
+                )
+                .all(runId);
+            expect(rows).toHaveLength(2);
+            expect(rows[0]).toMatchObject({
+                node: 'implement',
+                kind: 'agent.run',
+                status: 'done',
+                duration_ms: 1234,
+                ok: 1,
+            });
+            expect(rows[1]).toMatchObject({ node: 'test', kind: 'shell', status: 'failed', duration_ms: 88, ok: 0 });
+        } finally {
+            db.close();
+        }
+
+        // The rows are real action_runs rows: --close done sees them (no zero-row defect).
+        const close = runScript(p.workdir, ['--close', '--run-id', runId, '--status', 'done']);
+        expect(close.status, close.stderr).toBe(0);
+        expect(JSON.parse(close.stdout)).toMatchObject({ ok: true, actionRows: 2 });
+    } finally {
+        p.cleanup();
+    }
+}, 60_000);
+
+test('1007 R5: invalid JSON or a malformed row exits 1 with no partial writes', () => {
+    const p = makeProject();
+    const runId = 'run-1007-batch-invalid';
+    try {
+        const setup = runScript(p.workdir, ['--run-id', runId, '--file', '.spur/workflows/inline-smoke.yaml']);
+        expect(setup.status, setup.stderr).toBe(0);
+
+        const invalid = join(p.workdir, 'actions-invalid.json');
+        writeFileSync(invalid, '[{"node":"a","kind":"b","status":"done","ok":true,"durationMs":1}\n');
+        const badJson = runScript(p.workdir, ['--actions-file', invalid, '--run-id', runId]);
+        expect(badJson.status).toBe(1);
+        expect(JSON.parse(badJson.stdout)).toMatchObject({ ok: false, runId });
+        expect(badJson.stdout).toContain('cannot read actions file');
+
+        const malformed = actionsFile([
+            { node: 'good', kind: 'shell', status: 'done', ok: true, durationMs: 5 },
+            { node: '', kind: 'shell', status: 'done', ok: true, durationMs: 5 },
+        ]);
+        const badRow = runScript(p.workdir, ['--actions-file', malformed, '--run-id', runId]);
+        expect(badRow.status).toBe(1);
+        expect(JSON.parse(badRow.stdout)).toMatchObject({ ok: false, runId });
+        expect(badRow.stdout).toContain('node must be a non-empty string');
+
+        // Validate-before-write: neither run left an action_runs row behind.
+        const db = new Database(join(p.workdir, '.spur', 'spur.db'), { readonly: true });
+        try {
+            expect(db.query<unknown, [string]>('SELECT 1 FROM action_runs WHERE run_id = ?').get(runId)).toBeNull();
+        } finally {
+            db.close();
+        }
+    } finally {
+        p.cleanup();
+    }
+}, 60_000);
+
+test('1007 R5: --actions-file rejects other mode flags and --action still works (no regression)', () => {
+    const p = makeProject();
+    const runId = 'run-1007-batch-usage';
+    try {
+        const file = actionsFile([{ node: 'a', kind: 'b', status: 'done', ok: true, durationMs: 1 }]);
+        const mixed = runScript(p.workdir, ['--actions-file', file, '--run-id', runId, '--node', 'x']);
+        expect(mixed.status).toBe(2);
+        expect(mixed.stderr).toContain('Usage:');
+
+        // Status outside the finalize vocabulary is a batch-validation error, not a pause.
+        const paused = actionsFile([{ node: 'a', kind: 'b', status: 'paused', ok: true, durationMs: 1 }]);
+        const badStatus = runScript(p.workdir, ['--actions-file', paused, '--run-id', runId]);
+        expect(badStatus.status).toBe(1);
+        expect(JSON.parse(badStatus.stdout).error).toContain('status must be');
+    } finally {
+        p.cleanup();
+    }
+}, 60_000);

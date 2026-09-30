@@ -3,8 +3,10 @@
 
 // plugins/sp/scripts/workflow-step-profile.ts
 import { spawnSync } from "child_process";
-import { existsSync } from "fs";
-import { fileURLToPath } from "url";
+
+// plugins/sp/lib/spur-bin.ts
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 // plugins/sp/lib/env.ts
 function getEnvVar(name, fallback) {
@@ -12,7 +14,18 @@ function getEnvVar(name, fallback) {
   return raw === undefined ? fallback : raw;
 }
 
-// plugins/sp/scripts/workflow-step-profile.ts
+// plugins/sp/lib/spur-bin.ts
+function defaultSpurBin() {
+  const fromEnv = getEnvVar("SPUR_BIN");
+  if (fromEnv)
+    return fromEnv;
+  const local = fileURLToPath(new URL("../../../apps/cli/src/index.ts", import.meta.url));
+  if (existsSync(local))
+    return `bun ${local}`;
+  return "spur";
+}
+
+// plugins/sp/lib/step-profile.generated.mjs
 var DEFAULT_LAST = 20;
 var DEFAULT_WINDOW_SEC = 300;
 function nearestRankP50(values) {
@@ -156,7 +169,7 @@ function ratio(value) {
 }
 function formatStepProfileHuman(profile) {
   const lines = [
-    `step profile \u2014 ${profile.workflow} (window ${profile.windowSec}s, ${profile.sampledRuns} sampled runs)`
+    `step profile — ${profile.workflow} (window ${profile.windowSec}s, ${profile.sampledRuns} sampled runs)`
   ];
   for (const row of profile.rows) {
     lines.push([
@@ -175,15 +188,8 @@ function formatStepProfileHuman(profile) {
 `)}
 `;
 }
-function defaultSpurBin() {
-  const fromEnv = getEnvVar("SPUR_BIN");
-  if (fromEnv)
-    return fromEnv;
-  const local = fileURLToPath(new URL("../../../apps/cli/src/index.ts", import.meta.url));
-  if (existsSync(local))
-    return `bun ${local}`;
-  return "spur";
-}
+
+// plugins/sp/scripts/workflow-step-profile.ts
 function positiveInt(raw, fallback) {
   const parsed = Number.parseInt(raw ?? "", 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
@@ -321,7 +327,6 @@ export {
   main,
   formatStepProfileHuman,
   extractExecutions,
-  defaultSpurBin,
   buildStepProfile,
   buildRows,
   STEP_PROFILE_USAGE,
