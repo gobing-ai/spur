@@ -248,21 +248,24 @@ function runInlineSmoke(
                 // the attempt counter and executes qualityGateCmd; recheck runs gateProbeCmd
                 // first (bun run lint is red in this sandbox, so the probe IS the recheck
                 // verdict, gate skipped). Both always leave status/findings/log for the guards.
-                if (command.includes('quality-gate.ts run')) {
+                if (command.includes('quality-gate.ts') && command.includes('"$RUNNER" "$S" run')) {
                     command =
                         'mkdir -p .spur/run; : > ".spur/run/$wbs-test-gate.log"; echo 0 > ".spur/run/$wbs-test-fix-attempt"; if $qualityGateCmd; then s=PASS; else s=FAIL; fi; printf "%s\\n" "$s" > ".spur/run/$wbs-test-gate.status"; : > ".spur/run/$wbs-test-gate.findings"; printf "proof-digest: %s\\n" "$proofDigest" >> ".spur/run/$wbs-test-gate.log"';
                 }
-                if (command.includes('quality-gate.ts recheck')) {
+                if (command.includes('quality-gate.ts') && command.includes('"$RUNNER" "$S" recheck')) {
                     command =
                         'mkdir -p .spur/run; : > ".spur/run/$wbs-test-gate.log"; if $gateProbeCmd; then s=PASS; else s=FAIL; fi; if [ "$s" = PASS ]; then if $qualityGateCmd; then s=PASS; else s=FAIL; fi; fi; printf "%s\\n" "$s" > ".spur/run/$wbs-test-gate.status"; : > ".spur/run/$wbs-test-gate.findings"; printf "proof-digest: %s\\n" "$proofDigest" >> ".spur/run/$wbs-test-gate.log"';
                 }
                 // F96 (0950): residual-scan is a plugin script like quality-gate — the smoke
                 // simulates its clean-tree contract (empty residual list, soft terminal
                 // actions); residual-scan.test.ts owns the script itself.
-                if (command.includes('residual-scan') && command.includes('fold')) {
+                if (command.includes('residual-scan.ts') && command.includes('"$S" fold')) {
                     command = 'mkdir -p .spur/run; printf "[]\\n" > ".spur/run/$wbs-residuals.json"';
                 }
-                if (command.includes('residual-scan') && (command.includes('settle') || command.includes('report'))) {
+                if (
+                    command.includes('residual-scan.ts') &&
+                    (command.includes('"$S" settle') || command.includes('"$S" report'))
+                ) {
                     command = 'exit 0';
                 }
                 command = command.replaceAll('sleep 2', 'sleep 0').replaceAll('sleep 10', 'sleep 0');

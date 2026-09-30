@@ -414,6 +414,12 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
                 );
                 expect(result.status, `shell ${index}`).toBe(0);
             };
+            mkdirSync(join(cwd, '.spur', 'run'), { recursive: true });
+            // 1007 R4: stage the script-root identity the resolution snippet reads.
+            writeFileSync(
+                join(cwd, '.spur', 'run', `${runId}-script-root.json`),
+                `${JSON.stringify({ mode: 'source-repo', source: 'project', dir: join(REPO_ROOT, 'plugins', 'sp', 'scripts') })}\n`,
+            );
             runShell(0, callerMode); // resolve: validates and writes the capture
             runShell(1, callerMode); // probe + mode projection (no-op projection when mode set)
             const raw = readFileSync(join(cwd, '.spur/run', `${runId}-mode.txt`), 'utf8');
@@ -544,7 +550,9 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
             expect(probeShell).toContain('wrapup-drift-probe');
             expect(probeShell.indexOf('[ -n "$mode" ]')).toBeGreaterThanOrEqual(0);
             expect(probeShell.indexOf('[ -n "$mode" ]')).toBeLessThan(probeShell.indexOf('wrapup-drift-probe'));
-            expect(probeShell).not.toContain('jq');
+            // 0944: no inline parsing of the capture/probe output — the only jq call is the
+            // 1007 R4 script-root identity read (mode→S/RUNNER), not the drift data path.
+            expect(probeShell.match(/jq /g)?.length ?? 0).toBe(1);
             // The projection is read into vars.mode by a declared file.read.into-var action.
             const actions = (def.states.find((s) => s.id === 'task-resolve')?.onEnter ?? []) as Array<{
                 kind: string;

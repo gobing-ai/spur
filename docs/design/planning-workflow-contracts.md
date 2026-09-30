@@ -421,7 +421,9 @@ run with no associated checkpoint remains a valid resume.
 (append-progress authoring — `Verdict: PARTIAL` first, one complete requirement/AC row at a time,
 first verdict line replaced only after all rows are certified), and the host checks post-exit
 existence without capturing or overwriting, so an interrupted verify leaves lintable partial rows
-instead of losing the capture. A hard `verify-answer-lint.ts` gate runs after the agent exits and
+instead of losing the capture. (1003 R2 later removed the separate lint step: `spur task verdict
+--from-answer` owns the row diagnostics itself.) A hard `verify-answer-lint.ts` gate ran after the
+agent exits and
 before `spur task verdict --from-answer`, rejecting with row-level diagnostics: missing, duplicate,
 or unknown requirement IDs (vs the task's bold `R#` items), AC IDs that do not exactly match a task
 AC checklist label (or its leading token) or a linked feature scenario title, status/evidence-type
@@ -436,7 +438,7 @@ fail-closed `task-evidence-precheck` step (same contract as the size precheck: P
 precheck→implement guard requires BOTH status files PASS. On the verify stage, the verifier OWNS
 the answer file — `agent.run expectFile` (engine checks existence; the verifier authors it and
 appends progress) — and a deterministic hard-gate lint step
-(`plugins/sp/scripts/verify-answer-lint.ts`) runs between capture and
+(`plugins/sp/scripts/verify-answer-lint.ts`) ran between capture and
 `spur task verdict --from-answer`: bounded row findings (max 10), non-zero exit writes nothing,
 enforcing verdict-line shape, requirement row completeness/uniqueness/identity, status/evidence
 validity, and AC-label identity against the task checklist (AC completeness stays a verifier

@@ -346,8 +346,10 @@ export {
     createOrAttachInlineRun,
     type InlineDecideInput,
     type InlineDecideOutcome,
+    type InlineRunActionEntry,
     type InlineRunProjectDb,
     type InlineRunStateOutcome,
+    type InlineRunTraceBatchInput,
     type InlineRunTraceInput,
     inlineRunRecordLogPath,
     isInlineRunActionStatus,
@@ -362,6 +364,7 @@ export {
     runInlineRunPersistOut,
     runInlineRunSetup,
     runInlineRunTrace,
+    runInlineRunTraceBatch,
     writeInlineRunOutcome,
 } from './services/inline-run-setup';
 export {

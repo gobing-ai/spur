@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: W4 pipeline check diet and final placement sweep
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-29T06:25:03.420Z
-updated_at: "2026-09-29T06:58:18.611Z"
+updated_at: "2026-09-30T07:18:47.172Z"
 feature_id: A9
 priority: P2
 tags:
@@ -36,20 +36,20 @@ Source: ADR-130, harness-surface-governance §2, docs/plans/A9-script-placement-
 
 ### Requirements
 
-- [ ] R1. Add `packages/app/tests/workflow/pipeline-action-budget.test.ts`: parse `config/workflows/{idea,task}-pipeline.yaml` and assert total onEnter+onExit actions idea ≤30, task ≤48 (constants `IDEA_ACTION_BUDGET = 30`, `TASK_ACTION_BUDGET = 48`).
-- [ ] R2. idea-pipeline cuts: merge feature-create's Goal and Scope `feature update` shells into one; delete feature-check onEnter route writer (update the 0945 byte-equal pin in `packages/app/tests/workflow/idea-pipeline-routing.test.ts` to assert the single writer); delete the handoff `note` (the `run.artifact` carries the handoff).
-- [ ] R3. task-pipeline cuts: drop precheck `note`; merge precheck base-sha write into the dirty-tree warning shell; merge test-fix's two log-append shells; merge triage's mode-fallback shell into the following memory-append shell; drop done `note`. Each merged shell keeps the original commands in order and `exit 0` semantics.
-- [ ] R4. In idea, task, feature-verification and wrapup pipelines, every plugin-script action after the `script-root` action resolves its script from `.spur/run/$__runId-script-root.json` (`mode` `source-repo` → `$dir/<name>.ts` with bun; `installed` → `$dir/<name>.mjs` with node; `unresolved`/missing → the action's existing fail-closed branch). No action repeats `config/plugin-scripts.json` / `superskill script path` probing. The `script-root` action itself keeps its probe.
-- [ ] R5. `plugins/sp/scripts/inline-run-setup.ts` accepts `--actions-file <path>`: a JSON array of `{node, kind, status, ok, durationMs}` recorded in order through the same writer as `--action` (one `action_runs` row each); invalid JSON exits 1 without partial writes. `inline-pipeline-driver.md` § Structured trace emission switches to one call per state; `--action` stays for single actions.
-- [ ] R6. Advisory-only: composition, drift and BDD-warning findings never fail a state or trigger retry; each removed/merged check and its replacement or rationale is listed in the Solution section.
-- [ ] R7. Final sweep: `config/script-placement-baseline.json` holds only cited exemptions (ADR-129 context hooks, batch-preflight, pr-reviewing, wrapup-steps, wrapup-drift-probe, feature-verification-steps, task-diffstat); `rg` for every script deleted in 1001–1006 over `plugins/sp config/workflows` returns nothing; `spur rule run --rule sp-script-placement` passes.
-- [ ] R8. (refactor RF-architect-003) `config/workflows/pr-review.yaml` and `config/workflows/history-anatomy.yaml` gain the run-start `script-root` onEnter action in their initial state (command identical to `feature-verification.yaml` state `verify` first action), and every later plugin-script action in both resolves through the R4 snippet; no action in either repeats `superskill script path` / `config/plugin-scripts.json` probing except `script-root` itself.
-- [ ] R9. (refactor RF-architect-001) Add `plugins/sp/lib/spur-bin.ts` exporting `spurCommand(spurBin)` (whitespace split → `{cmd, prefix}`) and `defaultSpurBin()` (`SPUR_BIN` > monorepo-local `apps/cli/src/index.ts` via bun > `spur`), moved verbatim from `wrapup-steps.ts:68` and `workflow-step-profile.ts:324`. Every surviving plugin script imports it; `rg -n 'function (spurCommand|defaultSpurBin)' plugins/sp/scripts` returns nothing. Behavior identical (existing script tests stay green unchanged).
+- [x] R1. Add `packages/app/tests/workflow/pipeline-action-budget.test.ts`: parse `config/workflows/{idea,task}-pipeline.yaml` and assert total onEnter+onExit actions idea ≤30, task ≤48 (constants `IDEA_ACTION_BUDGET = 30`, `TASK_ACTION_BUDGET = 48`).
+- [x] R2. idea-pipeline cuts: merge feature-create's Goal and Scope `feature update` shells into one; delete feature-check onEnter route writer (update the 0945 byte-equal pin in `packages/app/tests/workflow/idea-pipeline-routing.test.ts` to assert the single writer); delete the handoff `note` (the `run.artifact` carries the handoff).
+- [x] R3. task-pipeline cuts: drop precheck `note`; merge precheck base-sha write into the dirty-tree warning shell; merge test-fix's two log-append shells; merge triage's mode-fallback shell into the following memory-append shell; drop done `note`. Each merged shell keeps the original commands in order and `exit 0` semantics.
+- [x] R4. In idea, task, feature-verification and wrapup pipelines, every plugin-script action after the `script-root` action resolves its script from `.spur/run/$__runId-script-root.json` (`mode` `source-repo` → `$dir/<name>.ts` with bun; `installed` → `$dir/<name>.mjs` with node; `unresolved`/missing → the action's existing fail-closed branch). No action repeats `config/plugin-scripts.json` / `superskill script path` probing. The `script-root` action itself keeps its probe.
+- [x] R5. `plugins/sp/scripts/inline-run-setup.ts` accepts `--actions-file <path>`: a JSON array of `{node, kind, status, ok, durationMs}` recorded in order through the same writer as `--action` (one `action_runs` row each); invalid JSON exits 1 without partial writes. `inline-pipeline-driver.md` § Structured trace emission switches to one call per state; `--action` stays for single actions.
+- [x] R6. Advisory-only: composition, drift and BDD-warning findings never fail a state or trigger retry; each removed/merged check and its replacement or rationale is listed in the Solution section.
+- [x] R7. Final sweep: `config/script-placement-baseline.json` holds only cited exemptions (ADR-129 context hooks, batch-preflight, pr-reviewing, wrapup-steps, wrapup-drift-probe, feature-verification-steps, task-diffstat); `rg` for every script deleted in 1001–1006 over `plugins/sp config/workflows` returns nothing; `spur rule run --rule sp-script-placement` passes.
+- [x] R8. (refactor RF-architect-003) `config/workflows/pr-review.yaml` and `config/workflows/history-anatomy.yaml` gain the run-start `script-root` onEnter action in their initial state (command identical to `feature-verification.yaml` state `verify` first action), and every later plugin-script action in both resolves through the R4 snippet; no action in either repeats `superskill script path` / `config/plugin-scripts.json` probing except `script-root` itself.
+- [x] R9. (refactor RF-architect-001) Add `plugins/sp/lib/spur-bin.ts` exporting `spurCommand(spurBin)` (whitespace split → `{cmd, prefix}`) and `defaultSpurBin()` (`SPUR_BIN` > monorepo-local `apps/cli/src/index.ts` via bun > `spur`), moved verbatim from `wrapup-steps.ts:68` and `workflow-step-profile.ts:324`. Every surviving plugin script imports it; `rg -n 'function (spurCommand|defaultSpurBin)' plugins/sp/scripts` returns nothing. Behavior identical (existing script tests stay green unchanged).
 
 ### Acceptance Criteria
 
-- [ ] AC1 — sp skills, commands and workflows track every CLI move (req: R4, R5, R7, R8, R9)
-- [ ] AC2 — Pipeline checks keep only core gates strict (req: R1, R2, R3, R6)
+- [x] AC1 — sp skills, commands and workflows track every CLI move (req: R4, R5, R7, R8, R9)
+- [x] AC2 — Pipeline checks keep only core gates strict (req: R1, R2, R3, R6)
 
 Task-local observability: AC2 by `pipeline-action-budget.test.ts` green at ≤30/≤48 plus existing pipeline/routing/resilience tests; AC1 by the empty-except-exemptions baseline, the rule run, the `rg` sweep, a driver test covering `--actions-file`, and `bun run plugin-smoke`.
 
@@ -92,18 +92,104 @@ R=".spur/run/$__runId-script-root.json"; D="$(jq -r '.dir // empty' "$R" 2>/dev/
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `packages/app/src/index.ts:349` |
+| `packages/app/src/index.ts:352` |
+| `packages/app/src/index.ts:367` |
+| `packages/app/src/services/inline-run-setup.ts:918` |
+| `packages/app/tests/services/inline-run-driver.test.ts:18` |
+| `packages/app/tests/services/inline-run-driver.test.ts:445` |
+| `packages/app/tests/workflow/idea-pipeline-definition.test.ts:390` |
+| `packages/app/tests/workflow/idea-pipeline-definition.test.ts:499` |
+| `packages/app/tests/workflow/idea-pipeline-definition.test.ts:507` |
+| `packages/app/tests/workflow/idea-pipeline-definition.test.ts:513` |
+| `packages/app/tests/workflow/idea-pipeline-routing.test.ts:176` |
+| `packages/app/tests/workflow/idea-pipeline-routing.test.ts:183` |
+| `packages/app/tests/workflow/idea-pipeline-routing.test.ts:186` |
+| `packages/app/tests/workflow/idea-pipeline-routing.test.ts:65` |
+| `packages/app/tests/workflow/proportional-routing-pilots.test.ts:225` |
+| `packages/app/tests/workflow/task-pipeline-triage-routing.test.ts:169` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:417` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:553` |
+| `packages/domain/tests/planning/lifecycle-drift.test.ts:301` |
+| `packages/domain/tests/planning/lifecycle-drift.test.ts:303` |
+| `plugins/sp/scripts/inline-run-setup.ts:146` |
+| `plugins/sp/scripts/inline-run-setup.ts:150` |
+| `plugins/sp/scripts/inline-run-setup.ts:154` |
+| `plugins/sp/scripts/inline-run-setup.ts:166` |
+| `plugins/sp/scripts/inline-run-setup.ts:170` |
+| `plugins/sp/scripts/inline-run-setup.ts:179` |
+| `plugins/sp/scripts/inline-run-setup.ts:188` |
+| `plugins/sp/scripts/inline-run-setup.ts:196` |
+| `plugins/sp/scripts/inline-run-setup.ts:2` |
+| `plugins/sp/scripts/inline-run-setup.ts:23` |
+| `plugins/sp/scripts/inline-run-setup.ts:46` |
+| `plugins/sp/scripts/workflow-step-profile.ts:17` |
+| `plugins/sp/scripts/workflow-step-profile.ts:38` |
+| `plugins/sp/scripts/wrapup-steps.ts:36` |
+| `plugins/sp/scripts/wrapup-steps.ts:67` |
+| `plugins/sp/tests/inline-pipeline-driver.test.ts:251` |
+| `plugins/sp/tests/inline-pipeline-driver.test.ts:255` |
+| `plugins/sp/tests/inline-pipeline-driver.test.ts:262` |
+| `plugins/sp/tests/inline-pipeline-driver.test.ts:265` |
+| `plugins/sp/tests/inline-run-trace.test.ts:440` |
+| `plugins/sp/tests/pr-reviewing.test.ts:78` |
+| `plugins/sp/tests/task-pipeline-resilience.test.ts:251` |
+| `plugins/sp/tests/task-pipeline-resilience.test.ts:257` |
+| `plugins/sp/tests/task-pipeline-resilience.test.ts:336` |
+| `plugins/sp/tests/task-pipeline-resilience.test.ts:370` |
+| `plugins/sp/tests/task-pipeline-resilience.test.ts:387` |
+| `plugins/sp/tests/task-pipeline-resilience.test.ts:403` |
+| `plugins/sp/tests/workflow-step-profile.test.ts:14` |
+| `plugins/sp/tests/workflow-step-profile.test.ts:17` |
+| `scripts/commands/bundle-plugin-lib.ts:592` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | command |
+| R2 | MET | command |
+| R3 | MET | command |
+| R4 | MET | command |
+| R5 | MET | command |
+| R6 | MET | command |
+| R7 | MET | command |
+| R8 | MET | command |
+| R9 | MET | command |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | command | R4/R5/R7/R8/R9 rows above: fresh greps + sweeps clean (probe remnants only at script-root actions, 9/9 scripts exist, zero stray refs), inline-run-trace 12/0, spur-bin 3/0, inline-pipeline-driver 4/0 fresh; standing canonical gate PASS .spur/run/1007-test-gate.log (9483 pass / 0 fail, digest sha256:2167af41f720cbe15876e8e939696029081450dd7d8b37aa6c137ed6d21c1d8b) |
+| AC2 | MET | command | R1/R2/R3/R6 rows above: pipeline-action-budget 2 pass / 0 fail fresh (ratchet exactly ≤30/≤48), idea-pipeline-routing 5/0 fresh (single-writer pin), merges verified order/exit-0-preserving by direct read, advisory-only semantics intact |
+| AC-9 | MET | command | Feature scenario #9 (R9 pipeline check diet): budget ratchet idea≤30/task≤48 pinned by packages/app/tests/workflow/pipeline-action-budget.test.ts (2 pass / 0 fail fresh); idea + task pipeline merges land with command order and exit-0 preserved; --actions-file single-call batching (packages/app/src/services/inline-run-setup.ts:918-1028) replaces per-row action writes; advisory settle/report stay soft exit-0 |
+| AC-8 | MET | command | Feature scenario #8 (R8 sp skills track CLI moves): pr-review + history-anatomy workflow run-start onEnter restored byte-identical to feature-verification (zero stray refs, fresh sweep); plugins/sp/lib/spur-bin.ts single owner with generated .mjs twins regenerated in lockstep (spur-bin rung test 3 pass / 0 fail fresh); sp-script-placement rule PASS |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-09-30T07:18:26.207Z todo → testing (system)
+- 2026-09-30T07:18:47.172Z testing → done (system)
+

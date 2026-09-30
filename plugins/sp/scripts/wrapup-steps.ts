@@ -33,6 +33,7 @@ import { spawnSync } from 'node:child_process';
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { getEnvVars } from '../lib/env';
+import { spurCommand } from '../lib/spur-bin';
 
 export interface WrapupStepsEnv {
     __runId?: string;
@@ -63,15 +64,6 @@ function jqText(value: unknown): string {
 
 /** Canonical four-digit WBS string: whitespace is rejected, not trimmed (0783 R1). */
 export const WBS_PATTERN = /^[0-9]{4}$/;
-
-/** `spurBin` splits on whitespace into a command plus prefix args (so `bun x.ts` works). */
-export function spurCommand(spurBin: string | undefined): { cmd: string; prefix: string[] } {
-    const parts = (spurBin ?? 'spur')
-        .trim()
-        .split(/\s+/)
-        .filter((p) => p.length > 0);
-    return { cmd: parts[0] ?? 'spur', prefix: parts.slice(1) };
-}
 
 function spur(
     env: WrapupStepsEnv,

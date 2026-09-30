@@ -59,7 +59,7 @@ states:
       - kind: shell
         options:
           command: >-
-            mkdir -p .spur/run; S=plugins/sp/scripts/feature-verification-steps.ts; [ -f config/plugin-scripts.json -a -f "$S" ] || S="$(superskill script path sp feature-verification-steps.mjs 2>/dev/null)"; RUNNER=bun; case "$S" in *.mjs) RUNNER=node ;; esac; [ -f "$S" ] && "$RUNNER" "$S" verify --feature-id "$featureId" --run-id "$__runId" --spur-bin "$spurBin" || printf 'FAIL feature-verification failed closed — script not found — run superskill install sp --marketplace gobing-ai/spur\n' > ".spur/run/$__runId-feature-verification.status"; exit 0
+            mkdir -p .spur/run; eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/feature-verification-steps.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/feature-verification-steps.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; [ -f "$S" ] && "$RUNNER" "$S" verify --feature-id "$featureId" --run-id "$__runId" --spur-bin "$spurBin" || printf 'FAIL feature-verification failed closed — script not found — run superskill install sp --marketplace gobing-ai/spur\n' > ".spur/run/$__runId-feature-verification.status"; exit 0
 
   - id: done
     description: Terminal — repo-wide checks passed and the receipt is bound.

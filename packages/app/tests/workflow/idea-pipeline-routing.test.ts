@@ -62,10 +62,10 @@ function guardCommand(from: string, to: string): string {
 }
 
 /**
- * The 0945 R2 writer contract — one deterministic shell action, duplicated verbatim at the end
- * of BOTH ac-generate and feature-check onEnter (YAML has no include; byte-equality is
- * test-pinned). Fails safe: missing/corrupt needs-design JSON → `design`; any non-PASS or
- * missing check status → `FAIL`.
+ * The 0945 R2 writer contract — one deterministic shell action at the end of ac-generate
+ * onEnter. 1007 R2 deleted the former feature-check duplicate (its inputs cannot change across
+ * hitl.confirm), so ac-generate is the SINGLE writer. Fails safe: missing/corrupt needs-design
+ * JSON → `design`; any non-PASS or missing check status → `FAIL`.
  */
 export const IDEA_ROUTE_WRITER_COMMAND = [
     'mkdir -p .spur/run &&',
@@ -173,18 +173,17 @@ function shellActions(stateId: string): ActionDef[] {
 describe('idea-pipeline 0945 — route fact writer (R2)', () => {
     const cwd = mkdtempSync(join(tmpdir(), 'idea-routing-'));
 
-    test('the writer action is declared once at the end of BOTH ac-generate and feature-check onEnter, byte-equal', () => {
-        for (const stateId of ['ac-generate', 'feature-check']) {
-            const writer = shellActions(stateId).find((a) =>
-                (a.options?.command ?? '').includes('-idea-design-route.txt'),
-            );
-            expect(writer, `writer action missing from ${stateId} onEnter`).toBeDefined();
-            expect(writer?.options?.command).toBe(IDEA_ROUTE_WRITER_COMMAND);
-        }
+    test('the writer action is declared exactly once, at the end of ac-generate onEnter (1007 R2: single writer)', () => {
+        // Single writer: ac-generate owns it; feature-check has no route-writer shell.
+        const writers = ['ac-generate', 'feature-check'].filter((stateId) =>
+            shellActions(stateId).some((a) => (a.options?.command ?? '').includes('-idea-design-route.txt')),
+        );
+        expect(writers).toEqual(['ac-generate']);
         const acShells = shellActions('ac-generate').map((a) => a.options?.command ?? '');
+        const writer = acShells[acShells.length - 1];
+        expect(writer).toBe(IDEA_ROUTE_WRITER_COMMAND);
         // End of list: the writer runs AFTER the recorded checks it derives from.
-        expect(acShells[acShells.length - 1]).toBe(IDEA_ROUTE_WRITER_COMMAND);
-        expect(acShells[acShells.length - 1]).toContain('idea-ac-check.status');
+        expect(writer).toContain('idea-ac-check.status');
     });
 
     test('writer truth table: route folds design×needs_design fail-safe to design; readiness mirrors the recorded check', () => {

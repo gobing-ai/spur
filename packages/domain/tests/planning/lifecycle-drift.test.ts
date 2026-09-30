@@ -298,8 +298,12 @@ describe('task-pipeline.yaml structure (task 0062)', () => {
         );
         for (const gateState of ['test', 'test-recheck']) {
             const cmds = shellCmds(gateState).join('\n');
+            const verb = gateState === 'test' ? 'run' : 'recheck';
             expect(cmds, `${gateState}: gate hop must delegate to quality-gate.ts`).toContain(
-                `quality-gate.ts ${gateState === 'test' ? 'run' : 'recheck'}`,
+                'quality-gate.ts"+" RUNNER=bun',
+            );
+            expect(cmds, `${gateState}: gate hop must run the script via the resolver`).toContain(
+                `"$RUNNER" "$S" ${verb}`,
             );
         }
         expect(gateCore).toContain('-test-gate.log');

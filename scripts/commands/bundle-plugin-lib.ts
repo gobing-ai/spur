@@ -589,6 +589,8 @@ const INLINE_RUN_EXPORTS: readonly InlineRunExport[] = [
         'persistWorktreeRuns',
         'runDecideForInlineRun',
         // Task 1006 R3: mode runners moved into the app service; the plugin script dispatches them.
+        // Task 1007 R5: the driver's per-state batch emission (`--actions-file`).
+        'runInlineRunTraceBatch',
         'runInlineRunDecide',
         'runInlineRunFingerprint',
         'runInlineRunPersistOut',

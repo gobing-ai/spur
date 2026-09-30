@@ -201,7 +201,7 @@ Expected artifacts per stage (all run-scoped under `.spur/run/<run-id>-*`):
 | start | `-idea-input.md` (verbatim idea), `-idea-precheck-doctor.status` |
 | discovery | `-idea-eval-report.md` (with `## Requirement inventory`), `-idea-needs-design.json` |
 | feature-create | `-idea-feature-id.txt`, `-idea-goal.md`, `-idea-scope.md` |
-| ac-generate | `-idea-ac-content.md`, `-idea-ac-check.status`, `-idea-coverage.status` |
+| ac-generate | `-idea-ac-content.md`, `-idea-ac-check.status` |
 | system-design | `-idea-design-review.md`, `-idea-design-check.status` |
 | decompose | `-idea-task-batch.json`, `-idea-task-order.json` |
 | batch-create-run | `-idea-batch-create-result.json`, `-idea-batch-create.done`/`.failed` |
@@ -499,6 +499,25 @@ The driver reaches it through the existing run delegate (`$SETUP_SCRIPT`,
   back-dates the row's `started_at` from its own `completed_at` minus the measured duration
   (0887 R8), so `completed_at − started_at == duration_ms` exactly; a back-date failure is
   recorded (`action.backdate`) and never affects the run.
+
+- **A state with several actions (1007 R5)** — emit the whole state's boundaries in one call
+  instead of one `--action` invocation per action. Write a JSON array
+  (`[{node,kind,status,ok,durationMs}, …]` — same fields the `--action` flags carry) to a temp
+  file and pass it with `--actions-file`:
+
+  ```bash
+  bun "$SETUP_SCRIPT" --actions-file <actions.json> --run-id "$RUN_ID"
+  ```
+
+  Every row is recorded through the same writer as `--action` (one `action_runs` row per entry);
+  the batch is validated in full before the first write, so an invalid row or unreadable file
+  exits `1` with `{"ok":false}` and leaves **no** partial rows — fix the batch and re-emit. On
+  success it prints `{"ok":true,"runId":…,"recorded":<n>}` and exits `0`. Row emission stays
+  best-effort exactly like `--action`: if a row's write fails mid-batch, the failure is recorded
+  to the run record and the call reports `{"ok":false,…,"error":…}` but still exits `0` — the run
+  continues; never retry the batch or backfill by hand. `--actions-file` is exclusive with the
+  other mode flags (`--action`, `--decide`, `--close`, …): mixing them is a usage error (exit 2),
+  and a mixed call must be corrected, not silently split.
 
 - **A `decide` action (0941)** — the driver never executes the DecisionMaker itself; it delegates
   to the same app runner the engine registers, which writes the resultFile row (schemaVersion 1)

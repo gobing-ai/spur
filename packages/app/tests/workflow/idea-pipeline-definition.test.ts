@@ -387,9 +387,9 @@ describe('idea-pipeline definition — task ordering, roster refresh, handoff re
     const finalizeCmd =
         DEF.states.find((s) => s.id === 'handoff-finalize')?.onEnter?.find((a) => a.kind === 'shell')?.options
             ?.command ?? '';
-    const handoffNote = DEF.states.find((s) => s.id === 'handoff')?.onEnter?.find((a) => a.kind === 'note')?.options as
-        | { message?: string }
-        | undefined;
+    const handoffActions = DEF.states.find((s) => s.id === 'handoff')?.onEnter?.map((a) => a.kind) ?? [];
+    const handoffArtifact = DEF.states.find((s) => s.id === 'handoff')?.onEnter?.find((a) => a.kind === 'run.artifact')
+        ?.options as { path?: string; artifactKind?: string } | undefined;
 
     test('decompose instructs the task-order sidecar emission (R1)', () => {
         const agent = decomposeActions.find((a) => a.kind === 'agent.run');
@@ -496,19 +496,24 @@ describe('idea-pipeline definition — task ordering, roster refresh, handoff re
     test('handoff-finalize delegates to the bundled finalizeIdeaHandoff and fails closed (0824)', () => {
         // 0824: the finalize shell is a locator wrapper. The zip/deps/refresh/check/report
         // contract is pinned by finalizeIdeaHandoff unit tests (idea-handoff.test.ts); no
-        // second shell implementation may remain in the definition.
-        expect(finalizeCmd).toContain('packages/app/src/workflow/idea-handoff-cli.ts');
-        expect(finalizeCmd).toContain('superskill script path sp idea-handoff.mjs');
+        // second shell implementation may remain in the definition. 1007 R4: resolution
+        // goes through the run-scoped script-root probe, not superskill path probing.
+        expect(finalizeCmd).toContain('@sh"\\(.dir)/idea-handoff.ts"+" RUNNER=bun"');
+        expect(finalizeCmd).toContain('@sh"\\(.dir)/idea-handoff.mjs"+" RUNNER=node"');
+        expect(finalizeCmd).toContain('if [ -f "$S" ]; then');
+        expect(finalizeCmd).toContain('"$RUNNER" "$S"');
         expect(finalizeCmd).toContain('failed closed');
         expect(finalizeCmd).toContain('exit 1');
+        expect(finalizeCmd).not.toContain('superskill script path');
         expect(finalizeCmd).not.toContain('task deps');
         expect(finalizeCmd).not.toContain('task check');
         expect(finalizeCmd).not.toContain('feature refresh');
     });
 
-    test('terminal note points at the handoff report and no longer hardcodes runall', () => {
-        expect(handoffNote?.message).toContain(`\${vars.__runId}-idea-handoff.md`);
-        expect(handoffNote?.message).not.toContain('Next: /sp:dev-runall');
+    test('terminal handoff is carried by the run.artifact, not a note (1007 R2)', () => {
+        expect(handoffActions).not.toContain('note');
+        expect(handoffArtifact?.path).toBe(`.spur/run/\${vars.__runId}-idea-handoff.md`);
+        expect(handoffArtifact?.artifactKind).toBe('idea-handoff');
     });
 });
 

@@ -15,6 +15,7 @@ import {
     runInlineRunPersistOut,
     runInlineRunSetup,
     runInlineRunTrace,
+    runInlineRunTraceBatch,
     writeInlineRunOutcome,
 } from '../../src/services/inline-run-setup';
 
@@ -435,6 +436,125 @@ describe('runInlineRunSetup + runInlineRunTrace (moved driver bodies, 1006 R3)',
                 );
                 expect(bad.value).toBe(1);
                 expect(JSON.parse(bad.out.trimEnd())).toMatchObject({ ok: false });
+            });
+        } finally {
+            p.cleanup();
+        }
+    });
+});
+
+describe('runInlineRunTraceBatch (1007 R5)', () => {
+    test('records one action row per valid entry and reports {ok:true,recorded}', async () => {
+        const p = makeProject('trace-batch');
+        try {
+            await inDir(p.dir, async () => {
+                expect(
+                    await runInlineRunSetup({
+                        runId: 'run-1006-batch',
+                        file: 'inline-smoke',
+                        inventory: await INVENTORY(p.dir),
+                    }),
+                ).toBe(0);
+                const file = join(p.dir, '.spur/run/run-1006-batch-actions.json');
+                writeFileSync(
+                    file,
+                    JSON.stringify([
+                        { node: 'start', kind: 'shell', status: 'done', ok: true, durationMs: 3 },
+                        { node: 'start', kind: 'agent.run', status: 'failed', ok: false, durationMs: 9 },
+                    ]),
+                );
+                const batch = await captureAsync(() =>
+                    runInlineRunTraceBatch({ runId: 'run-1006-batch', actionsFile: file }),
+                );
+                expect(batch.value).toBe(0);
+                expect(JSON.parse(batch.out.trimEnd())).toMatchObject({
+                    ok: true,
+                    runId: 'run-1006-batch',
+                    recorded: 2,
+                });
+            });
+        } finally {
+            p.cleanup();
+        }
+    });
+
+    test('malformed input exits 1 before the database opens (no partial writes)', async () => {
+        const p = makeProject('trace-batch-bad');
+        try {
+            await inDir(p.dir, async () => {
+                const file = join(p.dir, '.spur/run/batch-not-json.json');
+                writeFileSync(file, '{nope');
+                const unreadable = await captureAsync(() =>
+                    runInlineRunTraceBatch({
+                        runId: 'run-1006-bad',
+                        actionsFile: join(p.dir, '.spur/run/absent.json'),
+                    }),
+                );
+                expect(unreadable.value).toBe(1);
+                expect(String(JSON.parse(unreadable.out.trimEnd()).error)).toContain('cannot read actions file');
+                const bad = await captureAsync(() =>
+                    runInlineRunTraceBatch({ runId: 'run-1006-bad', actionsFile: file }),
+                );
+                expect(bad.value).toBe(1);
+                expect(String(JSON.parse(bad.out.trimEnd()).error)).toContain('cannot read actions file');
+                const cases: Array<[string, string, string]> = [
+                    ['not-array', '{"node":"start"}', 'must be a JSON array'],
+                    ['null-entry', '[null]', 'entry must be a JSON object'],
+                    [
+                        'bad-node',
+                        '[{"node":" ","kind":"shell","status":"done","ok":true,"durationMs":1}]',
+                        'node must be a non-empty string',
+                    ],
+                    [
+                        'bad-kind',
+                        '[{"node":"start","kind":"","status":"done","ok":true,"durationMs":1}]',
+                        'kind must be a non-empty string',
+                    ],
+                    [
+                        'bad-status',
+                        '[{"node":"start","kind":"shell","status":"nope","ok":true,"durationMs":1}]',
+                        'status must be',
+                    ],
+                    [
+                        'bad-ok',
+                        '[{"node":"start","kind":"shell","status":"done","ok":"yes","durationMs":1}]',
+                        'ok must be a boolean',
+                    ],
+                    [
+                        'bad-duration',
+                        '[{"node":"start","kind":"shell","status":"done","ok":true,"durationMs":-1}]',
+                        'durationMs must be a finite non-negative number',
+                    ],
+                ];
+                for (const [tag, payload, expected] of cases) {
+                    const caseFile = join(p.dir, '.spur/run', `batch-${tag}.json`);
+                    writeFileSync(caseFile, payload);
+                    const batch = await captureAsync(() =>
+                        runInlineRunTraceBatch({ runId: 'run-1006-bad', actionsFile: caseFile }),
+                    );
+                    expect(batch.value, tag).toBe(1);
+                    expect(String(JSON.parse(batch.out.trimEnd()).error), tag).toContain(expected);
+                }
+            });
+        } finally {
+            p.cleanup();
+        }
+    });
+
+    test('emission failure on a missing run reports {ok:false} and exits 0 (best-effort contract)', async () => {
+        const p = makeProject('trace-batch-ghost');
+        try {
+            await inDir(p.dir, async () => {
+                const file = join(p.dir, '.spur/run/ghost-actions.json');
+                writeFileSync(file, '[{"node":"start","kind":"shell","status":"done","ok":true,"durationMs":1}]');
+                const batch = await captureAsync(() =>
+                    runInlineRunTraceBatch({ runId: 'run-1006-ghost-batch', actionsFile: file }),
+                );
+                expect(batch.value).toBe(0);
+                expect(JSON.parse(batch.out.trimEnd())).toMatchObject({ ok: false, recorded: 0 });
+                expect(readFileSync(join(p.dir, '.spur/run/run-1006-ghost-batch.md'), 'utf8')).toContain(
+                    'trace-emission-failed',
+                );
             });
         } finally {
             p.cleanup();

@@ -915,6 +915,118 @@ export async function runInlineRunTrace(input: InlineRunTraceInput): Promise<num
     }
 }
 
+/** One `--actions-file` batch row (1007 R5): the `--action` argv shape as JSON. */
+export interface InlineRunActionEntry {
+    readonly node: string;
+    readonly kind: string;
+    /** Finalize vocabulary only — a batch row never pauses or closes (0868 #4). */
+    readonly status: 'done' | 'failed';
+    readonly ok: boolean;
+    readonly durationMs: number;
+}
+
+/** Input for `runInlineRunTraceBatch` (`--actions-file`, 1007 R5). */
+export interface InlineRunTraceBatchInput {
+    readonly runId: string;
+    readonly actionsFile: string;
+}
+
+/**
+ * Batch trace emission (1007 R5): read a JSON array of `{node,kind,status,ok,durationMs}` rows
+ * and record one `action_runs` row per entry through the SAME `WorkflowActionTraceWriter` as
+ * `--action`. The whole file is parsed and validated BEFORE the database opens, so an
+ * unreadable file, invalid JSON, or a malformed row exits 1 with no partial writes. Accepted
+ * rows then emit best-effort (the `--action` contract): the first emission failure is logged
+ * to the run record, reported as `{ok:false,runId,recorded,error}`, and the driver exits 0 so
+ * the run still reaches its declared terminal state. Success: one stdout summary
+ * `{ok:true,runId,recorded}` exit 0.
+ */
+export async function runInlineRunTraceBatch(input: InlineRunTraceBatchInput): Promise<number> {
+    const batchFailed = (error: string): number => {
+        process.stdout.write(`${JSON.stringify({ ok: false, runId: input.runId, error })}\n`);
+        return 1;
+    };
+    let rows: unknown;
+    try {
+        rows = JSON.parse(readFileSync(input.actionsFile, 'utf8'));
+    } catch (error) {
+        return batchFailed(
+            `cannot read actions file ${input.actionsFile}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+    }
+    if (!Array.isArray(rows)) {
+        return batchFailed('actions file must be a JSON array of {node,kind,status,ok,durationMs}');
+    }
+    const entries: InlineRunActionEntry[] = [];
+    const rowError = (index: number, error: string): string => `actions[${index}]: ${error}`;
+    for (const [index, row] of rows.entries()) {
+        if (row === null || typeof row !== 'object' || Array.isArray(row)) {
+            return batchFailed(rowError(index, 'entry must be a JSON object'));
+        }
+        const record = row as Record<string, unknown>;
+        const { node, kind, status, ok, durationMs } = record;
+        if (typeof node !== 'string' || node.trim() === '') {
+            return batchFailed(rowError(index, 'node must be a non-empty string'));
+        }
+        if (typeof kind !== 'string' || kind.trim() === '') {
+            return batchFailed(rowError(index, 'kind must be a non-empty string'));
+        }
+        if (typeof status !== 'string' || !isInlineRunActionStatus(status)) {
+            return batchFailed(rowError(index, 'status must be "done" or "failed"'));
+        }
+        if (typeof ok !== 'boolean') return batchFailed(rowError(index, 'ok must be a boolean'));
+        if (typeof durationMs !== 'number' || !Number.isFinite(durationMs) || durationMs < 0) {
+            return batchFailed(rowError(index, 'durationMs must be a finite non-negative number'));
+        }
+        entries.push({ node, kind, status, ok, durationMs });
+    }
+    let projectDb: InlineRunProjectDb | undefined;
+    let recorded = 0;
+    const reportEmissionFailure = (node: string, kind: string, error: string): void => {
+        appendInlineRunLogLine(
+            input.runId,
+            `trace-emission-failed operation=action.finish run=${input.runId} node=${node} kind=${kind}: ${error}`,
+        );
+        process.stdout.write(`${JSON.stringify({ ok: false, runId: input.runId, recorded, error })}\n`);
+    };
+    try {
+        projectDb = await openInlineRunProjectDb(process.cwd());
+        const writer = createWorkflowActionTraceWriter(projectDb.adapter, (failure: unknown) => {
+            const detail = failure as { operation?: string; error?: string };
+            appendInlineRunLogLine(
+                input.runId,
+                `trace-emission-failed operation=${detail.operation ?? 'action.finish'} run=${input.runId}: ${detail.error ?? 'unknown error'}`,
+            );
+        });
+        for (const entry of entries) {
+            const result = (await writer.recordAction({
+                runId: input.runId,
+                node: entry.node,
+                kind: entry.kind,
+                status: entry.status,
+                ok: entry.ok,
+                durationMs: entry.durationMs,
+            })) as Record<string, unknown>;
+            if (result.ok === true) {
+                recorded += 1;
+                continue;
+            }
+            const failure = result.failure as { error?: string } | undefined;
+            reportEmissionFailure(entry.node, entry.kind, failure?.error ?? 'unknown trace emission failure');
+            return 0;
+        }
+        process.stdout.write(`${JSON.stringify({ ok: true, runId: input.runId, recorded })}\n`);
+        return 0;
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        appendInlineRunLogLine(input.runId, `trace-emission-failed run=${input.runId}: ${message}`);
+        process.stdout.write(`${JSON.stringify({ ok: false, runId: input.runId, recorded, error: message })}\n`);
+        return 0;
+    } finally {
+        projectDb?.close();
+    }
+}
+
 // ─── Driver mode runners (task 1006 R3) ──────────────────────────────────────
 // The per-mode bodies moved from plugins/sp/scripts/inline-run-setup.ts so the plugin script
 // stays within its ADR-130 glue budget (argv/env + entry resolution + dispatch). Each runner

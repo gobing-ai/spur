@@ -248,15 +248,16 @@ esac`,
     // 0823 (d): the gate shells are thin resolvers — quality-gate.ts owns the retry loop,
     // findings cap, bounded summary and status artifact (behavioral coverage lives in
     // plugins/sp/tests/quality-gate.test.ts). Here: resolution order and fail-closed shape.
-    test('gate shells resolve quality-gate.ts, fall back to superskill, and fail closed (0823 d)', () => {
+    test('gate shells resolve quality-gate through the script-root probe and fail closed (0823 d, 1007 R4)', () => {
         for (const [stateId, shellIndex, mode] of [
             ['test', 2, 'run'],
             ['test-recheck', 0, 'recheck'],
         ] as const) {
             const command = commandFor(stateId, shellIndex);
-            expect(command).toContain(`quality-gate.ts ${mode}`);
-            expect(command).toContain('superskill script path sp quality-gate.mjs');
-            expect(command).toContain(`node "$Q" ${mode}`);
+            expect(command).toContain('@sh"\\(.dir)/quality-gate.ts"+" RUNNER=bun"');
+            expect(command).toContain('@sh"\\(.dir)/quality-gate.mjs"+" RUNNER=node"');
+            expect(command).toContain(`"$RUNNER" "$S" ${mode}`);
+            expect(command).not.toContain('superskill script path');
             // Fail closed: an unresolvable gate writes FAIL (never PASS) and stays soft.
             expect(command).toContain('failed closed');
             expect(command).toContain(`printf 'FAIL\\n' > ".spur/run/$wbs-test-gate.status"`);
@@ -332,8 +333,10 @@ esac`,
         expect(foldIdx).toBe(cmds.length - 2); // followed only by the R5 re-record step
         // Hard action: no exit-0 blanket — a scanner crash must fail record closed.
         expect(cmds[foldIdx]?.trim().endsWith('exit 0')).toBe(false);
-        // Repo-first, then superskill twin, failing closed (quality-gate pattern).
-        expect(cmds[foldIdx]).toContain('superskill script path sp residual-scan.mjs');
+        // Resolves through the run-scoped script-root probe, failing closed (1007 R4).
+        expect(cmds[foldIdx]).toContain('@sh"\\(.dir)/residual-scan.ts"+" RUNNER=bun"');
+        expect(cmds[foldIdx]).toContain('@sh"\\(.dir)/residual-scan.mjs"+" RUNNER=node"');
+        expect(cmds[foldIdx]).not.toContain('superskill script path');
         // Fail-closed completion gate: the done guard still re-asserts PASS + proof digest,
         // so a fold-downgraded PARTIAL verdict can never certify done (0983 R3).
         const doneGuard = PIPELINE.transitions?.find((t) => t.from === 'record' && t.to === 'done')?.guard?.options
@@ -364,6 +367,12 @@ esac`,
                 join(import.meta.dir, '..', 'lib', 'residual-scan.generated.mjs'),
                 join(dir, 'plugins', 'sp', 'lib', 'residual-scan.generated.mjs'),
             );
+            // 1007 R4: the sweep resolves through the run-scoped script-root probe — stage
+            // the identity file the snippet reads (source-repo → the staged scripts dir).
+            writeFileSync(
+                join(dir, '.spur', 'run', '0983-script-root.json'),
+                `${JSON.stringify({ mode: 'source-repo', source: 'project', dir: join(dir, 'plugins', 'sp', 'scripts') })}\n`,
+            );
             const fold = shellCommands('record').find((c) => c.includes('residual-scan') && c.includes('fold'));
             if (fold === undefined) throw new Error('record sweep command missing');
             const verdict = { wbs: '0983', verdict: 'PASS', requirements: [], checks: [] };
@@ -375,7 +384,11 @@ esac`,
                 );
             // Pass path: post-record, every box flipped (record flipped the proven R/AC ones).
             writeFileSync(join(dir, '.spur', 'run', '0983-verdict.json'), `${JSON.stringify(verdict)}\n`);
-            const pass = runShell(fold, dir, { wbs: '0983', spurBin: stubFor('## Plan\n\n- [x] plan step\n') });
+            const pass = runShell(fold, dir, {
+                __runId: '0983',
+                wbs: '0983',
+                spurBin: stubFor('## Plan\n\n- [x] plan step\n'),
+            });
             expect(pass.exitCode).toBe(0);
             const kept = JSON.parse(readFileSync(join(dir, '.spur', 'run', '0983-verdict.json'), 'utf8')) as {
                 verdict: string;
@@ -387,7 +400,11 @@ esac`,
             // Fail path: one open Plan box stays blocking and downgrades PASS → PARTIAL —
             // no section becomes deferrable (0983 R2).
             writeFileSync(join(dir, '.spur', 'run', '0983-verdict.json'), `${JSON.stringify(verdict)}\n`);
-            const fail = runShell(fold, dir, { wbs: '0983', spurBin: stubFor('## Plan\n\n- [ ] open plan step\n') });
+            const fail = runShell(fold, dir, {
+                __runId: '0983',
+                wbs: '0983',
+                spurBin: stubFor('## Plan\n\n- [ ] open plan step\n'),
+            });
             expect(fail.exitCode).toBe(0);
             const folded = JSON.parse(readFileSync(join(dir, '.spur', 'run', '0983-verdict.json'), 'utf8')) as {
                 verdict: string;

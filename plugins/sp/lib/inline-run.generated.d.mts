@@ -7,6 +7,7 @@ export declare const isInlineRunCloseStatus: typeof import('@gobing-ai/spur-app'
 export declare const openInlineRunProjectDb: typeof import('@gobing-ai/spur-app').openInlineRunProjectDb;
 export declare const persistWorktreeRuns: typeof import('@gobing-ai/spur-app').persistWorktreeRuns;
 export declare const runDecideForInlineRun: typeof import('@gobing-ai/spur-app').runDecideForInlineRun;
+export declare const runInlineRunTraceBatch: typeof import('@gobing-ai/spur-app').runInlineRunTraceBatch;
 export declare const runInlineRunDecide: typeof import('@gobing-ai/spur-app').runInlineRunDecide;
 export declare const runInlineRunFingerprint: typeof import('@gobing-ai/spur-app').runInlineRunFingerprint;
 export declare const runInlineRunPersistOut: typeof import('@gobing-ai/spur-app').runInlineRunPersistOut;

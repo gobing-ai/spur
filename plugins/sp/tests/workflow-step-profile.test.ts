@@ -11,10 +11,10 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getEnvVar, getEnvVars, removeEnvVar, setEnvVar } from '@gobing-ai/ts-utils';
+import { defaultSpurBin } from '../lib/spur-bin';
 import {
     type ActionCostAttributionLike,
     buildStepProfile,
-    defaultSpurBin,
     formatStepProfileHuman,
     main,
     parseStepProfileCliArgs,

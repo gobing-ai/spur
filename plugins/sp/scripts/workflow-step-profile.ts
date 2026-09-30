@@ -14,9 +14,7 @@
  * parse, or the workflow argument is missing.
  */
 import { spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { getEnvVar } from '../lib/env';
+import { defaultSpurBin } from '../lib/spur-bin';
 import {
     buildStepProfile,
     DEFAULT_LAST,
@@ -36,19 +34,6 @@ export interface StepProfileCliArgs {
     spurBin: string;
     json: boolean;
     help: boolean;
-}
-
-/**
- * Resolve the spur CLI monorepo-safely (twin-safe resolution:
- * self-contained and no plugin script imports another):
- * --spur-bin > SPUR_BIN > monorepo-local CLI entry > PATH `spur`.
- */
-export function defaultSpurBin(): string {
-    const fromEnv = getEnvVar('SPUR_BIN');
-    if (fromEnv) return fromEnv;
-    const local = fileURLToPath(new URL('../../../apps/cli/src/index.ts', import.meta.url));
-    if (existsSync(local)) return `bun ${local}`;
-    return 'spur';
 }
 
 function positiveInt(raw: string | undefined, fallback: number): number {

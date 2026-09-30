@@ -11,6 +11,12 @@ function getEnvVars() {
   return process.env;
 }
 
+// plugins/sp/lib/spur-bin.ts
+function spurCommand(spurBin) {
+  const parts = (spurBin ?? "spur").trim().split(/\s+/).filter((p) => p.length > 0);
+  return { cmd: parts[0] ?? "spur", prefix: parts.slice(1) };
+}
+
 // plugins/sp/scripts/wrapup-steps.ts
 function jqPick(...values) {
   for (const value of values) {
@@ -23,10 +29,6 @@ function jqText(value) {
   return typeof value === "string" ? value : JSON.stringify(value);
 }
 var WBS_PATTERN = /^[0-9]{4}$/;
-function spurCommand(spurBin) {
-  const parts = (spurBin ?? "spur").trim().split(/\s+/).filter((p) => p.length > 0);
-  return { cmd: parts[0] ?? "spur", prefix: parts.slice(1) };
-}
 function spur(env, args, options = {}) {
   const { cmd, prefix } = spurCommand(env.spurBin);
   const result = spawnSync(cmd, [...prefix, ...args], {
@@ -405,7 +407,6 @@ export {
   writeRouteReason,
   verdictFromTestingSection,
   taskStatusOf,
-  spurCommand,
   runMetrics,
   runFeatureTransition,
   resolveTasks,

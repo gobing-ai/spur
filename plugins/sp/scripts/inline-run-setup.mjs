@@ -19,6 +19,7 @@ function usage() {
     "Usage: bun plugins/sp/scripts/inline-run-setup.ts --run-id <id> --file <definition> [--spur-bin <path>]",
     "       bun plugins/sp/scripts/inline-run-setup.ts --fingerprint --task-file <path> [--feature-file <path>] [--spur-bin <path>]",
     "       bun plugins/sp/scripts/inline-run-setup.ts --action --run-id <id> --node <state> --kind <kind> --status <done|failed> --ok <true|false> --duration-ms <n> [--spur-bin <path>]",
+    "       bun plugins/sp/scripts/inline-run-setup.ts --actions-file <json-file> --run-id <id> [--spur-bin <path>]  (1007 R5 batch trace emission)",
     "       bun plugins/sp/scripts/inline-run-setup.ts --close --run-id <id> --status <done|failed|paused> [--reason <terminal-reason>] [--spur-bin <path>]",
     "       bun plugins/sp/scripts/inline-run-setup.ts --persist-out --from <worktree-path> [--task-file <path>]... [--spur-bin <path>]",
     "       terminal-reason is a closed enum (0937 R2): done, paused-operator, failed-check, failed-agent, failed-timeout, failed-guard, cancelled, interrupted, retry-exhausted",
@@ -34,12 +35,8 @@ function refuseUnsafeRunId(runId) {
   process.exit(1);
 }
 function resolveAppEntry(spurBin) {
-  let candidates = [];
-  if (spurBin !== "") {
-    candidates = [spurBin];
-  } else {
-    candidates = [fileURLToPath(new URL("../../../apps/cli/src/index.ts", import.meta.url))];
-  }
+  const fallback = fileURLToPath(new URL("../../../apps/cli/src/index.ts", import.meta.url));
+  const candidates = spurBin !== "" ? [spurBin] : [fallback];
   for (const candidate of candidates) {
     const tokens = candidate.split(/\s+/).filter(Boolean);
     const mainModule = [...tokens].reverse().find((t) => t.endsWith(".ts"));
@@ -127,12 +124,24 @@ async function main() {
   const reason = flags.get("--reason") ?? "";
   const okRaw = flags.get("--ok") ?? "";
   const durationRaw = flags.get("--duration-ms") ?? "";
+  const actionsFile = flags.get("--actions-file") ?? "";
   if (fingerprint) {
     if (runId !== "" || file !== "" || taskFiles.length !== 1 || (taskFiles[0] ?? "").trim() === "")
       usage();
-    const { entry: entry2 } = resolveAppEntry(spurBin);
-    const app2 = await import(entry2);
+    const app2 = await import(resolveAppEntry(spurBin).entry);
     process.exit(await app2.runInlineRunFingerprint({ taskFile: taskFiles[0] ?? "", featureFile }));
+  }
+  if (actionsFile !== "") {
+    if (action || close || fingerprint || decide || persistOut || file !== "" || taskFiles.length > 0)
+      usage();
+    if (runId.trim() === "" || status !== "" || node !== "" || kind !== "")
+      usage();
+    if (okRaw !== "" || durationRaw !== "")
+      usage();
+    if (!SAFE_RUN_ID_RE.test(runId))
+      refuseUnsafeRunId(runId);
+    const app2 = await import(resolveAppEntry(spurBin).entry);
+    process.exit(await app2.runInlineRunTraceBatch({ runId, actionsFile }));
   }
   if (decide) {
     if (action || close || fingerprint || file !== "" || taskFiles.length > 0)
@@ -141,19 +150,18 @@ async function main() {
       usage();
     if (!SAFE_RUN_ID_RE.test(runId))
       refuseUnsafeRunId(runId);
-    const decideFailed = (error) => {
-      process.stdout.write(`${JSON.stringify({ ok: false, runId, error })}
-`);
-      return 1;
-    };
     try {
       const { entry: entry2, portable: portable2 } = resolveAppEntry(spurBin);
       const app2 = await import(entry2);
-      const lib = await import(fileURLToPath(new URL("../lib/inline-run.generated.mjs", import.meta.url)));
+      const bundlePath = fileURLToPath(new URL("../lib/inline-run.generated.mjs", import.meta.url));
+      const lib = await import(bundlePath);
       const enabled = await lib.resolveDecideDecisionMakerEnabled(process.cwd(), portable2 ? { embeddedSchemas: lib.EMBEDDED_SPUR_SCHEMAS } : undefined);
       process.exit(await app2.runInlineRunDecide({ runId, node, optionsFile: optionsJson, enabled }));
     } catch (error) {
-      process.exit(decideFailed(error instanceof Error ? error.message : String(error)));
+      const message = error instanceof Error ? error.message : String(error);
+      process.stdout.write(`${JSON.stringify({ ok: false, runId, error: message })}
+`);
+      process.exit(1);
     }
   }
   if (persistOut) {
@@ -161,8 +169,7 @@ async function main() {
       usage();
     if (from.trim() === "" || taskFiles.some((taskFile) => taskFile.trim() === ""))
       usage();
-    const { entry: entry2 } = resolveAppEntry(spurBin);
-    const app2 = await import(entry2);
+    const app2 = await import(resolveAppEntry(spurBin).entry);
     process.exit(await app2.runInlineRunPersistOut({ from, taskFiles }));
   }
   if (action || close) {
@@ -172,8 +179,7 @@ async function main() {
       usage();
     if (!SAFE_RUN_ID_RE.test(runId))
       refuseUnsafeRunId(runId);
-    const { entry: entry2 } = resolveAppEntry(spurBin);
-    const app2 = await import(entry2);
+    const app2 = await import(resolveAppEntry(spurBin).entry);
     if (close) {
       if (!app2.isInlineRunCloseStatus(status))
         usage();

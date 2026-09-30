@@ -1,8 +1,7 @@
 #!/usr/bin/env bun
-/** Inline run setup driver (ADR-117/1006 R3): thin glue — argv/env, app-entry resolution, the
- *  installed-CLI handshake, mode dispatch. Mode bodies live in the bundled app service and are
- *  reached as `runInlineRun*` exports. The `.mjs` twin re-enters Bun in `main()` (SQLite) and
- *  imports the bundle dynamically, so bare `node` never loads app code at module scope. */
+/** Inline run setup driver (ADR-117/1006 R3): thin glue — argv/env, app-entry resolution, the installed-CLI
+ *  handshake, mode dispatch. Mode bodies live in the bundled app service (`runInlineRun*` exports); the `.mjs`
+ *  twin re-enters Bun in `main()` (SQLite) and imports the bundle dynamically, so bare `node` never loads app code. */
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -21,6 +20,7 @@ function usage(): never {
             'Usage: bun plugins/sp/scripts/inline-run-setup.ts --run-id <id> --file <definition> [--spur-bin <path>]',
             '       bun plugins/sp/scripts/inline-run-setup.ts --fingerprint --task-file <path> [--feature-file <path>] [--spur-bin <path>]',
             '       bun plugins/sp/scripts/inline-run-setup.ts --action --run-id <id> --node <state> --kind <kind> --status <done|failed> --ok <true|false> --duration-ms <n> [--spur-bin <path>]',
+            '       bun plugins/sp/scripts/inline-run-setup.ts --actions-file <json-file> --run-id <id> [--spur-bin <path>]  (1007 R5 batch trace emission)',
             '       bun plugins/sp/scripts/inline-run-setup.ts --close --run-id <id> --status <done|failed|paused> [--reason <terminal-reason>] [--spur-bin <path>]',
             '       bun plugins/sp/scripts/inline-run-setup.ts --persist-out --from <worktree-path> [--task-file <path>]... [--spur-bin <path>]',
             '       terminal-reason is a closed enum (0937 R2): done, paused-operator, failed-check, failed-agent, failed-timeout, failed-guard, cancelled, interrupted, retry-exhausted',
@@ -43,12 +43,8 @@ function refuseUnsafeRunId(runId: string): never {
 
 /** Resolve the app entry: --spur-bin/SPUR_BIN main module if it proves a repo checkout, else the adjacent bundle. */
 function resolveAppEntry(spurBin: string): { entry: string; portable: boolean } {
-    let candidates: string[] = [];
-    if (spurBin !== '') {
-        candidates = [spurBin];
-    } else {
-        candidates = [fileURLToPath(new URL('../../../apps/cli/src/index.ts', import.meta.url))];
-    }
+    const fallback = fileURLToPath(new URL('../../../apps/cli/src/index.ts', import.meta.url));
+    const candidates = spurBin !== '' ? [spurBin] : [fallback];
     for (const candidate of candidates) {
         const tokens = candidate.split(/\s+/).filter(Boolean);
         // Main module = last path-like token; only a .ts source entry proves a repo checkout.
@@ -147,28 +143,32 @@ async function main(): Promise<void> {
     const reason = flags.get('--reason') ?? '';
     const okRaw = flags.get('--ok') ?? '';
     const durationRaw = flags.get('--duration-ms') ?? '';
+    const actionsFile = flags.get('--actions-file') ?? '';
 
     if (fingerprint) {
         if (runId !== '' || file !== '' || taskFiles.length !== 1 || (taskFiles[0] ?? '').trim() === '') usage();
-        const { entry } = resolveAppEntry(spurBin);
-        const app = (await import(entry)) as InlineApp;
+        const app = (await import(resolveAppEntry(spurBin).entry)) as InlineApp;
         process.exit(await app.runInlineRunFingerprint({ taskFile: taskFiles[0] ?? '', featureFile }));
+    }
+
+    if (actionsFile !== '') {
+        if (action || close || fingerprint || decide || persistOut || file !== '' || taskFiles.length > 0) usage();
+        if (runId.trim() === '' || status !== '' || node !== '' || kind !== '') usage();
+        if (okRaw !== '' || durationRaw !== '') usage();
+        if (!SAFE_RUN_ID_RE.test(runId)) refuseUnsafeRunId(runId);
+        const app = (await import(resolveAppEntry(spurBin).entry)) as InlineApp;
+        process.exit(await app.runInlineRunTraceBatch({ runId, actionsFile }));
     }
 
     if (decide) {
         if (action || close || fingerprint || file !== '' || taskFiles.length > 0) usage();
         if (runId.trim() === '' || node.trim() === '' || optionsJson.trim() === '') usage();
         if (!SAFE_RUN_ID_RE.test(runId)) refuseUnsafeRunId(runId);
-        const decideFailed = (error: string): number => {
-            process.stdout.write(`${JSON.stringify({ ok: false, runId, error })}\n`);
-            return 1;
-        };
         try {
             const { entry, portable } = resolveAppEntry(spurBin);
             const app = (await import(entry)) as InlineApp;
-            const lib = (await import(
-                fileURLToPath(new URL('../lib/inline-run.generated.mjs', import.meta.url))
-            )) as typeof import('../lib/inline-run.generated.mjs');
+            const bundlePath = fileURLToPath(new URL('../lib/inline-run.generated.mjs', import.meta.url));
+            const lib = (await import(bundlePath)) as typeof import('../lib/inline-run.generated.mjs');
             // Decide-enabled switch resolved at the driver boundary (ADR-082), passed as a param.
             const enabled = await lib.resolveDecideDecisionMakerEnabled(
                 process.cwd(),
@@ -176,15 +176,16 @@ async function main(): Promise<void> {
             );
             process.exit(await app.runInlineRunDecide({ runId, node, optionsFile: optionsJson, enabled }));
         } catch (error) {
-            process.exit(decideFailed(error instanceof Error ? error.message : String(error)));
+            const message = error instanceof Error ? error.message : String(error);
+            process.stdout.write(`${JSON.stringify({ ok: false, runId, error: message })}\n`);
+            process.exit(1);
         }
     }
 
     if (persistOut) {
         if (fingerprint || decide || action || close || runId !== '' || file !== '') usage();
         if (from.trim() === '' || taskFiles.some((taskFile) => taskFile.trim() === '')) usage();
-        const { entry } = resolveAppEntry(spurBin);
-        const app = (await import(entry)) as InlineApp;
+        const app = (await import(resolveAppEntry(spurBin).entry)) as InlineApp;
         process.exit(await app.runInlineRunPersistOut({ from, taskFiles }));
     }
 
@@ -192,8 +193,7 @@ async function main(): Promise<void> {
         if (action && close) usage();
         if (runId.trim() === '' || status.trim() === '') usage();
         if (!SAFE_RUN_ID_RE.test(runId)) refuseUnsafeRunId(runId);
-        const { entry } = resolveAppEntry(spurBin);
-        const app = (await import(entry)) as InlineApp;
+        const app = (await import(resolveAppEntry(spurBin).entry)) as InlineApp;
         if (close) {
             if (!app.isInlineRunCloseStatus(status)) usage();
             // 0937 R2: failed close needs a declared closed-enum reason — before any write.

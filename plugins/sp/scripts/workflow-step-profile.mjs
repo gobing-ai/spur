@@ -3,13 +3,26 @@
 
 // plugins/sp/scripts/workflow-step-profile.ts
 import { spawnSync } from "child_process";
-import { existsSync } from "fs";
-import { fileURLToPath } from "url";
+
+// plugins/sp/lib/spur-bin.ts
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 // plugins/sp/lib/env.ts
 function getEnvVar(name, fallback) {
   const raw = process.env[name];
   return raw === undefined ? fallback : raw;
+}
+
+// plugins/sp/lib/spur-bin.ts
+function defaultSpurBin() {
+  const fromEnv = getEnvVar("SPUR_BIN");
+  if (fromEnv)
+    return fromEnv;
+  const local = fileURLToPath(new URL("../../../apps/cli/src/index.ts", import.meta.url));
+  if (existsSync(local))
+    return `bun ${local}`;
+  return "spur";
 }
 
 // plugins/sp/lib/step-profile.generated.mjs
@@ -177,15 +190,6 @@ function formatStepProfileHuman(profile) {
 }
 
 // plugins/sp/scripts/workflow-step-profile.ts
-function defaultSpurBin() {
-  const fromEnv = getEnvVar("SPUR_BIN");
-  if (fromEnv)
-    return fromEnv;
-  const local = fileURLToPath(new URL("../../../apps/cli/src/index.ts", import.meta.url));
-  if (existsSync(local))
-    return `bun ${local}`;
-  return "spur";
-}
 function positiveInt(raw, fallback) {
   const parsed = Number.parseInt(raw ?? "", 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
@@ -323,7 +327,6 @@ export {
   main,
   formatStepProfileHuman,
   extractExecutions,
-  defaultSpurBin,
   buildStepProfile,
   buildRows,
   STEP_PROFILE_USAGE,
