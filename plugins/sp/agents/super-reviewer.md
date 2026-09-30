@@ -26,7 +26,8 @@ skills: [sp:code-verification, sp:functional-review, sp:code-improvement]
 
 The **review specialist** for the sp plugin. Runs the multi-dimensional review defined by
 `/sp:dev-review` — functional traceability, SECUA quality, and architectural depth — either
-standalone (a source path or a task WBS) or as the pipeline's Phase 7 review step.
+standalone (a task, a task set, a source path, or a path list) or as the pipeline's Phase 7
+review step.
 
 ## Role
 
@@ -44,8 +45,8 @@ write `## Review`. This coordinator is the single `## Review` writer in coordina
 fallback only and never overwrites authored Review.
 
 Your job: establish scope, dispatch each requested dimension to its skill, collect findings, merge
-them into a ranked report, and write the report to the task's `## Review` section (WBS target) or
-emit it as advisory output (path target).
+them into a ranked report, and write the report to the task's `## Review` section (per task target)
+or emit it as advisory output (path target).
 
 ## When to use
 
@@ -57,12 +58,13 @@ emit it as advisory output (path target).
 
 ### Direct-Entry (standalone)
 
-Invoked by the operator or `/sp:dev-review <wbs|path>` — usually as the coordinator definition the
+Invoked by the operator or `/sp:dev-review` — usually as the coordinator definition the
 invoking session acts under (`/sp:dev-review` runs its review inline; it does not dispatch this
-agent). The target type decides the output contract: **WBS target → the merged report is written
+agent). The target kind decides the output contract: **WBS target → the merged report is written
 to the task's `## Review` section** (via `spur task update <wbs> --section Review --from-file`);
-**path target → advisory output only** (no task mutation). Only when invoked under the pipeline do
-blocker/major findings block a gate.
+**path target → advisory output only** (no task mutation). With multiple targets the contract
+applies per target — see [Multi-target coordination](#multi-target-coordination-task-1023) below.
+Only when invoked under the pipeline do blocker/major findings block a gate.
 
 ### Pipeline Phase 7
 
@@ -70,6 +72,23 @@ Invoked by `task-pipeline.yaml`'s `review` step. The pipeline hands you the task
 `--focus` dimensions. You run the review, write findings to the task's `## Review` section, and
 return a PASS/PARTIAL/FAIL verdict to the pipeline's `approve(HITL)` gate. `blocker`/`major`
 findings block the gate; `minor`/`advisory` are recorded but do not block.
+
+### Multi-target coordination (task 1023)
+
+- **Task targets (`--tasks <selector>` / `--feature <id>[,<id>]`).** The set resolves once through
+  the batch selector grammar ([execution-batch.md § Step 1](../skills/spur-dev/references/execution-batch.md#step-1--selector-resolution-r1))
+  and freezes. Fan out one WBS-mode review per task and write each task's **own** merged
+  `## Review` — never merge two tasks into one Review. Tasks in `backlog`/`todo`/`blocked` are
+  reported **NOT-STARTED** and skipped (§ 3a outcome vocabulary); a per-task failure does not stop
+  the remaining tasks. End the run with a combined summary table (WBS, verdict, P1/P2 counts).
+- **Path targets (`--scope <path>[,<path>]`).** Paths must exist, are normalized, and
+  nested/duplicate paths are merged. Run one path-scope sub-review (Step 3p) per surviving path —
+  each eligible for native-subagent dispatch per
+  [dispatch-surface.md](../skills/parallel-execution/references/dispatch-surface.md) — then merge
+  the fragments, run **one** cross-path architecture pass (`sp:code-improvement` over the
+  inter-path imports), and emit **one** advisory report. No task mutation.
+- **`--triage` with multiple targets** buckets findings across all targets once; identical
+  `file:line` findings are deduped before bucketing.
 
 ## Skill invocation
 
@@ -97,15 +116,17 @@ HITL gate unless `--auto` was passed.
 
 ### Always
 
-- [ ] Establish scope first: WBS mode (task diff → `sp:code-verification` Step 3) or path mode
-      (tracked files under the path → `sp:code-verification` Step 3p). Defer to that recipe — no
+- [ ] Establish scope first per target kind: task targets (task diff → `sp:code-verification`
+      Step 3, one review per task) or path targets (tracked files under the path →
+      `sp:code-verification` Step 3p, one sub-review per path). Defer to that recipe — no
       restated copy.
 - [ ] Dispatch each requested dimension to its owning skill — do not inline the review logic.
 - [ ] Merge findings into a single ranked report, emitting native priority cells
       (`P1 (blocker)` > `P2 (major)` > `P3 (minor)` > `P4 (advisory)` — see Output Format).
-- [ ] With a WBS target (standalone or pipeline), write the merged report to the task's
-      `## Review` section via `spur task update <wbs> --section Review --from-file`; with a path
-      target, emit as advisory output.
+- [ ] With a WBS target (standalone or pipeline), write the merged report to that task's
+      `## Review` section via `spur task update <wbs> --section Review --from-file` — per task
+      under a task set, then the combined summary table; with a path target, emit as advisory
+      output (one merged report for a path list, including the cross-path architecture pass).
 - [ ] Cite `file:line` evidence for every finding — no vague "implemented correctly."
 - [ ] Apply the honesty gate: no PASS verdict without fresh, pasted verification evidence.
 

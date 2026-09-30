@@ -589,11 +589,14 @@ non-PASS verify verdict, or a HITL pause that ends the run take the WT-5 retenti
 full pipeline is eligible — `--worktree --mode implement` is rejected (WT-7), because that mode is
 the pipeline's implement stage and already runs in the driver's tree.
 
-**Review triage `dev-review` (run of one).** `/sp:dev-review <target> --triage --worktree [<name>]`
+**Review triage `dev-review` (run of one).** `/sp:dev-review [--tasks <selector> | --feature <id>[,<id>] | --scope <path>[,<path>]] --triage --worktree [<name>]`
 runs this lifecycle around one review-plus-triage pass: WT-1…WT-6 apply unchanged, the marker's
-`command` is `dev-review` and its `selector` is the review target, and the slug is the WBS or the
-path's basename (`sp/review-<slug>-<short-id>`). It skips `quickReadiness` (there is no task set;
-admission is "the target resolves"). WT-4 success reads as "every direct fix passed its check and the
+`command` is `dev-review` and its `selector` records the full normalized target list, and the slug
+is `sp/review-<first>-and-<N>-<short-id>` for a multi-target run (N = target count) or
+`sp/review-<slug>-<short-id>` for a single target (the WBS or the path's basename). It skips
+`quickReadiness` (there is no task set; admission is "every target resolves" — each WBS/path must
+resolve before the tree is cut). Under `--triage` the findings are bucketed across all targets once
+(identical `file:line` findings deduped). WT-4 success reads as "every direct fix passed its check and the
 project gate is green"; anything else takes WT-5. Contract: [dev-operations.md § 2. review](dev-operations.md#2-review).
 
 One flag, two modes (see the glossary entry for the ownership rule). Bare `--worktree` is **create

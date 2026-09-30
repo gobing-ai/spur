@@ -349,3 +349,87 @@ describe('task 1022 — dev-review contract hygiene', () => {
         expect(raw).toMatch(/modes:\s*\n\s*-\s*verify\s*\n\s*-\s*review/);
     });
 });
+
+// ---------- task 1023 (feature I33): dev-review target selectors ----------
+//
+// R1 exactly one of --tasks/--feature/--scope per invocation; R2 --tasks keeps the review-safe
+// batch selector grammar (comma WBS list, feature:<id>; status pseudo-lists and ready rejected)
+// with --feature as union sugar; R5 deprecated positional alias; R6 pipeline review step forwards
+// --tasks ${vars.wbs} and the bundled copy matches; R7 multi-target worktree admission/slug/marker;
+// R8 hint + dev-operations row + glossary (#flag-tasks/#flag-feature/#flag-scope) change together.
+
+describe('task 1023 — dev-review target selectors (--tasks / --feature / --scope)', () => {
+    const PIPELINE = join(ROOT, 'config', 'workflows', 'task-pipeline.yaml');
+    const BUNDLED_PIPELINE = join(ROOT, 'apps', 'cli', 'config', 'workflows', 'task-pipeline.yaml');
+    const opsRaw = readFileSync(DEV_OPS_PATH, 'utf8');
+    const reviewRaw = readFileSync(join(COMMANDS_DIR, 'dev-review.md'), 'utf8');
+    const reviewHintFlags = extractFlags(argumentHint(reviewRaw));
+
+    test('R1 — hint declares the three exclusive selectors plus --auto; exclusivity stated before review', () => {
+        for (const flag of ['--tasks', '--feature', '--scope', '--auto']) {
+            expect(reviewHintFlags.has(flag), `dev-review argument-hint must declare ${flag} (task 1023)`).toBe(true);
+        }
+        expect(reviewRaw).toContain('Exactly one target kind per invocation');
+    });
+
+    test('R2 — review-safe selector grammar: comma WBS list + feature:<id>; status pseudo-lists and ready rejected; --feature is union sugar', () => {
+        expect(reviewRaw).toContain('`feature:<id>`');
+        expect(reviewRaw).toMatch(/status pseudo-lists and `ready` are rejected for review/);
+        expect(reviewRaw).toContain('--feature <id>[,<id>]');
+        expect(reviewRaw).toContain('execution-batch.md#step-1--selector-resolution-r1');
+    });
+
+    test('R5 — positional documented as a deprecated alias naming the replacement selectors', () => {
+        expect(reviewRaw).toContain('Deprecated positional alias');
+        expect(reviewRaw).toContain('`^\\d{4}$`');
+        expect(reviewRaw).toContain('--tasks <wbs>');
+        expect(reviewRaw).toContain('--scope <path>');
+    });
+
+    test('R8a — dev-operations.md row 2 and §2 text carry the selectors, NOT-STARTED and exit-2 contracts', () => {
+        const rowFlags = commandTableFlags().get('dev-review');
+        expect(rowFlags).toBeDefined();
+        for (const flag of ['--tasks', '--feature', '--scope', '--auto']) {
+            expect(rowFlags?.has(flag), `dev-operations.md dev-review row must declare ${flag}`).toBe(true);
+        }
+        expect(opsRaw).toContain('--feature <id>[,<id>]');
+        expect(opsRaw).toContain('--scope <path>[,<path>]');
+        expect(opsRaw).toContain('NOT-STARTED');
+        expect(opsRaw).toContain('no implicit `cwd` target');
+    });
+
+    test('R8b — glossary #flag-tasks / #flag-feature / #flag-scope each cover dev-review', () => {
+        const glossary = readFileSync(GLOSSARY_PATH, 'utf8');
+        const sectionOf = (flag: string): string => {
+            const name = flag.replace(/^--/, '');
+            return glossary.split('\n### ').find((p) => p.startsWith(`\`--${name}`)) ?? '';
+        };
+        for (const flag of ['--tasks', '--feature', '--scope']) {
+            const section = sectionOf(flag);
+            expect(section, `${flag} glossary entry must mention dev-review (task 1023)`).toContain('dev-review');
+        }
+        expect(sectionOf('--feature')).toContain('`--feature <id>[,<id>]`');
+        expect(sectionOf('--scope')).toContain('comma list of paths');
+        expect(sectionOf('--tasks')).toMatch(/status pseudo-lists and `ready` are\s+rejected/);
+    });
+
+    // Biome forbids "${...}" inside string literals; split the token to keep the literal assertion honest.
+    const VARREF = '$' + '{vars.wbs}';
+    test('R6 — pipeline review step forwards the task via --tasks; generated apps/cli/config matches', () => {
+        const pipeline = readFileSync(PIPELINE, 'utf8');
+        const forwarded = 'input: /sp:dev-review --tasks ' + VARREF + ' --auto';
+        const bare = 'input: /sp:dev-review ' + VARREF + ' --auto';
+        expect(pipeline).toContain(forwarded);
+        expect(pipeline).not.toContain(bare);
+        expect(readFileSync(BUNDLED_PIPELINE, 'utf8')).toContain(forwarded);
+    });
+
+    test('R7 — multi-target worktree admission, slug and marker documented', () => {
+        for (const raw of [reviewRaw, opsRaw]) {
+            expect(raw).toContain('sp/review-<first>-and-<N>-<short-id>');
+            expect(raw).toContain('sp/review-<slug>-<short-id>');
+        }
+        expect(reviewRaw).toMatch(/every target to resolve before the tree is cut/);
+        expect(reviewRaw).toMatch(/`selector` = the full normalized target list/);
+    });
+});

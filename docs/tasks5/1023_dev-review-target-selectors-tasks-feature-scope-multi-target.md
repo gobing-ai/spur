@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "dev-review target selectors: --tasks / --feature / --scope multi-target with deprecated positional alias"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-30T18:12:19.059Z
-updated_at: "2026-09-30T18:14:44.930Z"
+updated_at: "2026-09-30T21:04:35.249Z"
 feature_id: I33
 
 dependencies: ["1021", "1022"]
@@ -95,22 +95,55 @@ Depends on 1021 (honest per-task and path scope — fan-out multiplies any scope
 
 **Verification checks (evidence for the AC above):**
 
-- [ ] `command-flag-parity.test.ts` asserts `--tasks`, `--feature`, `--scope` in the dev-review hint, dev-operations row and glossary entries.
-- [ ] `grep -n "dev-review" config/workflows/task-pipeline.yaml` shows `--tasks ${vars.wbs}`; generated `apps/cli/config/` matches after `build:bundle`.
-- [ ] E2E dogfood: `/sp:dev-review --scope plugins/sp/commands,plugins/sp/agents` produces one merged report with a cross-path section and `git status --short docs/tasks*` unchanged; `/sp:dev-review --tasks 1021,1022` writes `## Review` on both. Transcript excerpt saved as the verifiable artifact in Testing.
-- [ ] `bun run spur-check` is green.
+- [x] `command-flag-parity.test.ts` asserts `--tasks`, `--feature`, `--scope` in the dev-review hint, dev-operations row and glossary entries.
+- [x] `grep -n "dev-review" config/workflows/task-pipeline.yaml` shows `--tasks ${vars.wbs}`; generated `apps/cli/config/` matches after `build:bundle`.
+- [x] E2E dogfood: `/sp:dev-review --scope plugins/sp/commands,plugins/sp/agents` produces one merged report with a cross-path section and `git status --short docs/tasks*` unchanged; `/sp:dev-review --tasks 1021,1022` writes `## Review` on both. Transcript excerpt saved as the verifiable artifact in Testing.
+- [x] `bun run spur-check` is green.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `plugins/sp/tests/command-flag-parity.test.ts:352` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | plugins/sp/commands/dev-review.md:42 — "Exactly one target kind per invocation: `--tasks`, `--feature`, or `--scope`. More than one → exit 2 naming the conflicting selectors; none (and no positional) → exit 2 with usage — there is no implicit `cwd` target", stated under Selector validation before any review runs; mirrored in plugins/sp/skills/spur-dev/references/dev-operations.md:121 (Inputs: exactly one of the three, both exit-2 contracts). Proven by plugins/sp/tests/command-flag-parity.test.ts task-1023 R1 test (pass): asserts the exclusivity sentence and that the hint (dev-review.md:4) declares --tasks, --feature, --scope, --auto |
+| R2 | MET | plugins/sp/commands/dev-review.md:16 + :42 — set resolved once and frozen through the execution-batch.md Step 1 batch resolver (comma WBS list or `feature:<id>`; status pseudo-lists and `ready` rejected for review; no review-specific parser); :42 --feature is sugar for the union of the feature:<id> sets. plugins/sp/skills/spur-dev/references/flag-glossary.md:238-241 (#flag-tasks) restricts dev-review to the review-safe forms. Proven by command-flag-parity task-1023 R2 test (pass) |
+| R3 | MET | plugins/sp/commands/dev-review.md:44 — one WBS-mode review per task in the frozen set, each writing its own merged `## Review`; backlog/todo/blocked reported NOT-STARTED and skipped; per-task failure does not stop the rest; run ends with a combined summary table (WBS, verdict, P1/P2 counts); coordinator per-task write via `spur task update <wbs> --section Review --from-file` at :45. plugins/sp/agents/super-reviewer.md:76-91 Multi-target coordination repeats the contract; NOT-STARTED vocabulary SSOT at plugins/sp/skills/spur-dev/references/dev-operations.md:146 (§ 3a). Proven by command-flag-parity task-1023 R8a test (pass, asserts NOT-STARTED + selectors in the ops row/text) |
+| R4 | MET | plugins/sp/commands/dev-review.md:18 + :46 — paths must exist (exit 2 otherwise), normalized, nested/duplicate paths merged; one sub-review per surviving path (Step 3p scope), eligible for native-subagent dispatch per dispatch-surface.md; coordinator merges sub-reviews, runs ONE cross-path architecture pass (`sp:code-improvement` over inter-path imports), emits ONE advisory report; no task mutation. plugins/sp/skills/spur-dev/references/dev-operations.md:120 (Path-set mode) and plugins/sp/agents/super-reviewer.md:85-89 agree. Proven by command-flag-parity task-1023 R8a + R8b tests (pass: --scope <path>[,<path>] in ops, glossary #flag-scope "comma list of paths" at flag-glossary.md:213-214) |
+| R5 | MET | plugins/sp/commands/dev-review.md:19 + :47 — deprecated positional alias for one release: `^\d{4}$` token with a resolvable task → `--tasks <wbs>`; existing path → `--scope <path>`; otherwise exit 2; deprecation warning names the replacement selector; removal is a follow-up. Mirrored in plugins/sp/skills/spur-dev/references/dev-operations.md:121. Proven by command-flag-parity task-1023 R5 test (pass: asserts the alias row, the `^\d{4}$` rule and both replacement selectors) |
+| R6 | MET | config/workflows/task-pipeline.yaml:593 — grep shows `input: /sp:dev-review --tasks ${vars.wbs} --auto`; generated apps/cli/config/workflows/task-pipeline.yaml:593 matches byte-for-byte (grep output identical). Proven by command-flag-parity task-1023 R6 test (pass: forwarded token present, bare positional absent in both files) |
+| R7 | MET | plugins/sp/commands/dev-review.md:50 — admission requires every target to resolve before the tree is cut; branch slug `sp/review-<first>-and-<N>-<short-id>` multi-target, `sp/review-<slug>-<short-id>` single; marker `selector` = the full normalized target list; :48 + plugins/sp/agents/super-reviewer.md:90-91 --triage buckets findings across all targets once with identical file:line dedupe. Mirrored in plugins/sp/skills/spur-dev/references/dev-operations.md:127 and execution-batch.md:592-597. Proven by command-flag-parity task-1023 R7 test (pass: slugs in dev-review.md and dev-operations.md, admission and marker phrasing) |
+| R8 | MET | Changed together in this diff: plugins/sp/commands/dev-review.md:4 (argument-hint), :13-19 (flags table), :30-34 (usage); plugins/sp/skills/spur-dev/references/dev-operations.md:71 (§2 row) + :115-127 (§2 text); plugins/sp/skills/spur-dev/references/flag-glossary.md:184-185 (#flag-feature comma list), :213-214 (#flag-scope gains dev-review), :238-241 (#flag-tasks gains dev-review with review-safe restriction); plugins/sp/agents/super-reviewer.md:76-91; plugins/sp/skills/spur-dev/references/execution-batch.md:592-597. Proven by executed suites: command-flag-parity.test.ts 99 pass (7 new task-1023 tests incl. R1/R8a/R8b), skill-structure.test.ts 91 pass, scripts/commands/command-contract.test.ts 67 pass |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R3 — exactly one target kind per invocation | MET | test | dev-review.md:42 selector validation (exit 2 naming the conflicting selectors before any review; none → usage, no implicit cwd) + dev-operations.md:121; executed command-flag-parity task-1023 R1 test pass (hint declares --tasks/--feature/--scope/--auto and the exclusivity sentence) |
+| R4 — multi-task and feature targets review each task | MET | test | dev-review.md:44 task fan-out (own merged `## Review` per task, combined summary, NOT-STARTED skip for backlog/todo/blocked) + super-reviewer.md:76-91; executed command-flag-parity task-1023 R8a test pass (ops row/text carry the selectors and NOT-STARTED contract). Behavioral dogfood (`--tasks 1021,1022` writes) intentionally not run in this read-only hop; contract is coordinator-owned per task in three surfaces |
+| R5 — multi-path scope reviews the union once | MET | test | dev-review.md:46 + :18 (paths merged/deduped, sub-review per surviving path, one cross-path architecture pass, one advisory report, no task mutation) + dev-operations.md:120 + flag-glossary.md:213-214; executed command-flag-parity task-1023 R8a + R8b tests pass |
+| R6 — positional target is a deprecated alias | MET | test | dev-review.md:19 + :47 alias rule with warning naming the replacement; executed greps: config/workflows/task-pipeline.yaml:593 and apps/cli/config/workflows/task-pipeline.yaml:593 both read `input: /sp:dev-review --tasks ${vars.wbs} --auto`; executed command-flag-parity task-1023 R5 + R6 tests pass (alias documented; bare positional absent from both pipeline files) |
+| R7 — command, agent and skill contracts agree | MET | test | Executed suites this hop: command-flag-parity.test.ts 99 pass (task-1023 R1/R2/R5/R6/R7/R8a/R8b: forwarded once, one --focus vocabulary, no live route recommends --fix or --next, selectors present in hint + ops row + glossary, worktree slug/marker agreed), skill-structure.test.ts 91 pass, scripts/commands/command-contract.test.ts 67 pass; contract text agrees across dev-review.md, super-reviewer.md:26-91, dev-operations.md:71,115-127, flag-glossary.md:184-185,213-214,238-241, execution-batch.md:592-597 |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -125,4 +158,7 @@ Depends on 1021 (honest per-task and path scope — fan-out multiplies any scope
 ### History
 
 - 2026-09-30T18:14:44.930Z backlog → todo (system)
+- 2026-09-30T20:17:48.855Z todo → wip (system)
+- 2026-09-30T21:04:33.326Z wip → testing (system)
+- 2026-09-30T21:04:35.249Z testing → done (system)
 
