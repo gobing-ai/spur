@@ -43,9 +43,9 @@ const {
     writeFileSync,
     writeSync,
 } = await import('node:fs');
-const { lstat, readFile } = await import('node:fs/promises');
+const { lstat, readdir, readFile } = await import('node:fs/promises');
 
-import { join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import type { DbAdapter, RunDefinitionSource } from '@gobing-ai/spur-domain';
 import {
     createMigratedDb,
@@ -253,6 +253,13 @@ function asLiteralRunFileName(citation: string): string | undefined {
  * an unreadable task file, or a citation set over {@link MAX_CITED_RUN_FILES} throws with
  * zero writes performed — the caller routes to WT-5 and the worktree is retained.
  *
+ * Owned evidence (1012 R1/R2): with `taskFiles`, the worktree's `.spur/run/` direct children
+ * named `<wbs>-…` (each forwarded task file's leading four-digit WBS) or `<runId>-…` (each
+ * worktree run row, whichever task it ran) are copy obligations too, cited or not — same
+ * pipeline, same cap over the deduplicated union. An absent `.spur/run/` means nothing owned;
+ * any other listing failure throws before the first invoking-tree write (1012 R4). Without
+ * `taskFiles` (or with `[]`) nothing is enumerated.
+ *
  * Record tolerance (0984 R5): a known bookkeeping lifecycle row (`task-lifecycle` /
  * `feature-lifecycle`, created by record-stage transitions) may have no two-file record at
  * all — its source ENOENT is reported as `skipped[{id, reason:'record-missing:<file>'}]`
@@ -288,6 +295,45 @@ export async function persistWorktreeRuns(input: PersistWorktreeRunsInput): Prom
                 throw new Error(
                     `persist-out: merged task files cite more than ${MAX_CITED_RUN_FILES} distinct ` +
                         '.spur/run/ files — over the fixed citation cap (0984 R3); split the batch or prune the citations',
+                );
+            }
+            citedNames.add(name);
+        }
+    }
+    // 1012 R1/R2: evidence the forwarded tasks OWN — worktree `.spur/run/` direct children
+    // named `<wbs>-…` (WBS = the task file's leading four digits) or `<runId>-…` (each
+    // worktree run row) — joins the cited set, so it rides the same copy/no-op/refuse pipeline
+    // below even when the task file never cites it. Runs before any invoking-tree write.
+    if ((input.taskFiles ?? []).length > 0) {
+        const prefixes = (input.taskFiles ?? []).flatMap((taskFile) => {
+            const wbs = /^(\d{4})_/.exec(basename(taskFile))?.[1];
+            return wbs === undefined ? [] : [`${wbs}-`];
+        });
+        const recordNames = new Set<string>();
+        const owner = await openInlineRunProjectDb(fromDir);
+        try {
+            for (const row of await listRunIdRows(owner.adapter)) {
+                if (!SAFE_RUN_ID_RE.test(row.id)) throw new InvalidWorkflowRunIdError(row.id);
+                prefixes.push(`${row.id}-`);
+                // The two-file run record is the record copy's job (conflict = skip, not throw).
+                recordNames.add(`${row.id}.md`).add(`${row.id}.state.json`);
+            }
+        } finally {
+            owner.close();
+        }
+        // 1012 R4: only an absent evidence dir means "nothing owned"; any other listing failure
+        // (ENOTDIR, EACCES, …) propagates here, before the first invoking-tree write.
+        const entries = await readdir(fromRunDir).catch((error: NodeJS.ErrnoException) => {
+            if (error.code === 'ENOENT') return [] as string[];
+            throw error;
+        });
+        for (const name of entries.sort()) {
+            if (citedNames.has(name) || recordNames.has(name)) continue;
+            if (!prefixes.some((prefix) => name.startsWith(prefix))) continue;
+            if (citedNames.size >= MAX_CITED_RUN_FILES) {
+                throw new Error(
+                    `persist-out: cited plus task-owned .spur/run/ files number more than ${MAX_CITED_RUN_FILES} ` +
+                        '— over the fixed citation cap (0984 R3, 1012 R1); split the batch or prune the evidence',
                 );
             }
             citedNames.add(name);

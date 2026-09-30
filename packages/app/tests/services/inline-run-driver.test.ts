@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { execSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -25,6 +25,16 @@ import {
  * tests cover the moved runners' behavior directly (and keep the service above the repo
  * coverage floor, which child processes do not count toward).
  */
+
+// The runners narrate on stderr; keep that out of the test reporter. Tests asserting on stderr
+// install their own console.error over this spy.
+let errSpy: ReturnType<typeof spyOn>;
+beforeEach(() => {
+    errSpy = spyOn(console, 'error').mockImplementation(() => {});
+});
+afterEach(() => {
+    errSpy.mockRestore();
+});
 
 /** Run `fn` with the process cwd parked in `dir` (the runners read `process.cwd()`); async-aware. */
 async function inDir<T>(dir: string, fn: () => T | Promise<T>): Promise<T> {

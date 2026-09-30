@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: persist-out forwards task-cited .spur/run evidence artifacts
-status: wip
+status: done
 template: feature-impl
 created_at: 2026-09-29T18:18:18.307Z
-updated_at: "2026-09-30T13:37:07.213Z"
+updated_at: "2026-09-30T13:54:01.136Z"
 feature_id: A9
 
 ac_altitude: task-local
@@ -35,27 +35,27 @@ The original R1 (citation scan + `--evidence` flag in the script) duplicates 098
 
 ### Requirements
 
-- [ ] R1. With nonempty `taskFiles`, preserve forwarding of source `.spur/run/` direct children selected by each task basename's leading four digits followed by `_` (`<wbs>-` prefix), or each safe source DB run ID (`<runId>-` prefix), alongside literal citations. Uncited two-file run records remain owned by the existing record-transfer path; regular evidence copies/no-ops/refusals and nonregular `cited-<kind>` skips retain existing behavior.
-- [ ] R2. Preserve the 64-name cap over the deduplicated union and validation before invoking-tree writes. Pre-existing byte conflicts, unreadable forwarded task files, unresolved citations, unsafe source run IDs and over-cap unions fail before target DB creation or mutation. Missing taskFiles and an empty array retain the legacy rows/records-only path. This is prevalidation safety, not a transaction across all late DB/file failures.
-- [ ] R3. The execution-batch reference accurately describes selection, union cap, exclusions, conflicts and enumeration failures. State that run prefixes come from all source run rows; unrelated files matching neither citations nor an ownership prefix are excluded.
-- [ ] R4. Source evidence-directory enumeration tolerates ENOENT only; ENOTDIR, EACCES and other errors propagate before any invoking-tree write. The persist-out wrapper returns exit 1 and `{ok:false,error:...}` for these failures so WT-5 retains the worktree.
-- [ ] R5. Real filesystem/DB integration and portable plugin subprocess checks demonstrate uncited evidence survival, prevalidation refusal and unchanged legacy behavior. Record repeatable command results in the eventual Testing section.
+- [x] R1. With nonempty `taskFiles`, preserve forwarding of source `.spur/run/` direct children selected by each task basename's leading four digits followed by `_` (`<wbs>-` prefix), or each safe source DB run ID (`<runId>-` prefix), alongside literal citations. Uncited two-file run records remain owned by the existing record-transfer path; regular evidence copies/no-ops/refusals and nonregular `cited-<kind>` skips retain existing behavior.
+- [x] R2. Preserve the 64-name cap over the deduplicated union and validation before invoking-tree writes. Pre-existing byte conflicts, unreadable forwarded task files, unresolved citations, unsafe source run IDs and over-cap unions fail before target DB creation or mutation. Missing taskFiles and an empty array retain the legacy rows/records-only path. This is prevalidation safety, not a transaction across all late DB/file failures.
+- [x] R3. The execution-batch reference accurately describes selection, union cap, exclusions, conflicts and enumeration failures. State that run prefixes come from all source run rows; unrelated files matching neither citations nor an ownership prefix are excluded.
+- [x] R4. Source evidence-directory enumeration tolerates ENOENT only; ENOTDIR, EACCES and other errors propagate before any invoking-tree write. The persist-out wrapper returns exit 1 and `{ok:false,error:...}` for these failures so WT-5 retains the worktree.
+- [x] R5. Real filesystem/DB integration and portable plugin subprocess checks demonstrate uncited evidence survival, prevalidation refusal and unchanged legacy behavior. Record repeatable command results in the eventual Testing section.
 
 Non-goals: new flags or public CLI commands; copying the entire directory; changing run-record collision semantics; changing `--close`; redesigning DB opening/transactions; changing the fixed cap or expanding filename ownership; unrelated pre-existing edits. Implementation is a minimal completion of existing changes, not a second ownership mechanism.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Uncited owned evidence survives and unrelated evidence is excluded (req: R1, R5)
+- [x] AC1 — Uncited owned evidence survives and unrelated evidence is excluded (req: R1, R5)
   Given a real source DB run and `1234_x.md` without citations, when persistence runs, `1234-verdict.json` and `<runId>-route-reason.txt` arrive with identical bytes, while `9999-verdict.json` without a matching run prefix does not. Repeating persistence preserves bytes. Observe in `packages/app/tests/services/persist-worktree-runs.test.ts`.
-- [ ] AC2 — Owned conflict and union overflow fail before target writes (req: R2, R5)
+- [x] AC2 — Owned conflict and union overflow fail before target writes (req: R2, R5)
   Given a divergent owned target, persistence rejects and preserves that target, copies no queued artifact and inserts no run rows. A distinct cited-only name plus 64 owned names rejects over-cap; a cited name also selected by ownership counts once. Use real fixtures in `packages/app/tests/services/persist-worktree-runs.test.ts`, preserving the existing 65-owned case.
-- [ ] AC3 — Omitted and empty taskFiles preserve legacy behavior (req: R2, R5)
+- [x] AC3 — Omitted and empty taskFiles preserve legacy behavior (req: R2, R5)
   For both omitted taskFiles and `[]`, only rows and two-file records transfer; uncited owned files remain absent at target. Observe in `packages/app/tests/services/persist-worktree-runs.test.ts`.
-- [ ] AC4 — Invalid evidence directory fails closed and absence remains supported (req: R4, R5)
+- [x] AC4 — Invalid evidence directory fails closed and absence remains supported (req: R4, R5)
   Given an already migrated valid source DB with zero run rows and a source `.spur/run` regular file, persistence rejects ENOTDIR and does not create target `.spur`. With that path absent (ENOENT), the same unciting-task fixture succeeds. Observe in `packages/app/tests/services/persist-worktree-runs.test.ts`; do not rely on permission bits, which can vary by runner.
-- [ ] AC5 — Portable persist-out observes owned evidence and enumeration failure (req: R1, R4, R5)
+- [x] AC5 — Portable persist-out observes owned evidence and enumeration failure (req: R1, R4, R5)
   Through the existing subprocess helper in `plugins/sp/tests/inline-run-setup.test.ts`, the checked-in portable script plus generated bundle copies uncited WBS/run-ID evidence when given `--task-file`. An ENOTDIR source fixture exits 1 with `{ok:false,error:...}` and leaves target `.spur` absent. Save command output as the repeatable receipt; no mock of the persistence service.
-- [ ] AC6 — Worktree documentation matches the completed contract (req: R3)
+- [x] AC6 — Worktree documentation matches the completed contract (req: R3)
   Review `plugins/sp/skills/spur-dev/references/execution-batch.md` against implementation: exact ownership prefixes, all-source-row scope, exclusions, union cap, ENOENT-only tolerance and failure-to-WT-5 behavior. Run its existing contract tests.
 
 ### Q&A
@@ -81,31 +81,68 @@ Non-goals: new flags or public CLI commands; copying the entire directory; chang
 
 ### Design
 
-Extend `persistWorktreeRuns` (`packages/app/src/services/inline-run-setup.ts`) so that, only when `taskFiles` is non-empty, the worktree's `.spur/run/` direct children named `<wbs>-…` (WBS = leading four digits of each forwarded task file basename) or `<runId>-…` (each worktree `runs` row) join the existing `citedNames` set before classification. They then ride the unchanged 0984 pipeline (copy / byte-identical no-op / divergent throw / `cited-<kind>` skip) under the same `MAX_CITED_RUN_FILES` cap.
+Minimal completion of the existing change in `persistWorktreeRuns` (`packages/app/src/services/inline-run-setup.ts`): only when `taskFiles` is non-empty, the worktree's `.spur/run/` direct children named `<wbs>-…` (WBS = leading four digits before `_` of each forwarded task file basename) or `<runId>-…` (every source `runs` row) join the existing `citedNames` set before classification, then ride the unchanged 0984 pipeline (copy / byte-identical no-op / divergent throw / `cited-<kind>` skip) under the same `MAX_CITED_RUN_FILES` cap over the deduplicated union.
 
-- Invariant: enumeration is read-only on the source (short-lived source DB open + `readdir`) and completes before any target write; unsafe run ids still reject with `InvalidWorkflowRunIdError`.
-- `<runId>.md` / `<runId>.state.json` are excluded — the record copy owns them (conflict = reported skip, not throw).
-- No flag, usage, record-format or `--close` change; without `taskFiles` behavior is byte-identical.
-- Tradeoff: the source DB is opened twice (once to enumerate, once for the transfer) rather than re-indenting the whole transfer block — smaller diff, negligible cost.
+- Invariant: enumeration (short-lived source DB open + `readdir`) completes before any invoking-tree write; unsafe run ids reject with `InvalidWorkflowRunIdError`. The source opener is migrated/read-write, so the guarantee is prevalidation safety for the invoking tree, not a transaction.
+- `readdir` tolerates ENOENT only; every other listing error propagates (R4).
+- `<runId>.md` / `<runId>.state.json` are excluded — the record copy owns them.
+- No flag, usage, record-format or `--close` change; omitted or empty `taskFiles` keeps the legacy path.
+- Tradeoff: the source DB is opened twice rather than hoisting the transfer block — smaller diff.
 
 ### Plan
 
-- [x] Add failing AC1–AC3 (+ cap) tests to `packages/app/tests/services/persist-worktree-runs.test.ts`.
-- [x] Enumerate owned names into `citedNames` in `persistWorktreeRuns`; update its JSDoc.
-- [x] Document the rule in `plugins/sp/skills/spur-dev/references/execution-batch.md`.
-- [x] `bun run build:plugin-lib`; `bun run plugin-smoke`.
+- [x] Failing integration tests first: ownership, conflict, legacy path, cap, union cap, empty array, ENOTDIR/ENOENT.
+- [x] Enumerate owned names into `citedNames`; ENOENT-only `readdir` tolerance; JSDoc.
+- [x] Portable subprocess tests for uncited evidence and ENOTDIR.
+- [x] Correct `execution-batch.md`; `bun run build:plugin-lib`; `bun run plugin-smoke`.
 
 ### Solution
 
-Existing uncommitted ownership implementation was present before refinement at `packages/app/src/services/inline-run-setup.ts:298`; its enumeration catch at `packages/app/src/services/inline-run-setup.ts:322` still requires correction. Proposed work is specified in Design and Plan. No implementation was performed or declared complete in this refinement; replace this note with as-built evidence during implementation.
+Finished the existing owned-evidence change; no second mechanism added.
+
+1. `packages/app/src/services/inline-run-setup.ts:303-340` — with non-empty `taskFiles`: WBS prefixes from each task basename, run-id prefixes from every source run row (unsafe ids rejected), sorted `readdir` of the source `.spur/run/` adds matching names to `citedNames`, skipping the two-file records, capped over the union.
+2. `packages/app/src/services/inline-run-setup.ts:324-329` — R4 fix: `readdir` tolerates ENOENT only; ENOTDIR/EACCES and other errors propagate before any invoking-tree write. The wrapper script needed no change — its existing catch prints `{ok:false,error}` and exits 1.
+3. `packages/app/tests/services/persist-worktree-runs.test.ts:467` — seven integration tests on real temp trees and DBs; `plugins/sp/tests/inline-run-setup.test.ts:774` and `plugins/sp/tests/inline-run-setup.test.ts:799` — two subprocess tests of the checked-in portable script plus generated bundle.
+4. `bun run build:plugin-lib` regenerated `plugins/sp/lib/inline-run.generated.mjs`.
+5. `plugins/sp/skills/spur-dev/references/execution-batch.md:511-521` — ownership prefixes, all-source-row scope, record exclusion, union cap, ENOENT-only tolerance, WT-5 on failure.
+
+Deviations: none from the refined requirements. The source DB is opened twice (enumeration, then transfer) instead of hoisting the transfer block.
+
+Tests were written before the code they cover: the ownership tests failed 3/20 before the enumeration existed, and the ENOTDIR tests failed in both suites before the ENOENT-only change.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/services/inline-run-setup.ts:303` selects WBS/run-row prefixes and preserves record exclusions; `packages/app/tests/services/persist-worktree-runs.test.ts:481` verifies uncited forwarding, exclusion and idempotence; app suite 23/0. |
+| R2 | MET | `packages/app/tests/services/persist-worktree-runs.test.ts:513` verifies conflict/no writes; :562 and :581 verify cap/dedup; :543 and :611 verify omitted/empty arrays. Existing unsafe-ID, unresolved-citation and unreadable-file tests passed in app suite 23/0. |
+| R3 | MET | `plugins/sp/skills/spur-dev/references/execution-batch.md:511` matches prefix/union/record/listing contract; plugin/contract suite 155/0. |
+| R4 | MET | `packages/app/src/services/inline-run-setup.ts:327` returns [] only for ENOENT; `packages/app/tests/services/persist-worktree-runs.test.ts:631` verifies ENOTDIR/no target writes and ENOENT; `plugins/sp/tests/inline-run-setup.test.ts:799` verifies portable exit 1/ok:false. |
+| R5 | MET | Fresh real DB/filesystem suite 23/0, plugin/contract suite 155/0, portable subprocess tests after regeneration 2/0. Receipts: .spur/run/1012-verify-app.log, .spur/run/1012-verify-plugin.log and .spur/run/1012-verify-portable-final.log. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | `packages/app/tests/services/persist-worktree-runs.test.ts:481` uncited WBS/run-ID bytes, unrelated exclusion and repeat persistence; fresh app suite 23/0. |
+| AC2 | MET | test | `packages/app/tests/services/persist-worktree-runs.test.ts:513` conflicting bytes and zero inserts/copies; :562 65-owned cap; :581 union-cap and dedup. Fresh app suite 23/0. |
+| AC3 | MET | test | `packages/app/tests/services/persist-worktree-runs.test.ts:543` omitted taskFiles and :611 empty array preserve rows/records-only; fresh app suite 23/0. |
+| AC4 | MET | test | `packages/app/tests/services/persist-worktree-runs.test.ts:631` migrated zero-row DB plus ENOTDIR rejects without target .spur; absent path succeeds. Fresh app suite 23/0. |
+| AC5 | MET | test | `plugins/sp/tests/inline-run-setup.test.ts:774` portable uncited forwarding and :799 portable ENOTDIR exit/JSON/no writes; fresh portable suite 2/0 after bundle regeneration. |
+| AC6 | MET | test | `plugins/sp/skills/spur-dev/references/execution-batch.md:511` re-read against service ownership algorithm; `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:182` driver contract and related skill/parallel contracts; fresh combined plugin suite 155/0. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -119,4 +156,6 @@ Existing uncommitted ownership implementation was present before refinement at `
 
 - 2026-09-30T13:35:35.888Z backlog → todo (system)
 - 2026-09-30T13:35:36.250Z todo → wip (system)
+- 2026-09-30T13:43:16.709Z wip → testing (system)
+- 2026-09-30T13:45:45.175Z testing → done (system)
 

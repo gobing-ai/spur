@@ -463,3 +463,201 @@ describe('persistWorktreeRuns cited evidence + record tolerance (task 0984)', ()
         }
     });
 });
+
+describe('persistWorktreeRuns owned evidence (task 1012)', () => {
+    /** A merged task file that cites no `.spur/run/` path at all — ownership comes from its WBS. */
+    function writeUncitingTaskFile(toDir: string): string {
+        mkdirSync(join(toDir, 'docs'), { recursive: true });
+        writeFileSync(join(toDir, 'docs', '1234_x.md'), '## Testing\n\nno citations here\n');
+        return 'docs/1234_x.md';
+    }
+
+    function seedOwnedEvidence(fromDir: string): void {
+        writeFileSync(join(fromDir, '.spur', 'run', '1234-verdict.json'), '{"verdict":"PASS"}\n');
+        writeFileSync(join(fromDir, '.spur', 'run', 'run_1012-route-reason.txt'), 'inline\n');
+        writeFileSync(join(fromDir, '.spur', 'run', '9999-verdict.json'), '{"verdict":"FAIL"}\n');
+    }
+
+    test('copies <wbs>- and <runId>- prefixed evidence the task file never cites; re-persist is a no-op (R1)', async () => {
+        const from = makeDir('owned-from-');
+        const to = makeDir('owned-to-');
+        try {
+            await seedWorktree(from.dir, 'run_1012');
+            seedOwnedEvidence(from.dir);
+            const taskFile = writeUncitingTaskFile(to.dir);
+
+            const first = await persistWorktreeRuns({
+                fromWorkdir: from.dir,
+                toWorkdir: to.dir,
+                taskFiles: [taskFile],
+            });
+            expect(first).toEqual({ ok: true, persisted: 1, skipped: [] });
+            const toRun = join(to.dir, '.spur', 'run');
+            expect(readFileSync(join(toRun, '1234-verdict.json'), 'utf8')).toBe('{"verdict":"PASS"}\n');
+            expect(readFileSync(join(toRun, 'run_1012-route-reason.txt'), 'utf8')).toBe('inline\n');
+            expect(existsSync(join(toRun, '9999-verdict.json'))).toBe(false);
+
+            const second = await persistWorktreeRuns({
+                fromWorkdir: from.dir,
+                toWorkdir: to.dir,
+                taskFiles: [taskFile],
+            });
+            expect(second).toEqual({ ok: true, persisted: 0, skipped: [{ id: 'run_1012', reason: 'id-exists' }] });
+            expect(readFileSync(join(toRun, '1234-verdict.json'), 'utf8')).toBe('{"verdict":"PASS"}\n');
+        } finally {
+            from.cleanup();
+            to.cleanup();
+        }
+    });
+
+    test('a divergent owned target is never overwritten and fails with zero writes (R1/R2)', async () => {
+        const from = makeDir('owned-cf-from-');
+        const to = makeDir('owned-cf-to-');
+        try {
+            await seedWorktree(from.dir, 'run_1012b');
+            seedOwnedEvidence(from.dir);
+            writeFileSync(join(from.dir, '.spur', 'run', 'run_1012b-route-reason.txt'), 'inline\n');
+            const taskFile = writeUncitingTaskFile(to.dir);
+            const toRun = join(to.dir, '.spur', 'run');
+            mkdirSync(toRun, { recursive: true });
+            writeFileSync(join(toRun, '1234-verdict.json'), '{"verdict":"OLD"}\n');
+
+            await expect(
+                persistWorktreeRuns({ fromWorkdir: from.dir, toWorkdir: to.dir, taskFiles: [taskFile] }),
+            ).rejects.toThrow(/1234-verdict\.json/);
+            expect(readFileSync(join(toRun, '1234-verdict.json'), 'utf8')).toBe('{"verdict":"OLD"}\n');
+            expect(existsSync(join(toRun, 'run_1012b-route-reason.txt'))).toBe(false);
+            expect(existsSync(join(toRun, 'run_1012b.md'))).toBe(false);
+            const db = await openInlineRunProjectDb(to.dir);
+            try {
+                expect(await db.adapter.queryFirst<{ n: number }>('SELECT COUNT(*) AS n FROM runs')).toEqual({ n: 0 });
+            } finally {
+                db.close();
+            }
+        } finally {
+            from.cleanup();
+            to.cleanup();
+        }
+    });
+
+    test('without taskFiles no owned evidence is copied (R2)', async () => {
+        const from = makeDir('owned-none-from-');
+        const to = makeDir('owned-none-to-');
+        try {
+            await seedWorktree(from.dir, 'run_1012c');
+            seedOwnedEvidence(from.dir);
+            writeFileSync(join(from.dir, '.spur', 'run', 'run_1012c-route-reason.txt'), 'inline\n');
+
+            const result = await persistWorktreeRuns({ fromWorkdir: from.dir, toWorkdir: to.dir });
+            expect(result).toEqual({ ok: true, persisted: 1, skipped: [] });
+            const toRun = join(to.dir, '.spur', 'run');
+            expect(existsSync(join(toRun, '1234-verdict.json'))).toBe(false);
+            expect(existsSync(join(toRun, 'run_1012c-route-reason.txt'))).toBe(false);
+        } finally {
+            from.cleanup();
+            to.cleanup();
+        }
+    });
+
+    test('owned evidence counts toward the 64-file cap (R1)', async () => {
+        const from = makeDir('owned-cap-from-');
+        const to = makeDir('owned-cap-to-');
+        try {
+            await seedWorktree(from.dir, 'run_1012d');
+            for (let i = 0; i < 65; i += 1) {
+                writeFileSync(join(from.dir, '.spur', 'run', `1234-e${i}.log`), 'x\n');
+            }
+            const taskFile = writeUncitingTaskFile(to.dir);
+            await expect(
+                persistWorktreeRuns({ fromWorkdir: from.dir, toWorkdir: to.dir, taskFiles: [taskFile] }),
+            ).rejects.toThrow(/more than 64/);
+            expect(existsSync(join(to.dir, '.spur', 'run'))).toBe(false);
+        } finally {
+            from.cleanup();
+            to.cleanup();
+        }
+    });
+
+    test('a cited-only name plus 64 owned names is over the cap; a cited owned name counts once (R2)', async () => {
+        const from = makeDir('owned-union-from-');
+        const to = makeDir('owned-union-to-');
+        try {
+            await seedWorktree(from.dir, 'run_1012e');
+            for (let i = 0; i < 64; i += 1) {
+                writeFileSync(join(from.dir, '.spur', 'run', `1234-e${i}.log`), 'x\n');
+            }
+            writeFileSync(join(from.dir, '.spur', 'run', 'extra.log'), 'x\n');
+            mkdirSync(join(to.dir, 'docs'), { recursive: true });
+            const taskFile = 'docs/1234_x.md';
+            // 1 cited-only + 64 owned = 65 distinct names.
+            writeFileSync(join(to.dir, taskFile), 'Evidence: `.spur/run/extra.log`\n');
+            await expect(
+                persistWorktreeRuns({ fromWorkdir: from.dir, toWorkdir: to.dir, taskFiles: [taskFile] }),
+            ).rejects.toThrow(/more than 64/);
+            expect(existsSync(join(to.dir, '.spur'))).toBe(false);
+
+            // The cited name is also owned: the union is 64, exactly at the cap.
+            writeFileSync(join(to.dir, taskFile), 'Evidence: `.spur/run/1234-e0.log`\n');
+            const ok = await persistWorktreeRuns({ fromWorkdir: from.dir, toWorkdir: to.dir, taskFiles: [taskFile] });
+            expect(ok).toEqual({ ok: true, persisted: 1, skipped: [] });
+            expect(existsSync(join(to.dir, '.spur', 'run', '1234-e63.log'))).toBe(true);
+            expect(existsSync(join(to.dir, '.spur', 'run', 'extra.log'))).toBe(false);
+        } finally {
+            from.cleanup();
+            to.cleanup();
+        }
+    });
+
+    test('an empty taskFiles array keeps the legacy rows/records-only path (R2)', async () => {
+        const from = makeDir('owned-empty-from-');
+        const to = makeDir('owned-empty-to-');
+        try {
+            await seedWorktree(from.dir, 'run_1012f');
+            seedOwnedEvidence(from.dir);
+            writeFileSync(join(from.dir, '.spur', 'run', 'run_1012f-route-reason.txt'), 'inline\n');
+
+            const result = await persistWorktreeRuns({ fromWorkdir: from.dir, toWorkdir: to.dir, taskFiles: [] });
+            expect(result).toEqual({ ok: true, persisted: 1, skipped: [] });
+            const toRun = join(to.dir, '.spur', 'run');
+            expect(existsSync(join(toRun, 'run_1012f.md'))).toBe(true);
+            expect(existsSync(join(toRun, '1234-verdict.json'))).toBe(false);
+            expect(existsSync(join(toRun, 'run_1012f-route-reason.txt'))).toBe(false);
+        } finally {
+            from.cleanup();
+            to.cleanup();
+        }
+    });
+
+    test('an evidence dir that cannot be listed fails before any target write; an absent one is fine (R4)', async () => {
+        const from = makeDir('owned-enotdir-from-');
+        const to = makeDir('owned-enotdir-to-');
+        try {
+            // Migrated source DB with zero run rows; no `.spur/run` yet (ENOENT).
+            (await openInlineRunProjectDb(from.dir)).close();
+            const taskFile = writeUncitingTaskFile(to.dir);
+            expect(existsSync(join(from.dir, '.spur', 'run'))).toBe(false);
+            const absent = await persistWorktreeRuns({
+                fromWorkdir: from.dir,
+                toWorkdir: to.dir,
+                taskFiles: [taskFile],
+            });
+            expect(absent).toEqual({ ok: true, persisted: 0, skipped: [] });
+
+            // `.spur/run` is a regular file: ENOTDIR must not read as "no owned evidence".
+            const to2 = makeDir('owned-enotdir-to2-');
+            try {
+                writeFileSync(join(from.dir, '.spur', 'run'), 'not a directory\n');
+                const taskFile2 = writeUncitingTaskFile(to2.dir);
+                await expect(
+                    persistWorktreeRuns({ fromWorkdir: from.dir, toWorkdir: to2.dir, taskFiles: [taskFile2] }),
+                ).rejects.toThrow(/ENOTDIR/);
+                expect(existsSync(join(to2.dir, '.spur'))).toBe(false);
+            } finally {
+                to2.cleanup();
+            }
+        } finally {
+            from.cleanup();
+            to.cleanup();
+        }
+    });
+});

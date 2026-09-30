@@ -508,6 +508,18 @@ obligation; neither do root-qualified paths (`knowledge-kit/.spur/run/…`, `/ab
 which cite another project's evidence — cite foreign run artifacts that way, never bare. A citation missing in BOTH trees, a divergent cited file (never overwritten — reconcile
 by hand), an unreadable task file, or more than 64 distinct cited files fails the pass → WT-5.
 
+**Owned evidence rides it too (1012).** With at least one `--task-file`, persist-out also treats as
+copy obligations the worktree's `.spur/run/` direct children named `<wbs>-…` (the WBS is each
+forwarded task file's leading four digits before `_`) or `<runId>-…` (every run row in the worktree
+DB, whichever task it ran) — `<wbs>-verdict.json`, check receipts, route reasons — whether or not
+the task file cites them. They join the cited set: same copy / byte-identical no-op /
+divergent-refuse handling, and the 64-file cap applies to the deduplicated union of cited and owned
+names. `<runId>.md` / `<runId>.state.json` stay with the record copy (a conflict there is a
+reported skip). Files matching neither a citation nor an ownership prefix are left behind. An
+absent worktree `.spur/run/` means nothing is owned; any other listing failure (not a directory,
+permission denied) fails the pass before the invoking tree is written → WT-5. Without `--task-file`
+nothing is enumerated.
+
 The shapes are pinned (task 0975 R1; `record-missing` and citation behavior per 0984): idempotent on re-persist;
 success exits 0 printing
 `{"ok":true,"persisted":<n>,"skipped":[{"id":<run-id>,"reason":"id-exists"|"external-key-conflict"|"record-conflict:<file>"|"record-missing:<file>"|"cited-directory:<name>"|"cited-symlink:<name>"|"cited-non-file:<name>"}]}`

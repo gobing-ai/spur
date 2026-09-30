@@ -770,3 +770,53 @@ test('0984 --persist-out: a citation missing in both trees exits 1 with {ok:fals
         rmSync(to, { recursive: true, force: true });
     }
 }, 60_000);
+
+test('1012 --persist-out: --task-file copies uncited <wbs>- and <runId>- evidence; unrelated files stay behind', () => {
+    const from = makeWorktree('persist-out-owned-from-', 'run-1012-owned');
+    const to = mkdtempSync(join(tmpdir(), 'persist-out-owned-to-'));
+    try {
+        writeFileSync(join(from.dir, '.spur', 'run', '1234-verdict.json'), '{"verdict":"PASS"}\n');
+        writeFileSync(join(from.dir, '.spur', 'run', 'run-1012-owned-route-reason.txt'), 'inline\n');
+        writeFileSync(join(from.dir, '.spur', 'run', '9999-verdict.json'), '{"verdict":"FAIL"}\n');
+        mkdirSync(join(to, 'docs'), { recursive: true });
+        writeFileSync(join(to, 'docs', '1234_x.md'), '## Testing\n\nno citations here\n');
+        const proc = spawnSync('bun', [SCRIPT, '--persist-out', '--from', from.dir, '--task-file', 'docs/1234_x.md'], {
+            cwd: to,
+            stdio: 'pipe',
+            encoding: 'utf8',
+        });
+        expect(proc.status, proc.stderr).toBe(0);
+        expect(JSON.parse(proc.stdout)).toEqual({ ok: true, persisted: 1, skipped: [] });
+        expect(readFileSync(join(to, '.spur', 'run', '1234-verdict.json'), 'utf8')).toBe('{"verdict":"PASS"}\n');
+        expect(readFileSync(join(to, '.spur', 'run', 'run-1012-owned-route-reason.txt'), 'utf8')).toBe('inline\n');
+        expect(existsSync(join(to, '.spur', 'run', '9999-verdict.json'))).toBe(false);
+    } finally {
+        from.cleanup();
+        rmSync(to, { recursive: true, force: true });
+    }
+}, 60_000);
+
+test('1012 --persist-out: a source evidence dir that cannot be listed exits 1 with {ok:false} and writes nothing', () => {
+    const from = makeWorktree('persist-out-enotdir-from-', 'run-1012-enotdir');
+    const to = mkdtempSync(join(tmpdir(), 'persist-out-enotdir-to-'));
+    try {
+        // Replace the evidence dir with a regular file: listing fails ENOTDIR.
+        rmSync(join(from.dir, '.spur', 'run'), { recursive: true, force: true });
+        writeFileSync(join(from.dir, '.spur', 'run'), 'not a directory\n');
+        mkdirSync(join(to, 'docs'), { recursive: true });
+        writeFileSync(join(to, 'docs', '1234_x.md'), '## Testing\n\nno citations here\n');
+        const proc = spawnSync('bun', [SCRIPT, '--persist-out', '--from', from.dir, '--task-file', 'docs/1234_x.md'], {
+            cwd: to,
+            stdio: 'pipe',
+            encoding: 'utf8',
+        });
+        expect(proc.status).toBe(1);
+        const out = JSON.parse(proc.stdout) as { ok: boolean; error?: string };
+        expect(out.ok).toBe(false);
+        expect(out.error).toContain('ENOTDIR');
+        expect(existsSync(join(to, '.spur'))).toBe(false);
+    } finally {
+        from.cleanup();
+        rmSync(to, { recursive: true, force: true });
+    }
+}, 60_000);
