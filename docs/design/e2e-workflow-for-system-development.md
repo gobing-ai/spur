@@ -189,7 +189,7 @@ The diagram is the authoritative visual; the linear map is the operator-friendly
 | Run one task | `/sp:dev-run <wbs> --mode full` | `task-pipeline.yaml` | Task at `done` + verdict artifact |
 | Run single step | `/sp:dev-run <wbs> --mode implement` | `sp:code-implementation` | Code + `## Solution` change-map |
 | Test pass | `/sp:dev-unit <target>` | `sp:code-testing` | Coverage-driven test extension |
-| Code review | `/sp:dev-review <wbs>` | `sp:code-verification review` | `## Review` findings (SECUA) |
+| Code review | `/sp:dev-review --tasks <wbs>` | `sp:code-verification review` | `## Review` findings (SECUA) |
 | Requirements verify | `/sp:dev-verify <wbs>` | `sp:code-verification verify` | PASS/PARTIAL/FAIL verdict |
 | Batch run | `/sp:dev-runall --tasks <sel>` | `sp:super-planner` + `task-pipeline.yaml` | Batch report; topological execution |
 | Feature umbrella | `/sp:dev-runall --feature <id>` | `feature-dev.yaml` | Verified feature end-to-end |

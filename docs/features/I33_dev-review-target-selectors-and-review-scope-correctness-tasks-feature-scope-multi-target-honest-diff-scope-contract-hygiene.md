@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: []
 created_at: "2026-09-30T18:11:48.107Z"
-updated_at: "2026-09-30T21:32:13.868Z"
+updated_at: "2026-09-30T22:22:30.144Z"
 ---
 
 # I33: dev-review target selectors and review-scope correctness: --tasks/--feature/--scope multi-target, honest diff scope, contract hygiene
@@ -91,6 +91,7 @@ Feature: dev-review target selectors and review-scope correctness
 | 1021 | dev-review honest review scope: tagged-commit task diff and path-mode SECUA scope | done |
 | 1022 | dev-review contract hygiene: single target forwarding, coordinator Review ownership, triage tools, one --focus vocabulary, stale flags | done |
 | 1023 | dev-review target selectors: --tasks / --feature / --scope multi-target with deprecated positional alias | done |
+| 1032 | Dev-review P4 advisory cleanup sweep from I33 reviews (1021-1023) | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -102,4 +103,7 @@ Source: operator review request on `plugins/sp/commands/dev-review.md` (2026-09-
 - 2026-09-30T19:08:22.157Z backlog → active (system)
 - 2026-09-30T21:23:35.367Z active → verifying (system)
 - 2026-09-30T21:32:13.868Z verifying → done (system)
+- 2026-09-30T22:05:19.136Z done → active (system)
+- 2026-09-30T22:13:16.473Z active → verifying (system)
+- 2026-09-30T22:22:30.144Z verifying → done (system)
 

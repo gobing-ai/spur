@@ -4,7 +4,7 @@ name: "dev-review contract hygiene: single target forwarding, coordinator Review
 status: done
 template: feature-impl
 created_at: 2026-09-30T18:12:18.743Z
-updated_at: "2026-09-30T20:17:24.604Z"
+updated_at: "2026-09-30T22:12:43.497Z"
 feature_id: I33
 
 ac_numbering: task-local
@@ -96,28 +96,48 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `plugins/sp/commands/dev-review.md:38,40` — all five dispatches forward the target once inside `$ARGUMENTS`; grep `args="<wbs> \$ARGUMENTS"` and `args="<path> \$ARGUMENTS"` over `plugins/sp/commands/dev-review.md` returns no matches (exit 1); proven by `plugins/sp/tests/command-flag-parity.test.ts:287-294` (task 1022 R1 test, pass) |
-| R2 | MET | `plugins/sp/commands/dev-review.md:39` — "Coordinator = this session", merges per super-reviewer Output Format, writes `## Review` via `spur task update <wbs> --section Review --from-file` in WBS mode; `plugins/sp/agents/super-reviewer.md:56-64` Two modes aligned (WBS target → writes Review; path target → advisory), `:106-107` checklist matches; proven by command-flag-parity.test.ts task 1022 R2 test (pass) |
-| R3 | MET | `plugins/sp/commands/dev-review.md:5` — allowed-tools `["Bash", "Read", "Skill", "Edit", "Write"]`; `:41` — Edit/Write "exist only for these direct fixes" (triage); proven by `scripts/commands/command-contract.test.ts:1039-1045` (0315 test superseded by 1022 R3, pass) and command-flag-parity task 1022 R3 test (pass) |
-| R4 | MET | SSOT `plugins/sp/skills/code-verification/SKILL.md:512` — `--focus <all\|functional\|security\|efficiency\|correctness\|usability\|architecture>` with routing; `plugins/sp/commands/dev-review.md:18`, `plugins/sp/skills/spur-dev/references/dev-operations.md:119`, `plugins/sp/skills/spur-dev/references/flag-glossary.md:196-202` link to it (glossary no longer restates the generic list for dev-review; dev-reverse keeps its reconstruction lens); proven by command-flag-parity task 1022 R4 test (pass) |
-| R5 | MET | `plugins/sp/skills/next-router/references/routing-table.md:134` now routes `/sp:dev-review <wbs> --triage`; grep `dev-review[^\n]*--fix blockers-first` over `plugins/sp/skills` → no matches (exit 1); grep `--next` over `plugins/sp/agents/super-reviewer.md` → no matches (exit 1); review-mode flag list `plugins/sp/skills/code-verification/SKILL.md:505-512` has no `--fix` (`:88` is verify-mode, which owns `--fix`/`--next`); `plugins/sp/commands/dev-review.md:45` keeps `--fix` only as documented deprecated no-op; proven by command-flag-parity task 1022 R5 test (pass) |
-| R6 | MET | `--auto` declared: `plugins/sp/commands/dev-review.md:4` (argument-hint), `:21` (Argument Flags row), `:28` (Usage), `plugins/sp/skills/spur-dev/references/dev-operations.md:71,119`; pipeline `config/workflows/task-pipeline.yaml:593` passes `--auto`; `--json` removed from `plugins/sp/agents/super-reviewer.md` (grep → no matches); proven by command-flag-parity task 1022 R6 test (pass) |
-| R7 | MET | `plugins/sp/skills/functional-review/SKILL.md:12-14` — frontmatter `modes: [verify, review]`; proven by command-flag-parity task 1022 R7 test (pass) |
+| R1 | MET | FIXED this run (I33 verifyall 2026-09-30): post-1023 the dispatches forwarded raw `$ARGUMENTS` (= the whole `--tasks a,b` selector) to per-task skills that take `<wbs>` (`plugins/sp/skills/functional-review/SKILL.md:361`). Now `plugins/sp/commands/dev-review.md:43` (WBS: `<wbs> $FLAGS`) and `plugins/sp/commands/dev-review.md:46` (path: `<path> $FLAGS`), `$FLAGS` = `$ARGUMENTS` minus the selector; pinned by `plugins/sp/tests/command-flag-parity.test.ts:291-302` (red before fix, green after) |
+| R2 | MET | `plugins/sp/commands/dev-review.md:45` "Coordinator = this session" writes `## Review` via `spur task update <wbs> --section Review --from-file`; `plugins/sp/agents/super-reviewer.md:57-66` Two modes aligned; test `plugins/sp/tests/command-flag-parity.test.ts:304` pass |
+| R3 | MET | `plugins/sp/commands/dev-review.md:5` allowed-tools includes Edit, Write; triage-only note in the `--triage` bullet; test `plugins/sp/tests/command-flag-parity.test.ts:315` pass |
+| R4 | MET | SSOT `plugins/sp/skills/code-verification/SKILL.md:512`; `plugins/sp/commands/dev-review.md:18` and `plugins/sp/skills/spur-dev/references/flag-glossary.md:198-199` link to it; test `plugins/sp/tests/command-flag-parity.test.ts:320` pass |
+| R5 | MET | `plugins/sp/skills/next-router/references/routing-table.md:134` routes `--triage`; greps for `dev-review … --fix blockers-first` in skills and `--next` in super-reviewer → no matches; test `plugins/sp/tests/command-flag-parity.test.ts:330` pass |
+| R6 | MET | `--auto` in `plugins/sp/commands/dev-review.md:4` and `plugins/sp/skills/spur-dev/references/dev-operations.md:71`; `--json` absent from super-reviewer (grep no match); test `plugins/sp/tests/command-flag-parity.test.ts:347` pass |
+| R7 | MET | `plugins/sp/skills/functional-review/SKILL.md:12-14` modes `[verify, review]`; test `plugins/sp/tests/command-flag-parity.test.ts:354` pass |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R7 — command, agent and skill contracts agree | MET | test | `cd plugins/sp && bun test tests/command-flag-parity.test.ts tests/skill-structure.test.ts` → 183 pass / 0 fail (incl. 7 task-1022 tests); `bun test scripts/commands/command-contract.test.ts` → 67 pass / 0 fail; greps: doubled-target args, `--fix blockers-first` in skills, `--next` in super-reviewer → all no matches; `bun run spur-check` → green (9524 pass / 0 fail, post-check rules 2/2) |
+| R7 — command, agent and skill contracts agree | MET | test | `(cd plugins/sp && bun test tests/command-flag-parity.test.ts tests/skill-structure.test.ts)` → 190 pass / 0 fail after the R1 fix; greps above all no-match; `bun run spur-check`: lint+typecheck pass, 9454 pass / 5 fail — all 5 sandbox-only (fixture `git init` denied writing `.git/hooks`; Chromium DevTools port), unrelated to this diff |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- spur:record-review -->
+#### Review Report — 1022
 
-**SECU findings** (pipeline verify step — verdict: PASS)
+**Scope:** wbs diff — tagged commit `f5a0b8edc` (10 files, task file excluded), derived with the Step 3 recipe (`/sp:dev-review --tasks 1021,1022`, I33 1023 dogfood 2026-09-30)
+**Dimensions:** functional, security, efficiency, correctness, usability, architecture
+**Verdict:** PASS
 
-| Priority | Dimension | Location | Finding |
-|----------|-----------|----------|----------|
-| P4 | — | — | No findings (verify verdict PASS) |
+##### Findings (ranked)
+
+| # | Priority | Dimension | Finding | Location | Disposition |
+|---|----------|-----------|---------|----------|-------------|
+| 1 | P2 (major) | correctness | Post-1023 dispatch forwarded raw `$ARGUMENTS` (whole selector) to per-task skills | `plugins/sp/commands/dev-review.md:43` | RESOLVED in I33 verifyall (`<wbs> $FLAGS` / `<path> $FLAGS`) |
+| 2 | P4 (advisory) | usability | `--focus` row restated the SSOT vocabulary | `plugins/sp/commands/dev-review.md:21` | RESOLVED by 1032 R4 |
+| 3 | P4 (advisory) | correctness | R5 test slice could pass vacuously on `''` | `plugins/sp/tests/command-flag-parity.test.ts:338-342` | RESOLVED by 1032 R5 |
+
+##### Functional Traceability
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | `plugins/sp/commands/dev-review.md:43` and `plugins/sp/commands/dev-review.md:46`; `plugins/sp/tests/command-flag-parity.test.ts:291-302` |
+| R2 | MET | `plugins/sp/commands/dev-review.md:45`; `plugins/sp/agents/super-reviewer.md:57-66` |
+| R3 | MET | `plugins/sp/commands/dev-review.md:5` |
+| R4 | MET | `plugins/sp/skills/code-verification/SKILL.md:512` SSOT, linked from `plugins/sp/commands/dev-review.md:21` |
+| R5 | MET | `plugins/sp/skills/next-router/references/routing-table.md:134` uses `--tasks <wbs> --triage` |
+| R6 | MET | `plugins/sp/commands/dev-review.md:4` declares `--auto` |
+| R7 | MET | `plugins/sp/skills/functional-review/SKILL.md:12-14` |
+
+**Next:** none — all findings resolved.
 
 ### References
 

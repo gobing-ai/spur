@@ -4,7 +4,7 @@ name: "dev-review honest review scope: tagged-commit task diff and path-mode SEC
 status: done
 template: feature-impl
 created_at: 2026-09-30T18:12:18.446Z
-updated_at: "2026-09-30T19:11:33.598Z"
+updated_at: "2026-09-30T22:12:40.354Z"
 feature_id: I33
 
 ac_numbering: task-local
@@ -95,25 +95,42 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | plugins/sp/skills/code-verification/SKILL.md:105-119 — SSOT recipe (git log --fixed-strings --grep="(<wbs>)" → diff-tree union → task-file exclusion, no extension filter, visible fallback); executed for WBS 1020: returns exactly bbef13522's 4 files (incl. task-pipeline.yaml), no a7ef9ba83-only leak |
-| R2 | MET | code-verification/SKILL.md:121-129 Step 3p (git ls-files -- <path>); executed ls-files on the 4-file skill dir; review-mode paragraph :505-509 routes path targets to Step 3p, never Step 3 |
-| R3 | MET | functional-review/SKILL.md:214-217, code-improvement/SKILL.md:108-110, super-reviewer.md:96-99 all defer; grep across plugins/sp/{skills,agents,commands}: recipe exists only in code-verification/SKILL.md:109,127 |
+| R1 | MET | `plugins/sp/skills/code-verification/SKILL.md:104-119` — tagged-commit union recipe (`git log --fixed-strings --grep="(<wbs>)"` → diff-tree → task-file exclusion), no extension filter, visible working-tree fallback; re-executed for WBS 1020 this run → exactly bbef13522's 4 files incl. `config/workflows/task-pipeline.yaml`; a7ef9ba83-only content excluded |
+| R2 | MET | `plugins/sp/skills/code-verification/SKILL.md:121-129` Step 3p (`git ls-files -- <path>`, count in Scope line); review-mode paragraph `plugins/sp/skills/code-verification/SKILL.md:507-510` routes path targets to Step 3p; executed `git ls-files -- plugins/sp/skills/code-verification` → 4 files |
+| R3 | MET | `plugins/sp/skills/functional-review/SKILL.md:215-219`, `plugins/sp/skills/code-improvement/SKILL.md:108-110`, `plugins/sp/agents/super-reviewer.md:119-121` defer to the SSOT; old-recipe grep `'*.ts' '*.tsx'` over plugins/sp/{skills,agents,commands} → no matches (exit 1) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R1 — task diff scope names the implementation commits | MET | command | git log --fixed-strings --grep="(1020)" → only bbef13522; recipe output matches expectation; old-recipe contrast executed (a7ef9ba83 anchor leaks AgentsView.tsx, drops .yaml) proving the defect gone |
-| R2 — path-mode SECUA review has a defined scope | MET | command | Step 3p documented + executed (4 tracked files); review mode claims Step 3p for path targets (SKILL.md:507-508) |
+| R1 — task diff scope names the implementation commits | MET | command | re-executed Step 3 recipe for WBS 1020 (I33 verifyall 2026-09-30): output = help-doc-parity.test.ts, task-pipeline.yaml, help-docs-parity.test.ts, skill-structure.test.ts; a7ef9ba83 task-file-only commit not a scope source |
+| R2 — path-mode SECUA review has a defined scope | MET | command | Step 3p `plugins/sp/skills/code-verification/SKILL.md:121-129` executed (4 tracked files); `plugins/sp/tests/skill-structure.test.ts` + command-flag-parity 190 pass / 0 fail this run |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- spur:record-review -->
+#### Review Report — 1021
 
-**SECU findings** (pipeline verify step — verdict: PASS)
+**Scope:** wbs diff — tagged commit `77f0d10dd` (7 files, task file excluded), derived with the Step 3 recipe (`/sp:dev-review --tasks 1021,1022`, I33 1023 dogfood 2026-09-30)
+**Dimensions:** functional, security, efficiency, correctness, usability, architecture
+**Verdict:** PASS
 
-| Priority | Dimension | Location | Finding |
-|----------|-----------|----------|----------|
-| P4 | — | — | No findings (verify verdict PASS) |
+##### Findings (ranked)
+
+| # | Priority | Dimension | Finding | Location | Disposition |
+|---|----------|-----------|---------|----------|-------------|
+| 1 | P3 (minor) | correctness | Session-review doc fixes to the scope recipe prose | `plugins/sp/skills/code-verification/SKILL.md:99-119` | RESOLVED in `f86aa20de` |
+| 2 | P4 (advisory) | correctness | `--grep` matched full message, not subject | `plugins/sp/skills/code-verification/SKILL.md:109` | RESOLVED by 1032 R1 |
+| 3 | P4 (advisory) | correctness | Task-file exclusion assumed cwd = repo root | `plugins/sp/skills/code-verification/SKILL.md:107-111` | RESOLVED by 1032 R2 |
+| 4 | P4 (advisory) | usability | Tagged commits touching only the task file gave a silent empty scope | `plugins/sp/skills/code-verification/SKILL.md:118` | RESOLVED by 1032 R3 |
+
+##### Functional Traceability
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | `plugins/sp/skills/code-verification/SKILL.md:103-119`; this review's own scope (`77f0d10dd`, incl. `.md`) is the executed proof |
+| R2 | MET | `plugins/sp/skills/code-verification/SKILL.md:121-129` Step 3p; executed for `plugins/sp/commands` (41) / `plugins/sp/agents` (4) |
+| R3 | MET | `plugins/sp/skills/functional-review/SKILL.md:215-219`, `plugins/sp/skills/code-improvement/SKILL.md:108-110` defer to the SSOT |
+
+**Next:** none — all findings resolved.
 
 ### References
 
