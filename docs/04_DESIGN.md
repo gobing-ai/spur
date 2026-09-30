@@ -59,6 +59,7 @@ Root [DESIGN.md](../DESIGN.md) owns visual and interaction design;
 | Feature check `--strict`: AC satisfaction (tasks 0340, 0410, 0561, 0672) | [feature-check-strict-ac-satisfaction.md](design/feature-check-strict-ac-satisfaction.md) |
 | Lifecycle Projection Integrity (task 0625) | [lifecycle-projection-integrity.md](design/lifecycle-projection-integrity.md) |
 | History Data Processing Architecture — Ingestion, Materialization, and Query Plane | [history-data-processing.md](design/history-data-processing.md) |
+| History capability detection — commands, subagents, and ordinary skills (E93; accepted design) | [history-capability-detection.md](design/history-capability-detection.md) |
 | Tool Call Arguments Extraction, Ingestion Diagnostics, and Field Provenance Standard Procedure | [history-importer-arguments-provenance.md](design/history-importer-arguments-provenance.md) |
 | History Refresh Process Isolation and Single-Flight Execution | [history-refresh-process-isolation.md](design/history-refresh-process-isolation.md) |
 | History Incremental Materialization — Refresh Watermark, Bucket-Scoped Rollups, and Precomputed Serving | [history-incremental-materialization.md](design/history-incremental-materialization.md) |
