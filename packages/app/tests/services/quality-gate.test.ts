@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -8,6 +8,7 @@ import {
     MAX_FINDINGS,
     parseCoverageThreshold,
     type QualityGateResult,
+    RECEIPT_SCHEMA_VERSION,
     runQualityGate,
     runShellCommand,
     scanCoverageShortfalls,
@@ -370,6 +371,108 @@ describe('check-receipt write on run (0939 R2)', () => {
             expect(existsSync(join(dir, '.spur/run/0823-check-receipt.json'))).toBe(true);
         } finally {
             cleanup();
+        }
+    });
+});
+
+describe('PASS receipt reuse (1016 R1)', () => {
+    /** Full-tier PASS receipt builder; overrides replace top-level fields (tier/status/digest). */
+    function fullPassReceipt(overrides: Record<string, unknown> = {}): string {
+        return `${JSON.stringify(
+            {
+                schemaVersion: RECEIPT_SCHEMA_VERSION,
+                wbs: '0823',
+                runId: 'pipeline-0823',
+                tier: 'full',
+                inputDigest: 'digest-1',
+                checks: [
+                    {
+                        id: 'test',
+                        cmd: 'bun run spur-check',
+                        status: 'PASS',
+                        durationMs: 12,
+                        logPath: '.spur/run/0823-test-gate.log',
+                    },
+                ],
+                status: 'PASS',
+                completedAt: '2026-09-30T00:00:00.000Z',
+                ...overrides,
+            },
+            null,
+            2,
+        )}\n`;
+    }
+
+    function writeReceipt(dir: string, receiptJson: string): string {
+        mkdirSync(join(dir, '.spur/run'), { recursive: true });
+        const path = join(dir, '.spur/run/0823-check-receipt.json');
+        writeFileSync(path, receiptJson);
+        return path;
+    }
+
+    test.each([
+        'run',
+        'recheck',
+    ] as const)('%s: a full-tier PASS receipt at the current digest skips the probe and the gate', (mode) => {
+        const { dir, cleanup } = scratch('spur-qg-reuse-');
+        try {
+            const receiptPath = writeReceipt(dir, fullPassReceipt());
+            const receiptBefore = readFileSync(receiptPath, 'utf8');
+            const sentinel = join(dir, 'sentinel');
+            const script = executable(dir, 'gate.sh', `touch "${sentinel}"`);
+            const result = gate(mode, dir, script, { proofDigest: 'digest-1' });
+            // The gate command never ran: the sentinel file it writes is absent.
+            expect(existsSync(sentinel)).toBe(false);
+            expect(result.status).toBe('PASS');
+            expect(readFileSync(join(dir, '.spur/run/0823-test-gate.status'), 'utf8')).toBe('PASS\n');
+            const log = readFileSync(join(dir, '.spur/run/0823-test-gate.log'), 'utf8');
+            expect(log).toContain('check.reused — full-tier PASS receipt at input digest digest-1; gate skipped');
+            // Reuse leaves the receipt untouched: the next re-entry can reuse it again.
+            expect(readFileSync(receiptPath, 'utf8')).toBe(receiptBefore);
+        } finally {
+            cleanup();
+        }
+    });
+
+    test('any other receipt state still runs the gate (1016 R2)', () => {
+        const scenarios: Array<{
+            name: string;
+            mode: 'run' | 'recheck';
+            proofDigest: string;
+            receipt?: string;
+        }> = [
+            { name: 'missing receipt', mode: 'run', proofDigest: 'digest-1' },
+            {
+                name: 'PASS receipt at a different digest',
+                mode: 'recheck',
+                proofDigest: 'digest-2',
+                receipt: fullPassReceipt(),
+            },
+            {
+                name: 'light-tier PASS receipt',
+                mode: 'recheck',
+                proofDigest: 'digest-1',
+                receipt: fullPassReceipt({ tier: 'light' }),
+            },
+            {
+                name: 'FAIL receipt in run mode',
+                mode: 'run',
+                proofDigest: 'digest-1',
+                receipt: fullPassReceipt({ status: 'FAIL' }),
+            },
+            { name: 'empty proofDigest', mode: 'run', proofDigest: '', receipt: fullPassReceipt() },
+        ];
+        for (const scenario of scenarios) {
+            const { dir, cleanup } = scratch('spur-qg-reuse-off-');
+            try {
+                if (scenario.receipt) writeReceipt(dir, scenario.receipt);
+                const sentinel = join(dir, 'sentinel');
+                const script = executable(dir, 'gate.sh', `touch "${sentinel}"`);
+                gate(scenario.mode, dir, script, { proofDigest: scenario.proofDigest });
+                if (!existsSync(sentinel)) throw new Error(`scenario "${scenario.name}" did not run the gate command`);
+            } finally {
+                cleanup();
+            }
         }
     });
 });

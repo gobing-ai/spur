@@ -569,6 +569,21 @@ export function runQualityGate(
     let gateRc = 0;
     let gateAttempt = 0;
 
+    // 1016 R1 — PASS receipt reuse, next to the 0940 no-progress skip: a full-tier PASS receipt
+    // bound to the current proof-input digest means these exact inputs already passed the full
+    // gate, so re-entry (run or recheck) skips the probe and the gate command. `readReceiptStatus`
+    // fails closed — missing, failed, stale, light-only or an empty digest never reuse — and the
+    // skip leaves the receipt untouched, so a FAIL can never be laundered into a reusable PASS.
+    const reusePass = readReceiptStatus(abs(rel('-check-receipt.json')), env.proofDigest ?? '').reuse;
+    if (reusePass) {
+        const line = `check.reused — full-tier PASS receipt at input digest ${env.proofDigest ?? ''}; gate skipped\n`;
+        process.stdout.write(line); // tee: stdout and the log
+        appendFileSync(abs(logFile), line);
+        writeFileSync(abs(findingsFile), extractFindings(readFileSync(abs(logFile), 'utf8')));
+        writeFileSync(abs(statusFile), 'PASS\n');
+        return { status: 'PASS', attempts: 0, logFile, findingsFile, statusFile, attemptFile };
+    }
+
     // 0940 R2 — no-progress skip, before the probe: a full-tier FAIL receipt at the current
     // proof-input digest means the fix pass changed nothing tracked, so the full chain can only
     // reproduce the failure. The marker tees to stdout (the action result `data`) and the log,
