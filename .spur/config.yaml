@@ -32,31 +32,32 @@ bootstrap:
     # `spur` that may be a stale bundle (AGENTS.md history-validation rule).
     jobs:
       # Incremental refresh, waking hours only (07:00-23:50; the cron hour range
-      # keeps 00:00-06:59 quiet). `history daily` = import + analyze; analyze is
-      # what refreshes the Board History rollups (token usage included) - import
-      # alone never does. Checkpoint resume + the rollup-freshness short-circuit
-      # keep a no-op tick cheap (I81).
+      # keeps 00:00-06:59 quiet). `history import` incrementally imports and refreshes
+      # the Board History rollups (via refreshHistoryRollups). Checkpoint resume + the
+      # rollup-freshness short-circuit keep a no-op tick cheap (I81).
       - name: history-refresh
         cron: "*/20 7-23 * * *"
-        # command: bun apps/cli/src/index.ts --no-logo history daily
-        command: bun run apps/cli/src/index.ts --no-logo history import && bun run apps/cli/src/index.ts --no-logo history analyze
+        command: bun apps/cli/src/index.ts --no-logo history import
+
+      # 04:30 daily: database maintenance (PRAGMA optimize + wal_checkpoint).
+      # Decoupled from the daily report so maintenance runs reliably even if
+      # report generation fails.
+      - name: database-daily-maintenance
+        cron: "30 4 * * *"
+        command: bun apps/cli/src/index.ts --no-logo self maintain
 
       # 05:00 daily: full-corpus import (checkpoint resume self-heals gaps),
       # then the twelve-section history-anatomy diagnostic report headless. On
       # a cache hit the workflow skips the token-expensive model stages and
       # republishes provenance (ADR-079), so a ready report costs no tokens.
-      # Ends with database maintenance (PRAGMA optimize + wal_checkpoint).
       - name: history-daily-report
         cron: "0 5 * * *"
-        # Total child budget. The chain runs a full-corpus import, a model-driven
-        # twelve-section workflow, and a VACUUM: measured daily runs hit the global
-        # 600s default and were killed mid-chain (2026-09-12/13/15). One hour is
-        # ~6x the observed healthy history-anatomy runtime per stage.
+        # Total child budget. The chain runs a full-corpus import and a model-driven
+        # twelve-section workflow: one hour is ~6x the observed healthy history-anatomy runtime.
         timeoutMs: 3600000
         command: >-
           bun apps/cli/src/index.ts --no-logo history import --source all &&
-          bun apps/cli/src/index.ts --no-logo workflow run config/workflows/history-anatomy.yaml --quiet &&
-          bun apps/cli/src/index.ts --no-logo self maintain
+          bun apps/cli/src/index.ts --no-logo workflow run config/workflows/history-anatomy.yaml --quiet
 
       # 04:00 Sunday weekly: deep database maintenance (VACUUM defragmentation +
       # page compaction, PRAGMA optimize, and WAL checkpoint truncation).
