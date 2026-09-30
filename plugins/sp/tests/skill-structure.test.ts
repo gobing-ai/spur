@@ -1758,7 +1758,7 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         const pipeline = readFileSync(join(WORKFLOWS_DIR, 'task-pipeline.yaml'), 'utf8');
         expect(pipeline).toContain('normal: backlog → todo → wip → testing → done');
         expect(pipeline).toContain('wip → testing:  spur task check <wbs>');
-        expect(pipeline).toContain('testing → done: spur task check <wbs> --strict-core');
+        expect(pipeline).toContain('testing → done: spur task check <wbs> --as done');
 
         const debugging = readFileSync(join(SKILLS_DIR, 'sys-debugging', 'SKILL.md'), 'utf8');
         // Heading is the structured marker; the sentence pin below it was redundant.

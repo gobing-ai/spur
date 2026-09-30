@@ -44,7 +44,7 @@ description: "Standard task pipeline: precheck → implement → quality-gate (t
 #   any non-terminal state may transition to cancelled.
 # Guards:
 #   wip → testing:  spur task check <wbs>
-#   testing → done: spur task check <wbs> --strict-core, then PASS-verdict provenance
+#   testing → done: spur task check <wbs> --as done, then PASS-verdict provenance
 # Invalid: todo → testing, todo → done, and wip → done.
 # Pipeline states below are orchestration states, not task statuses.
 iterationBound: 20

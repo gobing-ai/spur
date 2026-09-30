@@ -52,7 +52,8 @@ function collectCliFlags(): Map<string, Set<string>> {
 
 /**
  * Parse the documented flag rows per command path. Three documented shapes:
- *   `# spur <noun>`          single-verb file — every flag row belongs to `spur <noun>`
+ *   `# spur <noun>` / `# spur self <verb>` — single-verb file (1020 canonical alias H1s);
+ *       every flag row belongs to `spur <noun>`
  *   `## spur <noun> <verb>`  per-verb section
  *   `## spur agent start | stop`  combined section — rows attribute to each named path
  * A row cell may carry an escaped pipe inside backticks (`<yes\|no\|cancel>`), so the
@@ -72,7 +73,9 @@ function collectDocFlags(): Map<string, Map<string, Set<string>>> {
             return { path, flags };
         };
         for (const line of readFileSync(join(HELP_DIR, file), 'utf8').split('\n')) {
-            if (/^# spur [a-z-]+\s*$/.test(line)) {
+            // 1020: alias pages were canonicalized to `# spur self <verb>` H1s (cmd_init.md etc.);
+            // both H1 shapes key the single-verb section under the top-level alias path.
+            if (/^# spur (?:self )?[a-z-]+\s*$/.test(line)) {
                 current = [own(`spur ${noun}`)];
                 continue;
             }
