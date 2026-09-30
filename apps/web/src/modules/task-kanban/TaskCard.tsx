@@ -73,7 +73,7 @@ export default function TaskCard({ task, onClick }: Props) {
         <Card
             variant="compact"
             asChild
-            className={`bg-spur-surface-2 hover:bg-spur-surface-3 rounded-xl border border-spur-border hover:border-spur-accent/40 cursor-pointer transition-colors w-full text-left ${
+            className={`group bg-spur-surface-2 hover:bg-spur-surface-3 rounded-xl border border-spur-border hover:border-spur-accent/60 shadow-xs hover:shadow-md cursor-pointer transition-all duration-150 w-full text-left ${
                 isDragging ? 'opacity-30' : ''
             }`}
         >
@@ -86,31 +86,48 @@ export default function TaskCard({ task, onClick }: Props) {
                 {...attributes}
                 aria-roledescription="draggable card"
             >
-                <CardBody className="p-3 gap-1">
+                <CardBody className="p-3 gap-1.5">
                     <div className="flex items-center justify-between gap-2">
                         <span className="flex items-center gap-1.5 text-xs font-mono font-semibold text-spur-text">
                             <span
-                                className={`h-1.5 w-1.5 rounded-full shrink-0 ${STATUS_DOT[task.status] ?? 'bg-spur-text-faint'}`}
+                                className={`h-2 w-2 rounded-full shrink-0 ring-1 ring-spur-surface-2 ${STATUS_DOT[task.status] ?? 'bg-spur-text-faint'}`}
                                 data-status={task.status}
                                 aria-hidden="true"
                             />
                             {task.wbs}
                         </span>
-                        {task.priority && (
-                            <Badge variant={PRIORITY_BADGE[task.priority] ?? 'outline'} size="xs">
-                                {task.priority}
-                            </Badge>
-                        )}
+                        <div className="flex items-center gap-1.5">
+                            {task.estimateHours !== undefined && (
+                                <span
+                                    className="text-[10px] font-mono text-spur-text-muted flex items-center gap-0.5"
+                                    title={`Estimated: ${task.estimateHours}h`}
+                                >
+                                    <span className="text-spur-text-faint text-[9px]">⏱</span>
+                                    {task.estimateHours}h
+                                </span>
+                            )}
+                            {task.priority && (
+                                <Badge
+                                    variant={PRIORITY_BADGE[task.priority] ?? 'outline'}
+                                    size="xs"
+                                    className="font-mono text-[10px] font-semibold"
+                                >
+                                    {task.priority}
+                                </Badge>
+                            )}
+                        </div>
                     </div>
-                    <p className="text-sm font-medium text-spur-text leading-snug line-clamp-2">{task.name}</p>
-                    <div className="flex gap-1 flex-wrap items-center">
+                    <p className="text-sm font-medium text-spur-text leading-snug line-clamp-2 group-hover:text-spur-accent transition-colors">
+                        {task.name}
+                    </p>
+                    <div className="flex gap-1.5 flex-wrap items-center pt-0.5">
                         {progress && progress.total > 0 && (
                             <div
-                                className="flex items-center gap-1.5"
+                                className="flex items-center gap-1.5 min-w-[3.5rem]"
                                 data-testid="subtask-progress"
                                 title="subtasks done/total"
                             >
-                                <div className="h-1 flex-1 rounded-full bg-spur-border overflow-hidden">
+                                <div className="h-1 flex-1 rounded-full bg-spur-border/60 overflow-hidden">
                                     <div
                                         className="h-full bg-spur-success"
                                         style={{ width: `${Math.round((progress.done / progress.total) * 100)}%` }}
@@ -122,14 +139,40 @@ export default function TaskCard({ task, onClick }: Props) {
                             </div>
                         )}
                         {task.type && task.type !== 'task' && (
-                            <Badge variant="outline" size="xs">
+                            <Badge
+                                variant="outline"
+                                size="xs"
+                                className="text-[10px] font-mono border-spur-border text-spur-text-muted"
+                            >
                                 {task.type}
                             </Badge>
                         )}
+                        {task.template && task.template !== 'feature-impl' && (
+                            <Badge
+                                variant="outline"
+                                size="xs"
+                                className="text-[10px] font-mono border-spur-accent/40 text-spur-accent bg-spur-accent/5 font-medium"
+                            >
+                                {task.template}
+                            </Badge>
+                        )}
                         {task.featureId && (
-                            <Badge variant="outline" size="xs">
+                            <Badge
+                                variant="outline"
+                                size="xs"
+                                className="text-[10px] font-mono border-spur-border text-spur-text-muted"
+                            >
                                 {task.featureId}
                             </Badge>
+                        )}
+                        {task.dependencyCount !== undefined && task.dependencyCount > 0 && (
+                            <span
+                                className="text-[10px] font-mono text-spur-text-muted flex items-center gap-0.5"
+                                title={`${task.dependencyCount} dependenc${task.dependencyCount === 1 ? 'y' : 'ies'}`}
+                            >
+                                <span className="text-spur-text-faint text-[9px]">⛓</span>
+                                {task.dependencyCount}
+                            </span>
                         )}
                         {task.updatedAt && (
                             <span

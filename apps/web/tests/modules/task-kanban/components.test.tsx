@@ -78,6 +78,24 @@ describe('TaskCard', () => {
         expect(getByText('issue')).toBeDefined();
     });
 
+    test('renders template tag when template is not feature-impl, omits when feature-impl', () => {
+        const { getByText, unmount } = render(<TaskCard task={task({ template: 'review' })} onClick={() => {}} />);
+        expect(getByText('review')).toBeDefined();
+        unmount();
+
+        const defaultCard = render(<TaskCard task={task({ template: 'feature-impl' })} onClick={() => {}} />);
+        expect(defaultCard.queryByText('feature-impl')).toBeNull();
+        defaultCard.unmount();
+    });
+
+    test('renders estimateHours and dependencyCount badges when present', () => {
+        const { getByText } = render(
+            <TaskCard task={task({ estimateHours: 4, dependencyCount: 2 })} onClick={() => {}} />,
+        );
+        expect(getByText('4h')).toBeDefined();
+        expect(getByText('2')).toBeDefined();
+    });
+
     test('R7 — does not render status badge text on card', () => {
         const { container } = render(<TaskCard task={task()} onClick={() => {}} />);
         // The card renders wbs, name, priority, feature — but never the raw status word as a badge

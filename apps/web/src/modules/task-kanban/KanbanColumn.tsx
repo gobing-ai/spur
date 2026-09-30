@@ -22,23 +22,29 @@ export default function KanbanColumn({ status, label, tasks, onCardClick, sortDi
         <section
             ref={setNodeRef}
             aria-label={`${label} column`}
-            className={`flex flex-col flex-1 min-w-[16rem] rounded-xl border transition-colors duration-200 ${
-                isOver ? 'bg-spur-surface-2 border-spur-accent shadow-lg' : 'bg-spur-surface border-spur-border'
+            className={`flex flex-col flex-1 min-w-[16rem] rounded-xl border transition-colors duration-200 overflow-hidden ${
+                isOver
+                    ? 'bg-spur-surface/40 border-spur-accent shadow-lg ring-1 ring-spur-accent/30'
+                    : 'bg-transparent border-spur-border'
             }`}
         >
-            <div className="flex items-center justify-between px-3 py-2 border-b border-spur-border shrink-0">
+            <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-spur-border shrink-0 bg-spur-surface">
                 <span className="text-xs font-semibold text-spur-text uppercase tracking-wide">
                     {taskStatusIcon(status)} {label}
                 </span>
-                <div className="flex items-center gap-1">
-                    <Badge variant="ghost" size="sm">
+                <div className="flex items-center gap-1.5">
+                    <Badge
+                        variant="ghost"
+                        size="sm"
+                        className="font-mono text-spur-text-muted bg-spur-surface-2 border border-spur-border/80 px-2 py-0.5"
+                    >
                         {tasks.length}
                     </Badge>
                     {onSortToggle && (
                         <Button
                             variant="ghost"
                             size="xs"
-                            className="px-1"
+                            className="h-6 w-6 p-0 flex items-center justify-center text-spur-text-muted hover:text-spur-text hover:bg-spur-surface-2 rounded-md transition-colors"
                             onClick={onSortToggle}
                             aria-label={`Sort ${label} by WBS`}
                             title={`Sort ${label}: ${sortDir === 'asc' ? 'WBS ↓' : sortDir === 'desc' ? 'WBS ↑' : 'none'}`}
@@ -53,7 +59,7 @@ export default function KanbanColumn({ status, label, tasks, onCardClick, sortDi
                     <TaskCard key={t.wbs} task={t} onClick={onCardClick} />
                 ))}
                 {tasks.length === 0 && (
-                    <div className="flex items-center justify-center h-16 text-xs text-spur-text-muted italic">
+                    <div className="flex items-center justify-center h-20 text-xs text-spur-text-muted italic border border-dashed border-spur-border/60 rounded-lg my-1 bg-spur-surface/30">
                         No tasks
                     </div>
                 )}

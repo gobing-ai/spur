@@ -96,35 +96,39 @@ export default function TasksShell() {
             <header className="mx-auto w-full max-w-[1600px] shrink-0 px-4 pt-3">
                 {/* ADR-081 (amended 2026-08-26): the header rides History's centered 1600px
                     rail; only the board body below stays full-bleed. */}
-                <div className="flex flex-nowrap items-center justify-between gap-4 border-b border-base-content/10 pb-3">
+                <div className="flex flex-nowrap items-center justify-between gap-4 border-b border-spur-border pb-3">
                     <div className="flex shrink-0 items-center gap-3">
                         <span className="text-2xl" aria-hidden="true">
                             📋
                         </span>
                         <div>
-                            <h1 className="text-xl font-bold tracking-tight text-spur-text">Tasks</h1>
-                            <p className="text-xs text-spur-text-muted">Task corpus, kanban lanes, and phase filters</p>
-                            <p
-                                className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-spur-border px-2 py-0.5 text-xs text-spur-text-muted font-mono"
-                                role="status"
-                                data-testid="tasks-live-chip"
-                            >
+                            <div className="flex items-center gap-2.5">
+                                <h1 className="text-xl font-bold tracking-tight text-spur-text">Tasks</h1>
                                 <span
-                                    className={`h-1.5 w-1.5 rounded-full ${connected ? 'bg-spur-success' : 'bg-spur-error'}`}
-                                    aria-hidden="true"
-                                />
-                                last sync {lastSyncAt ? new Date(lastSyncAt).toLocaleString() : '—'}
+                                    className="inline-flex items-center gap-1.5 rounded-full border border-spur-border bg-spur-surface-2 px-2.5 py-0.5 text-xs text-spur-text-muted font-mono"
+                                    role="status"
+                                    data-testid="tasks-live-chip"
+                                >
+                                    <span
+                                        className={`h-1.5 w-1.5 rounded-full ${connected ? 'bg-spur-success' : 'bg-spur-error'}`}
+                                        aria-hidden="true"
+                                    />
+                                    last sync {lastSyncAt ? new Date(lastSyncAt).toLocaleString() : '—'}
+                                </span>
+                            </div>
+                            <p className="text-xs text-spur-text-muted mt-0.5">
+                                Task corpus, kanban lanes, and phase filters
                             </p>
                         </div>
                     </div>
 
                     {/* One non-wrapping cluster: filters sit just before the tab strip so the
                         identity block and tabs always share a single header row. */}
-                    <div className="flex min-w-0 flex-nowrap items-center gap-2 overflow-x-auto">
+                    <div className="flex min-w-0 flex-nowrap items-center gap-2.5 overflow-x-auto">
                         <Select
                             variant="ghost"
                             size="xs"
-                            className="text-xs shrink-0 w-44"
+                            className="text-xs shrink-0 w-44 bg-spur-surface-2 border border-spur-border rounded-lg text-spur-text"
                             value={folder}
                             onChange={(e) => setFilter('folder', e.target.value)}
                             aria-label="Task phase folder"
@@ -135,12 +139,12 @@ export default function TasksShell() {
                                 </option>
                             ))}
                         </Select>
-                        <div className="flex shrink-0 items-center gap-1">
+                        <div className="flex shrink-0 items-center gap-1 bg-spur-surface-2 border border-spur-border px-2 py-1 rounded-xl">
                             {TASK_STATUSES.map((status) => (
                                 <label
                                     key={status}
                                     htmlFor={`tasks-status-${status}`}
-                                    className="flex items-center gap-1 cursor-pointer"
+                                    className="flex items-center gap-1.5 px-1.5 py-0.5 rounded-md hover:bg-spur-surface-3 transition-colors cursor-pointer"
                                 >
                                     <Checkbox
                                         id={`tasks-status-${status}`}
@@ -148,7 +152,7 @@ export default function TasksShell() {
                                         checked={!hiddenColumns.has(status)}
                                         onChange={() => toggleColumn(status)}
                                     />
-                                    <span className="text-[10px] text-spur-text-muted">
+                                    <span className="text-[11px] font-medium text-spur-text-muted select-none">
                                         {taskStatusIcon(status)} {status}
                                     </span>
                                 </label>
@@ -161,15 +165,20 @@ export default function TasksShell() {
                                 placeholder="WBS or feature"
                                 variant="bordered"
                                 size="xs"
-                                className="w-36"
+                                className="w-36 bg-spur-surface-2 border-spur-border text-spur-text"
                                 value={query}
                                 onChange={(e) => setQuery(e.target.value)}
                             />
                         </form>
-                        <Button variant="primary" size="sm" className="shrink-0" onClick={() => setShowNewPanel(true)}>
+                        <Button
+                            variant="primary"
+                            size="sm"
+                            className="shrink-0 font-medium"
+                            onClick={() => setShowNewPanel(true)}
+                        >
                             + New Task
                         </Button>
-                        <div className="flex shrink-0 items-center gap-1 bg-base-300 p-1 rounded-xl">
+                        <div className="flex shrink-0 items-center gap-1 bg-spur-surface-2 border border-spur-border p-1 rounded-xl">
                             {TASKS_TABS.map((tab) => (
                                 <button
                                     key={tab.id}
@@ -177,7 +186,7 @@ export default function TasksShell() {
                                     className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
                                         activeTab === tab.id
                                             ? 'bg-primary text-primary-content font-bold shadow-sm'
-                                            : 'text-base-content/70 hover:bg-base-content/10'
+                                            : 'text-spur-text-muted hover:text-spur-text hover:bg-spur-surface-3'
                                     }`}
                                     onClick={() => setActiveTab(tab.id)}
                                 >
