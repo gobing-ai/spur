@@ -200,15 +200,15 @@ function observedFact(entry: RosterEntry, orchestratorOffline: boolean): { label
 function tierBadgeClass(tier: string): string {
     switch (tier) {
         case 'cheap':
-            return 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
+            return 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20';
         case 'standard':
-            return 'bg-blue-500/10 text-blue-400 border border-blue-500/20';
+            return 'bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-500/20';
         case 'capable-1':
-            return 'bg-purple-500/10 text-purple-400 border border-purple-500/20';
+            return 'bg-purple-500/10 text-purple-700 dark:text-purple-400 border border-purple-500/20';
         case 'capable-2':
-            return 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20';
+            return 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border border-indigo-500/20';
         case 'capable-3':
-            return 'bg-amber-500/10 text-amber-400 border border-amber-500/20';
+            return 'bg-amber-500/10 text-amber-800 dark:text-amber-400 border border-amber-500/20';
         default:
             return 'bg-spur-surface-3 text-spur-text-muted border border-spur-border';
     }
@@ -374,7 +374,13 @@ export default function AgentsView({ pollMs = STATUS_POLL_MS }: { pollMs?: numbe
                                     >
                                         <span>{sec.label}</span>
                                         {'count' in sec && (
-                                            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-white/20">
+                                            <span
+                                                className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono transition-colors ${
+                                                    activeSection === sec.id
+                                                        ? 'bg-white/20 text-white'
+                                                        : 'bg-spur-surface-3 text-spur-text-muted'
+                                                }`}
+                                            >
                                                 {sec.count}
                                             </span>
                                         )}
@@ -407,7 +413,7 @@ export default function AgentsView({ pollMs = STATUS_POLL_MS }: { pollMs?: numbe
                         {/* Section 1: Agent Roles */}
                         {(activeSection === 'all' || activeSection === 'roles') && (
                             <section className="space-y-3" data-roles-section>
-                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                                     <div className="flex items-center gap-2">
                                         <h2 className="text-sm font-semibold tracking-tight text-spur-text">
                                             Agent Roles
@@ -433,7 +439,7 @@ export default function AgentsView({ pollMs = STATUS_POLL_MS }: { pollMs?: numbe
                         {/* Section 2: Pipeline Stages */}
                         {(activeSection === 'all' || activeSection === 'stages') && (
                             <section className="space-y-3" data-stages-section>
-                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                                     <div className="flex items-center gap-2">
                                         <h2 className="text-sm font-semibold tracking-tight text-spur-text">
                                             Pipeline Stages
@@ -442,7 +448,7 @@ export default function AgentsView({ pollMs = STATUS_POLL_MS }: { pollMs?: numbe
                                             pipeline.stages
                                         </code>
                                         {stages.length > 0 && (
-                                            <span className="text-xs text-spur-text-muted">
+                                            <span className="text-xs text-spur-text-muted font-mono">
                                                 ({stages.length} defined)
                                             </span>
                                         )}
@@ -473,7 +479,7 @@ export default function AgentsView({ pollMs = STATUS_POLL_MS }: { pollMs?: numbe
                         {/* Section 3: Agent Executors */}
                         {(activeSection === 'all' || activeSection === 'executors') && (
                             <section className="space-y-3" data-executors-section>
-                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                                     <div className="flex items-center gap-2">
                                         <h2 className="text-sm font-semibold tracking-tight text-spur-text">
                                             Agent Executors
@@ -482,7 +488,7 @@ export default function AgentsView({ pollMs = STATUS_POLL_MS }: { pollMs?: numbe
                                             agent.executors
                                         </code>
                                         {executors.length > 0 && (
-                                            <span className="text-xs text-spur-text-muted">
+                                            <span className="text-xs text-spur-text-muted font-mono">
                                                 ({executors.filter((e) => !e.disabled).length} active,{' '}
                                                 {executors.filter((e) => e.disabled).length} disabled)
                                             </span>
@@ -522,7 +528,7 @@ export default function AgentsView({ pollMs = STATUS_POLL_MS }: { pollMs?: numbe
                         {/* Section 3: Agent Fleet */}
                         {(activeSection === 'all' || activeSection === 'fleet') && (
                             <section className="space-y-3" data-fleet-section>
-                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
                                     <div className="flex items-center gap-2">
                                         <h2 className="text-sm font-semibold tracking-tight text-spur-text">
                                             Agent Fleet
@@ -732,9 +738,9 @@ function CandidateBadge({ cand, kind }: { cand: CandidateItem; kind: 'role' | 's
             <span
                 className={`px-1.5 py-0.5 rounded text-[11px] font-mono inline-flex items-center gap-1 border transition-colors cursor-help ${
                     cand.isDefault
-                        ? 'bg-amber-500/15 border-amber-500/40 text-amber-300 font-semibold'
+                        ? 'bg-amber-500/15 border-amber-500/40 text-amber-800 dark:text-amber-300 font-semibold'
                         : cand.disabled
-                          ? 'bg-spur-surface-2/40 border-spur-border/40 text-spur-text-muted/50 line-through'
+                          ? 'bg-spur-surface-2/40 border-spur-border/40 text-spur-text-muted/60 dark:text-spur-text-muted/50 line-through'
                           : 'bg-spur-surface-2 border-spur-border/60 text-spur-text hover:border-spur-accent/30'
                 }`}
                 title={buildExecutorTooltip(cand)}
@@ -767,7 +773,7 @@ function RoleCard({ role, executors = [] }: { role: ConfiguredAgentRole; executo
 
     return (
         <div
-            className="p-3 bg-gray-50 dark:bg-spur-surface-2 border border-spur-border rounded-xl flex flex-col justify-between gap-2.5 hover:border-spur-accent/30 transition-colors shadow-sm"
+            className="p-3.5 bg-spur-surface border border-spur-border rounded-xl flex flex-col justify-between gap-3 hover:border-spur-accent/40 transition-colors shadow-sm"
             data-role-card={role.name}
         >
             <div>
@@ -858,7 +864,7 @@ function StageCard({ stage, executors = [] }: { stage: ConfiguredStageInfo; exec
 
     return (
         <div
-            className="p-3 bg-white dark:bg-spur-surface border border-spur-border rounded-xl flex flex-col justify-between gap-2.5 hover:border-spur-accent/30 transition-colors shadow-sm"
+            className="p-3.5 bg-spur-surface border border-spur-border rounded-xl flex flex-col justify-between gap-3 hover:border-spur-accent/40 transition-colors shadow-sm"
             data-stage-card={stage.id}
         >
             <div>
@@ -883,7 +889,9 @@ function StageCard({ stage, executors = [] }: { stage: ConfiguredStageInfo; exec
                 </div>
 
                 {/* Description */}
-                <p className="mt-2 text-xs text-spur-text-muted leading-relaxed line-clamp-2">{stage.description}</p>
+                <p className="mt-2 text-xs text-spur-text-muted leading-relaxed line-clamp-2 min-h-[2.5rem]">
+                    {stage.description}
+                </p>
 
                 <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
                     <span className="px-1.5 py-0.5 rounded bg-spur-surface-2 border border-spur-border/60 font-medium text-spur-text">
@@ -937,7 +945,7 @@ function ExecutorCard({
 
     return (
         <div
-            className="p-3 bg-gray-50 dark:bg-spur-surface-2 border border-spur-border rounded-xl flex flex-col justify-between gap-2.5 hover:border-spur-accent/30 transition-colors shadow-sm"
+            className="p-3.5 bg-spur-surface border border-spur-border rounded-xl flex flex-col justify-between gap-3 hover:border-spur-accent/40 transition-colors shadow-sm"
             data-executor-card={executor.name}
         >
             <div>
@@ -969,11 +977,11 @@ function ExecutorCard({
 
                 {executor.elected && executor.elected.length > 0 && (
                     <div className="mt-2 flex flex-wrap items-center gap-1">
-                        <span className="text-[10px] text-amber-400 font-medium">Elected:</span>
+                        <span className="text-[10px] text-amber-700 dark:text-amber-400 font-medium">Elected:</span>
                         {executor.elected.map((role) => (
                             <span
                                 key={role}
-                                className="px-1.5 py-0.2 rounded bg-amber-500/10 border border-amber-500/20 text-[10px] font-mono text-amber-300 flex items-center gap-0.5"
+                                className="px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-[10px] font-mono text-amber-800 dark:text-amber-300 flex items-center gap-0.5"
                             >
                                 <span>⭐</span>
                                 <span>{role}</span>
@@ -1071,7 +1079,7 @@ function RosterCard({
     return (
         <button
             type="button"
-            className="text-left p-3 bg-white dark:bg-spur-surface border border-spur-border rounded-xl hover:bg-spur-surface-2/60 focus:outline-none focus:ring-1 focus:ring-spur-accent shadow-sm transition-colors"
+            className="text-left p-3.5 bg-spur-surface border border-spur-border rounded-xl hover:bg-spur-surface-2/60 focus:outline-none focus:ring-1 focus:ring-spur-accent shadow-sm transition-colors"
             data-roster-entry={entry.instanceId}
             data-g6="open-member"
             aria-haspopup="dialog"
