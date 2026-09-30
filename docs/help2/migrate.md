@@ -1,12 +1,14 @@
-# spur migrate
+# spur self migrate
 
 Apply Spur's CLI-owned schema migrations to the project database (`.spur/spur.db`).
+
+> **Canonical path:** `spur self migrate`. The legacy `spur migrate` top-level form remains a hidden alias.
 
 ## Usage
 
 ```bash
-spur migrate [--json]
-spur migrate [--json-envelope]
+spur self migrate [--json]
+spur self migrate [--json-envelope]
 ```
 
 ## Options
@@ -18,13 +20,13 @@ spur migrate [--json-envelope]
 
 ## Behavior
 
-`spur migrate` brings the SQLite schema to the current version — it is idempotent, so running it
+`spur self migrate` brings the SQLite schema to the current version — it is idempotent, so running it
 again on an up-to-date database is a no-op. Run it once after upgrading Spur; it is not part of
 the daily loop.
 
 ```bash
-spur migrate
-spur status    # confirm the project still reports healthy
+spur self migrate
+spur self status    # confirm the project still reports healthy
 ```
 
 ## See also

@@ -1,11 +1,13 @@
-# spur maintain
+# spur self maintain
 
 Database maintenance for `.spur/spur.db`: routine optimization and optional compaction.
+
+> **Canonical path:** `spur self maintain`. The legacy `spur maintain` top-level form remains a hidden alias.
 
 ## Usage
 
 ```bash
-spur maintain [options]
+spur self maintain [options]
 ```
 
 ## Options
@@ -18,7 +20,7 @@ spur maintain [options]
 
 ## Behavior
 
-A bare `spur maintain` runs the safe, always-applicable upkeep: `PRAGMA optimize` and a WAL
+A bare `spur self maintain` runs the safe, always-applicable upkeep: `PRAGMA optimize` and a WAL
 checkpoint with truncation. Add `--vacuum` to also rewrite the database file for compaction.
 
 > **When:** run the bare form occasionally (it is cheap and safe); reach for `--vacuum` after

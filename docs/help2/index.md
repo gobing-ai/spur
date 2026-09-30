@@ -13,8 +13,8 @@ than `spur agent run`, which delegates to the installed agents.
 ```bash
 npm i -g @gobing-ai/spur   # or install from source / standalone binary
 spur agent doctor          # verify your coding agents are ready
-spur init                  # scaffold .spur/ in your project
-spur status                # confirm the project is healthy
+spur self init                  # scaffold .spur/ in your project
+spur self status                # confirm the project is healthy
 ```
 
 From there, create your first task and open the [daily development workflow](./daily-development-workflow.md):
@@ -39,11 +39,11 @@ spur task create "Investigate flaky login test" --skip-ready
 | --- | --- | --- | --- |
 | `spur agent` | [agent](./agent.md) | `spur projects` | [projects](./projects.md) |
 | `spur builder` | [builder](./builder.md) | `spur rule` | [rule](./rule.md) |
-| `spur feature` | [feature](./feature.md) | `spur serve` | [serve](./serve.md) |
-| `spur history` | [history](./history.md) | `spur status` | [status](./status.md) |
-| `spur init` | [init](./init.md) | `spur task` | [task](./task.md) |
-| `spur maintain` | [maintain](./maintain.md) | `spur workflow` | [workflow](./workflow.md) |
-| `spur message` | [message](./message.md) | `spur migrate` | [migrate](./migrate.md) |
+| `spur feature` | [feature](./feature.md) | `spur self serve` | [serve](./serve.md) |
+| `spur history` | [history](./history.md) | `spur self status` | [status](./status.md) |
+| `spur self init` | [init](./init.md) | `spur task` | [task](./task.md) |
+| `spur self maintain` | [maintain](./maintain.md) | `spur workflow` | [workflow](./workflow.md) |
+| `spur message` | [message](./message.md) | `spur self migrate` | [migrate](./migrate.md) |
 
 ## Global conventions
 

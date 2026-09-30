@@ -1,12 +1,14 @@
-# spur init
+# spur self init
 
 Initialize Spur in a project: scaffold `.spur/`, seed the global config on first run, and get a
 project ready for tasks, rules, and workflows.
 
+> **Canonical path:** `spur self init`. The legacy `spur init` top-level form remains a hidden alias.
+
 ## Usage
 
 ```bash
-spur init [options]
+spur self init [options]
 ```
 
 ## Options
@@ -45,7 +47,7 @@ spur init [options]
 ## Verify
 
 ```bash
-spur status          # project: ok, .spur: ok, git branch, agent specs
+spur self status          # project: ok, .spur: ok, git branch, agent specs
 ```
 
 ## See also

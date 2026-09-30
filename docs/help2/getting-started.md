@@ -56,7 +56,7 @@ curl -fsSL https://raw.githubusercontent.com/gobing-ai/spur/main/scripts/install
 ```
 
 Installs to `~/.local/bin` (override via `SPUR_INSTALL`), embeds the Bun runtime, and runs
-`spur init` for you. Per-platform binaries (darwin/linux, arm64/x64) are published as release
+`spur self init` for you. Per-platform binaries (darwin/linux, arm64/x64) are published as release
 assets.
 
 ```bash
@@ -83,10 +83,10 @@ expected is missing or unauthenticated, fix that first; everything downstream de
 Every project that uses Spur needs a one-time initialization. Run this at the project root:
 
 ```bash
-spur init                    # scaffold .spur/ with config, rules, agents
-spur init --name my-project  # custom project name (default: directory name)
-spur init --minimal          # only the minimal .spur scaffold
-spur init --force            # recreate files that already exist
+spur self init                    # scaffold .spur/ with config, rules, agents
+spur self init --name my-project  # custom project name (default: directory name)
+spur self init --minimal          # only the minimal .spur scaffold
+spur self init --force            # recreate files that already exist
 ```
 
 | Created path | Purpose |
@@ -98,7 +98,7 @@ spur init --force            # recreate files that already exist
 | `.spur/spur.db` | SQLite database: run history, traces, planning events (WAL mode) |
 | `.spur/logs/spur.log` | Log output |
 
-> **Re-init guard:** `spur init` refuses to run when `.spur/config.yaml` already exists, unless
+> **Re-init guard:** `spur self init` refuses to run when `.spur/config.yaml` already exists, unless
 > you pass `--force`. A stray `init` cannot clobber a configured project.
 
 On first run, Spur also seeds `~/.config/spur/` from its bundled defaults (existing files are
@@ -108,8 +108,8 @@ the shipped default (the old file is backed up first).
 ## Check project health
 
 ```bash
-spur status          # project, .spur, git branch, agent specs
-spur status <path>   # also inspect a specific file or directory
+spur self status          # project, .spur, git branch, agent specs
+spur self status <path>   # also inspect a specific file or directory
 ```
 
 ## Your first task

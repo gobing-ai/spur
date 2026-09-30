@@ -88,12 +88,13 @@ finds it via its project-then-bundled name probe.
 ## spur workflow continue
 
 ```bash
-spur workflow continue [run-id] [--yes] [--force] [--answer <yes|no|cancel>] [--json]
+spur workflow continue [run-id] [--yes] [--force] [--answer <yes|no|cancel>] [--answer-text <text>] [--json]
 ```
 
 Resume a paused (HITL) run; omit the id to take the most recent paused run. The three flags do
 different jobs: `--yes` skips only the CLI confirmation, `--answer` injects the HITL gate answer
-before guards re-evaluate (it does **not** imply `--yes`), and `--force` proceeds despite
+before guards re-evaluate (it does **not** imply `--yes`; `--answer-text` answers a pending
+input gate with free text), and `--force` proceeds despite
 workflow-definition drift.
 
 ```bash
@@ -106,7 +107,7 @@ spur workflow continue <run-id> --yes --answer yes
 spur workflow cancel <run-id> [--json]
 spur workflow clean [--older-than <minutes>] [--force] [--logs] [--dry-run] [--json]
 spur workflow trace [run-id] [--workflow <name>] [--status <status>] [--since <iso-date>]
-spur workflow trace [--last <n>] [--follow] [--poll <ms>] [--output] [--json]
+spur workflow trace [--last <n>] [--follow] [--poll <ms>] [--output] [--timeout <ms>] [--json]
 ```
 
 `cancel` stops one non-terminal run by id (a live async worker's process group is SIGTERMed).
@@ -114,7 +115,7 @@ spur workflow trace [--last <n>] [--follow] [--poll <ms>] [--output] [--json]
 and reclaim retained logs (`--logs` scopes to logs only; `--force` takes everything non-terminal;
 `--dry-run` lists without writing). `trace` is the observability verb — recent runs, one run's
 timeline, or `--follow` polling a live run until terminal (`--output` streams the run log
-instead).
+instead; `--timeout` sets a caller deadline in milliseconds).
 
 ```bash
 spur workflow trace <run-id> --follow

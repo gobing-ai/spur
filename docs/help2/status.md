@@ -1,12 +1,14 @@
-# spur status
+# spur self status
 
 Project health check in one command: config, database, git, and detected agent specs.
+
+> **Canonical path:** `spur self status`. The legacy `spur status` top-level form remains a hidden alias.
 
 ## Usage
 
 ```bash
-spur status [path] [--json]
-spur status [path] [--json-envelope]
+spur self status [path] [--json]
+spur self status [path] [--json-envelope]
 ```
 
 ## Arguments and options
@@ -20,16 +22,16 @@ spur status [path] [--json-envelope]
 ## Example
 
 ```bash
-spur status
+spur self status
 # project: ok · .spur: ok · git: <branch> · agent specs: n
 
-spur status src/auth/   # also inspect a specific path
-spur status --json      # { ok, git: {root, branch, dirty}, agentSpecs, ... }
+spur self status src/auth/   # also inspect a specific path
+spur self status --json      # { ok, git: {root, branch, dirty}, agentSpecs, ... }
 ```
 
 ## When to run it
 
-- Right after `spur init` — confirm the scaffold is healthy.
+- Right after `spur self init` — confirm the scaffold is healthy.
 - After upgrading Spur or pulling a collaborator's changes.
 - Before starting a work session: it surfaces a dirty tree, missing config, or agent-spec
   surprises before they hit a longer command.

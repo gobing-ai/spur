@@ -82,8 +82,11 @@ spur task update 0010 --feature F7 --priority P0                # (c) scalar fie
 | `--priority <p>` | Set priority (`P0`–`P3`) |
 | `--ac-numbering <mode>` | Opt the task into the requirements↔AC coverage check |
 | `--ac-altitude <mode>` | `graduating` (default) or `task-local` (skip the feature-AC subset rule) |
+| `--estimate-hours <n>` | Set the `estimate_hours` frontmatter field (positive number; decomposition size estimate) |
+| `--assignee <spec-id>` | Set the `assignee` frontmatter field to an agent spec id |
 | `--no-lifecycle` | Suppress the lifecycle workflow run (pipeline use) |
 | `--force-done` | Allow `done` with a non-PASS verdict; records an override |
+| `--provenance-bypass` | Record an audited provenance-bypass link when no pipeline run exists (pair with `--force-done --reason`) |
 | `--reason <text>` | Rationale for a forced-done override |
 | `--verdict-dir <path>` | Directory holding `<wbs>-verdict.json` artifacts |
 
@@ -166,8 +169,11 @@ status. `record` never transitions to `done` — that gate stays with `update`.
 ## spur task check
 
 ```bash
-spur task check [wbs] [--strict] [--as <status>] [--fix] [--corpus] [--since <ref>] [--json]
+spur task check [wbs] [--strict] [--as <status>] [--precheck] [--fix] [--corpus] [--since <ref>] [--json]
 ```
+
+`--precheck` also runs the implement-readiness prechecks (size, evidence channel); failures are
+errors.
 
 Four layers: frontmatter schema (L1), status-driven section matrix (L2), format (L3),
 traceability (L4 — edges resolve, AC coverage, parent↔child roll-ups). `--as <status>` evaluates

@@ -11,9 +11,11 @@ model call in Spur (skills, workflow `agent.run` actions, team-mode runs) routes
 | `run <prompt>` | Execute a prompt or slash command via a coding agent |
 | `list` | List detected coding agents (agent specs with `--specs`) |
 | `doctor [agent]` | Check agent readiness |
+| `status` | Show agent specs with live process status and member session (requires `spur self serve`) |
+| `usage` | Run-once provider usage capture that refreshes quota-owned executor availability |
 | `wait [specId]` | Wait for a pinned occupant run to reach a lifecycle state |
-| `start <spec-id>` | Start a supervised agent process (requires `spur serve`) |
-| `stop <spec-id>` | Stop a supervised agent process (requires `spur serve`) |
+| `start <spec-id>` | Start a supervised agent process (requires `spur self serve`) |
+| `stop <spec-id>` | Stop a supervised agent process (requires `spur self serve`) |
 
 ## spur agent run
 
@@ -54,10 +56,29 @@ spur agent run "Work on task 0010" --spec reviewer --drain
 ## spur agent list
 
 ```bash
-spur agent list [--specs] [--json]
+spur agent list [--specs] [--server <url>] [--json]
 ```
 
-Without flags: detected coding agents. With `--specs`: team agent specs from `.spur/agents/`.
+Without flags: detected coding agents. With `--specs`: team agent specs from `.spur/agents/`;
+`--server` points at the server API for live run status (default `http://localhost:3000/api`).
+
+## spur agent status
+
+```bash
+spur agent status [--server <url>] [--json]
+```
+
+Agent specs with live process status and member session, read from the running server.
+
+## spur agent usage
+
+```bash
+spur agent usage [--dry-run] [--source <source>] [--json]
+```
+
+Run-once provider usage capture (default source `codexbar`) that refreshes quota-owned executor
+availability. Schedule it externally (cron/launchd) — `spur self serve` never runs it. `--dry-run`
+prints the would-be changes without writing the snapshot or any config.
 
 ## spur agent doctor
 
@@ -79,9 +100,18 @@ Block until a pinned occupant run reaches a lifecycle state. Address the occupan
 latest run is used. `--until` is repeatable (OR semantics) and `--timeout` bounds the wait in
 milliseconds.
 
+## spur agent start / stop
+
+```bash
+spur agent start <spec-id> [--server <url>] [--json]
+spur agent stop <spec-id> [--server <url>] [--json]
+```
+
+Start or stop a supervised agent process through the running server.
+
 ## Agent specs
 
-`.spur/agents/<id>.yaml` specs are materialized from the fleet declaration when `spur serve`
+`.spur/agents/<id>.yaml` specs are materialized from the fleet declaration when `spur self serve`
 starts; there is no CLI verb to hand-author them. `spur agent loop` is supervisor-internal
 (hidden from `--help`): the supervisor spawns one per started spec.
 
