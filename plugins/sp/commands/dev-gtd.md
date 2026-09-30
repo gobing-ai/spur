@@ -63,8 +63,8 @@ Then stop the run (this stage failed). The operator can proceed by re-running wi
 
 **3 — Generate a conventional commit message.** Follow the gitmsg procedure (the same one
 `/sp:dev-gitmsg` runs) — see
-[dev-operations.md](../skills/spur-dev/references/dev-operations.md#9-gitmsg): one bounded diff
-capture, concern grouping, conventional `<type>(<scope>): <summary>` formatting. Two deviations
+[dev-operations.md](../skills/spur-dev/references/dev-operations.md#9-gitmsg): one bounded gather
+call, concern grouping, conventional `<type>(<scope>): <summary>` formatting. Two deviations
 belong to this flow: read the change set with `--all` semantics (this stage commits everything the
 gate just proved green, not only what happens to be staged), and resolve multiple concerns to a
 **single combined message** (dominant type/scope, one body bullet per concern) so the push is

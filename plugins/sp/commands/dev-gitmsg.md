@@ -1,5 +1,5 @@
 ---
-description: Generate conventional commit message(s) from the current change set via one bounded diff capture, optionally commit
+description: Generate conventional commit message(s) from the current change set via one bounded gather call, optionally commit
 role: scribe
 argument-hint: "[--commit] [--squash] [--all] [--scope <path>]"
 allowed-tools: ["Bash", "Read"]
@@ -28,8 +28,10 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 
 Follow the inline procedure in [dev-operations.md](../skills/spur-dev/references/dev-operations.md#9-gitmsg) (gitmsg).
 
-One diff capture per run — `-U0`, lockfiles excluded, 60 KB cap — is the token contract; never re-read
-the diff wider. Neither `--commit` nor `--squash` → messages only. `--commit` → one commit per concern, split automatically,
-so the operator is never asked to re-stage and re-run. `--squash` → one commit for everything.
-An empty index widens to the whole tree only on a message-only run, and says so; a committing run
-stops there and prints the exact `--all` re-run line instead of guessing.
+One gather call per run (per-file-capped `-U0` diff including untracked content, recent subjects for
+scope vocabulary, secret and partial-staging guards — git + shell only), then at most one commit call.
+Never re-read the diff wider. Neither `--commit` nor `--squash` → messages only. `--commit` → one
+commit per concern, split automatically, so the operator is never asked to re-stage and re-run.
+`--squash` → one commit for everything. An empty index widens to the whole tree only on a
+message-only run, and says so; a committing run stops there and prints the exact `--all` re-run line
+instead of guessing.

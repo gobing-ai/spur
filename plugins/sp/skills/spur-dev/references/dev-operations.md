@@ -460,73 +460,84 @@ is the procedure. The backing is a combination of git CLI, `spur` CLI, and agent
 
 ### 9. gitmsg
 
-- **Purpose:** Generate conventional commit message(s) for the current change set — one bounded diff capture → concern grouping → one message per concern; optionally commit.
+- **Purpose:** Generate conventional commit message(s) for the current change set — one gather call → concern grouping → one message per concern; optionally commit. Git + POSIX shell only; no helper script.
 - **Inputs:** `--scope <path>` (default: the whole change set) — path filter; an explicit `--scope` always wins over change-set auto-discovery. `--all` (default: off) — widen the change set past the index to every change in the tree: unstaged **and untracked** files. Omitted, the change set is the index only, which keeps pre-commit semantics stable. `--commit` (default: off) — commit the change set, one commit per concern. `--squash` (default: off) — collapse every concern into one message and one commit; implies `--commit`.
-- **Backing:** `inline` — bounded diff capture + concern grouping + conventional commit formatting.
+- **Backing:** `inline` — one bounded gather call + concern grouping + conventional commit formatting.
 - **Behavior:**
 
-  1. **Gather once — a single shell round trip.** No temp file, no second read, no follow-up `git` call for context:
+  1. **Gather — exactly one Bash call.** Set the three variables from the flags and run the block
+     verbatim. It resolves the change set, applies the empty-index rule, and prints everything the
+     message needs; the guards run in shell, not in the model:
 
      ```bash
-     # default:  RANGE=--cached        (the index)
-     # --all:    RANGE=HEAD            (plus untracked, listed below)
-     git rev-parse --abbrev-ref HEAD --git-dir --git-common-dir
-     git diff $RANGE --stat $PATHSPEC
-     git diff $RANGE --name-status $PATHSPEC
-     git diff $RANGE -U0 $PATHSPEC ':(exclude)*.lock' ':(exclude)*lock.json' ':(exclude)*.lockb' | head -c 60000
-     # --all only:
-     git ls-files --others --exclude-standard $PATHSPEC
+     bash <<'EOF'
+     ALL=0 COMMIT=0 SCOPE=':/'   # --all → ALL=1 · --commit/--squash → COMMIT=1 · --scope <p> → SCOPE=<p>
+     EX=(':!*.lock' ':!*lock.json' ':!*.lockb')
+     untracked() { git ls-files -o --exclude-standard -- "$SCOPE" "${EX[@]}"; }
+     if [ "$ALL" = 0 ] && git diff --cached --quiet -- "$SCOPE"; then
+       t=$(git diff --name-only HEAD -- "$SCOPE" | wc -l | tr -d ' '); u=$(untracked | wc -l | tr -d ' ')
+       [ "$COMMIT" = 1 ] && { echo "STOP index empty ($t tracked, $u untracked changed) — re-run with --all"; exit; }
+       echo "NOTE index empty — reading the whole tree instead"; ALL=1
+     fi
+     [ "$ALL" = 1 ] && R=HEAD || R=--cached
+     stream() {
+       git diff $R -U0 --diff-filter=d -- "$SCOPE" "${EX[@]}"
+       [ "$ALL" = 1 ] && untracked | while IFS= read -r f; do git diff --no-index -U0 -- /dev/null "$f"; done
+     }
+     [ -z "$(stream | head -c1)" ] && { echo "STOP no changes in $SCOPE"; exit; }
+     echo "## context"; git rev-parse --abbrev-ref HEAD --git-dir --git-common-dir --show-superproject-working-tree
+     echo "## recent subjects"; git log -12 --format=%s
+     echo "## stat"; git diff $R --stat=100 --compact-summary -- "$SCOPE"
+     [ "$ALL" = 1 ] && untracked | sed 's/^/ (untracked) /'
+     [ "$ALL" = 0 ] && { echo "## partially staged"; comm -12 <(git diff --cached --name-only | sort) <(git diff --name-only | sort); }
+     echo "## secret hits"
+     stream | awk '/^\+\+\+ /{f=substr($0,7)} /^\+[^+]/{print f": "$0}' \
+       | grep -E '(password|passwd|secret|api[_-]?key|access[_-]?token|auth[_-]?token)["'"'"']?[[:space:]]*[:=][[:space:]]*["'"'"'][^"'"'"'[:space:]]{12,}|BEGIN [A-Z ]*PRIVATE KEY|(ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{40,}|sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16})' | head -5
+     echo "## diff (-U0, ≤80 lines/file, ≤40 KB)"
+     stream | awk '/^diff --git/{n=0} n++<80' | head -c 40000
+     EOF
      ```
 
-     `$PATHSPEC` is `-- <path>` when `--scope` is given, empty otherwise.
+     What the block guarantees:
+     - **Untracked files are read, not just named** — under `--all` each one is diffed against `/dev/null`, so a new file (often the main change) shapes the message.
+     - **Every file gets a share** — the per-file 80-line cap runs before the 40 KB total cap, so one large file cannot starve the rest. Deleted files contribute only their `(gone)` stat line; lockfiles are excluded.
+     - **Empty index, no `--all`:** a message-only run widens to the whole tree and says so (`NOTE`); a committing run prints `STOP` with the counts — re-print the exact re-run line (`/sp:dev-gitmsg <same flags> --all`) and stop. Committing untracked files is never inferred.
+     - **`STOP no changes`** → report it and stop.
 
-     **Empty index, no `--all`** — the dead-end this command used to hand back. Reading is
-     not a mutation, so the two cases split there:
-     - **No committing flag** → re-gather once with `--all` semantics and say so
-       (`index empty — read the whole tree instead`). A message-only run has nothing to lose by
-       looking wider, and the operator gets an answer instead of an errand.
-     - **`--commit` / `--squash`** → stop. Print the worktree counts (`N tracked, M untracked`) and
-       the exact re-run line (`/sp:dev-gitmsg <the same flags> --all`). Committing
-       untracked files is never inferred from an empty index — that is the operator's call, and it
-       is now one paste away rather than a guess.
+  2. **Stay inside the budget.** The block's output is the whole input. Never run a second, wider `git diff`, `git show`, or file `Read` to "see more"; never paste hunks into the output. A truncated file is typed from its stat line and path.
 
-     Empty under `--all`, or still empty after the widen → report `no changes in <scope>` and stop.
+  3. **Group by concern.** A concern is one coherent change a reviewer would accept or revert as a unit:
+     - Tests, docs, and registry/index updates travel **with the code they cover** — not as separate `test`/`docs` groups. A standalone `test`/`docs` group exists only when nothing else in the change set motivates it.
+     - Behavior changes and pure formatting/refactor churn are **different** concerns.
+     - Prefer fewer groups; a single group is the common case. Order groups by dependency (refactor before the feature that uses it).
 
-  2. **Stay inside the budget.** `-U0` (no context lines) plus the lockfile exclusions plus the 60 KB cap is the token contract — never re-run the diff with context to "see more", never paste diff hunks into the output. If the cap truncated the diff, say so and derive the message from `--stat` + `--name-status` alone; a large mechanical change rarely needs hunk detail to be typed and scoped correctly.
+  4. **Write each message.**
+     - **Type** from the dominant change: `feat` · `fix` · `refactor` · `perf` · `docs` · `test` · `style` · `build` (deps, bundling) · `ci` (workflows, pipelines) · `chore` (other tooling/config) · `revert`.
+     - **Scope** — reuse a scope that appears in `## recent subjects` for the same area (the repo's own vocabulary beats a guessed one); `--scope <path>` overrides. Omit the scope rather than invent one.
+     - **Summary** — imperative, ≤72 chars, lowercase first word, no period; says what changed in user/maintainer terms, not which files.
+     - **Body** — only when the *why* is not obvious from the summary: intent and consequence in 1–3 lines, never a restated diff or file list. `--squash` → one combined message (dominant type/scope, one body bullet per concern).
 
-  3. **Summarize only what shapes the message.** One sentence — what changed and _why_, not a line count — for each file whose change is not obvious from its path and status. Skip the obvious ones (generated files, lockfiles, pure renames, `docs/**` under a `docs` group). Past ~12 interesting files, summarize per directory instead of per file.
+  5. **Report.** Print: one context line (branch; `linked worktree` when `--git-dir` ≠ `--git-common-dir` and the superproject line is empty), then each message in a fenced block. No per-file summaries, no restated diff. With neither `--commit` nor `--squash`, add one copy-paste `git commit` line per message and stop.
 
-  4. **Group by concern**, and for each group derive type, scope, message:
-     - Type from the dominant change — `feat` (new functionality) · `fix` (bug fix) · `refactor` (restructuring, no behavior change) · `docs` (documentation only) · `chore` (build/config/tooling) · `perf` · `test` · `style`.
-     - Scope from the affected module/package (`cli`, `domain`, `server`, `web`, `app`, …); `--scope` overrides.
-     - Message:
+  6. **Commit (`--commit` / `--squash`) — one more Bash call.** `--squash` implies `--commit`, so both together is just `--squash`. Refuse before touching the index when:
+     - `## secret hits` is non-empty → print each `file: line`, commit nothing;
+     - `--commit` would split (more than one group) and `## partially staged` is non-empty → splitting would widen those `git add -p` stagings to whole files; print the paths and commit nothing (`--squash` is allowed — it commits the index as staged).
 
-       ```
-       <type>(<scope>): <summary>
+     Otherwise run the commits in one heredoc — `--all` first stages the scope (`git add -A -- "$SCOPE"`); a single group or `--squash` is one `git commit -F -`; multiple groups commit in dependency order:
 
-       <body — why, only when the why is not obvious>
-       ```
+     ```bash
+     bash <<'EOF'
+     git reset -q -- :/ && git add -A -- <group-1 paths> && git commit -q -F - <<'MSG'
+     <group-1 message>
+     MSG
+     # …repeat per group…
+     git log --oneline -<n>; git status --short
+     EOF
+     ```
 
-       Summary: imperative mood, ≤72 chars, lowercase first word, no period. Body explains intent and consequence; it never restates the diff. Behavior changes and pure formatting/refactor churn are **different concerns** — never one group.
+     Hooks stay enabled; a failing hook stops the run with its output — never `--no-verify`.
 
-  5. **Resolve the message shape without a round trip to the operator.** `--squash` → one combined
-     message (dominant type/scope, one body bullet per group). Otherwise one message per group, in
-     dependency order (refactor before the feature that uses it); a single group is that same rule
-     with one group.
-
-  6. **Report, then commit if asked.** Print the resolved message(s), a copy-paste `git commit` line per message, and a one-line context header: current branch, and `linked worktree` when `--git-dir` differs from `--git-common-dir` and `git rev-parse --show-superproject-working-tree` is empty (a non-empty result means submodule, not worktree). With neither `--commit` nor `--squash`, stop here — the operator commits.
-
-  7. **Committing (`--commit` / `--squash`).** The two flags name outcomes, not dimensions: `--commit`
-     commits **by concern**, `--squash` commits **everything as one**. `--squash` implies `--commit`,
-     so `--commit --squash` is just `--squash`, never an error.
-
-     First scan the captured diff's added lines for credentials (`password`, `secret`, `api[_-]?key`, `token`, `BEGIN [A-Z ]*PRIVATE KEY`, long base64-looking literals). On a hit: print the offending `file:line`, commit nothing, stop. Otherwise:
-     - `--all` → `git add -A $PATHSPEC` first (this is what stages the untracked files).
-     - `--squash`, or `--commit` on a single group → `git commit -m "$MESSAGE"`.
-     - `--commit` on multiple groups → **commit each group in sequence**: record the full staged file list once, then per group `git reset -q -- <all staged paths>` → `git add -- <that group's paths>` → `git commit -m "<that group's message>"`. This is the split; it needs no re-run and no re-staging by the operator.
-     - **Partial-staging guard:** if any path appears in _both_ `git diff --cached --name-only` and `git diff --name-only` (a `git add -p` staging), the sequence above would silently widen those commits to the whole file. Do not split — report the affected paths and commit nothing unless `--squash` was given.
-
-- **Invariants:** With neither `--commit` nor `--squash`, never runs `git commit` — message only. Neither flag commits across a credential hit, and `--commit` never splits across a partial staging. Without `--all` the change set is the index, so plain `/sp:dev-gitmsg` keeps pre-commit semantics; only `--all` reaches unstaged and untracked files, and only a committing run (`--commit` / `--squash`) stages them. The empty-index widen is read-only and always announced — a committing run never widens its own scope. An explicit `--scope <path>` always bounds the change set, with or without `--all`. One diff capture per run, bounded and context-free — never a second, wider read.
+- **Invariants:** Git and POSIX shell only — no helper script, no temp file. At most two Bash calls: gather, then (only when committing) commit. With neither `--commit` nor `--squash`, never runs `git commit` — message only. Neither flag commits across a secret hit, and `--commit` never splits across a partial staging. Without `--all` the change set is the index, so plain `/sp:dev-gitmsg` keeps pre-commit semantics; only `--all` reaches unstaged and untracked files, and only a committing run stages them. The empty-index widen is read-only and always announced — a committing run never widens its own scope. An explicit `--scope <path>` always bounds the change set, with or without `--all`. One bounded, context-free capture per run — never a second, wider read.
 
 ### 10. fixall
 
