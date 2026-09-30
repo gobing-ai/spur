@@ -15,6 +15,10 @@ function getEnvVar(name, fallback) {
 }
 
 // plugins/sp/lib/spur-bin.ts
+function spurCommand(spurBin) {
+  const parts = (spurBin ?? "spur").trim().split(/\s+/).filter((p) => p.length > 0);
+  return { cmd: parts[0] ?? "spur", prefix: parts.slice(1) };
+}
 function defaultSpurBin() {
   const fromEnv = getEnvVar("SPUR_BIN");
   if (fromEnv)
@@ -221,9 +225,8 @@ function parseStepProfileCliArgs(argv) {
   return { workflow, last, windowSec, spurBin, json, help };
 }
 function runSpurJson(spurBin, args) {
-  const binParts = spurBin.split(/\s+/).filter(Boolean);
-  const cmd = binParts[0] ?? "spur";
-  const cmdArgs = [...binParts.slice(1), ...args];
+  const { cmd, prefix } = spurCommand(spurBin);
+  const cmdArgs = [...prefix, ...args];
   const r = spawnSync(cmd, cmdArgs, { stdio: ["ignore", "pipe", "pipe"], encoding: "utf8" });
   const decode = (b) => typeof b === "string" ? b : Buffer.from(b ?? []).toString("utf8");
   return {
