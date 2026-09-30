@@ -4,7 +4,7 @@ name: W4 pipeline check diet and final placement sweep
 status: done
 template: feature-impl
 created_at: 2026-09-29T06:25:03.420Z
-updated_at: "2026-09-30T07:18:47.172Z"
+updated_at: "2026-09-30T13:20:35.133Z"
 feature_id: A9
 priority: P2
 tags:
@@ -92,6 +92,37 @@ R=".spur/run/$__runId-script-root.json"; D="$(jq -r '.dir // empty' "$R" 2>/dev/
 
 ### Solution
 
+Pipeline check diet, script-root resolution and final placement sweep (W4). Prose added by the
+re-verify of 2026-09-30 (R6 requires the removed/merged list here); the auto change-map follows.
+
+#### Removed / merged checks and their replacement (R6)
+
+| Pipeline | State | Change | Replacement / rationale |
+|----------|-------|--------|-------------------------|
+| idea | feature-create | Goal and Scope `feature update` shells merged into one | Same commands in order, same `&&` fail-fast; one artifact precondition |
+| idea | feature-check | Post-confirm route-writer shell deleted | ac-generate's writer is the single writer; its inputs cannot change across `hitl.confirm` (0945 pin updated) |
+| idea | handoff | `note` deleted | The `run.artifact` carries the handoff report at the same path |
+| task | precheck | Start `note` dropped | Informational only; run start is already in the trace |
+| task | precheck | Base-sha capture shell merged into the dirty-tree warning shell | Same commands in order; a resumed run keeps its original base |
+| task | test-fix | Two log-append shells merged | Same commands in order, exit 0 |
+| task | triage | Mode-fallback shell merged into the memory-append shell | Same commands in order; a non-empty mode file is still never overridden |
+| task | done | Completion `note` dropped | The checkpoint action is the terminal record |
+
+No strict gate was removed: composition, drift and BDD-warning findings stay advisory and never fail
+a state or trigger a retry.
+
+#### Deviations from the written requirements
+
+- R1: `IDEA_ACTION_BUDGET` is 31, not 30. The A9×main merge (1451c856e) kept one
+  recommendation-derivation shell that dev-idea decision-brief gates (8027248e2) added on main. The
+  diet's own cuts still land (33 → 30 before the merge); the ratchet holds at the current count.
+- R9: `rg 'function (spurCommand|defaultSpurBin)' plugins/sp/scripts` still matches the generated
+  `.mjs` twins of wrapup-steps and workflow-step-profile, because `build:scripts` inlines
+  `../lib/spur-bin` so the twin runs under bare `node`. No `.ts` source defines either function.
+- R7: the baseline also keeps the plan §2 Keep rows for `daily-summary/`, `dogfood-testing/` and
+  `hooks/pi/guard-extension.ts`; the no-kinds `residual-scan` ledger row was removed by the re-verify.
+
+
 Change-map (auto-generated — implement step did not record a Solution).
 Each entry cites the first changed line per file (`file:line`).
 
@@ -156,22 +187,20 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | command |
-| R2 | MET | command |
-| R3 | MET | command |
-| R4 | MET | command |
-| R5 | MET | command |
-| R6 | MET | command |
-| R7 | MET | command |
-| R8 | MET | command |
-| R9 | MET | command |
+| R1 | MET | `packages/app/tests/workflow/pipeline-action-budget.test.ts:14` IDEA_ACTION_BUDGET = 31; `packages/app/tests/workflow/pipeline-action-budget.test.ts:15` TASK_ACTION_BUDGET = 48; counted idea 31 / task 48; test passes. Documented deviation: 30 at the W4 commit, raised to 31 by the A9 x main merge (Solution, Deviations) |
+| R2 | MET | `config/workflows/idea-pipeline.yaml:193` merged Goal and Scope shell; `config/workflows/idea-pipeline.yaml:304` route-writer duplicate deleted; `config/workflows/idea-pipeline.yaml:557` handoff note deleted; `packages/app/tests/workflow/idea-pipeline-routing.test.ts:66` single-writer pin |
+| R3 | MET | `config/workflows/task-pipeline.yaml:191` base-sha merged into the hygiene shell; `config/workflows/task-pipeline.yaml:433` log appends merged; `config/workflows/task-pipeline.yaml:542` mode fallback merged; `config/workflows/task-pipeline.yaml:801` done note dropped |
+| R4 | MET | `config/workflows/idea-pipeline.yaml:92`, `config/workflows/task-pipeline.yaml:190`, `config/workflows/feature-verification.yaml:58` and `config/workflows/wrapup-pipeline.yaml:121` hold the only script-root probe per file (`rg -c 'superskill script path\|plugin-scripts\.json'` -> 1 each) |
+| R5 | MET | `plugins/sp/scripts/inline-run-setup.ts:146` --actions-file flag; `packages/app/src/services/inline-run-setup.ts:944` runInlineRunTraceBatch; `plugins/sp/tests/inline-run-trace.test.ts:441` batch emission tests; `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:513` one call per state |
+| R6 | MET | Solution section of task 1007 now lists each removed or merged check with its replacement (added this run); `config/workflows/task-pipeline.yaml:191` hygiene advisory never fails the run |
+| R7 | MET | `spur rule run --rule sp-script-placement` -> All 1 rule passed; sweep of every script deleted in 1001-1006 over plugins/sp config/workflows -> no hits; baseline holds 10 rows, each citing plan section 2 (no-kinds residual-scan row removed this run) |
+| R8 | MET | `config/workflows/pr-review.yaml:71` script-root action; `config/workflows/history-anatomy.yaml:107` script-root action; one probe per file |
+| R9 | MET | `plugins/sp/lib/spur-bin.ts:17` spurCommand; `plugins/sp/lib/spur-bin.ts:30` defaultSpurBin; `plugins/sp/scripts/wrapup-steps.ts:36` and `plugins/sp/scripts/workflow-step-profile.ts:17` import it; no .ts source defines either function (the rg still matches the two generated .mjs twins, documented in Solution) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | command | R4/R5/R7/R8/R9 rows above: fresh greps + sweeps clean (probe remnants only at script-root actions, 9/9 scripts exist, zero stray refs), inline-run-trace 12/0, spur-bin 3/0, inline-pipeline-driver 4/0 fresh; standing canonical gate PASS .spur/run/1007-test-gate.log (9483 pass / 0 fail, digest sha256:2167af41f720cbe15876e8e939696029081450dd7d8b37aa6c137ed6d21c1d8b) |
-| AC2 | MET | command | R1/R2/R3/R6 rows above: pipeline-action-budget 2 pass / 0 fail fresh (ratchet exactly ≤30/≤48), idea-pipeline-routing 5/0 fresh (single-writer pin), merges verified order/exit-0-preserving by direct read, advisory-only semantics intact |
-| AC-9 | MET | command | Feature scenario #9 (R9 pipeline check diet): budget ratchet idea≤30/task≤48 pinned by packages/app/tests/workflow/pipeline-action-budget.test.ts (2 pass / 0 fail fresh); idea + task pipeline merges land with command order and exit-0 preserved; --actions-file single-call batching (packages/app/src/services/inline-run-setup.ts:918-1028) replaces per-row action writes; advisory settle/report stay soft exit-0 |
-| AC-8 | MET | command | Feature scenario #8 (R8 sp skills track CLI moves): pr-review + history-anatomy workflow run-start onEnter restored byte-identical to feature-verification (zero stray refs, fresh sweep); plugins/sp/lib/spur-bin.ts single owner with generated .mjs twins regenerated in lockstep (spur-bin rung test 3 pass / 0 fail fresh); sp-script-placement rule PASS |
+| Scenario: R8 — sp skills, commands and workflows track every CLI move | MET | command | placement rule passes; `bun run plugin-smoke` -> plugin-install-smoke PASS; `bun test scripts/commands/script-contract-check.test.ts` -> 23 pass / 0 fail; actions-file tests in the plugins/sp 248 pass run |
+| Scenario: R9 — Pipeline checks keep only core gates strict | MET | test | `packages/app/tests/workflow/pipeline-action-budget.test.ts:14` ratchet plus idea/task/wrapup pipeline tests -> 112 pass / 0 fail across 6 files |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

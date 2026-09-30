@@ -4,7 +4,7 @@ name: W2 feature check --inventory and idempotent feature sync replace feature s
 status: done
 template: feature-impl
 created_at: 2026-09-29T06:25:03.419Z
-updated_at: "2026-09-29T21:28:36.185Z"
+updated_at: "2026-09-30T13:20:32.323Z"
 feature_id: A9
 priority: P2
 tags:
@@ -179,22 +179,19 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | packages/app/src/services/feature-inventory.ts:40 `checkInventoryCoverage(report, ac)` (parseInventory:28-46 — `[deferred:` exempt, `[unclear:` still owing; missing/empty section → error finding :54-62); wired in packages/app/src/services/feature-check.ts:305-308; CLI flag apps/cli/src/commands/feature.ts:405-407 with fail-closed unreadable-report read :427-433; rule id registered packages/config/src/finding-codes.ts:184 (`inventory-coverage`, allowlist :85). Tests: packages/app/tests/services/feature-inventory.test.ts 6 pass (incl. unclear-not-exempt :57, missing section fails closed :64, empty section :70). |
-| R2 | MET | config/workflows/idea-pipeline.yaml:250 gate args carry `--inventory .spur/run/${vars.__runId}-idea-eval-report.md`; idea-coverage-check action deleted (comment :259 "coverage folds into idea-ac-check via --inventory"); `grep idea-coverage config/workflows/idea-pipeline.yaml` → no matches (exit 1); route derivation :286, feature-check prompt :293 and guards :681-698 read only `idea-ac-check.status`; idea-pipeline-definition + idea-pipeline-routing tests pass (226 across 4 files incl. feature-service/feature-check suites). |
-| R3 | MET | packages/app/src/services/feature-sync-suppression.ts:29 `computeSyncFingerprint` (sha256[:32], sorted vectors :36-39), `BlockedSyncState` :47, path `.spur/run/feature-sync-blocked-<id>.json` :60; FeatureService.syncFeature packages/app/src/services/feature-service.ts:560-572 — force/dryRun/forceConfirm bypass replay :560-562, replay returns `suppressed: true` :563-565, non-BLOCKED clears state :666-678, fingerprint inputs :695-701. Tests: feature-sync-suppression.test.ts:173-196 (persist→replay suppressed:true, --force re-derives) and CLI apps/cli/tests/commands/feature-inventory-sync.test.ts:131 pass. |
-| R4 | MET | config/workflows/task-pipeline.yaml:765 record step is an inline shell: FID resolved via `$spurBin task show $wbs --json` + jq, `$spurBin feature sync "$FID" --json`, orphan note appended when FID empty, `deferFeatureSync` branch kept :757-763, `exit 0`. Tests: plugins/sp task-pipeline-resilience + run-record-catalog 41 pass. |
-| R5 | MET | plugins/sp/scripts/wrapup-steps.ts:492 calls `spur(env, ['feature', 'sync', feature, '--json'], ...)` directly (suppression note :488); regenerated twin wrapup-steps.mjs updated (mirror lines :320/:373/:377 region); plugins/sp/skills/spur-dev/references/execution-batch.md:340 "invoke `spur feature sync <feature-id> --json` directly"; config/workflows/wrapup-pipeline.yaml:348 text updated ("repeated-BLOCKED…"). workflow-step-profile tests 39 pass. |
-| R6 | MET | Deletions: ls idea-coverage-check.ts, feature-sync-bounded.{ts,mjs}, record-feature-sync.{ts,mjs} → all ENOENT; git status shows D for the 5 scripts + 2 test files. Rows purged: grep across config/plugin-scripts.json, package.json (build:scripts), config/script-placement-baseline.json, packages/app/tests/workflow/fixtures/guard-parity-baseline.json → no matches (exit 1). Ports: packages/app/tests/services/feature-inventory.test.ts (6) + feature-sync-suppression.test.ts (14), apps/cli/tests/commands/feature-inventory-sync.test.ts (2) — all pass. |
-| R7 | MET | `rg 'idea-coverage-check |
+| R1 | MET | `apps/cli/src/commands/feature.ts:416` --inventory option; `packages/app/src/services/feature-inventory.ts:74` checkInventoryCoverage; `packages/app/src/services/feature-check.ts:305` wired into check; `bun run apps/cli/src/index.ts feature check A9 --inventory <report with uncovered I99> --json` -> exit 1, one inventory-coverage error; report without the section -> exit 1, inventory-coverage |
+| R2 | MET | `config/workflows/idea-pipeline.yaml:258` idea-ac-check args carry --inventory; `rg -n idea-coverage config/workflows/idea-pipeline.yaml` -> no hits |
+| R3 | MET | `packages/app/src/services/feature-sync-suppression.ts:9` blocked state path; `packages/app/src/services/feature-sync-suppression.ts:40` computeSyncFingerprint; `packages/app/src/services/feature-service.ts:590` suppressed: true replay; `bun test tests/services/feature-sync-suppression.test.ts` (packages/app) in the 62 pass / 0 fail run |
+| R4 | MET | `config/workflows/task-pipeline.yaml:749` inline record shell: deferFeatureSync branch, task show feature_id, feature sync |
+| R5 | MET | `plugins/sp/scripts/wrapup-steps.ts:480` direct feature sync call; `plugins/sp/skills/spur-dev/references/execution-batch.md:340` spur feature sync <feature-id> --json; `config/workflows/wrapup-pipeline.yaml:343` text updated |
+| R6 | MET | `ls plugins/sp/scripts` has no idea-coverage-check, feature-sync-bounded or record-feature-sync file; `bun test tests/services/feature-inventory.test.ts tests/services/feature-sync-suppression.test.ts tests/workflow/idea-pipeline-definition.test.ts` (packages/app) -> 62 pass / 0 fail |
+| R7 | MET | `plugins/sp/skills/spur-cli/references/features.md:187` --inventory; `plugins/sp/skills/spur-cli/references/features.md:227` suppressed: true semantics; `rg -l 'idea-coverage-check\|feature-sync-bounded\|record-feature-sync' plugins/sp config packages apps/cli/src scripts package.json` -> no hits |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | command | bun test packages/app (feature-inventory 6 + feature-sync-suppression 14 = 20 pass; feature-service/feature-check/idea-pipeline-definition/idea-pipeline-routing 226 pass); bun test apps/cli feature-inventory-sync.test.ts 2 pass — uncovered item → inventory-coverage finding with failing exit (test :97), two identical syncs → second `suppressed: true`, --force re-derives (test :131); feature.test.ts 47 pass. |
-| AC2 | MET | command | R7 rg sweep over plugins/sp config packages apps/cli/src scripts package.json → exit 1 (zero matches); ls of the three scripts (+.mjs twins) → all absent; manifest/build:scripts/baseline grep → exit 1. |
-| AC3 | MET | command | bun run apps/cli/src/index.ts rule run --rule sp-script-placement --no-logo → "All 1 rule passed — no violations found"; spur-cli features.md rows :187-192/:224-229 verified; rg sweep exit 1. |
-| AC-1 | MET | command | Same command evidence as AC1: wave-scoped suites all green (packages/app 246 pass across the two runs, apps/cli 49 pass, plugins/sp 80 pass incl. workflow-step-profile 39, packages/domain lifecycle-drift 25, scripts surface-drift-inventory 78). |
-| AC-2 | MET | command | Same command evidence as AC2: three scripts and their tests deleted (git D, ls ENOENT), manifest/build:scripts/baseline rows purged (grep exit 1). |
-| AC-3 | MET | command | Same command evidence as AC3: sp-script-placement rule PASS + R7 rg sweep exit 1 + spur-cli/docs/help prose updated. |
+| Scenario: R6 — Refactor lands in independently revertible waves | MET | command | source CLI `feature check A9 --inventory` -> exit 1 with inventory-coverage for an uncovered item; packages/app suppression and inventory tests 62 pass / 0 fail. The CLI-level suite `apps/cli/tests/commands/feature-inventory-sync.test.ts:97` was not run: its git init fixture is blocked by this sandbox |
+| Scenario: R7 — Duplicated and overengineered scripts are deleted | MET | command | `ls plugins/sp/scripts` -> the three scripts and their twins are absent |
+| Scenario: R8 — sp skills, commands and workflows track every CLI move | MET | command | the R7 rg sweep over plugins/sp config packages apps/cli/src scripts package.json -> no hits |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

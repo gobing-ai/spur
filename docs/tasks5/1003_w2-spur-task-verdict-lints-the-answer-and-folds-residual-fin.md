@@ -4,7 +4,7 @@ name: W2 spur task verdict lints the answer and folds residual findings
 status: done
 template: feature-impl
 created_at: 2026-09-29T06:25:03.418Z
-updated_at: "2026-09-29T20:05:47.485Z"
+updated_at: "2026-09-30T13:20:48.189Z"
 feature_id: A9
 priority: P2
 tags:
@@ -201,22 +201,19 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Pure port: `lintVerifyAnswer(answerText, taskContent)` at packages/app/src/services/verify-answer-lint.ts:42 with `ANSWER_LINT_MAX_FINDINGS = 10` (:27) and cap enforced at :49; exported from barrel packages/app/src/index.ts:727-728; command: `bun test tests/services/verify-answer-lint.test.ts tests/services/residual-scan.test.ts` (in packages/app) → 60 pass / 0 fail (47 lint tests incl. ported behavior classes at :247-542) |
-| R2 | MET | Lint runs before `deriveVerdict` in the verdict action at apps/cli/src/commands/task.ts:1284-1312 — on findings: `--json` emits `{wbs, lintFindings}`, non-JSON prints the capped stderr list (per-finding lines, `+` when length ≥ ANSWER_LINT_MAX_FINDINGS), `setExitCode(1)`, return before any verdict write; no new flag; command: `bun test apps/cli/tests/commands/task.test.ts` → 195 pass / 0 fail incl. `verdict lints the answer before deriving (1003 R2)` (:2457-2474: exit 1, lintFindings non-empty, no verdict artifact) |
-| R3 | MET | `rg 'verify-answer-lint\.ts' plugins/sp config` → empty (0 matches); `test ! -e plugins/sp/scripts/verify-answer-lint.ts` → absent; no manifest row (config/plugin-scripts.json grep: only residual-scan.ts at :84-86) and no baseline entry (config/script-placement-baseline.json grep: only residual-scan.ts migration row at :21-23); task-pipeline.yaml has 0 `verify-answer-lint` hits — verify stage now gates via `task verdict` at config/workflows/task-pipeline.yaml:691-695 |
-| R4 | MET | packages/app/tests/services/verify-answer-lint.test.ts = 47 tests (ported behavior classes block :247-542), packages/app/tests/services/residual-scan.test.ts = 13 tests → 60 pass / 0 fail; CLI verdict exit-path cases at apps/cli/tests/commands/task.test.ts:2457-2474 (malformed) and :2478 (absent file); plugins/sp/tests/dispatch-handoff-contract.test.ts rewired to call only `task verdict` (:130-141) with lintFindings assertions (:155, :161, :168); lint branch dropped in plugins/sp/tests/inline-pipeline-driver.test.ts:243-244; old plugin test plugins/sp/tests/verify-answer-lint.test.ts deleted (git status: D) |
-| R5 | MET | All 11 named pure functions in packages/app/src/services/residual-scan.ts (makeItemId:75, normalizeAnchor:82, locationOf:87, parseReviewFindings:100, parseDiffMarkers:160, findUncheckedBoxes:171, classify:185, scanResiduals:218, blockingAnchors:266, foldVerdict:287, renderReport:318) with types ResidualItem/ResidualCategory/Deferral; bundle rows in scripts/commands/bundle-plugin-lib.ts:147-159; generated twins exist and are in sync — plugins/sp/lib/residual-scan.generated.mjs exports exactly the 11 functions + ALLOW_PRAGMA, .generated.d.mts declares the matching surface; glue plugins/sp/scripts/residual-scan.ts imports the bundle (:14-15) and is 246 LOC ≤ 250; four modes/usage intact; residual-scan tests pass (13/13) |
-| R6 | MET | All lint prose spots now name `spur task verdict` as owner: plugins/sp/skills/code-verification/references/verdict-schema.md:122, plugins/sp/skills/spur-dev/references/ac-style-guide.md:128 and :144, plugins/sp/skills/spur-dev/references/done-housekeeping.md:131, plugins/sp/skills/spur-dev/references/execution-batch.md:295, plus plugins/sp/skills/code-verification/SKILL.md:341 (`spur task verdict --from-answer` lints then derives); residual consumers unchanged and intact: plugins/sp/commands/dev-verify.md (3 refs), dev-verifyall.md (2 refs), pipeline record/settle/report shell glue at config/workflows/task-pipeline.yaml:778, 804, 851 |
-| R7 | MET | config/script-placement-baseline.json drops both verify-answer-lint entries (grep: only residual-scan.ts migration row :21-23); command: `bun run apps/cli/src/index.ts rule run --rule sp-script-placement --no-logo` → "All 1 rule passed — no violations found." |
+| R1 | MET | `packages/app/src/services/verify-answer-lint.ts:42` lintVerifyAnswer; `packages/app/src/services/verify-answer-lint.ts:27` ANSWER_LINT_MAX_FINDINGS = 10; `packages/app/src/index.ts:744` barrel export |
+| R2 | MET | `apps/cli/src/commands/task.ts:1284` lint runs first and returns on findings; `apps/cli/src/commands/task.ts:1303` deriveVerdict after; `apps/cli/tests/commands/task.test.ts:2490` malformed answer exits 1 with lintFindings |
+| R3 | MET | `config/workflows/task-pipeline.yaml:679` task verdict is the verify gate; `rg -c verify-answer-lint config/workflows/task-pipeline.yaml config/plugin-scripts.json config/script-placement-baseline.json` -> no hits; plugin lint script absent |
+| R4 | MET | `bun test tests/services/verify-answer-lint.test.ts tests/services/residual-scan.test.ts` (packages/app) -> 60 pass / 0 fail; `bun test tests/dispatch-handoff-contract.test.ts tests/inline-pipeline-driver.test.ts tests/residual-scan.test.ts` (plugins/sp) -> 35 pass / 0 fail |
+| R5 | MET | `packages/app/src/services/residual-scan.ts:75` makeItemId through `packages/app/src/services/residual-scan.ts:318` renderReport; `plugins/sp/scripts/residual-scan.ts:18` imports the generated bundle; `wc -l plugins/sp/scripts/residual-scan.ts` -> 246; `scripts/commands/bundle-plugin-lib.ts:286` bundle row |
+| R6 | MET | `plugins/sp/skills/spur-dev/references/ac-style-guide.md:128`, `plugins/sp/skills/spur-dev/references/done-housekeeping.md:131` and `plugins/sp/skills/spur-dev/references/execution-batch.md:295` name the spur task verdict answer lint |
+| R7 | MET | `spur rule run --rule sp-script-placement` -> All 1 rule passed, exit 0 |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | command | `bun test apps/cli/tests/commands/task.test.ts` → 195 pass / 0 fail incl. the lint-reject path (:2457-2474: exit 1 + lintFindings + no verdict artifact); R2+R3+R5 land as one consistent working-tree unit with no staging and no commits (git status clean of staged entries); residual tests pass against the slimmed script + `.mjs` twin (13/13) |
-| AC2 | MET | command | `test ! -e plugins/sp/scripts/verify-answer-lint.ts` → absent; `wc -l plugins/sp/scripts/residual-scan.ts` → 246 ≤ 250; duplicated 549-LOC plugin lint deleted (git status D for script + old test); `rg 'verify-answer-lint\.ts' plugins/sp config` → empty |
-| AC3 | MET | command | `rg 'verify-answer-lint\.ts' plugins/sp config` → empty (0 hits across all skills/config); 5/5 prose spots grep-verified naming `spur task verdict` (verdict-schema.md:122, ac-style-guide.md:128+144, done-housekeeping.md:131, execution-batch.md:295); `bun run apps/cli/src/index.ts rule run --rule sp-script-placement --no-logo` → no violations |
-| AC-1 | MET | command | Same evidence as AC1: CLI lint-reject test passes (195/0), residual tests pass (13/13), tree consistency verified via git status (no staging, no commits) |
-| AC-2 | MET | command | Same evidence as AC2: script absent, `wc -l` → 246 ≤ 250, AC3 rg sweep empty |
-| AC-3 | MET | command | Same evidence as AC3: 5/5 prose spots name `spur task verdict`, rg sweep empty, placement rule passes |
+| Scenario: R6 — Refactor lands in independently revertible waves | MET | test | `apps/cli/tests/commands/task.test.ts:2490` lint-reject path; 196 pass / 0 fail; residual tests 35 pass against the slimmed script |
+| Scenario: R7 — Duplicated and overengineered scripts are deleted | MET | command | `ls plugins/sp/scripts/verify-answer-lint.ts` -> No such file; `wc -l plugins/sp/scripts/residual-scan.ts` -> 246 |
+| Scenario: R8 — sp skills, commands and workflows track every CLI move | MET | command | `rg -n 'verify-answer-lint\.ts' plugins/sp config` -> empty |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

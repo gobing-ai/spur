@@ -4,7 +4,7 @@ name: W2 spur task check --precheck replaces size and evidence precheck scripts
 status: done
 template: feature-impl
 created_at: 2026-09-29T06:25:03.417Z
-updated_at: "2026-09-29T15:24:01.222Z"
+updated_at: "2026-09-30T13:20:47.264Z"
 feature_id: A9
 priority: P2
 tags:
@@ -141,22 +141,19 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | apps/cli/src/commands/task.ts --precheck (requires wbs, --corpus rejected exit 2); task-check.ts runs evaluateTaskSize(DEFAULT_TASK_SIZE_LIMITS) + evidence precheck; failures are error findings, exit 1; 3 CLI tests pass (194 CLI task tests green) |
-| R2 | MET | packages/app/src/services/task-evidence-precheck.ts exact port: allowlist {history_tool_call.args_raw[pi]}, unknown declaration/missing DB/zero count fail closed, no-declaration passes without DB; reviewer verified regex/ordering/query line-by-line vs deleted script; live probes: task check 1002 --precheck exit 1 (fail-closed), task check 1001 --precheck exit 0 |
-| R3 | MET | packages/domain/src/analytics/forensic-query.ts countToolCallArgsRaw (parameterized SQL, forensic-query.ts:1145) + index export + 31 domain tests; rg bun:sqlite outside packages/domain -> plugins/sp/scripts only daily-summary (plan-kept, out of scope) |
-| R4 | MET | config/workflows/task-pipeline.yaml: both onEnter precheck scripts + maxImplementReqs/maxImplementPlanItems removed; guard $spurBin task check $wbs --precheck; precheck->failed fallback kept; guard-parity test + baseline fixture updated; build:bundle regenerated, generated copy in sync |
-| R5 | MET | plugins/sp/scripts/task-size-precheck.ts + task-evidence-precheck.ts + both tests deleted; manifest rows removed; behavioral cases ported: packages/app/tests/services/task-evidence-precheck.test.ts + domain forensic-query test + 3 CLI tests (965 app workflow tests pass) |
-| R6 | MET | eval-pipeline.ts GATE_FILES, guard-parity + fixture, task-pipeline-resilience.test.ts, inline-pipeline-driver.test.ts, surface-drift-inventory.ts + test, lifecycle-drift.test.ts guard assertion, gate-checklists.md both copies, plugins/sp/README.md, spur-cli tasks.md --precheck doc — all updated; 1320 plugins/sp tests pass |
-| R7 | MET | config/script-placement-baseline.json: both entries removed; spur rule run --rule sp-script-placement exit 0 (reviewer re-ran) |
+| R1 | MET | `apps/cli/src/commands/task.ts:1417` --precheck option; `apps/cli/src/commands/task.ts:1444` rejects --corpus or missing wbs; `packages/app/src/services/task-check.ts:608` precheck branch runs evaluateTaskSize; `spur task check --corpus --precheck` -> exit 1; `spur task check 1001 --precheck --json` -> pass, exit 0 |
+| R2 | MET | `packages/app/src/services/task-evidence-precheck.ts:25` ALLOWED_EVIDENCE_CHANNELS single channel; `packages/app/src/services/task-evidence-precheck.ts:41` parseEvidenceChannels; `bun test tests/services/task-evidence-precheck.test.ts` (packages/app) -> 9 pass / 0 fail |
+| R3 | MET | `packages/domain/src/analytics/forensic-query.ts:1145` countToolCallArgsRaw; `rg -l "bun:sqlite" packages/app/src packages/config apps/cli/src` -> only a comment at `apps/cli/src/commands/serve.ts:110`, no import |
+| R4 | MET | `config/workflows/task-pipeline.yaml:847` guard `$spurBin task check $wbs --precheck`; `rg maxImplement config/workflows/task-pipeline.yaml` -> empty |
+| R5 | MET | both plugin precheck scripts absent; `apps/cli/tests/commands/task.test.ts:1000` check --precheck size case; `bun test tests/commands/task.test.ts` (apps/cli) -> 196 pass / 0 fail |
+| R6 | MET | `plugins/sp/skills/spur-dev/references/gate-checklists.md:76` and `plugins/sp/skills/spur-cli/references/tasks.md:54` document --precheck; status-file sweep `rg -l 'precheck-(size |
+| R7 | MET | `spur rule run --rule sp-script-placement` -> All 1 rule passed, exit 0; baseline holds no precheck entries |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | command | bun run spur-check exit 0 (9474/0, log .spur/run/1002-test-gate.log) bound to digest sha256 in .spur/run/1002-proof-digest.txt; yaml+CLI+service single-commit layout revertible |
-| AC-1 | MET | command | spur-check exit 0 with --precheck guard live in task-pipeline.yaml |
-| AC2 | MET | command | test ! -e plugins/sp/scripts/task-size-precheck.ts + task-evidence-precheck.ts; rg -n "bun:sqlite" plugins/sp/scripts -> only daily-summary (A9 plan marks Keep, out of 1002 scope; both target scripts gone, zero bun:sqlite from them); rg -l "bun:sqlite" packages/app packages/config apps/cli/src -> empty |
-| AC-2 | MET | command | scripts absent; sp-script-placement rule exit 0; manifest + baseline rows purged |
-| AC3 | MET | command | rg 'task-(size |
-| AC-3 | MET | command | consumer sweep clean (execution-workflow.md stale maxImplementReqs note -> P3 carried to 1007) |
+| Scenario: R6 — Refactor lands in independently revertible waves | MET | test | `apps/cli/tests/commands/task.test.ts:1000` over-limit task fails --precheck with precheck-size and passes without the flag; 196 pass / 0 fail |
+| Scenario: R7 — Duplicated and overengineered scripts are deleted | MET | command | `ls plugins/sp/scripts/task-size-precheck.ts plugins/sp/scripts/task-evidence-precheck.ts` -> No such file; `spur rule run --rule sp-script-placement` exit 0 |
+| Scenario: R8 — sp skills, commands and workflows track every CLI move | MET | command | `rg -n maxImplement -g '!docs/**' -g '!CHANGELOG.md' -g '!apps/cli/plugins/**' .` -> empty after this run's fix |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

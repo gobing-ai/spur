@@ -4,7 +4,7 @@ name: W3 fold quality-gate into command.gate and slim inline-run-setup through t
 status: done
 template: feature-impl
 created_at: 2026-09-29T06:25:03.420Z
-updated_at: "2026-09-30T02:44:07.579Z"
+updated_at: "2026-09-30T13:20:34.182Z"
 feature_id: A9
 priority: P2
 tags:
@@ -163,18 +163,16 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Gate core moved to packages/app/src/services/quality-gate.ts (676 LOC, new): planLightChecks:372, runLightGate:434, runQualityGate:549 plus constants/helpers; behavioral suite ported to packages/app/tests/services/quality-gate.test.ts (375 LOC), green in fresh targeted run (129 pass / 0 fail across 9 suites at HEAD 1f607febe) |
-| R2 | MET | wc -l plugins/sp/scripts/quality-gate.ts = 64 (budget 250); plugins/sp/lib/quality-gate.generated.mjs standalone: grep @gobing-ai = 0 matches, zero static import/require specifiers; bare-node twin fresh run: node plugins/sp/scripts/quality-gate.mjs (no args) usage exit 2; task-pipeline-resilience suite green (gate shell resolution unchanged) |
-| R3 | MET | Frozen 6 exports moved app-side in packages/app/src/services/inline-run-setup.ts: writeInlineRunOutcome:707, isInlineRunCloseStatus:778, isInlineRunActionStatus:786, inlineRunRecordLogPath:813, appendInlineRunLogLine:826, runInlineRunTrace:846; script wc -l = 250 (budget 250); bare-node twin fresh runs: usage exit 2, --fingerprint with missing --task-file exit 1; inline-run-trace / inline-run-close-reason / inline-run-setup / packages/app inline-run-driver suites green |
-| R4 | MET | Fresh bun test of the 7 named contract suites (task-pipeline-resilience, inline-run-installed, inline-run-trace, inline-run-close-reason, inline-run-setup, inline-pipeline-driver, dogfood-testing/execution-batch-contract) plus app suites quality-gate.test.ts and inline-run-driver.test.ts: 129 pass, 0 fail, 27.2s |
-| R5 | MET | config/script-placement-baseline.json diff deletes both budget rows (grep quality-gate and inline-run-setup exit 1 = no rows); fresh `bun run apps/cli/src/index.ts rule run --rule sp-script-placement --no-logo` = All 1 rule passed, exit 0; git diff --name-only filtered for task-pipeline/config-workflows/docs/skills/AGENTS = zero invocation edits; config/workflows/task-pipeline.yaml:426,509 still shell `bun plugins/sp/scripts/quality-gate.ts` run and recheck and the file is untouched (git status empty) |
+| R1 | MET | `packages/app/src/services/quality-gate.ts:549` runQualityGate; `packages/app/src/services/quality-gate.ts:10` MAX_GATE_ATTEMPTS retry loop; quality-gate app tests in the 145 pass / 0 fail run |
+| R2 | MET | `scripts/commands/bundle-plugin-lib.ts:17` quality-gate bundle; `plugins/sp/scripts/quality-gate.ts:8` imports the generated bundle; `plugins/sp/scripts/quality-gate.ts:24` QUALITY_GATE_USAGE; `wc -l` -> 64 |
+| R3 | MET | `packages/app/src/services/inline-run-setup.ts:846` runInlineRunTrace; `packages/app/src/services/inline-run-setup.ts:813` inlineRunRecordLogPath; `scripts/commands/bundle-plugin-lib.ts:576` INLINE_RUN_EXPORTS; `plugins/sp/scripts/inline-run-setup.ts:45` resolveAppEntry stays in the script; `wc -l` -> 250 |
+| R4 | MET | `bun test` (plugins/sp) over quality-gate, inline-run-setup, inline-run-trace, inline-run-close-reason, inline-run-installed, inline-pipeline-driver, execution-batch-contract, task-pipeline-resilience and three more -> 248 pass / 0 fail across 11 files |
+| R5 | MET | `rg -n 'quality-gate\|inline-run-setup' config/script-placement-baseline.json` -> no hits; `spur rule run --rule sp-script-placement` -> All 1 rule passed |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | command | git status --porcelain + git diff --stat at HEAD 1f607febe: two file-disjoint waves (quality-gate: plugins/sp/scripts/quality-gate.ts+mjs, lib/quality-gate.generated.*, packages/app/src/services/quality-gate.ts + its test; inline-run: plugins/sp/scripts/inline-run-setup.ts+mjs, lib/inline-run.generated.*, app inline-run service + driver test); only shared file scripts/commands/bundle-plugin-lib.ts with separable hunks (review F7); both scripts wc -l 64 and 250 (budget 250) |
-| AC2 | MET | command | Fresh sp-script-placement rule run exit 0 (All 1 rule passed) + git diff --name-only invocation filter exit 1 (zero edits to config/workflows/task-pipeline.yaml, spur-check/spur-dev SKILL.md files, docs, AGENTS) |
-| AC-1 | MET | command | Same command evidence as AC1: file-disjoint waves in git diff --stat, both scripts wc -l within 250, 7 contract + 2 app suites green (129 pass / 0 fail) |
-| AC-2 | MET | command | Same command evidence as AC2: placement rule exit 0, zero invocation-file edits in working-tree diff, config/workflows/task-pipeline.yaml and packages/app/src/workflow/actions/command-gate.ts untouched per git status (command-gate.ts tracked) |
+| Scenario: R6 — Refactor lands in independently revertible waves | MET | test | packages/app quality-gate, inline-run-setup and inline-run-driver tests (145 pass / 0 fail); plugins/sp contract tests (248 pass / 0 fail) |
+| Scenario: R8 — sp skills, commands and workflows track every CLI move | MET | command | `bun run plugin-smoke` -> plugin-install-smoke PASS; placement rule passes with no baseline rows for either script |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

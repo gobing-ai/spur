@@ -4,7 +4,7 @@ name: W3 workflow progress --profile and history report --anatomy absorb profile
 status: done
 template: feature-impl
 created_at: 2026-09-29T06:25:03.419Z
-updated_at: "2026-09-29T23:46:07.863Z"
+updated_at: "2026-09-30T13:20:33.278Z"
 feature_id: A9
 priority: P2
 tags:
@@ -105,19 +105,17 @@ Surface-neutral relocation; no new spur surface, `history-anatomy.yaml` untouche
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | packages/app/src/workflow/step-profile.ts:107 nearestRankP50, :149 extractExecutions, :184 rowFlags, :200 buildRows, :244 buildStepProfile, :259 nonDryRuns, :274 formatStepProfileHuman + all types (:19-101); bun test tests/workflow/step-profile.test.ts (packages/app) pass — 87 pass / 0 fail across both app suites |
-| R2 | MET | packages/app/src/services/history-anatomy.ts:37 leaf import from domain/src/analytics/artifact-digest, :86 REPORT_SECTIONS, :104 FINDING_FIELDS, :125 semanticArtifactDigest re-export, :209 parseProvenance, :271 decideCache, :437 logicDigest, :550 resolvePaths, :614 validateSelector, :702 buildProvenance, :867 publishAtomically, :897 porcelainPaths, :907 diffPorcelain; argv parsing/dispatch stays in plugins/sp/scripts/history-anatomy-cache.ts (runCacheCli) per R2; bun test tests/services/history-anatomy.test.ts pass (in the 87/0) |
-| R3 | MET | scripts/commands/bundle-plugin-lib.ts:122 bundleStepProfileLib, :263 bundleHistoryAnatomyLib, both invoked :548-550; bun test scripts/commands/bundle-plugin-lib.test.ts → 14 pass / 0 fail (standalone + decl parity enforced); find for artifact-digest.generated.* = 0 files repo-wide; grep @gobing-ai in both new .mjs bundles = 0, imports node-builtins only |
-| R4 | MET | wc -l: workflow-step-profile.ts 181, history-anatomy-cache.ts 247 (≤250); glue imports only bundle + node:* + ../lib/env (workflow-step-profile.ts:16-21, history-anatomy-cache.ts:12-13); bare-node twin parity: node plugins/sp/scripts/{workflow-step-profile,history-anatomy-cache}.mjs → exit 1, stdout/stderr byte-identical to bun running the .ts (diff clean); plugin suites 142 pass / 0 fail incl. twin pins |
-| R5 | MET | plugins/sp/tests/skill-structure.test.ts:1105-1125 pin reads packages/app/src/services/history-anatomy.ts (comment: task 1005 R5); plugins/sp/README.md:509, plugins/sp/skills/spur-doctor/SKILL.md:108, plugins/sp/skills/history-anatomy/references/modes.md:5, packages/domain/src/analytics/artifact-digest.ts:13-18 all name the new layout; 2300-2301 doctor pin unchanged and passing (inside the 142); script-contract-check.test.ts:586-588 R6 exclusion present |
-| R6 | MET | config/script-placement-baseline.json: 0 rows for workflow-step-profile/history-anatomy-cache; `bun run apps/cli/src/index.ts rule run --rule sp-script-placement --no-logo` → "All 1 rule passed — no violations found", exit 0 |
+| R1 | MET | `packages/app/src/workflow/step-profile.ts:107` nearestRankP50; `packages/app/src/workflow/step-profile.ts:149` extractExecutions; `bun test tests/workflow/step-profile.test.ts` (packages/app) in the 145 pass / 0 fail run |
+| R2 | MET | `packages/app/src/services/history-anatomy.ts:763` probe; `packages/app/src/services/history-anatomy.ts:867` publishAtomically; `packages/app/src/services/history-anatomy.ts:37` artifact-digest leaf import; history-anatomy app tests in the 145 pass / 0 fail run |
+| R3 | MET | `scripts/commands/bundle-plugin-lib.ts:12` step-profile bundle; `scripts/commands/bundle-plugin-lib.ts:13` history-anatomy bundle; `ls plugins/sp/lib` -> both bundle pairs present, no artifact-digest.generated file |
+| R4 | MET | `plugins/sp/scripts/workflow-step-profile.ts:8` and `plugins/sp/scripts/history-anatomy-cache.ts:5` load the generated bundle; `wc -l` -> 166 and 247; plugin script tests 248 pass / 0 fail |
+| R5 | MET | `plugins/sp/README.md:510` thin glue over the step-profile bundle; `plugins/sp/skills/spur-doctor/SKILL.md:108` core in packages/app; `plugins/sp/skills/history-anatomy/references/modes.md:6` logic core pointer; skill-structure test in the 248 pass run |
+| R6 | MET | `rg -n 'workflow-step-profile\|history-anatomy-cache' config/script-placement-baseline.json` -> no hits; `spur rule run --rule sp-script-placement` -> All 1 rule passed |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | command | bun test: app 87 pass/0 fail (step-profile + history-anatomy), plugins/sp 142 pass/0 fail (parity/skill-structure/workflow), bundle-plugin-lib 14 pass/0 fail; wc -l 181/247 ≤250; bare-node twin run exit 1 with byte-identical stdout/stderr vs bun .ts |
-| AC2 | MET | command | rule run sp-script-placement exit 0, no violations; baseline rows absent (0); git diff config/workflows/history-anatomy.yaml = empty (untouched); apps/cli untouched (no new flag/verb in git status); plugin-smoke covered by standing gate PASS sha256:6447d232bd62e37d44e462756168891d8dd07ce118e425c70f22e9fdaebcd333 (not re-run, per instruction) |
-| AC-1 | MET | command | Same commands as AC1: 243 total test passes / 0 fails across the four targeted suites; LOC and twin-parity checks green — wave lands revertibly with logic in packages/app and thin glue retained |
-| AC-2 | MET | command | Same commands as AC2: placement rule exit 0 with no baseline rows, history-anatomy.yaml zero-diff, skill/README/doc pins verified at file:line, spur-doctor pin (skill-structure.test.ts:2300-2301) unchanged and passing |
+| Scenario: R6 — Refactor lands in independently revertible waves | MET | test | packages/app step-profile and history-anatomy tests (145 pass / 0 fail across 6 files); plugins/sp workflow-step-profile and history-anatomy-cache script tests (248 pass / 0 fail across 11 files) |
+| Scenario: R8 — sp skills, commands and workflows track every CLI move | MET | command | `bun run plugin-smoke` -> plugin-install-smoke PASS; placement rule passes with no baseline rows for either script |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
