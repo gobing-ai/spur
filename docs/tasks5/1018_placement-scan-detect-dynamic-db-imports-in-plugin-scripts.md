@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Placement scan: detect dynamic DB imports in plugin scripts"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-30T13:48:58.443Z
-updated_at: "2026-09-30T13:55:20.630Z"
+updated_at: "2026-09-30T22:23:19.779Z"
 feature_id: A9
 
 ac_altitude: task-local
@@ -20,19 +20,19 @@ Nothing was fixed for this during triage.
 
 ### Requirements
 
-- [ ] R1. The placement scan (`checkPlacement`, `scripts/commands/script-contract-check.ts`) reports a `db-import` finding for a dynamic `import('bun:sqlite')` / `import('drizzle-orm…')` in a scanned file under `plugins/sp/scripts` or `plugins/sp/hooks`, the same kind as for a static import.
-- [ ] R2. `plugins/sp/scripts/daily-summary/daily-summary.ts` no longer passes silently: its row in `config/script-placement-baseline.json` lists `db-import` next to `budget`, with a reason naming the read-only history-health query and this task.
-- [ ] R3. `import type` statements and comment lines mentioning `bun:sqlite` / `drizzle-orm` stay unreported, and a bare `'bun:sqlite'` string literal without `import(` stays unreported.
+- [x] R1. The placement scan (`checkPlacement`, `scripts/commands/script-contract-check.ts`) reports a `db-import` finding for a dynamic `import('bun:sqlite')` / `import('drizzle-orm…')` in a scanned file under `plugins/sp/scripts` or `plugins/sp/hooks`, the same kind as for a static import.
+- [x] R2. `plugins/sp/scripts/daily-summary/daily-summary.ts` no longer passes silently: its row in `config/script-placement-baseline.json` lists `db-import` next to `budget`, with a reason naming the read-only history-health query and this task.
+- [x] R3. `import type` statements and comment lines mentioning `bun:sqlite` / `drizzle-orm` stay unreported, and a bare `'bun:sqlite'` string literal without `import(` stays unreported.
 
 Out of scope: moving the daily-summary history-health read behind a `spur` CLI verb or an app bundle (needs operator consent for a public surface; follow-up only if requested); AST parsing; scanning `.mjs` twins; any other finding kind.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Dynamic DB import is reported as db-import (req: R1)
+- [x] AC1 — Dynamic DB import is reported as db-import (req: R1)
   Layer: `scripts/commands/script-contract-check.test.ts`, placement fixture block (from `:449`). A fixture script whose only DB reference is `const { Database } = await import('bun:sqlite');` yields exactly one `db-import` finding; the same for `await import("drizzle-orm/bun-sqlite")`.
-- [ ] AC2 — Type imports, comments and bare string literals are not reported (req: R3)
+- [x] AC2 — Type imports, comments and bare string literals are not reported (req: R3)
   Layer: same file. Fixture scripts holding only `import type { Database } from 'bun:sqlite'`, only a `// await import('bun:sqlite')` comment line, only a `* import('bun:sqlite')` JSDoc line, and only `const x = 'bun:sqlite'` each yield no `db-import` finding.
-- [ ] AC3 — daily-summary is baselined with db-import and the real tree is clean (req: R2)
+- [x] AC3 — daily-summary is baselined with db-import and the real tree is clean (req: R2)
   Layer: same file, real-tree assertion beside the plan §2 reconcile test (`:541`): the baseline entry for `plugins/sp/scripts/daily-summary/daily-summary.ts` has kinds `budget` and `db-import`, and `checkPlacement` on the repo root with the tracked baseline returns no findings. Command: `bun run apps/cli/src/index.ts rule run --rule sp-script-placement --no-logo` exits 0.
 
 ### Q&A
@@ -70,23 +70,60 @@ In the per-file loop (`:587`), when the static regex does not match, test each l
 
 ### Plan
 
-- [ ] 0. Precondition: working tree clean of other tasks' changes to `config/script-placement-baseline.json` and `scripts/commands/script-contract-check.test.ts`.
-- [ ] 1. Add failing tests for AC1 and AC2 to the placement fixture block of `scripts/commands/script-contract-check.test.ts`; add the AC3 real-tree assertion. Run `bun test scripts/commands/script-contract-check.test.ts` and see AC1/AC3 fail (R1, R2, R3).
-- [ ] 2. Add `DB_DYNAMIC_IMPORT_RE` and the per-line check in `checkPlacement` (R1, R3).
-- [ ] 3. Update the daily-summary row in `config/script-placement-baseline.json` (R2).
-- [ ] 4. Verify: `bun test scripts/commands/script-contract-check.test.ts`; `bun run apps/cli/src/index.ts rule run --rule sp-script-placement --no-logo`; `bun run spur-check`.
+- [x] 0. Precondition: working tree clean of other tasks' changes to `config/script-placement-baseline.json` and `scripts/commands/script-contract-check.test.ts`.
+- [x] 1. Add failing tests for AC1 and AC2 to the placement fixture block of `scripts/commands/script-contract-check.test.ts`; add the AC3 real-tree assertion. Run `bun test scripts/commands/script-contract-check.test.ts` and see AC1/AC3 fail (R1, R2, R3).
+- [x] 2. Add `DB_DYNAMIC_IMPORT_RE` and the per-line check in `checkPlacement` (R1, R3).
+- [x] 3. Update the daily-summary row in `config/script-placement-baseline.json` (R2).
+- [x] 4. Verify: `bun test scripts/commands/script-contract-check.test.ts`; `bun run apps/cli/src/index.ts rule run --rule sp-script-placement --no-logo`; `bun run spur-check`.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change map (commit 43f745dfaafb0d535623a077f1c06348355867ca, 3 files, +71/−3):
+
+- `scripts/commands/script-contract-check.ts` (+16/−1): added frozen `DB_DYNAMIC_IMPORT_RE` at `scripts/commands/script-contract-check.ts:537` beside `DB_IMPORT_RE`; in the `checkPlacement` per-file loop the else-branch now probes each non-comment line (`//`/`*` trimmed skip) and records at most one `db-import` finding per file with detail `dynamic import of ${m[1]}` at `scripts/commands/script-contract-check.ts:590-599`. Static path and its `value-import of …` detail unchanged; `ponytail:` comment records the trailing-comment/template-string ceiling per task Q&A.
+- `scripts/commands/script-contract-check.test.ts` (+53): AC1 dynamic-import fixtures at `scripts/commands/script-contract-check.test.ts:487-508` (`bun:sqlite` and `drizzle-orm/bun-sqlite` each yield exactly one `db-import`); AC2 negative fixtures (import type, `//` comment, `*` JSDoc, bare literal) at `scripts/commands/script-contract-check.test.ts:512-528`.
+- `config/script-placement-baseline.json` (+2/−2): daily-summary row kinds now `["budget","db-import"]` with the task-frozen reason at `config/script-placement-baseline.json:29-31`; no new rows — the AC3 real-tree assertion covers the row and the unchanged reconcile `dirKeys` count at `scripts/commands/script-contract-check.test.ts:676-684`.
+
+Rationale: ADR-130 forbids direct DB access in plugin glue; the scan must see both import forms or a real violation passes silently (`plugins/sp/scripts/daily-summary/daily-summary.ts:300` opens `bun:sqlite` via a dynamic import). Baseline (not CLI move) per closed Q&A: no existing public verb owns that read.
+
+Out of scope: moving the history-health read behind a CLI/app bundle, AST parsing, `.mjs` twins, `daily-summary.ts` edits, new finding kinds — per task Do-not list.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `scripts/commands/script-contract-check.ts:537` adds the frozen `DB_DYNAMIC_IMPORT_RE = /\bimport\(\s*['"](bun:sqlite\|drizzle-orm(?:\/[\w.-]+)?)['"]\s*\)/` beside the untouched static `DB_IMPORT_RE` (`scripts/commands/script-contract-check.ts:536`). The dynamic probe runs only in the else-branch opened when the static regex misses (`scripts/commands/script-contract-check.ts:590`), walks the file per line (`scripts/commands/script-contract-check.ts:593`), skips comment lines whose trimmed text starts with `//` or `*` (`scripts/commands/script-contract-check.ts:595`), and records the same `db-import` kind with detail `dynamic import of ${m[1]}` then breaks — at most one db-import finding per file, same kind as the static path, whose `value-import of …` detail is unchanged (`scripts/commands/script-contract-check.ts:587-589`). The probe applies to every file the loop scans under `plugins/sp/scripts` and `plugins/sp/hooks`. Both import forms are proven by the AC1 fixture test (`scripts/commands/script-contract-check.test.ts:487-510`, re-executed fresh this run) and on the real tree by AC3's stale-baseline transitivity (see R2). |
+| R2 | MET | `config/script-placement-baseline.json:29-31` — the daily-summary row now reads `"kinds": ["budget", "db-import"]` with reason `Keep (daily-summary/, plan §2); read-only history-health query via dynamic bun:sqlite import (task 1018)`, naming both the read-only history-health query and this task. The commit's baseline diff touches only this row (`git show 43f745dfa -- config/script-placement-baseline.json`: +2/−2, no new rows — the plan §2 reconcile test `scripts/commands/script-contract-check.test.ts:588` still passes, so the dirKeys count of 3 holds). Detection is real, not merely declared: with `db-import` listed for daily-summary, a non-detecting scanner would surface `stale-baseline` for that kind (enforcement at `scripts/commands/script-contract-check.ts:622-631`), yet the real-tree `checkPlacement` returns clean and the rule run exits 0 fresh this run — so `plugins/sp/scripts/daily-summary/daily-summary.ts:300` (`const { Database } = await import('bun:sqlite');`) is genuinely detected and suppressed by exactly this row. |
+| R3 | MET | AC2 fixture test (`scripts/commands/script-contract-check.test.ts:512-528`, re-executed fresh this run) holds the four AC-named shapes — only `import type { Database } from 'bun:sqlite'` (`scripts/commands/script-contract-check.test.ts:518`), only a `// await import('bun:sqlite')` line comment (`:520`), only a `* import('bun:sqlite')` JSDoc line (`:521`), and only `const x = 'bun:sqlite'` (`:522`) — and asserts the only `db-import` finding in the fixture tree is the static-import control `db.ts` (`:523-524`). Structurally: `import type … from` cannot match `DB_DYNAMIC_IMPORT_RE` (which requires `import(`) and is excluded by the static path's `(?!type\b)` guard (`scripts/commands/script-contract-check.ts:536`); comment lines are skipped by the trimmed `//`/`*` rule (`scripts/commands/script-contract-check.ts:595`); a bare `'bun:sqlite'` literal without `import(` cannot match `scripts/commands/script-contract-check.ts:537`. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | `scripts/commands/script-contract-check.test.ts:487-510` (test `checkPlacement reports dynamic DB imports as db-import (task 1018 AC1)`): fixture `dyn-sqlite.ts` whose only DB reference is `const { Database } = await import('bun:sqlite');` yields exactly one finding with kind `db-import` and detail `dynamic import of bun:sqlite` (`scripts/commands/script-contract-check.test.ts:499-502`); fixture `dyn-drizzle.ts` whose only DB reference is `await import("drizzle-orm/bun-sqlite")` yields exactly one `db-import` with detail `dynamic import of drizzle-orm/bun-sqlite` (`scripts/commands/script-contract-check.test.ts:503-506`). Re-executed fresh this verify: `bun test ./scripts/commands/script-contract-check.test.ts` → 26 pass / 0 fail / 81 expect() calls, exit 0. |
+| AC2 | MET | test | `scripts/commands/script-contract-check.test.ts:512-528` (test `checkPlacement skips type imports, comment lines and bare string literals (task 1018 AC2)`): the four fixture shapes (type import at `scripts/commands/script-contract-check.test.ts:518`, `//` line comment at `:520`, JSDoc `*` line at `:521`, bare `'bun:sqlite'` literal at `:522`) each produce no `db-import` finding — asserted by the whole-tree filter expecting exactly `plugins/sp/scripts/db.ts`, the static-import control from the fixture helper (`scripts/commands/script-contract-check.test.ts:523-524`). Covered by the same fresh green run (26 pass / 0 fail, exit 0). |
+| AC3 | MET | test | Real-tree assertion `scripts/commands/script-contract-check.test.ts:676-684` (test `daily-summary dynamic db import is baselined and the real tree is clean (task 1018 AC3)`): loads the tracked baseline and asserts the daily-summary entry kinds equal exactly `['budget', 'db-import']` (`scripts/commands/script-contract-check.test.ts:682`), then asserts `checkPlacement({ repoRoot, baselinePath })` returns `[]` (`scripts/commands/script-contract-check.test.ts:683`). The AC-named command re-run fresh this verify: `bun run apps/cli/src/index.ts rule run --rule sp-script-placement --no-logo` → `All 1 rule passed — no violations found.`, exit 0. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+REVIEW — task 1018 (review-only), commit 43f745dfa, worktree sp/runall-A9-485e
+
+VERDICT: APPROVE-WITH-NOTES — 0 P1, 0 P2, 1 P3 (deferred per closed Q&A), 2 P4 advisory.
+
+| Priority | Dimension | Location | Finding | Disposition |
+| --- | --- | --- | --- | --- |
+| P1 (blocker) | Traceability | — | none (R1/R2/R3 all verified: dynamic `import('bun:sqlite')` / `import('drizzle-orm/bun-sqlite')` in `plugins/sp/scripts` and `plugins/sp/hooks` yields one `db-import` finding with detail `dynamic import of …` via the frozen `DB_DYNAMIC_IMPORT_RE` (`scripts/commands/script-contract-check.ts:537`); the daily-summary baseline row now lists `["budget", "db-import"]` with the task-frozen reason naming the read-only history-health query and task 1018 and no new rows (dirKeys still 3); `import type`, `//`/`*` comment lines and bare `'bun:sqlite'` literals stay unreported; static path and `value-import of …` detail unchanged) | — |
+| P2 | Quality | — | none (the else-branch at `scripts/commands/script-contract-check.ts:589` runs only after the static regex misses; if/else plus the `break` after the first hit preserves at most one `db-import` finding per file; regex probes confirm `\bimport\(` rejects `ximport(` / `importx(`, accepts inner-paren whitespace, and captures `drizzle-orm/bun-sqlite` exactly as AC1 asserts) | — |
+| P3 | Quality | `scripts/commands/script-contract-check.ts:595` | single-line block comments (trimmed text starting with `/*`, e.g. `/** Opens DB via import('bun:sqlite') */`) are not skipped by the trimmed `//`/`*` rule and would produce a false `db-import` finding (probe-verified); this third comment shape is missing from the declared ponytail note, which lists only trailing comments on code lines and template-string content | DEFER — the closed Q&A froze the skip rule to `//`/`*` prefixes, so deviating would violate the approved design; the static `DB_IMPORT_RE` path has the identical comment exposure and was deliberately left unchanged; no occurrence in the scanned dirs (rg probe returns nothing, rule run exits 0); failure direction is loud-and-safe, widen only on an actual false positive |
+| P4 | Quality | `scripts/commands/script-contract-check.ts:537` | `DB_DYNAMIC_IMPORT_RE` does not match `import ('bun:sqlite')` (space before the paren), two-segment `drizzle-orm/x/y` specifiers, or multi-line dynamic calls; the regex is the task-frozen shape and the static `DB_IMPORT_RE` shares the spacing/subpath limits, so no regression versus the static path | — |
+| P4 | Quality | `scripts/commands/script-contract-check.ts:595` | theoretical false negative: a code statement whose trimmed text starts with `*` (a one-line generator method containing a dynamic DB import) is skipped by the comment rule; contrived and absent from `plugins/sp/scripts` / `plugins/sp/hooks` (rg check) | — |
+
+Summary: Commit 43f745dfa implements R1/R2/R3 exactly to the frozen design — regex, detail strings, baseline reason, and the else-branch ordering all match the task spec verbatim, the three tests genuinely assert the contract (AC1 pins length/kind/exact details, AC2 expects exactly the static fixture `db.ts`, AC3 pins the exact kinds array and a clean real-tree check whose stale-baseline logic transitively proves daily-summary.ts:300 is detected), and all 26 tests plus the `sp-script-placement` rule run pass with exit 0. On the declared implementer note: verified it creates no false-negative hole — trailing comments on code lines do not block matching (probe: `await import('bun:sqlite'); // drv` still detected), template-string content is a false-positive-shaped risk, rg confirms daily-summary.ts:300 is the only real dynamic DB import in the scanned dirs and sits on a plain code line, and the only theoretical false-negative shape is the contrived `*`-prefixed one-liner (P4). The one undeclared residual is the single-line block-comment false positive (P3, deferred per the closed Q&A). Scope clean: commit touches only the baseline, the test file and the checker; daily-summary.ts, its twins, `PlacementFindingKind`, and docs/plans are untouched. Minor cosmetic note: the ponytail comment says "widen only on a false negative" while the unhandled cases it names (trailing comments, template strings) are false-positive-shaped — worth rewording if the file is touched again.
+
+Commands run: `bun test ./scripts/commands/script-contract-check.test.ts` (26 pass / 0 fail); `bun run apps/cli/src/index.ts rule run --rule sp-script-placement --no-logo` (all rules passed, exit 0); `git show 43f745dfa --stat` (3 files: baseline ±4/±2, test +53, checker +17/−1); `rg` dynamic-import and block-comment probes over the scanned dirs; `bun -e` regex/comment-skip probes (14 cases).
 
 ### References
 
@@ -95,4 +132,7 @@ In the per-file loop (`:587`), when the static regex does not match, test each l
 ### History
 
 - 2026-09-30T13:55:20.630Z backlog → todo (system)
+- 2026-09-30T21:31:58.520Z todo → wip (system)
+- 2026-09-30T21:55:57.856Z wip → testing (system)
+- 2026-09-30T22:23:19.779Z testing → done (system)
 
