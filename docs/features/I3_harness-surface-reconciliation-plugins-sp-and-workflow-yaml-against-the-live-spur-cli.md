@@ -2,11 +2,11 @@
 schema_version: 1
 id: "I3"
 name: "Harness surface reconciliation: plugins/sp and workflow YAML against the live spur CLI"
-status: active
+status: verifying
 priority: P2
 tags: []
 created_at: "2026-08-13T23:27:41.734Z"
-updated_at: "2026-09-30T15:17:17.967Z"
+updated_at: "2026-09-30T16:40:38.286Z"
 ---
 
 # I3: Harness surface reconciliation: plugins/sp and workflow YAML against the live spur CLI
@@ -95,6 +95,7 @@ Feature: Harness surface reconciliation
 | --- | ---- | ------ |
 | 0539 | Inventory and repair plugins/sp and workflow YAML drift against the live spur CLI | done |
 | 0540 | Exercise tier fallback and executor exhaustion under real failure | done |
+| 1020 | Extend the CLI-surface parity gate to docs/help and docs/help2 | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -121,4 +122,5 @@ evidence base — runtime behavior of the harness as installed.
 - 2026-08-15T07:34:56.663Z active → verifying (system)
 - 2026-08-15T07:36:51.108Z verifying → done (system)
 - 2026-09-30T15:17:17.967Z done → active (system)
+- 2026-09-30T16:40:38.286Z active → verifying (system)
 

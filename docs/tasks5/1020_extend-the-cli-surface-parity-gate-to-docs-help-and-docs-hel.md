@@ -4,7 +4,7 @@ name: Extend the CLI-surface parity gate to docs/help and docs/help2
 status: done
 template: feature-impl
 created_at: 2026-09-30T15:14:13.467Z
-updated_at: "2026-09-30T16:36:09.267Z"
+updated_at: "2026-09-30T16:46:17.082Z"
 feature_id: I3
 
 estimate_hours: 3
@@ -151,10 +151,10 @@ Seed-and-revert proof: all literal task-spec seeds failed the gate as designed; 
 
 | Severity | Finding | Disposition |
 | --- | --- | --- |
-| P3 | `docs/help2/README.md` prose counts (48 verbs / 72 cells) predate the live 51/71; R3 scopes the matrix file, not README prose. | Deferred — out of R1–R4 scope; follow-up if README numbers become load-bearing. |
+| P3 (retracted) | Original row claimed `docs/help2/README.md` prose counts (48/72) predate live 51/71. Unsupported: no README exists in `docs/help/` or `docs/help2/` (`ls`, `git log --all --diff-filter=D`), and no live prose-count drift exists in either tree. The 48/72-vs-51/71 figures are the task Background's historical description of the pre-realignment `spur-cli-matrix.md` (task line 22), now gated by R3. Entered without re-verification during pre-compaction review authoring. | Retracted — misattributed historical context, not a live finding; nothing to defer. |
 | P4 | Scanner silently skips placeholder-only invocation lines (e.g. `spur <noun> <verb>` in how-to prose) rather than parsing a placeholder grammar. | Accepted — deliberate minimal scope; documented in the test header. |
 
-No P1/P2 findings.
+No open P1–P3 findings (P3 retracted above); no P2.
 
 ### References
 
