@@ -131,7 +131,7 @@ call; no git dirtiness as a route (optional advisory print only).
 | C2 and C3 both true | lint vs tests both red | (1) fixall (2) unit (3) abort |
 | Feature B3 pick ambiguous because two `todo` same rank — **should not happen** after WBS sort | — | N/A — WBS tie-break is total |
 | Task `todo` but also feature-level AC invalid when invoked via feature id | feature health vs task progress | (1) fix feature AC (2) proceed with task A3 |
-| `testing` with open P1 in Review section | verify vs review-fix | (1) `/sp:dev-review <wbs> --fix blockers-first` (2) verify anyway |
+| `testing` with open P1 in Review section | verify vs review-fix | (1) `/sp:dev-review <wbs> --triage` (2) verify anyway |
 | `wip` with both checkpoint and dirty Solution L3 | resume vs re-implement | (1) `--continue` (2) implement `--next` |
 
 When HITL STOP fires: print decision-brief (question, stakes, recommended option, alternatives).

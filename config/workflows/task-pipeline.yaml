@@ -590,7 +590,7 @@ states:
                 # through the executor registry, and the runner enforces (pre-dispatch,
                 # fail-closed) that a P0/P1 task's review resolves a DIFFERENT executor
                 # spec than the implement stage recorded in __agentRouting_implement.
-                input: /sp:dev-review ${vars.wbs} --auto
+                input: /sp:dev-review --tasks ${vars.wbs} --auto
                 # The captured review answer is the run's dispatch evidence (0823 R1):
                 # expectFile fails the step when no answer was captured. Quality stays with
                 # the review proof digest and the verify verdict.

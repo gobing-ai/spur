@@ -1036,10 +1036,12 @@ describe('(g) CLI surface', () => {
 // ─── (h) task 0315 — dev-review and dev-handover hardened contracts ─────────
 
 describe('(h) task 0315 — dev-review and dev-handover hardened contracts', () => {
-    test('dev-review allowed-tools does not include Write (least privilege)', () => {
+    test('dev-review allowed-tools scopes Edit/Write to --triage direct fixes (1022 R3; supersedes 0315 no-Write)', () => {
         const raw = readFileSync(join(COMMANDS_DIR, 'dev-review.md'), 'utf8');
-        expect(raw).toContain('allowed-tools: ["Bash", "Read", "Skill"]');
-        expect(raw).not.toContain('"Write"');
+        expect(raw).toContain('allowed-tools: ["Bash", "Read", "Skill", "Edit", "Write"]');
+        // The write surface stays least-privilege: the body must scope Edit/Write to the
+        // --triage direct fixes — without that sentence the tools are unaccounted for.
+        expect(raw).toContain('`Edit`/`Write` in `allowed-tools` exist only for these direct fixes');
     });
 
     test('dev-review implementation defines deterministic WBS vs Path modes and flags deprecations', () => {

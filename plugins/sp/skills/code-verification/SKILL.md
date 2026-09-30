@@ -96,15 +96,38 @@ no-op there; `--force` matters for re-auditing completed tasks.)
 
 ### Step 3 — Establish the change scope
 
-Determine which files the task changed (the evidence surface):
+Determine which files the task changed (the evidence surface). This step is the SSOT scope recipe:
+`sp:functional-review` Step 3, `sp:code-improvement` Step 1, and `sp:super-reviewer` "Establish
+scope first" defer here and must not restate it.
+
+WBS mode — the union of files changed by the task's implementation commits, identified by the
+`(<wbs>)` subject tag ("commit per task"), excluding the task file itself:
 
 ```bash
 TASK_FILE=$(spur task show <wbs> --json | jq -r .filePath)
-COMMIT=$(git log -1 --format=%H -- "$TASK_FILE")
-git diff --name-only "${COMMIT}~1"..HEAD -- '*.ts' '*.tsx' '*.js' '*.jsx'
-# Fallback when the task file is uncommitted: use the working-tree diff.
+COMMITS=$(git log --format=%H --fixed-strings --grep="(<wbs>)")
+for c in $COMMITS; do git diff-tree --no-commit-id --name-only -r "$c"; done \
+  | sort -u | grep -vxF "${TASK_FILE#$PWD/}"
+# No tagged commit → fall back to the working-tree diff.
 git status --porcelain
 ```
+
+- No file-extension filter — `.md`/`.yaml` are first-class harness surfaces. Generated/lock files
+  (`*.generated.mjs`, `bun.lock`) may be excluded by name, with the exclusion stated in the Scope
+  line.
+- A task without a tagged commit degrades visibly, never silently: state `working tree` (no tagged
+  commit) in the review Scope line.
+
+### Step 3p — Path scope (review mode only)
+
+When the review target is a path, not a WBS, Step 3 does not apply — derive the scope from the
+path: the tracked files under it, with the file count reported in the Scope line.
+
+```bash
+git ls-files -- <path>
+```
+
+Large scopes are fanned out by the coordinator (`sp:super-reviewer`), not here.
 
 ### Step 4 — Requirements traceability gate (Phase 8)
 
@@ -482,10 +505,11 @@ re-audit is never misread as a successful `testing -> done` (dev-verify.md `--ne
 ## Mode: review (`/sp:dev-review`)
 
 The source-oriented path: SECUA review of a task's diff without the full traceability verdict. Runs
-Steps 3 + 7 and returns a **review fragment** — no verdict artifact, no section write, no `done`
+Step 3 (WBS target) or Step 3p (path target — a path target never derives scope from Step 3) plus
+Step 7, and returns a **review fragment** — no verdict artifact, no section write, no `done`
 gate (F92 0593 R1); the coordinator (`sp:super-reviewer`) merges fragments into `## Review`.
 
-Flags: `--agent <inline|auto|name>` (execution surface — inline default, with named escalation triggers taking precedence), `--auto` (no confirmations), `--fix <none|blockers-first|all>` (post-review repair), and `--focus <all|security|efficiency|correctness|usability|architecture>` (SECUA dimensions). Apply the [central contract](../spur-dev/references/cross-cutting.md#inline-default-execution-surface) before starting the review.
+Flags: `--agent <inline|auto|name>` (execution surface — inline default, with named escalation triggers taking precedence), `--auto` (no confirmations), and `--focus <all|functional|security|efficiency|correctness|usability|architecture>` (review dimensions — **the single review `--focus` vocabulary is declared here (SSOT)**: `functional` routes to `sp:functional-review`, `architecture` to `sp:code-improvement` + SECUA-A, the SECUA lenses to Step 7; `dev-review.md`, `dev-operations.md` §2 and `flag-glossary.md#flag-focus` link here instead of restating a second list). Apply the [central contract](../spur-dev/references/cross-cutting.md#inline-default-execution-surface) before starting the review.
 
 ---
 
