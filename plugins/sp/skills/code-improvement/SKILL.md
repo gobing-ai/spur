@@ -105,9 +105,9 @@ spur task show <wbs> --json    # for a pipeline run
 # scope = 'src/api/' | 'packages/domain/' | 'plugins/sp/'
 ```
 
-For a pipeline run, derive the diff scope the same way `sp:code-verification` Step 3 does (the
-task's last commit → changed `*.ts/*.tsx/*.js/*.jsx`). For standalone, the `path` argument is the
-scope.
+For a pipeline run, derive the diff scope the same way `sp:code-verification` Step 3 does (the SSOT
+recipe: tagged-commit task diff — defined there, not restated here). For standalone, the `path`
+argument is the scope.
 
 ### Step 2 — Explore (read the map)
 

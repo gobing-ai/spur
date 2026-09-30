@@ -214,8 +214,8 @@ return `verdict = PASS` with "No requirements to verify" (zero-requirements case
 ### Step 3 — Establish the change scope
 
 If `--source-paths` is given, use it. Otherwise derive the diff scope exactly as
-`sp:code-verification` Step 3 does (the task file's last commit → `git diff --name-only` for
-`*.ts`/`*.tsx`/`*.js`/`*.jsx`, fallback to working-tree diff).
+`sp:code-verification` Step 3 does (the SSOT recipe: the `(<wbs>)`-tagged implementation commits'
+changed files, fallback to the working-tree diff — defined there, not restated here).
 
 ### Step 4 — Track A: BDD mapping (if `--bdd-report`)
 

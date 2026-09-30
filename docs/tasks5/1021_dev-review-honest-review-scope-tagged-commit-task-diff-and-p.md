@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "dev-review honest review scope: tagged-commit task diff and path-mode SECUA scope"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-30T18:12:18.446Z
-updated_at: "2026-09-30T18:14:44.480Z"
+updated_at: "2026-09-30T19:11:33.598Z"
 feature_id: I33
 
 ac_numbering: task-local
@@ -74,21 +74,46 @@ This task is a prerequisite for multi-target review (1023): scope derivation mus
 
 **Verification checks (evidence for the AC above):**
 
-- [ ] Running the documented R1 recipe for WBS 1020 lists the files of `bbef13522` (help-doc-parity test, task-pipeline.yaml, help-docs-parity test, skill-structure test) and not files from `a7ef9ba83` alone.
-- [ ] `code-verification/SKILL.md` review-mode section references the path-scope step, not Step 3, for path targets.
-- [ ] `grep -rn "'\*.ts' '\*.tsx'" plugins/sp/skills` returns no scope recipe.
+- [x] Running the documented R1 recipe for WBS 1020 lists the files of `bbef13522` (help-doc-parity test, task-pipeline.yaml, help-docs-parity test, skill-structure test) and not files from `a7ef9ba83` alone.
+- [x] `code-verification/SKILL.md` review-mode section references the path-scope step, not Step 3, for path targets.
+- [x] `grep -rn "'\*.ts' '\*.tsx'" plugins/sp/skills` returns no scope recipe.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `plugins/sp/tests/skill-structure.test.ts:876` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | plugins/sp/skills/code-verification/SKILL.md:105-119 — SSOT recipe (git log --fixed-strings --grep="(<wbs>)" → diff-tree union → task-file exclusion, no extension filter, visible fallback); executed for WBS 1020: returns exactly bbef13522's 4 files (incl. task-pipeline.yaml), no a7ef9ba83-only leak |
+| R2 | MET | code-verification/SKILL.md:121-129 Step 3p (git ls-files -- <path>); executed ls-files on the 4-file skill dir; review-mode paragraph :505-509 routes path targets to Step 3p, never Step 3 |
+| R3 | MET | functional-review/SKILL.md:214-217, code-improvement/SKILL.md:108-110, super-reviewer.md:96-99 all defer; grep across plugins/sp/{skills,agents,commands}: recipe exists only in code-verification/SKILL.md:109,127 |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R1 — task diff scope names the implementation commits | MET | command | git log --fixed-strings --grep="(1020)" → only bbef13522; recipe output matches expectation; old-recipe contrast executed (a7ef9ba83 anchor leaks AgentsView.tsx, drops .yaml) proving the defect gone |
+| R2 — path-mode SECUA review has a defined scope | MET | command | Step 3p documented + executed (4 tracked files); review mode claims Step 3p for path targets (SKILL.md:507-508) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -101,4 +126,7 @@ This task is a prerequisite for multi-target review (1023): scope derivation mus
 ### History
 
 - 2026-09-30T18:14:44.480Z backlog → todo (system)
+- 2026-09-30T18:43:37.028Z todo → wip (system)
+- 2026-09-30T19:08:21.362Z wip → testing (system)
+- 2026-09-30T19:11:33.598Z testing → done (system)
 

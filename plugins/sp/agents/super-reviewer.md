@@ -94,8 +94,9 @@ HITL gate unless `--auto` was passed.
 
 ### Always
 
-- [ ] Establish scope first: WBS mode (task diff) or path mode (source glob). Derive the diff
-      scope the same way `sp:code-verification` Step 3 does.
+- [ ] Establish scope first: WBS mode (task diff → `sp:code-verification` Step 3) or path mode
+      (tracked files under the path → `sp:code-verification` Step 3p). Defer to that recipe — no
+      restated copy.
 - [ ] Dispatch each requested dimension to its owning skill — do not inline the review logic.
 - [ ] Merge findings into a single ranked report, emitting native priority cells
       (`P1 (blocker)` > `P2 (major)` > `P3 (minor)` > `P4 (advisory)` — see Output Format).

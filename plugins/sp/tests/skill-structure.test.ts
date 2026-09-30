@@ -873,7 +873,9 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
             // the three verify surfaces. Not permanent — same split candidate.
             // 1003 R6: +22B verify-flow lint ownership pointer (spur task verdict --from-answer
             // runs the answer lint; standalone lint script deleted). Not permanent.
-            'code-verification': 32_499,
+            // 1021: +1186B SSOT scope-recipe rewrite (Step 3 tagged-commit diff + Step 3p
+            // path scope; R1/R2 of I33). Not permanent — candidate for references/ split.
+            'code-verification': 33_685,
             wayfinder: 26_264,
             // 0622 R9: +921B of live-matrix reconciliation (section table, SPUR_BIN
             // refusal, artifact-size discipline). Not permanent — split into references.
