@@ -3900,3 +3900,64 @@ Batch: task 0999 (feature A8). Base `7e442aab`, head `e1c89fa33`. Diff was test-
 - 1010/1011: `testing→done` requires `task run-link <wbs> --source task-pipeline --run-id <rid>` first; else "No pipeline run recorded". `record-feature-sync.ts` needs env `wbs=<n>`.
 - 1011: batch tail order that works: record → feature-sync → residual scan → fold → settle → strict-core check → run-link → done → driver commit.
 
+## Doc-evolve wrapup — task 1012 (2026-09-30)
+
+**Checks run:** focused §7 audit of the task's changed surfaces (drift-audit + sync-check + contract-verify) · **Findings: 0 repairs** in `docs/00_ADR.md`, `docs/03_ARCHITECTURE.md`, `docs/04_DESIGN.md`, `docs/design/*`.
+
+| # | Candidate | Reality says | Doc says | Authority | Judgment |
+|---|---|---|---|---|---|
+| 1 | `execution-batch.md` (drift-probe `plugins/sp/skills/**`) | 1012 adds owned-evidence enumeration at WT-4a | Reference updated in the same change (`:511-521`, AC6) | detail owner | synchronized — T3/T9 met |
+| 2 | `docs/03` §29 | batch isolation model unchanged | "one tree per task / rebase-then-ff"; delegates driver contract to `execution-batch.md:1169` | `03` | no delta |
+| 3 | `docs/design/planning-workflow-contracts.md:541` | runall entry unchanged | delegates batch detail to `execution-batch.md` | satellite | pointer unchanged |
+| 4 | `docs/04_DESIGN.md` | no CLI/flag/config/schema added (`git diff` shows no `.command(`/`.option(`) | index | `04` | no delta |
+| 5 | `docs/00_ADR.md` | refinement of existing 0975/0984 mechanism inside ADR-127 | no ADR entry | `00` | T1 not triggered |
+
+**Zero-finding checks (commands):** `rg "persist-out|persistWorktreeRuns|persist-worktree" docs/00_ADR.md docs/03_ARCHITECTURE.md docs/04_DESIGN.md docs/design/` → none; `rg "execution-batch.md" docs/03_ARCHITECTURE.md docs/design/` → 3 delegating pointers, none changed; frontmatter of `00`–`05`/`99` matches §4.1 rows, `edit_rules` point to §6.x, `updated_at` plausible. No task/feature corpus written.
+
+Artifact: `/Users/robin/xprojects/spur-new/.spur/run/1012-verify-wrap-20260930-wrapup-learnings.md` (45 lines).
+
+## 2026-09-29 — task 1012 (persist-out forwards task-cited .spur/run evidence artifacts; feature A9)
+
+**The original diagnosis was wrong — verify the premise against shipped code before implementing.**
+
+- 1012 was chartered to add task-cited evidence forwarding, but that already shipped in 0984 (commits `9e131b141` / `a77b28028` / `fd0a81872`). The real gap was **run-owned** evidence the task file never cites by path (`<wbs>-verdict.json`, `<runId>-route-reason.txt`, check receipts) — it died with the worktree. The 1008 task file cites exactly one run path; its Testing section says "Verdict: PASS (from verdict artifact)" with no path, so the citation scan had nothing to fire on.
+- Refine rewrote R1/R2: the proposed `--evidence <path>` flag duplicated 0984, and the proposed "conflict → report and continue / missing → warning" would have regressed 0984's fail-closed guarantees. Cost of not checking first: a full refine cycle and a rewritten task name/scope.
+- Rule: before adding a mechanism, grep the surface the task names for an existing implementation. A "missing feature" report is a hypothesis, not evidence.
+
+**A doc that promises behavior the code only delivers conditionally is drift.**
+
+- `execution-batch.md:1117` said WT-4a persists `<wbs>-verdict.json` into the invoking tree, but that was only true when the task happened to cite it. An unconditional doc claim over a conditional code path is the same defect class as a stale contract — fix the code or qualify the doc.
+
+**YAGNI on script surface.** The proposed `--evidence <path>` flag was dropped: the ownership-prefix rule plus literal citations cover the cases, and it avoided a script-surface change — the script owns no persistence policy.
+
+**Section discipline: planning content belongs in Design/Plan, not Solution.** A refine correction moved the plan narrative out of `### Solution`; the section was replaced with an explicit pre-existing-change note plus shipped file:line citations.
+
+## 2026-09-30 — task 1012 (implementation + verify)
+
+**Only ENOENT means "no owned directory"; every other listing failure must propagate.**
+
+- `readdir(...).catch(() => [])` swallowed ENOTDIR/EACCES. A real fixture (valid source DB, no run rows, an unciting task file, a regular file at source `.spur/run`) returned `{ok:true,persisted:0,skipped:[]}` and still created the target DB.
+- Fix: `readdir` tolerates ENOENT only; ENOTDIR/EACCES and other errors propagate before any invoking-tree write → wrapper exits 1 with `{ok:false,error:...}` → WT-5 retains the worktree.
+- AC4 uses ENOTDIR (not permission bits) because permission-bit behavior varies by runner; pick the deterministic failure mode for the test.
+
+**State the exact scope of a "zero-write" guarantee.** The source DB opener (`openInlineRunProjectDb`) is migrated/read-write, so the guarantee is *prevalidation safety for the invoking tree*, not a transaction across the source DB or all late I/O failures. Claiming "read-only source" or "atomic" would be false.
+
+**Ownership = filename prefix, not directory copy.**
+
+- Owned = direct children of the worktree's `.spur/run/` named `<wbs>-…` (WBS = each forwarded task file basename's leading four digits before `_`) or `<runId>-…` (every source `runs` row, whichever task it ran).
+- `<runId>.md` / `<runId>.state.json` stay with the record-transfer path; a conflict there is a reported skip, not a refusal.
+- Files matching neither a citation nor an ownership prefix are left behind. Run-id prefixes come from *all* source run rows — do not claim other-task artifacts are excluded.
+
+**The 64-name cap applies to the deduplicated union** of cited and owned names; a name selected by both counts once. Over-cap rejects before target writes.
+
+**Fail closed on a divergent owned target.** A stale `<wbs>-verdict.json` in the target refuses and is preserved; the operator reconciles by hand and the worktree is retained. "A green run can never destroy its own evidence" outranks convenience — revisit only if it proves frequent.
+
+**Preserve the legacy path exactly.** Omitted `taskFiles` and `[]` transfer only rows + two-file records; without `--task-file` nothing is enumerated.
+
+**The checked-in portable twin needs regeneration plus subprocess coverage.** `bun run build:plugin-lib` regenerated `plugins/sp/lib/inline-run.generated.mjs` after the app-service change; AC5 drives the checked-in `plugins/sp/scripts/inline-run-setup.mjs` and the generated bundle through the subprocess helper — no mock of the persistence service. The wrapper script itself needed no change: its existing catch already prints `{ok:false,error}` and exits 1.
+
+**Tests were written before the code they cover.** Recorded red-first evidence: ownership tests failed 3/20 before the enumeration existed, and ENOTDIR tests failed in both suites before the ENOENT-only change. That receipt is what proves the tests bite.
+
+**Declare deviations, even benign ones.** The one deviation — the source DB is opened twice (enumeration, then transfer) instead of hoisting the transfer block — was recorded rather than hidden; the smaller diff was the chosen tradeoff.
+
+**Doc ownership for the batch surface (doc-evolve wrapup).** The wrapup drift probe treats `plugins/sp/skills/**` as a doc-owned surface, but the batch driver's detail owner *is* `execution-batch.md`: `docs/03_ARCHITECTURE.md` §29 and `docs/design/planning-workflow-contracts.md:541` both delegate to it. Updating that reference in the same change is the whole T3/T9 sync — no `docs/00`/`docs/03`/`docs/04` edit and no index-pointer change. The §29 isolation sentence ("the invoking tree takes no task writes while the batch runs") is not contradicted by evidence writes under `.spur/run/`, which are not task-corpus writes. No ADR is warranted: this refines the existing 0975/0984 mechanism inside ADR-127's isolation model, not a new architectural choice.
