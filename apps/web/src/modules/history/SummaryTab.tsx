@@ -6,6 +6,7 @@ import type {
 } from '@gobing-ai/spur-contracts';
 import type React from 'react';
 import { memo, useCallback, useMemo, useState } from 'react';
+import { Tooltip } from '@/ui';
 import {
     type ChartSeries,
     fmtBucketLabel,
@@ -123,12 +124,18 @@ const SummaryDimensionBlock: React.FC<SummaryDimensionBlockProps> = memo(
                 <div className="flex flex-wrap justify-between items-center gap-2 pb-2 border-b border-base-content/10">
                     <div>
                         <h4 className="font-bold text-sm text-base-content flex items-center gap-2">
-                            {title}
+                            <Tooltip
+                                tip={description}
+                                position="top"
+                                className="cursor-help [&:before]:whitespace-normal [&:before]:max-w-xs [&:before]:text-left [&:before]:text-[11px] [&:before]:font-normal [&:before]:leading-snug z-20"
+                                data-testid={testId ? `${testId}-tooltip` : undefined}
+                            >
+                                <span className="hover:text-primary transition-colors">{title}</span>
+                            </Tooltip>
                             <span className="text-[11px] font-normal text-base-content/60 font-mono">
-                                ({series.length} {series.length === 1 ? 'tracked' : 'tracked'})
+                                ({series.length} tracked)
                             </span>
                         </h4>
-                        <p className="text-[11px] text-base-content/60">{description}</p>
                     </div>
                     <div className="flex items-center gap-1 bg-base-300 p-0.5 rounded-lg text-xs">
                         <button
@@ -639,12 +646,17 @@ export const SummaryTab: React.FC<SummaryTabProps> = memo(
                     <div className="flex flex-wrap justify-between items-center gap-3">
                         <div>
                             <h3 className="font-bold text-base text-base-content">
-                                Token Activity & Cache Hit Ratio & Gain Ratio
+                                <Tooltip
+                                    tip="4-block breakdown across Model, Source, Tool, and Skill (Stacked token bars with Cache Hit % and Gain Ratio % line overlays)"
+                                    position="bottom"
+                                    className="cursor-help [&:before]:whitespace-normal [&:before]:max-w-xs [&:before]:text-left [&:before]:text-[11px] [&:before]:font-normal [&:before]:leading-snug z-20"
+                                    data-testid="summary-overview-tooltip"
+                                >
+                                    <span className="hover:text-primary transition-colors">
+                                        Token Activity & Cache Hit Ratio & Gain Ratio
+                                    </span>
+                                </Tooltip>
                             </h3>
-                            <p className="text-xs text-base-content/60">
-                                4-block breakdown across Model, Source, Tool, and Skill (Stacked token bars with Cache
-                                Hit % and Gain Ratio % line overlays)
-                            </p>
                         </div>
 
                         <div className="flex items-center gap-3">
@@ -1030,10 +1042,16 @@ export const SummaryTab: React.FC<SummaryTabProps> = memo(
                     data-testid="summary-skill-breakdown"
                 >
                     <div>
-                        <h4 className="font-bold text-sm mb-1">Skill Load Breakdown</h4>
-                        <p className="text-[11px] text-base-content/60">
-                            Skill invocations by name, agent, and invocation kind over the selected window.
-                        </p>
+                        <h4 className="font-bold text-sm">
+                            <Tooltip
+                                tip="Skill invocations by name, agent, and invocation kind over the selected window."
+                                position="top"
+                                className="cursor-help [&:before]:whitespace-normal [&:before]:max-w-xs [&:before]:text-left [&:before]:text-[11px] [&:before]:font-normal [&:before]:leading-snug z-20"
+                                data-testid="summary-skill-breakdown-tooltip"
+                            >
+                                <span className="hover:text-primary transition-colors">Skill Load Breakdown</span>
+                            </Tooltip>
+                        </h4>
                     </div>
                     {skillBreakdown.fresh === false ? (
                         <div className="flex flex-col items-center justify-center text-[11px] text-base-content/40 font-mono border border-dashed border-base-content/10 rounded-xl bg-base-100/30 py-6">

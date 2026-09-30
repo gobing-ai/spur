@@ -340,6 +340,47 @@ describe('History Board components', () => {
         expect(view.getByTestId('summary-block-skill')).toBeDefined();
     });
 
+    test('Summary renders section titles with tooltips instead of raw description paragraphs', () => {
+        const view = render(<SummaryTab data={summary} />);
+
+        // Overview title has tooltip with breakdown description
+        const overviewTooltip = view.getByTestId('summary-overview-tooltip');
+        expect(overviewTooltip.getAttribute('data-tip')).toContain(
+            '4-block breakdown across Model, Source, Tool, and Skill',
+        );
+
+        // All 4 dimension blocks have title tooltips with their respective descriptions
+        const modelTooltip = view.getByTestId('summary-block-model-tooltip');
+        expect(modelTooltip.getAttribute('data-tip')).toBe(
+            'Token load by LLM model with cache hit ratio and gain ratio overlays',
+        );
+
+        const sourceTooltip = view.getByTestId('summary-block-source-tooltip');
+        expect(sourceTooltip.getAttribute('data-tip')).toBe(
+            'Token load by agent platform with cache hit ratio and gain ratio overlays',
+        );
+
+        const toolTooltip = view.getByTestId('summary-block-tool-tooltip');
+        expect(toolTooltip.getAttribute('data-tip')).toBe(
+            'Token load (or call volume when unmeasured) by tool execution with cache hit ratio and gain ratio overlays',
+        );
+
+        const skillTooltip = view.getByTestId('summary-block-skill-tooltip');
+        expect(skillTooltip.getAttribute('data-tip')).toBe(
+            'Token load by specialized skill with cache hit ratio and gain ratio overlays',
+        );
+
+        // Skill load breakdown has title tooltip
+        const skillBreakdownTooltip = view.getByTestId('summary-skill-breakdown-tooltip');
+        expect(skillBreakdownTooltip.getAttribute('data-tip')).toContain(
+            'Skill invocations by name, agent, and invocation kind',
+        );
+
+        // Descriptions are moved to tooltips, not rendered as raw paragraphs
+        expect(view.container.querySelectorAll('p.text-xs.text-base-content\\/60').length).toBe(0);
+        expect(view.container.querySelectorAll('p.text-\\[11px\\].text-base-content\\/60').length).toBe(0);
+    });
+
     test('Summary renders the skill-load breakdown section with counts and empty state', () => {
         const view = render(<SummaryTab data={summary} />);
         const section = view.getByTestId('summary-skill-breakdown');
