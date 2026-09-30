@@ -323,13 +323,17 @@ describe('help-docs parity', () => {
                             `${tree}: live verb \`${noun} ${verb}\` undocumented in ${files.join(', ')}`,
                         );
                 }
-                const flagUnion = new Set(
-                    [...(surface.get(noun)?.values() ?? [])].flat().filter((f) => !FLAG_EXEMPT.has(f)),
-                );
-                for (const flag of flagUnion) {
+                // flag → verbs carrying it, so a failure names the full `<noun> <verb> <flag>` path.
+                const flagVerbs = new Map<string, string[]>();
+                for (const [verb, flags] of surface.get(noun) ?? []) {
+                    for (const flag of flags.filter((f) => !FLAG_EXEMPT.has(f))) {
+                        flagVerbs.set(flag, [...(flagVerbs.get(flag) ?? []), verb]);
+                    }
+                }
+                for (const [flag, verbs] of flagVerbs) {
                     if (!mentions(text, flag))
                         onCliNotDocumented.push(
-                            `${tree}: live flag \`${flag}\` (noun \`${noun}\`) undocumented in ${files.join(', ')}`,
+                            `${tree}: live flag \`${noun} ${verbs.join('|')} ${flag}\` undocumented in ${files.join(', ')}`,
                         );
                 }
             }

@@ -4,7 +4,7 @@ name: Extend the CLI-surface parity gate to docs/help and docs/help2
 status: done
 template: feature-impl
 created_at: 2026-09-30T15:14:13.467Z
-updated_at: "2026-09-30T16:46:17.082Z"
+updated_at: "2026-09-30T17:16:47.522Z"
 feature_id: I3
 
 estimate_hours: 3
@@ -106,19 +106,19 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Literal AC1 seed `spur team start` appended to docs/help2/task.md → R1 test failed (documentedNotOnCli); reverted → 0 fails. Scanner: exact-token match, fenced blocks + inline spans, hidden aliases init/maintain/migrate/serve/status→self + hidden `agent loop` allow-listed (plugins/sp/tests/help-docs-parity.test.ts). |
-| R2 | MET | Literal AC2 seed: `--precheck` removed from docs/help2/task.md → R2 failed naming "live flag `--precheck` (noun `task`) undocumented in …/docs/help2/task.md"; reverted → 0 fails. Per-tree owning-page routing docs/help/cmd_<noun>.md vs docs/help2/<noun>.md verified in same run; `--help`/`--json-envelope` exempt. |
-| R3 | MET | Literal AC3 seed: `**19**`→`**18**` in docs/help/spur-cli-matrix.md Verb count → R3 failed "matrix Verb count for `task` is 18, live is 19"; reverted → 0 fails. Cells, Verb-count row, and Summary counts all checked against frozen captureCliSurface. |
-| R4 | MET | config/workflows/task-pipeline.yaml:47 names `testing → done: spur task check <wbs> --as done`; `bun run --filter @gobing-ai/spur build:bundle` exit 0; bundled apps/cli/config/ regenerated with no diff. |
-| R5 | MET | Gate test imports the frozen 0512 `captureCliSurface` helper (plugins/sp/tests/helpers/cli-surface.ts) already used by cli-surface-parity.test.ts; diff adds no production code, no CLI verb, no dependency (git diff --stat: 4 test/config files + task doc). |
+| R1 | MET | `plugins/sp/tests/help-docs-parity.test.ts:281-304` R1 test; hidden aliases/verbs `plugins/sp/tests/help-docs-parity.test.ts:37-39`; seed `spur team start` in docs/help2/task.md → fail "docs/help2/task.md:247: unknown noun `spur team`"; reverted → 3 pass / 0 fail |
+| R2 | MET | `plugins/sp/tests/help-docs-parity.test.ts:306-343` R2 test, owning pages `plugins/sp/tests/help-docs-parity.test.ts:194-209`, exemptions `plugins/sp/tests/help-docs-parity.test.ts:41`; seed removing `--precheck` → fail "live flag `task check --precheck` undocumented in …/docs/help2/task.md"; reverted → green |
+| R3 | MET | `plugins/sp/tests/help-docs-parity.test.ts:345-386` R3 test, matrix parser `plugins/sp/tests/help-docs-parity.test.ts:227-274`; seed Verb count 19→18 → fail "matrix Verb count for `task` is 18, live is 19"; reverted → green |
+| R4 | MET | `config/workflows/task-pipeline.yaml:47` names `--as done`; `bun run --filter @gobing-ai/spur build:bundle` exit 0 this run; `diff -rq config/workflows apps/cli/config/workflows` exit 0; `rg strict-core` on both copies exit 1 |
+| R5 | MET | `plugins/sp/tests/help-docs-parity.test.ts:28` imports `captureCliSurface` from the shared helper; commit bbef13522 touches only tests, one yaml comment, and the task doc — no verb, no dependency |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | Seed-and-revert live run this session: `spur team start` → R1 fail naming file+token; revert → suite green. |
-| AC2 | MET | test | Seed-and-revert live run: `--precheck` removal → R2 fail naming `task` + `--precheck`; revert → green. |
-| AC3 | MET | test | Seed-and-revert live run: Verb count 19→18 → R3 fail "18, live is 19"; revert → green. |
-| AC4 | MET | command | `rg 'strict-core' config/workflows/task-pipeline.yaml` → no match; build:bundle exit 0; `git diff apps/cli/config/` empty after regeneration. |
-| AC5 | MET | command | Full `bun run spur-check` PASS on final tree at the recorded digest (9515 pass / 0 fail; gate log .spur/run/1020-test-gate.log). |
+| AC1 | MET | test | Seed `spur team start` appended to docs/help2/task.md → R1 fails naming `docs/help2/task.md:247` and `spur team`; revert → 3 pass / 0 fail |
+| AC2 | MET | test | `--precheck` removed from docs/help2/task.md → R2 fails naming `task check --precheck`; revert → green |
+| AC3 | MET | test | `**19**`→`**18**` on the Verb count row of docs/help/spur-cli-matrix.md → R3 fails "is 18, live is 19"; revert → green |
+| AC4 | MET | command | `rg -n strict-core config/workflows/task-pipeline.yaml` exit 1; build:bundle exit 0; bundled copy byte-identical (`diff -rq` exit 0) |
+| AC5 | MET | command | Operator ran `bun run gate` (= `bun run format && bun run spur-check`) outside the Claude Code sandbox on the final tree: all PASS; format left the tree unchanged (`git status --short` = task doc + help-docs-parity test only). In-sandbox run failed only on sandbox-blocked fixtures (nested .git writes, Chromium launch), outside 1020 scope. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
