@@ -289,8 +289,8 @@ Never edit a task or feature file directly. Every mutation goes through:
 
 The interactive `--next` step-chain (`dev-refine → dev-run → dev-verify → done`) moves a task's
 status with `spur task update <wbs> <status>` **without `--no-lifecycle`**, so the lifecycle guards
-run: `wip → testing` invokes `spur task check`, `testing → done` invokes
-`spur task check --strict-core`. A guard failure **stops the chain as review-pending** — leave the
+run: `wip → testing` invokes `spur task check --as testing`, `testing → done` invokes
+`spur task check --as done`. A guard failure **stops the chain as review-pending** — leave the
 task at its current status, surface the blocking finding, do not advance. This is the gate that
 keeps a malformed task out of `testing`/`done`.
 
@@ -455,7 +455,7 @@ Seven non-negotiable invariants for the spur-dev lifecycle. These are laws, not 
 violation is a defect in the run, not a style choice. Every competency skill and the spine consume
 them; they live here because they cross every phase boundary.
 
-1. **NEVER skip the verification gate.** A task is not done until `spur task check <wbs> --strict-core`
+1. **NEVER skip the verification gate.** A task is not done until `spur task check <wbs> --as done`
    returns PASS and every AC scenario has a corresponding verify command that exited 0. "I tested it
    manually" is not verification evidence.
 2. **NEVER write to task/feature corpus outside the `spur` CLI.** Direct file edits to
@@ -463,7 +463,7 @@ them; they live here because they cross every phase boundary.
    under `.spur/memory/`. Every other mutation goes through `spur task` / `spur feature` so the
    schema, matrix, and traceability guards run.
 3. **NEVER mark a task done without a PASS verdict.** `testing → done` requires
-   `spur task check --strict-core` PASS and a recorded verdict. PARTIAL or FAIL verdicts leave the
+   `spur task check --as done` PASS and a recorded verdict. PARTIAL or FAIL verdicts leave the
    task at `testing` and surface to the operator.
 4. **NEVER proceed past a failed gate without explicit operator approval.** A failed
    `feature-check`, `batch-create`, `precheck`, `review`, or `verify` stops the run. The operator

@@ -24,8 +24,16 @@ blocking retry).
 | `--feature <id>` | Records `feature_id` in frontmatter; derives `Background` from the feature's `Goal` (L4 edge). |
 | `--parent <wbs>` | Groups under a parent WBS for sub-task decomposition. |
 | `--template <variant>` | Selects the section-matrix variant for the new file. |
+| `--skip-ready` | Keep the capture as-is: no ready preparation, no model dispatch. |
+| `--agent <selector>` | Agent used for ready preparation (default: the configured agent). Exit `2` when combined with `--skip-ready`. |
 | `--folder <path>` | Target a non-default tasks folder. |
-| `--json` | Emit `{ ref: { id, filePath } }`. |
+| `--json` | Emit `{ ref: { id, filePath }, wbs, filePath, readiness: { status, depth } }`. |
+
+**Ready by default (ADR-109):** after the capture is saved, `create` prepares the same WBS in place —
+model refine → deterministic post-check (`task check --as todo`) → promotion to `todo`.
+`readiness.status` is `ready`, `skipped` (`--skip-ready`), or `failed`. A failed preparation exits `1`
+with error code `preparation-failed` (`failedStage`, `recoveryCommand`, `findings`); the task file and
+its WBS are kept. `batch-create` takes the same two flags.
 
 (See also the full verb map in [tasks.md](../tasks.md).)
 
@@ -67,6 +75,10 @@ frontmatter scalar.
   wholesale. No inline-body flag. Section names: `Background`, `Requirements`, `Acceptance Criteria`, `Q&A`, `Design`, `Plan`, `Solution`, `Testing`, `Review`, `References`, `History`, `Notes`.
 - **Frontmatter** (`--feature <id>`, `--priority <p>`): sets the scalar frontmatter field on an
   existing task — the only post-create path, allow-listed to `feature_id` / `parent_wbs` / `priority`.
+- **Estimate** (`--estimate-hours <n>`): sets the `estimate_hours` frontmatter field (positive number) —
+  the decomposition size estimate the inline pipeline driver reads.
+- **`--provenance-bypass`** (pair with `--force-done` and `--reason`): records an audited
+  provenance-bypass link when no pipeline run exists. Replaces the `SPUR_PROVENANCE_OVERRIDE` env var.
 - **AC controls** (`--ac-altitude <graduating|task-local>`, `--ac-numbering task-local`) — independent
   of each other (task 0818 R5). `--ac-altitude task-local` skips the **DD-09 feature-AC subset** rule
   because the task's scenarios are intentionally not the feature's ship criteria; `--ac-numbering
@@ -413,9 +425,9 @@ unallocated.
 ## Command surface (quick)
 
 ```
-spur task create   <title> [--feature <id>] [--parent <wbs>] [--template <v>] [--dedupe-within <seconds>] [--allow-duplicate-name] [--folder] [--json]
+spur task create   <title> [--feature <id>] [--parent <wbs>] [--template <v>] [--dedupe-within <seconds>] [--allow-duplicate-name] [--skip-ready | --agent <selector>] [--folder] [--json]
 spur task show     <wbs> [--folder] [--json]
-spur task update   <wbs> [status] [--section <n> --from-file <p>] [--feature <id>] [--priority <p>] [--no-lifecycle] [--folder] [--json]
+spur task update   <wbs> [status] [--section <n> --from-file <p>] [--feature <id>] [--priority <p>] [--ac-numbering task-local] [--ac-altitude <a>] [--estimate-hours <n>] [--assignee <spec-id>] [--no-lifecycle] [--force-done --reason <text> [--provenance-bypass] [--verdict-dir <path>]] [--folder] [--json]
 spur task deps     <wbs> <set|add|remove|clear> [values...] [--folder] [--json]
 spur task sections <wbs> <init|add|list> [name] [--folder] [--json]
 spur task list     [--status <s>] [--phase <p>] [--parent <wbs>] [--feature <id>] [--folder] [--json]
@@ -423,7 +435,7 @@ spur task refresh  [--folder] [--json]
 spur task migrate  [--dry-run] [--folder] [--json]
 spur task migrate-anchors [--dry-run] [--json]
 spur task refresh-roster <wbs> [--folder] [--json]
-spur task batch-create --file <path> [--folder] [--json]
+spur task batch-create --file <path> [--skip-ready | --agent <selector>] [--folder] [--json]
 spur task record   <wbs> [--verdict-file <p>] [--solution-from-diff] [--transition <s>] [--folder] [--json]
 spur task verdict  <wbs> [--from-answer <p>] [--folder] [--json]
 spur task verifyall-aggregate [--from-file <path>] [--json]

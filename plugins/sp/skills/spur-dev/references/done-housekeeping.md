@@ -34,7 +34,7 @@ If you hand-walk lifecycle statuses (manual `spur task update <wbs> <status>` wi
 pipeline), you MUST state so explicitly in your final message and name the gate you verified:
 
 ```
-Transitioned manually. Gate verified: spur task check <wbs> --strict-core -> PASS
+Transitioned manually. Gate verified: spur task check <wbs> --as done -> PASS
 ```
 
 Silent manual transitions are the anti-pattern to forbid. Either the pipeline ran (name the
@@ -160,7 +160,7 @@ command printing `0`.
 | # | Check | Command to run (literal - paste the output) | Pass condition |
 |---|-------|----------------------------------------------|----------------|
 | 1 | F1 - no unchecked boxes anywhere | `grep -c '^\s*- \[ \]' <task-file>` | output is exactly `0` (whole file, not just Plan) |
-| 2 | F2 - honest transition | (state it) | named a pipeline run-id, OR "manual + `spur task check <wbs> --strict-core` PASS" |
+| 2 | F2 - honest transition | (state it) | named a pipeline run-id, OR "manual + `spur task check <wbs> --as done` PASS" |
 | 3 | F4 - gate evidence | (recall change type) | raw gate tails pasted if code/test/infra touched; one-liner only if pure-doc |
 | 4 | F5 - no `/tmp` residue | `ls /tmp/<wbs>-* 2>/dev/null \| wc -l` | output is `0` |
 | 5 | Dogfood (only if in dogfood mode) | `rg -c '^### 3\. Monitor Ledger' <report> && rg -c '── Dogfood Summary ──' <report> && rg -c '^status: (complete\|aborted)' <report>` | all three counts are `>= 1` (report exists under `docs/dogfood/` AND carries the mandatory ledger section AND the mandatory summary footer AND terminal frontmatter status - not just any file matching the slug) |

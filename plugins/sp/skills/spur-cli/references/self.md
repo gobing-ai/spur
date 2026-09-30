@@ -17,7 +17,7 @@ top-level forms are omitted from `spur --help`, leaving `self` as the visible su
 
 | Verb | Purpose | Key flags |
 | ---- | ------- | --------- |
-| `init` | Scaffold a new Spur project in the current directory | `--name <name>` `--force` `--minimal` `--json` |
+| `init` | Scaffold a new Spur project in the current directory | `--name <name>` `--force` `--minimal` `--adopt-global-config` `--json` |
 | `maintain` | Run database maintenance: PRAGMA optimize, WAL truncation, optional VACUUM | `--vacuum` `--json` |
 | `migrate` | Apply CLI-owned schema migrations | `--json` |
 | `serve` | Start the Spur web server (local fallback) | `--port <n>` `--host <addr>` `--no-open` `--cwd <path>` `--json` |
@@ -40,7 +40,8 @@ spur self init --json                 # machine-readable
 
 Materializes the `.spur/` directory tree with config, docs, rules, and workflow templates. Flags:
 `--name <name>` (default: current directory name), `--force` (recreate existing files), `--minimal`
-(skip optional scaffolding), `--json` (machine-readable output). Post-scaffold validation probes
+(skip optional scaffolding), `--adopt-global-config` (also rewrite `~/.config/spur/config.yaml` from
+the shipped global default, backed up first), `--json` (machine-readable output). Post-scaffold validation probes
 (Phase 1.5 / 1.6) run immediately after this verb completes — see **[init.md](init.md)** for the
 probe protocol and rule-glob adaptation procedure.
 

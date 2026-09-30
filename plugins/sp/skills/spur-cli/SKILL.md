@@ -46,7 +46,7 @@ Pick the noun, read its reference. Each Tier A and Tier B reference owns that no
 | **Tier A** | **builder** | Release plumbing: bump a package (or the `workspace:`-pinned set) with `bump-ver`, delete release tags with `drop-tags`, commit + tag + optional push | [references/builder.md](references/builder.md) |
 | **Tier B** | **agent** | Coding-agent execution surface: run prompts via detected/named agents, list agent specs, start/stop supervised processes, readiness check | [references/agent.md](references/agent.md) |
 | **Tier B** | **message** | Durable inter-agent messaging: send, inbox, reply, watch | [references/message.md](references/message.md) |
-| **Tier B** | **self** | Self-management verbs: scaffold (`init`), schema migrations (`migrate`), local web server (`serve`), status overview (`status`); `self init` runs post-scaffold validation probes & layout classification | [references/self.md](references/self.md) |
+| **Tier B** | **self** | Self-management verbs: scaffold (`init`), database maintenance (`maintain`), schema migrations (`migrate`), local web server (`serve`), status overview (`status`); `self init` runs post-scaffold validation probes & layout classification | [references/self.md](references/self.md) |
 | **Tier B** | **history** | Import agent histories, aggregate forensic artifacts, render reports, and run the checkpoint-resumed daily pipeline | [references/history.md](references/history.md) |
 | **Tier B** | **projects** | Manage the local multi-project registry and start/stop project servers | [references/projects.md](references/projects.md) |
 | **Tier C** | **help** | Commander-generated help command; not a Spur noun | Generated `--help` |
@@ -141,8 +141,8 @@ and spreading it; full contract in `docs/04_DESIGN.md` §1.0.1.
   [dispatch-surface rule](../parallel-execution/references/dispatch-surface.md).
 - **[references/message.md](references/message.md)** - durable inter-agent messaging (`send`,
   `inbox`, `reply`, `watch`).
-- **[references/self.md](references/self.md)** - `spur self init|migrate|serve|status` CLI verbs
-  (the four legacy top-level nouns remain hidden aliases). `self init` runs post-scaffold init
+- **[references/self.md](references/self.md)** - `spur self init|maintain|migrate|serve|status` CLI verbs
+  (the five legacy top-level nouns remain hidden aliases). `self init` runs post-scaffold init
   validation (Phase 1.5/1.6 probes).
 - **[references/history.md](references/history.md)** - history import, forensic artifact analysis,
   pure report rendering, and the daily pipeline.

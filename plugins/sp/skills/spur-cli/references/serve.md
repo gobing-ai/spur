@@ -1,13 +1,13 @@
 ---
 name: spur-cli-serve
-description: "spur-cli noun reference: operate `spur serve` as the local web-server fallback - start the Hono/Cloudflare-Worker server that backs the web Task Kanban and the supervisor API. Single verb, five flags."
+description: "spur-cli noun reference: operate `spur self serve` as the local web-server fallback - start the Hono/Cloudflare-Worker server that backs the web Task Kanban and the supervisor API. Single verb, five flags."
 see_also:
   - spur-cli
 ---
 
-# spur serve - local web server
+# spur self serve - local web server
 
-`spur serve` starts the **Spur web server** - a local Hono / Cloudflare-Worker server that serves
+`spur self serve` starts the **Spur web server** - a local Hono / Cloudflare-Worker server that serves
 the web Task Kanban and exposes the supervisor API (`/api/processes/*` + `/api/agents/*`). It is the local fallback
 when no remote server is configured.
 
@@ -22,10 +22,10 @@ when no remote server is configured.
 ## `serve` - start the web server
 
 ```bash
-spur serve                          # default: localhost:3000, opens browser
-spur serve --port 8080 --host 0.0.0.0
-spur serve --no-open                # skip browser
-spur serve --json                   # dry probe: print { port, url, pid, running } and exit
+spur self serve                          # default: localhost:3000, opens browser
+spur self serve --port 8080 --host 0.0.0.0
+spur self serve --no-open                # skip browser
+spur self serve --json                   # dry probe: print { port, url, pid, running } and exit
 ```
 
 Starts the server with the Hono app backed by the local SQLite database. The web Task Kanban and
@@ -46,14 +46,14 @@ the supervisor API become available at `http://<host>:<port>`.
 
 ## What this skill is NOT
 
-- **Not the agent supervisor.** `spur serve` hosts the supervisor API; `spur agent start` / `stop` /
+- **Not the agent supervisor.** `spur self serve` hosts the supervisor API; `spur agent start` / `stop` /
   `agent list --specs` are the verbs that drive and inspect it (0848). See
   **[agent.md](agent.md)**.
 - **Not a production server.** This is the local fallback. Production deployment uses the Cloudflare
-  Worker build (`apps/server/`), not `spur serve`.
+  Worker build (`apps/server/`), not `spur self serve`.
 
 ## See also
 
-- **`spur agent` (see [agent.md](agent.md))** - `start`/`stop`/`list --specs` require `spur serve`
+- **`spur agent` (see [agent.md](agent.md))** - `start`/`stop`/`list --specs` require `spur self serve`
   for the supervisor API.
 - **`sp:spur-cli`** SKILL.md - the facade that routes to this reference.

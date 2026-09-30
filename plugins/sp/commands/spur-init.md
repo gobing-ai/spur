@@ -7,7 +7,7 @@ allowed-tools: ["Bash", "Read", "Write", "Skill"]
 
 # Spur Init
 
-Wraps **spur init** (deterministic scaffold) + **sp:doc-evolve** (project customization).
+Wraps **spur self init** (deterministic scaffold) + **sp:doc-evolve** (project customization).
 
 ## Usage
 
@@ -16,7 +16,7 @@ Wraps **spur init** (deterministic scaffold) + **sp:doc-evolve** (project custom
 ## Implementation
 
 ```bash
-spur init --json $ARGUMENTS
+spur self init --json $ARGUMENTS
 ```
 - Parse the JSON envelope once and retain it as `scaffoldResult`; summarize its created/skipped files in one block.
 - Customize (Phase 2): `Skill(skill="sp:doc-evolve", args="customize --project <scaffoldResult.project>")`.

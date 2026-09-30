@@ -107,7 +107,7 @@ Entered before `task-pipeline.yaml` `verify` state produces a task verdict.
       values, and empty evidence on any row. A lint failure fails the verdict step
       (fail-closed) before verdict derivation; an unresolvable task file fails open so
       pre-lint historical runs (8001–8005) stay reproducible.
-- [ ] `spur task check <wbs> --strict-core --json` returns PASS.
+- [ ] `spur task check <wbs> --as done --json` returns PASS.
 - [ ] Every AC scenario has a corresponding verify command that exited 0.
 - [ ] The `## Solution` section is filled (not the placeholder comment).
 - [ ] The `## Testing` evidence (commands run + outcomes) is present in the verdict artifact —
@@ -143,14 +143,14 @@ bounded retry does not.
 ### The three `testing → done` gate layers
 
 The CLI verdict-artifact check runs first. The lifecycle adapter then checks provenance, Review L3,
-and finally the workflow's strict-core shell guard. The table groups the two complementary
-strict-core/verdict checks as one defense-in-depth layer even though they bracket the adapter checks.
+and finally the workflow's `task check --as done` shell guard. The table groups the two complementary
+done-row/verdict checks as one defense-in-depth layer even though they bracket the adapter checks.
 The first denial wins; each denial names its own remediation. In verify-0293, the artifact check
 passed, so provenance denied first and Review L3 denied on the retry.
 
 | # | Gate layer | Triggers denial when | Remediation |
 |---|------------|----------------------|-------------|
-| 1 | **Strict-core + verdict artifact** (`spur task check <wbs> --strict-core` + `done-transition-guard.ts`) | The strict-core check fails, or `.spur/run/<wbs>-verdict.json` is **missing** or has a non-PASS aggregate. **Missing artifact is a deny** (not a silent allow — closes the 0349 "done without verdict" class). The aggregate is recomputed from requirement/AC rows; the harsher of stored and computed wins. | Re-run `/sp:dev-verify <wbs>` until PASS (writes the artifact), or explicitly override with `spur task update <wbs> done --force-done --reason "<why>"`. Docs-only procedures meet the same layer: read-only measured verification
+| 1 | **Done-row check + verdict artifact** (`spur task check <wbs> --as done` + `done-transition-guard.ts`) | The done-row check fails, or `.spur/run/<wbs>-verdict.json` is **missing** or has a non-PASS aggregate. **Missing artifact is a deny** (not a silent allow — closes the 0349 "done without verdict" class). The aggregate is recomputed from requirement/AC rows; the harsher of stored and computed wins. | Re-run `/sp:dev-verify <wbs>` until PASS (writes the artifact), or explicitly override with `spur task update <wbs> done --force-done --reason "<why>"`. Docs-only procedures meet the same layer: read-only measured verification
 (answer file + `spur task verdict`) writes the standard `.spur/run/<wbs>-verdict.json` artifact
 under proof-input digest bracketing; missing or non-PASS evidence is a refusal, never a synthetic
 PASS stub. |

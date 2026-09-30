@@ -11,13 +11,13 @@ see_also:
 **Scope:** opt-in, strictness-triggered — never gate-time, never automatic.
 
 This helper resolves a deferred `feature_id` edge when the operator explicitly invokes or intends
-`--strict` rigor, or asks to "link this task to a feature." It is **NOT** part of the `--strict-core`
+`--strict` rigor, or asks to "link this task to a feature." It is **NOT** part of the `--as done`
 done-gate, NOT in any `--next` chain, and NOT triggered automatically. Invoking it is always an
 explicit operator choice.
 
 **Design boundaries (enforced):**
 
-- `feature_id: null` is a valid, supported state under the default done-gate (`--strict-core`). Deferral is legitimate.
+- `feature_id: null` is a valid, supported state under the default done-gate (`--as done`). Deferral is legitimate.
 - This helper fires only when the operator opts in — it does NOT change the L4 warning severity.
 - It NEVER creates a new feature without operator confirmation.
 - It ALWAYS prefers matching an **existing** feature before proposing creation.
@@ -30,7 +30,7 @@ explicit operator choice.
 - A deliberate traceability audit: `spur task check --strict` across the corpus reveals N orphan tasks.
 
 **Do NOT invoke from:**
-- The `--strict-core` done-gate (it must stay feature_id-agnostic)
+- The `--as done` done-gate (it must stay feature_id-agnostic)
 - Any `--next` chain or automated pipeline step
 - Any context where the operator has not explicitly requested strict rigor or linking
 

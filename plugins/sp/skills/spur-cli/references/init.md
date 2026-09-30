@@ -1,11 +1,11 @@
 ---
 name: init
-description: "spur-cli noun reference for `spur init` and `spur status`: CLI verbs (init scaffold with --name/--force/--minimal, status with --json) plus post-scaffold init validation for /sp:spur-init - Phase 1.5 functional-validation probes and Phase 1.6 rule-glob adaptation."
+description: "spur-cli noun reference for `spur self init` and `spur self status`: CLI verbs (init scaffold with --name/--force/--minimal, status with --json) plus post-scaffold init validation for /sp:spur-init - Phase 1.5 functional-validation probes and Phase 1.6 rule-glob adaptation."
 see_also:
   - spur-cli
 ---
 
-# spur init / spur status - CLI verbs and post-scaffold validation
+# spur self init / spur self status - CLI verbs and post-scaffold validation
 
 ## CLI verbs
 
@@ -14,14 +14,14 @@ see_also:
 | `init` | Scaffold a new Spur project in the current directory | `--name <name>` `--force` `--minimal` `--json` |
 | `status [path]` | Show project and git status for a Spur project | `--json` |
 
-### `spur init` - scaffold a Spur project
+### `spur self init` - scaffold a Spur project
 
 ```bash
-spur init                            # interactive: prompt for project name
-spur init --name my-project          # non-interactive
-spur init --name my-project --force  # overwrite existing .spur/ files
-spur init --minimal                  # skip optional scaffolding (rules, workflows)
-spur init --json                     # machine-readable
+spur self init                            # interactive: prompt for project name
+spur self init --name my-project          # non-interactive
+spur self init --name my-project --force  # overwrite existing .spur/ files
+spur self init --minimal                  # skip optional scaffolding (rules, workflows)
+spur self init --json                     # machine-readable
 ```
 
 Materializes the `.spur/` directory tree with config, docs, rules, and workflow templates. The
@@ -34,14 +34,15 @@ post-scaffold validation probes (Phase 1.5 / 1.6, below) run immediately after t
 | `--name <name>` | Project name (skips interactive prompt). |
 | `--force` | Overwrite existing `.spur/` files. Without it, existing files are preserved. |
 | `--minimal` | Skip optional scaffolding (rules presets, workflow templates). Core config + docs only. |
+| `--adopt-global-config` | Also rewrite `~/.config/spur/config.yaml` from the shipped global default (backed up first). Opt-in only. |
 | `--json` | Output machine-readable JSON instead of interactive summary. |
 
-### `spur status [path]` - project and git status
+### `spur self status [path]` - project and git status
 
 ```bash
-spur status                          # current directory
-spur status /path/to/project         # specific project
-spur status --json                   # machine-readable
+spur self status                          # current directory
+spur self status /path/to/project         # specific project
+spur self status --json                   # machine-readable
 ```
 
 Reports the project's Spur configuration state (init status, feature/task counts, rule preset
@@ -50,11 +51,11 @@ directory.
 
 ## Post-scaffold validation
 
-Two probes sit between the deterministic scaffold (`spur init`) and the non-deterministic doc
+Two probes sit between the deterministic scaffold (`spur self init`) and the non-deterministic doc
 customization: Phase 1.5 (functional validation) confirms the fresh tree is immediately functional;
 Phase 1.6 (rule glob adaptation) rewrites layout-dependent rule globs so `recommended-pre-check`
 runs clean on this project's layout. The executing agent owns content *adaptation* only — `spur
-init` owns *file materialization* (`04_DESIGN.md` §1.1 "Init ownership contract").
+self init` owns *file materialization* (`04_DESIGN.md` §1.1 "Init ownership contract").
 
 ### Phase 1.5 — Functional validation probe
 
@@ -62,8 +63,8 @@ Before any customization, confirm the fresh scaffold is immediately functional. 
 fails, STOP and report the gap rather than papering over it with customization:
 
 ```
-spur status
-spur task create "__probe__" --template standard   # confirms task template + matrix resolve
+spur self status
+spur task create "__probe__" --template standard --skip-ready   # no model dispatch; confirms task template + matrix resolve
 spur workflow validate task-pipeline.yaml
 ```
 

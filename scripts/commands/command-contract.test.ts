@@ -445,10 +445,10 @@ describe('spur-init structured-output contract (task 0313)', () => {
     test('invokes init once with JSON, preserves supported flags, and reuses the parsed result', () => {
         const raw = readFileSync(join(COMMANDS_DIR, 'spur-init.md'), 'utf8');
         const implementation = implSection(raw);
-        const invocations = implementation.match(/spur init\b/g) ?? [];
+        const invocations = implementation.match(/spur self init\b/g) ?? [];
 
         expect(invocations).toHaveLength(1);
-        expect(implementation).toContain('spur init --json $ARGUMENTS');
+        expect(implementation).toContain('spur self init --json $ARGUMENTS');
         expect(implementation).toContain('scaffoldResult');
         expect(implementation).toContain('<scaffoldResult.project>');
         expect(raw).not.toContain('--skip-docs');

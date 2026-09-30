@@ -23,12 +23,12 @@ that before using `run` for fan-out dispatch.
 | ---- | ------- | --------- |
 | `run <prompt>` | Execute a prompt or slash command via a coding agent | `--agent <name>` `--spec <id>` `--model <name>` `--mode <mode>` `--continue` `--cwd <path>` `--drain` `--json` |
 | `wait [<specId>]` | Identity-pinned wait for an occupant run to reach a lifecycle state (G4 wave 2; `--role` selector per 0685) | `--role <name>` `--run <runId>` `--until <state>...` `--timeout <ms>` `--json` |
-| `list` | List detected coding agents, or agent specs with `--specs` (live run status + member session merged from `spur serve`) | `--specs` `--server <url>` `--json` |
-| `status` | Agent specs with live process status and member session (requires `spur serve`) | `--server <url>` `--json` |
+| `list` | List detected coding agents, or agent specs with `--specs` (live run status + member session merged from `spur self serve`) | `--specs` `--server <url>` `--json` |
+| `status` | Agent specs with live process status and member session (requires `spur self serve`) | `--server <url>` `--json` |
 | `doctor [agent]` | Check agent readiness | `--json` `--probe-health` `--force-refresh` |
 | `usage` | Run-once provider usage capture (codexbar) → quota-owned availability refresh; scheduled externally | `--dry-run` `--source <name>` `--json` |
-| `start <spec-id>` | Start a supervised agent process (requires `spur serve`) | `--server <url>` `--json` |
-| `stop <spec-id>` | Stop a supervised agent process (requires `spur serve`) | `--server <url>` `--json` |
+| `start <spec-id>` | Start a supervised agent process (requires `spur self serve`) | `--server <url>` `--json` |
+| `stop <spec-id>` | Stop a supervised agent process (requires `spur self serve`) | `--server <url>` `--json` |
 
 `list`, `status`, `doctor`, `run`, `wait`, `start`, and `stop` accept `--json` plus `--json-envelope`. The hidden
 `loop` is a supervisor-internal process surface. **Exit codes:** `0` success, `1` failure, and `2`
@@ -85,7 +85,7 @@ justify it - but ensure the run executes in a context that can write the target 
 
 ## `loop` - supervisor-internal self-draining wrapper (hidden)
 
-`spur agent loop --spec <id> [--poll <ms>]` is spawned by the `spur serve` supervisor for each
+`spur agent loop --spec <id> [--poll <ms>]` is spawned by the `spur self serve` supervisor for each
 materialized agent spec; it is hidden from `--help` and not an operator verb (use `spur agent start`).
 It waits for a wake on the `system_events` ledger — a human request (`message.sent`), a strategy
 change (`strategy.changed`), a capacity change (`fleet.capacity.changed`), or a completion receipt
@@ -145,7 +145,7 @@ lists agent specs (`.spur/agents/*.yaml`) **with live run status merged from the
 supervisor**: each row carries a trailing status column
 (`running` / `stopped` / `errored` / `unknown`), `pid=<n>` where a process exists, and the member
 session (0897): the session mode plus a shortened resume id (`resume id=3f9c2a1d`), or `-` when the
-member has no recorded session. When `spur serve` is unreachable, the listing falls back to all
+member has no recorded session. When `spur self serve` is unreachable, the listing falls back to all
 `stopped` with a stderr warning. `--server <url>`
 (default `http://localhost:3000/api`) targets the supervisor API.
 
@@ -200,9 +200,9 @@ spur agent start worker-1
 spur agent start worker-1 --json
 ```
 
-Posts to the `spur serve` supervisor API
+Posts to the `spur self serve` supervisor API
 (`POST /api/agents/:id/start`) and prints `started <id> (pid=<n>, status=<s>)`. Requires a
-reachable `spur serve`; `--server <url>` (default `http://localhost:3000/api`) targets it. Exit `1`
+reachable `spur self serve`; `--server <url>` (default `http://localhost:3000/api`) targets it. Exit `1`
 when the server is unreachable or the start fails.
 
 ## `stop` - stop a supervised process
@@ -250,7 +250,7 @@ unconfirmed or failed. For `skipped`/`pending` the printed target is intent only
 0 * * * * /opt/homebrew/bin/spur agent usage >> /tmp/spur-agent-usage.log 2>&1
 ```
 
-`spur serve` never invokes the producer (asserted by a test, design R4).
+`spur self serve` never invokes the producer (asserted by a test, design R4).
 
 ### Flags
 
@@ -285,7 +285,7 @@ one never re-sends settled work; only never-started deliveries release and redel
 - **Not the dispatch decision.** *When* to use `spur agent run` vs a native subagent is the
   **[dispatch-surface rule](../../parallel-execution/references/dispatch-surface.md)**, not this
   reference. This reference documents the verbs; that rule decides which surface carries a dispatch.
-- **Not the fleet orchestrator.** The `spur serve` supervisor drives the lifecycle: `spur agent
+- **Not the fleet orchestrator.** The `spur self serve` supervisor drives the lifecycle: `spur agent
   start` / `stop` manage supervised processes and `agent list --specs` reports live state.
 
 ## See also

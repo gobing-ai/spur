@@ -38,9 +38,9 @@ re-reading or re-tokenizing the task.
 
 | Verb | Purpose | Key flags |
 | ---- | ------- | --------- |
-| `create <title>` | Allocate a new task (race-safe WBS) | `--feature <id>` `--parent <wbs>` `--template <variant>` `--dedupe-within <s>` `--allow-duplicate-name` `--folder` `--json` |
+| `create <title>` | Allocate a new task (race-safe WBS) | `--feature <id>` `--parent <wbs>` `--template <variant>` `--dedupe-within <s>` `--allow-duplicate-name` `--skip-ready` `--agent <selector>` `--folder` `--json` |
 | `show <wbs>` | Print one task's frontmatter + body | `--folder` `--json` |
-| `update <wbs> [status]` | Lifecycle transition, section replace, **or** frontmatter set | `--section <name> --from-file <path>` `--assignee <spec-id>` (exclusive with `--section`) `--feature <id>` `--priority <p>` `--no-lifecycle` `--force-done` `--reason <text>` `--verdict-dir <path>` `--folder` `--json` |
+| `update <wbs> [status]` | Lifecycle transition, section replace, **or** frontmatter set | `--section <name> --from-file <path>` `--assignee <spec-id>` (exclusive with `--section`) `--feature <id>` `--priority <p>` `--ac-numbering task-local` `--ac-altitude <a>` `--estimate-hours <n>` `--no-lifecycle` `--force-done` `--reason <text>` `--provenance-bypass` `--verdict-dir <path>` `--folder` `--json` |
 | `deps <wbs> <op> [values...]` | Mutate `dependencies[]` frontmatter array (ops: `set`, `add`, `remove`, `clear`) | `--folder` `--json` |
 | `sections <wbs> <op> [name]` | Initialize, add, or list canonical task sections (ops: `init`, `add`, `list`) | `--folder` `--json` |
 | `list` | List tasks, filtered | `--status <s>` `--phase <p>` `--parent <wbs>` `--feature <id>` `--folder` `--json` |
@@ -48,7 +48,7 @@ re-reading or re-tokenizing the task.
 | `migrate` | One-time A17 corpus normalization pass | `--dry-run` `--folder` `--json` |
 | `migrate-anchors` | Qualify in-repo evidence anchors to repo-relative paths (0583 R1–R3) | `--dry-run` `--json` |
 | `refresh-roster <wbs>` | Regenerate a parent task's sub-task roster block in `## Plan` | `--folder` `--json` |
-| `batch-create` | Create many tasks from a validated JSON array | `--file <path>` `--folder` `--json` |
+| `batch-create` | Create many tasks from a validated JSON array | `--file <path>` `--skip-ready` `--agent <selector>` `--folder` `--json` |
 | `record <wbs>` | Write `Testing` from a verify verdict (deterministic); bare-`## Review` fallback only; optional Solution + transition | `--verdict-file <path>` `--solution-from-diff` `--transition <status>` `--folder` `--json` |
 | `verdict <wbs>` | Derive PASS/PARTIAL/FAIL/UNKNOWN from verify answer text → verdict JSON; see [answer-file shape](tasks/verbs.md#answer-file-shape-what---from-answer-parses) | `--from-answer <path>` `--folder` `--json` |
 | `check [wbs]` | Four-layer validation; `--fix` repairs structure; `--corpus` is the explicit unsuppressed audit; `--precheck` adds the pipeline precheck gate (size + evidence channel, WBS required) | `--strict` `--as <status>` `--strict-core` `--precheck` `--fix` `--folder` `--corpus` `--since <ref>` `--json` |
@@ -73,6 +73,11 @@ spur task create "Add email validation" --feature H2 --parent 0040
 - **`--template <variant>`** selects the section-matrix variant that shapes the new file's sections:
   `standard·feature-impl·issue·review·meta·brainstorm`. The default is **`feature-impl` when
   `--feature` is given, else `standard`**. An unknown variant is exit `2`.
+- **Ready by default (ADR-109):** `create` and `batch-create` dispatch a model to prepare the new task
+  to ready (refine → `task check --as todo` post-check → promotion to `todo`). Pass **`--skip-ready`**
+  for a plain capture with no model dispatch; **`--agent <selector>`** picks the preparing agent.
+  `--json` carries `readiness: { status: ready|skipped|failed, depth }`; a failed preparation exits `1`
+  (`preparation-failed`) and keeps the task.
 
 The same `--template` axis drives both *which sections the new file carries* (per the
 Section-Status-Matrix) and *its creation status*: a spec'd task (a `--feature` link, or a batch item
@@ -271,7 +276,7 @@ spur task check --json              # whole corpus
 spur task check 0040 --json         # one task
 spur task check --strict --json     # elevate ALL warnings to failures
 spur task check 0040 --as done        # evaluate as the done row (lifecycle target, F92 R2)
-spur task check 0040 --strict-core    # temporary compatibility alias
+spur task check 0040 --strict-core    # compatibility alias; not the done gate (use --as done)
 ```
 
 **Folder resolution (task 0522):** a WBS-targeted check (`<wbs>` present, no `--folder`) resolves
@@ -291,9 +296,10 @@ The two flags are distinct gate profiles:
 - **`--strict`** elevates *all* warnings to failures (the strictest reading).
 - **`--as <status>`** evaluates the task as if it were already in `<status>` (F92 R2); the lifecycle
   guards pass the transition target. Validated against canonical task statuses; excluded with `--corpus`.
-- **`--strict-core`** is a **temporary compatibility alias** (F92 R2). Fails only on hard-core errors — Solution `file:line`, Review P1–P4, and
-  `gate:true` required-section misses — *without* the blanket elevation. This is the variant wired
-  as the `testing→done` lifecycle guard.
+- **`--strict-core`** is a **compatibility alias** (F92 R2) kept so installed plugins/workflows that
+  call it keep working. It runs the default severity computation against the task's *current* status
+  and is no longer meaningful on its own. The lifecycle guards are `--as testing` (`wip→testing`) and
+  `--as done` (`testing→done`); use `--as <status>` for gate checks.
 
 See [tasks/verbs.md](tasks/verbs.md) for the JSON shape per finding.
 

@@ -49,7 +49,7 @@ the FF-merge on success. Expected, not a bug.
 
 **`--next` (per-task lifecycle chaining):** `--next`
 is chain-to-completion with propagation. For each task whose verdict is **PASS**, the chain's first
-hop transitions `testing → done` through the FSM with the `--strict-core` Review L3 guard honored;
+hop transitions `testing → done` through the FSM with the `--as done` Review L3 guard honored;
 a task whose verdict is **PARTIAL** or **FAIL** does **not** transition (it stays `testing` as
 review-pending) — that task's chain halts, reporting the verdict. One task's non-PASS never blocks
 another task's transition — each task's verdict is its own, and each task's chain is independent.
