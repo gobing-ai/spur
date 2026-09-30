@@ -31,6 +31,9 @@ rules:
             - "**/tests/**"
             - "**/*.test.ts"
 
+            # Low-level system primitives:
+            - "packages/app/src/services/quality-gate.ts" # gate runs `sh -c` with stdout+stderr merged onto ONE fd; ProcessExecutor captures streams separately and cannot reproduce the stream-order contract (task 1006 R1; mirrors the history-anatomy bundling exemptions)
+
   - id: no-direct-fs-io
     description: "Prefer ts-runtime's FileSystem seam for fs IO."
     severity: warning
@@ -63,6 +66,7 @@ rules:
             - "packages/app/src/observability/workflow-run-log-sink.ts" # sync FD append for mid-run tail-able all-in-one run log (task 0426 / feature D2); append() is sync from the observability bus
             - "apps/cli/src/commands/workflow.ts" # FD byte-window tail of the mid-run run log for `workflow trace --follow` streaming (task 0428 / feature D2); readSync at offset over the observability sink's FDs
             - "apps/web/src/modules/discover.ts" # Vite/Astro module scanner fallback under bun test
+            - "packages/app/src/services/quality-gate.ts" # gate artifacts (log/findings/receipt) written directly; merged-fd gate log and fsync-free atomic writes must stay byte-stable; bundled standalone for the bare-node plugin twin (task 1006 R1; mirrors history-anatomy.ts)
 
             # Synchronous bootstrap & path resolution:
             - "packages/config/src/bundled-config.ts" # sync bundledConfigRoot() directory walk

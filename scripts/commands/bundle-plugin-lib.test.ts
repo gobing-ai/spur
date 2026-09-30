@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { bundleResidualScanLib } from './bundle-plugin-lib';
+import { bundleQualityGateLib, bundleResidualScanLib } from './bundle-plugin-lib';
 
 describe('bundleStepProfileLib (task 1005 R1)', () => {
     test('generated artifacts exist and are committed', () => {
@@ -114,6 +114,34 @@ describe('bundleResidualScanLib (task 1003 R5)', () => {
         expect(result.dmts.endsWith('residual-scan.generated.d.mts')).toBeTrue();
         const after = readFileSync(join(import.meta.dir, '../../plugins/sp/lib/residual-scan.generated.mjs'), 'utf8');
         for (const name of ['scanResiduals', 'classify', 'foldVerdict', 'renderReport', 'parseReviewFindings']) {
+            expect(after).toContain(name);
+        }
+        expect(after).toBe(before);
+    });
+});
+
+describe('bundleQualityGateLib (task 1006 R1)', () => {
+    test('generated artifacts exist and are committed', () => {
+        const mjs = join(import.meta.dir, '../../plugins/sp/lib/quality-gate.generated.mjs');
+        const dmts = join(import.meta.dir, '../../plugins/sp/lib/quality-gate.generated.d.mts');
+        expect(existsSync(mjs)).toBeTrue();
+        expect(existsSync(dmts)).toBeTrue();
+    });
+
+    test('regeneration is deterministic and exports the gate core', async () => {
+        const before = readFileSync(join(import.meta.dir, '../../plugins/sp/lib/quality-gate.generated.mjs'), 'utf8');
+        const result = await bundleQualityGateLib();
+        expect(result.mjs.endsWith('quality-gate.generated.mjs')).toBeTrue();
+        expect(result.dmts.endsWith('quality-gate.generated.d.mts')).toBeTrue();
+        const after = readFileSync(join(import.meta.dir, '../../plugins/sp/lib/quality-gate.generated.mjs'), 'utf8');
+        for (const name of [
+            'runQualityGate',
+            'runLightGate',
+            'buildReceipt',
+            'readReceiptStatus',
+            'planLightChecks',
+            'lightScope',
+        ]) {
             expect(after).toContain(name);
         }
         expect(after).toBe(before);

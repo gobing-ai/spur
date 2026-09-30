@@ -6,14 +6,6 @@
             "kinds": ["budget"],
             "reason": "Keep, sp-owned git/gh loop; cited exemption (plan \u00a72)"
         },
-        "plugins/sp/scripts/inline-run-setup.ts": {
-            "kinds": ["budget"],
-            "reason": "Keep as glue; run-identity \u2192 inline-run lib bundle, aim \u2264250, W3 (plan \u00a72)"
-        },
-        "plugins/sp/scripts/quality-gate.ts": {
-            "kinds": ["budget"],
-            "reason": "logic \u2192 packages/app + quality-gate lib bundle; script \u2264250 glue, W3 (plan \u00a72)"
-        },
         "plugins/sp/scripts/residual-scan.ts": {
             "kinds": [],
             "reason": "migration ledger (plan \u00a72): logic \u2192 packages/app + residual-scan lib bundle; script slimmed to 246 LOC glue, W2"

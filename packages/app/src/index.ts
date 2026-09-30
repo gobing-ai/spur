@@ -342,15 +342,27 @@ export type {
     InlineRunSetupSuccess,
 } from './services/inline-run-setup';
 export {
+    appendInlineRunLogLine,
     createOrAttachInlineRun,
     type InlineDecideInput,
     type InlineDecideOutcome,
     type InlineRunProjectDb,
+    type InlineRunStateOutcome,
+    type InlineRunTraceInput,
+    inlineRunRecordLogPath,
+    isInlineRunActionStatus,
+    isInlineRunCloseStatus,
     openInlineRunProjectDb,
     type PersistWorktreeRunsInput,
     type PersistWorktreeRunsSuccess,
     persistWorktreeRuns,
     runDecideForInlineRun,
+    runInlineRunDecide,
+    runInlineRunFingerprint,
+    runInlineRunPersistOut,
+    runInlineRunSetup,
+    runInlineRunTrace,
+    writeInlineRunOutcome,
 } from './services/inline-run-setup';
 export {
     acquireExclusiveJob,

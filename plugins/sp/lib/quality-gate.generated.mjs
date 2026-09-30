@@ -1,16 +1,4 @@
-#!/usr/bin/env node
-// @bun
-
-// plugins/sp/scripts/quality-gate.ts
-import { appendFileSync as appendFileSync2 } from "fs";
-import { join as join2 } from "path";
-
-// plugins/sp/lib/env.ts
-function getEnvVars() {
-  return process.env;
-}
-
-// plugins/sp/lib/quality-gate.generated.mjs
+// packages/app/src/services/quality-gate.ts
 import { spawnSync } from "node:child_process";
 import {
   appendFileSync,
@@ -411,43 +399,6 @@ function runQualityGate(mode, env, options = {}) {
   }
   return { status, attempts: gateAttempt, logFile, findingsFile, statusFile, attemptFile, receiptFile };
 }
-
-// plugins/sp/scripts/quality-gate.ts
-var QUALITY_GATE_USAGE = "usage: quality-gate.ts <run|recheck|light|status>  (env: wbs, qualityGateCmd, gateProbeCmd, proofDigest, runId)";
-function main(argv, rawEnv = getEnvVars(), options = {}) {
-  const mode = argv[0];
-  if (mode !== "run" && mode !== "recheck" && mode !== "light" && mode !== "status") {
-    process.stderr.write(`${QUALITY_GATE_USAGE}
-`);
-    return 2;
-  }
-  const wbs = rawEnv.wbs ?? "";
-  if (wbs.length === 0) {
-    process.stderr.write("quality-gate: env `wbs` is required\n");
-    return 2;
-  }
-  const env = { ...rawEnv, wbs };
-  if (mode === "light") {
-    runLightGate(env);
-  } else if (mode === "status") {
-    const runDir = join2(options.cwd ?? ".", ".spur", "run");
-    const verdict = readReceiptStatus(join2(runDir, `${env.wbs}-check-receipt.json`), env.proofDigest ?? "");
-    if (verdict.reuse) {
-      const line = `check.reused \u2014 full-tier receipt reused for input digest ${env.proofDigest ?? ""}
-`;
-      process.stdout.write(line);
-      appendFileSync2(join2(runDir, `${env.wbs}-test-gate.log`), line);
-    }
-    process.stdout.write(`${JSON.stringify(verdict)}
-`);
-  } else {
-    runQualityGate(mode, env);
-  }
-  return 0;
-}
-{
-  process.exit(main(process.argv.slice(2)));
-}
 export {
   workspaceHasTypecheck,
   tailLines,
@@ -461,7 +412,6 @@ export {
   readReceiptStatus,
   planLightChecks,
   parseCoverageThreshold,
-  main,
   lightScope,
   isTransientLock,
   extractFindings,
@@ -469,7 +419,6 @@ export {
   RETRY_DELAY_MS_ENV,
   RETRY_DELAY_MS_DEFAULT,
   RECEIPT_SCHEMA_VERSION,
-  QUALITY_GATE_USAGE,
   MAX_GATE_ATTEMPTS,
   MAX_FINDINGS,
   LOCKED_PATTERN,

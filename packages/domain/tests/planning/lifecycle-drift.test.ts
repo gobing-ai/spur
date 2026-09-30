@@ -289,18 +289,22 @@ describe('task-pipeline.yaml structure (task 0062)', () => {
                 .map((a) => String(a.options?.command ?? ''));
 
         // 1. Both gate hops extract anchors into the digest file. 0823 (d): the extraction moved
-        // into quality-gate.ts — assert the wrappers delegate and the script owns the log and
+        // into quality-gate.ts; 1006 R1 moved the gate core into the app service (the script is
+        // dispatch glue) — assert the wrappers delegate and the app core owns the log and
         // findings artifacts with the bounded cap (MAX_FINDINGS = 20).
-        const gateScript = readFileSync(join(REPO_ROOT, 'plugins', 'sp', 'scripts', 'quality-gate.ts'), 'utf-8');
+        const gateCore = readFileSync(
+            join(REPO_ROOT, 'packages', 'app', 'src', 'services', 'quality-gate.ts'),
+            'utf-8',
+        );
         for (const gateState of ['test', 'test-recheck']) {
             const cmds = shellCmds(gateState).join('\n');
             expect(cmds, `${gateState}: gate hop must delegate to quality-gate.ts`).toContain(
                 `quality-gate.ts ${gateState === 'test' ? 'run' : 'recheck'}`,
             );
         }
-        expect(gateScript).toContain('-test-gate.log');
-        expect(gateScript).toContain('-test-gate.findings');
-        expect(gateScript).toContain('MAX_FINDINGS = 20');
+        expect(gateCore).toContain('-test-gate.log');
+        expect(gateCore).toContain('-test-gate.findings');
+        expect(gateCore).toContain('MAX_FINDINGS = 20');
 
         // 2. test-fix projects the digest into a var (a vars template cannot shell out).
         const fixSteps = yaml.states.find((s) => s.id === 'test-fix')?.onEnter ?? [];

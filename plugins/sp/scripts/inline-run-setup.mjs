@@ -3,18 +3,7 @@
 
 // plugins/sp/scripts/inline-run-setup.ts
 import { spawnSync } from "child_process";
-import {
-  appendFileSync,
-  closeSync,
-  existsSync,
-  mkdirSync,
-  openSync,
-  readFileSync,
-  renameSync,
-  unlinkSync,
-  writeFileSync,
-  writeSync
-} from "fs";
+import { existsSync } from "fs";
 import { dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
 
@@ -26,19 +15,22 @@ function getEnvVar(name, fallback) {
 
 // plugins/sp/scripts/inline-run-setup.ts
 function usage() {
-  console.error("Usage: bun plugins/sp/scripts/inline-run-setup.ts --run-id <id> --file <definition> [--spur-bin <path>]");
-  console.error("       bun plugins/sp/scripts/inline-run-setup.ts --fingerprint --task-file <path> [--feature-file <path>] [--spur-bin <path>]");
-  console.error("       bun plugins/sp/scripts/inline-run-setup.ts --action --run-id <id> --node <state> --kind <kind> " + "--status <done|failed> --ok <true|false> --duration-ms <n> [--spur-bin <path>]");
-  console.error("       bun plugins/sp/scripts/inline-run-setup.ts --close --run-id <id> --status <done|failed|paused> [--reason <terminal-reason>] [--spur-bin <path>]");
-  console.error("       bun plugins/sp/scripts/inline-run-setup.ts --persist-out --from <worktree-path> [--task-file <path>]... [--spur-bin <path>]");
-  console.error("       terminal-reason is a closed enum (0937 R2): done, paused-operator, failed-check, failed-agent, " + "failed-timeout, failed-guard, cancelled, interrupted, retry-exhausted");
-  console.error("       bun plugins/sp/scripts/inline-run-setup.ts --decide --run-id <id> --node <state> --options-json <file> [--spur-bin <path>]");
+  console.error([
+    "Usage: bun plugins/sp/scripts/inline-run-setup.ts --run-id <id> --file <definition> [--spur-bin <path>]",
+    "       bun plugins/sp/scripts/inline-run-setup.ts --fingerprint --task-file <path> [--feature-file <path>] [--spur-bin <path>]",
+    "       bun plugins/sp/scripts/inline-run-setup.ts --action --run-id <id> --node <state> --kind <kind> --status <done|failed> --ok <true|false> --duration-ms <n> [--spur-bin <path>]",
+    "       bun plugins/sp/scripts/inline-run-setup.ts --close --run-id <id> --status <done|failed|paused> [--reason <terminal-reason>] [--spur-bin <path>]",
+    "       bun plugins/sp/scripts/inline-run-setup.ts --persist-out --from <worktree-path> [--task-file <path>]... [--spur-bin <path>]",
+    "       terminal-reason is a closed enum (0937 R2): done, paused-operator, failed-check, failed-agent, failed-timeout, failed-guard, cancelled, interrupted, retry-exhausted",
+    "       bun plugins/sp/scripts/inline-run-setup.ts --decide --run-id <id> --node <state> --options-json <file> [--spur-bin <path>]"
+  ].join(`
+`));
   process.exit(2);
 }
 var SAFE_RUN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 function refuseUnsafeRunId(runId) {
   console.error(`inline-run-setup: refusing unsafe run id: ${runId}`);
-  console.error("  The run id must be a single safe filename component (alphanumeric/._-, no leading dot, " + "no path separators, interpolation or traversal; same class as the task-pipeline " + "route-reason guard, task 0804 R8). Allocate a fresh run id (uuid or timestamp slug) and retry.");
+  console.error("  The run id must be a single safe filename component (alphanumeric/._-, no leading dot, no path separators, interpolation or traversal; same class as the task-pipeline route-reason guard, task 0804 R8). Allocate a fresh run id (uuid or timestamp slug) and retry.");
   process.exit(1);
 }
 function resolveAppEntry(spurBin) {
@@ -53,8 +45,7 @@ function resolveAppEntry(spurBin) {
     const mainModule = [...tokens].reverse().find((t) => t.endsWith(".ts"));
     if (mainModule === undefined || !existsSync(mainModule))
       continue;
-    const srcDir = dirname(mainModule);
-    const repoRoot = resolve(srcDir, "..", "..", "..");
+    const repoRoot = resolve(dirname(mainModule), "..", "..", "..");
     const appEntry = join(repoRoot, "packages", "app", "src", "index.ts");
     if (existsSync(appEntry))
       return { entry: appEntry, portable: false };
@@ -77,85 +68,9 @@ async function readInstalledInventory(file, spurBin) {
     throw new Error(`could not resolve the workflow definition with the installed CLI: ${result.error?.message ?? result.stderr}`);
   }
   const value = JSON.parse(result.stdout);
-  if (value && typeof value === "object" && "ok" in value && "data" in value && value.ok === true) {
+  if (value && typeof value === "object" && "ok" in value && "data" in value && value.ok === true)
     return value.data;
-  }
   return value;
-}
-function writeOutcome(runId, outcome) {
-  const runDir = join(process.cwd(), ".spur", "run");
-  if (!existsSync(runDir))
-    mkdirSync(runDir, { recursive: true });
-  const statePath = join(runDir, `${runId}.state.json`);
-  const markdownPath = join(runDir, `${runId}.md`);
-  let prior = {};
-  try {
-    const parsed = JSON.parse(readFileSync(statePath, "utf8"));
-    if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
-      prior = parsed;
-    }
-  } catch {}
-  const at = new Date().toISOString();
-  const state = {
-    schemaVersion: 1,
-    runId,
-    ...outcome.workflowName !== undefined ? { workflowName: outcome.workflowName } : {},
-    ...outcome.status !== undefined ? { status: outcome.status } : {},
-    startedAt: typeof prior.startedAt === "string" ? prior.startedAt : at,
-    updatedAt: at,
-    ...outcome.attached !== undefined ? { attached: outcome.attached } : {},
-    ...outcome.definitionDigest !== undefined ? { definitionDigest: outcome.definitionDigest } : {},
-    ...outcome.workflowVersion !== undefined ? { workflowVersion: outcome.workflowVersion } : {},
-    ...outcome.resolvedPath !== undefined ? { resolvedPath: outcome.resolvedPath } : {},
-    ...outcome.layer !== undefined ? { layer: outcome.layer } : {},
-    ...outcome.workdir !== undefined ? { workdir: outcome.workdir } : {},
-    ok: outcome.ok,
-    ...outcome.ok === false && outcome.error !== undefined ? { error: outcome.error } : {}
-  };
-  const temp = `${statePath}.tmp`;
-  try {
-    writeFileSync(temp, `${JSON.stringify(state, null, 4)}
-`);
-    renameSync(temp, statePath);
-  } catch {
-    try {
-      unlinkSync(temp);
-    } catch {}
-  }
-  let headerFd;
-  try {
-    headerFd = openSync(markdownPath, "wx");
-    writeSync(headerFd, `# spur inline run ${runId} \u2014 ${outcome.workflowName ?? "unknown workflow"} \u2014 setup ${at}
-`);
-  } catch {} finally {
-    if (headerFd !== undefined)
-      closeSync(headerFd);
-  }
-}
-async function printFingerprint(taskFile, featureFile, spurBin) {
-  const { entry } = resolveAppEntry(spurBin);
-  const app = await import(entry);
-  const workdir = process.cwd();
-  const inputs = await app.readProofInputContents(undefined, workdir, {
-    taskFile,
-    ...featureFile.trim() !== "" ? { featureFile } : {}
-  });
-  if (!inputs.ok) {
-    console.error(`inline-run-setup: FAIL \u2014 ${inputs.error}`);
-    return 1;
-  }
-  const digest = await app.computeProofInputFingerprint({
-    cwd: workdir,
-    ...inputs.taskContent !== undefined ? { taskContent: inputs.taskContent } : {},
-    ...inputs.featureContent !== undefined ? { featureContent: inputs.featureContent } : {}
-  });
-  process.stdout.write(`${digest}
-`);
-  return 0;
-}
-var CLOSE_STATUSES = new Set(["done", "failed", "paused"]);
-function isCloseStatus(status) {
-  return CLOSE_STATUSES.has(status);
 }
 var TERMINAL_REASONS = new Set([
   "done",
@@ -168,135 +83,6 @@ var TERMINAL_REASONS = new Set([
   "interrupted",
   "retry-exhausted"
 ]);
-var ACTION_STATUSES = new Set(["done", "failed"]);
-function isActionStatus(status) {
-  return ACTION_STATUSES.has(status);
-}
-function runRecordLogPath(runDir, runId) {
-  const markdownPath = join(runDir, `${runId}.md`);
-  const legacyLogPath = join(runDir, `${runId}.log`);
-  if (existsSync(legacyLogPath) && !existsSync(markdownPath))
-    return legacyLogPath;
-  return markdownPath;
-}
-function appendRunLogLine(runId, detail) {
-  try {
-    const runDir = join(process.cwd(), ".spur", "run");
-    if (!existsSync(runDir))
-      mkdirSync(runDir, { recursive: true });
-    const safeRunId = runId.replace(/[^A-Za-z0-9._-]/g, "_");
-    const stamp = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
-    appendFileSync(runRecordLogPath(runDir, safeRunId), `[${stamp}] ${detail}
-`);
-  } catch {}
-}
-async function runTraceMode(input) {
-  const operation = input.close ? "run.close" : "action.finish";
-  const fail = (error) => {
-    appendRunLogLine(input.runId, `trace-emission-failed operation=${operation} run=${input.runId}${input.node === "" ? "" : ` node=${input.node}`}${input.kind === "" ? "" : ` kind=${input.kind}`}: ${error}`);
-    process.stdout.write(`${JSON.stringify({ ok: false, runId: input.runId, error })}
-`);
-    return input.close ? 1 : 0;
-  };
-  let projectDb;
-  try {
-    const { entry } = resolveAppEntry(input.spurBin);
-    const app = await import(entry);
-    projectDb = await app.openInlineRunProjectDb(process.cwd());
-    const writer = app.createWorkflowActionTraceWriter(projectDb.adapter, (failure) => {
-      const detail = failure;
-      appendRunLogLine(input.runId, `trace-emission-failed operation=${detail.operation ?? operation} run=${input.runId}: ${detail.error ?? "unknown error"}`);
-    });
-    const result = input.close ? await writer.closeRun(input.runId, input.status, undefined, input.reason) : await writer.recordAction({
-      runId: input.runId,
-      node: input.node,
-      kind: input.kind,
-      status: input.status,
-      ok: input.ok,
-      durationMs: input.durationMs
-    });
-    if (result.ok !== true && result.failure !== undefined) {
-      const failure = result.failure;
-      return fail(failure.error ?? "unknown trace emission failure");
-    }
-    if (input.close && input.status === "done" && result.actionRows === 0) {
-      const error = `run ${input.runId} closed done with zero action_runs rows`;
-      appendRunLogLine(input.runId, `trace-close-failed run=${input.runId}: ${error}`);
-      process.stdout.write(`${JSON.stringify({ ok: false, runId: input.runId, error, code: "NO_ACTION_ROWS", actionRows: 0 })}
-`);
-      return 1;
-    }
-    process.stdout.write(`${JSON.stringify({ ...result, runId: input.runId })}
-`);
-    return 0;
-  } catch (error) {
-    if (input.close && error.name === "RunRowNotFoundError") {
-      const message = error instanceof Error ? error.message : String(error);
-      appendRunLogLine(input.runId, `trace-close-failed run=${input.runId}: ${message}`);
-      process.stdout.write(`${JSON.stringify({ ok: false, runId: input.runId, error: message, code: "RUN_NOT_FOUND" })}
-`);
-      return 1;
-    }
-    return fail(error instanceof Error ? error.message : String(error));
-  } finally {
-    projectDb?.close();
-  }
-}
-async function runDecideMode(input) {
-  const decideFailed = (error) => {
-    process.stdout.write(`${JSON.stringify({ ok: false, runId: input.runId, error })}
-`);
-    return 1;
-  };
-  let outcome;
-  try {
-    const { entry, portable } = resolveAppEntry(input.spurBin);
-    const app = await import(entry);
-    const lib = await import(fileURLToPath(new URL("../lib/inline-run.generated.mjs", import.meta.url)));
-    const enabled = await lib.resolveDecideDecisionMakerEnabled(process.cwd(), portable ? { embeddedSchemas: lib.EMBEDDED_SPUR_SCHEMAS } : undefined);
-    outcome = await app.runDecideForInlineRun({
-      workdir: process.cwd(),
-      optionsFile: input.optionsFile,
-      enabled
-    });
-  } catch (error) {
-    return decideFailed(error instanceof Error ? error.message : String(error));
-  }
-  if (!outcome.ok)
-    return decideFailed(outcome.error ?? "decide failed without an error message");
-  process.stdout.write(`${JSON.stringify({ runId: input.runId, node: input.node, ...outcome, ok: true })}
-`);
-  appendRunLogLine(input.runId, `decide node=${input.node} value=${outcome.value ?? ""} source=${outcome.source ?? "default"} reason=${outcome.reason ?? ""}`);
-  return await runTraceMode({
-    runId: input.runId,
-    close: false,
-    node: input.node,
-    kind: "decide",
-    status: "done",
-    ok: true,
-    durationMs: outcome.durationMs ?? 0,
-    spurBin: input.spurBin
-  });
-}
-async function runPersistOutMode(input) {
-  try {
-    const { entry } = resolveAppEntry(input.spurBin);
-    const app = await import(entry);
-    const result = await app.persistWorktreeRuns({
-      fromWorkdir: input.from,
-      toWorkdir: process.cwd(),
-      ...input.taskFiles.length > 0 ? { taskFiles: input.taskFiles } : {}
-    });
-    process.stdout.write(`${JSON.stringify({ ok: true, persisted: result.persisted, skipped: result.skipped })}
-`);
-    return 0;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    process.stdout.write(`${JSON.stringify({ ok: false, error: message })}
-`);
-    return 1;
-  }
-}
 async function main() {
   if (!process.versions.bun) {
     const child = spawnSync("bun", [fileURLToPath(import.meta.url), ...process.argv.slice(2)], {
@@ -306,67 +92,47 @@ async function main() {
       console.error(`inline-run-setup requires Bun on PATH: ${child.error.message}`);
     process.exit(child.status ?? 1);
   }
-  let runId = "";
-  let file = "";
-  let fingerprint = false;
+  const flags = new Map;
+  let fingerprint = false, action = false, close = false, decide = false, persistOut = false;
   const taskFiles = [];
-  let featureFile = "";
-  let action = false;
-  let close = false;
-  let decide = false;
-  let persistOut = false;
-  let from = "";
-  let optionsJson = "";
-  let node = "";
-  let kind = "";
-  let status = "";
-  let reason = "";
-  let okRaw = "";
-  let durationRaw = "";
   let spurBin = getEnvVar("SPUR_BIN") ?? "";
   const argv = process.argv.slice(2);
   for (let i = 0;i < argv.length; i++) {
-    if (argv[i] === "--run-id")
-      runId = argv[++i] ?? "";
-    else if (argv[i] === "--file")
-      file = argv[++i] ?? "";
-    else if (argv[i] === "--fingerprint")
+    const flag = argv[i];
+    if (flag === "--fingerprint")
       fingerprint = true;
-    else if (argv[i] === "--task-file")
-      taskFiles.push(argv[++i] ?? "");
-    else if (argv[i] === "--feature-file")
-      featureFile = argv[++i] ?? "";
-    else if (argv[i] === "--action")
+    else if (flag === "--action")
       action = true;
-    else if (argv[i] === "--close")
+    else if (flag === "--close")
       close = true;
-    else if (argv[i] === "--decide")
+    else if (flag === "--decide")
       decide = true;
-    else if (argv[i] === "--persist-out")
+    else if (flag === "--persist-out")
       persistOut = true;
-    else if (argv[i] === "--from")
-      from = argv[++i] ?? "";
-    else if (argv[i] === "--options-json")
-      optionsJson = argv[++i] ?? "";
-    else if (argv[i] === "--node")
-      node = argv[++i] ?? "";
-    else if (argv[i] === "--kind")
-      kind = argv[++i] ?? "";
-    else if (argv[i] === "--status")
-      status = argv[++i] ?? "";
-    else if (argv[i] === "--reason")
-      reason = argv[++i] ?? "";
-    else if (argv[i] === "--ok")
-      okRaw = argv[++i] ?? "";
-    else if (argv[i] === "--duration-ms")
-      durationRaw = argv[++i] ?? "";
-    else if (argv[i] === "--spur-bin")
+    else if (flag === "--task-file")
+      taskFiles.push(argv[++i] ?? "");
+    else if (flag === "--spur-bin")
       spurBin = argv[++i] ?? spurBin;
+    else if (flag !== undefined)
+      flags.set(flag, argv[++i] ?? "");
   }
+  const runId = flags.get("--run-id") ?? "";
+  const file = flags.get("--file") ?? "";
+  const featureFile = flags.get("--feature-file") ?? "";
+  const from = flags.get("--from") ?? "";
+  const optionsJson = flags.get("--options-json") ?? "";
+  const node = flags.get("--node") ?? "";
+  const kind = flags.get("--kind") ?? "";
+  const status = flags.get("--status") ?? "";
+  const reason = flags.get("--reason") ?? "";
+  const okRaw = flags.get("--ok") ?? "";
+  const durationRaw = flags.get("--duration-ms") ?? "";
   if (fingerprint) {
     if (runId !== "" || file !== "" || taskFiles.length !== 1 || (taskFiles[0] ?? "").trim() === "")
       usage();
-    process.exit(await printFingerprint(taskFiles[0] ?? "", featureFile, spurBin));
+    const { entry: entry2 } = resolveAppEntry(spurBin);
+    const app2 = await import(entry2);
+    process.exit(await app2.runInlineRunFingerprint({ taskFile: taskFiles[0] ?? "", featureFile }));
   }
   if (decide) {
     if (action || close || fingerprint || file !== "" || taskFiles.length > 0)
@@ -375,14 +141,29 @@ async function main() {
       usage();
     if (!SAFE_RUN_ID_RE.test(runId))
       refuseUnsafeRunId(runId);
-    process.exit(await runDecideMode({ runId, node, optionsFile: optionsJson, spurBin }));
+    const decideFailed = (error) => {
+      process.stdout.write(`${JSON.stringify({ ok: false, runId, error })}
+`);
+      return 1;
+    };
+    try {
+      const { entry: entry2, portable: portable2 } = resolveAppEntry(spurBin);
+      const app2 = await import(entry2);
+      const lib = await import(fileURLToPath(new URL("../lib/inline-run.generated.mjs", import.meta.url)));
+      const enabled = await lib.resolveDecideDecisionMakerEnabled(process.cwd(), portable2 ? { embeddedSchemas: lib.EMBEDDED_SPUR_SCHEMAS } : undefined);
+      process.exit(await app2.runInlineRunDecide({ runId, node, optionsFile: optionsJson, enabled }));
+    } catch (error) {
+      process.exit(decideFailed(error instanceof Error ? error.message : String(error)));
+    }
   }
   if (persistOut) {
     if (fingerprint || decide || action || close || runId !== "" || file !== "")
       usage();
     if (from.trim() === "" || taskFiles.some((taskFile) => taskFile.trim() === ""))
       usage();
-    process.exit(await runPersistOutMode({ from, taskFiles, spurBin }));
+    const { entry: entry2 } = resolveAppEntry(spurBin);
+    const app2 = await import(entry2);
+    process.exit(await app2.runInlineRunPersistOut({ from, taskFiles }));
   }
   if (action || close) {
     if (action && close)
@@ -391,16 +172,14 @@ async function main() {
       usage();
     if (!SAFE_RUN_ID_RE.test(runId))
       refuseUnsafeRunId(runId);
+    const { entry: entry2 } = resolveAppEntry(spurBin);
+    const app2 = await import(entry2);
     if (close) {
-      if (!isCloseStatus(status))
+      if (!app2.isInlineRunCloseStatus(status))
         usage();
-      if (reason.trim() === "") {
-        if (status === "failed")
-          usage();
-      } else if (!TERMINAL_REASONS.has(reason)) {
+      if (reason.trim() === "" ? status === "failed" : !TERMINAL_REASONS.has(reason))
         usage();
-      }
-      process.exit(await runTraceMode({
+      process.exit(await app2.runInlineRunTrace({
         runId,
         close: true,
         node: "",
@@ -408,21 +187,19 @@ async function main() {
         status,
         ok: true,
         durationMs: 0,
-        spurBin,
         ...reason.trim() === "" ? {} : { reason }
       }));
     }
     if (node.trim() === "" || kind.trim() === "")
       usage();
-    if (!isActionStatus(status))
+    if (!app2.isInlineRunActionStatus(status))
       usage();
     if (okRaw !== "true" && okRaw !== "false")
       usage();
-    const ok = okRaw === "true";
     const durationMs = Number(durationRaw);
     if (durationRaw.trim() === "" || !Number.isFinite(durationMs) || durationMs < 0)
       usage();
-    process.exit(await runTraceMode({ runId, close: false, node, kind, status, ok, durationMs, spurBin }));
+    process.exit(await app2.runInlineRunTrace({ runId, close: false, node, kind, status, ok: okRaw === "true", durationMs }));
   }
   if (runId.trim() === "" || file.trim() === "")
     usage();
@@ -430,38 +207,20 @@ async function main() {
     refuseUnsafeRunId(runId);
   const { entry, portable } = resolveAppEntry(spurBin);
   const app = await import(entry);
-  const workdir = process.cwd();
   let inventory;
   try {
     inventory = await readInstalledInventory(file, spurBin);
   } catch (error) {
     const message = `could not resolve the workflow definition: ${error instanceof Error ? error.message : String(error)}`;
-    writeOutcome(runId, { ok: false, runId, error: message });
+    app.writeInlineRunOutcome(runId, { ok: false, runId, error: message });
     throw new Error(message);
   }
-  const projectDb = await app.openInlineRunProjectDb(workdir);
-  let exitCode = 0;
-  try {
-    const result = await app.createOrAttachInlineRun({
-      workdir,
-      getDb: async () => projectDb.adapter,
-      file,
-      runId,
-      inventory,
-      ...portable ? { embeddedSchemas: app.EMBEDDED_SPUR_SCHEMAS } : {}
-    });
-    writeOutcome(runId, result);
-    if (!result.ok) {
-      console.error(`inline-run-setup: FAIL for run ${runId}`);
-      console.error(`  ${result.error}`);
-      exitCode = 1;
-    } else {
-      console.error(`inline-run-setup: ${result.attached ? "attached" : "created"} run ${runId} (${result.workflowName}, layer ${result.layer}, digest ${result.definitionDigest}, status ${result.status})`);
-    }
-  } finally {
-    projectDb.close();
-  }
-  process.exit(exitCode);
+  process.exit(await app.runInlineRunSetup({
+    runId,
+    file,
+    inventory,
+    ...portable ? { embeddedSchemas: app.EMBEDDED_SPUR_SCHEMAS } : {}
+  }));
 }
 main().catch((e) => {
   console.error(`inline-run-setup: FAIL \u2014 ${e instanceof Error ? e.message : String(e)}`);
