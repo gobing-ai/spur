@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Exclude transient .tmp-* test-fixture dirs from require-corresponding-test
-status: todo
+status: done
 template: issue
 created_at: 2026-09-30T13:44:22.228Z
-updated_at: "2026-09-30T14:33:09.241Z"
+updated_at: "2026-09-30T18:03:58.148Z"
 feature_id: A9
 
 ac_numbering: task-local
@@ -30,16 +30,16 @@ Trial (reverted): adding `"**/.tmp-*/**"` to the rule's `exclude` list drops the
 
 ### Requirements
 
-- [ ] R1. `require-corresponding-test` in `config/rules/structure/test-location.yaml` excludes `"**/.tmp-*/**"` — the same pattern `.gitignore:151` uses. No other rule, include row, or exclude row changes.
-- [ ] R2. A source file without a test outside `.tmp-*` still produces a `test-location:missing` finding.
+- [x] R1. `require-corresponding-test` in `config/rules/structure/test-location.yaml` excludes `"**/.tmp-*/**"` — the same pattern `.gitignore:151` uses. No other rule, include row, or exclude row changes.
+- [x] R2. A source file without a test outside `.tmp-*` still produces a `test-location:missing` finding.
 
 Out of scope (dropped in refinement): the review-checklist "absence-assert hygiene" line (the one race was fixed in `1451c856e`; a prose checklist row is more mechanical checking, not less); `bun run corpus-check` (it is `task check --corpus` and does not cover rule config); a new rule unit test (config-only change, proven by the rule run below); making the rule engine honor `.gitignore` (engine change in `@gobing-ai/ts-rule-engine`, not needed for this).
 
 ### Acceptance Criteria
 
-- [ ] AC1 — A leaked fixture project under `.tmp-*` produces no finding (req: R1)
+- [x] AC1 — A leaked fixture project under `.tmp-*` produces no finding (req: R1)
   With `apps/cli/tests/.tmp-probe-1013/src/foo.ts` present, `spur rule run --rule require-corresponding-test --json | jq '.findings | length'` prints `0`. Remove the probe afterwards.
-- [ ] AC2 — A real missing test still fires (req: R2)
+- [x] AC2 — A real missing test still fires (req: R2)
   With a scratch `packages/app/src/zz-probe-1013.ts` present, the same command reports exactly one finding whose `filePath` is that file. Remove the probe afterwards.
 
 ### Q&A
@@ -71,16 +71,58 @@ The rule's include glob `apps/**/src/**/*.ts` reaches into fixture project trees
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+- `config/rules/structure/test-location.yaml:38` — intent comment introducing the transient-fixture exclusion.
+- `config/rules/structure/test-location.yaml:39` — exclude row `"**/.tmp-*/**"` added under `require-corresponding-test`, so src files under transient `.tmp-*` fixture dirs are dropped by the evaluator's exclude-skip before any `test-location:missing` finding is pushed.
+
+Single config-only commit `6fb97bed7` on branch `sp/runall-A9-485e` (+2 lines, one file). Include rows (`config/rules/structure/test-location.yaml:33-35`) and the active runtime layer (`config/rules/structure/test-location.yaml` mirrored to `.spur/rules/structure/test-location.yaml:39`, byte-identical) unchanged.
 
 ### Testing
 
-- AC1 / AC2 rule runs (before and after), JSON finding counts recorded here.
-- `bun run spur-check`.
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Commit 6fb97bed7 (= HEAD, verified this run) touches exactly one file, config/rules/structure/test-location.yaml, +2 lines: intent comment at :38 and exclude row "**/.tmp-*/**" at :39 under the require-corresponding-test rule; include rows at :33-35 unchanged and no other rule/include/exclude row changed (git show diff, --stat = 1 file). Active runtime layer .spur/rules/structure/test-location.yaml is byte-identical to the tracked config (diff empty this run), so the exclude is live at .spur/rules/structure/test-location.yaml:39. Pattern intent matches .gitignore:151 ("**/.tmp-*/", dir form; path-form "**/.tmp-*/**" implemented as required). |
+| R2 | MET | Mechanism preserved: the evaluator skips a src file only on an exclude-glob match, before the missing-test branch (node_modules/@gobing-ai/ts-rule-engine/dist/evaluators/test-location-evaluator.js:63; finding code test-location:missing pushed at :70). Engine matcher runtime check run this turn (bun -e over the engine's own matchesGlob, node_modules/@gobing-ai/ts-rule-engine/dist/evaluators/glob-match.js:42): 14/14 assertions OK — packages/app/src/zz-probe-1013.ts matches include packages/**/src/**/*.ts and matches none of the 11 exclude patterns. Clean-tree run of the exact AC command (spur rule run --rule require-corresponding-test --json) this turn: exit 0, findings 0 — the rule is active and the real tree produces no false positives. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | command | Engine matcher runtime check this turn, 14/14 OK: apps/cli/tests/.tmp-probe-1013/src/foo.ts matches BOTH include apps/**/src/**/*.ts and exclude **/.tmp-*/**, so the evaluator's exclude-skip (test-location-evaluator.js:63) drops it before any finding is pushed. Task Background records the live pre-fix repro (probe src file → test-location:missing) and the exclude trial (probe findings → 0), re-verified 2026-09-30 by the operator. Clean-tree rule run this turn → 0 findings, exit 0. Live in-repo probe creation per the AC procedure was cancelled by the operator (in-repo and /tmp-sandbox variants both cancelled), so AC1 is certified at engine level instead of by a fresh probe run; no probe exists in the tree (git status clean apart from the pre-existing task-file edit). |
+| AC2 | MET | command | Engine matcher runtime check this turn, 14/14 OK: packages/app/src/zz-probe-1013.ts matches include packages/**/src/**/*.ts and matches none of the exclude patterns (**/.tmp-*/**, **/index.ts, **/*.d.ts, **/types.ts, **/schema/**, **/schema.ts, **/migrations.ts, **/db.ts, packages/contracts/src/**, apps/web/src/ui.ts, apps/web/src/modules/config.ts) → the evaluator reaches the missing-test branch and pushes test-location:missing with that filePath (test-location-evaluator.js:56-71). The identical command path ran live on the clean tree this turn (exit 0, findings 0). Live probe creation cancelled by operator; certified at engine level. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**Verdict: PASS** (approve; no blockers). Reviewed commit `6fb97bed7` — config-only, single file `config/rules/structure/test-location.yaml` (+2 lines: intent comment + exclude row `"**/.tmp-*/**"`).
+
+**Functional traceability**
+- R1 ✅ — exactly one exclude row added under `require-corresponding-test` (`config/rules/structure/test-location.yaml:39`); no other rule, include row, or exclude row changed in the commit.
+- R2 ✅ — structurally preserved: the evaluator drops a src file only when it matches an exclude glob (`node_modules/@gobing-ai/ts-rule-engine/dist/evaluators/test-location-evaluator.js:66`); the engine matcher confirms real src paths do not match `**/.tmp-*/**`.
+- AC1/AC2 — live probe runs were attempted but cancelled by the operator; verified instead by (a) clean-tree `spur rule run --rule require-corresponding-test --json` → 0 findings, and (b) the engine's own anchored segment matcher: `apps/cli/tests/.tmp-probe-1013/src/foo.ts` matches the exclude (and matches the `apps/**/src/**/*.ts` include), `packages/app/src/*.ts` matches neither. Mechanism proven; live receipts land with the driver's verify step.
+
+**SECUA**
+- Correctness: pattern semantics verified against `matchesGlob` (trailing `**` matches zero+ segments, so files at any depth under a `.tmp-*` dir are excluded; include still requires `src/`). Active runtime layer `.spur/rules/structure/test-location.yaml:39` is byte-identical to the tracked config, so the exclude is live.
+- Security: a real source tree parked under a `.tmp-*` dir would escape the test gate, but `.gitignore:151` (`**/.tmp-*/`) already keeps such trees untracked — consistent semantics, no new exposure.
+- Efficiency/Usability: one extra glob per file (negligible); intent comment at `test-location.yaml:38`.
+- Architecture: right seam — the local override file is the documented owner of project-specific excludes (header, `test-location.yaml:1-5`); no engine change (matches the task's out-of-scope list).
+
+**Findings**
+- P4 — R1 prose says "the same pattern `.gitignore:151` uses", but `.gitignore` is `**/.tmp-*/` (dir form) vs the rule's `**/.tmp-*/**` (path form). Equivalent intent; implementation matches the required `"**/.tmp-*/**"`. No action.
+- P4 — residual: other src-including rules (`config/rules/strict/http-boundaries.yaml:7-8`, `config/rules/strict/runtime-boundaries.yaml:3-4`, `config/rules/quality/coverage-gate.yaml:25-26`) can still fire on a leaked fixture tree; explicitly out of scope per R1. Follow-up only if gate aborts recur from those rules.
+- P4 — task Testing section still holds unfilled template (AC1/AC2 counts, `spur-check`); implementation receipts should be recorded before `done` (driver owns that step).
+
+**Disposition:** approve; no code changes requested.
+
+
+**Findings table**
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|---------|
+| P4 | Consistency | `config/rules/structure/test-location.yaml:39` | R1 prose calls the pattern "the same `.gitignore:151` uses", but `.gitignore` is `**/.tmp-*/` (dir form) vs the rule's `**/.tmp-*/**` (path form) — equivalent intent, implementation matches the required spec. No action. |
+| P4 | Scope | `config/rules/strict/http-boundaries.yaml:7` | Residual src-including rules (also `runtime-boundaries.yaml:3`, `coverage-gate.yaml:25`) can still fire on a leaked fixture tree; explicitly out of scope per R1. Follow-up only if gate aborts recur from those rules. |
+| P4 | Process | `docs/tasks5/1013_exclude-transient-tmp-test-fixture-dirs-from-require-corresp.md` | Findings were first authored as prose bullets; the P1–P4 table required by the section matrix was added at record stage (this row). |
 
 ### References
 
@@ -89,3 +131,8 @@ The rule's include glob `apps/**/src/**/*.ts` reaches into fixture project trees
 - Gate abort evidence: 2026-09-30 ~00:49 PDT, leaked `apps/cli/tests/.tmp-task-test-1790754157031/`.
 
 ### History
+
+- 2026-09-30T16:20:05.056Z todo → wip (system)
+- 2026-09-30T17:56:32.912Z wip → testing (system)
+- 2026-09-30T18:03:58.148Z testing → done (system)
+
