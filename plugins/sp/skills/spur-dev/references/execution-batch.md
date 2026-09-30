@@ -986,6 +986,23 @@ Resume, merge, or discard:
   discard: git worktree remove <worktree-path> && git branch -D <branch> && spur projects remove <worktree-path>
 ```
 
+When the halt cause is `non-FF base ref`, the report replaces the one-line `merge:` hint with this
+ordered divergence recipe, run by the operator — the driver never merges, rebases, or resolves
+conflicts itself. Other halt causes (task failure, HITL pause) keep the hint as printed:
+
+```
+# 1. integrate as a merge commit — never a rebase; task evidence cites the branch's commit SHAs
+git checkout <base-ref> && git merge --no-ff --no-commit <branch>
+# 2. resolve source conflicts by hand; generated files are then regenerated with the project's
+#    generator, never hand-merged
+#    (this repo: bun run build:plugin-lib && bun run --filter @gobing-ai/spur build:bundle)
+# 3. run qualityGateCmd once, after ALL conflicts are resolved
+# 4. commit the merge with the prepared message file
+git commit -F <message-file>
+# 5. persist evidence out (WT-4a), then WT-4b/4c cleanup, and set the marker to merged
+inline-run-setup --persist-out --from <worktree> --task-file …
+```
+
 The report reuses the [`--next` chain contract](flag-glossary.md#--next-chain-contract) halt-report
 shape (halt cause + where + why), not new vocabulary. Retention is the right default: these batches
 are long and already resumable via `--continue`; auto-deleting is data loss, auto-merging is a
