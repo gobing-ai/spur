@@ -82,6 +82,7 @@ Feature: Embedded job queue and scheduler
 | 0734 | Configurable scheduler jobs (interval + real cron) in ts-libs adapter and spur serve | done |
 | 0750 | Retire history.refresh.schedule_minutes in favor of bootstrap.scheduler.jobs | done |
 | 0806 | Fix history-daily-report timeout containment, import stalls, budget mismatch and missing job lifecycle timing | done |
+| 0807 | 0806 session-review follow-ups: job-queue coverage gaps and event-catalog drift | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

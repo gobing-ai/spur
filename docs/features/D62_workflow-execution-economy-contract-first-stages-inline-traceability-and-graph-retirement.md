@@ -211,7 +211,9 @@ Feature: Workflow execution economy: contract-first stages, inline traceability,
 | 0881 | Make the guard-parity harness enumerate both reference sets and catch spurious dependency edges | done |
 | 0882 | Refuse retiring workflow definitions that still have real non-dry runs | done |
 | 0912 | Establish the post-delivery workflow baseline and select a measured task-pipeline pilot | done |
-| 0986 | Assert the wrapup learnings artifact shape before appending it to memory | backlog |
+| 0986 | Assert the wrapup learnings artifact shape before appending it to memory | done |
+| 0994 | Derive the wrap-up metrics verdict from the tracked Testing record | done |
+| 0996 | A feature-scenario-keyed verdict AC row never proves its task AC box | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

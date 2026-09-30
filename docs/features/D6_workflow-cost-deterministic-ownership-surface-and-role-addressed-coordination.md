@@ -194,7 +194,8 @@ Feature: Workflow cost, deterministic ownership surface, and role-addressed coor
 | 0814 | Move dev workflow isolation and visible planning ahead of comprehensive checks | done |
 | 0815 | Align RunDao.traceRowById return type with queryFirst SQL-NULL semantics | done |
 | 0817 | Fix test hermeticity and dogfood-harness findings from run 20260908-2330-devrun-0815 | done |
-| 0818 | Fix harness reliability findings from 0815 session review | todo |
+| 0818 | Fix harness reliability findings from 0815 session review | done |
+| 0862 | Harden batch execution against the G65 failure modes | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

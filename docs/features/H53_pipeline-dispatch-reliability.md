@@ -50,6 +50,7 @@ Feature: pipeline-dispatch-reliability
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 0930 | Bound watcher follow loops and reject stale child results in batch runs | done |
+| 0953 | Run the entered state's onEnter on external lifecycle transitions so the feature-lifecycle verifying caller executes | cancelled |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

@@ -140,6 +140,8 @@ Feature: Measured, decision-explicit, check-deduplicated workflow catalogue
 | 0945 | Make idea-pipeline guards legible with terminal reasons on failure edges | done |
 | 0946 | Reconcile the workflow catalogue with keep, fix or retire decisions | done |
 | 0947 | Make idea-pipeline ready-prepare audit premise correctness and re-stamp evidence after re-parenting | done |
+| 0956 | Satisfy the D64 feature-done gate: scenario-key verdict evidence and add dogfood artifact | done |
+| 0974 | Dedup inert-var cells in idea-pipeline routing parity truth table | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

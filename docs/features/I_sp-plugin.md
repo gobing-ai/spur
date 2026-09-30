@@ -47,7 +47,9 @@ Feature: sp plugin capability ownership
 | --- | ---- | ------ |
 | 0600 | Align plugins/sp scripts to the superskill entrypoint contract and record the ADR | done |
 | 0715 | Synchronize expert-spur and spur-cli with the complete CLI surface | done |
-| 0913 | Make session review and dogfood produce trustworthy workflow-improvement evidence | testing |
+| 0913 | Make session review and dogfood produce trustworthy workflow-improvement evidence | done |
+| 0959 | Give consuming projects a supported way to sync the sp plugin pipeline scripts (vendoring drifts) | cancelled |
+| 0960 | Make pipeline script resolution revision-safe across the project copy and the installed twin | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

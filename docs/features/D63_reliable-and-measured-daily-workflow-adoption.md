@@ -114,6 +114,8 @@ Feature: Reliable and measured daily-workflow adoption
 | 0921 | Complete measured workflow migration and catalogue reconciliation | done |
 | 0935 | Settle D63 0917 inline-run evidence debt and close the feature | done |
 | 0936 | Preserve feature scenario-key rows when re-verifying and re-recording a task | done |
+| 0979 | Persist-out must skip a record-less run row instead of failing the transfer | cancelled |
+| 0981 | Make the feature-lifecycle R4 (0872) guard test load-deterministic | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

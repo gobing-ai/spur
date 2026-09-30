@@ -130,6 +130,7 @@ Feature: Observabilities module polish — naming, shell time range, catalog-ope
 | --- | ---- | ------ |
 | 0793 | Align Observabilities header and hoist the time-range selector to the shell for all tabs | done |
 | 0794 | Catalog-open system-event ingestion with generic fallback and drift signal | done |
+| 0795 | Dogfood J31 findings register — comma-list status filters, dogfood token-table drift, ADR-110 retention premise, and section-write semantics | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
