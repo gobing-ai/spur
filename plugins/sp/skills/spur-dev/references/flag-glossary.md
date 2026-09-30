@@ -194,11 +194,13 @@ establishes a baseline with it before the first change and re-runs it after each
 
 **Anchor:** `#flag-focus`.
 
-Constrain the operation to a named subset of dimensions — review dimensions on `dev-review`/
-`dev-verify`/`dev-verifyall` (`all|stack|dependencies|data|flows|api|security|quality|performance`),
-a refactor lens set on `dev-refactor` (`api|architect|tests|ui|auto`), a refine focus mode on
+Constrain the operation to a named subset of dimensions — review dimensions on `dev-review`
+(vocabulary SSOT: [code-verification/SKILL.md](../../code-verification/SKILL.md) review mode —
+`dev-verify`/`dev-verifyall` keep their SECUA-only lens set), a refactor lens set on
+`dev-refactor` (`api|architect|tests|ui|auto`), a refine focus mode on
 `dev-refine`/`dev-refineall` (`all|requirements|background|constraints|acceptance|quick` —
-[dev-operations.md](dev-operations.md) § refine), or a reconstruction lens on `dev-reverse`.
+[dev-operations.md](dev-operations.md) § refine), or a reconstruction lens on `dev-reverse`
+(`all|stack|dependencies|data|flows|api|security|quality|performance`).
 Narrowing reduces token cost; omitting runs
 all dimensions.
 

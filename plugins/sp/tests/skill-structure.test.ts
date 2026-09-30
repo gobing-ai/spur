@@ -875,7 +875,10 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
             // runs the answer lint; standalone lint script deleted). Not permanent.
             // 1021: +1186B SSOT scope-recipe rewrite (Step 3 tagged-commit diff + Step 3p
             // path scope; R1/R2 of I33). Not permanent — candidate for references/ split.
-            'code-verification': 33_685,
+            // 1022: +274B review-mode `--focus` vocabulary SSOT declaration (R4 of I33:
+            // functional/architecture routing + link-back note; `--fix` dropped from the
+            // review flag list). Not permanent — candidate for references/ split.
+            'code-verification': 33_959,
             wayfinder: 26_264,
             // 0622 R9: +921B of live-matrix reconciliation (section table, SPUR_BIN
             // refusal, artifact-size discipline). Not permanent — split into references.

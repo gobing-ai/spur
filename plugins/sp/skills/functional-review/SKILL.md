@@ -11,6 +11,7 @@ metadata:
     - pipeline
   modes:
     - verify
+    - review
   verdicts:
     - PASS
     - PARTIAL

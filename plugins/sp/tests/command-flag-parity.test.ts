@@ -274,3 +274,78 @@ describe('sp plugin — command flag parity with dev-operations.md (R8/R9, task 
         expect(glossary).toContain('(default 2, `n ≥ 1`)');
     });
 });
+
+// ---------- task 1022 (feature I33): dev-review contract hygiene ----------
+//
+// R1 single target forwarding; R2 coordinator Review ownership; R3 triage Edit/Write;
+// R4 one --focus vocabulary (SSOT: code-verification review mode); R5 no live --fix/--next
+// routes; R6 --auto declared + --json removed; R7 functional-review modes include review.
+
+describe('task 1022 — dev-review contract hygiene', () => {
+    const ROUTING_PATH = join(ROOT, 'plugins', 'sp', 'skills', 'next-router', 'references', 'routing-table.md');
+    const REVIEWER_PATH = join(ROOT, 'plugins', 'sp', 'agents', 'super-reviewer.md');
+    const CV_PATH = join(ROOT, 'plugins', 'sp', 'skills', 'code-verification', 'SKILL.md');
+    const FUNCTIONAL_PATH = join(ROOT, 'plugins', 'sp', 'skills', 'functional-review', 'SKILL.md');
+    const reviewRaw = readFileSync(join(COMMANDS_DIR, 'dev-review.md'), 'utf8');
+
+    test('R1 — each review skill receives the target exactly once (no doubled <wbs>/<path> prefix)', () => {
+        expect(reviewRaw).not.toMatch(/args="<wbs> \$ARGUMENTS"/);
+        expect(reviewRaw).not.toMatch(/args="<path> \$ARGUMENTS"/);
+        // The surviving dispatches forward the target once, inside $ARGUMENTS.
+        expect(reviewRaw).toContain('Skill(skill="sp:functional-review", args="$ARGUMENTS")');
+        expect(reviewRaw).toContain('Skill(skill="sp:code-improvement", args="$ARGUMENTS")');
+    });
+
+    test('R2 — the invoking session is the coordinator and writes ## Review in WBS mode', () => {
+        expect(reviewRaw).toContain('Coordinator = this session');
+        expect(reviewRaw).toContain('spur task update <wbs> --section Review --from-file');
+        const reviewer = readFileSync(REVIEWER_PATH, 'utf8');
+        expect(reviewer).toMatch(/WBS target → the merged report is written/);
+        expect(reviewer).toMatch(/path target → advisory output only/);
+        // The agent file must not claim /sp:dev-review spawns it — the invoking session is
+        // the coordinator (1022 R2); the command's contract text is the guard above.
+        expect(reviewer).not.toContain('Spawned by `/sp:dev-review`');
+    });
+
+    test('R3 — allowed-tools includes Edit and Write, stated as --triage direct-fix only', () => {
+        expect(reviewRaw).toMatch(/^allowed-tools:\s*\[.*"Edit".*"Write".*\]$/m);
+        expect(reviewRaw).toContain('`Edit`/`Write` in `allowed-tools` exist only for these direct fixes');
+    });
+
+    test('R4 — one --focus vocabulary for review, SSOT in code-verification review mode', () => {
+        const cv = readFileSync(CV_PATH, 'utf8');
+        expect(cv).toContain('--focus <all|functional|security|efficiency|correctness|usability|architecture>');
+        // The stale glossary list no longer claims to be the review/verify vocabulary
+        // (dev-reverse keeps its own reconstruction lens list).
+        const glossary = readFileSync(GLOSSARY_PATH, 'utf8');
+        expect(glossary).not.toContain('`dev-verify`/`dev-verifyall` (`all|stack|');
+        expect(reviewRaw).toContain('[code-verification/SKILL.md](../skills/code-verification/SKILL.md)');
+    });
+
+    test('R5 — no live route recommends dev-review --fix or super-reviewer --next', () => {
+        const routing = readFileSync(ROUTING_PATH, 'utf8');
+        expect(routing).not.toMatch(/dev-review[^\n]*--fix/);
+        expect(routing).toContain('/sp:dev-review <wbs> --triage');
+        const reviewer = readFileSync(REVIEWER_PATH, 'utf8');
+        expect(reviewer).not.toContain('--next');
+        // code-verification's review-mode flag list drops --fix (scoping: only the
+        // section between '## Mode: review' and the next '---' separator).
+        const cv = readFileSync(CV_PATH, 'utf8');
+        const reviewSection = cv.split('## Mode: review')[1]?.split('\n---')[0] ?? '';
+        expect(reviewSection).not.toContain('--fix');
+        // dev-review keeps --fix only as the documented deprecated no-op, outside the hint.
+        expect(extractFlags(argumentHint(reviewRaw)).has('--fix')).toBe(false);
+    });
+
+    test('R6 — --auto declared in hint and dev-operations row; --json gone from super-reviewer', () => {
+        expect(extractFlags(argumentHint(reviewRaw)).has('--auto')).toBe(true);
+        expect(commandTableFlags().get('dev-review')?.has('--auto')).toBe(true);
+        const reviewer = readFileSync(REVIEWER_PATH, 'utf8');
+        expect(reviewer).not.toContain('--json');
+    });
+
+    test('R7 — functional-review frontmatter modes include review', () => {
+        const raw = readFileSync(FUNCTIONAL_PATH, 'utf8');
+        expect(raw).toMatch(/modes:\s*\n\s*-\s*verify\s*\n\s*-\s*review/);
+    });
+});

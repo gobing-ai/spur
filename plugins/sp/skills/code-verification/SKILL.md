@@ -509,7 +509,7 @@ Step 3 (WBS target) or Step 3p (path target — a path target never derives scop
 Step 7, and returns a **review fragment** — no verdict artifact, no section write, no `done`
 gate (F92 0593 R1); the coordinator (`sp:super-reviewer`) merges fragments into `## Review`.
 
-Flags: `--agent <inline|auto|name>` (execution surface — inline default, with named escalation triggers taking precedence), `--auto` (no confirmations), `--fix <none|blockers-first|all>` (post-review repair), and `--focus <all|security|efficiency|correctness|usability|architecture>` (SECUA dimensions). Apply the [central contract](../spur-dev/references/cross-cutting.md#inline-default-execution-surface) before starting the review.
+Flags: `--agent <inline|auto|name>` (execution surface — inline default, with named escalation triggers taking precedence), `--auto` (no confirmations), and `--focus <all|functional|security|efficiency|correctness|usability|architecture>` (review dimensions — **the single review `--focus` vocabulary is declared here (SSOT)**: `functional` routes to `sp:functional-review`, `architecture` to `sp:code-improvement` + SECUA-A, the SECUA lenses to Step 7; `dev-review.md`, `dev-operations.md` §2 and `flag-glossary.md#flag-focus` link here instead of restating a second list). Apply the [central contract](../spur-dev/references/cross-cutting.md#inline-default-execution-surface) before starting the review.
 
 ---
 
