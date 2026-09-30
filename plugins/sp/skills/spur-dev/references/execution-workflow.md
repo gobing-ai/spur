@@ -96,10 +96,7 @@ cache-conservation discipline (`plugins/sp/skills/dogfood-testing/references/mon
 
 ## Step 2: Pipeline run
 
-> **Pre-launch size-gate pre-check (R1 / 0478).** Before launching `spur workflow run task-pipeline.yaml`, probe the task's `## Plan` checklist item count (`spur task show <wbs> --json`). The default cap is 8 items (`maxImplementPlanItems: 8`). If the plan item count exceeds 8:
->
-> - Without `--auto`: warn the operator before calling `spur workflow run` and prompt for confirmation or a plan-item override via `--vars '{"maxImplementPlanItems":"<count>"}'`.
-> - With `--auto`: automatically append `"maxImplementPlanItems": "<count>"` to `--vars` and log a single-line notice (e.g. `Notice: task <wbs> has N plan items (>8 default cap); injecting maxImplementPlanItems override`).
+> **Pre-launch size-gate pre-check (R1 / 0478; task 1002).** Before launching `spur workflow run task-pipeline.yaml`, run `spur task check <wbs> --precheck --json` — the same command the pipeline's precheck guard runs. It fails with a `precheck-size` finding above 10 requirements or 16 Plan items. The limits are fixed (no `--vars` override): on a failure, split the task instead of launching.
 
 **`--worktree [<name>]` wraps Step 2, on either surface.** When `/sp:dev-run --mode full` carries
 [`--worktree`](flag-glossary.md#flag-worktree), create or adopt the worktree *before* launching the
@@ -336,10 +333,9 @@ task.** A `cheap`/`standard`-tier model handed a task that big does not fail fas
 entire `implementTimeoutMs` and exits 3 with a partial tree (run `ca130182` — 7 reqs / 9 plan
 items / 12+ files → 30 minutes, 6 of 12 files, no tests, no docs, no `## Solution`).
 
-The precheck size gate is count-only: it writes FAIL above 10 requirements or 16 Plan items and
-never consults the executor's capability tier. Clear a FAIL deliberately — split the task, or raise
-the cap with `--vars '{"maxImplementReqs":<n>}'` — but the caps only accept a big task, they do not
-make a flash model able to finish one.
+The precheck size gate (`spur task check <wbs> --precheck`) is count-only: it fails above 10
+requirements or 16 Plan items and never consults the executor's capability tier. The limits are
+fixed — clear a failure by splitting the task.
 
 The empty-implement guard (`requireDiff` on the task-pipeline `implement` step, R3) fails the
 run fast when an implement exits 0 with zero non-corpus changes — a no-op never drifts into
