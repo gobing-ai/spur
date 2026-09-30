@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.63.0
+version: 1.64.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-09-28
+updated_at: 2026-09-30
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -1194,3 +1194,14 @@ normalizes `tool_result` / `session_start` / `session_shutdown` into the canonic
 `normalizePiToolEvent` and calls the same cores (agent fallback `pi`). Hosts never re-implement the
 row schema, token cascade, redaction or session reuse — a new host adds a normalizer. Row and
 session-event contracts: [observability contracts](design/observability-contracts.md) §7.8b.
+
+## 32. Disposable Run Storage — accepted design, implementation pending (ADR-131; E71)
+
+Current run/evidence locations remain unchanged. The E71 proposal separates temporary stage data
+in `.spur/run/` from lasting verdict/receipt files in `.spur/memory/evidence/` and retained run
+records, registered artifacts and owned sessions in `.spur/memory/runs/`. Existing app owners
+publish and read their durable data; task Testing remains the tracked portable coverage record.
+The accepted `workflow clean` extension previews/applies bounded migration through its app service
+before existing housekeeping; the operator gave public-surface consent. Automatic per-workflow terminal
+deletion and a new retention policy are omitted. Exact lifetimes, confinement, compatibility and
+failure behavior: [disposable run storage](design/disposable-run-storage.md).

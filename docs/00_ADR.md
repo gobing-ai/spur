@@ -2,9 +2,9 @@
 doc: 00_ADR
 owns: WHY — lasting architectural choices, context and tradeoffs
 authority: authoritative
-version: 1.57.0
+version: 1.58.0
 owner: Robin Min
-updated_at: 2026-09-28
+updated_at: 2026-09-30
 read_before: any structural change; before diverging from a decision
 edit_rules: 99 §6.1
 sync: [T1, T2]
@@ -2014,3 +2014,13 @@ posture); [workflow composition](design/workflow-composition-contract.md#composi
 - **Consequence:** Plugin pipelines require a `spur` CLI new enough to carry the moved flags. Spur releases every package in lockstep and an older CLI rejects an unknown flag, so a skewed install fails closed; each wave runs `plugin-smoke`. ADR-129's hook cores remain plugin-local — they are the host adapter boundary, not Spur domain logic.
 - **Retains:** ADR-021 (thin transports), ADR-051 (public-surface consent), ADR-065 (plugin entrypoint contract), ADR-115 (composition budgets), ADR-129 (hook cores).
 - **Detail:** [harness surface governance](design/harness-surface-governance.md) §2; plan `docs/plans/A9-script-placement-migration.md`; feature A9.
+
+## ADR-131: Completed Run Scratch Is Disposable; Lasting Records Have Durable Owners
+
+- **Status:** Accepted (design; implementation pending) · **Date:** 2026-09-30 · **Feature:** E71
+- **Decision:** Reserve `.spur/run/` for execution scratch. Existing verdict/receipt owners publish lasting structured evidence under `.spur/memory/evidence/`; existing run-record/session/artifact owners use `.spur/memory/runs/`. Keep tracked task Testing as the portable coverage representation. Persist retained artifact bytes before registering their durable references. Do not add automatic per-workflow terminal deletion.
+- **Why:** Acceptance, inspection and history must survive completed scratch removal; separating lifetime at the producing owner avoids permanent artifact exceptions in every cleaner.
+- **Alternatives:** Selective deletion of mixed scratch preserves lasting dependencies; DB-only storage adds schema work and does not retain path-referenced bytes; tracked JSON per task duplicates the existing F93 representation.
+- **Consequence:** Coordinate producers/readers and migrate valid existing local evidence without weakening proof, freshness, recovery or confinement. Reuse `workflow clean` and its existing dry-run/log scopes for bounded migration; the operator accepted this behavior extension with the E71 design context. Current locations remain in force until implementation. Retention durations and pair-retention policy are unchanged.
+- **Retains:** ADR-021/130 (application-service ownership), ADR-051 (public-surface consent), current E7 run identity/inspection and F93 tracked evidence behavior.
+- **Detail:** [disposable run storage](design/disposable-run-storage.md); proposed topology in `03 §32`.
