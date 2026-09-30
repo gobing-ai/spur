@@ -4,10 +4,11 @@ name: Extend the CLI-surface parity gate to docs/help and docs/help2
 status: todo
 template: feature-impl
 created_at: 2026-09-30T15:14:13.467Z
-updated_at: "2026-09-30T15:17:59.230Z"
+updated_at: "2026-09-30T15:18:18.290Z"
 feature_id: I3
 
 estimate_hours: 3
+ac_altitude: task-local
 ---
 
 ## 1020. Extend the CLI-surface parity gate to docs/help and docs/help2
