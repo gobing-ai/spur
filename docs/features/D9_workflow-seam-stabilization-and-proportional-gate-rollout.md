@@ -2,11 +2,11 @@
 schema_version: 1
 id: "D9"
 name: "Workflow seam stabilization and proportional gate rollout"
-status: done
+status: active
 priority: P1
 tags: []
 created_at: "2026-09-03T20:25:50.515Z"
-updated_at: "2026-09-05T00:58:04.076Z"
+updated_at: "2026-09-30T22:38:44.716Z"
 ---
 
 # D9: Workflow seam stabilization and proportional gate rollout
@@ -236,3 +236,5 @@ Tasks 0754, 0757, 0758, 0759, and 0764 are re-verified against this selected bra
 - 2026-09-05T00:44:43.508Z done → active (system)
 - 2026-09-05T00:58:03.762Z active → verifying (system)
 - 2026-09-05T00:58:04.076Z verifying → done (system)
+- 2026-09-30T22:38:44.716Z done → active (system)
+
