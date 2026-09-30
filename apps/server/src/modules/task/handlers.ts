@@ -41,6 +41,13 @@ export function createTaskHandlers(ctx: ServerContext) {
             const tasks = await ctx.taskService().list(filters);
             const data = tasks.map((t) => {
                 const fm = t.frontmatter ?? {};
+                const estimateHours =
+                    typeof fm.estimate_hours === 'number'
+                        ? fm.estimate_hours
+                        : typeof fm.estimated_hours === 'number'
+                          ? fm.estimated_hours
+                          : undefined;
+                const deps = Array.isArray(fm.dependencies) ? fm.dependencies : [];
                 return {
                     wbs: t.wbs,
                     name: t.name,
@@ -51,6 +58,9 @@ export function createTaskHandlers(ctx: ServerContext) {
                     type: (TASK_TYPES as readonly string[]).includes(fm.type as string)
                         ? (fm.type as (typeof TASK_TYPES)[number])
                         : undefined,
+                    template: typeof fm.template === 'string' ? fm.template : undefined,
+                    estimateHours,
+                    dependencyCount: deps.length > 0 ? deps.length : undefined,
                     filePath: t.filePath,
                     updatedAt: fm.updated_at as string | undefined,
                 };

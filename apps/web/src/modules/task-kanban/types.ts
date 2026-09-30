@@ -5,6 +5,9 @@ export interface TaskSummary {
     status: string;
     priority?: string;
     type?: string;
+    template?: string;
+    estimateHours?: number;
+    dependencyCount?: number;
     featureId?: string | null;
     parentWbs?: string | null;
     filePath: string;

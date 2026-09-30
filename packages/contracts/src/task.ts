@@ -19,6 +19,9 @@ export const taskSummarySchema = z.object({
         .nullable()
         .optional(),
     type: z.enum(TASK_TYPES).optional(),
+    template: z.string().optional(),
+    estimateHours: z.number().optional(),
+    dependencyCount: z.number().optional(),
     filePath: z.string(),
     updatedAt: z.string().optional(),
 });
