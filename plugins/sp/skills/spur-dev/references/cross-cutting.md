@@ -783,10 +783,12 @@ The Design Approval Gate is the taste gate between system design and decompositi
 **Auto-mode behavior:**
 
 - `--auto` routes around taste HITL states BEFORE entry only when the matching pre-clear vars are
-  true. CLI **`--approve-taste`** (idea + plan) sets `design_approved=true` and, on the idea path,
-  also `idea_approved=true`. Aliases: `--design-approved` / `--idea-approved` set one var each.
-- Without explicit prior approval, `--auto` still pauses at idea-eval and design-approval — taste
-  gates are not auto-clicked (Auto-Decision Principle #5).
+  true. On the planning commands (`dev-idea`, `dev-plan`) CLI **`--auto`** sets `profile=auto`,
+  `design_approved=true`, and `idea_approved=true` — the planning exception to Auto-Decision
+  Principle #5 (reversible corpus writes; see flag-glossary `--auto`).
+- The bypass still follows the evidence: idea-eval continues only on a `proceed`/`reshape`
+  recommendation (`drop` cancels, missing pauses) and design-approval only on a PASS design check.
+  Direct `spur workflow run` callers that leave the pre-clear vars `false` keep both taste pauses.
 - The brainstorm design summary is ALWAYS recorded, regardless of `--auto` — `--auto` does not
   bypass the "nothing is too simple" pattern.
 

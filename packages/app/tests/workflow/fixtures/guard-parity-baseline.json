@@ -196,9 +196,15 @@
         },
         {
             "from": "discovery",
+            "to": "cancelled",
+            "kind": "shell",
+            "command": "test \"$profile\" = auto && test \"$idea_approved\" = true && grep -qx drop .spur/run/$__runId-idea-recommendation.txt"
+        },
+        {
+            "from": "discovery",
             "to": "feature-create",
             "kind": "shell",
-            "command": "test \"$profile\" = auto && test \"$idea_approved\" = true"
+            "command": "test \"$profile\" = auto && test \"$idea_approved\" = true && grep -qxE 'proceed|reshape' .spur/run/$__runId-idea-recommendation.txt"
         },
         {
             "from": "discovery",
@@ -210,7 +216,7 @@
             "from": "idea-eval",
             "to": "feature-create",
             "kind": "shell",
-            "command": "test \"$profile\" = auto && test \"$idea_approved\" = true"
+            "command": "test \"$profile\" = auto && test \"$idea_approved\" = true && grep -qxE 'proceed|reshape' .spur/run/$__runId-idea-recommendation.txt"
         },
         {
             "from": "idea-eval",

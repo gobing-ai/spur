@@ -9,9 +9,9 @@
 #
 # Shape: start -> discovery -> idea-eval -> feature-create -> ac-generate -> feature-check
 #          -> system-design (conditional: needs_design signal)
-#          -> design-approval (taste HITL gate; not auto-clicked by --auto)
+#          -> design-approval (taste HITL gate; bypassed only when design_approved=true + design check PASS)
 #          -> decompose -> batch-create -> handoff-finalize -> handoff
-#        (idea-eval rejection -> cancelled)
+#        (idea-eval rejection, or auto + `drop` recommendation -> cancelled)
 #        (feature-check failure routes back to ac-generate; batch-create failure to decompose).
 #
 # Evidence instead of ceremony (task 0769): the feature check is MEASURED exactly once at
@@ -27,11 +27,11 @@
 #   design   — "auto" (default, signal-driven) or "skip" (--skip-design). No force path.
 #              Unified: skip also means omit per-task Design in batch-create (scaffold only;
 #              refine fills later). Default: decompose must author batch item `design`.
-#   design_approved — "true" when taste pre-cleared (CLI --approve-taste or alias --design-approved);
-#              lets profile=auto route around the design-approval taste gate (default "false")
-#   idea_approved — "true" when taste pre-cleared (CLI --approve-taste or alias --idea-approved);
-#              lets profile=auto route around the idea-eval taste gate (default "false")
-#   CLI --approve-taste sets both design_approved and idea_approved to true.
+#   design_approved — "true" lets profile=auto route around the design-approval taste gate when
+#              the recorded design check PASSes (default "false")
+#   idea_approved — "true" lets profile=auto accept the idea-eval report's recommendation
+#              (proceed/reshape → continue, drop → cancelled; missing → pause) (default "false")
+#   CLI --auto on dev-idea / dev-plan sets profile=auto AND both pre-clear vars to true.
 #   spurBin  — PATH-independent spur invocation (overridden by CLI at run start)
 #   agent    — agent for agent.run steps (default: auto → `agent.default` in config)
 #
@@ -137,15 +137,24 @@ states:
           session: fresh
           expectFile: .spur/run/${vars.__runId}-idea-eval-report.md
           timeoutMs: ${vars.stepTimeoutMs}
+      # Derive the eval recommendation ONCE (0769 pattern): the first non-blank line under
+      # `## Recommendation` → proceed | reshape | drop | unknown. The --auto guards out of
+      # discovery / idea-eval read this file; `unknown` routes to the idea-eval pause.
+      - kind: shell
+        options:
+          command: >-
+            awk '/^## Recommendation/{f=1;next} f&&NF{r=tolower($0);exit}
+            END{print (match(r,/^[*_ ]*(proceed|reshape|drop)/) ? substr(r,RSTART,RLENGTH) : "unknown")}'
+            ".spur/run/$__runId-idea-eval-report.md" | tr -d '*_ ' > ".spur/run/$__runId-idea-recommendation.txt"
 
   - id: idea-eval
     description: >
       HITL taste gate. Discovery has produced the idea-evaluation report
       (.spur/run/${vars.__runId}-idea-eval-report.md) with urgency/necessity scores, premises,
       pros/cons, and a recommendation. The operator reviews and approves or
-      rejects. This gate is NOT auto-clicked by --auto (taste gate, like
-      design-approval). Only routes around when vars.idea_approved=true
-      (explicit prior approval).
+      rejects. Routed around only when profile=auto AND vars.idea_approved=true
+      (CLI --auto) AND the report's recommendation is proceed/reshape; a drop
+      recommendation cancels, a missing one still pauses here.
     pause: true
     onEnter:
       - kind: hitl.confirm
@@ -376,9 +385,8 @@ states:
   - id: design-approval
     description: >
       HITL taste gate. The operator reviews the system design and approves or
-      rejects it. This gate is NOT auto-clicked by --auto (Auto-Decision Principle
-      #5: taste-decision -> surface to human). Only routes around when
-      vars.design_approved=true (explicit prior approval).
+      rejects it. Routed around only when profile=auto AND vars.design_approved=true
+      (CLI --auto) AND the recorded design check PASSes; a FAIL still pauses here.
 
       R7 (0433): a headless `no` persisted by DefaultHitlResponder would loop
       design-approval -> system-design -> design-approval, burning unbounded
@@ -608,17 +616,32 @@ transitions:
     guard:
       kind: always
 
-  # ── discovery: auto-skip (profile=auto + idea_approved) OR enter idea-eval taste gate ──
-  # Declaration order: auto-skip FIRST (same pattern as system-design → design-approval).
-  # Without this edge, discovery always enters idea-eval (pause: true), rendering the prompt
+  # ── discovery: auto-accept the eval recommendation (profile=auto + idea_approved) OR enter idea-eval ──
+  # Declaration order: auto edges FIRST (same pattern as system-design → design-approval).
+  # Without them, discovery always enters idea-eval (pause: true), rendering the prompt
   # and persisting an avoidable pause before the in-state auto-skip guard can fire (0366 R4/R5).
+  # --auto accepts the recommendation derived at the end of discovery (-idea-recommendation.txt):
+  # drop → cancelled, proceed/reshape → feature-create; unknown/missing falls through to the
+  # idea-eval pause (fail-safe: never auto-create a feature without an explicit proceed).
   - from: discovery
-    to: feature-create
-    description: profile=auto AND idea_approved=true — skip idea-eval taste gate entirely.
+    to: cancelled
+    terminalReason: cancelled
+    description: profile=auto AND idea_approved=true AND eval recommends drop — accept it, no feature.
     guard:
       kind: shell
       options:
-        command: 'test "$profile" = auto && test "$idea_approved" = true'
+        command: >-
+          test "$profile" = auto && test "$idea_approved" = true &&
+          grep -qx drop .spur/run/$__runId-idea-recommendation.txt
+  - from: discovery
+    to: feature-create
+    description: profile=auto AND idea_approved=true AND eval recommends proceed/reshape — skip idea-eval taste gate.
+    guard:
+      kind: shell
+      options:
+        command: >-
+          test "$profile" = auto && test "$idea_approved" = true &&
+          grep -qxE 'proceed|reshape' .spur/run/$__runId-idea-recommendation.txt
   - from: discovery
     to: idea-eval
     description: Discovery complete — gate on idea evaluation taste decision.
@@ -629,11 +652,13 @@ transitions:
   # Declaration order: auto-skip FIRST (same pattern as system-design → design-approval).
   - from: idea-eval
     to: feature-create
-    description: profile=auto AND idea_approved=true — skip idea-eval taste gate.
+    description: profile=auto AND idea_approved=true AND eval recommends proceed/reshape — skip idea-eval taste gate.
     guard:
       kind: shell
       options:
-        command: 'test "$profile" = auto && test "$idea_approved" = true'
+        command: >-
+          test "$profile" = auto && test "$idea_approved" = true &&
+          grep -qxE 'proceed|reshape' .spur/run/$__runId-idea-recommendation.txt
   - from: idea-eval
     to: feature-create
     description: Idea evaluation approved — create or select a feature.

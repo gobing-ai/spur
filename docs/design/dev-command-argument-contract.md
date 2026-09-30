@@ -120,8 +120,7 @@ syntax:
 | Glossary membership | Reconcile `--keep-going`, `--tasks`, `--output`, `--description`, and `--scope` against declaring commands |
 | Contextual `--full` / `--task` | Document per-command meanings or propose a separate compatible rename |
 
-Recognized aliases include `dev-idea --idea-approved|--design-approved`,
-`dev-plan --design-approved`, `dev-verify* --skip-shipable`, `dev-review --fix`, and dogfood's
+Recognized aliases include `dev-verify* --skip-shipable`, `dev-review --fix`, and dogfood's
 accepted single-dash forms. They are compatibility evidence, not canonical hint syntax.
 
 ## Rollout

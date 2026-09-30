@@ -466,9 +466,12 @@ unless force/skip:
 command/module/schema/transport); neither = no design doc (the default). Idempotent —
 re-runs update in place.
 
-**`--auto` on `/sp:dev-idea`** — routes around objective gates (`feature-check`,
-`batch-create`). `design-approval` (taste) still pauses. Use `--design` to force
-system-design; `--skip-design` to skip it (brainstorm design summary is always recorded).
+**`--auto` on `/sp:dev-idea` / `/sp:dev-plan`** — accepts the recommendation at every gate:
+idea-eval follows the eval report (`drop` cancels), `feature-check` / `batch-create` proceed on
+PASS, `design-approval` approves on a PASS design check. A gate with no actionable
+recommendation still pauses. `--skip-design` skips system-design (brainstorm design summary is
+always recorded). Interactive gates are asked as select-an-option prompts with the recommended
+choice first.
 
 **`--auto` on `/sp:dev-wrap` / `/sp:dev-wrapall`** — routes around objective
 confirmations. **`branch-cleanup` (when `--merge` is set) is irreversible and always

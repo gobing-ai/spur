@@ -468,7 +468,7 @@ Required actions:
 | `ac-generate` | Generate AC using `ac-style-guide.md`; write through `spur feature update`. |
 | `feature-check` | Run `spur feature check <id> --strict`; objective gate. |
 | `system-design` | Dispatch `sp:sys-architecture` when design is required; create ADR/architecture/design artifacts through constitution rules. |
-| `design-approval` | HITL taste gate; not auto-clicked by `--auto`. |
+| `design-approval` | HITL taste gate; `dev-idea`/`dev-plan --auto` approves only on a PASS design check. |
 | `decompose` | Dispatch `sp:spec-decomposition` with brainstorm/design context. |
 | `batch-create` | Validate and create tasks through `spur task batch-create`; objective gate. |
 | `handoff` | Output feature id, task WBS list, and next command. No task execution. |
@@ -601,7 +601,7 @@ paused run ids back to the operator.
 | `/sp:dev-refine` | (no pipeline) | `<wbs>`, `--focus`, `--auto`, `--next`, `--agent` | Task requirements gap analysis + section writes; chains to `dev-run --mode implement` under `--next`. |
 | `/sp:dev-run` | `.spur/workflows/task-pipeline.yaml` | `<wbs>`, `--mode full\|implement`, `--auto`, `--wrap`, `--continue`, `--agent` | One task through execution; implement mode is inline by default, while full workflow actions remain subprocess-backed. |
 | `/sp:dev-runall` | `.spur/workflows/task-pipeline.yaml` per selected task | `--tasks <selector>`, `--mode sequential\|parallel`, `--keep-going`, `--auto`, `--wrap`, `--agent` | Batch orchestrator starts inline; each full per-task workflow keeps its explicit subprocess boundary. |
-| `/sp:dev-idea` | `.spur/workflows/idea-pipeline.yaml` | `"<idea>"`, `--auto`, `--design`, `--skip-design` | Vague idea to feature + task batch handoff (no execution). |
+| `/sp:dev-idea` | `.spur/workflows/idea-pipeline.yaml` | `"<idea>"` \| `--from-file`, `--skip-design`, `--agent`, `--auto` | Vague idea to feature + task batch handoff (no execution). |
 | `/sp:dev-wrap` | `.spur/workflows/wrapup-pipeline.yaml` | `<wbs>`, `--auto`, `--merge`, `--dry-run` | Single-task wrap-up. |
 | `/sp:dev-wrapall` | `.spur/workflows/wrapup-pipeline.yaml` | `--since`, `--feature`, `--status`, `--auto`, `--merge`, `--dry-run` | Batch wrap-up. |
 | `/sp:dev-unit` | (no pipeline) | `<target>`, `--coverage`, `--auto`, `--agent` | Coverage-driven test extension via `sp:code-testing`. |

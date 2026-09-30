@@ -247,6 +247,13 @@ Action semantics come from the YAML and the workflow action contract:
   actions/guards.
 - `hitl.confirm` — under `profile=auto`, follow the YAML's auto-skip transition. Otherwise pause,
   surface the prompt, and resume from the same state with the operator's answer.
+  **Host-session rendering:** ask the gate as ONE `AskUserQuestion`
+  [decision brief](decision-brief.md), never a typed yes/no. Read the state's evidence (the
+  artifacts its prompt names and the recorded `.status` files) and derive the recommendation;
+  map options to the `yes` / `no` / `cancel` answers the guards route on, recommended option
+  first, each with a one-line reason from that evidence. When a `no` needs operator feedback
+  (design-approval's `## Operator feedback`), take it from the operator's notes/"Other" text
+  and write it into the named artifact yourself before resuming. Never ask them to edit the file.
 - `hitl.input` — pause, surface the declared prompt (the agent's operator question, 0933), and
   resume from the same state with the operator's answer written into the declared var (default
   `__hitlInput`); the subsequent guards route on answer presence exactly as the engine does.

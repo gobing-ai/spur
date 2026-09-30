@@ -68,6 +68,7 @@ Score guide:
 
 ## Recommendation
 <proceed | reshape | drop> — <one-line rationale linking scores, premises, and pros/cons>
+<!-- the first line under this heading MUST start with exactly one of proceed / reshape / drop — `--auto` routes on it -->
 
 Stakes: <plain-English cost of proceeding vs not; reversibility; blast radius>
 
@@ -87,4 +88,4 @@ Stakes: <plain-English cost of proceeding vs not; reversibility; blast radius>
 | HITL state | `idea-eval` in `idea-pipeline.yaml` |
 | Approve | continue → `feature-create` |
 | Reject / cancel | → `cancelled` (no feature) |
-| `--auto` | still pauses unless taste pre-cleared (`--approve-taste` → `idea_approved=true`) |
+| `--auto` (`idea_approved=true`) | `proceed`/`reshape` → `feature-create`; `drop` → `cancelled`; missing/unparseable recommendation → pauses |

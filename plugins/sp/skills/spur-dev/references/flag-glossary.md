@@ -126,6 +126,10 @@ Skip objective HITL confirmations inside this command (feature-check, batch-crea
 gate). Taste gates and irreversible HITL gates (e.g. `--merge`) still pause even under `--auto`.
 Only declared where the command already has at least one HITL gate the flag can skip.
 
+**Planning exception** (`dev-idea`, `dev-plan`): `--auto` also accepts the recommendation at the
+taste gates (idea-eval, design-approval) — every gate there is reversible corpus writes. A gate
+without an actionable recommendation (missing eval recommendation, FAIL design check) still pauses.
+
 ### `--keep-going` — batch failure policy: skip dependents, continue independents
 
 **Anchor:** `#flag-keep-going`.
@@ -427,14 +431,6 @@ remainder through `spur task` — never fix straight from the raw findings list.
 (report-only). Both file one or more implement-ready tasks sized per cohesive unit, under existing
 features ([dev-operations.md § 2. review](dev-operations.md#2-review)); `dev-review-session` keeps
 the stricter direct-fix bar (pure docs / one-to-two-line fixes).
-
-### `--approve-taste` — pre-clear all taste gates this run
-
-**Anchor:** `#flag-approve-taste`.
-
-Planning commands (`dev-idea`, `dev-plan`): with `--auto`, skip all remaining taste pauses this
-run (idea-eval + design-approval). Sets `idea_approved=true` and `design_approved=true`. One CLI
-flag sets both.
 
 ### `--worktree [<name>]` — run the batch in an isolated git worktree (create or reuse)
 

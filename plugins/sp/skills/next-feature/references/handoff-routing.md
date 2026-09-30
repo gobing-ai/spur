@@ -78,7 +78,7 @@ survivors would make its primary case unreachable. Offer the rank-1 ranked candi
 **Why this is not a Principle #5 taste auto-click.** The ranking already produced the recommendation;
 `--auto` only skips the *proceed-with-offer* pause. Overriding the ranking (picking a non-offered
 candidate) still requires the interactive confirm path. Architecture / design-approval taste gates
-inside dispatched children remain governed by their own contracts (`--approve-taste` where applicable).
+inside dispatched children remain governed by their own contracts (`--auto` where applicable).
 
 ### What `--task` does not change
 

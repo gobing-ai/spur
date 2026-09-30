@@ -74,7 +74,7 @@ each would be scope creep for one-liner procedures.
 | 4   | run        | `dev-run`           | `Skill()`         | `sp:spur-dev` (`run` / `implement`)                                                | `<wbs> [--mode <full\|implement>] [--agent <inline\|auto\|name>] [--auto] [--next] [--wrap] [--continue] [--worktree [<name>]]`                                                                                              |
 | 5   | refine     | `dev-refine`        | `Skill()`         | `sp:spur-dev` (`refine`)                                                           | `<wbs> [--focus <mode>] [--description <text>] [--depth <standard\|ready>] [--agent <inline\|auto\|name>] [--auto] [--next]`                                                                           |
 | 5a  | refineall  | `dev-refineall`     | `Skill()`         | `sp:spur-dev` (`refineall`)                                                        | `--feature <id> \| --tasks <selector> [--focus <mode>] [--description <text>] [--depth <standard\|ready>] [--agent <inline\|auto\|name>] [--auto] [--keep-going] [--status <s>] [--json] [--worktree [<name>]]` |
-| 6   | plan       | `dev-plan`          | `Skill()`         | inline driver (`idea-pipeline`) or async workflow                                  | `"<description>" [--feature <id>] [--parent <feature-id>] [--agent <inline\|auto\|name>] [--skip-design] [--auto] [--approve-taste]`                                                                   |
+| 6   | plan       | `dev-plan`          | `Skill()`         | inline driver (`idea-pipeline`) or async workflow                                  | `"<description>" [--feature <id>] [--parent <feature-id>] [--skip-design] [--agent <inline\|auto\|name>] [--auto]`                                                                   |
 | 7   | docs       | _(no thin wrapper)_ | `Skill()`         | `sp:doc-evolve`                                                                    | `"<change description>"`                                                                                                                                                                               |
 | 8   | changelog  | `dev-changelog`     | `inline`          | git log + conventional-commit grouping                                             | `[--since <ref>] [--until <ref>] [--version <ver>]`                                                                                                                                                    |
 | 9   | gitmsg     | `dev-gitmsg`        | `inline`          | bounded diff capture → concern grouping → conventional commit                      | `[--commit] [--squash] [--all] [--scope <path>]`                                                                                                                            |
@@ -85,7 +85,7 @@ each would be scope creep for one-liner procedures.
 | 13a | parallel   | `dev-parallel`      | `Skill()`         | `sp:parallel-execution`                                                            | `--tasks <selector> [--feature <id>] [--mode <fan-out\|review-panel\|investigation>] [--agent <inline\|auto\|name>] [--json]`                                                                          |
 | 14  | wrap       | `dev-wrap`          | `Skill()`         | `spur workflow run` (wrapup-pipeline)                                              | `<wbs> [--agent <inline\|auto\|name>] [--auto] [--merge] [--dry-run]`                                                                                                                                 |
 | 15  | wrapall    | `dev-wrapall`       | `Skill()`         | `spur workflow run` (wrapup-pipeline)                                              | `[--since <iso>] [--feature <id>] [--status <s>] [--agent <inline\|auto\|name>] [--auto] [--merge] [--dry-run]`                                                                                        |
-| 16  | idea       | `dev-idea`          | `Skill()`         | inline driver (`idea-pipeline`) or async workflow                                  | `"<idea>" [--from-file <path>] [--auto] [--skip-design] [--approve-taste] [--agent <inline\|auto\|name>]`                                                                                                                              |
+| 16  | idea       | `dev-idea`          | `Skill()`         | inline driver (`idea-pipeline`) or async workflow                                  | `"<idea>" \| --from-file <path> [--skip-design] [--agent <inline\|auto\|name>] [--auto]`                                                                                                                              |
 | 17  | refactor   | `dev-refactor`      | `Skill()`         | `sp:code-refactoring` skill (thin wrapper, ADR-032)                                | `[<description>] [--scope <path>] [--focus <api\|architect\|tests\|ui\|auto>] [--fix <none\|blockers-first\|all>] [--check <cmd>] [--agent <inline\|auto\|name>] [--auto]`                                                                                          |
 
 ## Skill-backed operations
@@ -322,7 +322,7 @@ must not be changed without updating the backing skill.
 - **Inputs:** `"<description>"` (required). `--feature <id>` links to an existing feature. `--parent <feature-id>` nests under a parent. Omitted/`inline` drives `idea-pipeline.yaml` in the host session; `auto` or a name launches the async workflow worker. **Design package flags (unified with `/sp:dev-idea`):**
   - **Default:** author task `design` on every batch item + feature satellite when the seam heuristic fires (**ties lean design**). There is **no** `--design` force flag.
   - `--skip-design` — skip feature satellite **and** omit task `design` fields (scaffold only; refine fills later). Sole design opt-out.
-  - `--approve-taste` — with `--auto`, pre-clear design-approval taste pause when that gate is used (`design_approved=true`). Alias: `--design-approved`.
+  - `--auto` — accept the recommendation at every operator gate, taste gates included (same contract as § 16 idea).
 - **Backing:** `sp:spur-dev` skill, `plan` operation. Stage floor: the `planner` role per [`roles.md`](../../../references/roles.md) — this file names roles, never tiers (0538 R4).
 - **Behavior:** Clarify scope → `spur feature create` → author BDD AC → `spur feature check` gate → decompose into task-batch JSON **including `design` (unless `--skip-design`)** → `spur task batch-create` gate. Design package details: [planning-workflow.md](planning-workflow.md) Step 5.5.
 - **Delegation:** `Skill(skill="sp:spur-dev", args="plan $ARGUMENTS")`
@@ -400,11 +400,14 @@ must not be changed without updating the backing skill.
 
 - **Purpose:** Turn a vague idea into a feature with AC and a decomposed task batch — the unified entry point for the planning half.
 - **Inputs:** `"<idea>"` (quoted) or `--from-file <path>` — exactly one; the two are mutually
-  exclusive (0887 R7). Three everyday axes:
-  - `--auto` — skip **objective** HITL (feature-check, batch-create); taste gates still pause.
-  - `--skip-design` — design package off (system-design + task Design).
-  - `--approve-taste` — with `--auto`, skip **all** remaining taste pauses this run (idea-eval + design-approval). Sets `idea_approved=true` and `design_approved=true`.
-    Aliases (prefer `--approve-taste`): `--idea-approved` → `idea_approved`; `--design-approved` → `design_approved`. There is **no** `--design` force flag.
+  exclusive (0887 R7). Two everyday axes:
+  - `--auto` — accept the recommendation at **every** operator gate (objective and taste):
+    sets `profile=auto`, `idea_approved=true`, `design_approved=true`. idea-eval follows the
+    report's `## Recommendation` (`proceed`/`reshape` continue, `drop` cancels, missing still
+    asks); design-approval approves only on a PASS design check (FAIL still asks).
+  - `--skip-design` — design package off (system-design + task Design). There is **no** `--design` force flag.
+  - Removed: `--approve-taste`, `--idea-approved`, `--design-approved` (folded into `--auto`;
+    ignored with a one-line notice if passed).
   - `--from-file <path>` — read the idea text from a file instead of the positional argument
     (verbatim; long/multiline asks). Mutually exclusive with `"<idea>"`.
 - **Verbatim idea artifact:** before `start` executes, the driver persists the idea argument (or
@@ -414,7 +417,7 @@ must not be changed without updating the backing skill.
 - **Backing:** `idea-pipeline.yaml` through the inline driver for omitted/`inline`, or `spur workflow run idea-pipeline.yaml --async` for `auto`/name.
 - **Behavior:** Builds vars from the table above and drives the idea pipeline. Flow: discovery → **idea-eval** (taste; reject → cancelled) → feature-create → ac-generate → feature-check → system-design (conditional) → design-approval (taste) → decompose → batch-create (`--skip-ready`) → ready-prepare (ready checklist per created task + ready-evidence sidecar, 0788) → handoff. STOPS at handoff — no task execution, no pipeline nesting. Headless runs use one `trace --follow`; cancellation is reported stopped only when `workflow cancel --json` returns `killed: true`.
 - **Delegation:** Host-session inline driver by default; explicit executor selection uses the async workflow worker.
-- **Idea-evaluation gate:** After discovery, operator reviews `.spur/run/idea-eval-report.md` ([idea-evaluation.md](idea-evaluation.md)). Approve continues; reject/cancel → no feature. Under `--auto`, still pauses unless taste pre-cleared (`--approve-taste` / alias). Enhanced idea is a sidecar — `vars.idea` is not overwritten.
+- **Idea-evaluation gate:** After discovery, operator reviews `.spur/run/idea-eval-report.md` ([idea-evaluation.md](idea-evaluation.md)). Approve continues; reject/cancel → no feature. Under `--auto`, follows the report's recommendation (`drop` → cancelled; missing recommendation → pauses). Enhanced idea is a sidecar — `vars.idea` is not overwritten.
 - **Design package (`--skip-design` only):**
 
   | Flags           | Feature satellite (`system-design`) | Task `### Design` in batch                |
@@ -425,7 +428,7 @@ must not be changed without updating the backing skill.
   Ties lean design — when the signal is ambiguous, `system-design` runs. Task Design defaults on
   unless `--skip-design`. Plan path uses the same package contract (no `--design` force flag).
 
-- **Taste pre-clear (`--approve-taste`):** owned with design-approval var semantics in [cross-cutting.md](cross-cutting.md) § "Design Approval Gate"; idea-eval uses the parallel `idea_approved` var. One CLI flag sets both.
+- **Operator gates:** every pause is one `AskUserQuestion` [decision brief](decision-brief.md) — recommended option first; see the gate table in `commands/dev-idea.md` and the `hitl.confirm` rule in [inline-pipeline-driver.md](inline-pipeline-driver.md).
 
 ### 17. refactor
 

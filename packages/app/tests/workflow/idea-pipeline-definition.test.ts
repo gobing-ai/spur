@@ -63,8 +63,53 @@ describe('idea-pipeline definition — pre-approval bypass ordering (R4/R5 of 03
 
         expect(guard?.kind).toBe('shell');
         // Guards reference vars by name so values reach the shell as env, never as command text
-        // (task 0435) — the invariant asserted is still "both conditions, ANDed".
-        expect(guard?.options?.command).toBe(`test "$profile" = auto && test "$idea_approved" = true`);
+        // (task 0435) — the invariant asserted is still "both conditions, ANDed", now also ANDed
+        // with the eval report's recommendation (--auto accepts it rather than overriding it).
+        expect(guard?.options?.command).toStartWith(`test "$profile" = auto && test "$idea_approved" = true && `);
+    });
+
+    test('--auto accepts the eval recommendation: drop cancels, proceed/reshape continue, missing pauses', () => {
+        const cancel = edgeIndex('discovery', 'cancelled');
+        const bypass = edgeIndex('discovery', 'feature-create');
+        expect(cancel).toBeGreaterThanOrEqual(0);
+        expect(cancel).toBeLessThan(bypass);
+
+        const dir = mkdtempSync(join(tmpdir(), 'idea-rec-'));
+        const report = join(dir, '.spur', 'run', 'r-idea-eval-report.md');
+        spawnSync('mkdir', ['-p', join(dir, '.spur', 'run')]);
+        const env = { ...getEnvVars(), profile: 'auto', idea_approved: 'true', __runId: 'r' };
+        const derive = DEF.states
+            .find((s) => s.id === 'discovery')
+            ?.onEnter?.find((a) => a.kind === 'shell' && a.options?.command?.includes('idea-recommendation.txt'));
+        expect(derive).toBeDefined();
+        // Run the discovery-exit derivation, then take the first passing edge in declaration
+        // order, as the engine routes.
+        const route = (): string | undefined => {
+            spawnSync('sh', ['-c', derive?.options?.command ?? 'false'], { cwd: dir, env });
+            return DEF.transitions
+                .filter((t) => t.from === 'discovery')
+                .find((t) => {
+                    if (t.guard?.kind === 'always') return true;
+                    const cmd = t.guard?.options?.command ?? 'false';
+                    return spawnSync('sh', ['-c', cmd], { cwd: dir, env }).status === 0;
+                })?.to;
+        };
+        const withRecommendation = (line: string): void =>
+            writeFileSync(report, `# Idea Evaluation Report\n\n## Recommendation\n\n${line}\n\nStakes: x\n`);
+        try {
+            withRecommendation('proceed — clear need');
+            expect(route()).toBe('feature-create');
+            withRecommendation('**Reshape** — narrow the scope');
+            expect(route()).toBe('feature-create');
+            withRecommendation('drop — workaround is fine');
+            expect(route()).toBe('cancelled');
+            withRecommendation('<proceed | reshape | drop> — unfilled template');
+            expect(route()).toBe('idea-eval');
+            rmSync(report);
+            expect(route()).toBe('idea-eval');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
     });
 
     test('design bypass to decompose is declared before the always edge to design-approval', () => {

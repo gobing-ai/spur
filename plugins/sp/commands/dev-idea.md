@@ -1,7 +1,7 @@
 ---
 description: Turn a vague idea into a feature with AC and a decomposed task batch — discovery, idea-eval, feature-create, AC, feature-check, system-design, decompose, batch-create (Design by default), handoff
 role: planner
-argument-hint: "\"<idea>\" [--from-file <path>] [--auto] [--skip-design] [--approve-taste] [--agent <inline|auto|name>]"
+argument-hint: "\"<idea>\" | --from-file <path> [--skip-design] [--agent <inline|auto|name>] [--auto]"
 allowed-tools: ["Bash", "Read", "Skill", "AskUserQuestion"]
 ---
 
@@ -16,29 +16,39 @@ contract below maps to that workflow's transitions.
 | --- | --- | --- |
 | `"<idea>"` | Vague idea to turn into a feature with AC and tasks. | required (or `--from-file`) |
 | `--from-file` `<path>` | Read the idea from a file instead of the positional argument. Mutually exclusive with `"<idea>"` — exactly one must be present. The file's contents become the verbatim idea text (trimmed of surrounding whitespace only). Useful for long or multiline asks that are awkward to quote. | off |
-| `--auto` | Skip objective HITL gates only (taste gates still pause). | off |
-| `--skip-design` | Omit system-design and per-task Design. | off |
-| `--approve-taste` | With `--auto`: set idea_approved + design_approved so idea-eval / design-approval do not pause. | off |
-| `--idea-approved` | Compatibility alias for idea_approved=true (subset of --approve-taste). | off |
-| `--design-approved` | Compatibility alias for design_approved=true (subset of --approve-taste). | off |
+| `--skip-design` | Omit system-design (and its approval gate) and per-task Design. | off |
 | `--agent` `<inline\|auto\|name>` | Who runs the model-bearing ideation. Omission and `inline` drive `idea-pipeline.yaml` in this session with zero external agent/workflow processes; `auto` tier-resolves an executor and a name pins one, both through the async workflow worker. | inline |
+| `--auto` | Accept the pipeline's recommendation at every operator gate (see below). | off |
 
 For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).
 
 ## Usage
 
 ```
-/sp:dev-idea "<idea>"
-  [--auto]              # skip objective HITL only (feature-check, batch-create)
-  [--skip-design]       # design package off (system-design + task Design)
-  [--approve-taste]     # with --auto: skip idea-eval + design-approval pauses
+/sp:dev-idea "<idea>" | --from-file <path>
+  [--skip-design]                # design package off (system-design + task Design)
   [--agent <inline|auto|name>]   # inline is the current session; auto/name are async workers
+  [--auto]                       # no operator pauses; follow each gate's recommendation
 ```
 
 There is **no** `--design` force flag. Design is default-on; only `--skip-design` opts out.
 
-**Aliases (one-release / scripts):** `--idea-approved` and `--design-approved` still map into the same
-vars as subsets of `--approve-taste` (`idea_approved` / `design_approved`). Prefer `--approve-taste`.
+**Removed flags:** `--approve-taste`, `--idea-approved`, and `--design-approved` are folded into
+`--auto`. If passed, ignore them with a one-line notice; do not treat them as `--auto`.
+
+**Operator gates.** Every gate is asked as one `AskUserQuestion` [decision brief](../skills/spur-dev/references/decision-brief.md):
+the recommended option first, then options with their reasoning. The operator picks; they never
+type a yes/no. `--auto` takes the recommended option at each gate without asking.
+
+| Gate | Pauses when | Recommendation comes from | `--auto` takes |
+| --- | --- | --- | --- |
+| idea-eval | after discovery | eval report `## Recommendation` (`proceed` / `reshape` / `drop`) | `proceed`/`reshape` → continue; `drop` → cancel; missing → still asks |
+| feature-check | after AC | recorded AC check + requirement coverage | PASS → continue; FAIL → revise AC (cap 3) |
+| design-approval | after system-design (skipped by `--skip-design`) | recorded design check | PASS → approve; FAIL → still asks |
+| batch-create | after decompose | batch schema + task-order sidecar validation | create the batch |
+
+Flag → vars: `--auto` sets `profile=auto`, `idea_approved=true`, `design_approved=true`;
+`--skip-design` sets `design=skip`.
 
 ## Implementation
 

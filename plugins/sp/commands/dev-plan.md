@@ -1,7 +1,7 @@
 ---
 description: Plan a feature from a description — intake → feature create → AC generation → feature check gate → decomposition → batch-create (Design by default)
 role: planner
-argument-hint: "\"<description>\" [--feature <id>] [--parent <feature-id>] [--agent <inline|auto|name>] [--skip-design] [--auto] [--approve-taste]"
+argument-hint: "\"<description>\" [--feature <id>] [--parent <feature-id>] [--skip-design] [--agent <inline|auto|name>] [--auto]"
 allowed-tools: ["Bash", "Read", "Skill", "AskUserQuestion"]
 ---
 
@@ -18,8 +18,7 @@ Wraps the **sp:spur-dev** skill.
 | `--parent` `<feature-id>` | Create under a parent feature. | omitted |
 | `--agent` `<inline\|auto\|name>` | Who runs the model-bearing planning. Omission and `inline` drive `idea-pipeline.yaml` in this session with zero external agent/workflow processes; `auto` tier-resolves an executor and a name pins one, both through the async workflow worker. | inline |
 | `--skip-design` | Omit the system-design hop. | off |
-| `--auto` | Skip objective HITL gates. | off |
-| `--approve-taste` | With --auto: skip design-approval pause. | off |
+| `--auto` | Accept the pipeline's recommendation at every operator gate (same gate table as `/sp:dev-idea`). | off |
 
 For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).
 
@@ -27,18 +26,18 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 
 ```
 /sp:dev-plan "<description>"
-  [--feature <id>] [--parent <feature-id>] [--agent <inline|auto|name>]
-  [--auto]              # skip objective HITL where the plan path supports it
-  [--skip-design]       # design package off (satellite + task Design)
-  [--approve-taste]     # with --auto: skip design-approval taste pause when applicable
+  [--feature <id>] [--parent <feature-id>]
+  [--skip-design]                # design package off (satellite + task Design)
+  [--agent <inline|auto|name>]
+  [--auto]                       # no operator pauses; follow each gate's recommendation
 ```
 
 **Design package (unified with `/sp:dev-idea`):** Design is **on by default**. Default fills
 per-task `### Design` in the batch and the feature satellite when the seam heuristic fires
 (ties lean **design**). There is **no** `--design` force flag — only **`--skip-design`** opts out.
 
-**Taste re-entry:** `--approve-taste` is the same flag as on `dev-idea` (sets prior design approval
-for taste gates). Alias: `--design-approved` (prefer `--approve-taste`).
+**Removed flags:** `--approve-taste` and `--design-approved` are folded into `--auto` (same
+contract as `/sp:dev-idea`). If passed, ignore them with a one-line notice.
 
 ## Implementation
 
