@@ -51,7 +51,7 @@ artifacts (with optional feature transition and irreversible branch cleanup).
 
 ## The command map
 
-The `sp` plugin provides **40 commands** across planning, execution, operations/hygiene, wrap-up, and authoring:
+The `sp` plugin provides **41 commands** across planning, execution, operations/hygiene, wrap-up, and authoring:
 
 | Command                 | Phase / Category | What it does                                                                                                                                                                           | Backed by                                        |
 | ----------------------- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
@@ -84,6 +84,7 @@ The `sp` plugin provides **40 commands** across planning, execution, operations/
 | `/sp:dev-reverse`       | Operations       | Depth-driven codebase reverse engineering / HLD generation / audit                                                                                                                     | `sp:reverse-engineering`                         |
 | `/sp:dev-find-conflict` | Operations       | Authority-aware semantic audit across source, tasks, features, and authority docs; routes confirmed repairs to owner surfaces                                                          | `sp:conflict-finding`                            |
 | `/sp:dev-pr-review`     | Operations       | Review GitHub PRs with Codex; collect and fix findings (`full\|submit\|collect\|fix\|rerun\|status\|rules`)                                                                           | `sp:pr-reviewing`                                |
+| `/sp:dev-fixgha`        | Operations       | Find failing GitHub Actions runs via `gh`, fix root causes, commit, push, and re-verify until green (optional context/filter argument)                                              | inline                                           |
 | `/sp:dev-gtd`           | Operations       | Quality gate → fix → commit → push → `gh` verify in one flow (`--act` for local CI simulation, `--no-push`)                                                                          | inline                                           |
 | `/sp:dev-gitmsg`        | Operations       | Draft Conventional-Commits message from staged changes                                                                                                                                 | inline                                           |
 | `/sp:dev-changelog`     | Operations       | Generate a changelog from commit history                                                                                                                                               | inline                                           |

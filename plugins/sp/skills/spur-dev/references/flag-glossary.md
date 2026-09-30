@@ -352,10 +352,17 @@ pauses, even under `--auto`.
 
 **Anchor:** `#flag-max-retry`.
 
-Bound the retry loop on fix-family commands (`dev-dogfood`, `dev-fixall`, `dev-gtd`). After `n` consecutive
+Bound the retry loop on fix-family commands (`dev-dogfood`, `dev-fixall`, `dev-fixgha`, `dev-gtd`). After `n` consecutive
 failed fix attempts, stop and ask the operator rather than looping indefinitely. On `dev-dogfood`
 the default is `2` (fix mode) and `--max-retry 0` selects observe-only — matching the backing
 `sp:dogfood-testing` skill; the command table and the skill must not drift on this default.
+
+### `--no-push` — commit locally, stop before push
+
+**Anchor:** `#flag-no-push`.
+
+Commit the fixes locally but do not `git push` or run the post-push `gh` verification
+(`dev-fixgha`, `dev-gtd`). The report lists the unpushed commits.
 
 ### `--full` — rewrite a `--next` run as full pipeline
 

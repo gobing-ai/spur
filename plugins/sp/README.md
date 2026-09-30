@@ -133,11 +133,12 @@ list this README is checked against.
 | `dev-find-conflict` | Authority-aware semantic audit across source, task, feature, and project authority files — detect conflicts, resolve claim-specific authority, and route confirmed repairs through owner surfaces |
 | `dev-find-next`     | Prompt-first feature frontier prioritizer — ranks the open feature frontier by derived importance/urgency with per-candidate evidence; gates unactionable features; emits tree defects as proposals only     |
 | `dev-fixall`        | Fix all lint, type, and test errors systematically across the working tree                                                                                                                        |
+| `dev-fixgha`        | Find and fix failing GitHub Actions runs — gh fetch → diagnose → root-cause fix → commit → push → re-verify until green; optional context/filter argument                                        |
 | `dev-simplify`      | Simplify recently-changed code for clarity without changing behavior — incremental, test-after-each, revert on regression                                                                         |
 | `dev-refactor`      | Lens-routed refactoring with a preservation contract — taste lenses (api/architect/tests/ui) classify findings on the shared schema; cutting/breaking changes pause for operator approval; forwards to sp:code-refactoring |
 | `dev-arch`          | Survey a codebase (or module tree) for shallow modules and deepening opportunities — emit a ranked MARKDOWN candidate report that feeds the planning half; never auto-refactors                   |
 | `dev-reverse`       | Reverse-engineer a codebase — analyze unfamiliar repos, generate HLD/architecture docs, audit quality/security, and produce onboarding documentation                                              |
-| `dev-gitmsg`        | Generate conventional commit message(s) from the current change set via one bounded diff capture, optionally commit                                                                                         |
+| `dev-gitmsg`        | Generate conventional commit message(s) from the current change set via one bounded gather call, optionally commit                                                                                         |
 | `dev-gtd`           | Get things done — quality gate (auto-fix) → conventional commit → push → gh verify in one flow; optional act CI simulation via `--act`                                                          |
 | `dev-changelog`     | Generate changelog from git commits                                                                                                                                                               |
 

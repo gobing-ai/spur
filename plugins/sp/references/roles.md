@@ -54,7 +54,7 @@ roles:
     stages: [changelog]
   - id: coder
     tier: standard
-    commands: [dev-run, dev-unit, dev-debug, dev-simplify, dev-fixall, dev-reverse, dev-wrap, dev-wrapall, dev-gtd]
+    commands: [dev-run, dev-unit, dev-debug, dev-simplify, dev-fixall, dev-fixgha, dev-reverse, dev-wrap, dev-wrapall, dev-gtd]
     stages: [implement, test, wrap]
   - id: reviewer
     tier: capable-1
