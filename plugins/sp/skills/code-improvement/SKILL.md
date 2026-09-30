@@ -188,7 +188,8 @@ When invoked as the `--focus architecture` dimension of `/sp:dev-review`:
 - `blocker`/`major` candidates block the `approve(HITL)` gate alongside any SECUA blockers from
   `sp:code-verification`.
 - The candidate list is returned as a **review fragment**; the review coordinator
-  (`sp:super-reviewer` under `/sp:dev-review`) merges it into the combined `## Review` section —
+  (`sp:super-reviewer` — the invoking session under `/sp:dev-review`) merges it into the combined
+  `## Review` section —
   it is never written by `record`, which backfills `## Review` only when the section is bare
   (fallback-only, F92 0593 R1).
 - This skill does **not** write to the task file directly — the coordinator (or the operator) does.

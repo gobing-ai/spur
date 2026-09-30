@@ -64,6 +64,10 @@ function normalizeArgs(raw: Args): Args {
 
 - If `--feature FOO` is present and `--tasks` is absent, treat the effective selector as `feature:FOO`.
 - If both are present, `--tasks` wins (with a one-line note in the batch report).
+- **Per-command admission filters (I33 1023).** Step 1 is the shared baseline; commands may layer
+  stricter grammar on top — e.g. `/sp:dev-review` rejects `ready`/status pseudo-lists and the mixed
+  `--tasks` + `--feature` combination (exit 2), and accepts multi-id `--feature <id>,<id>` as
+  caller-level sugar expanded by the command layer before the resolver.
 
 **Feature-derived strict preflight (R2, task 0510).** After normalization, if the **effective
 selector** is `feature:<id>` (whether via `--tasks feature:<id>` or the `--feature <id>` sugar),

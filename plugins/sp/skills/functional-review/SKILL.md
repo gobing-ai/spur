@@ -269,7 +269,8 @@ The priority table leads; the traceability table follows for per-requirement det
 **Fragment-only discipline (F92 0593 R1).** In coordinated mode (dispatched by `/sp:dev-review` /
 `sp:super-reviewer`), do **not** write `## Review` — return the fragment to the coordinator, which
 merges the functional + SECUA + architecture fragments into the combined `## Review` section. Only
-`sp:super-reviewer` (the review coordinator) writes `## Review`; direct component-skill use is
+`sp:super-reviewer` (the invoking session under `/sp:dev-review` acting as review coordinator)
+writes `## Review`; direct component-skill use is
 advisory output. `spur task record` backfills a **bare** `## Review` from the verdict artifact as a
 standalone compatibility fallback only and never overwrites authored Review (F92 0593 R1).
 
@@ -292,7 +293,8 @@ Include the per-requirement traceability table in the report:
 ```
 
 **Under the pipeline**, `sp:functional-review` is a component of `/sp:dev-review`: it returns its
-fragment to the coordinator (`sp:super-reviewer`), which writes the combined `## Review`. The
+fragment to the coordinator (`sp:super-reviewer` — the invoking session under `/sp:dev-review`),
+which writes the combined `## Review`. The
 `record` step transcribes only `## Testing` from the verdict artifact and backfills `## Review`
 only when the section is bare (`sectionIsBare` guard, `task-service.ts`); it never overwrites the
 coordinator's authored Review. Keep the priority-table lead stable in the fragment so the L3 gate

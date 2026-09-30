@@ -27,7 +27,7 @@ interface FunctionalVerdict {
     bddReportPath: string | null;
     /**
      * Explicit source scope (if --source-paths given) or derived diff scope
-     * (the changed *.ts/*.tsx/*.js/*.jsx files for the task's last commit).
+     * (tagged-commit recipe; SSOT = code-verification SKILL Step 3/3p).
      */
     sourcePaths: string[];
 }
