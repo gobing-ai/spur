@@ -4,7 +4,7 @@ name: Audit run storage ownership and one-off cleanup
 status: done
 template: feature-impl
 created_at: 2026-09-30T20:13:58.349Z
-updated_at: "2026-10-01T22:14:29.449Z"
+updated_at: "2026-10-01T22:22:36.915Z"
 feature_id: E71
 priority: P2
 tags:
@@ -95,29 +95,29 @@ Audit-only task (mutationPolicy: none) — no source, test, workflow, or CLI sur
 
 **Pipeline verify results**
 
-- Verdict: PASS (from verdict artifact)
+- Verdict: PARTIAL (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Regenerated scans in report §1 with traced producers/consumers across app/CLI/server/workflows/plugins/tests; spot-checked citations resolve (task.ts:1329-1330 emit, run-record.ts:118-149 shared reader, agent-run.ts:558-592 session dirs, history-service.ts:481-519 importer) |
-| R2 | MET | Lifetime taxonomy matches ADR-131 (docs/00_ADR.md:2042) and design §3 destinations (feature-verification-receipt.ts:32-36, workflow-run-log-sink.ts:47-57, agent-run.ts:574-580, agent-service.ts:2612-2613) |
-| R3 | MET | Independent census of every rmSync/unlinkSync/deleteFile site in product src maps to §4/§8 rows (quality-gate.ts:540,608,619; inline-run-setup.ts:804; history-anatomy.ts:880; history-service.ts:1504,1692; idea-pipeline.yaml W1-W6; agent-run.ts:327-337,809-843; feature-service.ts:696-703) |
-| R4 | MET | Persistent inventory published at docs/reports/2026-09-30-E71-run-storage-ownership.md (§3 families, §10 scenario map, §11 handoff); unmatched candidates carried as X1-X6, nothing silently disposable |
+| R1 | PARTIAL | `docs/reports/2026-09-30-E71-run-storage-ownership.md:294` — regenerated source census; no executable candidate-to-location equality establishes all producers and consumers. |
+| R2 | MET | `docs/reports/2026-09-30-E71-run-storage-ownership.md:306` — current artifact families retain explicit durable, temporary or unresolved dispositions; original lifetime taxonomy remains in section 2. |
+| R3 | MET | `docs/reports/2026-09-30-E71-run-storage-ownership.md:139` — cleanup census classifies freshness, atomic publication, housekeeping and unrelated storage; correctness invalidation remains retained. |
+| R4 | PARTIAL | `docs/reports/2026-09-30-E71-run-storage-ownership.md:302` — persistent unresolved dependency/regression map is present; exhaustive current coverage has not been established. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| [R1] AC1 | MET | command | Quality gate `bun run spur-check` PASS (.spur/run/1024-test-gate.log, 5m08s); verifier spot-check greps over report §4/§8 citations all resolved (rmSync/unlinkSync/deleteFile census, ADR-131 taxonomy at docs/00_ADR.md:2042); full inventory in docs/reports/2026-09-30-E71-run-storage-ownership.md |
+| Scenario: R1 — Every run storage dependency and cleanup site has a disposition | PARTIAL | command | Current source census regenerated with rg; historical count-only equality claim is insufficient; `docs/reports/2026-09-30-E71-run-storage-ownership.md:299`. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
 <!-- spur:record-review -->
 
-**SECU findings** (pipeline verify step — verdict: PASS)
+**SECU findings** (pipeline verify step — verdict: PARTIAL)
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | — | — | No findings (verify verdict PASS) |
+| P4 | design-conformance | — | Frozen design is partly implemented; unresolved claims are named in requirements and AC above. |
 
 ### References
 
