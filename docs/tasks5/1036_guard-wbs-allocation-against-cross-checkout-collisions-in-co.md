@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Guard WBS allocation against cross-checkout collisions in concurrent batch runs
-status: backlog
+status: cancelled
 template: feature-impl
 created_at: 2026-10-01T00:47:13.093Z
-updated_at: "2026-10-01T00:47:36.303Z"
+updated_at: "2026-10-01T01:10:16.018Z"
 feature_id: A9
 
 ---
@@ -34,13 +34,29 @@ Captured from the creation title: "Guard WBS allocation against cross-checkout c
      condition. Not a parking lot for open questions — an unanswered question here means the task
      is not ready to hand off. Keep empty if none. -->
 
+#### Q&A entry — 2026-10-01T01:08:13.746Z
+
+- Cancelled 2026-09-30 by operator decision: a cross-checkout allocation guard is not worth the complexity. WBS collisions across checkouts are rare and are handled after the fact by fixing or renumbering the duplicate task at merge time. Root cause recorded for reference: the WBS scan and the `.create.lock` are both per-checkout (`packages/app/src/services/task-service.ts` allocateWbs / `createAllocated`).
+
 ### Design
 
-<!-- Chosen implementation approach, key tradeoffs, invariants, and impacted surfaces. -->
+Root geometry: WBS allocation reads the max WBS from the local checkout's .spur/spur.db (allocator in packages/app/src/services/task-service.ts). Linked git worktrees share .git but have separate .spur databases, so two concurrent creators (e.g., the i33 session on main and a batch worktree) can scan the same max and allocate the same WBS. Observed 2026-09-30: the runall-A9-485e batch and the i33 session collided in the 102x range; the allocator jumped 1033 past possibly-foreign ids. Confirm the hypothesis with the repro below before implementing.
+
+Chosen mechanism (recommended) - mutual exclusion + re-scan anchored at the git common dir:
+- From any linked worktree, git rev-parse --git-common-dir resolves to the main repo's .git - a location all worktrees of the repo share. Place the allocation lock + a small ledger there (e.g., .git/spur/wbs-lock).
+- Algorithm: acquire lock via O_EXCL create (bounded retry; stale takeover if lock mtime exceeds a few seconds - crash safety), re-scan max WBS across ALL configured task folders under the lock, allocate, record, release.
+- Independent clones = different projects: out of scope by design.
+Alternative rejected: DB unique constraint (does not help across separate per-checkout DBs); timestamp-based reservation without a lock (racy).
+
+Failure mode: forced or unresolved collision fails loudly with an actionable error naming the conflicting WBS and the file(s) holding it (AC2); no silent skip-ahead (the 1033 jump is the anti-pattern).
 
 ### Plan
 
-<!-- Ordered implementation checklist. Fill before moving to todo/wip. -->
+1. Reproduce: two spur task create --feature A9 --json run concurrently from main and a linked worktree of a fixture repo; observe duplicate WBS (or document actual allocator behavior if the hypothesis is wrong).
+2. Locate the allocation path in packages/app/src/services/task-service.ts (rg -n -i allocat) and wrap it with the common-dir lock + re-scan.
+3. Error path: bounded retries, then throw with the conflicting path in the message.
+4. Update the docs/04_DESIGN.md satellite (allocator contract) in the same commit (T3).
+5. Gates: bun run spur-check, then bun run spur-check-feature once.
 
 ### Solution
 
@@ -48,14 +64,26 @@ Captured from the creation title: "Guard WBS allocation against cross-checkout c
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Unit (packages/app/tests): two concurrent allocations against a shared fixture ledger -> distinct WBS, both persisted; stale lock (backdated mtime) is taken over, not fatal.
+- Integration repro script (repeatable artifact): drive two task creates from main + a linked worktree of a fixture; assert distinct WBS and the actionable error path when a duplicate is forced. Commit the script per ADR-130 placement.
+- Gates: bun run spur-check; bun run spur-check-feature once.
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+- Verify common-dir anchoring works from a linked worktree (git rev-parse resolves to the main .git).
+- Crash safety: stale takeover tested; no permanent lock on kill.
+- Perf: single-checkout create latency unchanged (local-file lock, ms-scale).
+- Error message names the conflicting WBS + holder; no silent skip-ahead.
+- Docs satellite updated; scopes disjoint from foreign 1024/1025.
 
 ### References
 
-<!-- Links to the parent feature, design docs, related tasks, or external references. -->
+- packages/app/src/services/task-service.ts (allocation; resolve exact lines via rg -n -i allocat)
+- Task lookup resolves across configured task folders (cross-folder max-scan is feasible)
+- Evidence: runall-A9-485e batch (worktree) vs i33 session (main checkout), 2026-09-30 ~15:24; docs(tasks) re-scope commits at 15:47 landed on main while the batch ran in its own checkout.
+- Related: one-writer-per-tree convention (AGENTS.md); worktree isolation contract.
 
 ### History
+
+- 2026-10-01T01:08:14.015Z backlog → cancelled (system)
+
