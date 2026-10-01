@@ -1,10 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getEnvVars } from '@gobing-ai/ts-utils';
 import {
+    type Diffstat,
     expandDiffPath,
     main,
     runDiffstat,
@@ -179,6 +180,135 @@ describe('task-diffstat (0943)', () => {
         });
         expect(run.status).toBe(0);
         expect(readRow(cwd)).toMatchObject({ files: 1, sensitive: false });
+        rmSync(cwd, { recursive: true, force: true });
+    });
+});
+
+// ─── 1039: verify dispatch-floor conformance (1033 R1 decision table) ─────────
+
+/**
+ * Transcript of `inline-pipeline-driver.md` condition-5 diffstat arm (verify only):
+ * `.files <= 3 and ((.insertions // 0) + (.deletions // 0)) <= 60 and .sensitive == false`.
+ * Hand-transcribed on purpose — this suite pins the contract semantics; the doc text
+ * itself is pinned separately by command-flag-parity (fd2ab09f5).
+ */
+function belowDiffstatFloor(row: {
+    files: number;
+    insertions: number;
+    deletions: number;
+    sensitive: boolean;
+}): boolean {
+    return row.files <= 3 && row.insertions + row.deletions <= 60 && !row.sensitive;
+}
+
+/**
+ * The driver reads `.spur/run/<wbs>-diffstat.json` with jq; a missing or unparsable
+ * artifact leaves condition 5 as-above (floor — failure mode is more isolation, never
+ * less). This mirrors that read, including the defensive shape check.
+ */
+function belowFloorFromArtifact(cwd: string, wbs = '1039'): boolean {
+    let row: unknown;
+    try {
+        row = JSON.parse(readFileSync(join(cwd, '.spur/run', `${wbs}-diffstat.json`), 'utf8'));
+    } catch {
+        return false;
+    }
+    const candidate = row as Partial<Diffstat> | null;
+    if (
+        candidate === null ||
+        typeof candidate !== 'object' ||
+        typeof candidate.files !== 'number' ||
+        typeof candidate.insertions !== 'number' ||
+        typeof candidate.deletions !== 'number' ||
+        typeof candidate.sensitive !== 'boolean'
+    ) {
+        return false;
+    }
+    return belowDiffstatFloor(candidate as Diffstat);
+}
+
+/** Transcript of the driver's below-floor run-log line (1039 R3 — exact template). */
+function floorLogLine(sessionId: string, row: Diffstat): string {
+    return `stage verify executed inline in session ${sessionId} (below dispatch floor: diffstat files ${row.files} lines ${row.insertions + row.deletions})`;
+}
+
+function changedLines(cwd: string, lineCount: number): void {
+    writeFileSync(
+        join(cwd, 'apps/cli/src/index.ts'),
+        Array.from({ length: lineCount }, (_, i) => `export const v${i} = ${i};\n`).join(''),
+    );
+}
+
+describe('task-diffstat → verify dispatch floor (1039)', () => {
+    test('small clean diffstat dispatches verify host-inline and renders the exact floor log line', () => {
+        const cwd = makeRepo();
+        anchorBase(cwd, '1039');
+        changedLines(cwd, 2);
+        const result = runDiffstat({ wbs: '1039' }, { cwd });
+        expect(result.sensitive).toBe(false);
+        expect(belowDiffstatFloor(result)).toBe(true);
+        expect(belowFloorFromArtifact(cwd)).toBe(true);
+        expect(floorLogLine('sess-1', result)).toBe(
+            'stage verify executed inline in session sess-1 (below dispatch floor: diffstat files 1 lines 3)',
+        );
+        rmSync(cwd, { recursive: true, force: true });
+    });
+
+    test('60 changed lines ride below the floor; 61 do not (threshold boundary bites)', () => {
+        const atFloor = makeRepo();
+        anchorBase(atFloor, '1039');
+        changedLines(atFloor, 59); // rewrite of the 1-line base: +59 −1 = exactly 60.
+        const small = runDiffstat({ wbs: '1039' }, { cwd: atFloor });
+        expect(small.insertions + small.deletions).toBe(60);
+        expect(belowDiffstatFloor(small)).toBe(true);
+        rmSync(atFloor, { recursive: true, force: true });
+
+        const overFloor = makeRepo();
+        anchorBase(overFloor, '1039');
+        changedLines(overFloor, 60); // +60 −1 = 61.
+        const large = runDiffstat({ wbs: '1039' }, { cwd: overFloor });
+        expect(large.insertions + large.deletions).toBe(61);
+        expect(belowDiffstatFloor(large)).toBe(false);
+        rmSync(overFloor, { recursive: true, force: true });
+    });
+
+    test('a sensitive diffstat keeps the floor even when tiny', () => {
+        const cwd = makeRepo();
+        anchorBase(cwd, '1039');
+        writeFileSync(join(cwd, 'secret.env'), 'TOKEN=1\n');
+        const result = runDiffstat({ wbs: '1039' }, { cwd });
+        expect(result.sensitive).toBe(true);
+        expect(result.insertions + result.deletions).toBeLessThanOrEqual(60);
+        expect(belowDiffstatFloor(result)).toBe(false);
+        expect(belowFloorFromArtifact(cwd)).toBe(false);
+        rmSync(cwd, { recursive: true, force: true });
+    });
+
+    test('a large clean diffstat keeps the floor even with few files', () => {
+        const cwd = makeRepo();
+        anchorBase(cwd, '1039');
+        changedLines(cwd, 500);
+        const result = runDiffstat({ wbs: '1039' }, { cwd });
+        expect(result.files).toBe(1);
+        expect(result.sensitive).toBe(false);
+        expect(belowDiffstatFloor(result)).toBe(false);
+        rmSync(cwd, { recursive: true, force: true });
+    });
+
+    test('missing or unparsable diffstat artifact keeps the floor (defensive)', () => {
+        const cwd = makeRepo();
+        anchorBase(cwd, '1039');
+        // No diffstat written yet at all.
+        expect(belowFloorFromArtifact(cwd)).toBe(false);
+        // Unparsable garbage where the driver expects the jq row.
+        writeFileSync(join(cwd, '.spur/run', '1039-diffstat.json'), 'not-json');
+        expect(belowFloorFromArtifact(cwd)).toBe(false);
+        // Parsable but shape-broken (null fields) — still floor.
+        writeFileSync(
+            join(cwd, '.spur/run', '1039-diffstat.json'),
+            '{"files":null,"insertions":1,"deletions":0,"sensitive":false}',
+        );
+        expect(belowFloorFromArtifact(cwd)).toBe(false);
         rmSync(cwd, { recursive: true, force: true });
     });
 });

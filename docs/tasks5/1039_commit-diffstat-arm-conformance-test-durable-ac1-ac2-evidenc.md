@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Commit diffstat-arm conformance test (durable AC1/AC2 evidence for 1033)
-status: todo
+status: done
 template: issue
 created_at: 2026-10-01T16:20:50.852Z
-updated_at: "2026-10-01T16:46:49.319Z"
+updated_at: "2026-10-01T17:12:57.307Z"
 
 feature_id: D9
 ---
@@ -42,9 +42,9 @@ A doc-text parity pin landed in `plugins/sp/tests/command-flag-parity.test.ts`: 
 
 ### Requirements
 
-- R1: In `plugins/sp/tests/task-diffstat.test.ts` (1033 R1 surface, producer `plugins/sp/scripts/task-diffstat.ts`), add a conformance test that mirrors the condition-5 diffstat-arm decision table from `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:317`: `files <= 3 && insertions + deletions <= 60 && sensitive == false` → host-inline; otherwise → unchanged floor (more isolation, never less).
-- R2: Cover the four observed fixture classes: small (→ inline), sensitive (→ floor), large (→ floor), and missing/null diffstat fields (→ floor, defensive).
-- R3: Also pin the exact host log template (`stage verify executed inline in session <sid> (below dispatch floor: diffstat files <f> lines <n>)`) so a wording change cannot slip silently.
+- [x] R1. Conformance test in `plugins/sp/tests/task-diffstat.test.ts` mirroring the condition-5 diffstat-arm decision table from `inline-pipeline-driver.md`: `files <= 3 && insertions + deletions <= 60 && sensitive == false` → host-inline; otherwise → unchanged floor.
+- [x] R2. Four fixture classes covered: small (→ inline), sensitive (→ floor), large (→ floor), and missing/null diffstat fields (→ floor, defensive).
+- [x] R3. Exact host log template pinned: `stage verify executed inline in session <sid> (below dispatch floor: diffstat files <f> lines <n>)`.
 
 ### Acceptance Criteria
 
@@ -61,9 +61,9 @@ A doc-text parity pin landed in `plugins/sp/tests/command-flag-parity.test.ts`: 
 
 ### Plan
 
-- [ ] Add conformance describe block per R1-R3.
-- [ ] Mutation-check one threshold to confirm the test bites (then revert).
-- [ ] `bun run spur-check` on the change; commit.
+- [x] Add conformance describe block per R1-R3.
+- [x] Mutation-check one threshold to confirm the test bites (then revert).
+- [x] `bun run spur-check` on the change; commit.
 
 ### Root Cause
 
@@ -71,18 +71,59 @@ A doc-text parity pin landed in `plugins/sp/tests/command-flag-parity.test.ts`: 
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Test-only conformance suite (AC2: no production changes) pinning the 1033 R1 verify dispatch-floor contract against real `runDiffstat` outputs from temp git repos.
+
+**Change map — plugins/sp/tests/task-diffstat.test.ts**
+
+- `belowDiffstatFloor` (plugins/sp/tests/task-diffstat.test.ts:195) — transcript of the driver-doc condition (inline-pipeline-driver.md condition-5 diffstat arm): `files <= 3 && ins+del <= 60 && !sensitive`. Hand-transcribed by design; the doc text itself stays pinned by command-flag-parity (fd2ab09f5) — no duplication.
+- `belowFloorFromArtifact` (plugins/sp/tests/task-diffstat.test.ts:209) — mirrors the driver's jq read of `.spur/run/<wbs>-diffstat.json` including the defensive path: missing, unparsable, or shape-broken rows keep the floor (more isolation, never less).
+- `floorLogLine` (plugins/sp/tests/task-diffstat.test.ts:231) — exact below-floor run-log template, pinned with `toBe` so wording drift fails the suite.
+- New describe block (plugins/sp/tests/task-diffstat.test.ts:242), 5 tests: small-clean→inline with exact log line; 60/61 threshold boundary; sensitive→floor even when tiny; large-clean→floor even at 1 file; missing/unparsable/null-field artifact→floor.
+- Imports: added `readFileSync` and `type Diffstat` (biome-organized).
+
+**Deliberate non-change:** no producer or driver-code edits — the decision is a documented driver behavior; this suite makes that contract executable without AC2 violations.
 
 ### Testing
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `belowDiffstatFloor` in plugins/sp/tests/task-diffstat.test.ts transcribes the condition-5 diffstat arm; 5 conformance tests drive real `runDiffstat` outputs from temp git repos (producer = plugins/sp/scripts/task-diffstat.ts, unmodified) |
+| R2 | MET | Fixture classes: small-clean→inline; sensitive (`secret.env`)→floor despite 1 line; large (61 changed lines)→floor despite 1 file; missing/unparsable/null-field artifact→floor via `belowFloorFromArtifact` defensive path |
+| R3 | MET | `floorLogLine` pinned with exact `toBe`: "stage verify executed inline in session sess-1 (below dispatch floor: diffstat files 1 lines 3)" |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | `cd plugins/sp && bun test tests/task-diffstat.test.ts` → 14 pass, 0 fail, 60 expects; mutation check: floor 60→59 in the transcribed condition → boundary test fails (13 pass, 1 fail), reverted → green again |
+| AC2 | MET | command | `git diff --stat` shows plugins/sp/tests/task-diffstat.test.ts only (test-only); `bun run spur-check` full chain green: lint, typecheck, 9574 tests, pre/post rules pass |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**Evidence**
+
+- Diffstat: one test file, test-only (AC2 holds by inspection; `git diff --stat` names no production path).
+- The suite drives the real producer (`runDiffstat`) over temp git repos. Fixture arithmetic is validated against actual counts — the suite itself caught a first-pass off-by-one (rewrite diffs count +N−1: ins+del totals, not written-line counts), which is the point of behavioral fixtures.
+- Mutation check: threshold 60→59 in the transcribed condition → exactly the boundary test fails (13 pass, 1 fail); reverted → green. The suite bites.
+- Layering: doc-text parity stays owned by command-flag-parity.test.ts (fd2ab09f5); this suite owns decision semantics. The Background don't-duplicate guard is honored.
+
+| Priority | Finding | Resolution |
+|----------|---------|------------|
+| P1 | None — no correctness, safety, or contract-risk findings. | — |
+| P2 | None — no architecture, integration, or evidence-quality concerns. | — |
+| P3 | The transcribed condition and log template are in-test mirrors: doc-text drift alone cannot fail this suite; catching drift requires both pins (doc-parity + semantics) to survive together. | Accepted: two-layer pinning is the 1039 design; a single runtime-shared constant would require production changes AC2 forbids. |
+| P4 | Boundary fixtures depend on rewrite-of-1-line-base arithmetic (+N−1); future fixture edits may miscount as the first pass did. | Mitigated inline with comments naming the totals (59 written → exactly 60 changed; 60 written → 61). |
 
 ### References
 
 <!-- Links to failing logs, related issues, tasks, docs, or external references. -->
 
 ### History
+
+- 2026-10-01T16:59:44.007Z todo → wip (system)
+- 2026-10-01T17:12:48.140Z wip → testing (system)
+- 2026-10-01T17:12:57.307Z testing → done (system)
+
