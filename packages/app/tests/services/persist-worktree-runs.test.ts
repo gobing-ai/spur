@@ -540,6 +540,34 @@ describe('persistWorktreeRuns owned evidence (task 1012)', () => {
         }
     });
 
+    test('a dangling owned destination symlink refuses before writes (1012 R2)', async () => {
+        const from = makeDir('owned-link-from-');
+        const to = makeDir('owned-link-to-');
+        try {
+            await seedWorktree(from.dir, 'run_1012link');
+            seedOwnedEvidence(from.dir);
+            const taskFile = writeUncitingTaskFile(to.dir);
+            const toRun = join(to.dir, '.spur', 'run');
+            mkdirSync(toRun, { recursive: true });
+            const outside = join(to.dir, 'outside.json');
+            symlinkSync(outside, join(toRun, '1234-verdict.json'));
+            await expect(
+                persistWorktreeRuns({ fromWorkdir: from.dir, toWorkdir: to.dir, taskFiles: [taskFile] }),
+            ).rejects.toThrow(/1234-verdict\.json/);
+            expect(existsSync(outside)).toBe(false);
+            expect(existsSync(join(toRun, 'run_1012link.md'))).toBe(false);
+            const db = await openInlineRunProjectDb(to.dir);
+            try {
+                expect(await db.adapter.queryFirst<{ n: number }>('SELECT COUNT(*) AS n FROM runs')).toEqual({ n: 0 });
+            } finally {
+                db.close();
+            }
+        } finally {
+            from.cleanup();
+            to.cleanup();
+        }
+    });
+
     test('without taskFiles no owned evidence is copied (R2)', async () => {
         const from = makeDir('owned-none-from-');
         const to = makeDir('owned-none-to-');

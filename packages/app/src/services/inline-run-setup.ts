@@ -236,6 +236,17 @@ function asLiteralRunFileName(citation: string): string | undefined {
     return name;
 }
 
+async function readExistingRunFile(path: string): Promise<Buffer | undefined> {
+    const stat = await lstat(path).catch((error: NodeJS.ErrnoException) => {
+        if (error.code === 'ENOENT') return undefined;
+        throw error;
+    });
+    if (stat === undefined) return undefined;
+    if (!stat.isFile())
+        throw new Error(`persist-out: destination ${path} is not a regular file — refusing to follow it`);
+    return readFile(path);
+}
+
 /**
  * Persist a worktree's inline-run provenance into the invoking tree (task 0975 R1; citations
  * per 0984): transfer the `runs` row plus its `action_runs` / `phase_runs` /
@@ -352,8 +363,11 @@ export async function persistWorktreeRuns(input: PersistWorktreeRunsInput): Prom
     for (const name of citedNames) {
         const sourcePath = join(fromRunDir, name);
         const targetPath = join(toRunDir, name);
-        const sourceStat = await lstat(sourcePath).catch(() => undefined);
-        const targetBytes = await readFile(targetPath).catch(() => undefined);
+        const sourceStat = await lstat(sourcePath).catch((error: NodeJS.ErrnoException) => {
+            if (error.code === 'ENOENT') return undefined;
+            throw error;
+        });
+        const targetBytes = await readExistingRunFile(targetPath);
         if (sourceStat === undefined) {
             if (targetBytes === undefined) {
                 throw new Error(
@@ -424,18 +438,13 @@ export async function persistWorktreeRuns(input: PersistWorktreeRunsInput): Prom
                             throw error;
                         }
                         const targetPath = join(toRunDir, fileName);
-                        let existing: Buffer | undefined;
-                        try {
-                            existing = await readFile(targetPath);
-                        } catch {
-                            existing = undefined; // absent target — copy below
-                        }
+                        const existing = await readExistingRunFile(targetPath);
                         if (existing !== undefined) {
                             if (existing.equals(sourceBytes)) continue; // idempotent re-persist
                             recordSkips.push({ id, reason: `record-conflict:${fileName}` });
                             continue; // never overwrite a divergent invoking-tree record
                         }
-                        writeFileSync(targetPath, sourceBytes);
+                        writeFileSync(targetPath, sourceBytes, { flag: 'wx' });
                     }
                 }
                 // 0984 R3/R4: copy the validated cited evidence. Re-check the target at write
@@ -443,12 +452,7 @@ export async function persistWorktreeRuns(input: PersistWorktreeRunsInput): Prom
                 // `.state.json` citation since the validation pass ran.
                 for (const cited of citedCopies) {
                     const sourceBytes = await readFile(cited.sourcePath);
-                    let existing: Buffer | undefined;
-                    try {
-                        existing = await readFile(cited.targetPath);
-                    } catch {
-                        existing = undefined;
-                    }
+                    const existing = await readExistingRunFile(cited.targetPath);
                     if (existing !== undefined) {
                         if (!existing.equals(sourceBytes)) {
                             throw new Error(
@@ -458,7 +462,7 @@ export async function persistWorktreeRuns(input: PersistWorktreeRunsInput): Prom
                         }
                         continue; // byte-identical — idempotent no-op
                     }
-                    writeFileSync(cited.targetPath, sourceBytes);
+                    writeFileSync(cited.targetPath, sourceBytes, { flag: 'wx' });
                 }
             }
             return {
