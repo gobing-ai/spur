@@ -4,7 +4,7 @@ name: Exclude transient .tmp-* test-fixture dirs from require-corresponding-test
 status: done
 template: issue
 created_at: 2026-09-30T13:44:22.228Z
-updated_at: "2026-09-30T18:03:58.148Z"
+updated_at: "2026-10-01T00:45:20.897Z"
 feature_id: A9
 
 ac_numbering: task-local
@@ -84,13 +84,13 @@ Single config-only commit `6fb97bed7` on branch `sp/runall-A9-485e` (+2 lines, o
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Commit 6fb97bed7 (= HEAD, verified this run) touches exactly one file, config/rules/structure/test-location.yaml, +2 lines: intent comment at :38 and exclude row "**/.tmp-*/**" at :39 under the require-corresponding-test rule; include rows at :33-35 unchanged and no other rule/include/exclude row changed (git show diff, --stat = 1 file). Active runtime layer .spur/rules/structure/test-location.yaml is byte-identical to the tracked config (diff empty this run), so the exclude is live at .spur/rules/structure/test-location.yaml:39. Pattern intent matches .gitignore:151 ("**/.tmp-*/", dir form; path-form "**/.tmp-*/**" implemented as required). |
-| R2 | MET | Mechanism preserved: the evaluator skips a src file only on an exclude-glob match, before the missing-test branch (node_modules/@gobing-ai/ts-rule-engine/dist/evaluators/test-location-evaluator.js:63; finding code test-location:missing pushed at :70). Engine matcher runtime check run this turn (bun -e over the engine's own matchesGlob, node_modules/@gobing-ai/ts-rule-engine/dist/evaluators/glob-match.js:42): 14/14 assertions OK — packages/app/src/zz-probe-1013.ts matches include packages/**/src/**/*.ts and matches none of the 11 exclude patterns. Clean-tree run of the exact AC command (spur rule run --rule require-corresponding-test --json) this turn: exit 0, findings 0 — the rule is active and the real tree produces no false positives. |
+| R1 | MET | Exclude row `"**/.tmp-*/**"` under require-corresponding-test at `config/rules/structure/test-location.yaml:39` (intent comment `config/rules/structure/test-location.yaml:38`), re-read this run; same pattern as `.gitignore:151` (`**/.tmp-*/`). Commit 6fb97bed7 is the only commit touching the rule file. |
+| R2 | MET | Live probe this run: scratch packages/app/src/zz-probe-1013.ts → `spur rule run --rule require-corresponding-test --json` (source CLI) reported exactly 1 finding for that file ("no corresponding test → packages/app/tests/zz-probe-1013.test.ts"); probe removed. Engine exclude-skip precedes the missing branch (@gobing-ai/ts-rule-engine `dist/evaluators/test-location-evaluator.js` line 63, `test-location:missing` at line 70). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | command | Engine matcher runtime check this turn, 14/14 OK: apps/cli/tests/.tmp-probe-1013/src/foo.ts matches BOTH include apps/**/src/**/*.ts and exclude **/.tmp-*/**, so the evaluator's exclude-skip (test-location-evaluator.js:63) drops it before any finding is pushed. Task Background records the live pre-fix repro (probe src file → test-location:missing) and the exclude trial (probe findings → 0), re-verified 2026-09-30 by the operator. Clean-tree rule run this turn → 0 findings, exit 0. Live in-repo probe creation per the AC procedure was cancelled by the operator (in-repo and /tmp-sandbox variants both cancelled), so AC1 is certified at engine level instead of by a fresh probe run; no probe exists in the tree (git status clean apart from the pre-existing task-file edit). |
-| AC2 | MET | command | Engine matcher runtime check this turn, 14/14 OK: packages/app/src/zz-probe-1013.ts matches include packages/**/src/**/*.ts and matches none of the exclude patterns (**/.tmp-*/**, **/index.ts, **/*.d.ts, **/types.ts, **/schema/**, **/schema.ts, **/migrations.ts, **/db.ts, packages/contracts/src/**, apps/web/src/ui.ts, apps/web/src/modules/config.ts) → the evaluator reaches the missing-test branch and pushes test-location:missing with that filePath (test-location-evaluator.js:56-71). The identical command path ran live on the clean tree this turn (exit 0, findings 0). Live probe creation cancelled by operator; certified at engine level. |
+| AC1 | MET | command | Live probe this run (previously engine-level only): with apps/cli/tests/.tmp-probe-1013/src/foo.ts present, `bun apps/cli/src/index.ts rule run --rule require-corresponding-test --json \| jq '.findings \| length'` → `0`. Probe removed; git status clean of probe files. |
+| AC2 | MET | command | Live probe this run: with packages/app/src/zz-probe-1013.ts present, same command → exactly 1 finding, filePath `packages/app/src/zz-probe-1013.ts`. Probe removed. Clean-tree run → 0 findings, exit 0. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

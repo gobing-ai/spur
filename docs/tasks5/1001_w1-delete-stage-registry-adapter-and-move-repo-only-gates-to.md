@@ -4,7 +4,7 @@ name: W1 delete stage-registry-adapter and move repo-only gates to scripts/comma
 status: done
 template: feature-impl
 created_at: 2026-09-29T06:25:03.417Z
-updated_at: "2026-09-30T13:20:46.312Z"
+updated_at: "2026-10-01T00:39:43.747Z"
 feature_id: A9
 priority: P2
 tags:

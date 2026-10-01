@@ -4,7 +4,7 @@ name: W4 pipeline check diet and final placement sweep
 status: done
 template: feature-impl
 created_at: 2026-09-29T06:25:03.420Z
-updated_at: "2026-09-30T13:20:35.133Z"
+updated_at: "2026-10-01T00:43:17.174Z"
 feature_id: A9
 priority: P2
 tags:
@@ -191,16 +191,16 @@ Each entry cites the first changed line per file (`file:line`).
 | R2 | MET | `config/workflows/idea-pipeline.yaml:193` merged Goal and Scope shell; `config/workflows/idea-pipeline.yaml:304` route-writer duplicate deleted; `config/workflows/idea-pipeline.yaml:557` handoff note deleted; `packages/app/tests/workflow/idea-pipeline-routing.test.ts:66` single-writer pin |
 | R3 | MET | `config/workflows/task-pipeline.yaml:191` base-sha merged into the hygiene shell; `config/workflows/task-pipeline.yaml:433` log appends merged; `config/workflows/task-pipeline.yaml:542` mode fallback merged; `config/workflows/task-pipeline.yaml:801` done note dropped |
 | R4 | MET | `config/workflows/idea-pipeline.yaml:92`, `config/workflows/task-pipeline.yaml:190`, `config/workflows/feature-verification.yaml:58` and `config/workflows/wrapup-pipeline.yaml:121` hold the only script-root probe per file (`rg -c 'superskill script path\|plugin-scripts\.json'` -> 1 each) |
-| R5 | MET | `plugins/sp/scripts/inline-run-setup.ts:146` --actions-file flag; `packages/app/src/services/inline-run-setup.ts:944` runInlineRunTraceBatch; `plugins/sp/tests/inline-run-trace.test.ts:441` batch emission tests; `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:513` one call per state |
+| R5 | MET | `plugins/sp/scripts/inline-run-setup.ts:146` --actions-file flag; `packages/app/src/services/inline-run-setup.ts:990` runInlineRunTraceBatch; `plugins/sp/tests/inline-run-trace.test.ts:441` batch emission tests; `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:513` one call per state |
 | R6 | MET | Solution section of task 1007 now lists each removed or merged check with its replacement (added this run); `config/workflows/task-pipeline.yaml:191` hygiene advisory never fails the run |
-| R7 | MET | `spur rule run --rule sp-script-placement` -> All 1 rule passed; sweep of every script deleted in 1001-1006 over plugins/sp config/workflows -> no hits; baseline holds 10 rows, each citing plan section 2 (no-kinds residual-scan row removed this run) |
+| R7 | MET | `spur rule run --rule sp-script-placement` -> All 1 rule passed; `rg 'plugins/sp/scripts/(<12 deleted 1001-1006 scripts>)' plugins/sp config/workflows` -> 0 hits (re-verify 2026-09-30; bare-name hits are package-script names and comments naming the moved gates, not paths); baseline holds 10 rows, each citing plan section 2 (no-kinds residual-scan row removed this run) |
 | R8 | MET | `config/workflows/pr-review.yaml:71` script-root action; `config/workflows/history-anatomy.yaml:107` script-root action; one probe per file |
 | R9 | MET | `plugins/sp/lib/spur-bin.ts:17` spurCommand; `plugins/sp/lib/spur-bin.ts:30` defaultSpurBin; `plugins/sp/scripts/wrapup-steps.ts:36` and `plugins/sp/scripts/workflow-step-profile.ts:17` import it; no .ts source defines either function (the rg still matches the two generated .mjs twins, documented in Solution) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: R8 — sp skills, commands and workflows track every CLI move | MET | command | placement rule passes; `bun run plugin-smoke` -> plugin-install-smoke PASS; `bun test scripts/commands/script-contract-check.test.ts` -> 23 pass / 0 fail; actions-file tests in the plugins/sp 248 pass run |
-| Scenario: R9 — Pipeline checks keep only core gates strict | MET | test | `packages/app/tests/workflow/pipeline-action-budget.test.ts:14` ratchet plus idea/task/wrapup pipeline tests -> 112 pass / 0 fail across 6 files |
+| Scenario: R8 — sp skills, commands and workflows track every CLI move | MET | command | placement rule passes; `bun run plugin-smoke` -> plugin-install-smoke PASS; `bun test scripts/commands/script-contract-check.test.ts` -> 26 pass / 0 fail; actions-file tests in the full plugins/sp 1160 pass / 0 fail run (re-verify 2026-09-30) |
+| Scenario: R9 — Pipeline checks keep only core gates strict | MET | test | `packages/app/tests/workflow/pipeline-action-budget.test.ts:14` ratchet plus packages/app workflow pipeline tests -> 136 pass / 0 fail across 8 files (re-verify 2026-09-30) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

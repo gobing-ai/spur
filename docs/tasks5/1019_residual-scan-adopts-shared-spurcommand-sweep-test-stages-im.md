@@ -4,7 +4,7 @@ name: residual-scan adopts shared spurCommand; sweep test stages imports robustl
 status: done
 template: feature-impl
 created_at: 2026-09-30T13:49:00.756Z
-updated_at: "2026-09-30T23:16:47.665Z"
+updated_at: "2026-10-01T00:47:16.325Z"
 feature_id: A9
 
 ac_altitude: task-local
@@ -95,16 +95,16 @@ Why: one copy of the command split, completing 1007 R9; the whole-lib staging ma
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Re-verified this run at `plugins/sp/scripts/residual-scan.ts:19` — imports `spurCommand` from `../lib/spur-bin`; `:38-39` builds `spurCommand(spurBinFlag ?? env.spurBin)` → `run(cmd, [...prefix, ...args], cwd)`. `plugins/sp/scripts/workflow-step-profile.ts:17` imports `{ defaultSpurBin, spurCommand }`; `:68` uses `spurCommand(spurBin)` in `runSpurJson`. Fallback semantics preserved: `plugins/sp/lib/spur-bin.ts:17-23` maps `undefined → 'spur'`, so `--spur-bin` flag > `env.spurBin` > `spur` holds. AC2 dynamic check re-run this pipeline: literal `split(/\s+/)` grep over `plugins/sp/scripts --glob '*.ts'` leaves only `plugins/sp/scripts/inline-run-setup.ts:49` — exactly the AC2 expectation (out of scope per task). |
-| R2 | MET | `plugins/sp/tests/task-pipeline-resilience.test.ts:5` imports `cpSync`; `:360-366` mkdirs `plugins/sp/lib`, keeps the `residual-scan.ts` copy (`:362`), and stages the whole lib via `cpSync(join(import.meta.dir, '..', 'lib'), …, { recursive: true })` (`:366`) with the 1019 R2 comment. `spur-bin.ts` imports only node builtins + `./env`, so the staged tree resolves; the fold run consumes the staged copy per `config/workflows/task-pipeline.yaml:760`. |
-| R3 | MET | `plugins/sp/scripts/residual-scan.mjs:213-214,227` and `plugins/sp/scripts/workflow-step-profile.mjs:18-19,228` inline `spurCommand` matching their `.ts` sources; both twins import only node builtins (child_process/fs/os/path/url/crypto), no `@gobing-ai/*` or relative imports — standalone contract holds. `residual-scan.ts` ends at line 244 ≤ 250 budget. |
+| R1 | MET | residual-scan imports `spurCommand` (`plugins/sp/scripts/residual-scan.ts:19`) and calls `spurCommand(spurBinFlag ?? env.spurBin)` (`plugins/sp/scripts/residual-scan.ts:38`); workflow-step-profile imports `{ defaultSpurBin, spurCommand }` (`plugins/sp/scripts/workflow-step-profile.ts:17`) and uses it in runSpurJson (`plugins/sp/scripts/workflow-step-profile.ts:68`). `spurCommand` keeps the `spur` default and whitespace-split semantics (`plugins/sp/lib/spur-bin.ts:17-23`). Re-read this run. |
+| R2 | MET | 0983 sweep test stages the whole lib dir via `cpSync(..., 'lib', ..., { recursive: true })` with the 1019 R2 comment (`plugins/sp/tests/task-pipeline-resilience.test.ts:356-366`). |
+| R3 | MET | Both `.mjs` twins carry `spurCommand` (2 matches each in plugins/sp/scripts/residual-scan.mjs and workflow-step-profile.mjs); `bun run plugin-smoke` this run: "plugin-install-smoke PASS — plugin surface is standalone and installs clean". |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `(cd plugins/sp && bun test tests/task-pipeline-resilience.test.ts)` → 29 pass / 0 fail (implement worker; the pipeline quality gate re-ran the suite green, `.spur/run/1019-test-gate.log`, attempts 1); the R2 staging block it exercises is multi-anchor-cited under R2. |
-| AC2 | MET | command | `rg -nF 'split(/\s+/)' plugins/sp/scripts --glob '*.ts'` → only `plugins/sp/scripts/inline-run-setup.ts:49` (host re-run this pipeline; out of scope per task; `plugins/sp/scripts/inline-run-setup.ts:70` already uses the generated `splitLaunchCommand`). |
-| AC3 | MET | test | `(cd plugins/sp && bun test tests/workflow-step-profile.test.ts tests/residual-scan.test.ts)` → 41 pass / 0 fail (implement worker). No test edits beyond the R2 staging block: signatures of `spur()` and `runSpurJson` are unchanged; the full plugins/sp suite is 1140 pass / 0 fail with biome + tsc clean. |
-| AC4 | MET | command | `wc -l plugins/sp/scripts/residual-scan.ts` → 244 ≤ 250 (host re-run). `bun run plugin-smoke` → PASS and `bun run apps/cli/src/index.ts rule run --rule sp-script-placement --no-logo` → all 1 rule passed, no violations (both executed host-side this pipeline — the verifier session is shell-less; runnable evidence recorded in `.spur/run/runall-A9-485e-1019-review-answer.txt`). |
+| AC1 | MET | test | `(cd plugins/sp && bun test tests/task-pipeline-resilience.test.ts tests/workflow-step-profile.test.ts tests/residual-scan.test.ts)` this run: 67 pass / 0 fail, 316 expect(); residual-scan.ts imports ../lib/spur-bin. |
+| AC2 | MET | command | `rg -nF 'split(/\s+/)' plugins/sp/scripts --glob '*.ts'` this run → only `plugins/sp/scripts/inline-run-setup.ts:49` (out of scope). |
+| AC3 | MET | test | workflow-step-profile and residual-scan suites green in the same 67/0 run; no test edits beyond the R2 staging block. |
+| AC4 | MET | command | `bun run plugin-smoke` exit 0; `bun apps/cli/src/index.ts rule run --rule sp-script-placement --no-logo` exit 0 (this run); `wc -l plugins/sp/scripts/residual-scan.ts` → 244 ≤ 250. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

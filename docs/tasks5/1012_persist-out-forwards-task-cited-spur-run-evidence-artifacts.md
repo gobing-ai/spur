@@ -4,7 +4,7 @@ name: persist-out forwards task-cited .spur/run evidence artifacts
 status: done
 template: feature-impl
 created_at: 2026-09-29T18:18:18.307Z
-updated_at: "2026-09-30T13:54:01.136Z"
+updated_at: "2026-10-01T00:43:47.169Z"
 feature_id: A9
 
 ac_altitude: task-local
@@ -118,9 +118,9 @@ Tests were written before the code they cover: the ownership tests failed 3/20 b
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/inline-run-setup.ts:303` selects WBS/run-row prefixes and preserves record exclusions; `packages/app/tests/services/persist-worktree-runs.test.ts:481` verifies uncited forwarding, exclusion and idempotence; app suite 23/0. |
+| R1 | MET | `packages/app/src/services/inline-run-setup.ts:303` selects WBS/run-row prefixes and preserves record exclusions; `packages/app/tests/services/persist-worktree-runs.test.ts:481` verifies uncited forwarding, exclusion and idempotence; app suite 23/0 (re-verify 2026-09-30: `bun test tests/services/persist-worktree-runs.test.ts` -> 23 pass / 0 fail). |
 | R2 | MET | `packages/app/tests/services/persist-worktree-runs.test.ts:513` verifies conflict/no writes; :562 and :581 verify cap/dedup; :543 and :611 verify omitted/empty arrays. Existing unsafe-ID, unresolved-citation and unreadable-file tests passed in app suite 23/0. |
-| R3 | MET | `plugins/sp/skills/spur-dev/references/execution-batch.md:511` matches prefix/union/record/listing contract; plugin/contract suite 155/0. |
+| R3 | MET | `plugins/sp/skills/spur-dev/references/execution-batch.md:515` matches prefix/union/record/listing contract; `bun test tests/inline-run-setup.test.ts tests/dogfood-testing/execution-batch-contract.test.ts` (plugins/sp) -> 56 pass / 0 fail (re-verify 2026-09-30). |
 | R4 | MET | `packages/app/src/services/inline-run-setup.ts:327` returns [] only for ENOENT; `packages/app/tests/services/persist-worktree-runs.test.ts:631` verifies ENOTDIR/no target writes and ENOENT; `plugins/sp/tests/inline-run-setup.test.ts:799` verifies portable exit 1/ok:false. |
 | R5 | MET | Fresh real DB/filesystem suite 23/0, plugin/contract suite 155/0, portable subprocess tests after regeneration 2/0. Receipts: .spur/run/1012-verify-app.log, .spur/run/1012-verify-plugin.log and .spur/run/1012-verify-portable-final.log. |
 
@@ -131,7 +131,7 @@ Tests were written before the code they cover: the ownership tests failed 3/20 b
 | AC3 | MET | test | `packages/app/tests/services/persist-worktree-runs.test.ts:543` omitted taskFiles and :611 empty array preserve rows/records-only; fresh app suite 23/0. |
 | AC4 | MET | test | `packages/app/tests/services/persist-worktree-runs.test.ts:631` migrated zero-row DB plus ENOTDIR rejects without target .spur; absent path succeeds. Fresh app suite 23/0. |
 | AC5 | MET | test | `plugins/sp/tests/inline-run-setup.test.ts:774` portable uncited forwarding and :799 portable ENOTDIR exit/JSON/no writes; fresh portable suite 2/0 after bundle regeneration. |
-| AC6 | MET | test | `plugins/sp/skills/spur-dev/references/execution-batch.md:511` re-read against service ownership algorithm; `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:182` driver contract and related skill/parallel contracts; fresh combined plugin suite 155/0. |
+| AC6 | MET | test | `plugins/sp/skills/spur-dev/references/execution-batch.md:515` re-read against service ownership algorithm; `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:182` driver contract and related skill/parallel contracts; re-verify 2026-09-30: 56 pass / 0 fail. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

@@ -4,7 +4,7 @@ name: W2 feature check --inventory and idempotent feature sync replace feature s
 status: done
 template: feature-impl
 created_at: 2026-09-29T06:25:03.419Z
-updated_at: "2026-09-30T13:20:32.323Z"
+updated_at: "2026-10-01T00:40:29.442Z"
 feature_id: A9
 priority: P2
 tags:

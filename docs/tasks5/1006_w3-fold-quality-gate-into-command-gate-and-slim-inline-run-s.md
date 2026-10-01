@@ -4,7 +4,7 @@ name: W3 fold quality-gate into command.gate and slim inline-run-setup through t
 status: done
 template: feature-impl
 created_at: 2026-09-29T06:25:03.420Z
-updated_at: "2026-09-30T13:20:34.182Z"
+updated_at: "2026-10-01T00:42:38.321Z"
 feature_id: A9
 priority: P2
 tags:
@@ -163,15 +163,15 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/quality-gate.ts:549` runQualityGate; `packages/app/src/services/quality-gate.ts:10` MAX_GATE_ATTEMPTS retry loop; quality-gate app tests in the 145 pass / 0 fail run |
+| R1 | MET | `packages/app/src/services/quality-gate.ts:549` runQualityGate; `packages/app/src/services/quality-gate.ts:10` MAX_GATE_ATTEMPTS retry loop; `bun test tests/services/quality-gate.test.ts tests/services/inline-run-setup.test.ts tests/services/inline-run-driver.test.ts` (packages/app) -> 59 pass / 0 fail (re-verify 2026-09-30) |
 | R2 | MET | `scripts/commands/bundle-plugin-lib.ts:17` quality-gate bundle; `plugins/sp/scripts/quality-gate.ts:8` imports the generated bundle; `plugins/sp/scripts/quality-gate.ts:24` QUALITY_GATE_USAGE; `wc -l` -> 64 |
-| R3 | MET | `packages/app/src/services/inline-run-setup.ts:846` runInlineRunTrace; `packages/app/src/services/inline-run-setup.ts:813` inlineRunRecordLogPath; `scripts/commands/bundle-plugin-lib.ts:576` INLINE_RUN_EXPORTS; `plugins/sp/scripts/inline-run-setup.ts:45` resolveAppEntry stays in the script; `wc -l` -> 250 |
-| R4 | MET | `bun test` (plugins/sp) over quality-gate, inline-run-setup, inline-run-trace, inline-run-close-reason, inline-run-installed, inline-pipeline-driver, execution-batch-contract, task-pipeline-resilience and three more -> 248 pass / 0 fail across 11 files |
+| R3 | MET | `packages/app/src/services/inline-run-setup.ts:892` runInlineRunTrace; `packages/app/src/services/inline-run-setup.ts:859` inlineRunRecordLogPath; `scripts/commands/bundle-plugin-lib.ts:576` INLINE_RUN_EXPORTS; `plugins/sp/scripts/inline-run-setup.ts:45` resolveAppEntry stays in the script; `wc -l` -> 250 |
+| R4 | MET | `bun test` (plugins/sp) over quality-gate, inline-run-setup, inline-run-trace, inline-run-close-reason, inline-run-installed, inline-pipeline-driver, execution-batch-contract, task-pipeline-resilience and the rest of the plugins/sp suite -> 1160 pass / 0 fail across 48 files (re-verify 2026-09-30) |
 | R5 | MET | `rg -n 'quality-gate\|inline-run-setup' config/script-placement-baseline.json` -> no hits; `spur rule run --rule sp-script-placement` -> All 1 rule passed |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: R6 — Refactor lands in independently revertible waves | MET | test | packages/app quality-gate, inline-run-setup and inline-run-driver tests (145 pass / 0 fail); plugins/sp contract tests (248 pass / 0 fail) |
+| Scenario: R6 — Refactor lands in independently revertible waves | MET | test | packages/app quality-gate, inline-run-setup and inline-run-driver tests (59 pass / 0 fail); full plugins/sp suite (1160 pass / 0 fail) |
 | Scenario: R8 — sp skills, commands and workflows track every CLI move | MET | command | `bun run plugin-smoke` -> plugin-install-smoke PASS; placement rule passes with no baseline rows for either script |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 

@@ -4,7 +4,7 @@ name: "W0 placement contract enforcement: key-file pointers, glue-budget check a
 status: done
 template: feature-impl
 created_at: 2026-09-29T06:25:03.413Z
-updated_at: "2026-09-30T13:20:45.379Z"
+updated_at: "2026-10-01T00:39:42.730Z"
 feature_id: A9
 priority: P2
 tags:
@@ -125,21 +125,21 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `package.json:94` runs `scripts/commands/script-contract-check.ts`; old plugin checker, its test and manifest row are absent; `bun test scripts/commands/script-contract-check.test.ts` -> 23 pass / 0 fail |
-| R2 | MET | `scripts/commands/script-contract-check.ts:489` GLUE_BUDGET_LINES = 250; `scripts/commands/script-contract-check.ts:536` DB_IMPORT_RE (bun:sqlite / drizzle-orm, type imports excluded); `scripts/commands/script-contract-check.ts:585` budget finding; `scripts/commands/script-contract-check.test.ts:469` each finding kind once per file |
-| R3 | MET | `scripts/commands/script-contract-check.ts:573` noun-clash finding; `bun scripts/commands/script-contract-check.ts --placement-only` -> 0 finding(s), exit 0 |
-| R4 | MET | `scripts/commands/script-contract-check.ts:510` loadPlacementBaseline; `scripts/commands/script-contract-check.ts:612` stale-baseline finding; `scripts/commands/script-contract-check.test.ts:487` baseline suppresses listed kinds and flags stale entries |
-| R5 | MET | `config/rules/boundary/sp-script-placement.yaml:7` rule id sp-script-placement, severity error, exit-code evaluator with SKIP guard; `spur rule run --rule sp-script-placement` -> All 1 rule passed, exit 0 |
+| R1 | MET | `package.json:94` runs `scripts/commands/script-contract-check.ts`; `plugins/sp/scripts/script-contract-check.ts`, `plugins/sp/tests/script-contract-check.test.ts` absent and `config/plugin-scripts.json` has 0 rows; `bun test scripts/commands/script-contract-check.test.ts` -> 26 pass / 0 fail (re-verify 2026-09-30) |
+| R2 | MET | `scripts/commands/script-contract-check.ts:489` GLUE_BUDGET_LINES = 250; `scripts/commands/script-contract-check.ts:536` DB_IMPORT_RE (type imports excluded); `scripts/commands/script-contract-check.ts:586` budget finding; `scripts/commands/script-contract-check.ts:589` db-import finding; `scripts/commands/script-contract-check.ts:605` corpus-parse finding; `scripts/commands/script-contract-check.test.ts:469` each finding kind once per file |
+| R3 | MET | `scripts/commands/script-contract-check.ts:574` noun-clash finding; `bun scripts/commands/script-contract-check.ts --placement-only` -> 0 finding(s), exit 0 |
+| R4 | MET | `scripts/commands/script-contract-check.ts:510` loadPlacementBaseline; `scripts/commands/script-contract-check.ts:628` stale-baseline finding; `scripts/commands/script-contract-check.test.ts:534` baseline suppresses listed kinds and flags stale entries |
+| R5 | MET | `config/rules/boundary/sp-script-placement.yaml:7` rule id sp-script-placement, severity error, exit-code evaluator; `config/rules/boundary/sp-script-placement.yaml:17` SKIP guard; `spur rule run --rule sp-script-placement` -> All 1 rule passed, exit 0 |
 | R6 | MET | `AGENTS.md:209` one sentence pointing at ADR-130 and governance section 2, no restated table |
-| R7 | MET | `scripts/commands/script-contract-check.test.ts:541` placement baseline reconciles with plan section 2; passes in the 23-test run |
+| R7 | MET | `scripts/commands/script-contract-check.test.ts:592` placement baseline reconciles with plan section 2; passes in the 26-test run |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
 | Scenario: R1 — Each script surface has one written owner and boundary | MET | command | `spur rule run --rule sp-script-placement` exit 0; `AGENTS.md:209` pointer to ADR-130 and governance section 2 |
 | Scenario: R2 — New public spur surface requires operator confirmation at planning time | MET | command | `spur rule run --rule sp-script-placement` exit 0; `AGENTS.md:205` public-surface consent paragraph |
 | Scenario: R3 — Key project files state the placement contract | MET | command | `bun scripts/commands/script-contract-check.ts --placement-only` exit 0; `AGENTS.md:209` names the enforcing rule |
-| Scenario: R4 — A spur rule flags scripts placed on the wrong surface | MET | test | `bun test scripts/commands/script-contract-check.test.ts` 23 pass; `scripts/commands/script-contract-check.test.ts:469` and `scripts/commands/script-contract-check.test.ts:517` |
-| Scenario: R5 — Complete inventory classifies every existing script | MET | test | `scripts/commands/script-contract-check.test.ts:541` baseline reconciles with plan section 2; 23 pass / 0 fail |
+| Scenario: R4 — A spur rule flags scripts placed on the wrong surface | MET | test | `bun test scripts/commands/script-contract-check.test.ts` 26 pass; `scripts/commands/script-contract-check.test.ts:469` and `scripts/commands/script-contract-check.test.ts:564` |
+| Scenario: R5 — Complete inventory classifies every existing script | MET | test | `scripts/commands/script-contract-check.test.ts:592` baseline reconciles with plan section 2; 26 pass / 0 fail |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

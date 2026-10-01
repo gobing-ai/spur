@@ -4,7 +4,7 @@ name: W2 spur task verdict lints the answer and folds residual findings
 status: done
 template: feature-impl
 created_at: 2026-09-29T06:25:03.418Z
-updated_at: "2026-09-30T13:20:48.189Z"
+updated_at: "2026-10-01T00:40:04.013Z"
 feature_id: A9
 priority: P2
 tags:
@@ -205,14 +205,14 @@ Each entry cites the first changed line per file (`file:line`).
 | R2 | MET | `apps/cli/src/commands/task.ts:1284` lint runs first and returns on findings; `apps/cli/src/commands/task.ts:1303` deriveVerdict after; `apps/cli/tests/commands/task.test.ts:2490` malformed answer exits 1 with lintFindings |
 | R3 | MET | `config/workflows/task-pipeline.yaml:679` task verdict is the verify gate; `rg -c verify-answer-lint config/workflows/task-pipeline.yaml config/plugin-scripts.json config/script-placement-baseline.json` -> no hits; plugin lint script absent |
 | R4 | MET | `bun test tests/services/verify-answer-lint.test.ts tests/services/residual-scan.test.ts` (packages/app) -> 60 pass / 0 fail; `bun test tests/dispatch-handoff-contract.test.ts tests/inline-pipeline-driver.test.ts tests/residual-scan.test.ts` (plugins/sp) -> 35 pass / 0 fail |
-| R5 | MET | `packages/app/src/services/residual-scan.ts:75` makeItemId through `packages/app/src/services/residual-scan.ts:318` renderReport; `plugins/sp/scripts/residual-scan.ts:18` imports the generated bundle; `wc -l plugins/sp/scripts/residual-scan.ts` -> 246; `scripts/commands/bundle-plugin-lib.ts:286` bundle row |
+| R5 | MET | `packages/app/src/services/residual-scan.ts:75` makeItemId through `packages/app/src/services/residual-scan.ts:318` renderReport; `plugins/sp/scripts/residual-scan.ts:18` imports the generated bundle; `wc -l plugins/sp/scripts/residual-scan.ts` -> 244 (re-verify 2026-09-30; 1019 trimmed it); `scripts/commands/bundle-plugin-lib.ts:286` bundle row |
 | R6 | MET | `plugins/sp/skills/spur-dev/references/ac-style-guide.md:128`, `plugins/sp/skills/spur-dev/references/done-housekeeping.md:131` and `plugins/sp/skills/spur-dev/references/execution-batch.md:295` name the spur task verdict answer lint |
 | R7 | MET | `spur rule run --rule sp-script-placement` -> All 1 rule passed, exit 0 |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
 | Scenario: R6 — Refactor lands in independently revertible waves | MET | test | `apps/cli/tests/commands/task.test.ts:2490` lint-reject path; 196 pass / 0 fail; residual tests 35 pass against the slimmed script |
-| Scenario: R7 — Duplicated and overengineered scripts are deleted | MET | command | `ls plugins/sp/scripts/verify-answer-lint.ts` -> No such file; `wc -l plugins/sp/scripts/residual-scan.ts` -> 246 |
+| Scenario: R7 — Duplicated and overengineered scripts are deleted | MET | command | `ls plugins/sp/scripts/verify-answer-lint.ts` -> No such file; `wc -l plugins/sp/scripts/residual-scan.ts` -> 244 (re-verify 2026-09-30; 1019 trimmed it) |
 | Scenario: R8 — sp skills, commands and workflows track every CLI move | MET | command | `rg -n 'verify-answer-lint\.ts' plugins/sp config` -> empty |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
