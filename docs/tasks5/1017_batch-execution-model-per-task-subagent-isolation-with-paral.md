@@ -4,7 +4,7 @@ name: "Batch execution model: per-task subagent isolation with parallel fan-out"
 status: cancelled
 template: issue
 created_at: 2026-09-30T13:44:23.137Z
-updated_at: "2026-10-01T07:07:17.224Z"
+updated_at: "2026-10-01T07:09:36.570Z"
 feature_id: A9
 
 ac_numbering: task-local
@@ -21,14 +21,14 @@ Filed from the A9 post-batch review (root causes RC2 + RC-E). The A9 batch ran 8
 
 Cancellation audit 2026-09-30: N/A for delivery verification. Task remains cancelled; the operator has not reactivated the withdrawn proposal. Unticked proposal checkboxes are rendered as historical bullets to avoid suggesting pending delivery work.
 
-- Withdrawn proposal R1. Per-task pipeline execution in a fresh-context subagent: the host stays a thin orchestrator (resolve set → topo-sort → dispatch → collect verdicts); each child runs the task pipeline for ONE task and returns the verdict + artifact paths.
-- Withdrawn proposal R2. Evidence forwarding: the child's task-cited `.spur/run` artifacts (verdict.json, verify-answer, test-gate receipt, precheck/residuals/diffstat) land in the main tree automatically — extends 1012 persist-out to the full artifact set.
-- Withdrawn proposal R3. Parallel children get worktree isolation (builds on 0931); one writer per tree; tasks sharing a workspace serialize even when the dependency graph would allow parallelism.
-- Withdrawn proposal R4. Host context stays bounded: the orchestrator consumes only verdict summaries + artifact paths (no raw logs); target zero compactions during a ≤8-task batch.
-- Withdrawn proposal R5. Fan-out policy: parallel only when tasks have no dependency edge AND disjoint workspace footprints; max concurrency configurable (default 2).
-- Withdrawn proposal R6. Failure semantics: child failure → verdict FAIL recorded, dependents skipped per existing topo behavior, batch continues.
-- Withdrawn proposal R7. Acceptance dry-run: a 2-task independent batch executes concurrently, both evidence sets land in the main tree, and host compaction count is unchanged.
-- Withdrawn proposal R8. No new public CLI noun — orchestrator behavior extends the existing dev-runall/pipeline driver surfaces (ADR-065/130 public-surface consent respected).
+- **R1.** Withdrawn proposal: Per-task pipeline execution in a fresh-context subagent: the host stays a thin orchestrator (resolve set → topo-sort → dispatch → collect verdicts); each child runs the task pipeline for ONE task and returns the verdict + artifact paths.
+- **R2.** Withdrawn proposal: Evidence forwarding: the child's task-cited `.spur/run` artifacts (verdict.json, verify-answer, test-gate receipt, precheck/residuals/diffstat) land in the main tree automatically — extends 1012 persist-out to the full artifact set.
+- **R3.** Withdrawn proposal: Parallel children get worktree isolation (builds on 0931); one writer per tree; tasks sharing a workspace serialize even when the dependency graph would allow parallelism.
+- **R4.** Withdrawn proposal: Host context stays bounded: the orchestrator consumes only verdict summaries + artifact paths (no raw logs); target zero compactions during a ≤8-task batch.
+- **R5.** Withdrawn proposal: Fan-out policy: parallel only when tasks have no dependency edge AND disjoint workspace footprints; max concurrency configurable (default 2).
+- **R6.** Withdrawn proposal: Failure semantics: child failure → verdict FAIL recorded, dependents skipped per existing topo behavior, batch continues.
+- **R7.** Withdrawn proposal: Acceptance dry-run: a 2-task independent batch executes concurrently, both evidence sets land in the main tree, and host compaction count is unchanged.
+- **R8.** Withdrawn proposal: No new public CLI noun — orchestrator behavior extends the existing dev-runall/pipeline driver surfaces (ADR-065/130 public-surface consent respected).
 
 ### Acceptance Criteria
 
