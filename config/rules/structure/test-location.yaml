@@ -35,6 +35,8 @@ rules:
       - "apps/**/src/**/*.ts"
 
     exclude:
+      ## transient CLI test-fixture projects (apps/cli/tests/.tmp-*), same pattern as .gitignore
+      - "**/.tmp-*/**"
       - "**/index.ts"
       - "**/*.d.ts"
       - "**/types.ts"

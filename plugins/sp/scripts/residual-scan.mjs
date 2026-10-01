@@ -209,6 +209,12 @@ function renderReport(wbs, items, attemptCount) {
 `;
 }
 
+// plugins/sp/lib/spur-bin.ts
+function spurCommand(spurBin) {
+  const parts = (spurBin ?? "spur").trim().split(/\s+/).filter((p) => p.length > 0);
+  return { cmd: parts[0] ?? "spur", prefix: parts.slice(1) };
+}
+
 // plugins/sp/scripts/residual-scan.ts
 var RESIDUAL_SCAN_USAGE = "usage: residual-scan.ts <scan|fold|settle|report> <wbs> [--spur-bin <bin>] [--root <dir>] [--tmp-dir <dir>]";
 function run(cmd, args, cwd) {
@@ -218,8 +224,8 @@ function run(cmd, args, cwd) {
   return { status: result.status ?? 1, stdout: result.stdout ?? "" };
 }
 function spur(env, spurBinFlag, args, cwd) {
-  const parts = (spurBinFlag ?? env.spurBin ?? "spur").trim().split(/\s+/).filter((p) => p.length > 0);
-  return run(parts[0] ?? "spur", [...parts.slice(1), ...args], cwd);
+  const { cmd, prefix } = spurCommand(spurBinFlag ?? env.spurBin);
+  return run(cmd, [...prefix, ...args], cwd);
 }
 function isRegularFile(path) {
   try {

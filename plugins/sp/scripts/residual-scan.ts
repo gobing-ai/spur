@@ -16,6 +16,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getEnvVars } from '../lib/env';
 import * as core from '../lib/residual-scan.generated.mjs';
+import { spurCommand } from '../lib/spur-bin';
 
 export * from '../lib/residual-scan.generated.mjs';
 export const RESIDUAL_SCAN_USAGE =
@@ -34,11 +35,8 @@ function run(cmd: string, args: string[], cwd: string): RunResult {
     return { status: result.status ?? 1, stdout: result.stdout ?? '' };
 }
 function spur(env: ScanEnv, spurBinFlag: string | undefined, args: string[], cwd: string): RunResult {
-    const parts = (spurBinFlag ?? env.spurBin ?? 'spur')
-        .trim()
-        .split(/\s+/)
-        .filter((p) => p.length > 0);
-    return run(parts[0] ?? 'spur', [...parts.slice(1), ...args], cwd);
+    const { cmd, prefix } = spurCommand(spurBinFlag ?? env.spurBin);
+    return run(cmd, [...prefix, ...args], cwd);
 }
 function isRegularFile(path: string): boolean {
     try {

@@ -573,11 +573,15 @@ describe('recheck no-progress skip (0940 R2)', () => {
         }
     });
 
-    test('a PASS receipt never skips the recheck — only a FAIL receipt does', () => {
+    // 1016 R1: a PASS full receipt at the current digest now skips via `check.reused` (PASS
+    // status, receipt untouched); it must never surface as the 0940 no-progress FAIL skip.
+    test('a PASS receipt at the current digest skips via check.reused — never as a FAIL skip', () => {
         const dir = mkdtempSync(join(tmpdir(), 'spur-0940-pass-'));
+        const receiptPath = join(dir, '.spur/run/0939-check-receipt.json');
         try {
             writeReceipt(dir, receipt());
-            const { value } = captureStdout(() =>
+            const receiptBefore = readFileSync(receiptPath, 'utf8');
+            const { out, value } = captureStdout(() =>
                 runQualityGate(
                     'recheck',
                     {
@@ -591,8 +595,12 @@ describe('recheck no-progress skip (0940 R2)', () => {
             );
             expect(value.status).toBe('PASS');
             const log = readFileSync(join(dir, '.spur/run/0939-test-gate.log'), 'utf8');
-            expect(log).toContain('full-ran');
+            expect(log).toContain('check.reused');
+            expect(log).not.toContain('full-ran');
             expect(log).not.toContain('check.skipped-no-progress');
+            expect(out).toContain('check.reused');
+            expect(readFileSync(join(dir, '.spur/run/0939-test-gate.status'), 'utf8')).toBe('PASS\n');
+            expect(readFileSync(receiptPath, 'utf8')).toBe(receiptBefore);
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }

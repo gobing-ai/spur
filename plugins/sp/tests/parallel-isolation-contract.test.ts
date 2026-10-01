@@ -81,7 +81,10 @@ describe('task 0931 — parallel isolation prose contract', () => {
             'The pipeline never creates a merge commit, and no conflict is ever resolved automatically',
         );
         expect(section).not.toContain('--no-ff');
-        expect(executionBatch).not.toContain('--no-ff');
+        // Task 1014: the WT-5 operator divergence recipe is the file's single sanctioned `--no-ff`
+        // (a manual merge commit by the operator). Driver integration stays rebase + --ff-only —
+        // pinned per-section above.
+        expect(executionBatch.match(/--no-ff/g)?.length).toBe(1);
     });
 
     test('AC4 (R4) — conflict aborts the rebase, retains the worktree, reports, blocks; no auto-resolution', () => {

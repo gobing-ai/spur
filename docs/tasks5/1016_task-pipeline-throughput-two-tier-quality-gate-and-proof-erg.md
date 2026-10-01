@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Task pipeline throughput: two-tier quality gate and proof ergonomics"
-status: todo
+status: done
 template: issue
 created_at: 2026-09-30T13:44:22.914Z
-updated_at: "2026-09-30T14:36:18.145Z"
+updated_at: "2026-09-30T21:14:38.269Z"
 feature_id: A9
 
 ac_numbering: task-local
@@ -32,16 +32,16 @@ Why R2 matters: a non-PASS verify routes through `test-fix` → `test-recheck` (
 
 ### Requirements
 
-- [ ] R1. `runQualityGate` in modes `run` and `recheck`: when `readReceiptStatus(.spur/run/<wbs>-check-receipt.json, env.proofDigest)` returns `reuse: true` (full-tier PASS at the current digest), skip the probe and the gate command, write one line `check.reused — full-tier PASS receipt at input digest <digest>; gate skipped` to stdout and `<wbs>-test-gate.log`, write `PASS` to `<wbs>-test-gate.status`, and leave the receipt file untouched.
-- [ ] R2. Every other receipt state — `missing`, `failed`, `stale`, `light-only`, or an empty `proofDigest` — runs exactly as today, including the 0940 no-progress FAIL skip and the lock-retry loop.
+- [x] R1. `runQualityGate` in modes `run` and `recheck`: when `readReceiptStatus(.spur/run/<wbs>-check-receipt.json, env.proofDigest)` returns `reuse: true` (full-tier PASS at the current digest), skip the probe and the gate command, write one line `check.reused — full-tier PASS receipt at input digest <digest>; gate skipped` to stdout and `<wbs>-test-gate.log`, write `PASS` to `<wbs>-test-gate.status`, and leave the receipt file untouched.
+- [x] R2. Every other receipt state — `missing`, `failed`, `stale`, `light-only`, or an empty `proofDigest` — runs exactly as today, including the 0940 no-progress FAIL skip and the lock-retry loop.
 
 Out of scope: `task-pipeline.yaml`, the plugin glue `plugins/sp/scripts/quality-gate.ts` and `inline-run-setup.ts` (at its 250-line budget), the light tier, the receipt schema, verify-answer lint, action durations.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — A full-tier PASS receipt at the current digest skips the gate (req: R1)
+- [x] AC1 — A full-tier PASS receipt at the current digest skips the gate (req: R1)
   Layer: `packages/app/tests/services/quality-gate.test.ts`. With a PASS/full receipt whose `inputDigest` equals `env.proofDigest`, and `qualityGateCmd` set to a command that writes a sentinel file, `runQualityGate('run', …)` and `runQualityGate('recheck', …)` each leave the sentinel absent, write `PASS` to the status file, log the `check.reused` line, and leave the receipt bytes unchanged.
-- [ ] AC2 — Any other receipt state still runs the gate (req: R2)
+- [x] AC2 — Any other receipt state still runs the gate (req: R2)
   Layer: same file. For a missing receipt, a PASS receipt at a different digest, a `tier: light` PASS receipt, a FAIL receipt in `run` mode, and an empty `proofDigest`, the sentinel command runs. The existing 0940 no-progress test stays green unedited.
 
 ### Q&A
@@ -83,16 +83,42 @@ Check receipts (0939) were wired for reporting (`status`) and for the FAIL no-pr
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change map (commit c6ee636489052f8e3c3269c18b48993414ebee73):
+
+- packages/app/src/services/quality-gate.ts:577-587 — R1: in `runQualityGate` (modes run/recheck), a full-tier PASS receipt at the current proof-input digest now short-circuits BEFORE the recheck probe and gate loop, via the existing `readReceiptStatus` verdict (`packages/app/src/services/quality-gate.ts:276-287`, fail-closed on missing/failed/stale/light-only/empty digest). The reuse result returns the green-gate shape with `attempts: 0`, tees `check.reused — full-tier PASS receipt at input digest <digest>; gate skipped` to stdout + `<wbs>-test-gate.log`, writes `PASS` to `<wbs>-test-gate.status`, and never invokes the receipt writer — receipt bytes stay untouched. R2: the branch sits above the 0940 no-progress skip, so every other receipt state (missing/failed/stale/light-only/empty proofDigest) falls through to today's behavior unchanged, including the FAIL skip and the lock-retry loop.
+- packages/app/tests/services/quality-gate.test.ts:413-436 — AC1 sentinel test: both run and recheck modes skip the gate on a matching full-tier PASS receipt (sentinel gate command never executes) with receipt bytes byte-identical and the exact `check.reused` line asserted on stdout and log.
+- packages/app/tests/services/quality-gate.test.ts:438-477 — AC2 five-state scenario loop: missing receipt, stale digest, light-tier PASS, FAIL receipt (run mode), empty proofDigest — all five still run the gate (sentinel present), proving no over-reuse.
+- plugins/sp/tests/quality-gate-receipt.test.ts:578-599 — plugin twin test that pinned the pre-1016 contract ("PASS receipt never skips the recheck") flipped to assert the new contract's anti-laundering invariants: PASS status + `check.reused` + no `full-ran` + no `check.skipped-no-progress` + byte-identical receipt; FAIL-receipt and light-tier non-reuse remain covered by AC2 scenarios and the unedited 0940 run→recheck→recheck no-progress test.
+- plugins/sp/lib/quality-gate.generated.mjs + plugins/sp/scripts/quality-gate.mjs — regenerated build twins (mechanical; `plugins/sp/scripts/quality-gate.ts` glue untouched), required by the stale_twin gate.
+
+Rationale: the full-tier gate dominates pipeline cost (~9 min/task at 9520 tests); reusing a full-tier PASS receipt at an unchanged proof-input digest removes the redundant re-gate on recheck/re-entry while keeping every non-reuse path byte-identical. Out of scope per task: receipt schema changes, new flags/env/files, `config/workflows/task-pipeline.yaml` edits, light-tier reuse.
 
 ### Testing
 
-- `(cd packages/app && bun test tests/services/quality-gate.test.ts)` — AC1, AC2.
-- `(cd plugins/sp && bun test tests/quality-gate-receipt.test.ts)`; `bun run plugin-smoke`; `bun run spur-check`.
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Reuse branch re-read live this run at `packages/app/src/services/quality-gate.ts:577-585`: `:577` computes `reusePass = readReceiptStatus(abs(rel('-check-receipt.json')), env.proofDigest ?? '').reuse` — reuse requires `status: PASS` + `tier: full` + non-empty digest match via `readReceiptStatus` (`:276-287`), so a full green gate did run on exactly these proof inputs; on reuse the branch tees the exact required line `check.reused — full-tier PASS receipt at input digest <digest>; gate skipped` (`:579`) to stdout and the `<wbs>-test-gate.log` (`:580-581`), writes findings (`:582`), writes `PASS\n` to `<wbs>-test-gate.status` (`:583`), and returns the green result shape with `attempts: 0` (`:584-585`) — placed before the recheck probe (`:603`) and the gate loop, and it never reaches the receipt writer, leaving the receipt bytes untouched (asserted at `packages/app/tests/services/quality-gate.test.ts:432`). No new export, flag, env var, or file: the commit's entire source diff to this file is one +15-line insertion (`git show c6ee63648 -- packages/app/src/services/quality-gate.ts`, re-run this turn). Fresh test evidence this run: `(cd packages/app && bun test tests/services/quality-gate.test.ts)` → 22 pass / 0 fail / 85 expect() calls, including the AC1 run+recheck sentinel test at `:413-435`. |
+| R2 | MET | The reuse branch is the only hunk in the source diff, inserted between the attempt counters and the 0940 no-progress skip, so every non-reuse state falls through to unchanged code: `noProgressSkip` (`packages/app/src/services/quality-gate.ts:593-595`, 0940), the recheck probe (`:603`), and the gate loop with lock retries are byte-untouched. `readReceiptStatus` fails closed for each named state — missing (null receipt or schemaVersion mismatch, `:279-281`), failed (`status !== 'PASS'`, `:282`), stale (empty currentDigest or digest mismatch, `:283-285`), light-only (`tier !== 'full'`, `:286-287`) — so an empty `proofDigest` maps to stale and never reuses. AC2's five-scenario sentinel loop (`packages/app/tests/services/quality-gate.test.ts:437-466`) re-run this turn proves the gate command runs for missing receipt, PASS at a different digest, light-tier PASS, FAIL receipt in run mode, and empty `proofDigest`; the 0940 run→recheck→recheck no-progress plugin test is unedited (the commit's diff to `plugins/sp/tests/quality-gate-receipt.test.ts` touches only the PASS-receipt test at `:573-603`) and green: `(cd plugins/sp && bun test tests/quality-gate-receipt.test.ts)` → 26 pass / 0 fail / 108 expect() calls this run. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | Test at `packages/app/tests/services/quality-gate.test.ts:413-435` (`test.each(['run','recheck'])`): with a PASS/full receipt whose `inputDigest` is `digest-1` = the passed `proofDigest`, and `qualityGateCmd` set to `gate.sh` writing a sentinel file, it asserts the sentinel is absent (`:425` — the gate command never ran), `result.status === 'PASS'` (`:426`), the status file is exactly `PASS\n` (`:427`), the log contains the exact `check.reused — full-tier PASS receipt at input digest digest-1; gate skipped` line (`:429`), and the receipt bytes are unchanged (`:432`). Re-executed this run: 22 pass / 0 fail / 85 expect() calls. Mirrored in the plugin twin at `plugins/sp/tests/quality-gate-receipt.test.ts:578-604` (check.reused on stdout and log, no `full-ran`, no `check.skipped-no-progress`, `PASS\n` status, receipt unchanged). |
+| AC2 | MET | test | Five-scenario loop at `packages/app/tests/services/quality-gate.test.ts:437-466` throws `did not run the gate command` if the sentinel is absent for: missing receipt, PASS receipt at a different digest, `tier: light` PASS receipt, FAIL receipt in run mode, empty `proofDigest` — each scenario re-ran the gate this run (suite green). The AC's "existing 0940 no-progress test stays green unedited" holds: the commit's test diff touches only the reversed PASS-receipt test (`plugins/sp/tests/quality-gate-receipt.test.ts:573-603`), the run→recheck→recheck no-progress test is byte-unchanged, and the plugin suite passed fresh this run: 26 pass / 0 fail / 108 expect() calls. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -102,3 +128,8 @@ Check receipts (0939) were wired for reporting (`status`) and for the FAIL no-pr
 - Baseline: `docs/reports/i31/0912-workflow-baseline.md` F4.
 
 ### History
+
+- 2026-09-30T20:25:37.904Z todo → wip (system)
+- 2026-09-30T21:10:13.936Z wip → testing (system)
+- 2026-09-30T21:14:38.269Z testing → done (system)
+

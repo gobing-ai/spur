@@ -130,13 +130,13 @@ Feature: Script placement contract, CLI-owned logic, thin plugin glue, and pipel
 | 1006 | W3 fold quality-gate into command.gate and slim inline-run-setup through the lib bundle | done |
 | 1007 | W4 pipeline check diet and final placement sweep | done |
 | 1012 | persist-out forwards task-cited .spur/run evidence artifacts | done |
-| 1013 | Exclude transient .tmp-* test-fixture dirs from require-corresponding-test | todo |
-| 1014 | Batch finalize: detect diverged main before fast-forward merge attempt | todo |
+| 1013 | Exclude transient .tmp-* test-fixture dirs from require-corresponding-test | done |
+| 1014 | Batch finalize: detect diverged main before fast-forward merge attempt | done |
 | 1015 | One-writer guard: per-checkout session heartbeat for corpus-writing agents | cancelled |
-| 1016 | Task pipeline throughput: two-tier quality gate and proof ergonomics | todo |
+| 1016 | Task pipeline throughput: two-tier quality gate and proof ergonomics | done |
 | 1017 | Batch execution model: per-task subagent isolation with parallel fan-out | cancelled |
-| 1018 | Placement scan: detect dynamic DB imports in plugin scripts | todo |
-| 1019 | residual-scan adopts shared spurCommand; sweep test stages imports robustly | todo |
+| 1018 | Placement scan: detect dynamic DB imports in plugin scripts | done |
+| 1019 | residual-scan adopts shared spurCommand; sweep test stages imports robustly | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

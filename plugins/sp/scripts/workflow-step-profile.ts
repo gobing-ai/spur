@@ -14,7 +14,7 @@
  * parse, or the workflow argument is missing.
  */
 import { spawnSync } from 'node:child_process';
-import { defaultSpurBin } from '../lib/spur-bin';
+import { defaultSpurBin, spurCommand } from '../lib/spur-bin';
 import {
     buildStepProfile,
     DEFAULT_LAST,
@@ -65,9 +65,8 @@ export function parseStepProfileCliArgs(argv: string[]): StepProfileCliArgs {
 type SpawnResult = { stdout: string; stderr: string; exitCode: number; ok: boolean };
 
 function runSpurJson(spurBin: string, args: string[]): SpawnResult {
-    const binParts = spurBin.split(/\s+/).filter(Boolean);
-    const cmd = binParts[0] ?? 'spur';
-    const cmdArgs = [...binParts.slice(1), ...args];
+    const { cmd, prefix } = spurCommand(spurBin);
+    const cmdArgs = [...prefix, ...args];
     const r = spawnSync(cmd, cmdArgs, { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' });
     const decode = (b: unknown): string =>
         typeof b === 'string' ? b : Buffer.from((b as Uint8Array) ?? []).toString('utf8');

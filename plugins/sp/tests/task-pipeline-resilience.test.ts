@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import {
     chmodSync,
     copyFileSync,
+    cpSync,
     existsSync,
     mkdirSync,
     mkdtempSync,
@@ -350,9 +351,9 @@ esac`,
         const dir = mkdtempSync(join(tmpdir(), 'spur-0983-sweep-'));
         try {
             mkdirSync(join(dir, '.spur', 'run'), { recursive: true });
-            // Stage the scanner exactly as the pipeline finds it in-repo. It imports
-            // ../lib/env (getEnvVars) and ../lib/residual-scan.generated.mjs (1003 R5
-            // bundle twin) — stage both (self-contained node builtins).
+            // Stage the scanner exactly as the pipeline finds it in-repo. Its ../lib
+            // imports (env, spur-bin, generated bundle twins) must resolve — stage the
+            // whole lib dir rather than a per-file list (1019 R2).
             mkdirSync(join(dir, 'plugins', 'sp', 'scripts'), { recursive: true });
             mkdirSync(join(dir, 'plugins', 'sp', 'lib'), { recursive: true });
             // 0960: the project-first probe is gated on the source-repo marker.
@@ -362,11 +363,7 @@ esac`,
                 join(import.meta.dir, '..', 'scripts', 'residual-scan.ts'),
                 join(dir, 'plugins', 'sp', 'scripts', 'residual-scan.ts'),
             );
-            copyFileSync(join(import.meta.dir, '..', 'lib', 'env.ts'), join(dir, 'plugins', 'sp', 'lib', 'env.ts'));
-            copyFileSync(
-                join(import.meta.dir, '..', 'lib', 'residual-scan.generated.mjs'),
-                join(dir, 'plugins', 'sp', 'lib', 'residual-scan.generated.mjs'),
-            );
+            cpSync(join(import.meta.dir, '..', 'lib'), join(dir, 'plugins', 'sp', 'lib'), { recursive: true });
             // 1007 R4: the sweep resolves through the run-scoped script-root probe — stage
             // the identity file the snippet reads (source-repo → the staged scripts dir).
             writeFileSync(

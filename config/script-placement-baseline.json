@@ -27,8 +27,8 @@
             "exempt": true
         },
         "plugins/sp/scripts/daily-summary/daily-summary.ts": {
-            "kinds": ["budget"],
-            "reason": "Keep (daily-summary/, plan \u00a72)"
+            "kinds": ["budget", "db-import"],
+            "reason": "Keep (daily-summary/, plan \u00a72); read-only history-health query via dynamic bun:sqlite import (task 1018)"
         },
         "plugins/sp/scripts/dogfood-testing/detect-pipeline-driving.ts": {
             "kinds": ["budget"],

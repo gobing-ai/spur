@@ -3,7 +3,7 @@ kind: design
 title: "Harness surface governance"
 status: accepted
 created_at: 2026-08-21
-updated_at: 2026-09-28
+updated_at: 2026-09-30
 related: [G64, A9, "0613", "0614", "0617", "0625", "0670", "0693"]
 tags: [contract, G64, plugin, cli]
 ---
@@ -89,7 +89,7 @@ judges them from step profiles ([workflow composition](workflow-composition-cont
 | `package.json` scripts | repo-wide developer entrypoints | a **repo developer** invokes it by name (`bun run …`); it composes existing binaries, adds no logic, and its name is the contract |
 | `plugins/sp/scripts` | plugin glue | sequences `spur` calls, git/gh, and run-scoped files for an sp skill, command or pipeline; must run on **agent machines that only have the plugin** — entrypoint contract owned by ADR-065 (`.mjs` twins, `config/plugin-scripts.json`, no repo-relative paths, [configuration contracts §2.6](configuration-contracts.md#26-plugin-script-contract-manifest--gate-task-0600-adr-065)). Does not re-implement a rule owned by a `spur` verb |
 | `plugins/sp/hooks` | host hook glue | normalizes a host event and calls a hook core or a `spur` verb; the ADR-129 ledger/session cores are the only hook-resident logic |
-| `plugins/sp/lib` | code shared by ≥2 plugin glue files | `env.ts` and generated bundles of `packages/app` code (`bundle-plugin-lib`); a plugin that must run without the monorepo imports the app implementation from here instead of forking it. Nothing outside the plugin imports it |
+| `plugins/sp/lib` | code shared by ≥2 plugin glue files | `env.ts`, the shared `spur-bin.ts` spur-CLI invocation helper, and generated bundles of `packages/app` code (`bundle-plugin-lib`); a plugin that must run without the monorepo imports the app implementation from here instead of forking it. Nothing outside the plugin imports it |
 
 Decision procedure for a new script: (1) does it touch Spur's own nouns or rules? → a flag/verb on
 the owning noun (consent gate); (2) self-dev or plugin-surface gate? → `scripts/commands`; (3) plugin

@@ -64,10 +64,6 @@ function normalizeArgs(raw: Args): Args {
 
 - If `--feature FOO` is present and `--tasks` is absent, treat the effective selector as `feature:FOO`.
 - If both are present, `--tasks` wins (with a one-line note in the batch report).
-- **Per-command admission filters (I33 1023).** Step 1 is the shared baseline; commands may layer
-  stricter grammar on top — e.g. `/sp:dev-review` rejects `ready`/status pseudo-lists and the mixed
-  `--tasks` + `--feature` combination (exit 2), and accepts multi-id `--feature <id>,<id>` as
-  caller-level sugar expanded by the command layer before the resolver.
 
 **Feature-derived strict preflight (R2, task 0510).** After normalization, if the **effective
 selector** is `feature:<id>` (whether via `--tasks feature:<id>` or the `--feature <id>` sugar),
@@ -593,14 +589,11 @@ non-PASS verify verdict, or a HITL pause that ends the run take the WT-5 retenti
 full pipeline is eligible — `--worktree --mode implement` is rejected (WT-7), because that mode is
 the pipeline's implement stage and already runs in the driver's tree.
 
-**Review triage `dev-review` (run of one).** `/sp:dev-review [--tasks <selector> | --feature <id>[,<id>] | --scope <path>[,<path>]] --triage --worktree [<name>]`
+**Review triage `dev-review` (run of one).** `/sp:dev-review <target> --triage --worktree [<name>]`
 runs this lifecycle around one review-plus-triage pass: WT-1…WT-6 apply unchanged, the marker's
-`command` is `dev-review` and its `selector` records the full normalized target list, and the slug
-is `sp/review-<first>-and-<N>-<short-id>` for a multi-target run (N = target count) or
-`sp/review-<slug>-<short-id>` for a single target (the WBS or the path's basename). It skips
-`quickReadiness` (there is no task set; admission is "every target resolves" — each WBS/path must
-resolve before the tree is cut). Under `--triage` the findings are bucketed across all targets once
-(identical `file:line` findings deduped). WT-4 success reads as "every direct fix passed its check and the
+`command` is `dev-review` and its `selector` is the review target, and the slug is the WBS or the
+path's basename (`sp/review-<slug>-<short-id>`). It skips `quickReadiness` (there is no task set;
+admission is "the target resolves"). WT-4 success reads as "every direct fix passed its check and the
 project gate is green"; anything else takes WT-5. Contract: [dev-operations.md § 2. review](dev-operations.md#2-review).
 
 One flag, two modes (see the glossary entry for the ownership rule). Bare `--worktree` is **create
@@ -991,6 +984,23 @@ Resume, merge, or discard:
   resume:  cd <worktree-path> && <command> --continue --worktree <worktree-path>
   merge:   git checkout <base-ref> && git merge <branch>     # resolve conflicts manually
   discard: git worktree remove <worktree-path> && git branch -D <branch> && spur projects remove <worktree-path>
+```
+
+When the halt cause is `non-FF base ref`, the report replaces the one-line `merge:` hint with this
+ordered divergence recipe, run by the operator — the driver never merges, rebases, or resolves
+conflicts itself. Other halt causes (task failure, HITL pause) keep the hint as printed:
+
+```
+# 1. integrate as a merge commit — never a rebase; task evidence cites the branch's commit SHAs
+git checkout <base-ref> && git merge --no-ff --no-commit <branch>
+# 2. resolve source conflicts by hand; generated files are then regenerated with the project's
+#    generator, never hand-merged
+#    (this repo: bun run build:plugin-lib && bun run --filter @gobing-ai/spur build:bundle)
+# 3. run qualityGateCmd once, after ALL conflicts are resolved
+# 4. commit the merge with the prepared message file
+git commit -F <message-file>
+# 5. persist evidence out (WT-4a), then WT-4b/4c cleanup, and set the marker to merged
+inline-run-setup --persist-out --from <worktree> --task-file …
 ```
 
 The report reuses the [`--next` chain contract](flag-glossary.md#--next-chain-contract) halt-report

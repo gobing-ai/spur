@@ -307,6 +307,17 @@ function runQualityGate(mode, env, options = {}) {
   const gateStartedAtMs = Date.now();
   let gateRc = 0;
   let gateAttempt = 0;
+  const reusePass = readReceiptStatus(abs(rel("-check-receipt.json")), env.proofDigest ?? "").reuse;
+  if (reusePass) {
+    const line = `check.reused — full-tier PASS receipt at input digest ${env.proofDigest ?? ""}; gate skipped
+`;
+    process.stdout.write(line);
+    appendFileSync(abs(logFile), line);
+    writeFileSync(abs(findingsFile), extractFindings(readFileSync(abs(logFile), "utf8")));
+    writeFileSync(abs(statusFile), `PASS
+`);
+    return { status: "PASS", attempts: 0, logFile, findingsFile, statusFile, attemptFile };
+  }
   const noProgressSkip = mode === "recheck" && receiptFailsAtDigest(readReceipt(abs(rel("-check-receipt.json"))), env.proofDigest ?? "");
   if (noProgressSkip) {
     const line = `check.skipped-no-progress — full-tier FAIL receipt at input digest ${env.proofDigest ?? ""}; recheck skipped
