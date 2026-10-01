@@ -280,7 +280,7 @@ export type FeatureReceiptValidation =
     | { ok: false; reason: FeatureReceiptRejection; detail: string };
 
 /** Structural validation of one parsed receipt copy. Returns the typed receipt. */
-function parseReceipt(raw: string): FeatureVerificationReceipt {
+export function parseFeatureVerificationReceipt(raw: string): FeatureVerificationReceipt {
     let parsed: unknown;
     try {
         parsed = JSON.parse(raw);
@@ -323,7 +323,7 @@ async function readReceiptCopy(fs: FileSystem, path: string, label: string): Pro
         throw new Error(`no ${label} receipt at ${path}; run the feature-scoped verification pass`);
     }
     try {
-        return parseReceipt(raw);
+        return parseFeatureVerificationReceipt(raw);
     } catch (err) {
         throw new Error(`${label} receipt at ${basename(path)} is not a valid schema-v1 artifact (${String(err)})`);
     }

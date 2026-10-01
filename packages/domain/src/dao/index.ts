@@ -60,6 +60,7 @@ export {
     type RunSessionMechanism,
     type RunSessionRow,
 } from './run-session-dao';
+export { type RunStorageReferenceMove, redirectRunStorageReferences } from './run-storage-reference-dao';
 export {
     listRunIdRows,
     type RunIdRow,

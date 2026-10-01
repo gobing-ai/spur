@@ -19,6 +19,11 @@ export class ArtifactDao extends EntityDao<typeof artifacts, typeof artifacts.id
         super(adapter, artifacts, [artifacts.id], 'artifacts');
     }
 
+    /** Registered bytes participate in migration even when their scratch filename is generic. */
+    storageReferences(): Promise<Array<{ path: string; runId: string | null }>> {
+        return this.adapter.queryAll('SELECT path, run_id AS runId FROM artifacts ORDER BY id');
+    }
+
     /** Persist artifact metadata. */
     record(input: CreateArtifactInput): Promise<ArtifactRecord> {
         return super.create({

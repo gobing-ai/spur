@@ -509,7 +509,12 @@ export class RunArtifactActionRunner implements ActionRunner {
         // 1026 R3: durable copy before registration; the row names the durable path.
         let registeredPath = normalized;
         try {
-            const evidenceRoot = join(this.fileSystem.realPath(resolve(workdir)), '.spur', 'memory', 'evidence');
+            const evidenceRoot = join(
+                this.fileSystem.realPath?.(resolve(workdir)) ?? resolve(workdir),
+                '.spur',
+                'memory',
+                'evidence',
+            );
             if (!normalized.startsWith(`${evidenceRoot}${sep}`)) {
                 registeredPath = await persistDurableArtifact(normalized, workdir, context.runId, this.fileSystem);
             }

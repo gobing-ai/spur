@@ -1,5 +1,5 @@
-import { realpathSync } from 'node:fs';
-import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
+import { realpathSync, statSync } from 'node:fs';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { AGENT_ROLE_NAMES, getEnvVars, type SpurConfig } from '@gobing-ai/spur-config';
 import { resolvePlanningFolders } from '@gobing-ai/spur-config/loader';
 import type { DbAdapter } from '@gobing-ai/spur-domain';
@@ -13,6 +13,7 @@ import {
     PhaseRunDao,
     RunDao,
     type RunDefinitionSource,
+    redirectRunStorageReferences,
     TaskRunLinkDao,
     TransitionRunDao,
 } from '@gobing-ai/spur-domain';
@@ -931,6 +932,42 @@ export class WorkflowAppService {
         return migrateRunStorage({
             dirs: paths,
             readRunStatus: async (runId) => (await runDao.traceRowById(runId))?.status ?? null,
+            registeredArtifacts: await new ArtifactDao(db).storageReferences(),
+            redirectReferences: async (entries) => {
+                const moves = new Map<string, string>();
+                for (const entry of entries) {
+                    if (entry.target === null) continue;
+                    const canonicalTarget = realpathSync(entry.target);
+                    moves.set(entry.source, canonicalTarget);
+                    moves.set(realpathSync(entry.source), canonicalTarget);
+                    moves.set(relative(paths.projectRoot, entry.source), canonicalTarget);
+                    for (
+                        let source = dirname(entry.source), target = dirname(canonicalTarget);
+                        source.startsWith(paths.scratchDir + sep);
+                        source = dirname(source), target = dirname(target)
+                    ) {
+                        moves.set(source, target);
+                        moves.set(realpathSync(source), target);
+                        moves.set(relative(paths.projectRoot, source), target);
+                    }
+                }
+                await redirectRunStorageReferences(
+                    db,
+                    Array.from(moves, ([source, target]) => {
+                        const stat = statSync(target);
+                        return {
+                            source,
+                            target,
+                            ...(stat.isFile()
+                                ? {
+                                      sourceSize: stat.size,
+                                      sourceMtimeMs: stat.mtimeMs,
+                                  }
+                                : {}),
+                        };
+                    }),
+                );
+            },
             dryRun: opts.dryRun === true,
             logsOnly: opts.logsOnly === true,
         });

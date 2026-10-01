@@ -26,21 +26,29 @@
  *   R4); other legacy scratch files (check receipts, …) are preserved.
  */
 
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
     appendFileSync,
     existsSync,
+    linkSync,
+    lstatSync,
     mkdirSync,
     readdirSync,
     readFileSync,
     renameSync,
     statSync,
+    unlinkSync,
     writeFileSync,
 } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { resolveDurableArtifactPath, resolveRunArtifactPath } from '../workflow/actions/run-path';
+import {
+    type FeatureVerificationReceipt,
+    parseFeatureVerificationReceipt,
+} from '../workflow/feature-verification-receipt';
 import { InvalidWorkflowRunIdError } from '../workflow/run-record';
+import { parseVerifyVerdict } from './verify-verdict';
 
 /** Resolved run-storage layout for one project root. */
 export interface RunStoragePaths {
@@ -125,6 +133,9 @@ export interface MigrateRunStorageInput {
     atomicCopy?: (source: string, target: string) => void;
     /** Test seam: manifest timestamp. */
     now?: () => string;
+    /** Existing DB/history owners redirect copied artifact, session and checkpoint references. */
+    redirectReferences?: (entries: readonly RunStorageMigrationEntry[]) => Promise<void>;
+    registeredArtifacts?: readonly { path: string; runId: string | null }[];
 }
 
 /** Run statuses whose scratch files must be preserved (owner still live or rerun-resumable). */
@@ -136,13 +147,21 @@ function fileDigest(path: string): string {
 }
 
 /** Atomic byte copy: write the temp sibling, rename, then reread and verify the digest. */
-function defaultAtomicCopy(source: string, target: string): void {
-    const bytes = readFileSync(source);
-    const tmp = `${target}.tmp`;
-    writeFileSync(tmp, bytes);
-    renameSync(tmp, target);
-    if (fileDigest(target) !== createHash('sha256').update(bytes).digest('hex')) {
-        throw new Error('copy-mismatch: renamed target digest differs from the source');
+function defaultAtomicCopy(source: string, target: string, snapshot?: Uint8Array): void {
+    const bytes = snapshot ?? readFileSync(source);
+    const tmp = `${target}.${randomUUID()}.tmp`;
+    writeFileSync(tmp, bytes, { flag: 'wx' });
+    try {
+        try {
+            linkSync(tmp, target);
+        } catch (error) {
+            if ((error as { code?: string }).code !== 'EEXIST') throw error;
+        }
+        if (fileDigest(target) !== createHash('sha256').update(bytes).digest('hex')) {
+            throw new Error('copy-mismatch: published target digest differs from the source');
+        }
+    } finally {
+        unlinkSync(tmp);
     }
 }
 
@@ -157,6 +176,8 @@ interface ScratchUnit {
     ownerRunId?: string;
     /** Absolute path of the missing `.md`/`.state.json` sibling, for incomplete run records. */
     missingRequiredItem?: string;
+    requiresReferenceRedirect?: boolean;
+    registeredArtifact?: boolean;
 }
 
 interface Classified {
@@ -165,9 +186,9 @@ interface Classified {
 }
 
 /** Parse a JSON scratch file; null when unparseable or not a plain object. */
-function parseJsonObject(path: string): Record<string, unknown> | null {
+function parseJsonObject(path: string, raw?: string): Record<string, unknown> | null {
     try {
-        const parsed: unknown = JSON.parse(readFileSync(path, 'utf8'));
+        const parsed: unknown = JSON.parse(raw ?? readFileSync(path, 'utf8'));
         if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
         return parsed as Record<string, unknown>;
     } catch {
@@ -200,7 +221,8 @@ function classify(name: string, scratchDir: string, files: Set<string>): Classif
                 family: 'run-record',
                 identity,
                 files: [source],
-                requiresJsonParse: name.endsWith('.json'),
+                requiresJsonParse: false,
+                requiresReferenceRedirect: true,
                 ...(identity !== '' ? { ownerRunId: identity } : {}),
             },
         };
@@ -225,27 +247,52 @@ function classify(name: string, scratchDir: string, files: Set<string>): Classif
                 },
             };
         }
-        const runId = typeof parsed.runId === 'string' ? parsed.runId : '';
-        const runScoped = runId !== '' && runId === prefix;
-        const featureId = typeof parsed.featureId === 'string' && parsed.featureId !== '' ? parsed.featureId : prefix;
+        let receipt: FeatureVerificationReceipt;
+        try {
+            receipt = parseFeatureVerificationReceipt(readFileSync(source, 'utf8'));
+            assertRunId(receipt.runId);
+            assertRunId(receipt.featureId);
+            if (prefix !== receipt.runId && prefix !== receipt.featureId) throw new Error('receipt identity mismatch');
+        } catch (error) {
+            return {
+                entry: {
+                    source,
+                    target: null,
+                    family: 'feature-receipt',
+                    identity: prefix,
+                    contentDigest: fileDigest(source),
+                    outcome: 'failed',
+                    reason: `malformed: ${String(error)}`,
+                },
+            };
+        }
+        const { runId, featureId } = receipt;
         return {
             unit: {
                 family: 'feature-receipt',
                 identity: featureId,
                 files: [source],
                 requiresJsonParse: true,
-                ...(runScoped ? { ownerRunId: runId } : {}),
+                ownerRunId: runId,
             },
         };
     }
 
     if (name.endsWith('-verdict.json')) {
+        const identity = name.slice(0, -'-verdict.json'.length);
+        const parsed = parseJsonObject(source);
+        const proof = parsed?.proof;
+        const ownerRunId =
+            proof !== null && typeof proof === 'object' && !Array.isArray(proof)
+                ? (proof as Record<string, unknown>).runId
+                : parsed?.pipelineRunId;
         return {
             unit: {
                 family: 'task-verdict',
-                identity: name.slice(0, -'-verdict.json'.length),
+                identity,
                 files: [source],
                 requiresJsonParse: true,
+                ...(typeof ownerRunId === 'string' ? { ownerRunId } : {}),
             },
         };
     }
@@ -312,11 +359,24 @@ function writeManifest(
     dirs: RunStoragePaths,
     entries: RunStorageMigrationEntry[],
     now: () => string,
+    failures: readonly RunStorageFailure[],
 ): RunStorageFailure | undefined {
     const manifestPath = join(dirs.projectRoot, '.spur', 'memory', 'run-storage-migration.json');
     try {
         mkdirSync(join(dirs.projectRoot, '.spur', 'memory'), { recursive: true });
-        const body = `${JSON.stringify({ version: 1, updatedAt: now(), entries }, null, 4)}\n`;
+        const body = `${JSON.stringify(
+            {
+                version: 1,
+                updatedAt: now(),
+                entries,
+                failures,
+                complete:
+                    failures.length === 0 &&
+                    !entries.some((entry) => entry.family !== null && entry.outcome === 'preserved'),
+            },
+            null,
+            4,
+        )}\n`;
         const tmp = `${manifestPath}.tmp`;
         writeFileSync(tmp, body);
         renameSync(tmp, manifestPath);
@@ -336,7 +396,6 @@ export async function migrateRunStorage(input: MigrateRunStorageInput): Promise<
     const { dirs, readRunStatus } = input;
     const dryRun = input.dryRun === true;
     const logsOnly = input.logsOnly === true;
-    const atomicCopy = input.atomicCopy ?? defaultAtomicCopy;
     const now = input.now ?? (() => new Date().toISOString());
     const result: RunStorageMigrationResult = { dryRun, logsOnly, entries: [], failures: [] };
     const fs = createNodeFileSystem(dirs.projectRoot);
@@ -358,7 +417,21 @@ export async function migrateRunStorage(input: MigrateRunStorageInput): Promise<
                     else if (entry.isFile()) names.push(relative(dirs.scratchDir, join(dir, entry.name)));
                 }
             };
-            walk(subtree);
+            for (const family of ['agent-sessions', 'artifacts']) {
+                const owned = join(subtree, family);
+                if (!existsSync(owned)) continue;
+                if (lstatSync(owned).isSymbolicLink()) {
+                    result.entries.push({
+                        source: owned,
+                        target: null,
+                        family: 'run-record',
+                        identity: item.name,
+                        contentDigest: '',
+                        outcome: 'preserved',
+                        reason: 'symlink-owned-subtree',
+                    });
+                } else if (statSync(owned).isDirectory()) walk(owned);
+            }
         }
     } catch (error) {
         if ((error as { code?: string }).code !== 'ENOENT') {
@@ -367,13 +440,48 @@ export async function migrateRunStorage(input: MigrateRunStorageInput): Promise<
         return result;
     }
     const fileSet = new Set(names);
+    const registered = new Map(
+        (input.registeredArtifacts ?? []).map((artifact) => [resolve(dirs.projectRoot, artifact.path), artifact]),
+    );
 
     // 1026: durable copies must not shift the proof-input tree — exclude the plane repo-locally first.
     if (!dryRun) ensureDurablePlaneIgnored(dirs.projectRoot);
     for (const name of names) {
         // Logs-only never touches verdicts, receipts, record pairs, sessions or artifacts.
         if (logsOnly && (name.includes(sep) || !name.endsWith('.log'))) continue;
-        const { unit, entry: standalone } = classify(name, dirs.scratchDir, fileSet);
+        const sourcePath = join(dirs.scratchDir, name);
+        try {
+            await resolveRunArtifactPath(fs, dirs.projectRoot, sourcePath);
+        } catch (error) {
+            const reason = `confinement: ${String(error)}`;
+            result.entries.push({
+                source: sourcePath,
+                target: null,
+                family: null,
+                identity: null,
+                contentDigest: '',
+                outcome: 'failed',
+                reason,
+            });
+            result.failures.push({ source: sourcePath, reason });
+            continue;
+        }
+        const artifact = registered.get(sourcePath) ?? registered.get(fs.realPath?.(sourcePath) ?? sourcePath);
+        const classification =
+            artifact?.runId && !name.endsWith('-verdict.json') && !name.endsWith('-feature-verification.json')
+                ? {
+                      unit: {
+                          family: 'run-record' as const,
+                          identity: artifact.runId,
+                          ownerRunId: artifact.runId,
+                          files: [sourcePath],
+                          requiresJsonParse: false,
+                          requiresReferenceRedirect: true,
+                          registeredArtifact: true,
+                      },
+                  }
+                : classify(name, dirs.scratchDir, fileSet);
+        const { unit, entry: standalone } = classification;
         if (standalone !== undefined) {
             result.entries.push(standalone);
             if (standalone.outcome === 'failed') {
@@ -390,6 +498,23 @@ export async function migrateRunStorage(input: MigrateRunStorageInput): Promise<
             family: unit.family,
             identity: unit.identity,
         };
+
+        if (unit.ownerRunId !== undefined) {
+            try {
+                assertRunId(unit.ownerRunId);
+            } catch (error) {
+                const reason = `owner identity: ${String(error)}`;
+                result.entries.push({
+                    ...baseEntry,
+                    source,
+                    contentDigest: fileDigest(source),
+                    outcome: 'failed',
+                    reason,
+                });
+                result.failures.push({ source, reason });
+                continue;
+            }
+        }
 
         // Owner gate: active/paused/interrupted-recoverable or unknown runs are preserved.
         if (unit.ownerRunId !== undefined && (await ownerPreserved(readRunStatus, unit.ownerRunId))) {
@@ -412,8 +537,15 @@ export async function migrateRunStorage(input: MigrateRunStorageInput): Promise<
             continue;
         }
 
+        const snapshots = new Map(unit.files.map((file) => [file, readFileSync(file)]));
+        const sourceText = snapshots.get(source)?.toString('utf8') ?? '';
+        const snapshotDigest = (file: string) =>
+            createHash('sha256')
+                .update(snapshots.get(file) as Uint8Array)
+                .digest('hex');
+
         // JSON families must parse before anything is written.
-        if (unit.requiresJsonParse && parseJsonObject(source) === null) {
+        if (unit.requiresJsonParse && parseJsonObject(source, sourceText) === null) {
             result.entries.push({
                 ...baseEntry,
                 source,
@@ -424,15 +556,57 @@ export async function migrateRunStorage(input: MigrateRunStorageInput): Promise<
             result.failures.push({ source, reason: 'malformed' });
             continue;
         }
+        let invalid: string | undefined;
+        if (unit.family === 'task-verdict') {
+            const parsed = parseVerifyVerdict(sourceText, unit.identity);
+            if (parsed.kind !== 'valid' || parsed.verdict.wbs !== unit.identity) invalid = 'verdict identity or shape';
+            const raw = parseJsonObject(source, sourceText);
+            if (raw !== null && 'wbs' in raw && raw.wbs !== unit.identity) invalid = 'verdict identity';
+            if (raw?.proof !== undefined) {
+                const proof = raw.proof;
+                if (
+                    proof === null ||
+                    typeof proof !== 'object' ||
+                    Array.isArray(proof) ||
+                    typeof (proof as Record<string, unknown>).runId !== 'string' ||
+                    (proof as Record<string, unknown>).runId !== unit.ownerRunId
+                )
+                    invalid = 'proof owner binding';
+            }
+        }
+        if (unit.family === 'feature-receipt') {
+            try {
+                const receipt = parseFeatureVerificationReceipt(sourceText);
+                if (receipt.featureId !== unit.identity || receipt.runId !== unit.ownerRunId)
+                    invalid = 'receipt identity';
+            } catch {
+                invalid = 'receipt shape';
+            }
+        }
+        for (const file of unit.files.filter((file) => file.endsWith('.state.json'))) {
+            const state = parseJsonObject(file, snapshots.get(file)?.toString('utf8'));
+            if (state === null || ('runId' in state && state.runId !== unit.identity))
+                invalid = 'run-state identity or shape';
+        }
+        if (unit.requiresReferenceRedirect && input.redirectReferences === undefined)
+            invalid = 'reference owner unavailable';
+        if (invalid !== undefined) {
+            const reason = `malformed: ${invalid}`;
+            result.entries.push({ ...baseEntry, source, contentDigest: fileDigest(source), outcome: 'failed', reason });
+            result.failures.push({ source, reason });
+            continue;
+        }
 
         const targetDir = unit.family === 'run-record' ? dirs.recordsDir : dirs.evidenceDir;
         const unitRoot = join(dirs.scratchDir, unit.identity);
         // Subtree files keep their scratch subpath under the durable run dir;
         // top-level files map by basename (record pair, log, evidence).
         const targets = unit.files.map((file) =>
-            file.startsWith(`${unitRoot}${sep}`)
-                ? join(targetDir, unit.identity, relative(unitRoot, file))
-                : join(targetDir, basename(file)),
+            unit.registeredArtifact
+                ? join(dirs.recordsDir, unit.identity, 'artifacts', basename(file))
+                : file.startsWith(`${unitRoot}${sep}`)
+                  ? join(targetDir, unit.identity, relative(unitRoot, file))
+                  : join(targetDir, basename(file)),
         );
         // targets is derived 1:1 from unit.files, so every index below is defined.
         const targetFor = (index: number): string => targets[index] as string;
@@ -456,7 +630,7 @@ export async function migrateRunStorage(input: MigrateRunStorageInput): Promise<
 
         // Preview uses the same conflict check as apply, including single-file units.
         const conflicts = unit.files.filter(
-            (file, index) => existsSync(targetFor(index)) && fileDigest(targetFor(index)) !== fileDigest(file),
+            (file, index) => existsSync(targetFor(index)) && fileDigest(targetFor(index)) !== snapshotDigest(file),
         );
         if (conflicts.length > 0) {
             for (const [index, file] of unit.files.entries()) {
@@ -464,7 +638,7 @@ export async function migrateRunStorage(input: MigrateRunStorageInput): Promise<
                     ...baseEntry,
                     source: file,
                     target: targetFor(index),
-                    contentDigest: fileDigest(file),
+                    contentDigest: snapshotDigest(file),
                     outcome: 'failed',
                     reason: 'target-mismatch',
                 });
@@ -479,7 +653,7 @@ export async function migrateRunStorage(input: MigrateRunStorageInput): Promise<
                     ...baseEntry,
                     source: file,
                     target: targetFor(index),
-                    contentDigest: fileDigest(file),
+                    contentDigest: snapshotDigest(file),
                     outcome: 'would-migrate',
                 });
             }
@@ -492,7 +666,7 @@ export async function migrateRunStorage(input: MigrateRunStorageInput): Promise<
                 result.failures.push({ source: file, reason: 'internal: no target mapped for file' });
                 continue;
             }
-            const fileEntry = { ...baseEntry, source: file, target, contentDigest: fileDigest(file) };
+            const fileEntry = { ...baseEntry, source: file, target, contentDigest: snapshotDigest(file) };
             if (existsSync(target)) {
                 if (fileDigest(target) === fileEntry.contentDigest) {
                     result.entries.push({ ...fileEntry, outcome: 'already-present' });
@@ -504,7 +678,8 @@ export async function migrateRunStorage(input: MigrateRunStorageInput): Promise<
             }
             try {
                 mkdirSync(dirname(target), { recursive: true });
-                atomicCopy(file, target);
+                if (input.atomicCopy) input.atomicCopy(file, target);
+                else defaultAtomicCopy(file, target, snapshots.get(file));
                 result.entries.push({ ...fileEntry, outcome: 'migrated' });
             } catch (err) {
                 const reason = (err as Error).message.startsWith('copy-mismatch:') ? 'copy-mismatch' : 'write-failed';
@@ -515,6 +690,14 @@ export async function migrateRunStorage(input: MigrateRunStorageInput): Promise<
     }
 
     if (!dryRun) {
+        const copied = result.entries.filter(
+            (entry) => entry.outcome === 'migrated' || entry.outcome === 'already-present',
+        );
+        try {
+            if (copied.length > 0) await input.redirectReferences?.(copied);
+        } catch (error) {
+            result.failures.push({ source: dirs.scratchDir, reason: `reference-redirect: ${String(error)}` });
+        }
         try {
             await resolveDurableArtifactPath(
                 fs,
@@ -526,8 +709,7 @@ export async function migrateRunStorage(input: MigrateRunStorageInput): Promise<
             result.failures.push({ source: dirs.projectRoot, reason: `manifest-confinement: ${String(error)}` });
             return result;
         }
-        const manifestEntries = result.entries.filter((entry) => entry.outcome !== 'preserved');
-        const manifestFailure = writeManifest(dirs, manifestEntries, now);
+        const manifestFailure = writeManifest(dirs, result.entries, now, result.failures);
         if (manifestFailure !== undefined) result.failures.push(manifestFailure);
     }
     return result;

@@ -501,6 +501,7 @@ async function runSessionAugmentedRoots(
     // migrated run's sessions discovered exactly once.
     const runBases = [runStoragePaths(cwd).recordsDir, join(cwd, '.spur', 'run')];
     const seen = new Set<string>();
+    const seenRunAgents = new Set<string>();
     const sourcesByRun = new Map<string, Set<string>>();
     for (const row of await dao.listRunSources()) {
         const sources = sourcesByRun.get(row.run_id) ?? new Set<string>();
@@ -517,9 +518,12 @@ async function runSessionAugmentedRoots(
                 const directMatch = agent === source || agent.startsWith(`${source}-`);
                 const soleMappedSource = mappedSources?.size === 1 && mappedSources.has(source);
                 if (!directMatch && !soleMappedSource) continue;
+                const identity = `${runId}\0${agent}`;
+                if (seenRunAgents.has(identity)) continue;
                 const root = realpathSync(join(sessionsRoot, agent));
                 if (seen.has(root)) continue;
                 seen.add(root);
+                seenRunAgents.add(identity);
                 roots.push(root);
                 runRoots.push({ runId, root });
             }

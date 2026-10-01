@@ -39,7 +39,94 @@ function outcome(result: { entries: RunStorageMigrationEntry[] }, identity: stri
     return entry;
 }
 
+function receipt(featureId: string, runId: string, workdir: string) {
+    return {
+        schemaVersion: 1,
+        featureId,
+        runId,
+        workdir,
+        verifier: {
+            name: 'feature-verification',
+            sourcePath: 'config/workflows/feature-verification.yaml',
+            layer: 'project',
+            definitionDigest: `sha256:${'a'.repeat(64)}`,
+        },
+        verificationCmd: 'bun test',
+        inputDigest: `sha256:${'b'.repeat(64)}`,
+        status: 'PASS',
+        startedAt: '2026-10-01T00:00:00Z',
+        completedAt: '2026-10-01T00:01:00Z',
+    };
+}
+
 describe('migrateRunStorage (E71/1025)', () => {
+    test('foreign verdict and state identities fail; proof and feature receipt live owners remain protected', async () => {
+        const { root, scratch, dirs } = makeProject();
+        try {
+            writeFileSync(join(scratch, '1025-verdict.json'), JSON.stringify({ wbs: '9999', verdict: 'PASS' }));
+            writeFileSync(join(scratch, 'closed.md'), 'record');
+            writeFileSync(join(scratch, 'closed.state.json'), '{"runId":"foreign"}');
+            writeFileSync(join(scratch, 'E71-feature-verification.json'), JSON.stringify(receipt('E71', 'live', root)));
+            writeFileSync(
+                join(scratch, '1026-verdict.json'),
+                JSON.stringify({ wbs: '1026', verdict: 'PASS', proof: { runId: 'live' } }),
+            );
+            const result = await migrateRunStorage({
+                dirs,
+                readRunStatus: statusMap({ closed: 'done', live: 'paused' }),
+            });
+            expect(outcome(result, '1025').outcome).toBe('failed');
+            expect(outcome(result, 'closed').outcome).toBe('failed');
+            expect(outcome(result, 'E71').outcome).toBe('preserved');
+            expect(outcome(result, '1026').outcome).toBe('preserved');
+            expect(existsSync(join(dirs.recordsDir, 'closed.state.json'))).toBe(false);
+            const manifest = JSON.parse(readFileSync(join(root, '.spur/memory/run-storage-migration.json'), 'utf8'));
+            expect(manifest.complete).toBe(false);
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('registered generic output requires reference ownership and redirects only after byte publication', async () => {
+        const { root, scratch, dirs } = makeProject();
+        try {
+            const path = join(scratch, 'handoff.txt');
+            writeFileSync(path, 'retained');
+            const input = {
+                dirs,
+                readRunStatus: statusMap({ closed: 'done' }),
+                registeredArtifacts: [{ path, runId: 'closed' }],
+            };
+            const refused = await migrateRunStorage(input);
+            expect(refused.failures[0]?.reason).toContain('reference owner unavailable');
+            expect(existsSync(join(dirs.recordsDir, 'closed/artifacts/handoff.txt'))).toBe(false);
+            let redirected = false;
+            const applied = await migrateRunStorage({
+                ...input,
+                redirectReferences: async (entries) => {
+                    const entry = entries.find((entry) => entry.source === path);
+                    expect(readFileSync(entry?.target as string, 'utf8')).toBe('retained');
+                    redirected = true;
+                },
+            });
+            expect(applied.failures).toEqual([]);
+            expect(redirected).toBe(true);
+            const failed = await migrateRunStorage({
+                ...input,
+                redirectReferences: async () => {
+                    throw new Error('owner refused');
+                },
+            });
+            expect(failed.failures[0]?.reason).toContain('reference-redirect');
+            expect(readFileSync(path, 'utf8')).toBe('retained');
+            expect(
+                JSON.parse(readFileSync(join(root, '.spur/memory/run-storage-migration.json'), 'utf8')).complete,
+            ).toBe(false);
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
     test('dry-run reports would-migrate and writes nothing', async () => {
         const { root, scratch, dirs } = makeProject();
         try {
@@ -127,10 +214,7 @@ describe('migrateRunStorage (E71/1025)', () => {
             writeFileSync(join(scratch, 'run-1', 'agent-sessions', 'omp.jsonl'), '{}\n');
             writeFileSync(join(scratch, 'run-1', 'artifacts', 'art.bin'), 'bytes');
             // Run-scoped receipt (runId === prefix) vs plain feature receipt.
-            writeFileSync(
-                join(scratch, '9002-feature-verification.json'),
-                JSON.stringify({ runId: '9002', featureId: 'F' }),
-            );
+            writeFileSync(join(scratch, '9002-feature-verification.json'), JSON.stringify(receipt('F', '9002', root)));
             writeFileSync(join(scratch, '9003-feature-verification.json'), JSON.stringify({ runId: 'other' }));
             // Unowned scratch files stay preserved with no family/identity.
             writeFileSync(join(scratch, 'notes.txt'), 'scratch');

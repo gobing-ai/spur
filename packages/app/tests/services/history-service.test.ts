@@ -1,8 +1,18 @@
 import { describe, expect, spyOn, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, writeFileSync } from 'node:fs';
+import {
+    existsSync,
+    mkdirSync,
+    mkdtempSync,
+    readFileSync,
+    readlinkSync,
+    realpathSync,
+    rmSync,
+    writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+    ArtifactDao,
     type ArtifactSelector,
     createMigratedDb,
     type DbAdapter,
@@ -22,6 +32,7 @@ import {
     UnsafeHistoryImporterError,
     writeArtifact,
 } from '../../src/services/history-service';
+import { WorkflowAppService } from '../../src/services/workflow-service';
 
 /** An empty directory so incremental scans find no real on-disk history (hermetic). */
 function emptyRoot(): string {
@@ -964,6 +975,107 @@ describe('HistoryService', () => {
         });
 
         describe('run-session discovery augmentation (0624 R5)', () => {
+            test('migration redirects artifacts, state and real imported sessions before repeated scratch disposal', async () => {
+                const home = emptyRoot();
+                const cwd = emptyRoot();
+                const runId = 'run-storage-import';
+                const stem = '2026-08-20T10-00-00-000Z_0123456789abcdef';
+                const sessionDir = join(cwd, '.spur/run', runId, 'agent-sessions', 'coder');
+                mkdirSync(sessionDir, { recursive: true });
+                const sessionFile = join(sessionDir, `${stem}.jsonl`);
+                writeFileSync(
+                    sessionFile,
+                    `${JSON.stringify({
+                        type: 'session',
+                        version: 3,
+                        id: 'evt-storage',
+                        timestamp: '2026-08-20T10:00:00Z',
+                        cwd,
+                    })}\n`,
+                );
+                const ctx = { ...makeCtx(), historyHome: home, cwd };
+                const db = await ctx.getDb();
+                try {
+                    await db.run(
+                        "INSERT INTO runs (id,status,started_at,metadata_json) VALUES (?,'done',?,?)",
+                        runId,
+                        '2026-08-20T10:00:00Z',
+                        JSON.stringify({ sessionDir }),
+                    );
+                    await db.run(
+                        "INSERT INTO workflow_states (id,run_id,state,data_json) VALUES ('state-storage',?,'done',?)",
+                        runId,
+                        JSON.stringify({ vars: { '__session.coder.dir': sessionDir } }),
+                    );
+                    await new RunSessionDao(db).insert({
+                        runId,
+                        source: 'omp',
+                        sessionId: null,
+                        exactness: 'unresolved',
+                        mechanism: 'observed',
+                        resolvedAt: '2026-08-20T10:01:00Z',
+                    });
+                    const artifactPath = join(cwd, '.spur/run/handoff.txt');
+                    writeFileSync(artifactPath, 'handoff bytes');
+                    await new ArtifactDao(db).record({ path: artifactPath, kind: 'handoff', runId });
+                    const history = new HistoryService(ctx);
+                    const beforeImport = await history.import('omp');
+                    expect(beforeImport.scannedFiles).toBe(1);
+                    const snapshot = () =>
+                        db.queryAll(
+                            'SELECT session_id, role, record_type, disposition, ts, provenance FROM history_message ORDER BY seq',
+                        );
+                    const before = await snapshot();
+                    expect(before.length).toBeGreaterThan(0);
+                    const unused = () => {
+                        throw new Error('unused migration dependency');
+                    };
+                    const workflow = new WorkflowAppService({
+                        cwd,
+                        getDb: ctx.getDb,
+                        agentService: unused,
+                        ruleService: unused,
+                        hitlResponder: unused,
+                    });
+                    expect((await workflow.migrateRunStorage({ dryRun: true })).failures).toEqual([]);
+                    expect((await workflow.migrateRunStorage()).failures).toEqual([]);
+                    const durableSession = realpathSync(join(cwd, '.spur/memory/runs', runId, 'agent-sessions/coder'));
+                    const metadata = await db.queryFirst<{ metadata_json: string }>(
+                        'SELECT metadata_json FROM runs WHERE id=?',
+                        runId,
+                    );
+                    expect(JSON.parse(metadata?.metadata_json ?? '{}').sessionDir).toBe(durableSession);
+                    const state = await db.queryFirst<{ data_json: string }>(
+                        "SELECT data_json FROM workflow_states WHERE id='state-storage'",
+                    );
+                    expect(JSON.parse(state?.data_json ?? '{}').vars['__session.coder.dir']).toBe(durableSession);
+                    const artifacts = await new ArtifactDao(db).artifactsByRunId(runId);
+                    expect(readFileSync(artifacts[0]?.path as string, 'utf8')).toBe('handoff bytes');
+                    // Copies must not be discovered twice while compatibility scratch still exists.
+                    expect((await history.import('omp')).scannedFiles).toBe(1);
+                    expect(await snapshot()).toEqual(before);
+                    for (let i = 0; i < 2; i++) {
+                        rmSync(join(cwd, '.spur/run'), { recursive: true, force: true });
+                        expect((await history.import('omp')).scannedFiles).toBe(1);
+                        expect(await snapshot()).toEqual(before);
+                        expect(
+                            (await new RunSessionDao(db).getByRunId(runId)).some(
+                                (row) => row.session_id === stem && row.exactness === 'exact',
+                            ),
+                        ).toBe(true);
+                    }
+                    expect(
+                        await db.queryAll<{ source_file: string }>('SELECT source_file FROM history_import_checkpoint'),
+                    ).toHaveLength(1);
+                    expect((await history.import('omp', { mode: 'full' })).scannedFiles).toBe(1);
+                    expect(await snapshot()).toEqual(before);
+                } finally {
+                    db.close();
+                    rmSync(home, { recursive: true, force: true });
+                    rmSync(cwd, { recursive: true, force: true });
+                }
+            });
+
             test('a role-named run dir resolves its source mapping and persists the exact imported session', async () => {
                 const home = emptyRoot();
                 const cwd = emptyRoot();
