@@ -4,7 +4,7 @@ name: Commit diffstat-arm conformance test (durable AC1/AC2 evidence for 1033)
 status: todo
 template: issue
 created_at: 2026-10-01T16:20:50.852Z
-updated_at: "2026-10-01T16:31:48.358Z"
+updated_at: "2026-10-01T16:46:49.319Z"
 
 feature_id: D9
 ---
@@ -35,6 +35,10 @@ stage verify executed inline in session <sid> (below dispatch floor: diffstat fi
 **In scope:** the conformance describe block per the table above; one mutation check (temporarily break a threshold, confirm the test fails, revert) to prove it bites; quoting the test run in the task.
 
 **Out of scope (anti-drift):** no production code changes — not `task-diffstat.ts`, not `wrapup-steps.ts`, not the driver reference, not workflow YAML; no extracting a shared decision helper (the consumer is prose; a mirror test with a source comment is the point); no new fixtures framework; don't restate the thresholds anywhere except the test and its cited anchor.
+
+**Adjacent coverage (2026-10-01, commit fd2ab09f5)**
+
+A doc-text parity pin landed in `plugins/sp/tests/command-flag-parity.test.ts`: it asserts the driver prose contains the arm thresholds and log-template text (fails-when wording, `<= 60`, `.sensitive == false`, `below dispatch floor:`). That pins the contract description, not implementation behavior. This task's ACs (behavioral decision-table fixtures in `plugins/sp/tests/task-diffstat.test.ts`) remain the outstanding work; implement them without duplicating the prose-parity assertions.
 
 ### Requirements
 
