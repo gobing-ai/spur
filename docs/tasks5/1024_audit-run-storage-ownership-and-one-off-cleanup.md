@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Audit run storage ownership and one-off cleanup
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-30T20:13:58.349Z
-updated_at: "2026-09-30T20:36:50.152Z"
+updated_at: "2026-10-01T08:08:23.014Z"
 feature_id: E71
 priority: P2
 tags:
@@ -31,14 +31,14 @@ Rubric: E4 D1 L2 C0 R1 = 8; independently reviewable classification deliverable
 
 ### Requirements
 
-- [ ] R1. Trace every direct and computed run-storage producer and all consumers across app/CLI, workflows, plugins and tests.
-- [ ] R2. Classify each artifact lifetime and record the durable destination or removable/recomputable disposition.
-- [ ] R3. Classify every one-off deletion as freshness invalidation, atomic publication cleanup, terminal housekeeping or unrelated temporary storage.
-- [ ] R4. Publish a persistent ownership inventory and regression mapping with no unclassified candidate silently treated as disposable.
+- [x] R1. Trace every direct and computed run-storage producer and all consumers across app/CLI, workflows, plugins and tests.
+- [x] R2. Classify each artifact lifetime and record the durable destination or removable/recomputable disposition.
+- [x] R3. Classify every one-off deletion as freshness invalidation, atomic publication cleanup, terminal housekeeping or unrelated temporary storage.
+- [x] R4. Publish a persistent ownership inventory and regression mapping with no unclassified candidate silently treated as disposable.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Every run storage dependency and cleanup site has a disposition (req: R1; R2; R3; R4)
+- [x] AC1 — Every run storage dependency and cleanup site has a disposition (req: R1; R2; R3; R4)
 
 ### Q&A
 
@@ -81,15 +81,38 @@ Execution checks and per-requirement observability are frozen in Design. Preserv
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Audit-only task (mutationPolicy: none) — no source, test, workflow, or CLI surface changes; the deliverable is a persistent ownership inventory that later E71 tasks (1025–1027) consume.
+
+- docs/reports/2026-09-30-E71-run-storage-ownership.md:1 — Ownership audit (290 lines): §1 live producer/consumer scans with traced citations; §2 lifetime taxonomy keyed to ADR-131 (docs/00_ADR.md:2042); §3 durable destination families; §4 one-off deletion census with §8 dispositions; §8 unmatched candidates X1–X6 (nothing silently disposable); §10 R1–R5 scenario coverage map; §11 handoff.
+- docs/tasks5/1024_audit-run-storage-ownership-and-one-off-cleanup.md:1 — Task record: verdict PASS with proof digest sha256:085c2ad7 (run inline-1024-233245, quality gate PASS, review skipped via fast lane).
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Regenerated scans in report §1 with traced producers/consumers across app/CLI/server/workflows/plugins/tests; spot-checked citations resolve (task.ts:1329-1330 emit, run-record.ts:118-149 shared reader, agent-run.ts:558-592 session dirs, history-service.ts:481-519 importer) |
+| R2 | MET | Lifetime taxonomy matches ADR-131 (docs/00_ADR.md:2042) and design §3 destinations (feature-verification-receipt.ts:32-36, workflow-run-log-sink.ts:47-57, agent-run.ts:574-580, agent-service.ts:2612-2613) |
+| R3 | MET | Independent census of every rmSync/unlinkSync/deleteFile site in product src maps to §4/§8 rows (quality-gate.ts:540,608,619; inline-run-setup.ts:804; history-anatomy.ts:880; history-service.ts:1504,1692; idea-pipeline.yaml W1-W6; agent-run.ts:327-337,809-843; feature-service.ts:696-703) |
+| R4 | MET | Persistent inventory published at docs/reports/2026-09-30-E71-run-storage-ownership.md (§3 families, §10 scenario map, §11 handoff); unmatched candidates carried as X1-X6, nothing silently disposable |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| [R1] AC1 | MET | command | Quality gate `bun run spur-check` PASS (.spur/run/1024-test-gate.log, 5m08s); verifier spot-check greps over report §4/§8 citations all resolved (rmSync/unlinkSync/deleteFile census, ADR-131 taxonomy at docs/00_ADR.md:2042); full inventory in docs/reports/2026-09-30-E71-run-storage-ownership.md |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -99,3 +122,8 @@ Execution checks and per-requirement observability are frozen in Design. Preserv
 - Concurrency snapshot: no wip tasks reported at refinement kickoff; active worktree branches `sp/runall-A9-485e` and `sp/runall-i33-a22b` exist. Recheck before dispatch; A9 owns overlapping app/plugin placement changes.
 
 ### History
+
+- 2026-10-01T07:08:10.179Z todo → wip (system)
+- 2026-10-01T07:54:35.656Z wip → testing (system)
+- 2026-10-01T08:08:23.014Z testing → done (system)
+
