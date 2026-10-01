@@ -9,6 +9,7 @@ import {
     parseCoverageThreshold,
     type QualityGateResult,
     RECEIPT_SCHEMA_VERSION,
+    readReceiptStatus,
     runQualityGate,
     runShellCommand,
     scanCoverageShortfalls,
@@ -52,6 +53,41 @@ function gate(
     }
 }
 describe('quality-gate service (0823 d)', () => {
+    test('a legacy PASS receipt from an empty command cannot be reused', () => {
+        const { dir, cleanup } = scratch('spur-qg-empty-receipt-');
+        try {
+            gate('run', dir, 'exit 0', { proofDigest: 'legacy-empty' });
+            const path = join(dir, '.spur/run/0823-check-receipt.json');
+            const receipt = JSON.parse(readFileSync(path, 'utf8'));
+            receipt.checks[0].cmd = '';
+            writeFileSync(path, JSON.stringify(receipt));
+            expect(readReceiptStatus(path, 'legacy-empty').reuse).toBe(false);
+            expect(gate('run', dir, 'exit 1', { proofDigest: 'legacy-empty' }).status).toBe('FAIL');
+        } finally {
+            cleanup();
+        }
+    });
+
+    test('empty full-gate commands fail in run and recheck, even with a reusable PASS receipt', () => {
+        const { dir, cleanup } = scratch('spur-qg-empty-');
+        try {
+            for (const mode of ['run', 'recheck'] as const) {
+                for (const command of ['', ' \t\n']) {
+                    gate('run', dir, 'exit 0', { proofDigest: 'empty-command-digest' });
+                    const result = gate(mode, dir, command, { proofDigest: 'empty-command-digest' });
+                    expect(result.status).toBe('FAIL');
+                    expect(result.attempts).toBe(0);
+                    expect(readFileSync(join(dir, '.spur/run/0823-test-gate.log'), 'utf8')).toContain('qualityGateCmd');
+                    expect(
+                        JSON.parse(readFileSync(join(dir, '.spur/run/0823-check-receipt.json'), 'utf8')).status,
+                    ).toBe('FAIL');
+                }
+            }
+        } finally {
+            cleanup();
+        }
+    });
+
     test('run mode: a lock failure retries, then passes when the lock clears', () => {
         const { dir, cleanup } = scratch('spur-qg-clear-');
         try {

@@ -123,6 +123,9 @@ function readReceiptStatus(receiptPath, currentDigest) {
   }
   if (receipt.tier !== "full")
     return { reuse: false, reason: "light-only" };
+  if (!Array.isArray(receipt.checks) || receipt.checks.length === 0 || receipt.checks.some((row) => row === null || typeof row !== "object" || row.status !== "PASS" || typeof row.cmd !== "string" || row.cmd.trim().length === 0)) {
+    return { reuse: false, reason: "failed" };
+  }
   return { reuse: true, reason: "ok" };
 }
 var TEST_FILE_PATTERN = /\.test\.tsx?$/;
@@ -317,9 +320,12 @@ function runQualityGate(mode, env, options = {}) {
     writeFileSync(abs(attemptFile), `0
 `);
   const gateStartedAtMs = Date.now();
-  let gateRc = 0;
+  const commandPresent = (env.qualityGateCmd ?? "").trim().length > 0;
+  let gateRc = commandPresent ? 0 : 1;
   let gateAttempt = 0;
-  const reusePass = readReceiptStatus(abs(rel("-check-receipt.json")), env.proofDigest ?? "").reuse;
+  if (!commandPresent)
+    appendFileSync(abs(logFile), "quality-gate: env `qualityGateCmd` must be non-empty\n");
+  const reusePass = commandPresent && readReceiptStatus(abs(rel("-check-receipt.json")), env.proofDigest ?? "").reuse;
   if (reusePass) {
     const line = `check.reused — full-tier PASS receipt at input digest ${env.proofDigest ?? ""}; gate skipped
 `;
@@ -330,7 +336,7 @@ function runQualityGate(mode, env, options = {}) {
 `);
     return { status: "PASS", attempts: 0, logFile, findingsFile, statusFile, attemptFile };
   }
-  const noProgressSkip = mode === "recheck" && receiptFailsAtDigest(readReceipt(abs(rel("-check-receipt.json"))), env.proofDigest ?? "");
+  const noProgressSkip = commandPresent && mode === "recheck" && receiptFailsAtDigest(readReceipt(abs(rel("-check-receipt.json"))), env.proofDigest ?? "");
   if (noProgressSkip) {
     const line = `check.skipped-no-progress — full-tier FAIL receipt at input digest ${env.proofDigest ?? ""}; recheck skipped
 `;
@@ -338,7 +344,7 @@ function runQualityGate(mode, env, options = {}) {
     appendFileSync(abs(logFile), line);
     gateRc = 1;
   }
-  if (mode === "recheck" && !noProgressSkip && (env.gateProbeCmd ?? "").length > 0) {
+  if (mode === "recheck" && gateRc === 0 && (env.gateProbeCmd ?? "").length > 0) {
     const probe = runShellCommand(env.gateProbeCmd ?? "", cwd);
     writeFileSync(abs(`${logFile}.probe`), probe.output);
     gateRc = probe.code;
@@ -452,7 +458,7 @@ function main(argv, rawEnv = getEnvVars(), options = {}) {
     process.stdout.write(`${JSON.stringify(verdict)}
 `);
   } else {
-    runQualityGate(mode, env);
+    return runQualityGate(mode, env, options).status === "PASS" ? 0 : 1;
   }
   return 0;
 }

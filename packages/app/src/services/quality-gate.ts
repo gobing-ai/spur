@@ -283,6 +283,20 @@ export function readReceiptStatus(receiptPath: string, currentDigest: string): R
         return { reuse: false, reason: 'stale' };
     }
     if (receipt.tier !== 'full') return { reuse: false, reason: 'light-only' };
+    if (
+        !Array.isArray(receipt.checks) ||
+        receipt.checks.length === 0 ||
+        receipt.checks.some(
+            (row) =>
+                row === null ||
+                typeof row !== 'object' ||
+                row.status !== 'PASS' ||
+                typeof row.cmd !== 'string' ||
+                row.cmd.trim().length === 0,
+        )
+    ) {
+        return { reuse: false, reason: 'failed' };
+    }
     return { reuse: true, reason: 'ok' };
 }
 
@@ -566,15 +580,17 @@ export function runQualityGate(
     if (mode === 'run') writeFileSync(abs(attemptFile), '0\n');
     const gateStartedAtMs = Date.now();
 
-    let gateRc = 0;
+    const commandPresent = (env.qualityGateCmd ?? '').trim().length > 0;
+    let gateRc = commandPresent ? 0 : 1;
     let gateAttempt = 0;
+    if (!commandPresent) appendFileSync(abs(logFile), 'quality-gate: env `qualityGateCmd` must be non-empty\n');
 
     // 1016 R1 — PASS receipt reuse, next to the 0940 no-progress skip: a full-tier PASS receipt
     // bound to the current proof-input digest means these exact inputs already passed the full
     // gate, so re-entry (run or recheck) skips the probe and the gate command. `readReceiptStatus`
     // fails closed — missing, failed, stale, light-only or an empty digest never reuse — and the
     // skip leaves the receipt untouched, so a FAIL can never be laundered into a reusable PASS.
-    const reusePass = readReceiptStatus(abs(rel('-check-receipt.json')), env.proofDigest ?? '').reuse;
+    const reusePass = commandPresent && readReceiptStatus(abs(rel('-check-receipt.json')), env.proofDigest ?? '').reuse;
     if (reusePass) {
         const line = `check.reused — full-tier PASS receipt at input digest ${env.proofDigest ?? ''}; gate skipped\n`;
         process.stdout.write(line); // tee: stdout and the log
@@ -591,7 +607,9 @@ export function runQualityGate(
     // The attempt counter is pipeline-owned (only the test-fix hop increments it; `recheck` never
     // touches it), so the existing cap still bounds the loop.
     const noProgressSkip =
-        mode === 'recheck' && receiptFailsAtDigest(readReceipt(abs(rel('-check-receipt.json'))), env.proofDigest ?? '');
+        commandPresent &&
+        mode === 'recheck' &&
+        receiptFailsAtDigest(readReceipt(abs(rel('-check-receipt.json'))), env.proofDigest ?? '');
     if (noProgressSkip) {
         const line = `check.skipped-no-progress — full-tier FAIL receipt at input digest ${env.proofDigest ?? ''}; recheck skipped\n`;
         process.stdout.write(line); // tee: stdout and the log
@@ -600,7 +618,7 @@ export function runQualityGate(
     }
 
     // recheck probe: a probe failure is the gate failure; the gate loop is skipped.
-    if (mode === 'recheck' && !noProgressSkip && (env.gateProbeCmd ?? '').length > 0) {
+    if (mode === 'recheck' && gateRc === 0 && (env.gateProbeCmd ?? '').length > 0) {
         const probe = runShellCommand(env.gateProbeCmd ?? '', cwd);
         writeFileSync(abs(`${logFile}.probe`), probe.output);
         gateRc = probe.code;

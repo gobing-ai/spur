@@ -54,7 +54,7 @@ export function main(
         }
         process.stdout.write(`${JSON.stringify(verdict)}\n`);
     } else {
-        runQualityGate(mode, env);
+        return runQualityGate(mode, env, options).status === 'PASS' ? 0 : 1;
     }
     return 0;
 }
