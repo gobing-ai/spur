@@ -4,7 +4,7 @@ name: "Task pipeline throughput: two-tier quality gate and proof ergonomics"
 status: done
 template: issue
 created_at: 2026-09-30T13:44:22.914Z
-updated_at: "2026-10-01T00:46:33.566Z"
+updated_at: "2026-10-01T06:58:57.557Z"
 feature_id: A9
 
 ac_numbering: task-local
@@ -101,24 +101,24 @@ Rationale: the full-tier gate dominates pipeline cost (~9 min/task at 9520 tests
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Reuse branch in runQualityGate re-read this run: `reusePass = readReceiptStatus(...-check-receipt.json, env.proofDigest)` at `packages/app/src/services/quality-gate.ts:577`; on reuse tees the exact `check.reused — full-tier PASS receipt at input digest <digest>; gate skipped` line to stdout + log, writes `PASS` status, returns without touching the receipt (`packages/app/src/services/quality-gate.ts:578-585`). Applies to both run and recheck (before the mode-specific probe). Bundles carry the same branch (plugins/sp/lib/quality-gate.generated.mjs, plugins/sp/scripts/quality-gate.mjs: 1 match each). |
-| R2 | MET | readReceiptStatus fails closed for missing/failed/stale(incl. empty digest)/light-only (`packages/app/src/services/quality-gate.ts:276-287`); non-reuse falls through to the unchanged 0940 noProgressSkip (`packages/app/src/services/quality-gate.ts:593-595`) and recheck probe (`packages/app/src/services/quality-gate.ts:603`). |
+| R1 | MET | `packages/app/src/services/quality-gate.ts:577`; `packages/app/src/services/quality-gate.ts:578` — reviewed implementation of R1. `runQualityGate` in modes `run` and `recheck`: when `readReceiptStatus(.spur/run/<wbs>-check-receipt.json, env.proofDigest)` returns `reuse: true` (full-tier PASS at the current digest), skip the probe and the gate command, write one line `check.reused — full-tier PASS receipt at input digest <digest>; gate skipped` to stdout and `<wbs>-test-ga. Fresh evidence: app workspace tests: 430 pass, 0 fail, exit 0; exact command .spur/run/A9-reverify/app-tests.json; output .spur/run/A9-reverify/app-tests.log. plugin workspace tests: 341 pass, 0 fail, exit 0; exact command .spur/run/A9-reverify/plugin-tests.json; output .spur/run/A9-reverify/plugin-tests.log. Full bun run spur-check exited 0: 9554 pass, 0 fail (.spur/run/A9-reverify/spur-check.log). |
+| R2 | MET | `packages/app/src/services/quality-gate.ts:276`; `packages/app/src/services/quality-gate.ts:593`; `packages/app/src/services/quality-gate.ts:603` — reviewed implementation of R2. Every other receipt state — `missing`, `failed`, `stale`, `light-only`, or an empty `proofDigest` — runs exactly as today, including the 0940 no-progress FAIL skip and the lock-retry loop.. Fresh evidence: app workspace tests: 430 pass, 0 fail, exit 0; exact command .spur/run/A9-reverify/app-tests.json; output .spur/run/A9-reverify/app-tests.log. plugin workspace tests: 341 pass, 0 fail, exit 0; exact command .spur/run/A9-reverify/plugin-tests.json; output .spur/run/A9-reverify/plugin-tests.log. Full bun run spur-check exited 0: 9554 pass, 0 fail (.spur/run/A9-reverify/spur-check.log). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `packages/app/tests/services/quality-gate.test.ts:413-435` test.each(run, recheck): sentinel absent, status PASS, log has check.reused line, receipt bytes unchanged. `(cd packages/app && bun test tests/services/quality-gate.test.ts)` this run: 22 pass / 0 fail, 85 expect(). |
-| AC2 | MET | test | `packages/app/tests/services/quality-gate.test.ts:437-472` five scenarios (missing, different digest, light tier, FAIL in run mode, empty proofDigest) each assert the sentinel ran; same run 22/0. 0940 no-progress tests untouched by commit c6ee63648 (its test diff in the plugin suite only reverses the PASS-receipt case); `(cd plugins/sp && bun test tests/quality-gate-receipt.test.ts)` 26/0. |
+| AC1 | MET | test | `packages/app/tests/services/quality-gate.test.ts:413` — source/contract review of AC1. Fresh executable evidence: app workspace tests: 430 pass, 0 fail, exit 0; exact command .spur/run/A9-reverify/app-tests.json; output .spur/run/A9-reverify/app-tests.log. plugin workspace tests: 341 pass, 0 fail, exit 0; exact command .spur/run/A9-reverify/plugin-tests.json; output .spur/run/A9-reverify/plugin-tests.log. Full bun run spur-check exited 0: 9554 pass, 0 fail (.spur/run/A9-reverify/spur-check.log). |
+| AC2 | MET | test | `packages/app/tests/services/quality-gate.test.ts:437` — source/contract review of AC2. Fresh executable evidence: app workspace tests: 430 pass, 0 fail, exit 0; exact command .spur/run/A9-reverify/app-tests.json; output .spur/run/A9-reverify/app-tests.log. plugin workspace tests: 341 pass, 0 fail, exit 0; exact command .spur/run/A9-reverify/plugin-tests.json; output .spur/run/A9-reverify/plugin-tests.log. Full bun run spur-check exited 0: 9554 pass, 0 fail (.spur/run/A9-reverify/spur-check.log). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- spur:record-review -->
+Re-verification 2026-09-30: requirement and AC traceability, correctness, security, efficiency, usability, maintainability, architecture, Design and scope checked against current task-owned code and executable tests.
 
-**SECU findings** (pipeline verify step — verdict: PASS)
+No new implementation defect found.
 
 | Priority | Dimension | Location | Finding |
-|----------|-----------|----------|----------|
-| P4 | — | — | No findings (verify verdict PASS) |
+| --- | --- | --- | --- |
+| P4 | SECUA and architecture | task-owned implementation | No findings (verify verdict PASS) |
 
 ### References
 
