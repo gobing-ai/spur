@@ -4,7 +4,7 @@ name: Commit diffstat-arm conformance test (durable AC1/AC2 evidence for 1033)
 status: done
 template: issue
 created_at: 2026-10-01T16:20:50.852Z
-updated_at: "2026-10-01T18:17:14.869Z"
+updated_at: "2026-10-01T18:56:12.645Z"
 
 feature_id: D9
 ---
@@ -93,14 +93,14 @@ Final re-verification adds a real-producer 3/4-file boundary at `plugins/sp/test
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `belowDiffstatFloor` in plugins/sp/tests/task-diffstat.test.ts transcribes the condition-5 diffstat arm; 5 conformance tests drive real `runDiffstat` outputs from temp git repos (producer = plugins/sp/scripts/task-diffstat.ts, unmodified) |
-| R2 | MET | Fixture classes: small-clean→inline; sensitive (`secret.env`)→floor despite 1 line; large (61 changed lines)→floor despite 1 file; missing/unparsable/null-field artifact→floor via `belowFloorFromArtifact` defensive path |
-| R3 | MET | `floorLogLine` pinned with exact `toBe`: "stage verify executed inline in session sess-1 (below dispatch floor: diffstat files 1 lines 3)" |
+| R1 | MET | `plugins/sp/tests/task-diffstat.test.ts:195` mirrors the documented decision; `plugins/sp/tests/task-diffstat.test.ts:243` pins its complete predicate and log; real producer fixtures cover both size boundaries. Fresh dispatch suites: 121 pass, 0 fail, exit 0. |
+| R2 | MET | `plugins/sp/tests/task-diffstat.test.ts:242` drives small, sensitive, large, missing/unparsable and missing/null-count fixtures with the real producer. Fresh dispatch suites: exit 0; literal documented jq probe: 11/11 expected results. |
+| R3 | MET | `plugins/sp/tests/task-diffstat.test.ts:251` pins the exact rendered log; `plugins/sp/tests/task-diffstat.test.ts:258` also pins its complete documented template. File threshold 3-to-4, line threshold 60-to-59, and documented log wording mutations each cause exit 1, restored suite exit 0 (origin: D9 final verification, `.spur/run/D9-finalverify/mutation-after.json`). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `cd plugins/sp && bun test tests/task-diffstat.test.ts` → 14 pass, 0 fail, 60 expects; mutation check: floor 60→59 in the transcribed condition → boundary test fails (13 pass, 1 fail), reverted → green again |
-| AC2 | MET | command | `git diff --stat` shows plugins/sp/tests/task-diffstat.test.ts only (test-only); `bun run spur-check` full chain green: lint, typecheck, 9574 tests, pre/post rules pass |
+| AC1 | MET | test | `plugins/sp/tests/task-diffstat.test.ts:251` pins the exact rendered log; `plugins/sp/tests/task-diffstat.test.ts:258` also pins its complete documented template. File threshold 3-to-4, line threshold 60-to-59, and documented log wording mutations each cause exit 1, restored suite exit 0 (origin: D9 final verification, `.spur/run/D9-finalverify/mutation-after.json`). Files and lines mutations fail boundary assertions; log mutation fails the source-template assertion. |
+| AC2 | MET | command | Task 1039 changes only `plugins/sp/tests/task-diffstat.test.ts:243`; producer code and workflow graph are untouched. The adjacent invalid-count driver-contract repair is owned and documented by task 1033. Fresh git scope assertion exit 0: original 1039 commit has exactly one non-corpus path, the test file; producer and task-pipeline have zero changes since 87721715f. Origin: D9 final verification, `.spur/run/D9-finalverify/1039-scope-audit.json`. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -138,8 +138,6 @@ Scope: tagged task implementation plus the final D9 fixes. Dimensions: functiona
 
 | Priority | Finding | Resolution |
 |----------|---------|------------|
-| P1 | None — no correctness, safety, or contract-risk findings. | — |
-| P2 | None — no architecture, integration, or evidence-quality concerns. | — |
 | P3 | The transcribed condition and log template are in-test mirrors: doc-text drift alone cannot fail this suite; catching drift requires both pins (doc-parity + semantics) to survive together. | Resolved in final re-verification: the suite now pins the full documented predicate and log template directly, and adds the 3/4-file boundary. All three fresh mutations fail as expected; production code stays unchanged. |
 | P4 | Boundary fixtures depend on rewrite-of-1-line-base arithmetic (+N−1); future fixture edits may miscount as the first pass did. | Mitigated inline with comments naming the totals (59 written → exactly 60 changed; 60 written → 61). |
 

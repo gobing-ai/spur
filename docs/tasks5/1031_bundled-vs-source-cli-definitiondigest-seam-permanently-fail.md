@@ -4,7 +4,7 @@ name: Bundled-vs-source CLI definitionDigest seam permanently fails feature-veri
 status: done
 template: feature-impl
 created_at: 2026-09-30T21:56:16.627Z
-updated_at: "2026-10-01T18:17:05.822Z"
+updated_at: "2026-10-01T18:56:06.124Z"
 feature_id: D9
 
 priority: P2
@@ -126,16 +126,16 @@ Title note: the task title keeps its original creation wording for traceability;
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `62499ad68` merges caller `spurBin` via `options.vars` (lifecycle-adapter.ts:219-224); `feature-lifecycle-adapter.test.ts` 12/12 pass — guard transitions use the current caller's spurBin. |
-| R2 | MET | `feature-verification-receipt.ts` run detail (:418) appends ` (receipt sourcePath=…)` + different-install re-run hint; contract-mismatch detail (:463) appends both sourcePath values with the hint gated on paths differing (Q&A hint condition). Tests assert receipt sourcePath + hint (run-row) and both paths + hint (differing-sourcePath case). |
-| R3 | MET | Invariants held: `drifted` list unchanged (name/layer/definitionDigest); reason values and return shapes untouched; sourcePath-only difference still passes (AC4, ok:true). Receipt suite 22/22 pass. |
+| R1 | MET | `packages/app/src/workflow/lifecycle-adapter.ts:223` supplies caller overrides to guarded transitions; `packages/app/tests/workflow/lifecycle-adapter.test.ts:98` proves a true caller overrides a persisted false binary. Fresh focused application run: 65 pass, 0 fail, exit 0. |
+| R2 | MET | `packages/app/src/workflow/feature-verification-receipt.ts:418` and `packages/app/src/workflow/feature-verification-receipt.ts:463` name definition files on run/contract mismatches; `packages/app/tests/workflow/feature-verification-receipt.test.ts:507` and `packages/app/tests/workflow/feature-verification-receipt.test.ts:546` assert diagnostics. Fresh focused application run: exit 0. |
+| R3 | MET | `packages/app/tests/workflow/feature-verification-receipt.test.ts:575` proves sourcePath-only changes still validate; identity remains name/layer/definitionDigest. Fresh focused application run: exit 0. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — a guard runs the caller's spurBin on a run attached by another binary (req: R1) | MET | test | "guards run the caller-resolved spurBin" scenario in feature-lifecycle-adapter.test.ts — transition allowed when second adapter's spurBin differs from snapshot. |
-| AC2 — a verifier-identity mismatch names both definition files (req: R2) | MET | test | New test `contract mismatch with differing source paths names both files and the re-run hint` (feature-verification-receipt.test.ts:540) asserts reason contract-mismatch, both sourcePath values, and the "different spur install" hint; implementation at feature-verification-receipt.ts:463. |
-| AC3 — a run-row digest mismatch names the receipt's definition file (req: R2) | MET | test | Run-row digest-mismatch test asserts `receipt sourcePath=` and `a different spur install may have attached the run` in detail with reason `run`; implementation at feature-verification-receipt.ts:418. |
-| AC4 — sourcePath alone never changes the verdict (req: R3) | MET | test | 0957 test `same definition resolved from a different install path still validates` — equal name/layer/digest, different sourcePath → ok:true. |
+| Scenario: AC1 — a guard runs the caller's spurBin on a run attached by another binary (req: R1) | MET | test | `packages/app/src/workflow/lifecycle-adapter.ts:223` supplies caller overrides to guarded transitions; `packages/app/tests/workflow/lifecycle-adapter.test.ts:98` proves a true caller overrides a persisted false binary. Fresh focused application run: 65 pass, 0 fail, exit 0. |
+| Scenario: AC2 — a verifier-identity mismatch names both definition files (req: R2) | MET | test | `packages/app/src/workflow/feature-verification-receipt.ts:418` and `packages/app/src/workflow/feature-verification-receipt.ts:463` name definition files on run/contract mismatches; `packages/app/tests/workflow/feature-verification-receipt.test.ts:507` and `packages/app/tests/workflow/feature-verification-receipt.test.ts:546` assert diagnostics. Fresh focused application run: exit 0. |
+| Scenario: AC3 — a run-row digest mismatch names the receipt's definition file (req: R2) | MET | test | `packages/app/src/workflow/feature-verification-receipt.ts:418` and `packages/app/src/workflow/feature-verification-receipt.ts:463` name definition files on run/contract mismatches; `packages/app/tests/workflow/feature-verification-receipt.test.ts:507` and `packages/app/tests/workflow/feature-verification-receipt.test.ts:546` assert diagnostics. Fresh focused application run: exit 0. |
+| Scenario: AC4 — sourcePath alone never changes the verdict (req: R3) | MET | test | `packages/app/tests/workflow/feature-verification-receipt.test.ts:575` proves sourcePath-only changes still validate; identity remains name/layer/definitionDigest. Fresh focused application run: exit 0. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

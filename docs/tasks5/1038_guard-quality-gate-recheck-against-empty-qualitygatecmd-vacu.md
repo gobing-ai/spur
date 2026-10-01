@@ -4,7 +4,7 @@ name: Guard quality-gate recheck against empty qualityGateCmd (vacuous PASS)
 status: done
 template: issue
 created_at: 2026-10-01T16:18:43.411Z
-updated_at: "2026-10-01T18:17:11.676Z"
+updated_at: "2026-10-01T18:56:10.547Z"
 
 feature_id: D9
 done_forced: "true"
@@ -82,14 +82,14 @@ An absent command previously reached the empty-shell success path and produced a
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | packages/app/src/services/quality-gate.ts:583-586 `commandPresent` guard rejects empty/whitespace `qualityGateCmd` with gateRc=1 before any gate execution, in both run and recheck; plugins/sp/scripts/quality-gate.ts delegates run/recheck to the same bundled core (twin regenerated via build:plugin-lib + build:scripts, in lockstep) |
-| R2 | MET | Rejection line now `quality-gate: mode <mode> requires env ` + "`qualityGateCmd`" + ` to be non-empty` — names env var and mode; live probe quoted `mode recheck requires env ...` and `mode run requires env ...` |
-| R3 | MET | Receipt condition now `!noProgressSkip && commandPresent` (quality-gate.ts:683): guard rejection evaluates no gate command and records no receipt; live probe fresh-cwd recheck with proofDigest set wrote no check-receipt.json, and a pre-existing PASS receipt stayed untouched (status PASS, cmd intact) |
+| R1 | MET | `packages/app/src/services/quality-gate.ts:583` rejects absent/blank commands before probe, gate execution and receipt reuse in both modes; `packages/app/tests/services/quality-gate.test.ts:71` covers blank commands despite reusable PASS evidence. Fresh shipped-node-twin probe: run/recheck exit 1, no fresh receipt; focused application run: 65 pass, 0 fail, exit 0. |
+| R2 | MET | `packages/app/src/services/quality-gate.ts:586` names qualityGateCmd and the mode. `packages/app/tests/services/quality-gate.test.ts:83` pins the diagnostic. Fresh node probe prints mode run/recheck requires env qualityGateCmd to be non-empty; exit 1 in both modes (origin: D9 final verification, `.spur/run/D9-finalverify/quality-probe.json`). |
+| R3 | MET | `packages/app/src/services/quality-gate.ts:683` writes a receipt only when a command was present; `packages/app/tests/services/quality-gate.test.ts:84` verifies seeded PASS remains untouched. Fresh node probes: no receipt on absent command, seeded receipt byte-identical after whitespace rejection; both modes exit 1. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | command | Temp cwd: `wbs=1038 runId=run-1038 proofDigest=z qualityGateCmd=` node plugins/sp/scripts/quality-gate.mjs recheck → rc=1, log `quality-gate: mode recheck requires env ` + "`qualityGateCmd`" + ` to be non-empty`, no receipt file written |
-| AC2 | MET | test | `qualityGateCmd='echo PASS-gate'` run → rc=0 + PASS receipt; packages/app quality-gate suite 24 pass (empty-cmd test now pins the R2 message and the untouched seeded PASS receipt); full bun run spur-check green: lint, typecheck, 9574 tests, post rules 2/2 |
+| AC1 | MET | command | `packages/app/src/services/quality-gate.ts:583` rejects absent/blank commands before probe, gate execution and receipt reuse in both modes; `packages/app/tests/services/quality-gate.test.ts:71` covers blank commands despite reusable PASS evidence. Fresh shipped-node-twin probe: run/recheck exit 1, no fresh receipt; focused application run: 65 pass, 0 fail, exit 0. `packages/app/src/services/quality-gate.ts:586` names qualityGateCmd and the mode. `packages/app/tests/services/quality-gate.test.ts:83` pins the diagnostic. Fresh node probe prints mode run/recheck requires env qualityGateCmd to be non-empty; exit 1 in both modes (origin: D9 final verification, `.spur/run/D9-finalverify/quality-probe.json`). `packages/app/src/services/quality-gate.ts:683` writes a receipt only when a command was present; `packages/app/tests/services/quality-gate.test.ts:84` verifies seeded PASS remains untouched. Fresh node probes: no receipt on absent command, seeded receipt byte-identical after whitespace rejection; both modes exit 1. |
+| AC2 | MET | test | `plugins/sp/tests/quality-gate.test.ts:16` proves valid commands return PASS and failed commands return FAIL. Full service regression suite and shipped twin probes preserve valid-command execution and receipt semantics. Focused application suite: 65 pass, 0 fail; plugin suite: 151 pass, 0 fail; both exit 0. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -127,8 +127,6 @@ Scope: tagged task implementation plus the final D9 fixes. Dimensions: functiona
 
 | Priority | Finding | Resolution |
 |----------|---------|------------|
-| P1 | None — no correctness, safety, or contract-risk findings. | — |
-| P2 | None — no architecture, integration, or evidence-quality concerns. | — |
 | P3 | This fix reverses the previously accepted deviation ("FAIL receipt on reject is strictly stronger"): the prior close documented that tradeoff, this reopen supersedes it at the operator's direction. | Resolved: literal R1-R3 now pass fresh shipped-twin probes and service tests. Reversal justified by the writer contract above: auditable red state still lands in log/status/findings, and receipts now bind only executed commands — matching the design doc and the literal R1–R3. |
 | P4 | The in-test guard message assertions match the exact template; future wording changes must update two test files (packages/app + any twin pin). | Accepted: message template is small and centrally defined; no production shared constant needed. |
 
