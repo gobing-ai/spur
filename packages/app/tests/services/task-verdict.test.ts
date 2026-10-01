@@ -128,6 +128,16 @@ describe('deriveVerdict', () => {
         expect(result.verdict).toBe('FAIL');
     });
 
+    test('a heading closes the checks table — SECUA rows never become checks (1003)', () => {
+        const answer = `${MET_ANSWER}\n### Checks\n| Check | Status | Evidence |\n| --- | --- | --- |\n| regression | pass | bun test exited 0 |\n### SECUA Review\n| Priority | Dimension | Location | Finding |\n| --- | --- | --- | --- |\n| P2 | Correctness | service.ts:1 | Fixed |`;
+        const result = deriveVerdict(answer, true);
+        expect(result.checks.filter((check) => check.name !== 'spur task check')).toEqual([
+            { name: 'lint', status: 'pass', evidence: 'biome clean' },
+            { name: 'regression', status: 'pass', evidence: 'bun test exited 0' },
+        ]);
+        expect(result.verdict).toBe('PASS');
+    });
+
     test('a heading closes the requirement table — SECUA rows never become requirements (0714 R3)', () => {
         const result = deriveVerdict(SECUA_AFTER_REQUIREMENTS_ANSWER, true);
         expect(result.requirements).toHaveLength(1);

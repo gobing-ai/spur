@@ -342,6 +342,7 @@ function extractChecks(
     let inChecks = false;
     for (const line of lines) {
         const trimmed = line.trim();
+        if (/^#{1,6}\s/.test(trimmed)) inChecks = false;
         if (!trimmed.startsWith('|')) continue;
         const cells = splitTableCells(trimmed);
         if (cells.length >= 2) {
