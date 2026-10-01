@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Persist-out: make the 64-file evidence cap row-aware for multi-task batches"
-status: wip
+status: done
 template: feature-impl
 created_at: 2026-10-01T00:47:12.647Z
-updated_at: "2026-10-01T01:19:56.091Z"
+updated_at: "2026-10-01T01:28:35.560Z"
 feature_id: A9
 
 ac_numbering: task-local
@@ -22,16 +22,16 @@ Captured from the creation title: "Persist-out: make the 64-file evidence cap ro
 - Background: batch runall-A9-485e had 6 run rows (5 tasks plus wrap). Its persist-out failed with the 64-file cap throw (`packages/app/src/services/inline-run-setup.ts:297`/`:336`). `MAX_CITED_RUN_FILES = 64` (:208) was sized by 0984 R3 for citations alone, but it is checked against the UNION of cited and owned files (1012 R1). Owned enumeration collects `<wbs>-*` and `<runId>-*` for EVERY run row, so 6 rows alone produced 68 files. That makes the cap structurally impossible to meet for batches of roughly 3+ tasks. The session workaround was a manual archive into a hidden subdirectory, recorded in `.spur/run/worktree-runall-A9-485e.json`.
 - Adjacent, do not duplicate: 1025 owns the evidence-location redesign; 1024 owns run-storage audit/cleanup.
 
-- [ ] R1. The 64-file cap applies to distinct literal citations alone (0984 R3, unchanged). Owned evidence is bounded per owner instead: each forwarded task WBS prefix and each worktree run-row id prefix gets its own budget of `MAX_CITED_RUN_FILES`. The overall bound therefore scales with the batch's row count.
-- [ ] R2. Overflowing any bound (citations, or one owner's files) still throws before the first invoking-tree write. The zero-writes abort contract is preserved.
-- [ ] R3. Cited-file resolution, run-row/record transfer, and the record-conflict skip are unchanged.
-- [ ] R4. A regression test in `packages/app/tests/services/persist-worktree-runs.test.ts` persists a 6-run-row batch whose owned files exceed 64 in total.
+- [x] R1. The 64-file cap applies to distinct literal citations alone (0984 R3, unchanged). Owned evidence is bounded per owner instead: each forwarded task WBS prefix and each worktree run-row id prefix gets its own budget of `MAX_CITED_RUN_FILES`. The overall bound therefore scales with the batch's row count.
+- [x] R2. Overflowing any bound (citations, or one owner's files) still throws before the first invoking-tree write. The zero-writes abort contract is preserved.
+- [x] R3. Cited-file resolution, run-row/record transfer, and the record-conflict skip are unchanged.
+- [x] R4. A regression test in `packages/app/tests/services/persist-worktree-runs.test.ts` persists a 6-run-row batch whose owned files exceed 64 in total.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — A simulated 6-run-row batch with more than 64 owned files in total persists mechanically, with no manual archive step (req: R1, R4)
-- [ ] AC2 — Over-cap citations and one owner over its budget each throw with zero invoking-tree writes (req: R2)
-- [ ] AC3 — Cited files resolve, and run rows and records transfer unchanged with the record-conflict skip intact; the existing persist-worktree-runs suite passes (req: R3)
+- [x] AC1 — A simulated 6-run-row batch with more than 64 owned files in total persists mechanically, with no manual archive step (req: R1, R4)
+- [x] AC2 — Over-cap citations and one owner over its budget each throw with zero invoking-tree writes (req: R2)
+- [x] AC3 — Cited files resolve, and run rows and records transfer unchanged with the record-conflict skip intact; the existing persist-worktree-runs suite passes (req: R3)
 
 ### Q&A
 
@@ -72,17 +72,33 @@ Status: implemented and committed in e8dbc9aa9. What remains is gate → verify 
 
 ### Testing
 
-Pending. `task record` will render this section from the verify verdict artifact.
+**Pipeline verify results**
 
-Planned evidence: `(cd packages/app && bun test tests/services/persist-worktree-runs.test.ts tests/services/inline-run-setup.test.ts)`. It covers the 6-row regression (:613), the per-owner overflow throw with zero writes (:581), the citation cap, and the record-conflict skip in the existing suite.
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Citation loop keeps its own `MAX_CITED_RUN_FILES` cap (`packages/app/src/services/inline-run-setup.ts:296-297`); owned loop charges each name to its first `<wbs>-`/`<runId>-` prefix with a per-owner counter (`packages/app/src/services/inline-run-setup.ts:331-347`). Re-read this run. |
+| R2 | MET | Both throws (`packages/app/src/services/inline-run-setup.ts:296`, `:341`) run in the pre-copy enumeration phase, before `citedCopies` is built (`packages/app/src/services/inline-run-setup.ts:350`); tests assert no `.spur/run` in the invoking tree after refusal (`packages/app/tests/services/persist-worktree-runs.test.ts:376`, `:581`). |
+| R3 | MET | Record-conflict skip still reported (`packages/app/tests/services/persist-worktree-runs.test.ts:89-99`); citation resolution suite (`packages/app/tests/services/persist-worktree-runs.test.ts:165`) unchanged and green. |
+| R4 | MET | 6-run-row regression test, 72 owned files, `persisted: 6` (`packages/app/tests/services/persist-worktree-runs.test.ts:613`). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | `packages/app/tests/services/persist-worktree-runs.test.ts:613` — `(cd packages/app && bun test tests/services/persist-worktree-runs.test.ts tests/services/inline-run-setup.test.ts)` this run: 49 pass / 0 fail, 210 expect(). |
+| AC2 | MET | test | Over-cap citations refuse with zero writes (`packages/app/tests/services/persist-worktree-runs.test.ts:376`); a 65th file for owner `1234-` refuses naming the owner with zero writes (`packages/app/tests/services/persist-worktree-runs.test.ts:581-598`); same 49/0 run. |
+| AC3 | MET | test | Record-conflict skip (`packages/app/tests/services/persist-worktree-runs.test.ts:89`) and idempotent re-persist (`packages/app/tests/services/persist-worktree-runs.test.ts:42`) green in the same 49/0 run. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-Pending. The review coordinator writes this. Checks to cover:
-- the citation cap is unchanged, and both throw paths precede any write;
-- the error names the owner prefix;
-- `rg -n "64-file" plugins/sp docs` finds no stale union-cap wording;
-- the existing 1–2-task batch tests pass untouched.
+**Review** (inline coordinator: functional, SECUA, architecture; scope = commit e8dbc9aa9)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | Functional | `packages/app/src/services/inline-run-setup.ts:331` | R1–R4 traced. The citation cap is unchanged (`:296`). Per-owner overflow throws before any copy (`:341` precedes `:350`), and the error names the owner. No gaps. |
+| P4 | Efficiency | `packages/app/src/services/inline-run-setup.ts:337` | `prefixes.find` per entry is O(entries × owners). Advisory: both are small. |
+| P4 | Architecture | `plugins/sp/skills/spur-dev/references/execution-batch.md:520` | The contract text matches the code. `rg "64-file"` finds no stale union-cap wording. Adjacent to 1025 (evidence relocation), which may later shrink what persist-out forwards; no overlap. |
 
 ### References
 
@@ -97,4 +113,6 @@ Pending. The review coordinator writes this. Checks to cover:
 
 - 2026-10-01T01:08:22.487Z backlog → todo (system)
 - 2026-10-01T01:08:22.753Z todo → wip (system)
+- 2026-10-01T01:28:00.519Z wip → testing (system)
+- 2026-10-01T01:28:35.560Z testing → done (system)
 
