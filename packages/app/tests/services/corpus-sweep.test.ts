@@ -168,6 +168,24 @@ describe('runCorpusSweep — measured durable-evidence sweep (0673 R1/R2)', () =
         expect(a).toEqual(b);
     });
 
+    test('durable artifact discovery survives completed scratch removal', async () => {
+        const repo = mkdtempSync(join(tmpdir(), 'corpus-durable-'));
+        try {
+            mkdirSync(join(repo, 'docs/tasks'), { recursive: true });
+            mkdirSync(join(repo, '.spur/memory/evidence'), { recursive: true });
+            mkdirSync(join(repo, '.spur/run'), { recursive: true });
+            writeFileSync(join(repo, 'docs/tasks/0001_durable.md'), taskFile('0001', 'done', PASS_TESTING));
+            writeFileSync(join(repo, '.spur/memory/evidence/0001-verdict.json'), '{}');
+            const fs = createNodeFileSystem(repo);
+            const before = await runCorpusSweep(fs);
+            expect(before.withArtifact).toBe(1);
+            rmSync(join(repo, '.spur/run'), { recursive: true });
+            expect(await runCorpusSweep(fs)).toEqual(before);
+        } finally {
+            rmSync(repo, { recursive: true, force: true });
+        }
+    });
+
     test('fails instead of reporting incomplete counts when a configured task folder is unreadable', async () => {
         const missingCorpus = mkdtempSync(join(tmpdir(), 'corpus-sweep-missing-'));
         try {

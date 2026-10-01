@@ -14,6 +14,7 @@
  */
 
 import { createHash } from 'node:crypto';
+import { dirname, join } from 'node:path';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import type { FeatureSyncProposal, FeatureSyncResult } from './feature-service';
 
@@ -88,7 +89,8 @@ export function parseBlockedState(raw: string): BlockedSyncState | null {
 }
 
 /**
- * `<wbs>:<mtimeMs>` vector for verdict artifacts in the run dir. Missing files contribute
+ * `<wbs>:<mtimeMs>` vector for verdict artifacts, preferring durable evidence to legacy scratch.
+ * Removing scratch cannot change an input whose authoritative copy is durable. Missing files contribute
  * nothing (a task with no verdict yet is a stable "absent" signal captured by its absence);
  * a missing run dir yields an empty vector. Read via the runtime FileSystem rather than
  * `ls` + `stat` subprocesses: BSD/GNU `stat` disagree on mtime flags, and statSync-style
@@ -96,20 +98,24 @@ export function parseBlockedState(raw: string): BlockedSyncState | null {
  */
 export async function readVerdictMtimeVector(fs: FileSystem, runDir: string): Promise<string[]> {
     const dir = runDir.replace(/\/$/, '');
-    let entries: string[];
-    try {
-        entries = await fs.readDir(dir);
-    } catch {
-        return [];
-    }
     const vector: string[] = [];
-    for (const entry of entries) {
-        if (!entry.endsWith('-verdict.json')) continue;
+    const seen = new Set<string>();
+    for (const plane of [join(dirname(dir), 'memory', 'evidence'), dir]) {
+        let entries: string[];
         try {
-            const stat = await fs.stat(`${dir}/${entry}`);
-            if (stat) vector.push(`${entry.replace('-verdict.json', '')}:${stat.mtimeMs}`);
+            entries = await fs.readDir(plane);
         } catch {
-            // Removed between readDir and stat — treat as absent.
+            continue;
+        }
+        for (const entry of entries) {
+            if (!entry.endsWith('-verdict.json') || seen.has(entry)) continue;
+            seen.add(entry);
+            try {
+                const stat = await fs.stat(join(plane, entry));
+                if (stat) vector.push(`${entry.replace('-verdict.json', '')}:${stat.mtimeMs}`);
+            } catch {
+                // Removed between readDir and stat — treat as absent.
+            }
         }
     }
     return vector.sort();

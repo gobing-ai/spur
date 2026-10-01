@@ -151,6 +151,27 @@ describe('blocked state serialization (1004 R3, 0411 JSON shape)', () => {
 });
 
 describe('readVerdictMtimeVector (1004 R3)', () => {
+    test('durable evidence overrides scratch and remains an input after scratch disposal', async () => {
+        const repo = mkdtempSync(join(tmpdir(), 'sync-durable-'));
+        try {
+            const fs = createNodeFileSystem(repo);
+            const scratch = join(repo, '.spur/run');
+            const evidence = join(repo, '.spur/memory/evidence');
+            await fs.ensureDir(scratch);
+            await fs.ensureDir(evidence);
+            writeFileSync(join(scratch, '0001-verdict.json'), '{"verdict":"FAIL"}');
+            writeFileSync(join(evidence, '0001-verdict.json'), '{"verdict":"PASS"}');
+            const before = await readVerdictMtimeVector(fs, scratch);
+            expect(before).toHaveLength(1);
+            rmSync(scratch, { recursive: true });
+            expect(await readVerdictMtimeVector(fs, scratch)).toEqual(before);
+            writeFileSync(join(evidence, '0002-verdict.json'), '{"verdict":"FAIL"}');
+            expect(await readVerdictMtimeVector(fs, scratch)).toHaveLength(2);
+        } finally {
+            rmSync(repo, { recursive: true, force: true });
+        }
+    });
+
     test('collects <wbs>:<mtimeMs> for -verdict.json files, skips others; missing dir → []', async () => {
         const fs = createNodeFileSystem(root);
         const dir = join(root, 'verdicts');

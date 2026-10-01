@@ -108,7 +108,10 @@ export async function runCorpusSweep(fs: FileSystem): Promise<CorpusSweepResult>
             const status = (doc.frontmatterData?.status as string | undefined) ?? '';
             if (status !== 'done') continue;
             doneTasks += 1;
-            if (await fs.exists(join(fs.resolve('.spur/run'), `${wbs}-verdict.json`))) {
+            if (
+                (await fs.exists(join(fs.resolve('.spur/memory/evidence'), `${wbs}-verdict.json`))) ||
+                (await fs.exists(join(fs.resolve('.spur/run'), `${wbs}-verdict.json`)))
+            ) {
                 withArtifact += 1;
                 continue;
             }
