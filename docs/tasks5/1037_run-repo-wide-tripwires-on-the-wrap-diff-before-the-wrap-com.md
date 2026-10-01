@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Run repo-wide tripwires on the wrap diff before the wrap commit
-status: backlog
+status: done
 template: feature-impl
 created_at: 2026-10-01T01:23:53.052Z
-updated_at: "2026-10-01T01:43:56.993Z"
+updated_at: "2026-10-01T03:50:38.750Z"
 feature_id: A9
 
 ac_altitude: task-local
@@ -22,19 +22,19 @@ The fail-early window matters because test (e) inspects only the *working diff* 
 
 ### Requirements
 
-- [ ] R1. Post-doc-sync tripwire hop. `wrapup-pipeline.yaml` gains one state, `doc-tripwire`, entered after the doc-sync branch resolves: from `learnings-append` and from `repair`, both of which today go straight to `metrics-record`. It is not entered on the `task-resolve → metrics-record` path, which runs no doc-sync. The state runs the new var `docTripwireCmd` via `sh -c` and writes `PASS` or `FAIL` to `.spur/run/$__runId-wrapup-doc-tripwire.status`, following the `feature-verify` pattern. FAIL routes to `failed` with `terminalReason: failed-check`. PASS routes to `metrics-record`. The FAIL edge is declared first, and a missing status never routes as PASS.
-- [ ] R2. Portable, trusted-config default. `docTripwireCmd` is a TRUSTED CONFIG ONLY var, with the same comment and security contract as `featureGateCmd`. Its default runs `bun run test-repo-wide` only when `package.json` declares a `test-repo-wide` script; otherwise it exits 0 (a no-op for other projects). Spur gets the tripwire with no caller change. Callers can override it with `--vars`, and an empty string disables the hop's check while still writing PASS.
-- [ ] R3. Additive and cost-bounded. No existing state, edge or gate changes semantics: `featureGateCmd`/`feature-verify`, `spur-check-feature` and merge-time re-gates stay as they are. Reuse the existing `test-repo-wide` runner and write no new check logic. On a clean wrap the added cost is one `test-repo-wide` run.
-- [ ] R4. Contract docs in the same change (T3). The wrapup state list and route description in `plugins/sp/skills/spur-dev/references/dev-operations.md` (wrap/wrapall) and `execution-batch.md` (Step 6 batch wrap) name the new hop and var. Rebuild the generated bundle `apps/cli/config/` with `build:bundle`.
-- [ ] N1. Non-goals. The feature-transition pre-flight is 1033 R2 and diff-sized verify is 1033 R1. No commit step is added to wrapup, no ADR-124 gate-frequency change, no new tripwire tests or rules, and no change to the doc-sync agent prompt.
+- [x] R1. Post-doc-sync tripwire hop. `wrapup-pipeline.yaml` gains one state, `doc-tripwire`, entered after the doc-sync branch resolves: from `learnings-append` and from `repair`, both of which today go straight to `metrics-record`. It is not entered on the `task-resolve → metrics-record` path, which runs no doc-sync. The state runs the new var `docTripwireCmd` via `sh -c` and writes `PASS` or `FAIL` to `.spur/run/$__runId-wrapup-doc-tripwire.status`, following the `feature-verify` pattern. FAIL routes to `failed` with `terminalReason: failed-check`. PASS routes to `metrics-record`. The FAIL edge is declared first, and a missing status never routes as PASS.
+- [x] R2. Portable, trusted-config default. `docTripwireCmd` is a TRUSTED CONFIG ONLY var, with the same comment and security contract as `featureGateCmd`. Its default runs `bun run test-repo-wide` only when `package.json` declares a `test-repo-wide` script; otherwise it exits 0 (a no-op for other projects). Spur gets the tripwire with no caller change. Callers can override it with `--vars`, and an empty string disables the hop's check while still writing PASS.
+- [x] R3. Additive and cost-bounded. No existing state, edge or gate changes semantics: `featureGateCmd`/`feature-verify`, `spur-check-feature` and merge-time re-gates stay as they are. Reuse the existing `test-repo-wide` runner and write no new check logic. On a clean wrap the added cost is one `test-repo-wide` run.
+- [x] R4. Contract docs in the same change (T3). The wrapup state list and route description in `plugins/sp/skills/spur-dev/references/dev-operations.md` (wrap/wrapall) and `execution-batch.md` (Step 6 batch wrap) name the new hop and var. Rebuild the generated bundle `apps/cli/config/` with `build:bundle`.
+- [x] N1. Non-goals. The feature-transition pre-flight is 1033 R2 and diff-sized verify is 1033 R1. No commit step is added to wrapup, no ADR-124 gate-frequency change, no new tripwire tests or rules, and no change to the doc-sync agent prompt.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — An in-place historical ADR edit left by doc-sync fails wrapup at doc-tripwire (req: R1)
-- [ ] AC2 — A clean doc-sync diff passes doc-tripwire and proceeds to metrics-record (req: R1, R3)
-- [ ] AC3 — The repair path also passes through doc-tripwire; the no-doc-sync path does not (req: R1)
-- [ ] AC4 — The default command is a no-op in a project without a test-repo-wide script and runs it in Spur (req: R2)
-- [ ] AC5 — Wrap contract docs and the generated bundle name the new hop and var (req: R4)
+- [x] AC1 — An in-place historical ADR edit left by doc-sync fails wrapup at doc-tripwire (req: R1)
+- [x] AC2 — A clean doc-sync diff passes doc-tripwire and proceeds to metrics-record (req: R1, R3)
+- [x] AC3 — The repair path also passes through doc-tripwire; the no-doc-sync path does not (req: R1)
+- [x] AC4 — The default command is a no-op in a project without a test-repo-wide script and runs it in Spur (req: R2)
+- [x] AC5 — Wrap contract docs and the generated bundle name the new hop and var (req: R4)
 
 ### Q&A
 
@@ -104,11 +104,37 @@ Pending — written by implement. Expected touch set:
 
 ### Testing
 
-Pending — written by `spur task record` from the verify verdict.
+**Pipeline verify results**
+
+- Verdict: PARTIAL (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | doc-tripwire state yaml:329-348 (sh -c "$docTripwireCmd", run-scoped status, exit-0 file-truth); retargets learnings-append/repair -> doc-tripwire :582-591; fast path untouched :500-506; FAIL edge first :598-611 terminalReason failed-check, PASS edge :612-618; missing status fail-closed via engine no-match (state-machine.ts:175-177); tests :806-843, :858-883 |
+| R2 | MET | docTripwireCmd default + package-script probe :120; TRUSTED CONFIG ONLY :115-119 (same contract as featureGateCmd :111-112); no-op/declared/empty-disable behavior test :858-883; --vars override + empty-string disable documented dev-operations.md:374,390 + execution-batch.md:563 |
+| R3 | MET | Additive diff: 1 var, 1 state, 2 new edges, 2 retargets; featureGateCmd/spur-check-feature untouched (package.json:84); reuses test-repo-wide runner (package.json:85), no new check logic; wrapup-steps.ts absent from diff; cost = one test-repo-wide per clean doc-sync wrap |
+| R4 | MET | dev-operations.md:374,:390 + execution-batch.md:559-563 name hop/var/override/disable; generated bundle identical at identical lines (v7 :89, :17, :30-31, :120, :329-348, :599-617), gitignored generated output (.gitignore:80) |
+| N1 | MET | No commit step (terminal reachability test :885-891), no ADR-124 change, no new tripwire tests/rules, no doc-sync prompt change; working-tree delta exactly the 5 stated files |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — An in-place historical ADR edit left by doc-sync fails wrapup at doc-tripwire (req: R1) | MET | test | repo-wide test (e) inspects only the uncommitted working diff of docs/00_ADR.md (adr-supersession.test.ts:152-208); declared script exit 1 records FAIL (test:868-871) -> FAIL edge routes failed (:816-829); missing status fail-closed; named E2E artifact covered by accepted mitigation (behavior tests + bundle parity + live wrap doc-tripwire run immediately after verify) |
+| AC2 — A clean doc-sync diff passes doc-tripwire and proceeds to metrics-record (req: R1, R3) | MET | test | exit-0 writes PASS (:863-866, :872-874); PASS guard routes metrics-record (:612-618, asserted :820-829); Spur declares the script so a clean diff runs it and passes; live wrap run is E2E confirm |
+| AC3 — The repair path also passes through doc-tripwire; the no-doc-sync path does not (req: R1) | MET | test | learnings-append and repair each have exactly one outbound edge to doc-tripwire (test:831-837; yaml:582-591); fast path present exactly once with shell guard, no task-resolve->doc-tripwire edge (test:838-843; yaml:478-519) |
+| AC4 — The default command is a no-op in a project without a test-repo-wide script and runs it in Spur (req: R2) | MET | test | no test-repo-wide script -> probe fails -> PASS no-op (test:863-866; var :120); in Spur the script is declared (package.json:85); live wrap doc-tripwire run completes the "runs in Spur" half (accepted rationale) |
+| AC5 — Wrap contract docs and the generated bundle name the new hop and var (req: R4) | MET | test | executable: version-pin test wrapup-pipeline.test.ts:116,149 + suite bundle parity asserts; static (reviewer-verified first-hand): dev-operations.md:374,390 + execution-batch.md:559-563 |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-Pending — written by the review coordinator (`/sp:dev-review`).
+Fresh reviewer subagent (read-only) ran /sp:dev-review --tasks 1037 --auto over the 5-file wrap diff. Verdict: PASS, HIGH confidence. SECUA clean. Functional traceability: R1-R4 + N1 MET. AC1-AC5 MET (AC1 mechanism-level).
+
+| Priority | Count | Findings |
+| --- | --- | --- |
+| P1 | 0 | None |
+| P2 | 0 | None |
+| P3 | 2 | Evidence hygiene: (1) AC1 E2E repro artifact .spur/run/1037-tripwire-repro.log absent — mitigated: behavior tests pin the mechanism (wrapup-pipeline.test.ts:848-885), pre-existing repo-wide ADR test supplies the historical-edit scenario, live tripwire runs in the wrap hop immediately after verify; (2) plan-step-6 one-time spur-check-feature receipt absent — mitigated: bundle parity holds (apps/cli/config regenerated in gate), full-tier gate PASS on disk (1037-check-receipt.json) |
+| P4 | 3 | Pre-existing drift, report-only, not introduced by this diff: stale learning-capture name in cross-cutting.md:652,667 + help docs + e2e-workflow design doc (route: sp:doc-evolve); lifecycle-projection-integrity.md:23 trusted sh -c var inventory lacks docTripwireCmd; wrapup iterationBound:10 headroom now 9/10 on worst-case wrap path |
 
 ### References
 
@@ -132,3 +158,8 @@ Pending — written by the review coordinator (`/sp:dev-review`).
   - 1035 (ADR-130 amendment).
 
 ### History
+
+- 2026-10-01T02:30:14.159Z backlog → wip (system)
+- 2026-10-01T03:45:02.206Z wip → testing (system)
+- 2026-10-01T03:50:38.750Z testing → done (system)
+

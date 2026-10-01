@@ -3,7 +3,7 @@ kind: design
 title: "Workflow shell ownership surface (feature D6, task 0608; amended by 0625)"
 status: accepted
 created_at: 2026-08-20
-updated_at: 2026-09-27
+updated_at: 2026-09-30
 related: [D6, A3, "0604", "0608", "0613", "0614", "0704", "0723"]
 tags: [system, D6, A3, workflow]
 ---
@@ -58,6 +58,16 @@ lookup row (+1) and a stale wrap-up `done:onEnter:1` row was dropped (5 compound
 only a note), netting zero; four rows are `command.gate` / `doctor.probe` built-in slots that
 left shell. `history-anatomy.yaml` (17 shell programs) shipped after the inventory
 date and stays outside this classification.
+
+**2026-09-30 delta (1037):** wrap-up gained `doc-tripwire:onEnter:0`, which runs the trusted
+`docTripwireCmd` through `sh -c` (option e) after `learnings-append` and `repair` converge. It is
+the second trusted-config var beside `featureGateCmd`, but its FAIL is blocking — it routes the
+wrap-up to `failed` with `terminalReason: failed-check`. The same pass re-counts the wrap-up table
+from 6 to **10** rows: `doc-tripwire` (1037) plus the states that shipped without a row
+(`task-resolve:onEnter:2` drift probe, 0944; `learnings-validate`/`repair`, 0986/0871;
+`feature-verify:onEnter:0`, D63 task 0915), the stale `task-resolve:onEnter:2` route-reason index
+corrected to `:4` (0944), and the phantom `doc-sync:onEnter:1` row replaced by the
+`learnings-append:onEnter:0` program it always described (0986 moved the append out of `doc-sync`).
 
 ## Bulk exceptions
 
@@ -248,7 +258,7 @@ write order without a subprocess pipe-buffer cap before appending each attempt t
 | `check:onEnter:0` | POLICY | `qualityGateCmd` soft probe (same exception as task-pipeline `test`) |
 | `fix:onEnter:0` | GLUE | fix-attempt counter increment |
 
-### wrapup-pipeline.yaml (5 compound)
+### wrapup-pipeline.yaml (10 compound)
 
 0824 moved the run-local JSON handling, the status probes and the bounded feature sync out of the
 workflow: the `wrapup-steps.ts resolve|metrics|feature-transition` extension (option d) owns them,
@@ -259,10 +269,15 @@ YAML-comment reason directly above the action.
 | Program | Disposition | Reason |
 | --- | --- | --- |
 | `task-resolve:onEnter:1` | EXT | wrapper for `wrapup-steps.ts resolve` (option d): task capture validation, status resolution and the run-scoped artifacts; a missing script writes FAIL |
-| `task-resolve:onEnter:2` | GLUE | route-reason writer: one jq table lookup over the mode var over the validated capture (0758/0783) |
-| `doc-sync:onEnter:1` | GLUE | append learnings if present (7 lines; re-keyed from `learning-capture:onEnter:1` after task 0607 renamed the state) |
+| `task-resolve:onEnter:2` | EXT | wrapper for `wrapup-drift-probe.ts` (option d, 0944): projects `mode` only when the caller left it empty — caller mode verbatim, `fast` on a clean probe, empty when dirty; any lookup/parse failure fails safe to a dirty probe |
+| `task-resolve:onEnter:4` | GLUE | route-reason writer: one jq table lookup over the projected mode var over the validated capture (0758/0783; behind the locator since 0944, hence the index) |
+| `learnings-validate:onEnter:0` | GLUE | structural shape gate over the capture (0986): a date + a four-digit task WBS + at least one markdown bullet → PASS, otherwise `invalid-learnings-shape`; an empty or missing capture keeps the soft skip |
+| `learnings-append:onEnter:0` | GLUE | append learnings if present (7 lines; moved out of `doc-sync` by 0986, itself re-keyed from `learning-capture:onEnter:1` after task 0607 renamed the state) |
+| `repair:onEnter:0` | GLUE | writes the run-scoped repair text for a missed doc-sync contract or a narration-only capture (ADR-118 pilot 0871; extended by 0986); no re-dispatch |
+| `doc-tripwire:onEnter:0` | EXT + POLICY | trusted `docTripwireCmd` through `sh -c` (option e, 1037): probes `package.json` for the `test-repo-wide` script and runs `bun run test-repo-wide` only when declared (no-op elsewhere); its FAIL is blocking (`failed-check`), unlike `featureGateCmd` |
 | `metrics-record:onEnter:0` | EXT | wrapper for `wrapup-steps.ts metrics` (option d): per-task metrics loop (`task show` + verdict) → wrapup-metrics.jsonl |
 | `feature-transition:onEnter:0` | EXT + POLICY | wrapper for `wrapup-steps.ts feature-transition`: bounded sync (`feature-sync-bounded.ts` → `feature sync` fallback); after an applied sync, trusted `featureGateCmd` runs through `sh -c` (option e) and reports PASS/FAIL softly |
+| `feature-verify:onEnter:0` | POLICY | trusted `featureGateCmd` through `sh -c` (option e, D63 task 0915): re-runs the feature gate after doc-sync and the feature transition mutate the corpus; a FAIL fails the wrap-up loudly |
 
 ### feature-dev.yaml (4 compound)
 

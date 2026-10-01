@@ -556,6 +556,15 @@ The wrap receives only what it would accept:
 3. When the done subset is **empty**, skip the wrap entirely with the reason (e.g. `batch wrap
    skipped: no done tasks`) instead of invoking wrapup-pipeline on an empty set.
 
+**Repo-wide tripwire (1037).** After the doc-sync exits converge, the pipeline's `doc-tripwire` hop
+runs the TRUSTED CONFIG ONLY `docTripwireCmd` over the still-uncommitted wrap diff before
+metrics-record. The default probes `package.json` for a `test-repo-wide` script and runs
+`bun run test-repo-wide` only when it is declared (a no-op in other projects), so the batch driver
+passes no extra vars. Batch callers override it like any wrap var (`docTripwireCmd` in `--vars`);
+an empty string disables the check while still recording PASS. A FAIL routes the wrap to `failed`
+with already-written learnings/docs preserved — fix the flagged working-diff violation and re-run
+the wrap.
+
 Filtering lives here, in the batch driver — no change to wrapup-pipeline.yaml or wrapup-steps.ts;
 the wrap's refusal of non-done tasks remains the hard invariant.
 

@@ -14,6 +14,8 @@
 # even under --auto (Iron Law #6: irreversible action -> surface to human).
 #
 # Shape: start -> task-resolve -> doc-sync -> learnings-validate -> learnings-append
+#          -> doc-tripwire (1037: repo-wide tripwire over the still-uncommitted wrap
+#          diff; repair also enters it; the task-resolve fast path does not)
 #          -> metrics-record
 #          -> feature-transition (conditional: if vars.feature set)
 #          -> feature-verify (post-transition feature check gate, 0915 F1)
@@ -25,10 +27,14 @@
 #        the same `repair` edge with a distinct invalid-learnings-shape status —
 #        expectFile proves existence, never shape — while empty/missing captures
 #        keep the soft skip by passing through to learnings-append;
+#        learnings-append and repair converge on doc-tripwire (1037), which runs
+#        docTripwireCmd — the repo-wide tripwires over the still-uncommitted wrap
+#        diff — before metrics-record; the task-resolve fast path never enters it;
 #        task-resolve with a VALIDATED empty list short-circuits to `skipped`;
 #        invalid wrap input, an unresolved/non-completed task, a failed metrics
-#        capture, a failed required sync, or a failed feature gate routes to
-#        `failed` (0770) instead of being absorbed by an always-defensive skip.
+#        capture, a failed required sync, a failed repo-wide tripwire (1037), or
+#        a failed feature gate routes to `failed` (0770) instead of being
+#        absorbed by an always-defensive skip.
 #
 # Vars (passed as a JSON object via `--vars`):
 # tasks    — JSON array of WBS strings, passed as a JSON-encoded STRING value
@@ -80,7 +86,7 @@
 "$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
 kind: state-machine
 name: wrapup-pipeline
-version: "6"
+version: "7"
 description: "Post-execution wrap-up: doc-sync (doc drift + learning capture), metrics, feature-transition, branch-cleanup"
 iterationBound: 10
 initialState: start
@@ -105,6 +111,13 @@ vars:
   # TRUSTED CONFIG ONLY — this string is executed via `sh -c` (same surface as
   # task-pipeline's qualityGateCmd). Never interpolate untrusted input into it.
   featureGateCmd: '$spurBin feature check "$feature"'
+  # Repo-wide tripwire over the wrap diff (1037): runs `bun run test-repo-wide`
+  # only when package.json declares the script, so other projects no-op. Callers
+  # can override it with --vars; an empty string disables the check (the hop
+  # still writes PASS).
+  # TRUSTED CONFIG ONLY — this string is executed via `sh -c` (same surface as
+  # featureGateCmd). Never interpolate untrusted input into it.
+  docTripwireCmd: 'if jq -e ''.scripts["test-repo-wide"]'' package.json >/dev/null 2>&1; then bun run test-repo-wide; fi'
   __hitlAnswer: ""
 
 states:
@@ -299,8 +312,8 @@ states:
       capture that fails learnings-validate's shape gate (0986). The miss is
       recorded to a run-scoped repair status — text distinguishing a narration-only
       shape failure from the missing-file contract violation — and wrap-up proceeds
-      to metrics-record; the run log and action trace already name the violated
-      contract and the observed value.
+      through the doc-tripwire hop (1037) to metrics-record; the run log and
+      action trace already name the violated contract and the observed value.
     onEnter:
       - kind: shell
         options:
@@ -312,6 +325,27 @@ states:
             else printf 'contract-violation: doc-sync learnings capture missed its declared contract — repair skipped re-dispatch (ADR-118 pilot)\n' > "$R";
             fi &&
             exit 0
+
+  - id: doc-tripwire
+    description: >
+      Repo-wide tripwire over the wrap diff (1037): the doc-sync edits are still
+      uncommitted when wrap-up reaches a terminal success, and the repo-wide
+      tripwires (repo-wide-tests/) execute only inside spur-check-feature — once
+      a wrap edit is committed on a clean tree, the working-diff tests (e.g.
+      adr-supersession (e)) can no longer see it. Entered from learnings-append
+      and repair, before metrics or feature state mutate, it runs the trusted
+      `docTripwireCmd` and records PASS or FAIL to a run-scoped status file; the
+      action always exits 0 so status truth lives in the file (0783 R4). Only a
+      verified run writes PASS; an empty docTripwireCmd disables the check and
+      still writes PASS. The no-doc-sync fast path (task-resolve →
+      metrics-record) never enters this state.
+    onEnter:
+      - kind: shell
+        options:
+          command: >-
+            sh -c "$docTripwireCmd" &&
+            printf 'PASS\n' > ".spur/run/$__runId-wrapup-doc-tripwire.status" ||
+            printf 'FAIL\n' > ".spur/run/$__runId-wrapup-doc-tripwire.status"
 
   - id: metrics-record
     description: >
@@ -427,9 +461,10 @@ states:
   - id: failed
     description: >
       Terminal — wrap-up failed (0770): invalid wrap input, an unresolved or
-      non-completed task, a failed metrics capture, a failed required sync, or
-      a failed feature gate. Already-written artifacts (learnings, metrics
-      rows, route reason) are preserved; nothing is rolled back.
+      non-completed task, a failed metrics capture, a failed required sync, a
+      failed repo-wide tripwire (1037), or a failed feature gate.
+      Already-written artifacts (learnings, metrics rows, route reason) are
+      preserved; nothing is rolled back.
 
 transitions:
   # ── start -> task-resolve ──
@@ -544,19 +579,42 @@ transitions:
     guard:
       kind: always
 
-  # ── linear body: learnings-append -> metrics-record ──
+  # ── doc-sync exits converge on the doc-tripwire hop (1037) before metrics ──
   - from: learnings-append
-    to: metrics-record
-    description: Learning capture appended (or soft-skipped) — record metrics.
+    to: doc-tripwire
+    description: Learning capture appended (or soft-skipped) — run the repo-wide tripwire over the wrap diff.
     guard:
       kind: always
 
-  # ── repair: cheap path, no re-dispatch -> metrics-record ──
   - from: repair
-    to: metrics-record
-    description: Contract-violation repair recorded — proceed to metrics without re-dispatch.
+    to: doc-tripwire
+    description: Contract-violation repair recorded — run the tripwire before metrics without re-dispatch.
     guard:
       kind: always
+
+  # ── doc-tripwire: repo-wide tripwire gate (1037) ──
+  # Declaration order matters: the FAIL edge is tried first so a failed tripwire
+  # can never be absorbed by the PASS edge; a missing status matches neither
+  # edge and follows the engine's no-match behavior for status-file states.
+  - from: doc-tripwire
+    to: failed
+    terminalReason: failed-check
+    description: >
+      Repo-wide tripwire FAILED on the still-uncommitted wrap diff (1037): an
+      edit the doc-sync stage made (e.g. an in-place historical ADR change)
+      violates a working-diff test. Learnings and docs already on disk stay
+      put; nothing is rolled back.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/$__runId-wrapup-doc-tripwire.status 2>/dev/null)" = FAIL'
+  - from: doc-tripwire
+    to: metrics-record
+    description: Repo-wide tripwire PASS (or the check disabled by an empty docTripwireCmd) — record metrics.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/$__runId-wrapup-doc-tripwire.status 2>/dev/null)" = PASS'
 
   # ── metrics-record: fail edge, then conditional routing (feature → merge → done) ──
   # Declaration order matters: the FAIL edge is tried first (0770), then

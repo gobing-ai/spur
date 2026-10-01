@@ -2,7 +2,7 @@
 kind: design
 title: "Design — End-to-end Workflow System for System Development"
 created_at: 2026-07-01
-updated_at: 2026-09-06
+updated_at: 2026-09-30
 related: ["0167", "0168", "0169", "0170", "0171", "0172"]
 tags: [system, workflow, plugin]
 ---
@@ -67,7 +67,7 @@ flowchart TD
     %% ====================== WRAP-UP HALF ======================
     subgraph Wrapup["Wrap-up Half — completed tasks → learnings + doc-sync"]
         direction TB
-        WrapOne["📦 dev-wrap &lt;wbs&gt;<br/>[wrapup-pipeline.yaml]<br/>task-resolve → doc-sync →<br/>learning-capture → metrics-record →<br/>(branch-cleanup) → done"]:::wrap
+        WrapOne["📦 dev-wrap &lt;wbs&gt;<br/>[wrapup-pipeline.yaml]<br/>task-resolve → doc-sync →<br/>learnings-validate → learnings-append →<br/>doc-tripwire → metrics-record →<br/>(branch-cleanup) → done"]:::wrap
         WrapBatch["📦 dev-wrapall [--feature/--since/--status]<br/>[wrapup-pipeline.yaml]<br/>batch + (feature-transition) → done"]:::wrap
     end
 
@@ -234,9 +234,9 @@ transition a pipeline invokes, but their states are not pipeline steps themselve
 | 23 | `feature-verify`             | `feature-dev.yaml`                                  | Umbrella execution          | `/sp:dev-runall --feature <id>`                                          | `shell spur feature check <id> --strict`                          | obj   |
 | 24 | `task-resolve`               | `wrapup-pipeline.yaml`                              | Wrap-up                     | `/sp:dev-wrap <wbs>` / `/sp:dev-wrapall ...`                             | `shell` — validate `vars.tasks` non-empty (route to `skipped` if not) | — |
 | 25 | `doc-sync`                   | `wrapup-pipeline.yaml`                              | Wrap-up                     | `/sp:dev-wrap` or `/sp:dev-wrapall`                                      | `agent.run sp:doc-evolve` (drift repair in 04/03/00, `docs/design/*`) | —  |
-| 26 | `learning-capture`           | `wrapup-pipeline.yaml`                              | Wrap-up                     | `/sp:dev-wrap` or `/sp:dev-wrapall`                                      | `agent.run` → `.spur/run/wrapup-learnings.md` + `shell` append to `.spur/memory/learnings.md` | — |
+| 26 | `learnings-append`           | `wrapup-pipeline.yaml`                              | Wrap-up                     | `/sp:dev-wrap` or `/sp:dev-wrapall`                                      | `shell` — append the validated run-scoped capture `.spur/run/<runId>-wrapup-learnings.md` to `.spur/memory/learnings.md`; soft-skips when absent | — |
 | 27 | `metrics-record`             | `wrapup-pipeline.yaml`                              | Wrap-up                     | `/sp:dev-wrap` or `/sp:dev-wrapall`                                      | `agent.run` → `.spur/run/wrapup-metrics.jsonl` + `shell` append to `.spur/memory/wrapup-metrics.jsonl` | — |
-| —  | `feature-transition`         | `wrapup-pipeline.yaml`                              | Wrap-up (conditional)       | `/sp:dev-wrapall --feature <id>`                                         | `shell` — bounded `feature sync`; after an applied transition, run `featureGateCmd` (default `bun run spur-check-new`) and report PASS/FAIL softly | obj |
+| —  | `feature-transition`         | `wrapup-pipeline.yaml`                              | Wrap-up (conditional)       | `/sp:dev-wrapall --feature <id>`                                         | `shell` — bounded `feature sync`; after an applied transition, run `featureGateCmd` (default `$spurBin feature check "$feature"`) and report PASS/FAIL softly | obj |
 | —  | `branch-cleanup`             | `wrapup-pipeline.yaml`                              | Wrap-up (conditional)       | `/sp:dev-wrap --merge` / `/sp:dev-wrapall --merge`                        | `hitl.confirm` — irreversible (always pauses, even under `--auto`) | irrev |
 
 **Reading the table.** Steps 1–15 cover the planning half (intake → ideation → design →
@@ -251,7 +251,9 @@ is auto-routed when `profile=auto`, otherwise pauses. See §"HITL And Auto Mode"
 taxonomy.
 
 **Why 27.** The count deliberately excludes terminal states and lifecycle FSMs because they are
-outcomes (not work) and guards (not steps). If you count them, the full state surface across all
+outcomes (not work) and guards (not steps). The same rule excludes the pipeline's pure check hops
+(`learnings-validate`, `doc-tripwire`, `feature-verify`), which the State contract below lists but
+which are not operator steps. If you count them, the full state surface across all
 ten workflows is 53 distinct states; the 27 above are the operator-walked operational sequence.
 
 ## Path Model
@@ -505,9 +507,12 @@ State contract:
 start
   -> task-resolve
   -> doc-sync
-  -> learning-capture
+  -> learnings-validate
+  -> learnings-append
+  -> doc-tripwire
   -> metrics-record
   -> feature-transition   (conditional: vars.feature set)
+  -> feature-verify       (conditional: same as feature-transition)
   -> branch-cleanup       (conditional: vars.merge=true)
   -> done
 ```
@@ -518,9 +523,12 @@ Required actions:
 | --- | --- |
 | `task-resolve` | Resolve explicit tasks or wrapper-selected task list; reject empty selection. |
 | `doc-sync` | Dispatch `sp:doc-evolve` once for the batch. |
-| `learning-capture` | Append working learnings to `.spur/memory/learnings.md`. |
+| `learnings-validate` | Reject a nonempty narration-only capture to the `repair` edge; empty/missing captures pass through. |
+| `learnings-append` | Append working learnings to `.spur/memory/learnings.md`. |
+| `doc-tripwire` | Run `docTripwireCmd` — the repo-wide tripwires over the still-uncommitted wrap diff — before metrics are recorded. |
 | `metrics-record` | Append one JSONL row per task to `.spur/memory/wrapup-metrics.jsonl`. |
 | `feature-transition` | If `feature` is set, run bounded feature sync; after an applied transition, run the corpus-aware `featureGateCmd` before returning. |
+| `feature-verify` | Re-run the feature check gate on the transitioned feature before `done`. |
 | `branch-cleanup` | If `merge=true`, dispatch `sp:branch-workflow` behind an irreversible HITL gate. |
 | `done` | Output wrap-up summary and next action. |
 
@@ -531,6 +539,8 @@ Rules:
 - Metrics are append-only and machine-readable.
 - `featureGateCmd` is trusted project configuration executed through `sh -c`; its failure is
   reported but does not hard-fail the wrap-up shell.
+- `docTripwireCmd` (1037) is trusted project configuration executed through `sh -c`; its FAIL is
+  blocking — it routes the wrap-up to `failed` with `terminalReason: failed-check`.
 - Branch cleanup always pauses unless the operator explicitly confirms the irreversible action.
 - Task statuses are not mutated.
 
@@ -656,7 +666,7 @@ domain-layer role.
 
 Not CLI-gated, not validated corpus, append-only within a session, operator-readable markdown.
 High-value learnings are promoted to `docs/99_PROJECT_CONSTITUTION.md §8` by `sp:doc-evolve`, not
-by the learning-capture step itself.
+by the learnings-append step itself.
 
 ### Checkpoint Frontmatter
 

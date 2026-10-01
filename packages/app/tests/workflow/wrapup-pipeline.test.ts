@@ -109,10 +109,11 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
     const def = loadDef('wrapup-pipeline');
 
     test('identity: the definition carries an explicit version tag', () => {
-        // 0986: learnings-validate inserted between doc-sync and learnings-append.
-        // (0944: task-resolve gained the drift-probe + mode projection actions and the
+        // 1037: doc-tripwire inserted between the doc-sync exits and metrics-record.
+        // (0986: learnings-validate inserted between doc-sync and learnings-append.
+        // 0944: task-resolve gained the drift-probe + mode projection actions and the
         // route-reason writer moved behind the wrapup-steps locator (composition caps).)
-        expect(def.version).toBe('6');
+        expect(def.version).toBe('7');
     });
 
     test('default feature gate checks only the selected feature and permits explicit override', () => {
@@ -137,15 +138,15 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
     });
 
     test('0770 definitions are all explicitly versioned (identity tag, not absence)', () => {
-        // Exact per-definition pins: a silent version bump fails here. wrapup-pipeline is '6'
-        // since 0986 added the learnings shape gate ('5' since 0944 added the drift probe + mode
-        // projection and moved the route-reason writer behind the wrapup-steps locator; '4' since
-        // 0871's repair edge).
+        // Exact per-definition pins: a silent version bump fails here. wrapup-pipeline is '7'
+        // since 1037 added the doc-tripwire hop ('6' since 0986 added the learnings shape gate,
+        // '5' since 0944 added the drift probe + mode projection and moved the route-reason
+        // writer behind the wrapup-steps locator; '4' since 0871's repair edge).
         // (feature-dev was pinned '3' until task 0866 retired the definition.)
         const expectedVersions: Record<string, string> = {
             'task-lifecycle': '1',
             'feature-lifecycle': '1',
-            'wrapup-pipeline': '6',
+            'wrapup-pipeline': '7',
         };
         for (const [name, version] of Object.entries(expectedVersions)) {
             expect(loadDef(name).version).toBe(version);
@@ -638,19 +639,19 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
             expect(cmd).toContain('wrapup-repair.status');
             expect(cmd).toContain('skipped re-dispatch');
             expect(cmd).not.toContain('wrapup-steps');
-            // The repair path never re-enters doc-sync: it flows straight to metrics-record.
+            // The repair path never re-enters doc-sync: it flows to doc-tripwire (1037).
             expect(def.transitions.filter((t: TransitionDef) => t.from === 'repair').map((e) => e.to)).toEqual([
-                'metrics-record',
+                'doc-tripwire',
             ]);
         });
 
-        test('learnings-append holds the soft append shell and flows to metrics-record', () => {
+        test('learnings-append holds the soft append shell and flows to doc-tripwire', () => {
             const state = def.states.find((s) => s.id === 'learnings-append');
             const cmd = String(state?.onEnter?.[0]?.options?.command ?? '');
             expect(cmd).toContain('.spur/memory/learnings.md');
             expect(
                 def.transitions.filter((t: TransitionDef) => t.from === 'learnings-append').map((e) => e.to),
-            ).toEqual(['metrics-record']);
+            ).toEqual(['doc-tripwire']);
         });
 
         test('R4: only wrapup-pipeline declares the contract-violation edge (opt-in)', () => {
@@ -795,6 +796,83 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
                 expect(
                     runShell(guardCommand('learnings-validate', 'learnings-append'), cwd, { __runId: runId }).status,
                 ).not.toBe(0);
+            } finally {
+                cleanup(cwd);
+            }
+        });
+    });
+
+    describe('1037: repo-wide doc tripwire between the doc-sync exits and metrics-record', () => {
+        test('doc-tripwire runs docTripwireCmd via sh -c and records PASS/FAIL to a run-scoped status file', () => {
+            const cmd = String(shellOf(def, 'doc-tripwire', 0).options?.command ?? '');
+            expect(cmd).toContain('sh -c "$docTripwireCmd"');
+            expect(cmd).toContain('wrapup-doc-tripwire.status');
+            expect(cmd).toContain("printf 'PASS\\n'");
+            expect(cmd).toContain("printf 'FAIL\\n'");
+            // Status truth lives in the file (0783 R4): the action exits 0 on both branches.
+        });
+
+        test('the FAIL edge is declared first and only a recorded PASS reaches metrics-record', () => {
+            const edges = def.transitions.filter((t: TransitionDef) => t.from === 'doc-tripwire');
+            expect(edges.map((e: TransitionDef) => e.to)).toEqual(['failed', 'metrics-record']);
+            expect(edges[0]?.terminalReason).toBe('failed-check');
+            expect(String(edges[0]?.guard?.options?.command ?? '')).toContain('= FAIL');
+            expect(String(edges[1]?.guard?.options?.command ?? '')).toContain('= PASS');
+            // A missing status satisfies neither guard (0783 status-file pattern).
+            expect(String(edges[0]?.guard?.options?.command ?? '')).toContain('2>/dev/null');
+            expect(String(edges[1]?.guard?.options?.command ?? '')).toContain('2>/dev/null');
+        });
+
+        test('learnings-append and repair both enter doc-tripwire; the no-doc-sync fast path does not', () => {
+            for (const from of ['learnings-append', 'repair']) {
+                expect(def.transitions.filter((t: TransitionDef) => t.from === from).map((e) => e.to)).toEqual([
+                    'doc-tripwire',
+                ]);
+            }
+            const fast = def.transitions.filter(
+                (t: TransitionDef) => t.from === 'task-resolve' && t.to === 'metrics-record',
+            );
+            expect(fast).toHaveLength(1);
+            expect(fast[0]?.guard?.kind).toBe('shell');
+        });
+
+        test('the default docTripwireCmd carries the package-script probe and the trusted-config contract', () => {
+            expect(def.vars?.docTripwireCmd).toBe(
+                'if jq -e \'.scripts["test-repo-wide"]\' package.json >/dev/null 2>&1; then bun run test-repo-wide; fi',
+            );
+            const raw = readFileSync(join(WORKFLOWS_DIR, 'wrapup-pipeline.yaml'), 'utf8');
+            const at = raw.indexOf('docTripwireCmd:');
+            expect(raw.slice(at - 300, at)).toContain('TRUSTED CONFIG ONLY');
+        });
+
+        test('behavior: no script is a PASS no-op, a failing script records FAIL, empty cmd still PASS (AC1/AC4, R2)', () => {
+            const onEnter = String(shellOf(def, 'doc-tripwire', 0).options?.command ?? '');
+            const runHop = (dir: string, extraEnv: Record<string, string> = {}): string => {
+                const r = spawnSync('sh', ['-c', onEnter], {
+                    cwd: dir,
+                    encoding: 'utf8',
+                    env: {
+                        ...getEnvVars(),
+                        __runId: 'trip',
+                        docTripwireCmd: def.vars?.docTripwireCmd ?? '',
+                        ...extraEnv,
+                    },
+                });
+                // The action always exits 0 — status truth lives in the file (0783 R4).
+                expect(r.status).toBe(0);
+                return readFileSync(join(dir, '.spur/run/trip-wrapup-doc-tripwire.status'), 'utf8');
+            };
+            const cwd = mkdtempSync(join(tmpdir(), 'wrapup-1037-tripwire-'));
+            try {
+                // AC4: a project without a test-repo-wide script is a PASS no-op.
+                mkdirSync(join(cwd, '.spur/run'), { recursive: true });
+                writeFileSync(join(cwd, 'package.json'), '{"name":"plain","scripts":{}}');
+                expect(runHop(cwd)).toBe('PASS\n');
+                // AC1: a declared script that fails (an in-place doc edit) records FAIL.
+                writeFileSync(join(cwd, 'package.json'), '{"name":"tripped","scripts":{"test-repo-wide":"exit 1"}}');
+                expect(runHop(cwd)).toBe('FAIL\n');
+                // R2: an empty docTripwireCmd disables the check while still writing PASS.
+                expect(runHop(cwd, { docTripwireCmd: '' })).toBe('PASS\n');
             } finally {
                 cleanup(cwd);
             }

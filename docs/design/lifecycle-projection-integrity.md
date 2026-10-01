@@ -3,7 +3,7 @@ kind: design
 title: "Lifecycle Projection Integrity (task 0625)"
 status: implemented
 created_at: 2026-08-21
-updated_at: 2026-09-05
+updated_at: 2026-09-30
 related: ["0688"]
 tags: [system, planning]
 ---
@@ -20,7 +20,8 @@ checks for task/feature projections.
 
 | Surface | Shape |
 | --- | --- |
-| `wrapup-pipeline.yaml` var | `featureGateCmd`, default `bun run spur-check-new`; trusted project config executed through `sh -c` |
+| `wrapup-pipeline.yaml` var | `featureGateCmd`, default `$spurBin feature check "$feature"`; trusted project config executed through `sh -c` |
+| `wrapup-pipeline.yaml` var | `docTripwireCmd` (1037), default probes `package.json` for the `test-repo-wide` script and runs `bun run test-repo-wide` only when declared (no-op otherwise; an empty value disables the check); trusted project config executed through `sh -c`; its FAIL routes wrap-up to `failed` (blocking, unlike `featureGateCmd`'s advisory result) |
 | wrap-up `feature-transition` | Capture feature-sync output and exit code; when `.applied == true` or sync exits non-zero after a possible partial transition, run `featureGateCmd` and print PASS/FAIL before returning. A clean no-op skips the gate. Gate failure is advisory and the shell exits 0. |
 | `spur feature sync [id]` | After any lifecycle hop lands, call `refresh({ featureId: id })` in `finally` before returning or rethrowing a later-hop failure. Dry-run, confirmation refusal, and no-op proposals do not refresh. |
 | `spur feature refresh --feature <id>` | Regenerate the global deterministic `INDEX.md`; rewrite only the named feature's `## Tasks` marker region. |

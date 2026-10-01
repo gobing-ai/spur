@@ -4011,3 +4011,143 @@ Artifact: `/Users/robin/xprojects/spur-new/.spur/run/1012-verify-wrap-20260930-w
 - Doc-evolve wrapup result: one real drift (lib enumeration), four clean surfaces — the docs had already absorbed ADR-124's reuse contract and ADR-130's placement contract; 03 §29's operator-decision divergence statement survived 1014's runbook change untouched.
 - Wrapup verification practice: zero-delta claims need two kinds of coverage — exact-term grep **and** an alternate-terminology sweep — before rating HIGH; judgment calls (amendment-vs-editorial, pointer scope) are rated MEDIUM and surfaced to the reviewer instead of being silently absorbed into the HIGH bucket.
 
+## 2026-09-30 — Task 1037
+
+- **Convention discovered:** Wrapup doc-sync (sp:doc-evolve wrapup) repairs project-level drift only in `docs/00_ADR.md`, `docs/03_ARCHITECTURE.md`, `docs/04_DESIGN.md`, `docs/design/*` — never `plugins/**`, `docs/help/**`, or task/feature corpus, even when a reviewer routes findings there. The stale `learning-capture` state name was fixable only in `docs/design/e2e-workflow-for-system-development.md:70,237,508,521,659`; the same stale name remains intentionally untouched in `plugins/sp/skills/spur-dev/references/cross-cutting.md:652,667`, `docs/help/how_to_use_spur_for_daily_software_development.md:523`, and `docs/help/how_to_use_dev_slash_commands_for_daily_software_development.md:319` (out of hop scope).
+- **Convention discovered:** Design satellites recording historical re-keyings keep old state names on purpose — `docs/design/workflow-shell-ownership.md:263`, `docs/design/harness-surface-governance.md:148`, and `docs/design/run-record-contract.md:91` cite `learning-capture` as dated history, not live claims. Drift repair renames live-shape statements only; "fixing" historical records rewrites evidence.
+- **Pattern that worked:** New trusted `sh -c` workflow vars must be registered in the trusted-var inventory at `docs/design/lifecycle-projection-integrity.md:23-24` at wrap-up: `docTripwireCmd` (1037, `config/workflows/wrapup-pipeline.yaml:120`, state :329-348) joined `featureGateCmd` as the second trusted-config var. Key semantic delta to record: `docTripwireCmd` FAIL is blocking (routes wrap-up to `failed`, `failed-check`) while `featureGateCmd`'s gate failure stays advisory (exit 0).
+- **Error hit and resolved:** The run's first test-gate FAIL was environmental, not diff-related — Biome's `vcs.useIgnoreFile` ignored the whole worktree under `.spur/` and checked 0 files (run record 02:35Z). Resolved at test-recheck by an explicit-path Biome accommodation (dirs-only TOPS), superseding the stale FAIL receipt; lesson: recheck gate failures for "0 files checked" before treating a receipt as diff evidence.
+- **Gotcha:** `lifecycle-projection-integrity.md:23` still claimed the pre-0775 `featureGateCmd` default `bun run spur-check-new`; the live default is `$spurBin feature check "$feature"` (`config/workflows/wrapup-pipeline.yaml:113`). Reviewer P4 findings are report-only and no stage repairs them automatically — treat P4s as the wrapup doc-sync hop's worklist, else stale facts ship in the wrap commit (now catchable by the new `doc-tripwire` hop, but only for repo-wide test surface).
+- **Gotcha:** `e2e-workflow-for-system-development.md`'s wrapup shape sections (mermaid :70, State contract :505-511, required-actions table :519-527) are lossy by established practice — they also omit `learnings-validate`, `repair`, `feature-verify`, and terminal states, and prior hop additions (0607, 0915) did not sync them. This hop fixed only the false state names; a full shape reconciliation is a separate doc-evolve audit scope.
+- **Gotcha:** Wrapup worst-case path is now 9/10 transitions against `iterationBound: 10` (reviewer P4, no wedge today); the next wrapup hop addition must bump the bound or the pipeline wedges before `done`.
+
+Batch: **task 1037** (`["1037"]` from the validated capture). Drift repaired in `docs/design/*`; `00_ADR.md` / `03_ARCHITECTURE.md` / `04_DESIGN.md` needed no change (no architectural choice per §6.1, no CLI/API/config contract change — verified by grep, ADR diff empty).
+
+| File | Repair |
+| --- | --- |
+| `docs/design/e2e-workflow-for-system-development.md:70,239,505-530` | Added 1037's `doc-tripwire` hop (+ `learnings-validate`, `feature-verify`) to mermaid, State contract, required actions, Rules; corrected stale `featureGateCmd` default `bun run spur-check-new` → `$spurBin feature check "$feature"`; stated the check-hop exclusion in "Why 27"; `updated_at` |
+| `docs/design/workflow-shell-ownership.md:50-60,251-266` | New `doc-tripwire:onEnter:0` inventory row (option e, `EXT + POLICY`), `5 → 6 compound`, `2026-09-30 delta (1037)` note, `updated_at` |
+| `docs/design/lifecycle-projection-integrity.md:23-24` | Verified the earlier hop pass's `docTripwireCmd` row and `featureGateCmd` correction; kept |
+
+Verification: `bun run test-repo-wide` → 7 pass / 0 fail (adr-supersession included). Task/feature corpus untouched.
+
+## 2026-09-30 — Task 1037
+
+### Conventions
+
+- **Wrapup doc-sync scope.** The `sp:doc-evolve` wrapup hop repairs project-level drift only in
+  `docs/00_ADR.md`, `docs/03_ARCHITECTURE.md`, `docs/04_DESIGN.md`, and `docs/design/*`. `plugins/**`,
+  `docs/help/**`, and task/feature corpus are out of scope even when a reviewer routes findings there;
+  those findings go back to the owning surface.
+- **Dated snapshots vs live counts.** `docs/design/workflow-shell-ownership.md` records its
+  shell-program totals (58 pre-migration, 67 re-count) as dated measurements. A new program is added
+  as a dated delta note plus a table row and a bumped section count — never by rewriting the snapshot
+  totals.
+- **Numbered "steps" tables and route blocks have different completeness rules.** The e2e doc's
+  "27 Steps" table is the operator-walked sequence and deliberately excludes guard/check states; its
+  State contract block is the route and must name every state on it. Reconcile the route block and
+  state the exclusion rule (as done in "Why 27") instead of renumbering the steps table.
+- **A stale fact fixed in one satellite must be grepped across all satellites.** `featureGateCmd`'s
+  pre-0775 default `bun run spur-check-new` was corrected in `lifecycle-projection-integrity.md:23`
+  but left standing in `e2e-workflow-for-system-development.md:239`. Fix pattern: after any
+  var-default correction, `grep -rn` the stale literal across `docs/`.
+
+### Patterns that worked
+
+- **Drift audit = deterministic detection, then judgment.** The live surface read from
+  `config/workflows/wrapup-pipeline.yaml` (state ids, vars block, every `kind: shell` action) diffed
+  against the documented surfaces via `grep -rn`. The 00/03/04 zero-finding verdict is backed by
+  those greps, not by reading alone.
+- **Route-shape reconciliation, bounded.** For 1037's new `doc-tripwire` hop: the mermaid wrap-up
+  node, the State contract block, the required-actions table, and the trusted-var Rules bullet in
+  `e2e-workflow-for-system-development.md`; plus a `doc-tripwire:onEnter:0` row and a
+  `2026-09-30 delta (1037)` note in `workflow-shell-ownership.md`.
+- **A new `kind: shell` action in a shipped workflow YAML creates a shell-ownership obligation.**
+  `docs/design/workflow-shell-ownership.md` asserts every `onEnter`/`onExit` shell program has a
+  decided owner, so `doc-tripwire:onEnter:0` (trusted `docTripwireCmd` through `sh -c`) had to be
+  classified option (e) `EXT + POLICY`, carrying the blocking-FAIL semantic that distinguishes it
+  from `featureGateCmd`.
+
+### Gotchas
+
+- **`docTripwireCmd` FAIL is blocking; `featureGateCmd` failure is advisory.** The tripwire routes
+  the wrap to `failed` with `terminalReason: failed-check`; the feature gate prints PASS/FAIL and
+  exits 0. Recording one semantic without the other misstates the wrap contract.
+- **A guard-style check hop does not belong in the operator-walked steps table.**
+  `learnings-validate`, `doc-tripwire`, and `feature-verify` are pipeline states the route block
+  lists but the 27-step table excludes under its own "outcomes and guards are not steps" rule.
+- **Wrapup worst case is 9/10 transitions against `iterationBound: 10`.** The next hop added to
+  `wrapup-pipeline.yaml` must bump the bound or the pipeline wedges before `done`.
+- **Biome in a worktree under `.spur/` can check 0 files.** `vcs.useIgnoreFile` can ignore the whole
+  worktree; a "0 files checked" gate result is an environment signal, not diff evidence — recheck
+  before treating a receipt as a FAIL on the change.
+- **The repo-wide tripwire surface is 7 tests in one file.** `bun run test-repo-wide` runs
+  `repo-wide-tests/` (including `adr-supersession.test.ts`), so a docs-only wrap edit is cheap to
+  verify; add a subset selector only when runtime measurably hurts wraps.
+
+### Verification
+
+- `bun run test-repo-wide` → 7 pass / 0 fail (adr-supersession included) after the docs edits.
+- `git diff --stat HEAD -- docs/00_ADR.md docs/03_ARCHITECTURE.md docs/04_DESIGN.md` → empty: no
+  architectural choice or CLI/API/config contract changed, so §6.1 (no ADR) and the 04 index were
+  correctly left alone.
+## Drift report — 2026-09-30 (wrap doc-sync, task 1037)
+
+**Repaired (1 file, in scope)**
+
+`docs/design/workflow-shell-ownership.md` — the wrap-up classification table contradicted the YAML it owns:
+
+| # | Reality (YAML) | Doc said | Repair |
+|---|---|---|---|
+| 1 | 10 `onEnter` shell programs in `wrapup-pipeline.yaml` (excluding the shared run-start `script-root` resolver, which no workflow table classifies) | `### wrapup-pipeline.yaml (6 compound)`, 6 rows | table re-counted 6 → 10 rows; heading updated |
+| 2 | `doc-sync` is `agent.run` only; the 7-line append program is `learnings-append:onEnter:0` (0986) | phantom row `doc-sync:onEnter:1` | row replaced by `learnings-append:onEnter:0` |
+| 3 | route-reason writer is `task-resolve:onEnter:4` (0944 inserted the drift probe at `:2`) | `task-resolve:onEnter:2` | index corrected; drift-probe row added |
+| 4 | `learnings-validate` (0986), `repair` (0871/0986), `feature-verify` (0915) are shell programs with no row | absent | 3 rows added |
+
+**Verified clean (no edit needed)** — each backed by a command, not by reading:
+- `docs/04_DESIGN.md` — zero wrap-up references (`rg -n -i 'wrapup|doc-tripwire'` → no match); no satellite pointer/title/state changed, so §6.5 requires no index edit.
+- `docs/03_ARCHITECTURE.md` — wrap-up appears only generically (`:940`, `:1102`); no state or var inventory to sync.
+- `docs/00_ADR.md` — no T1 trigger: additive state + trusted var reusing an existing runner and the existing `featureGateCmd` precedent is not a §6.1 architectural choice; ADR-051 surface unchanged; ADR-115 composition gate stayed green (task receipt).
+- `docs/design/lifecycle-projection-integrity.md` and `docs/design/e2e-workflow-for-system-development.md` — already carry the 1037 `docTripwireCmd` inventory row, state contract, required-actions row, diagram and blocking-FAIL rule.
+- No other `docs/design/*` enumerates wrap-up states (`rg -n 'learnings-append|doc-tripwire|metrics-record' docs/design/*.md`).
+
+**Residual drift — outside this prompt's scope, needs its own route**
+- `plugins/sp/skills/spur-dev/references/cross-cutting.md:652,667` — still names the retired `learning-capture` state as the writer of `.spur/memory/learnings.md` (now `learnings-append`).
+- `docs/help/how_to_use_dev_slash_commands_for_daily_software_development.md:319` and `docs/help/how_to_use_spur_for_daily_software_development.md:523` — same stale `learning-capture` in the wrap-up chain.
+- `docs/design/workflow-shell-ownership.md`'s global `(67 programs)` heading is a dated measurement (68 rows before this edit) and the `task-pipeline` table is an explicit snapshot; a global recount is a separate task, not a wrap edit.
+
+No task/feature corpus was written. The pipeline's own `doc-tripwire` hop gates this edit next.
+
+---
+
+## 2026-10-01 — 1037 · Run repo-wide tripwires on the wrap diff before the wrap commit
+
+### Conventions
+
+- **Trusted project-command vars carry a `TRUSTED CONFIG ONLY` comment and run through `sh -c`.** `docTripwireCmd` sits beside `featureGateCmd` with the same contract; never interpolate untrusted input into either.
+- **Shipped workflows stay portable: probe for the project script, never hardcode a Spur-only command.** `docTripwireCmd` checks `package.json` for the `test-repo-wide` script and no-ops elsewhere, because `.spur/config.yaml` has no workflow-var surface for a project to override.
+- **Status truth lives in a run-scoped file, not the shell exit code** (0783 R4 pattern): the action always exits 0 and writes `PASS`/`FAIL` to `.spur/run/<runId>-…status`; guards read the file.
+- **Declare the FAIL edge before the PASS edge**, or a failed gate can be absorbed by the permissive edge. A missing status must match neither edge and follow the engine's no-match path — confirm it ends at `failed`, not `done` (`state-machine.ts:175-177`).
+- **An additive workflow hop is not an ADR.** A new state plus a var that reuses an existing check runner and an existing trusted-config precedent is not a §6.1 architectural choice: no `00_ADR.md` entry, no ADR-115 budget amendment (the composition gate stayed green).
+- **Regenerate the generated bundle in the same change:** `bun run --filter @gobing-ai/spur build:bundle` → `apps/cli/config/` (gitignored). Bundle parity is asserted by the version pin at identical lines.
+
+### Errors fixed / failure modes removed
+
+- **A guard on `doc-sync` cannot coexist with its `contract-violation → repair` edge**, which needs the agent result. The tripwire therefore sits where both doc-sync exits converge (`learnings-append`, `repair`), before `metrics-record`/`feature-transition` mutate state — and the no-doc-sync fast path (`task-resolve → metrics-record`) deliberately skips it.
+- **Repo-wide tripwires could not see the wrap's own doc edits.** `repo-wide-tests/` runs only inside `spur-check-feature`; once a wrap edit is committed on a clean tree, working-diff tests (e.g. `adr-supersession` (e), which freezes in-place edits to historical `docs/00_ADR.md` lines) can no longer observe it. The new hop runs the tripwire while the doc-sync diff is still uncommitted.
+- **Rejected alternatives worth remembering:** folding the check into `featureGateCmd` would widen ADR-108/D61's feature-scoped gate and runs only *after* `feature-transition` has mutated state; logic in `wrapup-steps.ts` is a different check class and file (that is 1033 R1/R2) and wrapup has no commit step; a doc-evolve prompt rule alone is not deterministic.
+
+### Patterns
+
+- **Test the graph structure, then the behavior.** Structural assertions (state exists, FAIL edge declared before PASS, `learnings-append`/`repair` retargeted, fast path unchanged, default carries the probe plus the trusted-config comment) plus a behavioral check that runs the default command in a temp dir without the script (exit 0 → PASS) and with a script that exits 1 (→ FAIL).
+- **Bound the blast radius by observation, not by move:** the change only adds an earlier observation point and moves nothing out of the feature-scoped pass (0872 unchanged).
+- **Cost is one `test-repo-wide` per clean doc-sync wrap** — accepted because the suite is a single file with no subset selector; add a selector only when the runtime measurably hurts.
+
+### Gotchas
+
+- **A plan-named evidence artifact is a review finding if absent.** The planned `.spur/run/1037-tripwire-repro.log` was never produced; the reviewer filed it P3 evidence hygiene and the mitigation (behavior tests + the pre-existing ADR test + a live wrap run) had to be argued explicitly. Produce the artifact, or record the accepted mitigation up front.
+- **A reviewer's P4 lane is the routing surface for pre-existing drift.** All three P4 findings predated the diff: two were real (`lifecycle-projection-integrity.md` trusted-var inventory missing `docTripwireCmd`; stale `learning-capture` names) and one was not doc drift at all (`iterationBound:10` headroom is YAML-only).
+- **`docs/design/workflow-shell-ownership.md` headings count rows, not programs.** `### <workflow> (N compound)` = N rows = that workflow's `onEnter`/`onExit` shell programs, excluding the shared run-start `script-root` resolver (`start:onEnter:0`), which no table classifies. Indices count **all** `onEnter` actions (notes included), so inserting an action renumbers later ones — 0944 pushed the wrap-up route-reason writer from `:2` to `:4`.
+- **A moved program leaves a phantom row.** 0986 moved the learnings append out of `doc-sync` into `learnings-append`, but the table kept a `doc-sync:onEnter:1` row that no longer existed; the same table was also missing rows for the drift probe (0944), `learnings-validate`/`repair` (0986/0871) and `feature-verify` (0915). All repaired in this wrap (table re-counted 6 → 10 rows).
+- **The doc's global `(67 programs)` heading is a dated measurement**, and the task-pipeline table is an explicit snapshot. Do not re-derive a global count inside a wrap doc-sync: fix the affected workflow table and record the local recount.
+- **The wrap doc-sync's repair scope is `docs/00_ADR.md`, `docs/03_ARCHITECTURE.md`, `docs/04_DESIGN.md`, `docs/design/*`.** Stale `learning-capture` references outside it remain and need their own route: `plugins/sp/skills/spur-dev/references/cross-cutting.md:652,667`, `docs/help/how_to_use_dev_slash_commands_for_daily_software_development.md:319`, `docs/help/how_to_use_spur_for_daily_software_development.md:523`.

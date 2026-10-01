@@ -2,11 +2,11 @@
 schema_version: 1
 id: "A9"
 name: "Script placement contract: CLI-owned logic, thin plugin glue, and pipeline check diet"
-status: active
+status: verifying
 priority: P2
 tags: []
 created_at: "2026-09-29T06:16:01.355Z"
-updated_at: "2026-09-29T10:34:25.246Z"
+updated_at: "2026-10-01T04:08:38.793Z"
 ---
 
 # A9: Script placement contract: CLI-owned logic, thin plugin glue, and pipeline check diet
@@ -137,6 +137,10 @@ Feature: Script placement contract, CLI-owned logic, thin plugin glue, and pipel
 | 1017 | Batch execution model: per-task subagent isolation with parallel fan-out | cancelled |
 | 1018 | Placement scan: detect dynamic DB imports in plugin scripts | done |
 | 1019 | residual-scan adopts shared spurCommand; sweep test stages imports robustly | done |
+| 1034 | Persist-out: make the 64-file evidence cap row-aware for multi-task batches | done |
+| 1035 | ADR-130: dated amendment for spur-bin.ts facade accuracy note | done |
+| 1036 | Guard WBS allocation against cross-checkout collisions in concurrent batch runs | cancelled |
+| 1037 | Run repo-wide tripwires on the wrap diff before the wrap commit | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -144,4 +148,5 @@ Feature: Script placement contract, CLI-owned logic, thin plugin glue, and pipel
 ## History
 
 - 2026-09-29T10:34:25.246Z backlog → active (system)
+- 2026-10-01T04:08:38.793Z active → verifying (system)
 
