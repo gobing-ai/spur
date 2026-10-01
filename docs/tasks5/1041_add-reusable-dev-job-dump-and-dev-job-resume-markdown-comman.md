@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Add reusable dev-job-dump and dev-job-resume Markdown commands
-status: testing
+status: done
 template: meta
 created_at: 2026-10-01T19:01:21.073Z
-updated_at: "2026-10-01T19:26:56.361Z"
+updated_at: "2026-10-01T21:21:46.213Z"
 priority: P2
 estimate_hours: 1
 
@@ -59,9 +59,9 @@ The two commands use the existing lifecycle skill and a shared procedure/templat
 | --- | --- |
 | Dump remaining work | plugins/sp/commands/dev-job-dump.md:2 |
 | Resume remaining work | plugins/sp/commands/dev-job-resume.md:2 |
-| job-dump | plugins/sp/skills/spur-dev/references/dev-operations.md:342 |
-| job-resume | plugins/sp/skills/spur-dev/references/dev-operations.md:354 |
-| Job handoff template | plugins/sp/skills/spur-dev/references/dev-operations.md:367 |
+| job-dump | plugins/sp/skills/spur-dev/references/dev-operations.md:343 |
+| job-resume | plugins/sp/skills/spur-dev/references/dev-operations.md:355 |
+| Job handoff template | plugins/sp/skills/spur-dev/references/dev-operations.md:368 |
 
 Updated the existing operation/role/command indexes, shared flag glossary and owning planning-workflow contract. Updated the existing command-count assertions from 41 to 43. No runtime dependency or public Spur CLI verb was introduced.
 
@@ -69,30 +69,59 @@ Updated the existing operation/role/command indexes, shared flag glossary and ow
 
 **Pipeline verify results**
 
-- Verdict: PARTIAL (from verdict artifact)
+- Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | .spur/run/1041-handoff-contract-check.log; .spur/run/1041-command-validation.log |
-| R2 | MET | .spur/run/1041-handoff-contract-check.log |
-| R3 | MET | Reviewed job-dump and job-resume live-state reconciliation, input validation and existing-owner continuation in dev-operations.md; .spur/run/1041-handoff-contract-check.log |
-| R4 | MET | .spur/run/1041-focused-tests.log (289 pass); .spur/run/1041-dump-validation.json; .spur/run/1041-resume-validation.json; .spur/run/1041-link-check.log |
+| R1 | MET | plugins/sp/commands/dev-job-dump.md:4 and plugins/sp/commands/dev-job-resume.md:4 declare required --file; .spur/run/1041-verify/command-validation.log:2 confirms 43 wrappers pass all five gates. |
+| R2 | MET | plugins/sp/skills/spur-dev/references/dev-operations.md:368 owns the shared eight-section template; .spur/run/1041-verify/instruction-contract-check.log:1 confirms reusable sections and sample filtering. |
+| R3 | MET | plugins/sp/skills/spur-dev/references/dev-operations.md:349 covers dump validation and verified state; plugins/sp/skills/spur-dev/references/dev-operations.md:358 covers resume validation, reconciliation and existing-owner continuation; .spur/run/1041-verify/instruction-contract-check.log:2 and .spur/run/1041-verify/resume-reconciliation.json:3 prove the instruction contract and current-host walkthrough. |
+| R4 | MET | plugins/sp/skills/spur-dev/references/flag-glossary.md:38 and plugins/sp/references/roles.md:53 index the shared option and roles; .spur/run/1041-verify/focused-tests.log (298 pass); .spur/run/1041-verify/dump-validation.json:2 and .spur/run/1041-verify/resume-validation.json:2 are valid; .spur/run/1041-verify/link-check.log:2 passes. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | command | .spur/run/1041-handoff-contract-check.log; .spur/run/1041-command-validation.log |
-| AC2 | MET | command | .spur/run/1041-handoff-contract-check.log |
-| AC3 | MET | manual-review | Reviewed job-dump and job-resume live-state reconciliation, input validation and existing-owner continuation in dev-operations.md; .spur/run/1041-handoff-contract-check.log |
-| AC4 | MET | command | .spur/run/1041-focused-tests.log (289 pass); .spur/run/1041-dump-validation.json; .spur/run/1041-resume-validation.json; .spur/run/1041-link-check.log |
+| AC1 | MET | command | bun .spur/run/1041-verify/instruction-contract-check.ts; .spur/run/1041-verify/instruction-contract-check.log:1 verifies both wrappers' required hint/table/usage and procedure links. |
+| AC2 | MET | command | bun .spur/run/1041-verify/instruction-contract-check.ts; .spur/run/1041-verify/instruction-contract-check.log:1 verifies all eight reusable sections and excludes sample-specific content. |
+| AC3 | MET | command | bun .spur/run/1041-verify/instruction-contract-check.ts; .spur/run/1041-verify/instruction-contract-check.log:2 verifies the prompt instructions' input-validation, live-state, missing-data and continuation obligations. Current-host inline dump/read-back/resume reconciliation used a path with spaces; .spur/run/1041-verify/dump-state.json:2 and .spur/run/1041-verify/resume-reconciliation.json:3 show fresh Git/task provenance, implementation skipped and the verification owner retained. This is instruction coverage plus one live inline walkthrough, not an arbitrary second-session/engine end-to-end claim. |
+| AC4 | MET | test | Fresh focused command/flag/role/skill/section suites: .spur/run/1041-verify/focused-tests.log (298 pass); Superskill strict validation for both wrappers: .spur/run/1041-verify/dump-validation.json:2 and .spur/run/1041-verify/resume-validation.json:2; .spur/run/1041-verify/command-validation.log:2; .spur/run/1041-verify/link-check.log:2. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-Reviewed the command wrappers, shared handoff procedure, template, argument contracts, role assignments and documentation synchronization against the task requirements and existing plugin owners.
+**Verdict: PASS**
 
-No P1-P4 findings remain in the changed surfaces. The shared structure removes all feature-specific identifiers, implementation maps, quota dates, parser workarounds and provenance bypasses from the supplied example. Resume reconciles live Git/run/task state before writing and preserves frozen membership, existing approvals and the owning lifecycle gates.
+Scope: task 1041, `--focus all --agent inline --auto`. Exact `(1041)` tag lookup had no commits and the initial working tree was clean; the identified implementation commit `317ff19397feab61c8674219a56bd48e337c1845` (`feat(sp-1041)`) supplies nine non-task surfaces, reviewed against current contents. This session coordinates functional, SECUA and architecture fragments.
 
-Validation covers prompt structure, shared flag/role parity, links and removal of sample-specific content. These are prompt instructions executed by a coding agent; validation does not claim an end-to-end run of an arbitrary resumed job.
+#### Findings and dispositions
+
+| Priority | Dimension | Location | Finding | Disposition |
+| --- | --- | --- | --- | --- |
+| P2 | Correctness | docs/tasks5/1041_add-reusable-dev-job-dump-and-dev-job-resume-markdown-comman.md:89 | The authored Review was prose-only and failed the populated-priority-table done guard. This coordinated report supplies the required table. | FIXED |
+| P3 | Correctness | docs/tasks5/1041_add-reusable-dev-job-dump-and-dev-job-resume-markdown-comman.md:62 | Three Solution citations pointed at blank lines after a shared-reference edit; updated to the actual job-dump, job-resume and template headings. | FIXED |
+
+Security: dump validates paths and rejects corpus targets; resume verifies embedded commands, execution identity, ownership and pending approvals; credentials are redacted. Efficiency: artifacts are linked, with no parser/runtime/dependency introduced. Correctness: required input, live Git/task reconciliation, frozen membership, completion evidence, unavailable notes/checkpoints and drift are covered by explicit instructions and assertions. Usability: required --file is consistent in hints, tables, usage and glossary. Architecture: two approved thin entries dispatch to one existing owner/template and reuse lifecycle/wrap contracts.
+
+#### Functional traceability
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | plugins/sp/commands/dev-job-dump.md:4; plugins/sp/commands/dev-job-resume.md:4; 43 wrappers pass the validator. |
+| R2 | MET | plugins/sp/skills/spur-dev/references/dev-operations.md:368; reusable-section and sample-exclusion assertions pass. |
+| R3 | MET | plugins/sp/skills/spur-dev/references/dev-operations.md:349; plugins/sp/skills/spur-dev/references/dev-operations.md:358; executable instruction assertions and current-host dump/resume reconciliation pass. |
+| R4 | MET | plugins/sp/skills/spur-dev/references/flag-glossary.md:38; plugins/sp/references/roles.md:53; focused tests, strict Superskill validation, shared-flag parity and link check pass. |
+
+#### Architecture
+
+All five architecture lenses reviewed: the two thin entry points are the approved command contract; shared behavior resides once in the existing reference, with no redundant runtime layer. Index/role/glossary updates are required integration points. No cross-workspace value imports, new dependency, public CLI verb, duplicate parser, engine snapshot or alternate lifecycle is introduced. The instruction contract is directly testable and a current-host handoff walkthrough is recorded. No architectural deepening candidate remains.
+
+#### Fresh verification evidence
+
+- `bun run spur-check`: exit 0; 9598 pass, 0 fail across 563 files; lint/typechecks, 50 pre-check rules and 2 post-check rules pass. Evidence: `.spur/run/1041-verify/spur-check.log`.
+- Focused command/flag/role/skill/section tests: 298 pass, 0 fail, 2464 assertions. Evidence: `.spur/run/1041-verify/focused-tests.log`.
+- Both Superskill strict validators: valid=true; 43 commands pass all five wrapper gates; link-check passes. Superskill's generic role-key warning is covered by Spur's role contract tests.
+- `bun .spur/run/1041-verify/instruction-contract-check.ts`: PASS; live current-host dump/read-back/resume reconciliation used a path with spaces. This proves instruction coverage and one inline walkthrough; it does not claim an arbitrary second-session or engine run.
+
+No unresolved P1-P4 findings. No feature-specific sample content, quota dates, parser workarounds or provenance/gate bypass instructions were introduced. Continue the guarded completion path using the fresh PASS verdict.
 
 ### References
 
@@ -102,4 +131,5 @@ Validation covers prompt structure, shared flag/role parity, links and removal o
 
 - 2026-10-01T19:09:30.557Z todo → wip (system)
 - 2026-10-01T19:26:56.361Z wip → testing (system)
+- 2026-10-01T21:19:18.220Z testing → done (system)
 
