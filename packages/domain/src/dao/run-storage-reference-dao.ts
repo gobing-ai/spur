@@ -37,7 +37,7 @@ export async function redirectRunStorageReferences(
                  WHERE t.${owner} IN (SELECT id FROM runs WHERE status NOT IN ('done','failed','cancelled'))`,
             );
             for (const row of live) {
-                if (!row.value.includes('.spur/run')) continue;
+                if (!moves.some((move) => row.value.includes(move.source))) continue;
                 const original: unknown = JSON.parse(row.value);
                 if (JSON.stringify(rewrite(original)) !== JSON.stringify(original)) {
                     throw new Error('live session or checkpoint consumer');
@@ -58,7 +58,7 @@ export async function redirectRunStorageReferences(
                  AND t.${column} IS NOT NULL`,
             );
             for (const row of rows) {
-                if (!row.value.includes('.spur/run')) continue;
+                if (!moves.some((move) => row.value.includes(move.source))) continue;
                 const value = JSON.stringify(rewrite(JSON.parse(row.value)));
                 if (value !== row.value) await db.run(`UPDATE ${table} SET ${column} = ? WHERE id = ?`, value, row.id);
             }

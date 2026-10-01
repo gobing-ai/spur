@@ -42,7 +42,14 @@ export interface RunTransferResult {
 }
 
 /** Child tables keyed by `run_id`, copied per persisted run (engine schema order). */
-const CHILD_TABLES = ['action_runs', 'phase_runs', 'transition_runs', 'workflow_states'] as const;
+const CHILD_TABLES = [
+    'action_runs',
+    'phase_runs',
+    'transition_runs',
+    'workflow_states',
+    'artifacts',
+    'task_run_links',
+] as const;
 
 /** Row shape as `SELECT *` returns it — column names come from the migrated schema. */
 type RawRow = { readonly [column: string]: unknown };

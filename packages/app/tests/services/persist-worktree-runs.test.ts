@@ -42,6 +42,117 @@ async function seedWorktree(workdir: string, runId: string, workflowName = 'wf')
 }
 
 describe('persistWorktreeRuns (task 0975 R1)', () => {
+    test('exports canonical evidence, registered artifacts and session references without scratch', async () => {
+        const from = makeDir('persist-durable-from-');
+        const to = makeDir('persist-durable-to-');
+        try {
+            await seedWorktree(from.dir, 'retained');
+            const paths = runStoragePaths(from.dir);
+            const artifact = join(paths.recordsDir, 'retained/artifacts/result.json');
+            const sessionDir = join(paths.recordsDir, 'retained/agent-sessions/omp');
+            mkdirSync(dirname(artifact), { recursive: true });
+            mkdirSync(sessionDir, { recursive: true });
+            writeFileSync(artifact, '{"ok":true}');
+            writeFileSync(join(sessionDir, 'session.jsonl'), 'retained session');
+            mkdirSync(paths.evidenceDir, { recursive: true });
+            writeFileSync(join(paths.evidenceDir, '1026-verdict.json'), '{"wbs":"1026","verdict":"PASS"}');
+            const receipt = {
+                schemaVersion: 1,
+                featureId: 'E71',
+                runId: 'retained',
+                workdir: from.dir,
+                verifier: {
+                    name: 'verify',
+                    sourcePath: 'verify.yaml',
+                    layer: 'project',
+                    definitionDigest: `sha256:${'a'.repeat(64)}`,
+                },
+                verificationCmd: 'bun test',
+                inputDigest: `sha256:${'b'.repeat(64)}`,
+                status: 'PASS',
+                startedAt: '2026-10-01T00:00:00Z',
+                completedAt: '2026-10-01T00:01:00Z',
+            };
+            for (const owner of ['E71', 'retained'])
+                writeFileSync(join(paths.evidenceDir, `${owner}-feature-verification.json`), JSON.stringify(receipt));
+            const source = await openInlineRunProjectDb(from.dir);
+            await source.adapter.run(
+                "INSERT INTO artifacts (id,run_id,path,kind,created_at,updated_at) VALUES ('artifact','retained',?,'result',1,1)",
+                artifact,
+            );
+            await source.adapter.run(
+                "INSERT INTO task_run_links (id,wbs,run_id,kind,created_at) VALUES ('link','1026','retained','pipeline',1)",
+            );
+            await source.adapter.run(
+                'UPDATE runs SET metadata_json = ? WHERE id = ?',
+                JSON.stringify({ sessionDir, proofDigest: 'keep' }),
+                'retained',
+            );
+            source.close();
+            rmSync(join(from.dir, '.spur/run'), { recursive: true });
+            expect((await persistWorktreeRuns({ fromWorkdir: from.dir, toWorkdir: to.dir })).ok).toBe(true);
+            expect((await persistWorktreeRuns({ fromWorkdir: from.dir, toWorkdir: to.dir })).persisted).toBe(0);
+            from.cleanup();
+            const target = await openInlineRunProjectDb(to.dir);
+            try {
+                const row = await target.adapter.queryFirst<{ path: string }>(
+                    "SELECT path FROM artifacts WHERE id='artifact'",
+                );
+                expect(readFileSync(row?.path as string, 'utf8')).toBe('{"ok":true}');
+                const run = await target.adapter.queryFirst<{ metadata_json: string }>(
+                    "SELECT metadata_json FROM runs WHERE id='retained'",
+                );
+                const metadata = JSON.parse(run?.metadata_json as string);
+                expect(readFileSync(join(metadata.sessionDir, 'session.jsonl'), 'utf8')).toBe('retained session');
+                expect(metadata.proofDigest).toBe('keep');
+                expect(
+                    await target.adapter.queryFirst<{ id: string }>("SELECT id FROM task_run_links WHERE id='link'"),
+                ).toEqual({
+                    id: 'link',
+                });
+                for (const name of [
+                    '1026-verdict.json',
+                    'E71-feature-verification.json',
+                    'retained-feature-verification.json',
+                ]) {
+                    expect(
+                        JSON.parse(readFileSync(join(runStoragePaths(to.dir).evidenceDir, name), 'utf8')).verdict ??
+                            'PASS',
+                    ).toBe('PASS');
+                }
+            } finally {
+                target.close();
+            }
+        } finally {
+            from.cleanup();
+            to.cleanup();
+        }
+    });
+
+    test('durable evidence conflict and foreign identity reject before target database creation', async () => {
+        const from = makeDir('persist-evidence-from-');
+        const to = makeDir('persist-evidence-to-');
+        try {
+            await seedWorktree(from.dir, 'retained');
+            const source = join(runStoragePaths(from.dir).evidenceDir, '1026-verdict.json');
+            const target = join(runStoragePaths(to.dir).evidenceDir, '1026-verdict.json');
+            mkdirSync(dirname(source), { recursive: true });
+            mkdirSync(dirname(target), { recursive: true });
+            writeFileSync(source, '{"wbs":"9999","verdict":"PASS"}');
+            await expect(persistWorktreeRuns({ fromWorkdir: from.dir, toWorkdir: to.dir })).rejects.toThrow('identity');
+            expect(existsSync(join(to.dir, '.spur/spur.db'))).toBe(false);
+            writeFileSync(source, '{"wbs":"1026","verdict":"PASS"}');
+            writeFileSync(target, '{"wbs":"1026","verdict":"FAIL"}');
+            await expect(persistWorktreeRuns({ fromWorkdir: from.dir, toWorkdir: to.dir })).rejects.toThrow(
+                'conflicts',
+            );
+            expect(existsSync(join(to.dir, '.spur/spur.db'))).toBe(false);
+            expect(readFileSync(target, 'utf8')).toContain('FAIL');
+        } finally {
+            from.cleanup();
+            to.cleanup();
+        }
+    });
     test('copies rows and run records into the invoking tree; re-persist is idempotent', async () => {
         const from = makeDir('persist-from-');
         const to = makeDir('persist-to-');

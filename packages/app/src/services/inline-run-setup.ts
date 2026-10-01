@@ -43,7 +43,7 @@ const {
     writeFileSync,
     writeSync,
 } = await import('node:fs');
-const { copyFile, lstat, mkdir, readdir, readFile } = await import('node:fs/promises');
+const { lstat, mkdir, readdir, readFile } = await import('node:fs/promises');
 
 import { basename, join, resolve } from 'node:path';
 import type { DbAdapter, RunDefinitionSource } from '@gobing-ai/spur-domain';
@@ -52,6 +52,7 @@ import {
     listRunIdRows,
     normalizePersistedWorkflowLayer,
     RunDao,
+    redirectRunStorageReferences,
     transferRunTables,
 } from '@gobing-ai/spur-domain';
 import {
@@ -62,6 +63,8 @@ import {
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { createWorkflowActionTraceWriter } from '../workflow/action-trace';
 import { DecideActionRunner, DecideOptionsSchema } from '../workflow/actions/decide';
+import { resolveDurableArtifactPath } from '../workflow/actions/run-path';
+import { parseFeatureVerificationReceipt } from '../workflow/feature-verification-receipt';
 import { computeProofInputFingerprint, readProofInputContents } from '../workflow/proof-input-fingerprint';
 import { InvalidWorkflowRunIdError } from '../workflow/run-record';
 import { isBookkeepingWorkflow } from '../workflow/terminal-reason';
@@ -72,6 +75,7 @@ import {
     type WorkflowLayerId,
 } from '../workflow/workflow-resolver';
 import { ensureDurablePlaneIgnored, runStoragePaths } from './run-storage';
+import { parseVerifyVerdict } from './verify-verdict';
 import { workflowVersionLiteral } from './workflow-service';
 
 /** Input for {@link createOrAttachInlineRun}. */
@@ -292,6 +296,45 @@ export async function persistWorktreeRuns(input: PersistWorktreeRunsInput): Prom
     // 1026 R7: the durable run-record plane migrates alongside the scratch evidence.
     const fromRecordsDir = runStoragePaths(fromDir).recordsDir;
     const toRecordsDir = runStoragePaths(toDir).recordsDir;
+    const fs = createNodeFileSystem();
+    const fromEvidence = runStoragePaths(fromDir).evidenceDir;
+    const toEvidence = runStoragePaths(toDir).evidenceDir;
+    const evidenceCopies: Array<{ source: string; target: string; bytes: Buffer }> = [];
+    // Canonical verdicts and both receipt identities travel even without scratch citations.
+    // Validate and snapshot the complete family before opening the destination database.
+    await resolveDurableArtifactPath(fs, fromDir, join(fromEvidence, 'probe.json'), 'evidence');
+    const evidenceNames = await readdir(fromEvidence).catch((error: NodeJS.ErrnoException) => {
+        if (error.code === 'ENOENT') return [] as string[];
+        throw error;
+    });
+    for (const name of evidenceNames.sort()) {
+        const source = await resolveDurableArtifactPath(fs, fromDir, join(fromEvidence, name), 'evidence');
+        const target = await resolveDurableArtifactPath(fs, toDir, join(toEvidence, name), 'evidence');
+        const stat = await lstat(source);
+        if (!stat.isFile()) throw new Error(`persist-out: durable evidence is not a regular file: ${name}`);
+        const bytes = await readFile(source);
+        const verdictWbs = /^(\d{4})-verdict\.json$/.exec(name)?.[1];
+        if (verdictWbs !== undefined) {
+            const parsed = parseVerifyVerdict(bytes.toString(), verdictWbs);
+            const raw = JSON.parse(bytes.toString()) as { wbs?: unknown };
+            if (!parsed || parsed.wbs !== verdictWbs || (raw.wbs !== undefined && raw.wbs !== verdictWbs)) {
+                throw new Error(`persist-out: malformed durable verdict identity: ${name}`);
+            }
+        } else if (name.endsWith('-feature-verification.json')) {
+            const receipt = parseFeatureVerificationReceipt(bytes.toString());
+            const owner = name.slice(0, -'-feature-verification.json'.length);
+            if (owner !== receipt.runId && owner !== receipt.featureId) {
+                throw new Error(`persist-out: malformed durable receipt identity: ${name}`);
+            }
+        } else {
+            throw new Error(`persist-out: unclassified durable evidence: ${name}`);
+        }
+        const existing = await readExistingRunFile(target);
+        if (existing !== undefined && !existing.equals(bytes)) {
+            throw new Error(`persist-out: durable evidence conflicts: ${name}`);
+        }
+        evidenceCopies.push({ source, target, bytes });
+    }
 
     // 0984 R1–R3: citation selection and validation run BEFORE any DB or file write, so an
     // unresolved/unsafe/over-cap citation fails with zero side effects (the driver blocks
@@ -420,6 +463,19 @@ export async function persistWorktreeRuns(input: PersistWorktreeRunsInput): Prom
             const { persistedIds, skipped } = await transferRunTables(source.adapter, target.adapter);
             const workflowNameById = new Map(runRows.map((row) => [row.id, row.workflowName]));
             const recordSkips: Array<{ id: string; reason: string }> = [];
+            const referenceMoves: Array<{ source: string; target: string }> = [];
+            if (evidenceCopies.length > 0) {
+                ensureDurablePlaneIgnored(toDir);
+                for (const copy of evidenceCopies) {
+                    await mkdir(join(copy.target, '..'), { recursive: true });
+                    const existing = await readExistingRunFile(copy.target);
+                    if (existing !== undefined && !existing.equals(copy.bytes)) {
+                        throw new Error(`persist-out: durable evidence conflicts: ${copy.target}`);
+                    }
+                    if (existing === undefined) writeFileSync(copy.target, copy.bytes, { flag: 'wx' });
+                    referenceMoves.push({ source: copy.source, target: fs.realPath?.(copy.target) ?? copy.target });
+                }
+            }
             if (persistedIds.length > 0 || citedCopies.length > 0) {
                 mkdirSync(toRunDir, { recursive: true });
                 mkdirSync(toRecordsDir, { recursive: true });
@@ -479,9 +535,10 @@ export async function persistWorktreeRuns(input: PersistWorktreeRunsInput): Prom
                 // 1026 R7: carry the durable per-run dirs (the record pair lives inside;
                 // agent sessions and artifacts ride along) with record conflict=skip semantics.
                 for (const id of persistedIds) {
-                    await carryRunRecordDir(fromRecordsDir, toRecordsDir, '', id, recordSkips);
+                    await carryRunRecordDir(fromRecordsDir, toRecordsDir, '', id, recordSkips, referenceMoves);
                 }
             }
+            await redirectRunStorageReferences(target.adapter, referenceMoves);
             return {
                 ok: true,
                 persisted: persistedIds.length,
@@ -784,31 +841,61 @@ async function carryRunRecordDir(
     rel: string,
     runId: string,
     skips: Array<{ id: string; reason: string }>,
+    moves: Array<{ source: string; target: string }>,
 ): Promise<void> {
+    const fs = createNodeFileSystem();
+    await resolveDurableArtifactPath(fs, resolve(srcRoot, '../../..'), join(srcRoot, rel, 'probe'), 'runs');
+    await resolveDurableArtifactPath(fs, resolve(destRoot, '../../..'), join(destRoot, rel, 'probe'), 'runs');
     let entries: Array<{ name: string; isDirectory: () => boolean }>;
     try {
         entries = await readdir(join(srcRoot, rel), { withFileTypes: true });
-    } catch {
-        return; // ENOENT/ENOTDIR — nothing durable to carry
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+        throw error;
     }
     for (const entry of entries) {
+        if (rel === '' && ![runId, `${runId}.md`, `${runId}.state.json`, `${runId}.log`].includes(entry.name)) continue;
         const relNext = rel === '' ? entry.name : `${rel}/${entry.name}`;
         if (entry.isDirectory()) {
-            await carryRunRecordDir(srcRoot, destRoot, relNext, runId, skips);
+            await carryRunRecordDir(srcRoot, destRoot, relNext, runId, skips, moves);
+            const target = join(destRoot, relNext);
+            if (existsSync(target))
+                moves.push({ source: join(srcRoot, relNext), target: fs.realPath?.(target) ?? target });
             continue;
         }
-        const sourceBytes = await readFile(join(srcRoot, relNext)).catch(() => undefined);
-        if (sourceBytes === undefined) continue;
-        const dest = join(destRoot, relNext);
-        const existing = await readFile(dest).catch(() => undefined);
+        const source = await resolveDurableArtifactPath(
+            fs,
+            resolve(srcRoot, '../../..'),
+            join(srcRoot, relNext),
+            'runs',
+        );
+        const dest = await resolveDurableArtifactPath(
+            fs,
+            resolve(destRoot, '../../..'),
+            join(destRoot, relNext),
+            'runs',
+        );
+        if (!(await lstat(source)).isFile())
+            throw new Error(`persist-out: retained item is not a regular file: ${source}`);
+        const sourceBytes = await readFile(source);
+        const existing = await readExistingRunFile(dest);
         if (existing !== undefined) {
             if (!existing.equals(sourceBytes)) {
+                if (rel !== '') throw new Error(`persist-out: retained data conflicts: ${relNext}`);
                 skips.push({ id: `${runId}/${relNext}`, reason: `record-conflict:${relNext}` });
+                continue;
             }
-            continue; // identical — idempotent no-op
+        } else {
+            await mkdir(join(dest, '..'), { recursive: true });
+            writeFileSync(dest, sourceBytes, { flag: 'wx' });
         }
-        await mkdir(join(dest, '..'), { recursive: true });
-        await copyFile(join(srcRoot, relNext), dest);
+        moves.push({ source, target: fs.realPath?.(dest) ?? dest });
+        moves.push({ source: join(srcRoot, relNext), target: fs.realPath?.(dest) ?? dest });
+        if (rel !== '')
+            moves.push({
+                source: join(srcRoot, rel),
+                target: fs.realPath?.(join(destRoot, rel)) ?? join(destRoot, rel),
+            });
     }
 }
 
