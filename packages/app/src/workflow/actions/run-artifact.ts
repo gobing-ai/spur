@@ -1,5 +1,5 @@
-import { createHash } from 'node:crypto';
-import { basename, join, resolve } from 'node:path';
+import { createHash, randomUUID } from 'node:crypto';
+import { basename, dirname, join, resolve } from 'node:path';
 import type { DbAdapter } from '@gobing-ai/spur-domain';
 import { ArtifactDao, RunDao } from '@gobing-ai/spur-domain';
 import type { ActionResult, ActionRunContext, ActionRunner } from '@gobing-ai/ts-dual-workflow-engine';
@@ -7,10 +7,10 @@ import { createNodeFileSystem, type FileSystem, type ProcessExecutor } from '@go
 import { ensureDurablePlaneIgnored, runArtifactsDir } from '../../services/run-storage';
 import { parseVerifyVerdict } from '../../services/verify-verdict';
 import { computeProofInputFingerprint, readProofInputContents } from '../proof-input-fingerprint';
-import { resolveRunArtifactPath } from './run-path';
+import { resolveDurableArtifactPath, resolveRunArtifactPath } from './run-path';
 
 // runtime-boundaries fs rule (no-direct-fs-io): dynamic destructure, not a static import.
-const { copyFile, mkdir, readFile, stat } = await import('node:fs/promises');
+const { copyFile, link, mkdir, readFile, unlink } = await import('node:fs/promises');
 
 const KIND = 'run.artifact';
 /** Canonical proof-input digest shape produced by `proof.fingerprint` (ADR-071). */
@@ -28,25 +28,47 @@ async function sha256File(path: string): Promise<string> {
  * references a durable copy. A divergent existing copy under the same basename
  * fails visibly; an identical copy is idempotent.
  */
-async function persistDurableArtifact(normalized: string, workdir: string, runId: string): Promise<string> {
+async function persistDurableArtifact(
+    normalized: string,
+    workdir: string,
+    runId: string,
+    fs: FileSystem,
+    allowMissing = false,
+): Promise<string> {
     ensureDurablePlaneIgnored(workdir); // 1026: the durable copy must not shift the proof-input tree
     const artifactsDir = runArtifactsDir(workdir, runId);
-    const dest = join(artifactsDir, basename(normalized));
-    let existing = false;
-    try {
-        await stat(dest);
-        existing = true;
-    } catch {
-        existing = false;
+    const dest = await resolveDurableArtifactPath(fs, workdir, join(artifactsDir, basename(normalized)), 'runs');
+    const source = await fs.stat(normalized);
+    if (source === null) {
+        if (allowMissing) return dest; // Optional missing output remains a path-only reference.
+        throw new Error(`required artifact disappeared before persistence: ${normalized}`);
     }
-    if (existing) {
+    if (!source.isFile()) throw new Error(`artifact is not a regular file: ${normalized}`);
+    if (await fs.stat(dest)) {
         if ((await sha256File(dest)) !== (await sha256File(normalized))) {
             throw new Error(`durable artifact path already holds different content: ${dest}`);
         }
         return dest;
     }
-    await mkdir(artifactsDir, { recursive: true });
-    await copyFile(normalized, dest);
+    await mkdir(dirname(dest), { recursive: true });
+    const tmp = `${dest}.${randomUUID()}.tmp`;
+    try {
+        await copyFile(normalized, tmp);
+        try {
+            await link(tmp, dest); // Atomic publication; never overwrite another producer's destination.
+        } catch (error) {
+            if (
+                (error as { code?: string }).code !== 'EEXIST' ||
+                (await sha256File(dest)) !== (await sha256File(tmp))
+            ) {
+                throw error;
+            }
+        }
+    } finally {
+        await unlink(tmp).catch((error: { code?: string }) => {
+            if (error.code !== 'ENOENT') throw error;
+        });
+    }
     return dest;
 }
 
@@ -167,7 +189,13 @@ export class RunArtifactActionRunner implements ActionRunner {
         // 1026 R3: empty runId keeps the legacy scratch-only registration.
         if (context.runId !== '') {
             try {
-                registeredPath = await persistDurableArtifact(normalized, workdir, context.runId);
+                registeredPath = await persistDurableArtifact(
+                    normalized,
+                    workdir,
+                    context.runId,
+                    this.fileSystem,
+                    !requireExisting,
+                );
             } catch (error) {
                 return { ok: false, error: `${KIND}: durable persist failed: ${(error as Error).message}` };
             }
@@ -460,7 +488,7 @@ export class RunArtifactActionRunner implements ActionRunner {
         // 1026 R3: durable copy before registration; the row names the durable path.
         let registeredPath = normalized;
         try {
-            registeredPath = await persistDurableArtifact(normalized, workdir, context.runId);
+            registeredPath = await persistDurableArtifact(normalized, workdir, context.runId, this.fileSystem);
         } catch (error) {
             return { ok: false, error: `${KIND}: durable persist failed: ${(error as Error).message}` };
         }

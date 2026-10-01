@@ -4,7 +4,7 @@ name: Retain run records sessions and artifacts outside scratch
 status: done
 template: feature-impl
 created_at: 2026-09-30T20:13:58.357Z
-updated_at: "2026-10-01T20:40:59.705Z"
+updated_at: "2026-10-01T22:10:48.499Z"
 feature_id: E71
 priority: P2
 tags:
@@ -104,6 +104,13 @@ Extended the 1025 storage seam (no fork; ADR-131, `docs/design/disposable-run-st
 - `packages/app/src/index.ts` — exports the new seam members (`runSessionsDir`, `runArtifactsDir`, `resolveRunRecordDir`, `ensureDurablePlaneIgnored`).
 
 DB trace stays authoritative (no paused snapshots, no schema change, no new backend/dep/public command). Terminal scratch deletion remains out of scope (ADR-131).
+
+**Force verification repair (2026-10-01).**
+
+- `packages/app/src/workflow/actions/run-artifact.ts:31` — durable publication now checks the destination's physical confinement, stages bytes and atomically links without overwriting a competing destination. Optional absent output returns a truthful path-only reference; a required source disappearing before persistence fails.
+- `packages/app/src/services/run-storage.ts:537` — artifact/session path construction validates run IDs before using them as path components.
+- `packages/app/tests/workflow/actions/run-artifact.test.ts:13` — regressions reproduced optional-missing refusal and an escaping durable-root write before the repair. Artifact/agent/inline/export/migration suites now pass: 244 tests across 5 files.
+- Residual: migration has no metadata-redirection or settled-importer port; worktree export can report success while record conflicts are skipped and does not transfer the evidence plane as a complete family. Bound evidence registration still accepts only scratch. These requirements remain PARTIAL after the bounded repair pass; the existing export follow-up 1043 is outside the frozen verify set.
 
 ### Testing
 

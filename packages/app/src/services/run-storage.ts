@@ -40,6 +40,7 @@ import {
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { resolveDurableArtifactPath, resolveRunArtifactPath } from '../workflow/actions/run-path';
+import { InvalidWorkflowRunIdError } from '../workflow/run-record';
 
 /** Resolved run-storage layout for one project root. */
 export interface RunStoragePaths {
@@ -534,12 +535,20 @@ export async function migrateRunStorage(input: MigrateRunStorageInput): Promise<
 
 /** Durable per-run session dir: `<projectRoot>/.spur/memory/runs/<runId>/agent-sessions` (1026 R3). */
 export function runSessionsDir(cwd: string, runId: string): string {
+    assertRunId(runId);
     return join(runStoragePaths(cwd).recordsDir, runId, 'agent-sessions');
 }
 
 /** Durable per-run artifact dir: `<projectRoot>/.spur/memory/runs/<runId>/artifacts` (1026 R3). */
 export function runArtifactsDir(cwd: string, runId: string): string {
+    assertRunId(runId);
     return join(runStoragePaths(cwd).recordsDir, runId, 'artifacts');
+}
+
+function assertRunId(runId: string): void {
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(runId) || runId.includes('..')) {
+        throw new InvalidWorkflowRunIdError(runId);
+    }
 }
 
 /** Repo-local ignore entry that keeps the durable run-record plane out of the git tree. */

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { execSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ArtifactDao, applyCliMigrations, type DbAdapter } from '@gobing-ai/spur-domain';
@@ -10,6 +10,43 @@ import { RunArtifactActionRunner } from '../../../src/workflow/actions/run-artif
 import { computeProofInputFingerprint } from '../../../src/workflow/proof-input-fingerprint';
 
 describe('RunArtifactActionRunner', () => {
+    test('optional missing output records a durable path without fabricating bytes', async () => {
+        const workdir = mkdtempSync(join(tmpdir(), 'artifact-optional-'));
+        try {
+            const result = await new RunArtifactActionRunner().execute(
+                { path: '.spur/run/missing.json', artifactKind: 'test', requireExisting: false },
+                { runId: 'r1', stateOrNodeId: 's1', workdir, vars: {}, env: {} },
+            );
+            expect(result.ok).toBe(true);
+            expect((result.data as { path: string }).path).toContain(join('.spur', 'memory', 'runs'));
+            expect(existsSync(join(workdir, '.spur', 'memory', 'runs', 'r1', 'artifacts', 'missing.json'))).toBe(false);
+        } finally {
+            rmSync(workdir, { recursive: true, force: true });
+        }
+    });
+
+    test('durable publication rejects escaping roots and traversal run ids before writing', async () => {
+        const workdir = mkdtempSync(join(tmpdir(), 'artifact-target-'));
+        const outside = mkdtempSync(join(tmpdir(), 'artifact-outside-'));
+        try {
+            mkdirSync(join(workdir, '.spur', 'run'), { recursive: true });
+            writeFileSync(join(workdir, '.spur', 'run', 'result.json'), '{"ok":true}');
+            mkdirSync(join(workdir, '.spur', 'memory'));
+            symlinkSync(outside, join(workdir, '.spur', 'memory', 'runs'));
+            for (const runId of ['r1', '../escape']) {
+                const result = await new RunArtifactActionRunner().execute(
+                    { path: '.spur/run/result.json', artifactKind: 'test' },
+                    { runId, stateOrNodeId: 's1', workdir, vars: {}, env: {} },
+                );
+                expect(result.ok).toBe(false);
+            }
+            expect(existsSync(join(outside, 'r1'))).toBe(false);
+        } finally {
+            rmSync(workdir, { recursive: true, force: true });
+            rmSync(outside, { recursive: true, force: true });
+        }
+    });
+
     test('rejects sibling prefixes and the run directory even without an existence probe (0781)', async () => {
         for (const path of ['.spur/run-other/verdict.json', '.spur/run/../run-other/verdict.json', '.spur/run']) {
             const result = await new RunArtifactActionRunner().execute(
