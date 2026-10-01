@@ -125,7 +125,7 @@ Bun + TypeScript + Biome monorepo using Bun workspaces; no Turborepo:
 ```text
 apps/cli       commander transport
 apps/server    Hono / Cloudflare Worker; oRPC OpenAPI
-apps/web       Astro + Cloudflare; typed oRPC client
+apps/web       static Astro/React Board; typed oRPC client
 packages/app   application services
 packages/contracts  transport DTOs only
 packages/config     Zod config/environment
@@ -178,7 +178,7 @@ relative-path commands:
 (cd apps/cli && bun test tests/output-envelope.test.ts)
 ```
 
-Root test runs enforce the repository coverage denominator. Tests belong under
+Root test runs enforce the per-measured-file coverage thresholds configured in `bunfig.toml`. Tests belong under
 `<workspace>/tests/**/*.test.ts`; use in-memory SQLite for DAO tests.
 
 After CLI source changes, link from `apps/cli` with `bun link`, then run

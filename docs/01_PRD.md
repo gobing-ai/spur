@@ -2,9 +2,9 @@
 doc: 01_PRD
 owns: WHAT — product vision, users, scope (in / out / deferred)
 authority: authoritative-on-scope
-version: 1.12.0
+version: 1.13.0
 owner: Robin Min
-updated_at: 2026-09-27
+updated_at: 2026-09-30
 read_before: adding a command or feature
 edit_rules: 99 §6.2
 sync: [T1, T4, T6]
@@ -64,10 +64,10 @@ around them.
 | Import and analyze agent conversation history & cost      | `spur history import` / `spur history analyze`                   |
 | Coordinate team agents and durable messages               | `spur message ...` / `spur agent ...` / `spur task update --assignee` |
 | Inspect rule/workflow run history                         | `spur rule trace` / `spur workflow trace`                        |
-| Scaffold a Spur project                                   | `spur init`                                                      |
+| Scaffold a Spur project                                   | `spur self init`                                                      |
 | Manage markdown task files (WBS, sections, status)        | `spur task ...` _(ADR-020)_                                      |
 | Manage feature files with BDD acceptance criteria         | `spur feature ...` _(ADR-020)_                                   |
-| Plan a feature from a vague description                   | sp planning skill → `spur agent run` + CLI verbs _(ADR-020/023)_ |
+| Plan a feature from a vague description                   | sp planning skill in the host session + CLI verbs _(ADR-020/023)_ |
 
 ## 5. Scope
 
@@ -88,15 +88,15 @@ SQLite lock cause. Delivery depends on compatible released upstream capabilities
 | ---------------------------------------------------------- | -------------------------------------------------- | ------------------------------------------ |
 | Local planning Board and launcher | Existing Board/task/feature API | server/web contracts |
 | Project-owned Board contributions | Embedded project configuration and the installed Board; native React contributions and URL-backed iframe compatibility | A8; [contribution contract](design/downstream-board-modules.md) |
-| Project scaffold                                           | `spur init`                                        | local CLI + DAOs                           |
+| Project scaffold                                           | `spur self init`                                        | local CLI + DAOs                           |
 | Agent detection / health                                   | `spur agent list\|doctor`                          | `ts-ai-runner`                             |
 | Agent run execution                                        | `spur agent run`                                   | `ts-ai-runner` (`AiRunner`)                |
-| Executor availability and quota-driven project updates      | Existing executor config, routing, and `spur agent doctor` | B5 (recovery detection and account-wide fan-out deferred) |
+| Executor availability and quota-driven project updates      | Existing executor config, routing, and `spur agent doctor` | B5/B6 (ownership-scoped recovery; account-wide fan-out deferred) |
 | Agent spec management                                      | `spur agent list --specs` (fleet-materialized)      | `ts-ai-runner` spec helpers                |
 | Inter-agent durable messages                               | `spur message send\|inbox\|reply`                  | `AgentCoordinationService` + ts-db                   |
-| Team coordination                                          | `spur task update --assignee`, `spur agent list --specs\|start\|stop` | `AgentCoordinationService` + `SupervisorService` (`spur serve`) |
+| Team coordination                                          | `spur task update --assignee`, `spur agent list --specs\|start\|stop` | `AgentCoordinationService` + `SupervisorService` (`spur self serve`) |
 | Inter-agent control plane (occupant identity, coordination artifacts, pinned wait) | existing `spur agent` / `spur message` (no new noun) | ADR-057; feature G4 |
-| Project-scoped fleet composition                              | Spur Board Projects (Conversation / Agents / Processes); `agent.fleet` in the project config | `FleetService` (`spur serve`); ADR-116 as amended by G65 |
+| Project-scoped fleet composition                              | Spur Board Projects (Conversation / Agents / Processes); `agent.fleet` in the project config | `FleetService` (`spur self serve`); ADR-116 as amended by G65 |
 | Constraint rule evaluation / discovery / validation        | `spur rule run\|list\|validate`                    | `ts-rule-engine`                           |
 | Rule / workflow run history                                | `spur rule trace` / `spur workflow trace`          | engine persistence via ts-db               |
 | Actionable local observability context                     | Spur Board System Events + existing trace commands | system-event ledger + engine persistence   |
@@ -107,15 +107,16 @@ SQLite lock cause. Delivery depends on compatible released upstream capabilities
 | History report surface                                     | `spur history report`                              | pure artifact renderer (`--mode default\|forensics`, `--task`/`--top`; E5) |
 | Task management (markdown CRUD, WBS, sections, check)      | `spur task ...`                                    | task domain in `packages/` (ADR-021)       |
 | Feature management (`docs/features/`, INDEX, traceability) | `spur feature ...`                                 | feature domain in `packages/` (ADR-021)    |
-| Spec-driven planning pipeline (fat skill)                  | `plugins/sp` skill → `spur agent run` + CLI verbs  | `ts-ai-runner` + task/feature domain       |
+| Spec-driven planning pipeline (fat skill)                  | `plugins/sp` skill + CLI verbs; explicit subprocess execution supported  | `ts-ai-runner` + task/feature domain       |
 | Semantic conflict audit (authority-aware, four-pillar)     | `/sp:dev-find-conflict`                            | `sp:conflict-finding` skill (`plugins/sp`) |
 | Environment-improvement lens on dogfood and history-anatomy reports | existing `/sp:dev-dogfood` / `/sp:dev-find-issue` (no new command) | ADR-084/085; feature I9 |
 | Immediate active-session review                            | `/sp:dev-review-session [<focus>]`                 | `sp:session-review` skill; ADR-089         |
 
 ### 5.2 Supporting utilities
 
-`spur status [path]` and `spur migrate` — operational helpers, stable but not headline surface.
-`spur migrate` remains a temporary helper until the migration lifecycle is finalized.
+`spur self status [path]` and `spur self migrate` — operational helpers, stable but not headline surface.
+`spur self migrate` remains a temporary helper until the migration lifecycle is finalized.
+Legacy top-level `init`, `serve`, `status`, `maintain`, and `migrate` remain hidden compatibility aliases.
 
 ### 5.3 Deferred (needs design before build)
 
@@ -124,7 +125,8 @@ SQLite lock cause. Delivery depends on compatible released upstream capabilities
   agent can address, not the inspector).
 - **`spur inspect <verb>`** — adapter-based project-state interrogation (coverage/lint/typecheck/deps).
 - **Meta-tooling, research, and context layers** — stay live in cc-agents until the core stabilizes.
-- **`spur plugin convert`** + per-platform adapter generation — per-platform install scripts suffice.
+- **Spur-owned capability conversion** — installation and per-platform adapter generation belong
+  to Superskill (ADR-032); reconsider only if that ownership boundary changes.
 - **General web plugin container & multi-workspace** — remain deferred (ADR-012 lesson). A8 reactivates the narrower project-owned UI contribution capability above; it does not include backend plugins, process management, or simultaneous multi-workspace composition.
 - **Scheduler auto-trigger** — lifecycle events exist on the engine's EventBus seam (ADR-022);
   the scheduler consumer comes later.
@@ -145,7 +147,8 @@ Full rd3-migration dispositions: `docs/plans/2026-06-10-rd3-migration-feature-li
 
 - **Gate:** the `AGENTS.md` verification gate passes before "done" (lint, tests incl. Workers
   runtime, build; coverage thresholds enforced by `bunfig.toml`).
-- **Determinism:** every command supports `--json`; output is stable for automation.
+- **Determinism:** machine-consumed command results expose stable `--json` contracts; command
+  discovery uses `--help` where no JSON inventory exists (ADR-053).
 - **Privacy:** Spur never stores agent API keys; history redaction strips secrets/PII before persistence.
 - **Portability:** server runs on both Bun and Cloudflare Workers via runtime abstraction.
 

@@ -163,9 +163,9 @@ spur <noun> --help
 **Long-tail:** Additional `/sp:dev-*` commands (handover, gitmsg, fixall, findconflict, dogfood, reverse, arch,
 …) are indexed in the project plugin README (`plugins/sp/README.md` when present).
 
-**Outside spur-cli:** Nouns not fully documented in `sp:spur-cli` (`agent`, `history`, `message`,
-`team`, `status`, `migrate`, `serve`, `init`, …) — use only `spur <noun> --help` and
-`docs/04_DESIGN.md`. Never guess flags.
+**Outside spur-cli:** For nouns without a reference file, use only `spur <noun> --help` and
+`docs/04_DESIGN.md`; never guess flags. Agent/message/self/projects references live under
+`plugins/sp/skills/spur-cli/references/`.
 
 ---
 

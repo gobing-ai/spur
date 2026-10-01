@@ -2,7 +2,7 @@
 doc: 00_ADR
 owns: WHY — lasting architectural choices, context and tradeoffs
 authority: authoritative
-version: 1.59.0
+version: 1.60.0
 owner: Robin Min
 updated_at: 2026-09-30
 read_before: any structural change; before diverging from a decision
@@ -103,6 +103,8 @@ Keep every issued ADR number and decision history; older misplaced entries are n
 - **Why:** Spur's core loop is a single-machine developer workflow with no required network service.
 - **Detail:** `03 §2`; `04 §1`; ADR-020.
 
+**Current reading:** ADR-021 makes CLI and Board writes thin transports over shared application services; the original inspection-only wording does not limit the current local Board.
+
 ## ADR-011: ts-db Facade and Single-Source Tables
 
 - **Status:** Accepted · **Date:** 2026-06-01
@@ -195,7 +197,7 @@ Keep every issued ADR number and decision history; older misplaced entries are n
 - **Status:** Accepted · **Date:** 2026-06-18
 - **Decision:** Superskill owns anti-hallucination behavior; Spur provides `AgentService.runCapture` and the DI-backed `response.validate` workflow primitive. The former in-repo skill is removed.
 - **Why:** Answer verification is an agent capability; Spur owns only harness plumbing.
-- **Detail:** `packages/app/src/builtins.ts`.
+- **Detail:** `packages/app/src/workflow/builtins.ts`.
 
 ## ADR-025: Board Interaction Libraries
 
@@ -296,6 +298,8 @@ escalation test in `packages/app/tests/services/agent-service.test.ts`.
 > 2026-08-13 (recorded in task 0536 § Background). `default-by-phase` was removed earlier (task
 > 0452).
 
+**Current reading:** ADR-078 owns the config-backed role table. Canonical stages derive from roles; the task-0536 explicit-stage wording above is historical, not a public CLI flag.
+
 ## ADR-034: Domain Status Vocabulary; Accessible Board Encoding
 
 - **Status:** Accepted · **Date:** 2026-07-25
@@ -329,7 +333,7 @@ escalation test in `packages/app/tests/services/agent-service.test.ts`.
 - **Status:** Accepted · **Date:** 2026-07-31
 - **Decision:** Update covered `sp:spur-cli` references in the same change as CLI verbs/flags; enforce bidirectional parity with a named exclusion list. Dispatch-surface selection remains separate from ADR-033 model-tier selection.
 - **Why:** Undocumented and phantom CLI surfaces accumulated without mechanical coupling.
-- **Detail:** `plugins/sp/tests/spur-cli-parity.test.ts`; dispatch-surface reference.
+- **Detail:** `plugins/sp/tests/cli-surface-parity.test.ts`; dispatch-surface reference.
 
 ## ADR-039: `--next` Means Chain to Completion
 
@@ -440,6 +444,8 @@ is already crowded.
 
 **Detail:** `04 §7.8`; `docs/design/agent-inline-host-session.md`; task 0565.
 
+**Current reading:** ADR-087 supersedes the explicit-inline rejection and omit-only delegation distinction above. ADR-121 defines current session-pinned subprocess dispatch.
+
 ## ADR-048: `task record` Owns Done Walk and Run-Link
 
 - **Status:** Accepted · **Date:** 2026-08-05 · **Task:** 0436 R4
@@ -477,6 +483,8 @@ is already crowded.
   exit. **Why:** `active → verifying` can persist before the strict `→ done` guard rejects — the
   exact A3 residue this decision must observe. **Detail:** `03 §12.5` and
   `docs/design/lifecycle-projection-integrity.md`.
+
+**Current reading:** ADR-108 retires routine corpus sweeps and accepted-debt baselines, including the intermediate gate split above; ADR-119 owns feature-scoped checks.
 
 ## ADR-051: Public CLI Surface vs Internal spur-dev Tooling — Ownership and Consent Gate
 
@@ -618,6 +626,8 @@ terminal (0841/0842); only their composition unit changed. Decision text above i
   (ADR-050).
 - **Detail:** `03 §18`; `04 §2.5`; `plugins/sp/scripts/transition-shim-check.ts`; task 0541;
   shims registered by 0536/0537/0538/0542.
+
+**Current reading:** ADR-119 places this repo-wide check in `spur-check-feature`. The current helper is `scripts/commands/transition-shim-check.ts`; the original plugin path is retired.
 
 ## ADR-059: Run→Session Correlation Is the Provenance Authority
 
@@ -1093,6 +1103,8 @@ against 15 globally defined executors, reproduced 2026-08-24).
 `docs/design/universal-config-loading.md` (context shapes, consumer rewiring table, `--json`
 error-envelope codes, regression-test matrix).
 
+**Current reading:** ADR-111/121 availability updates require composition-root reload callbacks at long-lived dispatch boundaries. One loader remains authoritative; “once” describes initial wiring, not a ban on those reloads.
+
 ## ADR-083: The Anchor-Citation Class Is a Dated Legacy Set — Frozen Pending F91's Matcher Decision
 
 **Status:** Superseded by ADR-090 (2026-08-27) · **Date:** 2026-08-25 · **Feature:** F61
@@ -1140,6 +1152,8 @@ improvement proposals, and performs no imported-history analysis.
 **Amendment (2026-08-27 · ADR-089):** `sp:session-review` inherits present-don't-apply for process
 and environment improvements. Its complete report is read-only: no source/doc edit, corpus write,
 workflow launch, or indexed-context append.
+
+**Current reading:** ADR-089 as amended permits explicit session-review triage fixes and task filing. Its default remains read-only; the environment-lens proposal boundary otherwise remains.
 
 ## ADR-086: Materialized Agent Instances Are Runtime State, Not Committed Spec Files
 
@@ -1202,6 +1216,8 @@ section below.
 overrides through the merged loader. The blanket scratch rule cannot inspect YAML tags, so
 hand-authored specs remain opt-in trackable with `git add -f`; only `spur:generated` specs are
 runtime state by contract. Detail: `docs/03_ARCHITECTURE.md` §17 and `docs/04_DESIGN.md` §2.1/§3.1.
+
+**Current reading:** ADR-116 as amended makes project `agent.fleet` the current roster carrier. The `.spur/fleet.json` and `agent.team` descriptions above record earlier stages, not supported configuration.
 
 ## ADR-087: `--agent inline` Is One Honest Selector — Default Inline, Substitution Over Rejection
 
@@ -1274,6 +1290,8 @@ class) is baselined as a dated set. (4) 04_DESIGN §2.1 and
 `docs/design/lifecycle-projection-integrity.md` §2 carry the widened-window tokenization contract.
 
 **Detail:** task 0688; feature F91; `config/corpus-baseline.json` note § 2026-08-27.
+
+**Current reading:** ADR-090 retires this reconciliation practice and status-claim matcher; ADR-108 retires accepted-debt snapshots. The severity ruling is retained.
 
 ## ADR-089: Active Session Review Is Inline and Separate from Imported-History Forensics
 
@@ -1731,6 +1749,8 @@ posture); [workflow composition](design/workflow-composition-contract.md#composi
 (rules); [spur artifact evolution](design/spur-artifact-evolution.md) §10 (doctor evidence);
 [CLI contracts](design/cli-contracts.md) (`workflow validate`).
 
+**Current reading:** ADR-119 moves shared-catalogue checks into the feature-scoped gate; the authoring caps and validation behavior remain unchanged.
+
 ## ADR-116: Project-Scoped Fleet Composition Replaces Team-Scoped Board Composition
 
 - **Status:** Accepted · **Date:** 2026-09-14 · **Feature:** G6 · **Supersedes:** ADR-052 (and ADR-042 via it)
@@ -1846,7 +1866,7 @@ posture); [workflow composition](design/workflow-composition-contract.md#composi
   `setEnvVar` / `removeEnvVar`), re-exported via `@gobing-ai/spur-config`; direct `process.env` /
   `Bun.env` access is forbidden everywhere else. Raw access is confined to two gateway zones:
   `packages/config/src/**` (the sole application owner) and the dependency-free plugin mirror
-  `plugins/sp/scripts/env.ts`. The user-settable set is documented in `.env.example`.
+  `plugins/sp/lib/env.ts`. The user-settable set is documented in `.env.example`.
 - **Why:** Environment access bypasses types, layering, and test isolation, and unmanaged growth
   turns the process environment into a shadow config plane that races the canonical config files and
   leaks into spawned children. A hard gateway with a single owner makes the surface auditable — one
@@ -1858,8 +1878,10 @@ posture); [workflow composition](design/workflow-composition-contract.md#composi
 - **Retains:** ADR-027 (one loader owns config resolution); ADR-091 (the `SPUR_JSON_ENVELOPE`
   flag+env contract remains a sanctioned process contract); ADR-112 (deadlines are upstream config
   policy, not env).
-- **Detail:** `packages/utils/src/env.ts` (gateway); `packages/config/src` (re-export);
+- **Detail:** upstream ts-libs `packages/utils/src/env.ts` (gateway); `packages/config/src` (re-export);
   `config/rules/boundary/env-var-hygiene.yaml`; `.env.example`.
+
+**Current enforcement:** `config/rules/boundary/env-var-hygiene.yaml` permits raw environment access only in the standalone plugin mirror. Application config re-exports the upstream gateway; it is not a raw-access exemption.
 
 ## ADR-121: Coding Agents Stay Headless; Dispatch Is Session-Pinned Per Run, Not One-Shot Per Stage
 

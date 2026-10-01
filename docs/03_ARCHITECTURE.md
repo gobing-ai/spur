@@ -2,7 +2,7 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.64.0
+version: 1.65.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
 updated_at: 2026-09-30
@@ -22,20 +22,22 @@ and interaction rules live in root [DESIGN.md](../DESIGN.md). Task receipts stay
 Bun-workspace monorepo (no Turborepo, ADR-002). Spur owns three apps and four local packages
 (ADR-001 as amended); all reusable engines are external `@gobing-ai/ts-*` packages (ADR-006).
 
+```text
 spur/
 ├── apps/
 │   ├── cli/         Primary surface — commander dispatch (ADR-014) + transport-wrapper commands
 │   ├── server/      Hono + oRPC OpenAPI handler; Bun + Cloudflare Worker entrypoints
-│   └── web/         Astro + Cloudflare adapter; typed oRPC OpenAPI client
+│   └── web/         Static Astro/React Board; typed oRPC OpenAPI client
 ├── packages/
-│   ├── app/         Application services — Agent/History/Plugin/Rule/Team/Workflow (ADR-021)
+│   ├── app/         Application services — agents, coordination, fleets, history, planning, rules, workflows (ADR-021)
 │   ├── contracts/   oRPC transport contracts ONLY (health/DTOs) — @gobing-ai/spur-contracts
 │   ├── config/      Config SSOT — merged schema + the single `.spur/config.yaml` loader; core/loader split (ADR-027)
 │   ├── domain/      DAOs + schema + analytics + migrations; sole ts-db importer (ADR-011)
 ├── plugins/sp/      Agent-facing layer: Fat Skills + thin command/subagent wrappers (ADR-016/023)
 ├── config/          Spur-owned default config SSOT — rules/, workflows/, plugins/ (ADR-015)
 ├── tooling/typescript/   Shared tsconfig presets (base/server/react); workspace and standalone TypeScript configs extend them
-└── drizzle/         0000_spur_cli_foundation.sql + incremental _spur_cli_ migrations +_legacy_reference/ (inert)
+└── drizzle/         0000_spur_cli_foundation.sql + incremental _spur_cli_ migrations + _legacy_reference/ (inert)
+```
 
 The root `typecheck` gate covers workspace projects plus the standalone `scripts/` and `plugins/sp/`
 trees. Each standalone tree has its own `tsconfig.json` extending the shared strict base; the plugin
@@ -44,17 +46,14 @@ standalone plugin a workspace member.
 
 ### 1.1 External dependency boundary (ADR-004/006/021)
 
-Per-app edges as they exist today (manifest-verified):
+Runtime ownership (manifests also include build and test dependencies):
 
-```
-apps/cli ────► packages/{app, config, domain}
-               + @gobing-ai/ts-{utils, infra, runtime, ai-runner,        (semver)
-                                rule-engine, dual-workflow-engine, llm-jsonl-importer}
-apps/server ─► packages/{config, contracts} + @gobing-ai/ts-{infra, runtime}
-               (+ packages/app — never direct DB — per ADR-021.b)
-apps/web ────► packages/contracts (types via oRPC client only)
-packages/app ───► packages/domain + the engine packages
-packages/domain ► @gobing-ai/ts-db (sole importer — §8.1)
+```text
+apps/cli ────► packages/{app, config, contracts, domain} + engine/runtime facades
+apps/server ─► packages/{app, config, contracts, domain} + engine/runtime facades
+apps/web ────► packages/contracts (oRPC) + domain status vocabulary
+packages/app ───► packages/{config, contracts, domain} + engine packages
+packages/domain ► @gobing-ai/ts-db (persistence owner — §8.1)
 ```
 
 | Layer | Owns |
@@ -72,7 +71,8 @@ packages/domain ► @gobing-ai/ts-db (sole importer — §8.1)
 
 1. No `@spur/*` imports — that scope does not exist here.
 2. `packages/contracts` holds transport DTOs only; domain types live in their owning ts-libs package.
-3. `apps/web` imports contract **types** via oRPC client — never server internals.
+3. `apps/web` uses oRPC contracts and shared domain status vocabulary — never server internals
+   or persistence implementations.
 4. CLI commands are transport wrappers over package APIs — no domain logic reimplemented inline.
 5. Cross-workspace imports use `@gobing-ai/*` aliases, never deep relative paths.
 6. `.spur/config.yaml` is loaded only through `@gobing-ai/spur-config` — no surface parses or
@@ -84,8 +84,7 @@ packages/domain ► @gobing-ai/ts-db (sole importer — §8.1)
 dependency-free **core** (`.`: merged `spurConfigSchema`, `DEFAULT_*` constants, config types) and a
 node-only **`./loader`** (`loadSpurConfig`, `resolveConfigFile`, `resolvePlanningFolders`,
 embedded-schema resolution). The split exists because importing `yaml`/`node:fs` into the Cloudflare
-Workers bundle crashes miniflare — so the server imports only the core; CLI and `packages/app` (on
-Bun) import the loader.
+Workers bundle crashes miniflare — so the Worker graph imports only the core; Bun composition roots may import the loader.
 
 This replaced five parallel paths that had diverged before ADR-027: the CLI's structured-config
 loader, the app's raw-`yaml` `resolvePlanningFolders`, a CLI `resolveConfigFile`, the server's inline
@@ -95,9 +94,11 @@ Enforced by `config/rules/boundary/config-loading-ownership.yaml`.
 
 ### 1.2.1 Composition-root merged-config wiring (built — ADR-082)
 
-The merged `loadSpurConfig` result is loaded **once per process at the composition root** — CLI
-`main()`, server startup — and threaded through the dispatch/service context as the only
-app-config source. ts-infra's `runNodeApplication` keeps only the project-shaped `bootstrap`
+The merged `loadSpurConfig` result is loaded at the composition root — CLI `main()`, server
+startup — and threaded through the dispatch/service context as the only app-config source.
+Long-lived dispatch uses composition-root reload callbacks to observe executor availability changes
+(ADR-111/121, §25); services do not introduce independent config loaders.
+ts-infra's `runNodeApplication` keeps only the project-shaped `bootstrap`
 section (`configFile` + `bootstrapSection`; no `appConfig` validator, `appRt.appConfig` unread).
 Per-slice loads in `packages/app` services (workflow-service ×4, coordination service) and CLI call sites
 (history-refresh, workflow.ts) are replaced by the threaded object; services degrade to current
@@ -119,14 +120,16 @@ Shapes: `docs/design/universal-config-loading.md`.
 
 ## 2. Runtime Model
 
-Phase 1 is single-process: the CLI owns the work and is the writer of record (ADR-010).
+The CLI is the primary local execution surface. The Bun server also handles Board writes and
+background work through the same application services (ADR-021); both use local files and SQLite.
+Agent and history workers run in child processes. The diagram shows the CLI path:
 
 ```mermaid
 flowchart TD
     User([User]) -->|spur <command>| CLI
     subgraph Process["apps/cli (Bun)"]
         CLI[commander dispatch] --> Ctx[CliContext<br/>config · fs · lazy migrated DB]
-        CLI --> APP[packages/app services<br/>Agent · History · Rule · Team · Workflow]
+        CLI --> APP[packages/app services<br/>Agent · History · Rule · Coordination · Workflow]
         APP --> AR[ts-ai-runner]
         APP --> RE[ts-rule-engine]
         APP --> WF[ts-dual-workflow-engine]
@@ -174,9 +177,9 @@ No file inventory here — that rots (99 §6.4 lesson); boundaries only:
 
 ```
 packages/contracts (oc.route + Zod)
-   ├─► apps/server/router.ts   implement(contract).handler(...)   ← compile-time bound
-   ├─► apps/server/openapi.ts  OpenAPIGenerator(contract)         ← spec derived, not hand-written
-   └─► apps/web/rpc-client.ts  OpenAPILink(contract)              ← typed client
+   ├─► apps/server/src/router.ts   implement(contract).handler(...)   ← compile-time bound
+   ├─► apps/server/src/openapi.ts  OpenAPIGenerator(contract)         ← spec derived, not hand-written
+   └─► apps/web/src/lib/rpc-client.ts  OpenAPILink(contract)              ← typed client
 ```
 
 Contract↔handler drift is a compile error. OpenAPI is generated, never hand-maintained. Domain types
@@ -299,8 +302,8 @@ Execution/lease ownership: §26.
 
 | Location | Purpose |
 | ---------- | --------- |
-| `.spur/` | Project config `config.yaml` (ADR-017), local rule/workflow definitions, team agent specs (`agents/`) |
-| `~/.config/spur/` | Global config layer, seeded from bundled assets; resolution is bundled > global > local (ADR-015). Its seeded `workflows/` copy is not a workflow layer (§6.4) |
+| `.spur/` | Project config `config.yaml` (ADR-017), local rule/workflow definitions, materialized agent specs (`agents/`) |
+| `~/.config/spur/` | Global config layer, seeded from bundled assets; later layers override earlier ones: bundled → global → local (ADR-015). Its seeded `workflows/` copy is not a workflow layer (§6.4) |
 | SQLite DB (`DATABASE_URL` or `.spur/spur.db`) | CLI domain tables + history ETL/ledger/checkpoint + workflow/rule run history + inbox |
 | Agent JSONL files | Canonical raw history (never copied into the DB) |
 | Task/feature markdown | Planning SSOT (ADR-020); the DB holds only derived data (§12.1) |
@@ -320,8 +323,9 @@ Spur consumes `@gobing-ai/ts-db` as a drizzle-free facade with a single-source-o
 model, so table/DDL/Zod drift is structurally impossible. Five rules, enforced by
 `.spur/rules/boundary/dao-boundary.yaml`:
 
-1. **`ts-db` is imported only inside `packages/domain`** — apps and the other local packages consume
-   persistence through `@gobing-ai/spur-domain` DAOs, never `ts-db` or the raw adapter directly.
+1. **Functional `ts-db` use stays inside `packages/domain`** — other packages consume the domain
+   facade. The CLI composition root has a rule-declared side-effect import for Bun bundling; it
+   calls no persistence API directly.
 2. **`drizzle-orm` is confined to `packages/domain/src/schema/`** — column builders are input to
    `defineTable`; no other file (DAOs, analytics, apps) may import drizzle.
 3. **Tables are defined with `defineTable`** (from `@gobing-ai/ts-db/schema`), never bare
@@ -346,8 +350,8 @@ model, so table/DDL/Zod drift is structurally impossible. Five rules, enforced b
 | Old migrations reactivated | Inert under `_legacy_reference/`; loader filters `_spur_cli_` marker |
 | Engine MVP gaps mistaken for parity | Roadmap Phase 3 tracks the depth restore explicitly |
 | History raw bloat / parse errors | Raw stays in files; only validated ETL persisted (ADR-008) |
-| Long-lived-run recovery drifting from the engine contract (pause/continue, interruption, HITL) | Interruption/resume contract shipped upstream in engine 0.5.0 (0902, ADR-025); Spur claims via CAS at its own boundary — no local FSM fallback (ADR-122); lifecycle waves still track ADR-022 |
-| Legacy board writes corrupt normalized task corpora during the rd3 migration | Freeze legacy `tasks server` read-only at the A17 cutover; the spur board lands in the same batch (triage doc) |
+| Long-lived-run recovery drifting from the engine contract (pause/continue, interruption, HITL) | Interruption/resume contract shipped upstream in engine 0.5.0 (0902, upstream ADR-025; Spur ADR-122); Spur claims via CAS at its own boundary — no local FSM fallback (ADR-122); lifecycle waves still track ADR-022 |
+| Transport-specific planning writes diverge | CLI and Board mutations share application services and the planning write boundary (§12.2) |
 
 ## 11. Plugin Substrate (ADR-012, amended 2026-06-09)
 
@@ -380,7 +384,7 @@ mechanisms (ADR-020/023), not a separate CLI noun.
 ### 12.1 Markdown as the single source of truth
 
 - **Tasks** live in configured folders (e.g. `docs/tasks/`), **features** in
-  `docs/features/FT-<NNN>_<name>.md` — YAML frontmatter + structured markdown body, both
+  `docs/features/<id>_<slug>.md` — YAML frontmatter + structured markdown body, both
   Zod-validated with a `schema_version` key. Parse-validate-serialize replaces all regex
   read-modify-write.
 - **The DB holds only derived data** (lifecycle events, run links, caches) — mirroring ADR-008's
@@ -402,7 +406,7 @@ One write service in `packages/app` serves every transport; lifecycle transition
 ```
 spur task/feature <verb> ──┐
                            ├──► write service (packages/app) ──► markdown file
-future server routes ──────┘         │
+Board server routes ──────┘         │
                                      ├─► per-WBS lock + create-lock (one domain)
                                      ├─► lifecycle = spur workflow definition
                                      │     (config/workflows/*; guards = task check;
@@ -454,9 +458,8 @@ from structural validation and execution prerequisites. Concrete shapes live in 
 
 - `apps/cli` task/feature commands stay transport wrappers (ADR-021) over `packages/app`
   services.
-- Task DTOs for any future board cross the oRPC seam via `packages/contracts` (ADR-005) — domain
-  types never leak into contracts. The server/web shape itself is a separate design task
-  (ADR-021 consequence b).
+- Board task/feature DTOs cross the oRPC seam via `packages/contracts` (ADR-005); existing
+  server handlers delegate mutations to the shared application services.
 - `plugins/sp` centralizes agent-facing behavior in **skills** (Fat Skills — ADR-023); slash
   commands and subagents are thin wrappers of skills. Skills delegate deterministic execution to
   CLI verbs where they exist, but are not limited to CLI wrapping. The environment-improvement
@@ -603,7 +606,7 @@ A multi-view Board module composes a **shell**: `<Module>Shell.tsx` plus an appe
 `id`). Header anatomy is one row: icon + name + live chip left, module-specific inline filters
 middle, tab strip right. Width rule: the default module layout is the centered `max-w-[1600px]`
 column; a density-first module whose primary canvas is a multi-lane board MAY go full-bleed, with
-header and body sharing one horizontal padding so lanes align under the header. Tasks
+a centered header rail and full-bleed board body (ADR-081 amendment, 2026-08-26). Tasks
 (`task-kanban/TasksShell.tsx` + `tabs.ts`, F72) is the first full-bleed instance; its shell absorbs
 the old in-board toolbar (phase select, lane toggles, combined WBS/feature input, `+ New Task`) and
 `TaskFilters.tsx` is deleted.
@@ -612,8 +615,8 @@ Embed rule: a module embedded under another module (Projects ⊃ Tasks) exports 
 view (`TaskKanbanView`) rendering pure content; the shell is the route component only. Header-owned
 state (phase folder, lane visibility) reaches the board as optional controlled props with
 uncontrolled in-board defaults, so the embed keeps working with no shell present. Enforceable
-invariants: one shell per module route; `tabs.ts` files are append-only; a full-bleed module shares
-exactly one horizontal padding between header and body; the headerless embed never imports its
+invariants: one shell per module route; `tabs.ts` files are append-only; a full-bleed board retains
+the shared centered header rail; the headerless embed never imports its
 module's shell. Shapes: `docs/design/tasks-module-shell-parity.md`.
 
 ## 15. Agent-Facing Plugin Surface Parity (ADR-053/054)
@@ -638,8 +641,10 @@ observability seam. `registerSystemEventTap` and the CLI `SystemEventEmitter` ca
 builder before persistence; SSE uses the same projection. The history read path recognizes legacy
 raw payloads and projects them into the current envelope without rewriting storage.
 
-The task-0526 foundation is current. Board semantic rendering and additive workflow/rule trace
-context remain downstream consumers in tasks 0527–0528; neither creates another envelope builder.
+Board semantic rendering and trace context consume this shared projection; neither creates another
+envelope builder. Ingestion is catalog-open (ADR-110): unknown names use a generic, bounded and
+redacted entry with per-prefix retention. The server catch-all persists unknown emissions; they
+appear on history refresh, while live SSE remains cataloged.
 
 ```text
 Spur / @gobing-ai/ts-* typed event
@@ -764,34 +769,20 @@ Gate contract: [configuration contracts](design/configuration-contracts.md).
 
 ## 19. Agent Executor Selection — Two-Layer Contract (features B2/B3, tasks 0535–0542, 0572)
 
-Executor selection is a two-layer contract. **Layer 1** maps _role → tier/stages_ and its SSOT is
-code: `DEFAULT_AGENT_ROLES` in `packages/config/src/index.ts` (ADR-061 / task 0572) declares the
-four roles — `scribe`·cheap, `coder`·standard, `reviewer`·capable-1, `planner`·capable-2 — with an
-optional closed-vocabulary `agent.roles` overlay (per-field merge, validated at config load) that
-wins over the constant; a project re-tiers/re-stages a known role, never invents one. Layer 1 never
-names an executor, model, or vendor. **Layer 2** maps _tier → executor_ and is owned by the operator
-in `.spur/config.yaml` (`agent.executors` entries carrying a `tier` field). `packages/config`
-exposes the four-id `AGENT_ROLE_NAMES` literal beside the SSOT. The CLI resolves roles in
-`apps/cli/src/context.ts` (`resolveAgentRoles`) so `--agent <role>` resolves before any spawn; the
-runtime regex parse of `plugins/sp/references/roles.md` is deleted outright (no shim — values are
-byte-identical), and roles.md survives as a parity-gated projection: its tier/stages half is
-asserted equal to `DEFAULT_AGENT_ROLES` by `plugins/sp/tests/roles.test.ts` (R9) and its
-command→role half stays plugin-owned. Plugin-internal stage floors read the projection
-(`plugins/sp/scripts/stage-registry-adapter.ts`, 0538 R4) and degrade to the `standard` floor when
-it is unreachable.
+Executor selection is a two-layer contract. **Layer 1** maps role → tier/stages from the merged
+config: `config/config.global.yaml` supplies the shipped defaults and project `agent.roles`
+overrides merge per field (ADR-078). `DEFAULT_AGENT_ROLES` is the byte-identical no-filesystem
+fallback, with explicit provenance. The four role IDs remain closed; projects can re-tier or
+re-stage them, never invent new roles. `roles.md` is a parity-tested projection, not runtime input.
+**Layer 2** maps tier → executor through operator-owned `agent.executors` in the merged config.
 
-Resolution (`AgentService.resolveAgent`): an explicit role starts at its tier's cheapest eligible
-executor; an explicit executor name is a permanent pin (0536 R2, beats role routing); a bare binary
-name survives under the `agent-bare-binary-name` shim with a one-time warning; `auto`/omitted falls
-to the declared role (command frontmatter or workflow step `role:`), else `agent.default` as the
-default role (0542 R2, shim `agent-default-executor`); on miss, Tier-1 priority. `extractPhase`
-prompt-regex stage detection is retired (0536 R4) — the prompt text never derives a stage or role;
-the stage door is the explicit `--stage` flag. Role names, executor names, and spec ids are proven
-pairwise disjoint at config load (0537 R4), so one `--agent` value never means two things. A
-spec-addressed run (`--spec <id>`, legacy `--agent <specId>`) rewrites the selector to the spec's
-executor name when the spec records one (0537), restoring the operator's `{ agent, model }` + tier;
-specs without an executor field fall back to `type` (shim `spec-without-executor-field`), and a
-dangling executor reference fails loudly at drain, spawning nothing.
+An explicit role starts at its tier's cheapest eligible executor; a configured executor name pins
+selection. Bare binary names and specs without executor fields retain their tracked compatibility
+paths. Omitted `--agent` resolves to `inline` (ADR-087): host-session execution stays inline;
+headless resolution substitutes tier routing and reports the selected executor. `auto` uses role
+routing. Canonical stages derive from the declared role, with an internal stage override; there
+is no public `--stage` flag and prompts never infer the stage. A spec-addressed run uses the spec's
+executor binding; a dangling executor reference fails before dispatch.
 
 **Run-scoped dispatch (ADR-121; B6 tasks 0890–0893, B7 tasks 0894/0895).** Within a workflow run,
 Layer-2 resolution happens once per role: the pipeline's `precheck` (task-pipeline) or `start`
@@ -862,8 +853,8 @@ repository snapshot + normative task/feature sections
   └─ ProofInputFingerprint ──→ digest carried by gate/review/verify evidence
 ```
 
-The baseline freezes behavior visible at the pipeline boundary: resolved graph, callers, terminal
-states, artifact owners, failure policy, model-query locations, and every action's two effects:
+The live contract checker inspects resolved graph, callers, terminal states, artifact owners,
+failure policy, model-query locations, and every action's two effects:
 `stateEffect: read|write|may-write` for repository/corpus inputs and
 `evidenceEffect: none|write` for declared result artifacts. It is checked data, not another
 executor. Unknown or extension-defined actions fail closed as `stateEffect: may-write` until their
@@ -1067,9 +1058,9 @@ for persistence.
 Recovery is ownership-scoped (0891): `agent.quota.recovered` maps through the same updater to
 `disabled: false` only when the current owner is `quota`/`probe` — operator-owned disables are
 never auto-re-enabled. The only proactive producer is the explicit run-once `spur agent usage`
-command (0892; an external scheduler owns invocation, `spur serve` never runs it) — no poller or
-timer. The two quota events are bus-consumed, not catalog-registered (board presentation awaits
-ADR-110 catalog-open ingestion).
+command (0892; an external scheduler owns invocation, `spur self serve` never runs it) — no poller or
+timer. The two quota events are bus-consumed and not catalog-registered; catalog-open ingestion retains
+them with generic presentation (§16), without authored catalog presenters.
 
 ADR-111 records this delivery choice. Shapes, failure contracts, and rejected alternatives live
 in [executor availability](design/executor-availability.md).
@@ -1081,8 +1072,10 @@ ts-runtime; importer cancellation to the importer; attempt ownership and lease s
 Spur resolves application defaults and consumes truthful cancellation, retry and timeout outcomes.
 
 Lease renewal is finite even for execution without a deadline. Age-based recovery must not expire
-explicitly unlimited jobs. Durable claim ownership remains an upstream persistence concern;
-the finite-deadline sweep is the recovery backstop while that contract is pending.
+explicitly unlimited jobs. The installed upstream queue consumer claims with finite visibility
+leases, renews them and
+fences completion/retry with attempt tokens through `QueueJobDao`. Expired leased attempts are
+recovered at claim; the age-based sweep is only the legacy unleased recovery path.
 Details: [execution deadlines](design/execution-deadlines.md).
 
 ## 27. Workflow Execution Economy — built (ADR-117/118/119; ADR-076 amendment)
@@ -1090,12 +1083,11 @@ Details: [execution deadlines](design/execution-deadlines.md).
 Workflow stage economics, not graph shape, are the lever on machine time (`agent.run` is ~96% of
 workflow machine time). Four invariants now bind every execution surface:
 
-- **Trace parity (ADR-117).** The structured action trace — an `action_runs` row plus one
-  start/finish `system_events` pair per action boundary, each carrying the dispatching run id — is
-  owed by whichever surface executes the action: engine subprocess or inline host-session driver
-  alike. Emission is best-effort at the action boundary only; run-row closure still fails loudly.
-  The inline run log is a human convenience, not the record of truth. One action boundary keeps
-  exactly one start name and one finish name (`workflow.action.started`/`.finished`).
+- **Trace parity (ADR-117, as amended).** Every execution surface owes structured `action_runs`
+  and truthful run-row closure. The 2026-09-17 amendment excludes retained `system_events` pairs
+  from the inline obligation until a consumer needs them. Boundary emission is best-effort;
+  run-row closure still fails loudly. The inline run log is a human convenience, not the record
+  of truth. Engine action events use `workflow.action.started`/`.finished`.
 - **Stage contracts (ADR-118).** A violated `agent.run` post-condition is a third stage outcome —
   `contract-violation` — distinct from success and from executor failure, named in the trace and
   run log, and routable to a dedicated repair edge that must not re-dispatch the full stage on its

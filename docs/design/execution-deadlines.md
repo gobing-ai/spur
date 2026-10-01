@@ -3,7 +3,7 @@ kind: design
 title: "Execution deadlines and unlimited jobs"
 status: implemented
 created_at: 2026-09-08
-updated_at: 2026-09-08
+updated_at: 2026-09-30
 related: [A21]
 tags: [contract, A21, workflow, agent]
 derived_from: [ADR-112, 01_PRD]
@@ -11,9 +11,12 @@ derived_from: [ADR-112, 01_PRD]
 
 # Execution deadlines and unlimited jobs
 
-Adopted in Spur (task 0813) on released ts-libs 0.4.59: the `ts-infra` execution policies,
-`ts-runtime` process containment, and importer deadlines described below are callable. The `ts-db`
-durable lease/claim ownership half is not in 0.4.59 and remains an upstream target.
+Initial adoption (task 0813) used ts-libs 0.4.59 for execution policies, process containment and
+importer deadlines. The installed 0.5.11 dependencies also implement durable ownership:
+`DBQueueConsumer` claims with a visibility lease, renews it through `QueueJobDao.renewLease`, and
+fences terminal/retry mutations with an attempt token. Spur composes that consumer through
+`packages/domain/src/db.ts`; expired leases recover at claim, while the age sweep handles only
+legacy unleased rows.
 
 ## Ownership
 
@@ -111,7 +114,7 @@ rejects; only completed checkpoints survive. A cancellation cannot interrupt syn
 mid-call, so the parent process watchdog remains the hard fallback. No background writes may occur
 after the importer promises cancellation has settled.
 
-**Server shutdown is not a command verdict.** `spur serve` terminates live job children on
+**Server shutdown is not a command verdict.** `spur self serve` terminates live job children on
 shutdown, so the child reports a signal death with no exit code. The handler takes a shutdown
 probe (`SchedulerCustomJobDeps.isShuttingDown`, wired to the server's own latch and flipped
 before the kill) and completes that attempt — with a `scheduler.job.executed` audit row naming

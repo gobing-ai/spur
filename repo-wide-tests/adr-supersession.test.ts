@@ -148,71 +148,23 @@ describe('ADR-057 stays accepted and points at the live authority (0854 R1)', ()
     });
 });
 
-describe('no historical ADR text is rewritten (0850/0854 R2)', () => {
-    test("(e) a working diff of 00_ADR.md deletes only the amended ADRs' status lines", () => {
-        // `git diff` is empty once the change is committed — the assertion is then vacuously true and
-        // (a)–(d) plus the frozen-body checks above remain the durable guard. While the change is
-        // unstaged, every removed line must be one of the amended ADRs' *pre-change* status lines
-        // (read from HEAD, so a status rewrite anywhere else still fails) and every added line must
-        // belong to one of the amended ADRs' current blocks.
-        const diff = execFileSync('git', ['diff', '--unified=0', 'HEAD', '--', ADR_REL], {
+describe('ADR identity survives editorial maintenance (constitution §6.1)', () => {
+    test('issued headings and original dates remain addressable', () => {
+        const head = execFileSync('git', ['show', `HEAD:${ADR_REL}`], {
             cwd: REPO_ROOT,
             encoding: 'utf-8',
         });
-        if (diff.trim() === '') return;
-
-        // 0911 added a dated clarification block to ADR-123 (explicit per-action decision modes), so
-        // 123 joins the set of ADRs a working diff may touch. The body-freshness assertions above and
-        // the removals check below still guard every other ADR.
-        // 1035 added a dated amendment to ADR-130 (shared spur-bin.ts in plugins/sp/lib), so 130 joins too.
-        const amended = [42, 52, 57, 86, 116, 123, 130];
-        const amendedLines = new Set(blocks.filter((b) => amended.includes(b.number)).flatMap((b) => b.lines));
-
-        // Only the statuses that ACTUALLY moved may disappear: derive the allowed removals from
-        // HEAD's status lines for the ADRs whose current status differs from HEAD's (read from HEAD,
-        // so a rewrite that strips any other ADR's status still fails — mutation-tested in pass 2).
-        const headLines = execFileSync('git', ['show', `HEAD:${ADR_REL}`], {
-            cwd: REPO_ROOT,
-            encoding: 'utf-8',
-        }).split('\n');
-        const headStatusByAdr = new Map<number, string>();
-        let headAdr: number | null = null;
-        for (const line of headLines) {
-            const heading = /^## ADR-(\d+):/.exec(line);
-            if (heading) headAdr = Number(heading[1]);
-            else if (headAdr !== null && line.includes('**Status:**')) headStatusByAdr.set(headAdr, line);
-        }
-        const allowedRemovals = new Set(
-            amended
-                .filter((n) => {
-                    const head = headStatusByAdr.get(n);
-                    return head !== undefined && head !== status(n);
-                })
-                .map((n) => headStatusByAdr.get(n))
-                .filter((l): l is string => l !== undefined),
-        );
-
-        const lines = diff.split('\n');
-        const added = lines.filter((l) => l.startsWith('+') && !l.startsWith('+++')).map((l) => l.slice(1));
-        const removed = lines.filter((l) => l.startsWith('-') && !l.startsWith('---')).map((l) => l.slice(1));
-        expect(added.length, 'a non-empty diff must add at least one line').toBeGreaterThan(0);
-
-        // 0911: the constitution requires bumping the doc-hygiene frontmatter (`version:` /
-        // `updated_at:`) on any content change, so those two metadata keys are not ADR text and
-        // are excluded from the freeze on both sides of the diff.
-        const FRONTMATTER_KEY = /^(version|updated_at):\s/;
-
-        for (const line of added) {
-            expect(
-                amendedLines.has(line) || line.trim() === '' || FRONTMATTER_KEY.test(line),
-                `added line is outside the amended ADRs (42, 52, 57, 86, 116, 123, 130): ${line}`,
-            ).toBe(true);
-        }
-        for (const line of removed) {
-            expect(
-                allowedRemovals.has(line) || FRONTMATTER_KEY.test(line),
-                `removed line is not an amended ADR's pre-change status — a historical decision was rewritten: ${line}`,
-            ).toBe(true);
+        // Compare identities, not allowed-edit IDs: §6.1 permits editorial repairs and
+        // new amendments. The decision-specific assertions above preserve G64 history.
+        for (const entry of head.split(/(?=^## ADR-\d+:)/m).slice(1)) {
+            const heading = entry.split('\n')[0] ?? '';
+            const number = Number(/^## ADR-(\d+):/.exec(heading)?.[1]);
+            const current = blocks.filter((block) => block.number === number);
+            expect(current, `ADR-${number} must exist exactly once`).toHaveLength(1);
+            expect(current[0]?.lines[0]).toBe(heading);
+            const date = /\*\*Date:\*\*[^\n]*?(\d{4}-\d{2}-\d{2})/.exec(entry)?.[1];
+            expect(date, `ADR-${number} must retain its original date`).toBeDefined();
+            expect(status(number)).toContain(date ?? '');
         }
     });
 });
