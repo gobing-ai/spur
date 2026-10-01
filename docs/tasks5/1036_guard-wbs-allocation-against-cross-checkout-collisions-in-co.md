@@ -4,7 +4,7 @@ name: Guard WBS allocation against cross-checkout collisions in concurrent batch
 status: cancelled
 template: feature-impl
 created_at: 2026-10-01T00:47:13.093Z
-updated_at: "2026-10-01T07:07:18.430Z"
+updated_at: "2026-10-01T07:09:38.771Z"
 feature_id: A9
 
 ---
@@ -19,9 +19,9 @@ Captured from the creation title: "Guard WBS allocation against cross-checkout c
 
 Cancellation audit 2026-09-30: N/A for delivery verification. Task remains cancelled; the operator has not reactivated the withdrawn proposal. Unticked proposal checkboxes are rendered as historical bullets to avoid suggesting pending delivery work.
 
-- Withdrawn proposal R1. Background: during batch runall-A9-485e, a concurrent agent session in a sibling checkout (i33) allocated overlapping WBS numbers, producing duplicate task IDs (1015/1021-1023 era) that had to be reconciled mid-merge. Hypothesis: WBS allocation is per-checkout with no cross-checkout guard (confirm by running `spur task create --feature X` concurrently from two checkouts of one repo). Cancelled task 1015 held a related one-writer-guard idea.
-- Withdrawn proposal R2. Proposed fix direction: cross-checkout allocation guard — either an allocator lock coordinated through the project data dir, or a loud, actionable precheck failure on collision. Smallest mechanism that makes concurrent creation fail loudly or allocate uniquely.
-- Withdrawn proposal R3. Proposed acceptance:
+- **R1.** Withdrawn proposal: Background: during batch runall-A9-485e, a concurrent agent session in a sibling checkout (i33) allocated overlapping WBS numbers, producing duplicate task IDs (1015/1021-1023 era) that had to be reconciled mid-merge. Hypothesis: WBS allocation is per-checkout with no cross-checkout guard (confirm by running `spur task create --feature X` concurrently from two checkouts of one repo). Cancelled task 1015 held a related one-writer-guard idea.
+- **R2.** Withdrawn proposal: Proposed fix direction: cross-checkout allocation guard — either an allocator lock coordinated through the project data dir, or a loud, actionable precheck failure on collision. Smallest mechanism that makes concurrent creation fail loudly or allocate uniquely.
+- **R3.** Withdrawn proposal: Proposed acceptance:
   1. Two concurrent `spur task create` runs from two checkouts of the same repo cannot silently allocate the same WBS.
   2. On collision, the error is actionable (names the conflicting checkout/task) rather than silent corruption.
   3. Verified by a repeatable test or documented repro command.
