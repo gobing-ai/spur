@@ -4,7 +4,7 @@ name: Bundled-vs-source CLI definitionDigest seam permanently fails feature-veri
 status: done
 template: feature-impl
 created_at: 2026-09-30T21:56:16.627Z
-updated_at: "2026-10-01T07:30:46.864Z"
+updated_at: "2026-10-01T18:17:05.822Z"
 feature_id: D9
 
 priority: P2
@@ -113,7 +113,7 @@ Title note: the task title keeps its original creation wording for traceability;
 
 ### Solution
 
-- R1 (re-verify only): confirmed `62499ad68` — `packages/app/src/workflow/lifecycle-adapter.ts:219` merges the caller's `spurBin` through `options.vars`, which the engine applies last, so guarded transitions of an already-attached run execute with the current caller's binary. Evidence: `feature-lifecycle-adapter.test.ts` 12/12 pass.
+- R1 (re-verify only): confirmed `62499ad68` — `packages/app/src/workflow/lifecycle-adapter.ts:219` merges the caller's `spurBin` through `options.vars`, which the engine applies last, so guarded transitions of an already-attached run execute with the current caller's binary. Evidence: `packages/app/tests/workflow/lifecycle-adapter.test.ts:98` passes in the fresh 65-test application run.
 - R2 (message-only): `packages/app/src/workflow/feature-verification-receipt.ts:418` — the `run` definition-digest rejection detail now appends ` (receipt sourcePath=…)` plus `— a different spur install may have attached the run; re-run the verification pass and the transition with the same spur binary`; the `contract-mismatch` rejection at `:463` keeps its original text and appends `; receipt sourcePath=…, current sourcePath=…` with the different-install hint printed only when the two paths differ (Q&A hint condition).
 - Tests: new AC2 case (differing sourcePaths → both files named + hint); run-row digest-mismatch case asserts the receipt's sourcePath and the re-run hint; drift case asserts equal-path variant without hint; AC4 (sourcePath-only → ok:true) unchanged. Receipt suite 22/22, lifecycle-adapter 12/12.
 - `plugins/sp/lib/inline-run.generated.mjs` regenerated with the final wording (the module is bundled — Design's stale note corrected in Review) and shipped in the same change set; bundle determinism gate green.
@@ -140,9 +140,33 @@ Title note: the task title keeps its original creation wording for traceability;
 
 ### Review
 
+#### Final inline review
+
+Scope: tagged task implementation plus the final D9 fixes. Dimensions: functional, security, efficiency, correctness, usability, architecture. Fresh focused commands pass (65 application tests, 151 plugin tests, 121 dispatch tests).
+
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P4 | functional | `packages/app/src/workflow/lifecycle-adapter.ts:223` supplies caller overrides to guarded transitions; `packages/app/tests/workflow/lifecycle-adapter.test.ts:98` proves a true caller overrides a persisted false binary. Fresh focused application run: 65 pass, 0 fail, exit 0. | All numbered requirements trace to fresh executable evidence; no open completeness finding. |
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `packages/app/src/workflow/lifecycle-adapter.ts:223` supplies caller overrides to guarded transitions; `packages/app/tests/workflow/lifecycle-adapter.test.ts:98` proves a true caller overrides a persisted false binary. Fresh focused application run: 65 pass, 0 fail, exit 0. |
+| R2 | MET | `packages/app/src/workflow/feature-verification-receipt.ts:418` and `packages/app/src/workflow/feature-verification-receipt.ts:463` name definition files on run/contract mismatches; `packages/app/tests/workflow/feature-verification-receipt.test.ts:507` and `packages/app/tests/workflow/feature-verification-receipt.test.ts:546` assert diagnostics. Fresh focused application run: exit 0. |
+| R3 | MET | `packages/app/tests/workflow/feature-verification-receipt.test.ts:575` proves sourcePath-only changes still validate; identity remains name/layer/definitionDigest. Fresh focused application run: exit 0. |
+
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P4 | security, efficiency, correctness, usability | `packages/app/src/workflow/lifecycle-adapter.ts:223` supplies caller overrides to guarded transitions; `packages/app/tests/workflow/lifecycle-adapter.test.ts:98` proves a true caller overrides a persisted false binary. Fresh focused application run: 65 pass, 0 fail, exit 0. | No open P1-P3 finding: fail-closed parsing, bounded work, diagnostic clarity and regression behavior reviewed. |
+
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P4 | architecture | `packages/app/src/workflow/lifecycle-adapter.ts:223` supplies caller overrides to guarded transitions; `packages/app/tests/workflow/lifecycle-adapter.test.ts:98` proves a true caller overrides a persisted false binary. Fresh focused application run: 65 pass, 0 fail, exit 0. | Shared service and existing script boundaries remain intact; standalone generated twins and real-fixture test seams need no structural change. |
+
+#### Retained review and resolved follow-ups
+
 **Reviewer:** host-inline (fresh-context over recorded diff; P2 → same-executor distinctness permitted)
 
-**Review re-check (remediation hop, digest sha256:da04de57):** implementation now matches the Design section verbatim — `run` detail appends ` (receipt sourcePath=…) — a different spur install may have attached the run; re-run the verification pass and the transition with the same spur binary`; `contract-mismatch` keeps original text, appends both sourcePath values, and prints the different-install hint only when the paths differ (Q&A hint condition honored). New AC2 test covers differing sourcePaths; drift test asserts equal-path variant without hint; AC4 unchanged (ok:true). R1 evidence re-confirmed (feature-lifecycle-adapter 12/12). Gate recheck PASS. Bundle regenerated and committed-with-change (determinism gate green).
+**Review re-check (remediation hop, digest sha256:da04de57):** implementation now matches the Design section verbatim — `run` detail appends ` (receipt sourcePath=…) — a different spur install may have attached the run; re-run the verification pass and the transition with the same spur binary`; `contract-mismatch` keeps original text, appends both sourcePath values, and prints the different-install hint only when the paths differ (Q&A hint condition honored). New AC2 test covers differing sourcePaths; drift test asserts equal-path variant without hint; AC4 unchanged (ok:true). R1 evidence re-confirmed (caller override regression in packages/app/tests/workflow/lifecycle-adapter.test.ts:98 (fresh focused suite green)). Gate recheck PASS. Bundle regenerated and committed-with-change (determinism gate green).
 
 | Priority | Finding | Disposition |
 | -------- | ------- | ----------- |

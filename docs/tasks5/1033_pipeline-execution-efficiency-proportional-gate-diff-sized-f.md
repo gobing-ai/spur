@@ -4,7 +4,7 @@ name: "Pipeline execution efficiency: proportional gate, diff-sized fan-out, wra
 status: done
 template: feature-impl
 created_at: 2026-09-30T22:20:05.119Z
-updated_at: "2026-10-01T16:18:38.819Z"
+updated_at: "2026-10-01T18:17:08.155Z"
 feature_id: D9
 
 priority: P2
@@ -138,11 +138,13 @@ Feature I33's 3-task batch (1021–1023, 2026-09-30) took 3h40m38s end-to-end (1
 
 ### Solution
 
-- `plugins/sp/scripts/wrapup-steps.ts` — R2: `preflightFeature` (:216) + `sortedUniqueCodes` (:201); invoked from `resolveTasks` (:123) when `env.feature` is set, after task-list resolution and before the PASS write. Sync dry-run (rc≠0/unparsable/non-object → `failed:preflight:sync-unreadable`; `gateBlocked` → `failed:preflight:gate-blocked <sorted unique error codes>`); done-reaching proposals run `feature check --strict --as done` (unparsable → `failed:preflight:check-unreadable`; error findings → `failed:preflight:done-gate <codes>`; `L4.feature-receipt-*` ignored unless `from === 'verifying'`); non-done proposals make no check call. Full check JSON captured to `.spur/run/<runId>-wrapup-preflight.json`. FAIL routes through the existing `writeFail` edge; the pre-flight never writes PASS.
+- `plugins/sp/scripts/wrapup-steps.ts` — R2: `preflightFeature` (:230) + `sortedUniqueCodes` (:215); invoked from `resolveTasks` (:123) when `env.feature` is set, after task-list resolution and before the PASS write. Sync dry-run (rc≠0/unparsable/non-object → `failed:preflight:sync-unreadable`; `gateBlocked` → `failed:preflight:gate-blocked <sorted unique error codes>`); done-reaching proposals run `feature check --strict --as done` (unparsable → `failed:preflight:check-unreadable`; error findings → `failed:preflight:done-gate <codes>`; `L4.feature-receipt-*` ignored unless `from === 'verifying'`); non-done proposals make no check call. Full check JSON captured to `.spur/run/<runId>-wrapup-preflight.json`. FAIL routes through the existing `writeFail` edge; the pre-flight never writes PASS.
 - `plugins/sp/tests/wrapup-steps.test.ts` — R2: cases (a)–(g) with an argv-dispatching stub `spur` (argv logged for no-call assertions); suite 42/42.
 - `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:317` + `cross-cutting.md` — R1: verify-only diffstat arm of dispatch condition 5 (literal thresholds files≤3 / ins+del≤60 / sensitive false; failure direction = more isolation; inline log template).
 - `config/workflows/wrapup-pipeline.yaml:142` — task-resolve description notes the feature pre-flight.
 - `plugins/sp/scripts/wrapup-steps.mjs` — node twin regenerated via `bun run build:scripts`.
+
+Final re-verification clarified the R1 numeric-count precondition in `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:319`: the literal jq predicate first requires numeric files/insertions/deletions. The previous expression incorrectly classified null files as small and defaulted missing counts to zero. The new guard is goal-equivalent safety hardening: missing/null counts keep the estimate floor; thresholds, valid-input behavior, other stages and state graph are unchanged. Fresh literal-jq fixtures pass 11/11. Task 1039 provides durable predicate/log and boundary pins.
 
 ### Testing
 
@@ -167,6 +169,29 @@ Feature I33's 3-task batch (1021–1023, 2026-09-30) took 3h40m38s end-to-end (1
 
 ### Review
 
+#### Final inline review
+
+Scope: tagged task implementation plus the final D9 fixes. Dimensions: functional, security, efficiency, correctness, usability, architecture. Fresh focused commands pass (65 application tests, 151 plugin tests, 121 dispatch tests).
+
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P4 | functional | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:317` specifies verify-only size eligibility with numeric counts, literal thresholds and fallback. `plugins/sp/tests/task-diffstat.test.ts:243` and `plugins/sp/tests/task-diffstat.test.ts:267` pin the documented expression, exact log and 3/4-file boundary. Fresh dispatch suites: 121 pass, 0 fail, exit 0; literal jq fixture probe: 11/11 expected results (origin: D9 final verification, `.spur/run/D9-finalverify/dispatch-jq.json`). | All numbered requirements trace to fresh executable evidence; no open completeness finding. |
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:317` specifies verify-only size eligibility with numeric counts, literal thresholds and fallback. `plugins/sp/tests/task-diffstat.test.ts:243` and `plugins/sp/tests/task-diffstat.test.ts:267` pin the documented expression, exact log and 3/4-file boundary. Fresh dispatch suites: 121 pass, 0 fail, exit 0; literal jq fixture probe: 11/11 expected results (origin: D9 final verification, `.spur/run/D9-finalverify/dispatch-jq.json`). |
+| R2 | MET | `plugins/sp/scripts/wrapup-steps.ts:179` preflights before writing resolve PASS; `plugins/sp/scripts/wrapup-steps.ts:230` rejects malformed/failed sync and check responses. `plugins/sp/tests/wrapup-steps.test.ts:864` and cases (a)-(g) exercise fail-closed behavior, receipt filtering and no-check paths. Fresh focused plugin run: 151 pass, 0 fail, exit 0. |
+
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P4 | security, efficiency, correctness, usability | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:317` specifies verify-only size eligibility with numeric counts, literal thresholds and fallback. `plugins/sp/tests/task-diffstat.test.ts:243` and `plugins/sp/tests/task-diffstat.test.ts:267` pin the documented expression, exact log and 3/4-file boundary. Fresh dispatch suites: 121 pass, 0 fail, exit 0; literal jq fixture probe: 11/11 expected results (origin: D9 final verification, `.spur/run/D9-finalverify/dispatch-jq.json`). | No open P1-P3 finding: fail-closed parsing, bounded work, diagnostic clarity and regression behavior reviewed. |
+
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P4 | architecture | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:317` specifies verify-only size eligibility with numeric counts, literal thresholds and fallback. `plugins/sp/tests/task-diffstat.test.ts:243` and `plugins/sp/tests/task-diffstat.test.ts:267` pin the documented expression, exact log and 3/4-file boundary. Fresh dispatch suites: 121 pass, 0 fail, exit 0; literal jq fixture probe: 11/11 expected results (origin: D9 final verification, `.spur/run/D9-finalverify/dispatch-jq.json`). | Shared service and existing script boundaries remain intact; standalone generated twins and real-fixture test seams need no structural change. |
+
+#### Retained review and resolved follow-ups
+
 Inline review of the 1033 change set: `wrapup-steps.ts` feature pre-flight (R2), driver/cross-cutting diffstat-arm prose (R1), wrapup-pipeline.yaml task-resolve description, wrapup-steps tests (a)–(g), regenerated node twin.
 
 Gate re-check: `quality-gate recheck` **PASS** on proof digest `sha256:62724c84ffacba1123d9490e7d5a0509e518ecc59f6ef05b7754898b05078ed2` — `bun run spur-check`, attempts 1, 0 fail, 323s (receipt `.spur/run/1033-check-receipt.json`). An earlier recheck invocation that omitted `qualityGateCmd` produced a vacuous instant-PASS receipt (empty command, 7 ms); it was purged and the gate re-run with the canonical `qualityGateCmd="bun run spur-check"` before this PASS.
@@ -175,14 +200,14 @@ Gate re-check: `quality-gate recheck` **PASS** on proof digest `sha256:62724c84f
 | --- | --- | --- |
 | P1 | (none) | — |
 | P2 | (none) | — |
-| P3 | `quality-gate recheck` silently passes when `qualityGateCmd` is unset (empty command → rc 0 → PASS receipt). Footgun for inline drivers; deserves a guard requiring a non-empty command in recheck mode. | out of scope here — candidate follow-up task under D9 efficiency follow-ups |
+| P3 | `quality-gate recheck` silently passes when `qualityGateCmd` is unset (empty command → rc 0 → PASS receipt). Footgun for inline drivers; deserves a guard requiring a non-empty command in recheck mode. | Resolved by completed task 1038: both modes reject blank commands with a mode-specific diagnostic before any receipt write; shipped-node probes pass. |
 | P4 | Design says the wrapup twin is refreshed by "the bundle step"; the actual regenerator is `superskill script convert` (`bun run build:scripts`). Twin regenerated in-change. | resolved in-change |
 | P4 | `sync-unreadable` also covers a spur CLI that fails for non-JSON reasons (e.g. no project in cwd, rc≠0). Contract-sanctioned fail-closed ("failure mode is more isolation, never less"); observed in the foreign-cwd E2E run. | accepted by design |
 
 Pre-flight invariants verified by test: never writes PASS on its own (only resolveTasks writes the status), later feature-transition / feature-verify gates untouched, same `spurBin` env as `runFeatureTransition`.
 
 
-Evidence-ephemerality note (session review 2026-10-01): the `.spur/run/1033-*` artifacts cited above (evidence log, verify answer, gate receipt, conformance-check output) lived in the batch worktree and were removed at closeout; the digests, commands and outcomes quoted in this file are the durable record. The diffstat-arm conformance check is filed as a follow-up task to become a committed test.
+Evidence-ephemerality note (session review 2026-10-01): the `.spur/run/1033-*` artifacts cited above (evidence log, verify answer, gate receipt, conformance-check output) lived in the batch worktree and were removed at closeout; the digests, commands and outcomes quoted in this file are the durable record. Resolved by task 1039: committed conformance tests now pin real fixtures, both thresholds, the literal document predicate and exact log; fresh mutation checks fail as expected. Historical removed artifacts are not relied on for this verification.
 
 ### References
 

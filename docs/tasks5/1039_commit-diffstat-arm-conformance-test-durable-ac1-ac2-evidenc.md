@@ -4,7 +4,7 @@ name: Commit diffstat-arm conformance test (durable AC1/AC2 evidence for 1033)
 status: done
 template: issue
 created_at: 2026-10-01T16:20:50.852Z
-updated_at: "2026-10-01T17:12:57.307Z"
+updated_at: "2026-10-01T18:17:14.869Z"
 
 feature_id: D9
 ---
@@ -67,7 +67,7 @@ A doc-text parity pin landed in `plugins/sp/tests/command-flag-parity.test.ts`: 
 
 ### Root Cause
 
-<!-- Verified underlying cause with file:line evidence. Fill once reproduced/isolated. -->
+Original executable evidence disappeared with a removed worktree. The committed fixture suite restored durable evidence, but its single-file fixtures did not constrain the 3-file threshold, and it pinned a rendered mirror without the full source log template. A fresh mutation to allow 4 files passed the original suite. Real 3/4-file fixtures plus full predicate/log source assertions now detect the drift; all mutation checks fail as expected and the restored suite passes.
 
 ### Solution
 
@@ -82,6 +82,8 @@ Test-only conformance suite (AC2: no production changes) pinning the 1033 R1 ver
 - Imports: added `readFileSync` and `type Diffstat` (biome-organized).
 
 **Deliberate non-change:** no producer or driver-code edits — the decision is a documented driver behavior; this suite makes that contract executable without AC2 violations.
+
+Final re-verification adds a real-producer 3/4-file boundary at `plugins/sp/tests/task-diffstat.test.ts:267`, pins the full documented predicate and exact log in the existing small-diff test at `:243`, and covers every missing/null count in the defensive artifact test. Before this fix a 3-to-4 threshold mutation still passed; afterwards file/line-threshold and documented-log mutations each fail, and restoration passes. Task 1039 remains test-only; the adjacent numeric-count driver-contract correction belongs to 1033.
 
 ### Testing
 
@@ -103,6 +105,30 @@ Test-only conformance suite (AC2: no production changes) pinning the 1033 R1 ver
 
 ### Review
 
+#### Final inline review
+
+Scope: tagged task implementation plus the final D9 fixes. Dimensions: functional, security, efficiency, correctness, usability, architecture. Fresh focused commands pass (65 application tests, 151 plugin tests, 121 dispatch tests).
+
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P4 | functional | `plugins/sp/tests/task-diffstat.test.ts:195` mirrors the documented decision; `plugins/sp/tests/task-diffstat.test.ts:243` pins its complete predicate and log; real producer fixtures cover both size boundaries. Fresh dispatch suites: 121 pass, 0 fail, exit 0. | All numbered requirements trace to fresh executable evidence; no open completeness finding. |
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `plugins/sp/tests/task-diffstat.test.ts:195` mirrors the documented decision; `plugins/sp/tests/task-diffstat.test.ts:243` pins its complete predicate and log; real producer fixtures cover both size boundaries. Fresh dispatch suites: 121 pass, 0 fail, exit 0. |
+| R2 | MET | `plugins/sp/tests/task-diffstat.test.ts:242` drives small, sensitive, large, missing/unparsable and missing/null-count fixtures with the real producer. Fresh dispatch suites: exit 0; literal documented jq probe: 11/11 expected results. |
+| R3 | MET | `plugins/sp/tests/task-diffstat.test.ts:251` pins the exact rendered log; `plugins/sp/tests/task-diffstat.test.ts:258` also pins its complete documented template. File threshold 3-to-4, line threshold 60-to-59, and documented log wording mutations each cause exit 1, restored suite exit 0 (origin: D9 final verification, `.spur/run/D9-finalverify/mutation-after.json`). |
+
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P4 | security, efficiency, correctness, usability | `plugins/sp/tests/task-diffstat.test.ts:195` mirrors the documented decision; `plugins/sp/tests/task-diffstat.test.ts:243` pins its complete predicate and log; real producer fixtures cover both size boundaries. Fresh dispatch suites: 121 pass, 0 fail, exit 0. | No open P1-P3 finding: fail-closed parsing, bounded work, diagnostic clarity and regression behavior reviewed. |
+
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P4 | architecture | `plugins/sp/tests/task-diffstat.test.ts:195` mirrors the documented decision; `plugins/sp/tests/task-diffstat.test.ts:243` pins its complete predicate and log; real producer fixtures cover both size boundaries. Fresh dispatch suites: 121 pass, 0 fail, exit 0. | Shared service and existing script boundaries remain intact; standalone generated twins and real-fixture test seams need no structural change. |
+
+#### Retained review and resolved follow-ups
+
 **Evidence**
 
 - Diffstat: one test file, test-only (AC2 holds by inspection; `git diff --stat` names no production path).
@@ -114,7 +140,7 @@ Test-only conformance suite (AC2: no production changes) pinning the 1033 R1 ver
 |----------|---------|------------|
 | P1 | None — no correctness, safety, or contract-risk findings. | — |
 | P2 | None — no architecture, integration, or evidence-quality concerns. | — |
-| P3 | The transcribed condition and log template are in-test mirrors: doc-text drift alone cannot fail this suite; catching drift requires both pins (doc-parity + semantics) to survive together. | Accepted: two-layer pinning is the 1039 design; a single runtime-shared constant would require production changes AC2 forbids. |
+| P3 | The transcribed condition and log template are in-test mirrors: doc-text drift alone cannot fail this suite; catching drift requires both pins (doc-parity + semantics) to survive together. | Resolved in final re-verification: the suite now pins the full documented predicate and log template directly, and adds the 3/4-file boundary. All three fresh mutations fail as expected; production code stays unchanged. |
 | P4 | Boundary fixtures depend on rewrite-of-1-line-base arithmetic (+N−1); future fixture edits may miscount as the first pass did. | Mitigated inline with comments naming the totals (59 written → exactly 60 changed; 60 written → 61). |
 
 ### References

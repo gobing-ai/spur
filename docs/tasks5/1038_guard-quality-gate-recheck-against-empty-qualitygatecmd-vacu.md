@@ -4,7 +4,7 @@ name: Guard quality-gate recheck against empty qualityGateCmd (vacuous PASS)
 status: done
 template: issue
 created_at: 2026-10-01T16:18:43.411Z
-updated_at: "2026-10-01T17:52:26.093Z"
+updated_at: "2026-10-01T18:17:11.676Z"
 
 feature_id: D9
 done_forced: "true"
@@ -65,13 +65,14 @@ wbs=1033 runId=<id> proofDigest=<digest> node plugins/sp/scripts/quality-gate.mj
 
 ### Root Cause
 
-<!-- Verified underlying cause with file:line evidence. Fill once reproduced/isolated. -->
+An absent command previously reached the empty-shell success path and produced a vacuous PASS. The first guard repair rejected it but still wrote a FAIL receipt and omitted the mode; the current shared-service guard at `packages/app/src/services/quality-gate.ts:583` and receipt condition at `:683` close both literal contract gaps. Fresh shipped-node probes reject absent/blank commands with exit 1, name each mode, write no new receipt and preserve seeded evidence.
 
 ### Solution
 
-- Empty/whitespace `qualityGateCmd` in `recheck` and `run` no longer reaches a vacuous PASS: the service records a FAIL check row with the empty `cmd`, writes a FAIL receipt, and the CLI exits 1 (guard in `packages/app/src/services/quality-gate.ts:583-586`; exit-code propagation in `plugins/sp/scripts/quality-gate.ts` `main()`).
-- The probe shortcut is skipped and receipts whose cmd rows are empty are never reused as evidence.
-- `.mjs` twin + `lib/quality-gate.generated.mjs` regenerated in the same commit (5edc4e868); pinned by `plugins/sp/tests/quality-gate.test.ts` (151 pass) and `packages/app/tests/services/quality-gate.test.ts` (24 pass).
+- `packages/app/src/services/quality-gate.ts:583` rejects absent/whitespace commands before probes, shell execution or receipt reuse in both run and recheck. `:586` names qualityGateCmd and the mode.
+- `packages/app/src/services/quality-gate.ts:683` writes no receipt on guard rejection, preserving any existing receipt byte-for-byte. Valid command execution still produces its evaluated PASS/FAIL receipt.
+- `plugins/sp/scripts/quality-gate.ts:57` propagates the shared result as a nonzero failure exit; shipped generated twins contain the same implementation.
+- Fresh service/plugin tests and node-twin probes pass. The earlier forced-close deviation is retained as history and superseded by literal R1-R3 compliance.
 
 ### Testing
 
@@ -93,6 +94,30 @@ wbs=1033 runId=<id> proofDigest=<digest> node plugins/sp/scripts/quality-gate.mj
 
 ### Review
 
+#### Final inline review
+
+Scope: tagged task implementation plus the final D9 fixes. Dimensions: functional, security, efficiency, correctness, usability, architecture. Fresh focused commands pass (65 application tests, 151 plugin tests, 121 dispatch tests).
+
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P4 | functional | `packages/app/src/services/quality-gate.ts:583` rejects absent/blank commands before probe, gate execution and receipt reuse in both modes; `packages/app/tests/services/quality-gate.test.ts:71` covers blank commands despite reusable PASS evidence. Fresh shipped-node-twin probe: run/recheck exit 1, no fresh receipt; focused application run: 65 pass, 0 fail, exit 0. | All numbered requirements trace to fresh executable evidence; no open completeness finding. |
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `packages/app/src/services/quality-gate.ts:583` rejects absent/blank commands before probe, gate execution and receipt reuse in both modes; `packages/app/tests/services/quality-gate.test.ts:71` covers blank commands despite reusable PASS evidence. Fresh shipped-node-twin probe: run/recheck exit 1, no fresh receipt; focused application run: 65 pass, 0 fail, exit 0. |
+| R2 | MET | `packages/app/src/services/quality-gate.ts:586` names qualityGateCmd and the mode. `packages/app/tests/services/quality-gate.test.ts:83` pins the diagnostic. Fresh node probe prints mode run/recheck requires env qualityGateCmd to be non-empty; exit 1 in both modes (origin: D9 final verification, `.spur/run/D9-finalverify/quality-probe.json`). |
+| R3 | MET | `packages/app/src/services/quality-gate.ts:683` writes a receipt only when a command was present; `packages/app/tests/services/quality-gate.test.ts:84` verifies seeded PASS remains untouched. Fresh node probes: no receipt on absent command, seeded receipt byte-identical after whitespace rejection; both modes exit 1. |
+
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P4 | security, efficiency, correctness, usability | `packages/app/src/services/quality-gate.ts:583` rejects absent/blank commands before probe, gate execution and receipt reuse in both modes; `packages/app/tests/services/quality-gate.test.ts:71` covers blank commands despite reusable PASS evidence. Fresh shipped-node-twin probe: run/recheck exit 1, no fresh receipt; focused application run: 65 pass, 0 fail, exit 0. | No open P1-P3 finding: fail-closed parsing, bounded work, diagnostic clarity and regression behavior reviewed. |
+
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P4 | architecture | `packages/app/src/services/quality-gate.ts:583` rejects absent/blank commands before probe, gate execution and receipt reuse in both modes; `packages/app/tests/services/quality-gate.test.ts:71` covers blank commands despite reusable PASS evidence. Fresh shipped-node-twin probe: run/recheck exit 1, no fresh receipt; focused application run: 65 pass, 0 fail, exit 0. | Shared service and existing script boundaries remain intact; standalone generated twins and real-fixture test seams need no structural change. |
+
+#### Retained review and resolved follow-ups
+
 **Evidence**
 
 - Live E2E on the shipped twin (plugins/sp/scripts/quality-gate.mjs after regeneration): fresh cwd, `wbs=1038 runId=run-1038 proofDigest=z qualityGateCmd=` recheck → rc=1, log `quality-gate: mode recheck requires env \`qualityGateCmd\` to be non-empty`, no receipt file. Second probe: seeded PASS receipt (real cmd), then whitespace-cmd run → rc=1, `mode run` named, seeded receipt untouched (status PASS, cmd intact).
@@ -104,7 +129,7 @@ wbs=1033 runId=<id> proofDigest=<digest> node plugins/sp/scripts/quality-gate.mj
 |----------|---------|------------|
 | P1 | None — no correctness, safety, or contract-risk findings. | — |
 | P2 | None — no architecture, integration, or evidence-quality concerns. | — |
-| P3 | This fix reverses the previously accepted deviation ("FAIL receipt on reject is strictly stronger"): the prior close documented that tradeoff, this reopen supersedes it at the operator's direction. | Reversal justified by the writer contract above: auditable red state still lands in log/status/findings, and receipts now bind only executed commands — matching the design doc and the literal R1–R3. |
+| P3 | This fix reverses the previously accepted deviation ("FAIL receipt on reject is strictly stronger"): the prior close documented that tradeoff, this reopen supersedes it at the operator's direction. | Resolved: literal R1-R3 now pass fresh shipped-twin probes and service tests. Reversal justified by the writer contract above: auditable red state still lands in log/status/findings, and receipts now bind only executed commands — matching the design doc and the literal R1–R3. |
 | P4 | The in-test guard message assertions match the exact template; future wording changes must update two test files (packages/app + any twin pin). | Accepted: message template is small and centrally defined; no production shared constant needed. |
 
 ### References
