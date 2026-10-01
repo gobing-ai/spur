@@ -114,14 +114,17 @@ function resolveTasks(env, options = {}) {
   if (unresolved) {
     return writeFail(`failed:unresolved or non-completed task (see ${relTasksFile})`);
   }
-  writeFileSync(abs(relStatusFile), `PASS
-`);
   if ((env.feature ?? "") !== "") {
     const pf = preflightFeature(env, cwd);
     if (pf)
       return writeFail(pf);
   }
+  writeFileSync(abs(relStatusFile), `PASS
+`);
   return { status: "PASS", statusFile: relStatusFile, tasksFile: relTasksFile, exitCode: 0 };
+}
+function isFindingList(value) {
+  return Array.isArray(value) && value.every((f) => f !== null && typeof f === "object" && typeof f.severity === "string" && typeof f.code === "string" && f.code.length > 0);
 }
 function sortedUniqueCodes(findings) {
   const codes = findings.filter((f) => f.severity === "error").map((f) => String(f.code ?? "")).filter((c) => c.length > 0);
@@ -141,7 +144,10 @@ function preflightFeature(env, cwd) {
   }
   if (sync === undefined)
     return "failed:preflight:sync-unreadable";
-  const proposal = sync.proposal ?? {};
+  const proposal = sync.proposal;
+  if (proposal === null || typeof proposal !== "object" || Array.isArray(proposal) || proposal.gateBlocked !== undefined && typeof proposal.gateBlocked !== "boolean" || proposal.gateFindings !== undefined && !isFindingList(proposal.gateFindings) || proposal.hops !== undefined && (!Array.isArray(proposal.hops) || !proposal.hops.every((hop) => typeof hop === "string")) || proposal.gateBlocked !== true && (typeof proposal.from !== "string" || typeof proposal.to !== "string")) {
+    return "failed:preflight:sync-unreadable";
+  }
   if (proposal.gateBlocked === true) {
     return `failed:preflight:gate-blocked ${sortedUniqueCodes(proposal.gateFindings ?? []).join(",")}`;
   }
@@ -155,8 +161,11 @@ function preflightFeature(env, cwd) {
   } catch {
     return "failed:preflight:check-unreadable";
   }
-  const payload = Array.isArray(check) ? check[0] : check;
-  const findings = (payload !== null && typeof payload === "object" ? payload.findings : undefined) ?? [];
+  const payload = Array.isArray(check) && check.length === 1 ? check[0] : check;
+  const findings = payload !== null && typeof payload === "object" ? payload.findings : undefined;
+  if (!isFindingList(findings) || checkOut.status !== 0 && (checkOut.status !== 1 || !findings.some((f) => f.severity === "error"))) {
+    return "failed:preflight:check-unreadable";
+  }
   const eligible = proposal.from === "verifying" ? findings : findings.filter((f) => !String(f.code ?? "").startsWith("L4.feature-receipt-"));
   const runId = env.__runId ?? "";
   if (runId.length > 0) {

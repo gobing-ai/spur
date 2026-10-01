@@ -834,14 +834,14 @@ test('0994 R1: an h1 Testing heading reaches the metrics row', () => {
  */
 function writeDispatchStub(
     cwd: string,
-    files: { task?: string; sync?: string; check?: string },
+    files: { task?: string; sync?: string; check?: string; checkRc?: number },
 ): { stub: string; argvLog: string } {
     const stub = join(cwd, 'stub-spur');
     const argvLog = join(cwd, 'stub-argv.log');
     const branches = [
         files.task ? `  "task show") cat '${files.task}';;` : '',
         files.sync ? `  "feature sync") cat '${files.sync}';;` : '',
-        files.check ? `  "feature check") cat '${files.check}';;` : '',
+        files.check ? `  "feature check") cat '${files.check}'; exit ${files.checkRc ?? 0};;` : '',
     ].filter(Boolean);
     writeFileSync(
         stub,
@@ -860,6 +860,51 @@ function writeJsonFile(cwd: string, name: string, value: unknown): string {
 }
 
 const DONE_TASK = { frontmatter: { status: 'done' } };
+
+test('1033 R2: malformed JSON payloads and unexplained check failures cannot pass resolve', () => {
+    const cases = [
+        { sync: {}, check: [], reason: 'sync-unreadable' },
+        { sync: { proposal: null }, check: [], reason: 'sync-unreadable' },
+        { sync: { proposal: { from: 'active', to: 'done', hops: 'done' } }, check: [], reason: 'sync-unreadable' },
+        { sync: { proposal: { from: 'active', to: 'done' } }, check: null, reason: 'check-unreadable' },
+        { sync: { proposal: { from: 'active', to: 'done' } }, check: {}, reason: 'check-unreadable' },
+        { sync: { proposal: { from: 'active', to: 'done' } }, check: [], reason: 'check-unreadable' },
+        {
+            sync: { proposal: { from: 'active', to: 'done' } },
+            check: [{ findings: [null] }],
+            reason: 'check-unreadable',
+        },
+        {
+            sync: { proposal: { from: 'active', to: 'done' } },
+            check: [{ findings: [] }],
+            checkRc: 7,
+            reason: 'check-unreadable',
+        },
+    ];
+    for (const entry of cases) {
+        const cwd = mkdtempSync(join(tmpdir(), 'wrapup-preflight-shape-'));
+        try {
+            const { stub } = writeDispatchStub(cwd, {
+                task: writeJsonFile(cwd, 'task.json', DONE_TASK),
+                sync: writeJsonFile(cwd, 'sync.json', entry.sync),
+                check: writeJsonFile(cwd, 'check.json', entry.check),
+                checkRc: entry.checkRc,
+            });
+            const run = runSteps(
+                ['resolve'],
+                { __runId: 'shape', tasks: '["0770"]', feature: 'D9', spurBin: stub },
+                cwd,
+            );
+            expect(run.code).toBe(0);
+            expect(readFileSync(join(cwd, '.spur/run/shape-wrapup-resolve.status'), 'utf8')).toBe('FAIL\n');
+            expect(readFileSync(join(cwd, '.spur/run/shape-route-reason.txt'), 'utf8')).toBe(
+                `failed:preflight:${entry.reason}`,
+            );
+        } finally {
+            cleanup(cwd);
+        }
+    }
+});
 
 test('1033 R2 (a): a gate-blocked dry-run fails with the sorted unique error codes', () => {
     const cwd = mkdtempSync(join(tmpdir(), 'wrapup-steps-preflight-a-'));
