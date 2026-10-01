@@ -68,6 +68,10 @@ single-task wrap-up closes out a whole set of completed tasks in one pass.
 
 ### Crossing a session boundary
 
+For any unfinished job, use `/sp:dev-job-dump --file <path>` to save a Markdown snapshot and
+`/sp:dev-job-resume --file <path>` in the next session to reconcile state and continue the remaining
+work. Include the referenced checkout and evidence files when transferring to another machine.
+
 Two different problems, two different tools:
 
 - **The harness compacts your context mid-task.** That's normal. Keep the _planning_ half in one
@@ -125,6 +129,8 @@ list this README is checked against.
 | Command             | What it does                                                                                                                                                                                      |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `dev-handover`      | Generate a structured handover document when blocked — captures goal, progress, blocker, rejected approaches, and next steps                                                                      |
+| `dev-job-dump`      | Save the current job, verified environment and ordered remaining work to a specified Markdown handoff file |
+| `dev-job-resume`    | Reconcile a Markdown handoff with current state and continue the remaining job through its existing owner |
 | `dev-debug`         | Systematic debugging protocol — reproduce, isolate, diagnose root cause, apply minimal fix, and verify with regression tests                                                                      |
 | `dev-daily`         | Generate a daily summary report from agent usage data, git history, and notes                                                                                                                     |
 | `dev-dogfood`       | Dogfood an agent skill/command/CLI — drive it end-to-end with bounded auto-fix, self-monitor, and emit a comprehensive report                                                                     |

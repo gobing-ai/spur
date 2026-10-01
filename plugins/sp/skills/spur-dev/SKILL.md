@@ -206,6 +206,8 @@ section adds what that table has no room for: per-file content summaries and ite
 step (glossary, config companions).** Read Step routing to find "which file for step X"; read below
 for "what's actually in file Y" or for resources that sit outside the step sequence.
 
+- Job transfer: [dump/resume](references/dev-operations.md#11a-job-dump).
+
 - [references/glossary.md](references/glossary.md) — sp's own vocabulary: spine, competency, facade,
   corpus, gate, verdict, noun/verb, half, HITL, WBS, section-write contract — canonical term +
   Avoid list. Owns term definitions only; `cross-cutting.md` owns the process rules that use them.

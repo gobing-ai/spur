@@ -50,7 +50,7 @@ version: 1
 roles:
   - id: scribe
     tier: cheap
-    commands: [dev-gitmsg, dev-handover, dev-daily, dev-changelog, dev-refresh, rule-add, rule-refine, workflow-add, workflow-refine, spur-init]
+    commands: [dev-gitmsg, dev-handover, dev-job-dump, dev-daily, dev-changelog, dev-refresh, rule-add, rule-refine, workflow-add, workflow-refine, spur-init]
     stages: [changelog]
   - id: coder
     tier: standard
@@ -62,7 +62,7 @@ roles:
     stages: [verify, review, dogfood]
   - id: planner
     tier: capable-2
-    commands: [dev-plan, dev-refine, dev-brainstorm, dev-idea, dev-runall, dev-parallel, dev-next, dev-arch, dev-refineall, dev-find-next, dev-feature-change]
+    commands: [dev-plan, dev-refine, dev-brainstorm, dev-idea, dev-runall, dev-parallel, dev-next, dev-job-resume, dev-arch, dev-refineall, dev-find-next, dev-feature-change]
     stages: [plan, refine, brainstorm]
 ```
 

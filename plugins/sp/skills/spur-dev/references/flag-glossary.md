@@ -35,6 +35,15 @@ where the command already has at least one HITL gate. The rule forces a declarat
 capability exists — a command that would benefit from `--json` but produces only prose is recorded
 as a follow-up, not quietly left inconsistent.
 
+### `--file <path>` — specify the operation's input or output file
+
+**Anchor:** `#flag-file`.
+
+Resolve relative paths against the invocation directory before switching to an execution
+repository/worktree; preserve quoted paths with spaces. The command defines format and direction:
+job-dump writes/refreshes Markdown, job-resume reads Markdown, and feature-change reads its mapping
+file. Required for job-dump and job-resume; neither has a default path.
+
 ### `--agent <inline|auto|name>` — name who does the model-bearing work
 
 **Anchor:** `#flag-agent`.

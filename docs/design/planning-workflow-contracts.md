@@ -3,7 +3,7 @@ kind: design
 title: "Planning workflow and operation contracts"
 status: implemented
 created_at: 2026-09-09
-updated_at: 2026-09-27
+updated_at: 2026-10-01
 related: ["0889", "0898", "0949", "0976", "0958"]
 tags: [contract, planning, workflow]
 ---
@@ -534,7 +534,7 @@ Two primitives back the anti-hallucination migration (superskill task 0041):
 The `sp:dev-*` commands back onto the orchestration spine plus competency skills
 (`sp:spur-dev`, `sp:code-implementation`, `sp:code-testing`, `sp:code-verification`,
 `sp:functional-review`, `sp:code-improvement`, `sp:doc-evolve`, `sp:brainstorm`, `sp:dogfood-testing`) or define their procedure inline. The
-authoritative reference for all 13 operations — purpose, inputs, backing, behavior contract — is
+authoritative reference for these operations — purpose, inputs, backing, behavior contract — is
 [`plugins/sp/skills/spur-dev/references/dev-operations.md`](../../plugins/sp/skills/spur-dev/references/dev-operations.md).
 The `runall` operation (#13) is the batch entry — interactive sequential omit/inline keeps the
 driver loop in the host session; explicit/parallel execution delegates it to `sp:super-planner` per
@@ -577,9 +577,15 @@ The `review` operation resolves to deterministic modes: WBS mode runs functional
 The `handover` operation writes the durable handover SSOT to `docs/handover/<YYYY-MM-DD>-<slug>.md` and appends a pointer link into the task's `References` / `Notes` without clobbering existing content.
 See [`dev-operations.md`](../../plugins/sp/skills/spur-dev/references/dev-operations.md).
 
+Job transfer uses `/sp:dev-job-dump --file <path>` and `/sp:dev-job-resume --file <path>`.
+Both require a file path resolved from the invocation directory. Dump writes a Markdown snapshot;
+resume reconciles it with the current checkout, evidence and checkpoints before continuing through
+the existing operation owner. The shared procedures and template are owned by
+[dev-operations.md](../../plugins/sp/skills/spur-dev/references/dev-operations.md#11a-job-dump).
+
 | Pattern              | Operations                                                                                          | Backing                                                                                                                                                                                                                           |
 | -------------------- | --------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Skill()` delegation | implement, unit, review, verify, run, refine, plan, docs, brainstorm, dogfood, runall, debug, daily | `sp:code-implementation`, `sp:code-testing`, `sp:code-verification`, `sp:functional-review`, `sp:code-improvement`, `sp:spur-dev`, `sp:doc-evolve`, `sp:brainstorm`, `sp:dogfood-testing`, `sp:sys-debugging`, `sp:daily-summary` |
+| `Skill()` delegation | implement, unit, review, verify, run, refine, plan, docs, brainstorm, dogfood, runall, debug, daily, job-dump, job-resume | `sp:code-implementation`, `sp:code-testing`, `sp:code-verification`, `sp:functional-review`, `sp:code-improvement`, `sp:spur-dev`, `sp:doc-evolve`, `sp:brainstorm`, `sp:dogfood-testing`, `sp:sys-debugging`, `sp:daily-summary` |
 | Inline procedure     | changelog, gitmsg, fixall, handover                                                                 | git CLI + `spur` CLI + agent reasoning                                                                                                                                                                                            |
 
 **Brainstorm artifact exits.** `dev-brainstorm` runs the grilling interview → ideation, then lands an
