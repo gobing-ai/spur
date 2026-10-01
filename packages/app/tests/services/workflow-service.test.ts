@@ -1300,6 +1300,9 @@ ${MINIMAL_WORKFLOW_YAML}`,
             );
             await mkdir(join(dir, '.spur', 'run'), { recursive: true });
             await writeFile(join(dir, '.spur', 'run', 'trace-context-1-implement-partial.md'), 'partial');
+            const retained = '.spur/memory/runs/trace-context-1/artifacts/trace-context-1-implement-partial.md';
+            await mkdir(join(dir, '.spur/memory/runs/trace-context-1/artifacts'), { recursive: true });
+            await writeFile(join(dir, retained), 'retained partial');
             await writeFile(join(dir, '.spur', 'run', 'trace-context-1.log'), 'log');
 
             const result = await svc.trace('trace-context-1');
@@ -1317,7 +1320,7 @@ ${MINIMAL_WORKFLOW_YAML}`,
                 outcome: 'failure',
                 result: { agent: 'codex', exitCode: 1 },
                 invocation: { agent: 'codex', command: 'codex', model: 'gpt-5', timeoutMs: 60000 },
-                artifacts: ['.spur/run/trace-context-1-implement-partial.md'],
+                artifacts: [retained],
                 nextAction: { kind: 'path' },
             });
             expect(JSON.stringify(action)).not.toContain('argv');
@@ -1335,6 +1338,11 @@ ${MINIMAL_WORKFLOW_YAML}`,
                 artifacts: [],
             });
             expect(malformed).not.toHaveProperty('nextAction');
+            await rm(join(dir, '.spur/run'), { recursive: true });
+            const after = await svc.trace('trace-context-1');
+            expect(after.events.find((event) => event.kind === 'action' && event.actionId === 'action-1')).toEqual(
+                action,
+            );
             await rm(dir, { recursive: true, force: true });
         });
     });

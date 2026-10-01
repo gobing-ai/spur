@@ -1,5 +1,5 @@
 import { realpathSync, statSync } from 'node:fs';
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { AGENT_ROLE_NAMES, getEnvVars, type SpurConfig } from '@gobing-ai/spur-config';
 import { resolvePlanningFolders } from '@gobing-ai/spur-config/loader';
 import type { DbAdapter } from '@gobing-ai/spur-domain';
@@ -94,7 +94,13 @@ import type { AgentService } from './agent-service';
 import { bridgeEventBus, dropRetiredActionBoundaryAliases, withWorkflowIdentity } from './event-bridge';
 import { FleetService } from './fleet-service';
 import type { RuleService } from './rule-service';
-import { migrateRunStorage, type RunStorageMigrationResult, resolveRunRecordDir, runStoragePaths } from './run-storage';
+import {
+    migrateRunStorage,
+    type RunStorageMigrationResult,
+    resolveRunRecordDir,
+    runArtifactsDir,
+    runStoragePaths,
+} from './run-storage';
 import {
     type SystemEventAction,
     type SystemEventProjectContext,
@@ -2627,5 +2633,7 @@ async function partialArtifactForAction(
 ): Promise<string | undefined> {
     if (ok !== false || !TRACE_IDENTIFIER.test(runId) || !TRACE_IDENTIFIER.test(node)) return undefined;
     const relativePath = join('.spur', 'run', `${runId}-${node}-partial.md`);
+    const retained = join(runArtifactsDir(cwd, runId), basename(relativePath));
+    if (await fileExists(retained)) return relative(cwd, retained);
     return (await fileExists(resolve(cwd, relativePath))) ? relativePath : undefined;
 }

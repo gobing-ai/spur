@@ -1394,8 +1394,10 @@ describe('AgentRunActionRunner partial-work handoff artifact', () => {
     // must leave a machine-readable handoff artifact — exit reason, elapsed time,
     // diff stat, and stdout/stderr tails — instead of discarding everything but a
     // one-line "exited with code N" message.
-    test('captured timeout (signal) writes a partial-work artifact under .spur/run', async () => {
+    test('captured timeout handoff and resume snapshot survive scratch disposal and replacement', async () => {
         dir = mkdtempSync(join(tmpdir(), 'agent-run-'));
+        mkdirSync(join(dir, '.spur/run'), { recursive: true });
+        writeFileSync(join(dir, '.spur/run/run-abc-agent-session.json'), '{"sessionId":"resume-me"}');
         const svc = svcWithRunTraced({
             exitCode: 137,
             stdout: 'partial stdout output before the kill',
@@ -1418,6 +1420,15 @@ describe('AgentRunActionRunner partial-work handoff artifact', () => {
         expect(artifact).toContain('partial stdout output before the kill');
         expect(artifact).toContain('some stderr noise');
         expect(artifact).toContain('git diff --stat');
+        expect(artifact).toContain('resume-me');
+        const retained = join(dir, '.spur/memory/runs/run-abc/artifacts/run-abc-implement-partial.md');
+        rmSync(join(dir, '.spur/run'), { recursive: true });
+        expect(readFileSync(retained, 'utf8')).toBe(artifact);
+        await runner.execute(
+            { role: 'coder', input: 'retry', capture: true },
+            makeCtx({ runId: 'run-abc', stateOrNodeId: 'implement', workdir: dir }),
+        );
+        expect(readFileSync(retained, 'utf8')).toContain('(none captured)');
     });
 
     test('R4 (0482) — partial artifact names the dead agent session dir + latched session file', async () => {

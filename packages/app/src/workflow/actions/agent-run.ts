@@ -2,6 +2,7 @@ import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join } from 'node:path';
 import type { ExecutorAvailability } from '@gobing-ai/spur-config';
 import { AGENT_ROLE_NAMES, getEnvVars } from '@gobing-ai/spur-config';
+import { atomicWriteAsync } from '@gobing-ai/spur-domain';
 import { getAgentSessionCapability, resolveAgentName } from '@gobing-ai/ts-ai-runner';
 import type { ActionResult, ActionRunContext, ActionRunner } from '@gobing-ai/ts-dual-workflow-engine';
 import { createNodeFileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
@@ -26,12 +27,13 @@ import {
     parseAgentRoutingIdentity,
     requiresDistinctExecutor,
 } from '../../services/review-independence';
-import { ensureDurablePlaneIgnored, runSessionsDir } from '../../services/run-storage';
+import { ensureDurablePlaneIgnored, runArtifactsDir, runSessionsDir } from '../../services/run-storage';
 import { TaskLocator } from '../../services/task-locator';
 import { dispatchToFleet, type FleetDispatchDeps, fleetUnavailableOutcome } from '../fleet-dispatch';
 import type { WorkflowAgentBudgetEvent, WorkflowObservabilityBus, WorkflowTripwireFiredEvent } from '../observability';
 import { parseSteeringPolicy, type WorkflowSteeringController } from '../steering';
 import { CAPABILITY_BLOCK_PREFIX, evaluateTripWires, type TripWireSignal } from '../tripwire';
+import { resolveDurableArtifactPath } from './run-path';
 
 /** Bound the stdout/stderr tail captured into the partial-work artifact (R2b). */
 const PARTIAL_ARTIFACT_TAIL_CHARS = 4000;
@@ -1584,12 +1586,17 @@ async function writePartialWorkArtifact(
         // the session dir (plus the latched sidecar when affinity is on). Naming
         // it here lets an operator resume without re-deriving the output contract.
         const latchedSessionPath = join(cwd, '.spur', 'run', `${context.runId}-agent-session.json`);
+        const fs = createNodeFileSystem(cwd);
+        const latchedSession = (await fs.exists(latchedSessionPath))
+            ? redactAndBound(await fs.readFile(latchedSessionPath), secretValues, PARTIAL_ARTIFACT_TAIL_CHARS)
+            : '(none captured)';
         const resumeContext = [
             '',
             '## resume context',
             '',
             `- session dir: ${sessionDir ?? '(none captured)'}`,
             `- latched session file: ${latchedSessionPath}`,
+            `- latched session snapshot: ${latchedSession}`,
             '',
         ].join('\n');
 
@@ -1661,7 +1668,15 @@ async function writePartialWorkArtifact(
         ].join('\n');
 
         const target = join(cwd, '.spur', 'run', `${context.runId}-${context.stateOrNodeId}-partial.md`);
-        const fs = createNodeFileSystem(cwd);
+        const retained = await resolveDurableArtifactPath(
+            fs,
+            cwd,
+            join(runArtifactsDir(cwd, context.runId), `${context.runId}-${context.stateOrNodeId}-partial.md`),
+            'runs',
+        );
+        ensureDurablePlaneIgnored(cwd);
+        await fs.ensureDir(dirname(retained));
+        await atomicWriteAsync(retained, body, context.runId, fs);
         await fs.ensureDir(dirname(target));
         await fs.writeFile(target, body);
     } catch {
