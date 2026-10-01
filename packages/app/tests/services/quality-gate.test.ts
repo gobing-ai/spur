@@ -77,10 +77,15 @@ describe('quality-gate service (0823 d)', () => {
                     const result = gate(mode, dir, command, { proofDigest: 'empty-command-digest' });
                     expect(result.status).toBe('FAIL');
                     expect(result.attempts).toBe(0);
-                    expect(readFileSync(join(dir, '.spur/run/0823-test-gate.log'), 'utf8')).toContain('qualityGateCmd');
-                    expect(
-                        JSON.parse(readFileSync(join(dir, '.spur/run/0823-check-receipt.json'), 'utf8')).status,
-                    ).toBe('FAIL');
+                    const log = readFileSync(join(dir, '.spur/run/0823-test-gate.log'), 'utf8');
+                    expect(log).toContain('qualityGateCmd');
+                    // 1038 R2: the rejection names the rejecting mode.
+                    expect(log).toContain(`mode ${mode} requires env \`qualityGateCmd\``);
+                    // 1038 R3: the guard rejects before any gate execution, so the seeded PASS
+                    // receipt from the real command above is left untouched — no FAIL overwrite.
+                    const receipt = JSON.parse(readFileSync(join(dir, '.spur/run/0823-check-receipt.json'), 'utf8'));
+                    expect(receipt.status).toBe('PASS');
+                    expect(receipt.checks[0].cmd).toBe('exit 0');
                 }
             }
         } finally {

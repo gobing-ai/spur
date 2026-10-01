@@ -312,7 +312,8 @@ function runQualityGate(mode, env, options = {}) {
   let gateRc = commandPresent ? 0 : 1;
   let gateAttempt = 0;
   if (!commandPresent)
-    appendFileSync(abs(logFile), "quality-gate: env `qualityGateCmd` must be non-empty\n");
+    appendFileSync(abs(logFile), `quality-gate: mode ${mode} requires env \`qualityGateCmd\` to be non-empty
+`);
   const reusePass = commandPresent && readReceiptStatus(abs(rel("-check-receipt.json")), env.proofDigest ?? "").reuse;
   if (reusePass) {
     const line = `check.reused — full-tier PASS receipt at input digest ${env.proofDigest ?? ""}; gate skipped
@@ -389,7 +390,7 @@ function runQualityGate(mode, env, options = {}) {
   appendFileSync(abs(logFile), `proof-digest: ${env.proofDigest ?? ""}
 `);
   let receiptFile;
-  if (!noProgressSkip) {
+  if (!noProgressSkip && commandPresent) {
     if ((env.proofDigest ?? "").length > 0) {
       receiptFile = join(runDir, `${env.wbs}-check-receipt.json`);
       const receipt = buildReceipt({

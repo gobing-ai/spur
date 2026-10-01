@@ -583,7 +583,9 @@ export function runQualityGate(
     const commandPresent = (env.qualityGateCmd ?? '').trim().length > 0;
     let gateRc = commandPresent ? 0 : 1;
     let gateAttempt = 0;
-    if (!commandPresent) appendFileSync(abs(logFile), 'quality-gate: env `qualityGateCmd` must be non-empty\n');
+    // 1038 R2: name the mode — the log line is the operator's only hint at which stage rejected.
+    if (!commandPresent)
+        appendFileSync(abs(logFile), `quality-gate: mode ${mode} requires env \`qualityGateCmd\` to be non-empty\n`);
 
     // 1016 R1 — PASS receipt reuse, next to the 0940 no-progress skip: a full-tier PASS receipt
     // bound to the current proof-input digest means these exact inputs already passed the full
@@ -680,7 +682,9 @@ export function runQualityGate(
     // take the no-progress skip. A skip leaves the FAIL receipt it matched untouched — a skip never
     // rewrites a receipt, so it can never launder FAIL into PASS.
     let receiptFile: string | undefined;
-    if (!noProgressSkip) {
+    // 1038 R3: the vacuous-`qualityGateCmd` guard rejects before any gate execution — it records
+    // no receipt. The log/status/findings carry the FAIL; a pre-existing receipt stays untouched.
+    if (!noProgressSkip && commandPresent) {
         if ((env.proofDigest ?? '').length > 0) {
             receiptFile = join(runDir, `${env.wbs}-check-receipt.json`);
             const receipt = buildReceipt({

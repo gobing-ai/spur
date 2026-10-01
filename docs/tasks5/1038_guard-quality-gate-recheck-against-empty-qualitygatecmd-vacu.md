@@ -4,7 +4,7 @@ name: Guard quality-gate recheck against empty qualityGateCmd (vacuous PASS)
 status: done
 template: issue
 created_at: 2026-10-01T16:18:43.411Z
-updated_at: "2026-10-01T16:55:55.132Z"
+updated_at: "2026-10-01T17:52:26.093Z"
 
 feature_id: D9
 done_forced: "true"
@@ -77,36 +77,35 @@ wbs=1033 runId=<id> proofDigest=<digest> node plugins/sp/scripts/quality-gate.mj
 
 **Pipeline verify results**
 
-- Verdict: PARTIAL (from verdict artifact)
+- Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | PARTIAL | command `wbs=probe runId=p proofDigest=dd node plugins/sp/scripts/quality-gate.mjs recheck` in temp cwd exits rc=1; static-ref packages/app/src/services/quality-gate.ts:583-586; commit 5edc4e868 |
-| R2 | PARTIAL | command output: quality-gate: env qualityGateCmd must be non-empty — names env var, not the mode; accepted deviation |
-| R3 | PARTIAL | static-ref: receipt IS written on reject — checks[0].cmd empty string, status FAIL, top-level status FAIL (live probe); auditable-rejection design accepted, vacuous-PASS class dead |
+| R1 | MET | packages/app/src/services/quality-gate.ts:583-586 `commandPresent` guard rejects empty/whitespace `qualityGateCmd` with gateRc=1 before any gate execution, in both run and recheck; plugins/sp/scripts/quality-gate.ts delegates run/recheck to the same bundled core (twin regenerated via build:plugin-lib + build:scripts, in lockstep) |
+| R2 | MET | Rejection line now `quality-gate: mode <mode> requires env ` + "`qualityGateCmd`" + ` to be non-empty` — names env var and mode; live probe quoted `mode recheck requires env ...` and `mode run requires env ...` |
+| R3 | MET | Receipt condition now `!noProgressSkip && commandPresent` (quality-gate.ts:683): guard rejection evaluates no gate command and records no receipt; live probe fresh-cwd recheck with proofDigest set wrote no check-receipt.json, and a pre-existing PASS receipt stayed untouched (status PASS, cmd intact) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | PARTIAL | command | rc=1 and guard message per R2; FAIL receipt per R3; unit pin: cd plugins/sp && bun test tests/quality-gate.test.ts → 151 pass incl. empty-command exit-code cases |
-| AC2 | MET | command | (cd plugins/sp && bun test tests/quality-gate.test.ts) → 151 pass 0 fail; (cd packages/app && bun test tests/services/quality-gate.test.ts) → 24 pass 0 fail; commit 5edc4e868 regenerated .mjs twin + lib/quality-gate.generated.mjs, non-empty path untouched |
+| AC1 | MET | command | Temp cwd: `wbs=1038 runId=run-1038 proofDigest=z qualityGateCmd=` node plugins/sp/scripts/quality-gate.mjs recheck → rc=1, log `quality-gate: mode recheck requires env ` + "`qualityGateCmd`" + ` to be non-empty`, no receipt file written |
+| AC2 | MET | test | `qualityGateCmd='echo PASS-gate'` run → rc=0 + PASS receipt; packages/app quality-gate suite 24 pass (empty-cmd test now pins the R2 message and the untouched seeded PASS receipt); full bun run spur-check green: lint, typecheck, 9574 tests, post rules 2/2 |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-Implemented by the concurrent session working this checkout; committed in the gitmsg split as 5edc4e868 (fix(sp): fail quality gate closed on empty qualityGateCmd).
+**Evidence**
 
-- Guard: `packages/app/src/services/quality-gate.ts` (empty/whitespace `qualityGateCmd` → FAIL, never reuses a receipt with empty cmd rows, skips probe shortcut); `plugins/sp/scripts/quality-gate.ts` `main()` propagates gate status as exit code; `.mjs` twin + `lib/quality-gate.generated.mjs` regenerated in the same commit.
-- Executable evidence: `(cd plugins/sp && bun test tests/quality-gate.test.ts)` — 151 pass incl. empty-command exit-code cases; `(cd packages/app && bun test tests/services/quality-gate.test.ts)` — 24 pass.
-- Live probe (temp cwd, `wbs=probe runId=p proofDigest=dd … quality-gate.mjs recheck`, no `qualityGateCmd`): rc=1; log line `quality-gate: env \`qualityGateCmd\` must be non-empty`; `.spur/run/<wbs>-check-receipt.json` written with `checks[0].cmd: ""`, `status: FAIL`, top-level `status: FAIL`.
-
-Verify outcome: **PARTIAL**, deviations accepted, intent intact — vacuous-PASS class (empty cmd → PASS rc 0) is dead either way.
+- Live E2E on the shipped twin (plugins/sp/scripts/quality-gate.mjs after regeneration): fresh cwd, `wbs=1038 runId=run-1038 proofDigest=z qualityGateCmd=` recheck → rc=1, log `quality-gate: mode recheck requires env \`qualityGateCmd\` to be non-empty`, no receipt file. Second probe: seeded PASS receipt (real cmd), then whitespace-cmd run → rc=1, `mode run` named, seeded receipt untouched (status PASS, cmd intact).
+- Behavior lives in one implementation: packages/app/src/services/quality-gate.ts (guard message :586, receipt condition :683); the plugin script is ADR-130 glue over the bundled generated twin — build:plugin-lib + build:scripts keep them in lockstep.
+- Full chain green: packages/app quality-gate 24 pass (empty-cmd test rewritten to pin the R2 message and the untouched PASS receipt), plugins/sp twin 2 pass, bun run spur-check green (lint, typecheck, 9574 tests, post rules 2/2).
+- Design alignment: docs/design/workflow-catalogue-refactor.md already declared the writer contract — "run and recheck both persist the full-tier receipt for the digest they actually evaluated" — so a guard rejection (nothing evaluated) recording no receipt is the documented contract; the old FAIL-receipt-on-reject was code drift from the design doc, not a stronger audit trail.
 
 | Priority | Finding | Resolution |
-| --- | --- | --- |
-| P1 | (none) | — |
-| P2 | (none) | — |
-| P3 | R2 deviation: guard message names the env var but not the mode (`must be non-empty` vs `qualityGateCmd is required for recheck mode`) | accepted — rc=1 + FAIL receipt carry the signal; mode naming is cosmetic in a single-gate-command script |
-| P4 | R3 deviation: an explicit FAIL receipt is written on reject instead of no receipt | accepted — auditable-rejection design; downstream gates see a real FAIL row with empty `cmd`, strictly stronger than a missing file |
+|----------|---------|------------|
+| P1 | None — no correctness, safety, or contract-risk findings. | — |
+| P2 | None — no architecture, integration, or evidence-quality concerns. | — |
+| P3 | This fix reverses the previously accepted deviation ("FAIL receipt on reject is strictly stronger"): the prior close documented that tradeoff, this reopen supersedes it at the operator's direction. | Reversal justified by the writer contract above: auditable red state still lands in log/status/findings, and receipts now bind only executed commands — matching the design doc and the literal R1–R3. |
+| P4 | The in-test guard message assertions match the exact template; future wording changes must update two test files (packages/app + any twin pin). | Accepted: message template is small and centrally defined; no production shared constant needed. |
 
 ### References
 
@@ -117,4 +116,7 @@ Verify outcome: **PARTIAL**, deviations accepted, intent intact — vacuous-PASS
 - 2026-10-01T16:53:11.184Z todo → wip (system)
 - 2026-10-01T16:55:40.877Z wip → testing (system)
 - 2026-10-01T16:55:55.043Z testing → done (system)
+- 2026-10-01T17:33:00.633Z done → wip (system)
+- 2026-10-01T17:52:25.427Z wip → testing (system)
+- 2026-10-01T17:52:26.093Z testing → done (system)
 
