@@ -4,7 +4,7 @@ name: Guard WBS allocation against cross-checkout collisions in concurrent batch
 status: cancelled
 template: feature-impl
 created_at: 2026-10-01T00:47:13.093Z
-updated_at: "2026-10-01T01:10:16.018Z"
+updated_at: "2026-10-01T06:58:07.255Z"
 feature_id: A9
 
 ---
@@ -17,16 +17,22 @@ Captured from the creation title: "Guard WBS allocation against cross-checkout c
 
 ### Requirements
 
-- Background: during batch runall-A9-485e, a concurrent agent session in a sibling checkout (i33) allocated overlapping WBS numbers, producing duplicate task IDs (1015/1021-1023 era) that had to be reconciled mid-merge. Hypothesis: WBS allocation is per-checkout with no cross-checkout guard (confirm by running `spur task create --feature X` concurrently from two checkouts of one repo). Cancelled task 1015 held a related one-writer-guard idea.
-- Fix direction: cross-checkout allocation guard — either an allocator lock coordinated through the project data dir, or a loud, actionable precheck failure on collision. Smallest mechanism that makes concurrent creation fail loudly or allocate uniquely.
-- AC:
+Cancellation audit 2026-09-30: N/A for delivery verification. Task remains cancelled; the operator has not reactivated the withdrawn proposal. Unticked proposal checkboxes are rendered as historical bullets to avoid suggesting pending delivery work.
+
+- R1. Background: during batch runall-A9-485e, a concurrent agent session in a sibling checkout (i33) allocated overlapping WBS numbers, producing duplicate task IDs (1015/1021-1023 era) that had to be reconciled mid-merge. Hypothesis: WBS allocation is per-checkout with no cross-checkout guard (confirm by running `spur task create --feature X` concurrently from two checkouts of one repo). Cancelled task 1015 held a related one-writer-guard idea.
+- R2. Proposed fix direction: cross-checkout allocation guard — either an allocator lock coordinated through the project data dir, or a loud, actionable precheck failure on collision. Smallest mechanism that makes concurrent creation fail loudly or allocate uniquely.
+- R3. Proposed acceptance:
   1. Two concurrent `spur task create` runs from two checkouts of the same repo cannot silently allocate the same WBS.
   2. On collision, the error is actionable (names the conflicting checkout/task) rather than silent corruption.
   3. Verified by a repeatable test or documented repro command.
 
 ### Acceptance Criteria
 
-<!-- Number items AC1, AC2, … (never R<n> — that is the Requirements namespace): `- [ ] AC1 — <feature scenario title without its R-number>` bullets or `Scenario: AC1 — <title>` blocks; add `(req: R<n>)` to bind a task requirement; task-only checks go in prose below, or set `ac_altitude: task-local`. Do not leave placeholder AC here. -->
+Cancellation audit 2026-09-30: N/A for delivery verification. Task remains cancelled; the operator has not reactivated the withdrawn proposal. Unticked proposal checkboxes are rendered as historical bullets to avoid suggesting pending delivery work.
+
+- AC1 — Concurrent creators cannot silently allocate duplicate WBS (withdrawn).
+- AC2 — Collision errors identify the conflicting checkout/task (withdrawn).
+- AC3 — Repeatable verification of the proposed allocator (withdrawn).
 
 ### Q&A
 
@@ -64,17 +70,17 @@ Failure mode: forced or unresolved collision fails loudly with an actionable err
 
 ### Testing
 
+Cancellation audit 2026-09-30: N/A for delivery verification. Task remains cancelled; the operator has not reactivated the withdrawn proposal. Unticked proposal checkboxes are rendered as historical bullets to avoid suggesting pending delivery work.
+
 - Unit (packages/app/tests): two concurrent allocations against a shared fixture ledger -> distinct WBS, both persisted; stale lock (backdated mtime) is taken over, not fatal.
 - Integration repro script (repeatable artifact): drive two task creates from main + a linked worktree of a fixture; assert distinct WBS and the actionable error path when a duplicate is forced. Commit the script per ADR-130 placement.
 - Gates: bun run spur-check; bun run spur-check-feature once.
 
 ### Review
 
-- Verify common-dir anchoring works from a linked worktree (git rev-parse resolves to the main .git).
-- Crash safety: stale takeover tested; no permanent lock on kill.
-- Perf: single-checkout create latency unchanged (local-file lock, ms-scale).
-- Error message names the conflicting WBS + holder; no silent skip-ahead.
-- Docs satellite updated; scopes disjoint from foreign 1024/1025.
+Cancellation audit 2026-09-30: N/A for delivery verification. Task remains cancelled; the operator has not reactivated the withdrawn proposal. Unticked proposal checkboxes are rendered as historical bullets to avoid suggesting pending delivery work.
+
+No implementation is certified. Requirements and proposed tests were reviewed against the retained cancellation decision and task History. The withdrawn design remains historical context; no new writer guard, agent fan-out or allocator was implemented.
 
 ### References
 
