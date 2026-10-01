@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { basename, dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import type { DbAdapter } from '@gobing-ai/spur-domain';
 import { ArtifactDao, RunDao } from '@gobing-ai/spur-domain';
 import type { ActionResult, ActionRunContext, ActionRunner } from '@gobing-ai/ts-dual-workflow-engine';
@@ -10,7 +10,7 @@ import { computeProofInputFingerprint, readProofInputContents } from '../proof-i
 import { resolveDurableArtifactPath, resolveRunArtifactPath } from './run-path';
 
 // runtime-boundaries fs rule (no-direct-fs-io): dynamic destructure, not a static import.
-const { copyFile, link, mkdir, readFile, unlink } = await import('node:fs/promises');
+const { copyFile, link, mkdir, readFile, unlink, writeFile } = await import('node:fs/promises');
 
 const KIND = 'run.artifact';
 /** Canonical proof-input digest shape produced by `proof.fingerprint` (ADR-071). */
@@ -44,13 +44,31 @@ async function persistDurableArtifact(
         throw new Error(`required artifact disappeared before persistence: ${normalized}`);
     }
     if (!source.isFile()) throw new Error(`artifact is not a regular file: ${normalized}`);
+    const sourcePath = await resolveDurableArtifactPath(
+        fs,
+        workdir,
+        join(artifactsDir, `${basename(normalized)}.source`),
+        'runs',
+    );
+    const sourceIdentity = relative(fs.realPath?.(resolve(workdir)) ?? resolve(workdir), normalized);
+    if ((await fs.stat(dest)) && (await fs.stat(sourcePath)) === null) {
+        throw new Error(`durable artifact source identity is missing: ${dest}`);
+    }
+    await mkdir(dirname(dest), { recursive: true });
+    try {
+        await writeFile(sourcePath, sourceIdentity, { flag: 'wx' });
+    } catch (error) {
+        if ((error as { code?: string }).code !== 'EEXIST') throw error;
+        if ((await readFile(sourcePath, 'utf8')) !== sourceIdentity) {
+            throw new Error(`durable artifact source identity conflicts: ${dest}`);
+        }
+    }
     if (await fs.stat(dest)) {
         if ((await sha256File(dest)) !== (await sha256File(normalized))) {
             throw new Error(`durable artifact path already holds different content: ${dest}`);
         }
         return dest;
     }
-    await mkdir(dirname(dest), { recursive: true });
     const tmp = `${dest}.${randomUUID()}.tmp`;
     try {
         await copyFile(normalized, tmp);
@@ -78,7 +96,7 @@ async function persistDurableArtifact(
 export interface RunArtifactOptions {
     /** Optional identifier for the artifact action. */
     id?: string;
-    /** Path to the artifact relative to repository root beneath `.spur/run/`. */
+    /** Scratch path, or canonical durable evidence when proofBinding is current. */
     path: string;
     /** Classification kind recorded in ArtifactDao (e.g. `verify-verdict`). */
     artifactKind: string;
@@ -306,7 +324,10 @@ export class RunArtifactActionRunner implements ActionRunner {
         // Physical confinement BEFORE read/ledger effects (0785 R2).
         let normalized: string;
         try {
-            normalized = await resolveRunArtifactPath(this.fileSystem, workdir, pathRaw);
+            const evidenceRoot = join(resolve(workdir), '.spur', 'memory', 'evidence');
+            normalized = resolve(workdir, pathRaw).startsWith(`${evidenceRoot}${sep}`)
+                ? await resolveDurableArtifactPath(this.fileSystem, workdir, pathRaw, 'evidence')
+                : await resolveRunArtifactPath(this.fileSystem, workdir, pathRaw);
         } catch (error) {
             return { ok: false, error: `path ${(error as Error).message}` };
         }
@@ -488,7 +509,10 @@ export class RunArtifactActionRunner implements ActionRunner {
         // 1026 R3: durable copy before registration; the row names the durable path.
         let registeredPath = normalized;
         try {
-            registeredPath = await persistDurableArtifact(normalized, workdir, context.runId, this.fileSystem);
+            const evidenceRoot = join(this.fileSystem.realPath(resolve(workdir)), '.spur', 'memory', 'evidence');
+            if (!normalized.startsWith(`${evidenceRoot}${sep}`)) {
+                registeredPath = await persistDurableArtifact(normalized, workdir, context.runId, this.fileSystem);
+            }
         } catch (error) {
             return { ok: false, error: `${KIND}: durable persist failed: ${(error as Error).message}` };
         }

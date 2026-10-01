@@ -1,6 +1,15 @@
 import { describe, expect, test } from 'bun:test';
 import { execSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+    existsSync,
+    mkdirSync,
+    mkdtempSync,
+    readFileSync,
+    realpathSync,
+    rmSync,
+    symlinkSync,
+    writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ArtifactDao, applyCliMigrations, type DbAdapter } from '@gobing-ai/spur-domain';
@@ -10,6 +19,26 @@ import { RunArtifactActionRunner } from '../../../src/workflow/actions/run-artif
 import { computeProofInputFingerprint } from '../../../src/workflow/proof-input-fingerprint';
 
 describe('RunArtifactActionRunner', () => {
+    test('distinct sources sharing a basename refuse even when their bytes match', async () => {
+        const workdir = mkdtempSync(join(tmpdir(), 'artifact-source-'));
+        try {
+            const runner = new RunArtifactActionRunner();
+            for (const dir of ['a', 'b']) {
+                mkdirSync(join(workdir, '.spur/run', dir), { recursive: true });
+                writeFileSync(join(workdir, '.spur/run', dir, 'result.json'), '{}');
+            }
+            const context = { runId: 'r1', stateOrNodeId: 's', workdir, vars: {}, env: {} };
+            const options = { artifactKind: 'test' };
+            expect((await runner.execute({ ...options, path: '.spur/run/a/result.json' }, context)).ok).toBe(true);
+            const collision = await runner.execute({ ...options, path: '.spur/run/b/result.json' }, context);
+            expect(collision.ok).toBe(false);
+            expect(collision.error).toContain('source identity');
+            expect((await runner.execute({ ...options, path: '.spur/run/a/result.json' }, context)).ok).toBe(true);
+        } finally {
+            rmSync(workdir, { recursive: true, force: true });
+        }
+    });
+
     test('optional missing output records a durable path without fabricating bytes', async () => {
         const workdir = mkdtempSync(join(tmpdir(), 'artifact-optional-'));
         try {
@@ -48,7 +77,12 @@ describe('RunArtifactActionRunner', () => {
     });
 
     test('rejects sibling prefixes and the run directory even without an existence probe (0781)', async () => {
-        for (const path of ['.spur/run-other/verdict.json', '.spur/run/../run-other/verdict.json', '.spur/run']) {
+        for (const path of [
+            '.spur/run-other/verdict.json',
+            '.spur/run/../run-other/verdict.json',
+            '.spur/run',
+            '.spur/memory/evidence/verdict.json',
+        ]) {
             const result = await new RunArtifactActionRunner().execute(
                 { path, artifactKind: 'test', requireExisting: false },
                 { runId: 'r1', stateOrNodeId: 's1', workdir: process.cwd(), vars: {}, env: {} },
@@ -307,6 +341,32 @@ describe('RunArtifactActionRunner bound verify-verdict registration (task 0785 R
             const rows = await f.dao.artifactsByRunId(RUN_ID);
             expect(rows).toHaveLength(1);
             expect(rows[0]?.kind).toBe('verify-verdict');
+        } finally {
+            f.adapter.close();
+            f.cleanup();
+        }
+    });
+
+    test('canonical durable verdict binds in place and remains readable after scratch disposal', async () => {
+        const f = await setup();
+        try {
+            const path = join(f.workdir, '.spur/memory/evidence', `${WBS}-verdict.json`);
+            mkdirSync(join(f.workdir, '.spur/memory/evidence'), { recursive: true });
+            const bytes = readFileSync(f.verdictPath, 'utf8');
+            writeFileSync(path, bytes);
+            const runner = new RunArtifactActionRunner(async () => f.adapter, createNodeFileSystem(), f.dao);
+            const result = await runner.execute(
+                { ...boundOptions(f), path },
+                ctxWith(f.workdir, { proofDigest: f.digest, wbs: WBS }),
+            );
+            expect(result.error).toBeUndefined();
+            expect(result.ok).toBe(true);
+            expect((result.data as { path: string }).path).toBe(realpathSync(path));
+            rmSync(join(f.workdir, '.spur/run'), { recursive: true });
+            expect(readFileSync(path, 'utf8')).toBe(bytes);
+            expect(await f.dao.artifactsByRunId(RUN_ID)).toEqual([
+                { path: realpathSync(path), kind: 'verify-verdict' },
+            ]);
         } finally {
             f.adapter.close();
             f.cleanup();
