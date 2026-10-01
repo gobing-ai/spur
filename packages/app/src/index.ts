@@ -506,6 +506,12 @@ export {
     type RunSessionOverlapRegistry,
     type RunSessionWatermark,
 } from './services/run-session-observer';
+export {
+    resolveRunRecordDir,
+    runArtifactsDir,
+    runSessionsDir,
+    runStoragePaths,
+} from './services/run-storage';
 export type {
     RunStoreAction,
     RunStoreDetail,

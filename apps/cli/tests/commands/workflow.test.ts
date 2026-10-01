@@ -689,8 +689,8 @@ terminalStates:
         await writeFile(join(wfDir, 'record-pauser.yaml'), RECORD_RESUME_WORKFLOW_YAML);
         const dbUrl = join(dir, 'spur.db');
         const counter = join(dir, 'counter.txt');
-        const mdPath = join(dir, '.spur', 'run', 'cli-rec1.md');
-        const statePath = join(dir, '.spur', 'run', 'cli-rec1.state.json');
+        const mdPath = join(dir, '.spur', 'memory', 'runs', 'cli-rec1.md');
+        const statePath = join(dir, '.spur', 'memory', 'runs', 'cli-rec1.state.json');
 
         const runExit = await main(['workflow', 'run', '--run-id', 'cli-rec1', join(wfDir, 'record-pauser.yaml')], {
             output: nullOutput(),
@@ -736,8 +736,8 @@ terminalStates:
             cwd: dir,
             dbUrl,
         });
-        const mdPath = join(dir, '.spur', 'run', 'cli-rec2.md');
-        const statePath = join(dir, '.spur', 'run', 'cli-rec2.state.json');
+        const mdPath = join(dir, '.spur', 'memory', 'runs', 'cli-rec2.md');
+        const statePath = join(dir, '.spur', 'memory', 'runs', 'cli-rec2.state.json');
         const mdBefore = await readFile(mdPath, 'utf8');
         const stateBefore = await readFile(statePath, 'utf8');
 
@@ -1465,11 +1465,11 @@ failureStates:
         });
 
         expect(exitCode).toBe(0);
-        const mdPath = join(dir, '.spur', 'run', 'retain-log-run.md');
+        const mdPath = join(dir, '.spur', 'memory', 'runs', 'retain-log-run.md');
         expect((await readFile(mdPath, 'utf8')).length).toBeGreaterThan(0);
         expect(await exists(join(dir, '.spur', 'run', 'retain-log-run.log'))).toBe(false);
         const state = JSON.parse(
-            await readFile(join(dir, '.spur', 'run', 'retain-log-run.state.json'), 'utf8'),
+            await readFile(join(dir, '.spur', 'memory', 'runs', 'retain-log-run.state.json'), 'utf8'),
         ) as Record<string, unknown>;
         expect(state).toMatchObject({ schemaVersion: 1, runId: 'retain-log-run', status: 'done' });
         await rm(dir, { recursive: true, force: true });
@@ -1487,8 +1487,8 @@ failureStates:
         });
 
         expect(exitCode).toBe(0);
-        await expect(readFile(join(dir, '.spur', 'run', 'no-log-run.md'), 'utf8')).rejects.toThrow();
-        await expect(readFile(join(dir, '.spur', 'run', 'no-log-run.state.json'), 'utf8')).rejects.toThrow();
+        await expect(readFile(join(dir, '.spur', 'memory', 'runs', 'no-log-run.md'), 'utf8')).rejects.toThrow();
+        await expect(readFile(join(dir, '.spur', 'memory', 'runs', 'no-log-run.state.json'), 'utf8')).rejects.toThrow();
         await rm(dir, { recursive: true, force: true });
     });
 

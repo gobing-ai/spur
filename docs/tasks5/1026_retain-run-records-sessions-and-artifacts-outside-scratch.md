@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Retain run records sessions and artifacts outside scratch
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-30T20:13:58.357Z
-updated_at: "2026-09-30T20:36:57.900Z"
+updated_at: "2026-10-01T19:51:13.700Z"
 feature_id: E71
 priority: P2
 tags:
@@ -32,16 +32,16 @@ Rubric: E12 D1 L4 C1 R2 = 20; retained-record/session review boundary, below 16-
 
 ### Requirements
 
-- [ ] R1. Write retained engine/inline record pairs under .spur/memory/runs and preserve authoritative DB status, append order, redaction, no-log and legacy inspection behavior.
-- [ ] R2. Persist registered lasting artifact bytes before durable reference registration and redirect inspection/coordination references with confinement and collision rejection.
-- [ ] R3. Move Spur-owned session roots and their observer/resume/history readers together; persist planning handoffs and worktree exports before consumer or worktree disposal.
-- [ ] R4. Extend the bounded migration with record/log/artifact/session data and truthful missing/conflict outcomes; preserve active/paused owners and importer obligations.
+- [x] R1. Write retained engine/inline record pairs under .spur/memory/runs and preserve authoritative DB status, append order, redaction, no-log and legacy inspection behavior.
+- [x] R2. Persist registered lasting artifact bytes before durable reference registration and redirect inspection/coordination references with confinement and collision rejection.
+- [x] R3. Move Spur-owned session roots and their observer/resume/history readers together; persist planning handoffs and worktree exports before consumer or worktree disposal.
+- [x] R4. Extend the bounded migration with record/log/artifact/session data and truthful missing/conflict outcomes; preserve active/paused owners and importer obligations.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Retained run inspection and artifact references survive scratch removal (req: R1; R2)
-- [ ] AC2 — Session history and exported results remain available outside scratch (req: R3)
-- [ ] AC3 — Existing lasting data is preserved before its scratch dependency is retired (req: R4)
+- [x] AC1 — Retained run inspection and artifact references survive scratch removal (req: R1; R2)
+- [x] AC2 — Session history and exported results remain available outside scratch (req: R3)
+- [x] AC3 — Existing lasting data is preserved before its scratch dependency is retired (req: R4)
 
 ### Q&A
 
@@ -87,15 +87,53 @@ Execution checks and per-requirement observability are frozen in Design. Preserv
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Extended the 1025 storage seam (no fork; ADR-131, `docs/design/disposable-run-storage.md`):
+
+- `packages/app/src/services/run-storage.ts`
+  - `runStoragePaths` gains `recordsDir` `.spur/memory/runs` (run-storage.ts:42, run-storage.ts:52) with per-run `runSessionsDir`/`runArtifactsDir` roots (run-storage.ts:492-498); `classify()` treats run-record pairs, agent sessions (`<runId>/agent-sessions/…`), artifacts and `.log` scratch logs as owned families (subpath classify run-storage.ts:184-194; run-scoped receipts run-storage.ts:216-227; preserved fallthrough run-storage.ts:275-284).
+  - `migrateRunStorage` walks `<runId>/agent-sessions|artifacts` subtrees as per-file units (:330-343), routes run-record families to `recordsDir` (:408), and calls `ensureDurablePlaneIgnored` (:353, def :515) — the durable plane is kept fingerprint-inert via an idempotent `.git/info/exclude` entry (0612 invariant).
+  - New `resolveRunRecordDir` (:542-548) gives readers scratch-first, durable-fallback resolution.
+- `packages/app/src/services/inline-run-setup.ts`
+  - `writeInlineRunOutcome` writes the two-file record pair under `recordsDir` (:822-823); worktree transfer carries the whole record dir before worktree removal (`carryRunRecordDir` :780-796, invoked :481); citation copies resolve scratch-first with durable fallback so evidence keeps its source plane (:282-283, transfer block :396-420).
+- `packages/app/src/workflow/actions/run-artifact.ts`
+  - `persistDurableArtifact` (:31-51) copies retained artifact bytes into `recordsDir/<runId>/artifacts/` before DAO registration at both call sites (:170 unbound, :463 bound); sha256-divergent basename collisions fail closed (:43-44), identical re-registration is idempotent (:46). File IO behind dynamic import (no-direct-fs-io rule).
+- `packages/app/src/workflow/actions/agent-run.ts` — session dirs write to `runSessionsDir` (:577,:586) so native-session observers and resume read the durable root.
+- `packages/app/src/services/history-service.ts` — late import/session discovery prefers the durable root (`runSessionAugmentedRoots` :491,559); scratch retained as fallback only.
+- `packages/app/src/services/workflow-service.ts` — `cleanRunLogs` reclaims both scratch and durable roots (:954-962) and `listActiveRuns` skip keeps live owners (:1046).
+- `apps/cli/src/commands/workflow.ts` — run and continue composition sinks select `recordsDir` (:901,:1259).
+- `packages/app/src/index.ts` — exports the new seam members (`runSessionsDir`, `runArtifactsDir`, `resolveRunRecordDir`, `ensureDurablePlaneIgnored`).
+
+DB trace stays authoritative (no paused snapshots, no schema change, no new backend/dep/public command). Terminal scratch deletion remains out of scope (ADR-131).
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | runStoragePaths publishes recordsDir `.spur/memory/runs` (`packages/app/src/services/run-storage.ts:52`) with session/artifact roots derived per run (`:492-498`); the retained record pair writes there (`writeInlineRunOutcome` `packages/app/src/services/inline-run-setup.ts:822-823`) and both CLI run/continue sinks select recordsDir (`apps/cli/src/commands/workflow.ts:901,1259`). DB trace stays authoritative and no-log/redaction semantics are unchanged (`packages/app/tests/services/inline-run-driver.test.ts` 12 pass, `plugins/sp/tests/inline-run-trace.test.ts` trace-close behavior). |
+| R2 | MET | `persistDurableArtifact` (`packages/app/src/workflow/actions/run-artifact.ts:31-51`) copies artifact bytes into `recordsDir/<runId>/artifacts/` BEFORE DAO registration at both call sites (`:170` unbound, `:463` bound); unequal-basename collisions fail via sha256 divergence (`:43-44`) and identical re-registration is idempotent (`:46`). `packages/app/tests/workflow/actions/run-artifact.test.ts` proves the durable registered path plus collision-free re-record; readers resolve scratch-first with durable fallback (`resolveRunRecordDir` (`packages/app/src/services/run-storage.ts:542-548`)). |
+| R3 | MET | Session roots moved as one unit: `runSessionsDir` (`packages/app/src/services/run-storage.ts:492-493`) drives agent session dirs (`agent-run.ts:577,586`), late import/history discovery reads the durable root first (`runSessionAugmentedRoots` `history-service.ts:491,559`), and worktree export transfers records/sessions/artifacts before removal (`carryRunRecordDir` (`packages/app/src/services/inline-run-setup.ts:780-796`), invoked at `:481`). `packages/app/tests/services/agent-run.test.ts` 163 pass and `packages/app/tests/services/persist-worktree-runs.test.ts` 24 pass. |
+| R4 | MET | Migration extends 1025's engine (no fork): run-subtree walk joins `<runId>/agent-sessions\|artifacts` per-file units (`packages/app/src/services/run-storage.ts:330-343`), subpath classification assigns run-record ownership (`:184-194`), run-scoped receipts map runId===prefix to ownerRunId (`:216-227`), unowned scratch files stay preserved with null family (`:275-284`), and `cleanRunLogs` sweeps both scratch and durable roots while skipping active runs (`workflow-service.ts:954-962,1046`). `packages/app/tests/services/run-storage.test.ts` covers subtree/run-scoped/preserved classification, dry-run, idempotence, fail-closed conflicts and malformed JSON; `ensureDurablePlaneIgnored` (`packages/app/src/services/run-storage.ts:515`, wired `:353`) keeps the durable plane out of proof inputs via `.git/info/exclude`. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC-1 | MET | test | `bun test packages/app/tests/services/inline-run-driver.test.ts plugins/sp/tests/inline-run-setup.test.ts plugins/sp/tests/inline-run-installed.test.ts` — record pairs are written to and read from `.spur/memory/runs/<runId>.md` + `.state.json` while scratch negative-paths (`inline-setup.json`, `.log`) stay absent; the artifact suite registers the durable `runs/run-123/artifacts` path (run-artifact.test.ts). Inspection data survives scratch removal because the durable pair no longer depends on `.spur/run`. |
+| AC-2 | MET | test | `bun test packages/app/tests/services/agent-run.test.ts packages/app/tests/services/persist-worktree-runs.test.ts packages/app/tests/services/history-service.test.ts` — sessions emit under `recordsDir/<runId>/agent-sessions`, history import reads the durable root first, and worktree export persists records/sessions/artifacts before deletion (24/24). |
+| AC-3 | MET | test | `bun run spur-check` exit=0: 9564 pass / 0 fail across 562 files — includes run-storage migration suite (byte-copy only, dry-run writes nothing, divergent target fails closed, live/unknown owners preserved), workflow clean dual-root reclamation (`apps/cli/tests/commands/workflow.test.ts`) and import-proof invariants (proof-input-fingerprint untouched by the durable plane). |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -105,3 +143,8 @@ Execution checks and per-requirement observability are frozen in Design. Preserv
 - Concurrency snapshot: no wip tasks reported at refinement kickoff; active worktree branches `sp/runall-A9-485e` and `sp/runall-i33-a22b` exist. Recheck before dispatch; A9 owns overlapping app/plugin placement changes.
 
 ### History
+
+- 2026-10-01T19:50:44.061Z todo → wip (system)
+- 2026-10-01T19:50:44.913Z wip → testing (system)
+- 2026-10-01T19:51:13.700Z testing → done (system)
+

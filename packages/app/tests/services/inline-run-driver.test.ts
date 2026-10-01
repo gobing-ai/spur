@@ -78,7 +78,7 @@ describe('writeInlineRunOutcome (0927 R1 pair record)', () => {
                     workdir: dir,
                 };
                 writeInlineRunOutcome('run-out-1', outcome);
-                const statePath = join(dir, '.spur/run/run-out-1.state.json');
+                const statePath = join(dir, '.spur/memory/runs/run-out-1.state.json');
                 const state = JSON.parse(readFileSync(statePath, 'utf8')) as Record<string, unknown>;
                 expect(state).toMatchObject({
                     schemaVersion: 1,
@@ -88,7 +88,7 @@ describe('writeInlineRunOutcome (0927 R1 pair record)', () => {
                     ok: true,
                     startedAt: state.updatedAt,
                 });
-                const header = readFileSync(join(dir, '.spur/run/run-out-1.md'), 'utf8');
+                const header = readFileSync(join(dir, '.spur/memory/runs/run-out-1.md'), 'utf8');
                 expect(header).toContain('# spur inline run run-out-1 — inline-smoke');
                 // A re-setup rewrites state but keeps startedAt, drops prior fields on success,
                 // and never appends a second header.
@@ -96,7 +96,7 @@ describe('writeInlineRunOutcome (0927 R1 pair record)', () => {
                 const state2 = JSON.parse(readFileSync(statePath, 'utf8')) as Record<string, unknown>;
                 expect(state2).toMatchObject({ ok: false, error: 'boom', startedAt: state.startedAt });
                 expect(state2.workflowName).toBeUndefined();
-                const header2 = readFileSync(join(dir, '.spur/run/run-out-1.md'), 'utf8');
+                const header2 = readFileSync(join(dir, '.spur/memory/runs/run-out-1.md'), 'utf8');
                 expect(header2.split('\n').filter((line) => line.startsWith('# spur inline run')).length).toBe(1);
             });
         } finally {
@@ -134,9 +134,9 @@ describe('status guards and run-log helpers', () => {
             inDir(dir, () => {
                 appendInlineRunLogLine('run-c', 'trace-emission-failed op=x');
                 appendInlineRunLogLine('bad/id', 'sanitized');
-                const log = readFileSync(join(dir, '.spur/run/run-c.md'), 'utf8');
+                const log = readFileSync(join(dir, '.spur/memory/runs/run-c.md'), 'utf8');
                 expect(log).toMatch(/^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z\] trace-emission-failed op=x\n$/m);
-                expect(existsSync(join(dir, '.spur/run/bad_id.md'))).toBe(true);
+                expect(existsSync(join(dir, '.spur/memory/runs/bad_id.md'))).toBe(true);
             });
         } finally {
             rmSync(dir, { recursive: true, force: true });
@@ -225,7 +225,7 @@ describe('runInlineRunSetup + runInlineRunTrace (moved driver bodies, 1006 R3)',
                     errors: expect.arrayContaining([expect.stringContaining('created run run-1006-setup')]),
                 });
                 const state = JSON.parse(
-                    readFileSync(join(p.dir, '.spur/run/run-1006-setup.state.json'), 'utf8'),
+                    readFileSync(join(p.dir, '.spur/memory/runs/run-1006-setup.state.json'), 'utf8'),
                 ) as Record<string, unknown>;
                 expect(state).toMatchObject({ ok: true, workflowName: 'inline-smoke' });
 
@@ -243,7 +243,7 @@ describe('runInlineRunSetup + runInlineRunTrace (moved driver bodies, 1006 R3)',
                     code: 1,
                     errors: expect.arrayContaining([expect.stringContaining('FAIL for run run-1006-refuse')]),
                 });
-                expect(existsSync(join(p.dir, '.spur/run/run-1006-refuse.state.json'))).toBe(true);
+                expect(existsSync(join(p.dir, '.spur/memory/runs/run-1006-refuse.state.json'))).toBe(true);
             });
         } finally {
             p.cleanup();
@@ -277,7 +277,7 @@ describe('runInlineRunSetup + runInlineRunTrace (moved driver bodies, 1006 R3)',
                 );
                 expect(ghost.value).toBe(0);
                 expect(JSON.parse(ghost.out.trimEnd().split('\n')[0] ?? '{}')).toMatchObject({ ok: false });
-                expect(readFileSync(join(p.dir, '.spur/run/run-1006-ghost.md'), 'utf8')).toContain(
+                expect(readFileSync(join(p.dir, '.spur/memory/runs/run-1006-ghost.md'), 'utf8')).toContain(
                     'trace-emission-failed',
                 );
 
@@ -562,7 +562,7 @@ describe('runInlineRunTraceBatch (1007 R5)', () => {
                 );
                 expect(batch.value).toBe(0);
                 expect(JSON.parse(batch.out.trimEnd())).toMatchObject({ ok: false, recorded: 0 });
-                expect(readFileSync(join(p.dir, '.spur/run/run-1006-ghost-batch.md'), 'utf8')).toContain(
+                expect(readFileSync(join(p.dir, '.spur/memory/runs/run-1006-ghost-batch.md'), 'utf8')).toContain(
                     'trace-emission-failed',
                 );
             });

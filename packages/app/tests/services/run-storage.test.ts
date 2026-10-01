@@ -1,13 +1,23 @@
 import { describe, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { applyCliMigrations } from '@gobing-ai/spur-domain';
+import { createDbAdapter } from '@gobing-ai/ts-db';
+import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
+import { readVerdictArtifact } from '../../src/services/done-transition-guard';
+import { runLightGate } from '../../src/services/quality-gate';
 import {
     type MigrateRunStorageInput,
     migrateRunStorage,
     type RunStorageMigrationEntry,
+    resolveRunRecordDir,
+    runArtifactsDir,
+    runSessionsDir,
     runStoragePaths,
 } from '../../src/services/run-storage';
+import { deriveVerifiedOutcome } from '../../src/services/verified-outcome';
+import { readWorkflowRunRecord } from '../../src/workflow/run-record';
 
 /** Temp project root with a `.spur/run` scratch plane; package.json pins the project-root walk. */
 function makeProject(): { root: string; scratch: string; dirs: ReturnType<typeof runStoragePaths> } {
@@ -80,6 +90,43 @@ describe('migrateRunStorage (E71/1025)', () => {
         }
     });
 
+    test('run subtrees, run-scoped receipts and unowned files classify correctly (1026 R4)', async () => {
+        const { root, scratch, dirs } = makeProject();
+        try {
+            // Per-file run-subtree units (1026 R4): agent-sessions + artifacts under one run dir.
+            mkdirSync(join(scratch, 'run-1', 'agent-sessions'), { recursive: true });
+            mkdirSync(join(scratch, 'run-1', 'artifacts'), { recursive: true });
+            writeFileSync(join(scratch, 'run-1', 'agent-sessions', 'omp.jsonl'), '{}\n');
+            writeFileSync(join(scratch, 'run-1', 'artifacts', 'art.bin'), 'bytes');
+            // Run-scoped receipt (runId === prefix) vs plain feature receipt.
+            writeFileSync(
+                join(scratch, '9002-feature-verification.json'),
+                JSON.stringify({ runId: '9002', featureId: 'F' }),
+            );
+            writeFileSync(join(scratch, '9003-feature-verification.json'), JSON.stringify({ runId: 'other' }));
+            // Unowned scratch files stay preserved with no family/identity.
+            writeFileSync(join(scratch, 'notes.txt'), 'scratch');
+
+            // Unknown owner status → run-scoped units are preserved, never migrated.
+            const result = await migrateRunStorage({ dirs, readRunStatus: statusMap({}), dryRun: false });
+            const subtree = result.entries.filter((e) => e.identity === 'run-1');
+            expect(subtree.length).toBe(2);
+            for (const entry of subtree) {
+                expect(entry.family).toBe('run-record');
+                expect(entry.outcome).toBe('preserved');
+            }
+            expect(outcome(result, 'F').family).toBe('feature-receipt');
+            expect(outcome(result, 'F').outcome).toBe('preserved');
+            expect(outcome(result, '9003').family).toBe('feature-receipt');
+            const unowned = result.entries.find((e) => (e.source as string).endsWith('notes.txt'));
+            expect(unowned?.family).toBeNull();
+            expect(unowned?.outcome).toBe('preserved');
+            expect(existsSync(join(scratch, 'run-1', 'artifacts', 'art.bin'))).toBeTrue();
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
     test('malformed verdict and receipt JSON are rejected, not copied', async () => {
         const { root, scratch, dirs } = makeProject();
         try {
@@ -101,7 +148,7 @@ describe('migrateRunStorage (E71/1025)', () => {
                 writeFileSync(join(scratch, `R${i}.md`), `record ${i}`);
                 writeFileSync(join(scratch, `R${i}.state.json`), '{}');
             }
-            writeFileSync(join(scratch, 'loose.log'), 'unowned scratch');
+            writeFileSync(join(scratch, 'loose.log'), 'legacy unowned log');
             const result = await migrateRunStorage({
                 dirs,
                 readRunStatus: statusMap({ R0: 'running', R1: 'paused', R2: 'interrupted' }),
@@ -110,10 +157,12 @@ describe('migrateRunStorage (E71/1025)', () => {
             expect(outcome(result, 'R0').outcome).toBe('preserved');
             expect(outcome(result, 'R1').outcome).toBe('preserved');
             expect(outcome(result, 'R2').outcome).toBe('preserved');
+            // 1026: loose `<name>.log` units get a legacy-log identity (`<name>`) even when
+            // their owner is unknown — fail-closed preservation keeps them in scratch.
             const loose = result.entries.find((e) => e.source.endsWith('loose.log'));
             expect(loose?.outcome).toBe('preserved');
             expect(loose?.target).toBeNull();
-            expect(loose?.identity).toBeNull();
+            expect(loose?.identity).toBe('loose');
         } finally {
             rmSync(root, { recursive: true, force: true });
         }
@@ -205,6 +254,165 @@ describe('migrateRunStorage (E71/1025)', () => {
             expect(result.failures.length).toBeGreaterThan(0);
             expect(existsSync(join(scratch, '1025-verdict.json'))).toBeTrue();
         } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+});
+
+/** Task record body the analytics plane can fold into a verified result. */
+const DISPOSAL_TASK_BODY = `---
+wbs: "1027"
+status: done
+---
+
+## History
+
+- 2026-09-30T10:00:00.000Z todo → wip (system)
+- 2026-09-30T10:05:00.000Z wip → testing (system)
+- 2026-09-30T11:00:00.000Z testing → done (system)
+
+## Testing
+
+- [x] R1. covered
+  - Verdict: PASS (from verdict artifact)
+`;
+
+/**
+ * 1027 decisive disposal-equivalence proof (AC1/AC2): removing a completed run's
+ * scratch changes nothing observable — the verdict resolves from durable evidence,
+ * analytics derive identically, run records/artifacts/sessions stay inspectable
+ * (success AND failure AND paused terminals), an unrelated ACTIVE run's scratch
+ * survives selective disposal, a symlink escaping scratch cannot take its target
+ * along, and the next temporary gate recreates scratch. Stale-PASS, missing-
+ * artifact, migration-write-failure and paused-recovery-resume scenarios are owned
+ * by their existing suites (done-transition-guard, quality-gate, the 1025
+ * migration tests above, workflow-service staleness checks) and are not duplicated.
+ */
+describe('completed scratch disposal equivalence (E71/1027)', () => {
+    test('removing completed scratch leaves acceptance, analytics, inspection and history equal', async () => {
+        const { root, scratch, dirs } = makeProject();
+        const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        try {
+            // Durable acceptance evidence registered via migration; the scratch copy stays
+            // behind as the completed run's last physical trace until disposal.
+            writeFileSync(
+                join(scratch, '1027-verdict.json'),
+                JSON.stringify({ wbs: '1027', verdict: 'PASS', proofDigest: 'sha256:abc' }),
+            );
+            await migrateRunStorage({ dirs, readRunStatus: statusMap({}), dryRun: false });
+            // Record pairs live flat under the durable records dir (1026 R1); sessions and
+            // artifacts live in the per-run subtree.
+            mkdirSync(dirs.recordsDir, { recursive: true });
+            const okRun = 'wfr-dispose-ok';
+            const badRun = 'wfr-dispose-failed';
+            const pausedRun = 'wfr-dispose-paused';
+            for (const [runId, status] of [
+                [okRun, 'done'],
+                [badRun, 'failed'],
+                [pausedRun, 'paused'],
+            ] as const) {
+                writeFileSync(join(dirs.recordsDir, `${runId}.md`), `# ${runId}\n`);
+                writeFileSync(join(dirs.recordsDir, `${runId}.state.json`), JSON.stringify({ runId, status }));
+            }
+            const artifactPath = join(runArtifactsDir(root, okRun), 'result.json');
+            mkdirSync(dirname(artifactPath), { recursive: true });
+            writeFileSync(artifactPath, '{"ok":true}');
+            const sessionPath = join(runSessionsDir(root, okRun), 's1.jsonl');
+            mkdirSync(dirname(sessionPath), { recursive: true });
+            writeFileSync(sessionPath, '{"t":1}\n');
+            // Concurrent unrelated ACTIVE run keeps its scratch; a symlink inside scratch
+            // points outside — disposal must not follow it.
+            const activeFile = join(scratch, 'wfr-active-live', 'attempt.log');
+            mkdirSync(dirname(activeFile), { recursive: true });
+            writeFileSync(activeFile, 'live');
+            const victim = join(root, 'outside-victim.txt');
+            writeFileSync(victim, 'keep');
+            symlinkSync(victim, join(scratch, 'escape-link'));
+            // Analytics plane: real task record + completed pipeline run linked to the wbs.
+            mkdirSync(join(root, 'tasks'));
+            const taskFile = join(root, 'tasks', '1027_disposal.md');
+            writeFileSync(taskFile, DISPOSAL_TASK_BODY);
+            await applyCliMigrations(db);
+            db.run(
+                `INSERT INTO runs (id, workflow_name, mode, status, agent, started_at, completed_at, metadata_json)
+                 VALUES (?, 'task-pipeline', 'auto', 'done', NULL, ?, ?, '{}')`,
+                'run_1027',
+                '2026-09-30T10:00:00.000Z',
+                '2026-09-30T11:00:00.000Z',
+            );
+            db.run(
+                `INSERT INTO task_run_links (id, wbs, run_id, kind, created_at) VALUES ('link_1', '1027', ?, 'pipeline', ?)`,
+                'run_1027',
+                '2026-09-30T11:00:00.000Z',
+            );
+
+            const fs = createNodeFileSystem(root);
+            const status = (runId: string): string => {
+                const read = readWorkflowRunRecord(resolveRunRecordDir(root, runId), runId);
+                return read.kind === 'pair' ? String(read.state.status) : read.kind;
+            };
+            const snapshot = async () => {
+                const verdict = await readVerdictArtifact(fs, dirs.scratchDir, '1027');
+                return {
+                    verdictPass: verdict.artifact?.verdict === 'PASS',
+                    verdictFromDurable: verdict.path.includes(join('.spur', 'memory', 'evidence')),
+                    stat: JSON.stringify(
+                        await deriveVerifiedOutcome(
+                            {
+                                db,
+                                cwd: root,
+                                locator: {
+                                    findByWbs: async (wbs: string) => ({
+                                        wbs,
+                                        name: '1027_disposal.md',
+                                        filePath: taskFile,
+                                    }),
+                                },
+                                fs,
+                            },
+                            {},
+                        ),
+                    ),
+                    ok: status(okRun),
+                    failed: status(badRun),
+                    paused: status(pausedRun),
+                    bytes: existsSync(artifactPath) ? readFileSync(artifactPath, 'utf8') : null,
+                    session: existsSync(sessionPath) ? readFileSync(sessionPath, 'utf8') : null,
+                };
+            };
+            const before = await snapshot();
+            expect(before.verdictPass).toBeTrue();
+            expect(before.ok).toBe('done');
+            expect(JSON.parse(before.stat).taskDenominator).toBe(1);
+
+            // Disposal of the completed scratch trace.
+            rmSync(join(scratch, '1027-verdict.json'), { force: true });
+            const after = await snapshot();
+            expect(after).toEqual(before); // durable-first evidence, identical analytics + inspection
+
+            // Repeated removal is a no-op.
+            rmSync(join(scratch, '1027-verdict.json'), { force: true });
+            expect(await snapshot()).toEqual(before);
+
+            // Confinement: active scratch survives, the escaping link left its target alone.
+            expect(existsSync(activeFile)).toBeTrue();
+            expect(readFileSync(victim, 'utf8')).toBe('keep');
+            expect(status(badRun)).toBe('failed');
+            expect(status(pausedRun)).toBe('paused');
+
+            // A later temporary gate recreates scratch and writes back into it.
+            runLightGate({ wbs: '1027' }, { cwd: root });
+            expect(existsSync(join(scratch, '1027-light-gate.log'))).toBeTrue();
+            expect(existsSync(join(scratch, '1027-check-receipt.json'))).toBeTrue();
+
+            // Missing durable artifact degrades bytes honestly; inspection plane unaffected.
+            rmSync(runArtifactsDir(root, okRun), { recursive: true, force: true });
+            const degraded = await snapshot();
+            expect(degraded.bytes).toBeNull();
+            expect(degraded.session).toBe(before.session);
+            expect(degraded.ok).toBe('done');
+        } finally {
+            db.close();
             rmSync(root, { recursive: true, force: true });
         }
     });

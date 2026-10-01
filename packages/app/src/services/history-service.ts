@@ -84,6 +84,7 @@ import type { FileSystem } from '@gobing-ai/ts-runtime';
 import type { TimeoutPolicyMs } from './execution-policy';
 import { getExecutorTier } from './executor-tier';
 import { refreshHistoryRollups } from './history-analysis-service';
+import { runStoragePaths } from './run-storage';
 import { attributeSessions } from './task-attribution';
 import { deriveVerifiedOutcome } from './verified-outcome';
 
@@ -495,25 +496,33 @@ async function runSessionAugmentedRoots(
 ): Promise<{ roots: string[]; runRoots: Array<{ runId: string; root: string }> }> {
     const roots = getSourceDefinition(source).defaultRoots.map((root) => resolve(home, root));
     const runRoots: Array<{ runId: string; root: string }> = [];
-    const runRoot = join(cwd, '.spur', 'run');
-    if (!existsSync(runRoot)) return { roots, runRoots };
+    // 1026 R2: durable session dirs first (`.spur/memory/runs/<id>/agent-sessions/`),
+    // legacy scratch (`.spur/run/<id>/agent-sessions/`) second; realpath dedup keeps a
+    // migrated run's sessions discovered exactly once.
+    const runBases = [runStoragePaths(cwd).recordsDir, join(cwd, '.spur', 'run')];
+    const seen = new Set<string>();
     const sourcesByRun = new Map<string, Set<string>>();
     for (const row of await dao.listRunSources()) {
         const sources = sourcesByRun.get(row.run_id) ?? new Set<string>();
         sources.add(row.source);
         sourcesByRun.set(row.run_id, sources);
     }
-    for (const runId of readdirSync(runRoot)) {
-        const sessionsRoot = join(runRoot, runId, 'agent-sessions');
-        if (!existsSync(sessionsRoot)) continue;
-        const mappedSources = sourcesByRun.get(runId);
-        for (const agent of readdirSync(sessionsRoot)) {
-            const directMatch = agent === source || agent.startsWith(`${source}-`);
-            const soleMappedSource = mappedSources?.size === 1 && mappedSources.has(source);
-            if (!directMatch && !soleMappedSource) continue;
-            const root = realpathSync(join(sessionsRoot, agent));
-            roots.push(root);
-            runRoots.push({ runId, root });
+    for (const runBase of runBases) {
+        if (!existsSync(runBase)) continue;
+        for (const runId of readdirSync(runBase)) {
+            const sessionsRoot = join(runBase, runId, 'agent-sessions');
+            if (!existsSync(sessionsRoot)) continue;
+            const mappedSources = sourcesByRun.get(runId);
+            for (const agent of readdirSync(sessionsRoot)) {
+                const directMatch = agent === source || agent.startsWith(`${source}-`);
+                const soleMappedSource = mappedSources?.size === 1 && mappedSources.has(source);
+                if (!directMatch && !soleMappedSource) continue;
+                const root = realpathSync(join(sessionsRoot, agent));
+                if (seen.has(root)) continue;
+                seen.add(root);
+                roots.push(root);
+                runRoots.push({ runId, root });
+            }
         }
     }
     return { roots, runRoots };

@@ -22,8 +22,10 @@ import {
     renderStepLine,
     renderWorkflowTodo,
     resolveOutputLogConfig,
+    resolveRunRecordDir,
     resolveWorkflowDefinition,
     resolveWorkflowLogRetentionDays,
+    runStoragePaths,
     type SteeringAck,
     type StepEvent,
     type SystemEventBus,
@@ -885,9 +887,10 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                 }
             }
             // Two-file run record (E7 / task 0925, on the feature D2 / 0426 sink): a
-            // read-only subscriber on the bus that appends `.spur/run/<RUNID>.md` and
-            // atomically replaces `.spur/run/<RUNID>.state.json` from creation to
-            // terminal status. Built by default (retained after the run ends);
+            // read-only subscriber on the bus that appends the durable record pair
+            // `.spur/memory/runs/<RUNID>.md` + `.state.json` from creation to
+            // terminal status (1026 R1: records are written outside scratch).
+            // Built by default (retained after the run ends);
             // `--no-log` (task 0427) opts out entirely so no file is opened or written.
             // Configured secrets are re-scrubbed at the sink's persistence boundary.
             const runLog =
@@ -895,7 +898,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                     ? undefined
                     : new WorkflowRunLogSink({
                           bus,
-                          dir: join(context.cwd, '.spur', 'run'),
+                          dir: runStoragePaths(context.cwd).recordsDir,
                           runId,
                           ...(planPreview !== undefined ? { planPreview } : {}),
                           secrets: configuredSecretValues(context.env),
@@ -1253,7 +1256,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                             ? undefined
                             : new WorkflowRunLogSink({
                                   bus,
-                                  dir: join(context.cwd, '.spur', 'run'),
+                                  dir: runStoragePaths(context.cwd).recordsDir,
                                   runId: targetId,
                                   secrets: configuredSecretValues(context.env),
                                   ...resolveOutputLogConfig(context.spurConfig ?? null),
@@ -2071,7 +2074,8 @@ export async function followRunLog(
     // persisted is pending registration.
     let lastStatus = 'pending';
     while (true) {
-        record = readWorkflowRunRecord(runDir, runId);
+        // 1026 R1: records resolve outside scratch (durable first, legacy fallback).
+        record = readWorkflowRunRecord(resolveRunRecordDir(dir, runId), runId);
         const target =
             record.kind === 'legacy-log'
                 ? record.logPath

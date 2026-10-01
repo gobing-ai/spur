@@ -93,7 +93,7 @@ import type { AgentService } from './agent-service';
 import { bridgeEventBus, dropRetiredActionBoundaryAliases, withWorkflowIdentity } from './event-bridge';
 import { FleetService } from './fleet-service';
 import type { RuleService } from './rule-service';
-import { migrateRunStorage, type RunStorageMigrationResult, runStoragePaths } from './run-storage';
+import { migrateRunStorage, type RunStorageMigrationResult, resolveRunRecordDir, runStoragePaths } from './run-storage';
 import {
     type SystemEventAction,
     type SystemEventProjectContext,
@@ -942,42 +942,62 @@ export class WorkflowAppService {
      * the only gate — a still-running run whose log is old enough is reclaimed
      * too (rare, and acceptable under the policy). A missing run dir is a no-op.
      *
-     * Scope is legacy `.log` names only (0925 R4): the two-file run record
-     * (`<runId>.md` + `<runId>.state.json`) is NOT reclaimed until a pair
-     * retention policy is selected.
+     * Scope (1026 R4): terminal `<runId>.log` files in the durable run-record plane
+     * (`.spur/memory/runs/`) first, legacy scratch (`.spur/run/`) second — realpath/name
+     * dedup across roots. A run whose DB row is still live (running) is never reclaimed.
+     * The two-file run record (`<runId>.md` + `<runId>.state.json`) is NOT reclaimed until
+     * a pair retention policy is selected.
      *
      * @param retentionDays Logs older than this many days are reclaimed. Default 30.
      * @param dryRun When true, report what would be removed without unlinking.
      */
     async cleanRunLogs(retentionDays = 30, dryRun = false): Promise<RunLogReclamationResult> {
-        const runDir = join(this.ctx.cwd, '.spur', 'run');
         const fs = createNodeFileSystem();
         const cutoffMs = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
         const reclaimed: ReclaimedRunLog[] = [];
         const failures: RunLogReclamationResult['failures'] = [];
 
-        let entries: string[];
+        const liveIds = new Set<string>();
         try {
-            entries = (await fs.readDir(runDir)).filter((name) => name.endsWith('.log'));
+            for (const row of await new RunDao(await this.ctx.getDb()).listActiveRuns()) {
+                liveIds.add(row.id);
+            }
         } catch {
-            // No run dir yet — nothing to reclaim.
-            return { retentionDays, dryRun, reclaimed, failures };
+            // No run DB yet — no run can be live, so nothing is protected.
         }
 
-        for (const name of entries) {
-            const path = join(runDir, name);
-            const stat = await fs.stat(path);
-            if (stat === null || !stat.isFile() || stat.mtimeMs >= cutoffMs) continue;
-            const entry = { runId: name.slice(0, -'.log'.length), path, mtime: new Date(stat.mtimeMs).toISOString() };
-            if (dryRun) {
-                reclaimed.push(entry);
+        const runDirs = [runStoragePaths(this.ctx.cwd).recordsDir, join(this.ctx.cwd, '.spur', 'run')];
+        const seen = new Set<string>();
+        for (const runDir of runDirs) {
+            let entries: string[];
+            try {
+                entries = (await fs.readDir(runDir)).filter((name) => name.endsWith('.log'));
+            } catch {
+                // Absent root — nothing to reclaim there.
                 continue;
             }
-            try {
-                await fs.deleteFile(path);
-                reclaimed.push(entry);
-            } catch (err) {
-                failures.push({ path, error: String(err) });
+            for (const name of entries) {
+                if (seen.has(name)) continue;
+                const path = join(runDir, name);
+                if (liveIds.has(name.slice(0, -'.log'.length))) continue;
+                const stat = await fs.stat(path);
+                if (stat === null || !stat.isFile() || stat.mtimeMs >= cutoffMs) continue;
+                const entry = {
+                    runId: name.slice(0, -'.log'.length),
+                    path,
+                    mtime: new Date(stat.mtimeMs).toISOString(),
+                };
+                seen.add(name);
+                if (dryRun) {
+                    reclaimed.push(entry);
+                    continue;
+                }
+                try {
+                    await fs.deleteFile(path);
+                    reclaimed.push(entry);
+                } catch (err) {
+                    failures.push({ path, error: String(err) });
+                }
             }
         }
         return { retentionDays, dryRun, reclaimed, failures };
@@ -1652,7 +1672,7 @@ export class WorkflowAppService {
      * directory. Read-only; the DB trace remains the lifecycle authority.
      */
     inspectRunRecord(runId: string): WorkflowRunRecordInspection {
-        return inspectWorkflowRunRecord(join(this.ctx.cwd, '.spur', 'run'), runId, {
+        return inspectWorkflowRunRecord(resolveRunRecordDir(this.ctx.cwd, runId), runId, {
             secretValues: this.ctx.secretValues,
         });
     }

@@ -26,6 +26,7 @@ import {
     parseAgentRoutingIdentity,
     requiresDistinctExecutor,
 } from '../../services/review-independence';
+import { ensureDurablePlaneIgnored, runSessionsDir } from '../../services/run-storage';
 import { TaskLocator } from '../../services/task-locator';
 import { dispatchToFleet, type FleetDispatchDeps, fleetUnavailableOutcome } from '../fleet-dispatch';
 import type { WorkflowAgentBudgetEvent, WorkflowObservabilityBus, WorkflowTripwireFiredEvent } from '../observability';
@@ -571,14 +572,18 @@ export class AgentRunActionRunner implements ActionRunner {
         let sessionDir = freshSession ? undefined : asOptionalString(context.vars[sessionDirVar]) || undefined;
         if (affinityOn) {
             if (!sessionDir || (prevAgent && prevAgent !== targetAgentDir)) {
-                sessionDir = join(cwd, '.spur', 'run', context.runId, 'agent-sessions', targetAgentDir);
+                // 1026 R3: session logs land in the durable per-run dir, outside scratch.
+                ensureDurablePlaneIgnored(cwd); // durable writes must not shift the proof-input tree
+                sessionDir = join(runSessionsDir(cwd, context.runId), targetAgentDir);
             }
         } else {
-            // Without affinity, still write session logs under .spur/run/<runId>/agent-sessions/
-            // instead of the agent's cwd (project root). One-hop dir only — not persisted to
-            // __agentSessionDir for subsequent hops, since affinity tracking is off.
+            // Without affinity, still write session logs under the durable per-run
+            // sessions dir instead of the agent's cwd (project root). One-hop dir only —
+            // not persisted to __agentSessionDir for subsequent hops, since affinity
+            // tracking is off.
             if (!sessionDir) {
-                sessionDir = join(cwd, '.spur', 'run', context.runId, 'agent-sessions', targetAgentDir);
+                ensureDurablePlaneIgnored(cwd);
+                sessionDir = join(runSessionsDir(cwd, context.runId), targetAgentDir);
             }
         }
         if (freshSession) {
@@ -1261,7 +1266,8 @@ export class AgentRunActionRunner implements ActionRunner {
             const resolvedAgent = invocation?.agent ?? targetAgentDir;
             let resolvedSessionDir = sessionDir;
             if (ok && affinityOn && resolvedAgent !== targetAgentDir && !context.vars[sessionDirVar]) {
-                resolvedSessionDir = join(cwd, '.spur', 'run', context.runId, 'agent-sessions', resolvedAgent);
+                ensureDurablePlaneIgnored(cwd);
+                resolvedSessionDir = join(runSessionsDir(cwd, context.runId), resolvedAgent);
             }
 
             let discoveredSessionId = storedSessionId;

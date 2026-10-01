@@ -1441,7 +1441,7 @@ describe('AgentRunActionRunner partial-work handoff artifact', () => {
         // the output contract (RC3 — 0470/0471 manual-resume cost).
         expect(artifact).toContain('## resume context');
         expect(artifact).toContain('session dir:');
-        expect(artifact).toContain(join('.spur', 'run', 'run-resume', 'agent-sessions'));
+        expect(artifact).toContain(join('.spur', 'memory', 'runs', 'run-resume', 'agent-sessions'));
         expect(artifact).toContain(join('.spur', 'run', 'run-resume-agent-session.json'));
     });
 
@@ -2169,13 +2169,13 @@ describe('Task 0448 — run-scoped session affinity and host protection', () => 
         const result = await runner.execute({ role: 'coder', input: 'hello', agent: 'omp' }, ctx);
 
         expect(result.ok).toBe(true);
-        expect(capturedFlags.sessionDir).toContain('.spur/run/run-123/agent-sessions/omp');
+        expect(capturedFlags.sessionDir).toContain('.spur/memory/runs/run-123/agent-sessions/omp');
         expect(result.setVars).toMatchObject({
             __agentSession: 'open',
             __agentSessionAgent: 'omp',
         });
         expect((result.setVars as Record<string, unknown>)['__session.coder.dir']).toContain(
-            '.spur/run/run-123/agent-sessions/omp',
+            '.spur/memory/runs/run-123/agent-sessions/omp',
         );
     });
 
@@ -2189,8 +2189,8 @@ describe('Task 0448 — run-scoped session affinity and host protection', () => 
         const result = await runner.execute({ role: 'coder', input: 'hello' }, ctx);
 
         expect(result.ok).toBe(true);
-        // Isolation under .spur/run still applied; cross-hop affinity vars not persisted.
-        expect(capturedFlags.sessionDir).toContain('.spur/run/run-123/agent-sessions/');
+        // Isolation under .spur/memory/runs still applied; cross-hop affinity vars not persisted.
+        expect(capturedFlags.sessionDir).toContain('.spur/memory/runs/run-123/agent-sessions/');
         expect(capturedFlags.sessionId).toBeUndefined();
         expect(result.setVars?.__agentSessionDir).toBeUndefined();
         // R3 (0451): affinity off + latch open → continue:true (restored Q8)
@@ -2239,9 +2239,9 @@ describe('R1 — config injection (task 0451)', () => {
         const result = await runner.execute({ role: 'coder', input: 'hello' }, ctx);
 
         expect(result.ok).toBe(true);
-        // Affinity-off still isolates session files under .spur/run/<runId>/agent-sessions/
+        // Affinity-off still isolates session files under .spur/memory/runs/<runId>/agent-sessions/
         // (not project cwd), but does not resume by sessionId or persist affinity vars.
-        expect(capturedFlags.sessionDir).toContain('.spur/run/run-123/agent-sessions/claude');
+        expect(capturedFlags.sessionDir).toContain('.spur/memory/runs/run-123/agent-sessions/claude');
         expect(capturedFlags.sessionId).toBeUndefined();
         expect(result.setVars?.__agentSessionDir).toBeUndefined();
         expect(result.setVars?.__agentSessionAgent).toBeUndefined();
@@ -2391,7 +2391,7 @@ describe('R3 — latch vs affinity matrix (task 0451)', () => {
 
         expect(result.ok).toBe(true);
         expect(capturedFlags.continue).toBeUndefined();
-        expect(capturedFlags.sessionDir).toContain('.spur/run/run-555/agent-sessions');
+        expect(capturedFlags.sessionDir).toContain('.spur/memory/runs/run-555/agent-sessions');
     });
 
     test('affinity-off + latch open → continue:true set (restored Q8); sessionDir run-scoped only', async () => {
@@ -2409,7 +2409,7 @@ describe('R3 — latch vs affinity matrix (task 0451)', () => {
         expect(result.ok).toBe(true);
         expect(capturedFlags.continue).toBe(true);
         // Run-scoped isolation path is still set; affinity resume (sessionId) is not.
-        expect(capturedFlags.sessionDir).toContain('.spur/run/run-666/agent-sessions/');
+        expect(capturedFlags.sessionDir).toContain('.spur/memory/runs/run-666/agent-sessions');
         expect(capturedFlags.sessionId).toBeUndefined();
         expect(result.setVars?.__agentSessionDir).toBeUndefined();
     });
@@ -2461,7 +2461,7 @@ describe('R5 — discoverSessionId prefers *.json (task 0451)', () => {
         dir = mkdtempSync(join(tmpdir(), 'agent-run-r5-'));
         // The invocation returns agent: 'claude' (default), so the resolved session dir
         // is under agent-sessions/claude, not agent-sessions/omp
-        const sessionDir = join(dir, '.spur', 'run', 'run-r5', 'agent-sessions', 'claude');
+        const sessionDir = join(dir, '.spur', 'memory', 'runs', 'run-r5', 'agent-sessions', 'claude');
         mkdirSync(sessionDir, { recursive: true });
         // Write a non-json file first (set older mtime) then a json file (newer mtime)
         const logPath = join(sessionDir, 'session.log');
@@ -2493,7 +2493,7 @@ describe('R5 — discoverSessionId prefers *.json (task 0451)', () => {
         dir = mkdtempSync(join(tmpdir(), 'agent-run-r5-json-'));
         // The invocation returns agent: 'claude' (default), so the resolved session dir
         // is under agent-sessions/claude, not agent-sessions/omp
-        const sessionDir = join(dir, '.spur', 'run', 'run-r5b', 'agent-sessions', 'claude');
+        const sessionDir = join(dir, '.spur', 'memory', 'runs', 'run-r5', 'agent-sessions', 'claude');
         mkdirSync(sessionDir, { recursive: true });
         // Only non-json files
         writeFileSync(join(sessionDir, 'session.log'), 'log content');

@@ -43,7 +43,7 @@ const {
     writeFileSync,
     writeSync,
 } = await import('node:fs');
-const { lstat, readdir, readFile } = await import('node:fs/promises');
+const { copyFile, lstat, mkdir, readdir, readFile } = await import('node:fs/promises');
 
 import { basename, join, resolve } from 'node:path';
 import type { DbAdapter, RunDefinitionSource } from '@gobing-ai/spur-domain';
@@ -71,6 +71,7 @@ import {
     resolveWorkflowDefinition,
     type WorkflowLayerId,
 } from '../workflow/workflow-resolver';
+import { ensureDurablePlaneIgnored, runStoragePaths } from './run-storage';
 import { workflowVersionLiteral } from './workflow-service';
 
 /** Input for {@link createOrAttachInlineRun}. */
@@ -288,6 +289,9 @@ export async function persistWorktreeRuns(input: PersistWorktreeRunsInput): Prom
     const toDir = resolve(input.toWorkdir);
     const fromRunDir = join(fromDir, '.spur', 'run');
     const toRunDir = join(toDir, '.spur', 'run');
+    // 1026 R7: the durable run-record plane migrates alongside the scratch evidence.
+    const fromRecordsDir = runStoragePaths(fromDir).recordsDir;
+    const toRecordsDir = runStoragePaths(toDir).recordsDir;
 
     // 0984 R1–R3: citation selection and validation run BEFORE any DB or file write, so an
     // unresolved/unsafe/over-cap citation fails with zero side effects (the driver blocks
@@ -361,12 +365,17 @@ export async function persistWorktreeRuns(input: PersistWorktreeRunsInput): Prom
     const citedCopies: Array<{ name: string; sourcePath: string; targetPath: string }> = [];
     const citedSkips: Array<{ id: string; reason: string }> = [];
     for (const name of citedNames) {
-        const sourcePath = join(fromRunDir, name);
-        const targetPath = join(toRunDir, name);
-        const sourceStat = await lstat(sourcePath).catch((error: NodeJS.ErrnoException) => {
-            if (error.code === 'ENOENT') return undefined;
-            throw error;
-        });
+        // 1026 R1: a citation may name a run record, which now lives in the durable plane.
+        // The copy keeps its source plane — scratch evidence lands in the invoking scratch,
+        // durable records in the invoking records dir — so every consumer resolves both
+        // trees durable-first without a second engine.
+        const scratchPath = join(fromRunDir, name);
+        const durablePath = join(fromRecordsDir, name);
+        const scratchStat = await lstat(scratchPath).catch(() => undefined);
+        const sourceIsDurable = scratchStat === undefined;
+        const sourcePath = sourceIsDurable ? durablePath : scratchPath;
+        const targetPath = sourceIsDurable ? join(toRecordsDir, name) : join(toRunDir, name);
+        const sourceStat = sourceIsDurable ? await lstat(durablePath).catch(() => undefined) : scratchStat;
         const targetBytes = await readExistingRunFile(targetPath);
         if (sourceStat === undefined) {
             if (targetBytes === undefined) {
@@ -413,12 +422,15 @@ export async function persistWorktreeRuns(input: PersistWorktreeRunsInput): Prom
             const recordSkips: Array<{ id: string; reason: string }> = [];
             if (persistedIds.length > 0 || citedCopies.length > 0) {
                 mkdirSync(toRunDir, { recursive: true });
+                mkdirSync(toRecordsDir, { recursive: true });
+                // 1026: durable record copies must not shift the proof-input tree.
+                ensureDurablePlaneIgnored(toDir);
                 for (const id of persistedIds) {
                     const workflowName = workflowNameById.get(id);
                     for (const fileName of [`${id}.md`, `${id}.state.json`]) {
                         let sourceBytes: Buffer;
                         try {
-                            sourceBytes = await readFile(join(fromRunDir, fileName));
+                            sourceBytes = await readFile(join(fromRecordsDir, fileName));
                         } catch (error) {
                             // 0984 R5: a known bookkeeping lifecycle row may have no two-file
                             // record at all (record-stage transitions create rows with zero
@@ -437,7 +449,7 @@ export async function persistWorktreeRuns(input: PersistWorktreeRunsInput): Prom
                             }
                             throw error;
                         }
-                        const targetPath = join(toRunDir, fileName);
+                        const targetPath = join(toRecordsDir, fileName);
                         const existing = await readExistingRunFile(targetPath);
                         if (existing !== undefined) {
                             if (existing.equals(sourceBytes)) continue; // idempotent re-persist
@@ -463,6 +475,11 @@ export async function persistWorktreeRuns(input: PersistWorktreeRunsInput): Prom
                         continue; // byte-identical — idempotent no-op
                     }
                     writeFileSync(cited.targetPath, sourceBytes, { flag: 'wx' });
+                }
+                // 1026 R7: carry the durable per-run dirs (the record pair lives inside;
+                // agent sessions and artifacts ride along) with record conflict=skip semantics.
+                for (const id of persistedIds) {
+                    await carryRunRecordDir(fromRecordsDir, toRecordsDir, '', id, recordSkips);
                 }
             }
             return {
@@ -756,14 +773,55 @@ export interface InlineRunStateOutcome {
 }
 
 /**
+ * 1026 R7: carry one durable per-run dir (`.spur/memory/runs/<runId>/` — the record pair,
+ * agent sessions and artifacts) from the worktree into the invoking tree with the records'
+ * conflict semantics: an identical existing file is an idempotent no-op; a divergent one is
+ * reported as `record-conflict:<rel>` and left untouched. Missing source → nothing to carry.
+ */
+async function carryRunRecordDir(
+    srcRoot: string,
+    destRoot: string,
+    rel: string,
+    runId: string,
+    skips: Array<{ id: string; reason: string }>,
+): Promise<void> {
+    let entries: Array<{ name: string; isDirectory: () => boolean }>;
+    try {
+        entries = await readdir(join(srcRoot, rel), { withFileTypes: true });
+    } catch {
+        return; // ENOENT/ENOTDIR — nothing durable to carry
+    }
+    for (const entry of entries) {
+        const relNext = rel === '' ? entry.name : `${rel}/${entry.name}`;
+        if (entry.isDirectory()) {
+            await carryRunRecordDir(srcRoot, destRoot, relNext, runId, skips);
+            continue;
+        }
+        const sourceBytes = await readFile(join(srcRoot, relNext)).catch(() => undefined);
+        if (sourceBytes === undefined) continue;
+        const dest = join(destRoot, relNext);
+        const existing = await readFile(dest).catch(() => undefined);
+        if (existing !== undefined) {
+            if (!existing.equals(sourceBytes)) {
+                skips.push({ id: `${runId}/${relNext}`, reason: `record-conflict:${relNext}` });
+            }
+            continue; // identical — idempotent no-op
+        }
+        await mkdir(join(dest, '..'), { recursive: true });
+        await copyFile(join(srcRoot, relNext), dest);
+    }
+}
+
+/**
  * Project the setup/driver outcome into the two-file run record (task 0927 R1): the machine
- * state merges into `.spur/run/<run-id>.state.json` (atomic same-directory temp + rename, the
- * 0925 R1 pattern) and `.spur/run/<run-id>.md` receives its run-start header exactly once.
- * A re-setup of the same run id rewrites the state from the current outcome but keeps the
- * prior `startedAt`. Identity/provenance fields only — never prompt bodies (0927 AC2).
+ * state merges into the durable `<run-id>.state.json` (atomic same-directory temp + rename, the
+ * 0925 R1 pattern) and the durable `<run-id>.md` receives its run-start header exactly once.
+ * 1026 R1: both files live under `.spur/memory/runs/`, outside scratch. A re-setup of the
+ * same run id rewrites the state from the current outcome but keeps the prior `startedAt`.
+ * Identity/provenance fields only — never prompt bodies (0927 AC2).
  */
 export function writeInlineRunOutcome(runId: string, outcome: InlineRunStateOutcome): void {
-    const runDir = join(process.cwd(), '.spur', 'run');
+    const runDir = runStoragePaths(process.cwd()).recordsDir;
     if (!existsSync(runDir)) mkdirSync(runDir, { recursive: true });
     const statePath = join(runDir, `${runId}.state.json`);
     const markdownPath = join(runDir, `${runId}.md`);
@@ -863,10 +921,10 @@ export interface InlineRunTraceInput {
 }
 
 /**
- * The run-record file for appended driver lines (task 0927 R1): `.spur/run/<run-id>.md`
- * for pair-based runs. A legacy run that predates the pair keeps appending to its declared
- * `.spur/run/<run-id>.log` — the same precedence as `readWorkflowRunRecord` (the pair wins,
- * legacy stays readable in place).
+ * The run-record file for appended driver lines (task 0927 R1): the durable `<run-id>.md`
+ * under `.spur/memory/runs/` for pair-based runs. A legacy run that predates the pair keeps
+ * appending to its declared legacy `<run-id>.log` — the same precedence as
+ * `readWorkflowRunRecord` (the pair wins, legacy stays readable in place).
  */
 export function inlineRunRecordLogPath(runDir: string, runId: string): string {
     const markdownPath = join(runDir, `${runId}.md`);
@@ -876,14 +934,15 @@ export function inlineRunRecordLogPath(runDir: string, runId: string): string {
 }
 
 /**
- * Append one emission-failure/provenance line to the run record — `.spur/run/<run-id>.md`,
- * the run log the inline driver already owns. Best-effort and synchronous (the process may
+ * Append one emission-failure/provenance line to the run record — the durable
+ * `.spur/memory/runs/<run-id>.md` (1026 R1), the run log the inline driver already
+ * owns. Best-effort and synchronous (the process may
  * exit immediately after), and never throws: an unwritable log must not wedge the run
  * (ADR-117 R3).
  */
 export function appendInlineRunLogLine(runId: string, detail: string): void {
     try {
-        const runDir = join(process.cwd(), '.spur', 'run');
+        const runDir = runStoragePaths(process.cwd()).recordsDir;
         if (!existsSync(runDir)) mkdirSync(runDir, { recursive: true });
         const safeRunId = runId.replace(/[^A-Za-z0-9._-]/g, '_');
         const stamp = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');

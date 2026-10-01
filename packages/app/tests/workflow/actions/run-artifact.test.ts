@@ -101,7 +101,19 @@ describe('RunArtifactActionRunner', () => {
         const rows = await artifactDao.artifactsByRunId('run-123');
         expect(rows.length).toBe(1);
         expect(rows[0]?.kind).toBe('verify-verdict');
-        expect(rows[0]?.path).toContain('verdict.json');
+        // 1026 R3: the registered path is the durable copy, not the scratch original.
+        expect(rows[0]?.path).toContain(join('.spur', 'memory', 'runs', 'run-123', 'artifacts'));
+
+        // 1026 R3: re-recording an identical artifact is idempotent through the
+        // durable copy (same path, no divergence error).
+        const again = await runner.execute(
+            { path: artifactPath, artifactKind: 'verify-verdict', requireExisting: true },
+            { runId: 'run-123', stateOrNodeId: 's1', workdir, vars: {}, env: {} },
+        );
+        expect(again.ok).toBe(true);
+        const rowsAfter = await artifactDao.artifactsByRunId('run-123');
+        expect(rowsAfter.length).toBe(2);
+        expect(rowsAfter[1]?.path).toBe(rows[0]?.path);
 
         db.close();
     });

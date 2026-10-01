@@ -1,10 +1,11 @@
 /**
  * Run-storage layout and one-shot scratch migration (feature E71, task 1025).
  *
- * Layout: `.spur/run` remains the live scratch plane — pipeline writes keep
- * landing there. Durable evidence accumulates under `.spur/memory/evidence`
- * and closed run records under `.spur/memory/runs`. Consumers resolve reads
- * from the evidence dir first and fall back to scratch, so migration is a
+ * Layout: `.spur/run` remains the live scratch plane — session sidecar latches,
+ * check receipts and other recomputable scratch keep landing there. Closed-run
+ * records, agent sessions, run artifacts and durable evidence accumulate under
+ * `.spur/memory/` (`runs/`, `evidence/`; task 1026 R1–R4). Consumers resolve
+ * reads from the durable plane first and fall back to scratch, so migration is a
  * byte copy: sources are NEVER removed (a migrated source is "preserved
  * after copy"). Everything here is plain functions over node:fs — no config,
  * no classes, no pluggable backends.
@@ -21,12 +22,13 @@
  *   `missing-required-item` (and lands in `failures[]`).
  * - units owned by an active/paused/interrupted-recoverable run, and
  *   unknown/unowned scratch paths, are `preserved` — never migrated, never
- *   deleted. Legacy scratch files (run logs, check receipts, …) are preserved.
+ *   deleted. Closed runs' records, logs, sessions and artifacts migrate (1026
+ *   R4); other legacy scratch files (check receipts, …) are preserved.
  */
 
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
-import { basename, join, resolve } from 'node:path';
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 
 /** Resolved run-storage layout for one project root. */
 export interface RunStoragePaths {
@@ -177,6 +179,21 @@ function runRecordUnit(recordId: string, files: string[], missing?: string): Scr
 function classify(name: string, scratchDir: string, files: Set<string>): Classified {
     const source = join(scratchDir, name);
 
+    // 1026 R4: a file under a run's scratch subtree (`<runId>/agent-sessions/**`,
+    // `<runId>/artifacts/**`) migrates under its subpath with owner protection.
+    if (name.includes(sep)) {
+        const identity = name.slice(0, name.indexOf(sep));
+        return {
+            unit: {
+                family: 'run-record',
+                identity,
+                files: [source],
+                requiresJsonParse: name.endsWith('.json'),
+                ...(identity !== '' ? { ownerRunId: identity } : {}),
+            },
+        };
+    }
+
     // Feature receipts — run-scoped `<runId>-feature-verification.json` and feature-latest
     // `<featureId>-feature-verification.json`. Checked before the verdict suffix so the
     // longer name never misparses as `<wbs>-verdict.json`.
@@ -239,7 +256,22 @@ function classify(name: string, scratchDir: string, files: Set<string>): Classif
         return { unit: runRecordUnit(recordId, [source], join(scratchDir, `${recordId}.state.json`)) };
     }
 
-    // Unknown/unowned scratch path (legacy run logs, check receipts, status files, …).
+    // Legacy retained run log `<runId>.log` (1026 R4): migrates like a record file,
+    // with owner protection; unknown-owner logs stay preserved via the owner gate.
+    if (name.endsWith('.log')) {
+        const recordId = name.slice(0, -'.log'.length);
+        return {
+            unit: {
+                family: 'run-record',
+                identity: recordId,
+                files: [source],
+                requiresJsonParse: false,
+                ...(recordId !== '' ? { ownerRunId: recordId } : {}),
+            },
+        };
+    }
+
+    // Unknown/unowned scratch path (check receipts, status files, …).
     return {
         entry: {
             source,
@@ -293,9 +325,22 @@ export async function migrateRunStorage(input: MigrateRunStorageInput): Promise<
 
     let names: string[];
     try {
-        names = readdirSync(dirs.scratchDir, { withFileTypes: true })
-            .filter((item) => item.isFile())
-            .map((item) => item.name);
+        const dirents = readdirSync(dirs.scratchDir, { withFileTypes: true });
+        names = dirents.filter((item) => item.isFile()).map((item) => item.name);
+        // 1026 R4: run subtrees (`<runId>/agent-sessions/**`, `<runId>/artifacts/**`)
+        // join the plan as per-file units; other scratch subdirectories stay unowned.
+        for (const item of dirents) {
+            if (!item.isDirectory()) continue;
+            const subtree = join(dirs.scratchDir, item.name);
+            if (!existsSync(join(subtree, 'agent-sessions')) && !existsSync(join(subtree, 'artifacts'))) continue;
+            const walk = (dir: string): void => {
+                for (const entry of readdirSync(dir, { withFileTypes: true })) {
+                    if (entry.isDirectory()) walk(join(dir, entry.name));
+                    else if (entry.isFile()) names.push(relative(dirs.scratchDir, join(dir, entry.name)));
+                }
+            };
+            walk(subtree);
+        }
     } catch {
         return result; // no scratch dir yet — nothing to migrate
     }
@@ -304,6 +349,8 @@ export async function migrateRunStorage(input: MigrateRunStorageInput): Promise<
     // Logs-only scope excludes task/feature evidence — run records carry the run-log plane.
     const evidenceExcluded = logsOnly;
 
+    // 1026: durable copies must not shift the proof-input tree — exclude the plane repo-locally first.
+    if (!dryRun) ensureDurablePlaneIgnored(dirs.projectRoot);
     for (const name of names) {
         const { unit, entry: standalone } = classify(name, dirs.scratchDir, fileSet);
         if (standalone !== undefined) {
@@ -359,7 +406,14 @@ export async function migrateRunStorage(input: MigrateRunStorageInput): Promise<
         }
 
         const targetDir = unit.family === 'run-record' ? dirs.recordsDir : dirs.evidenceDir;
-        const targets = unit.files.map((file) => join(targetDir, basename(file)));
+        const unitRoot = join(dirs.scratchDir, unit.identity);
+        // Subtree files keep their scratch subpath under the durable run dir;
+        // top-level files map by basename (record pair, log, evidence).
+        const targets = unit.files.map((file) =>
+            file.startsWith(`${unitRoot}${sep}`)
+                ? join(targetDir, unit.identity, relative(unitRoot, file))
+                : join(targetDir, basename(file)),
+        );
         // targets is derived 1:1 from unit.files, so every index below is defined.
         const targetFor = (index: number): string => targets[index] as string;
 
@@ -398,8 +452,6 @@ export async function migrateRunStorage(input: MigrateRunStorageInput): Promise<
             }
         }
 
-        mkdirSync(targetDir, { recursive: true });
-
         for (const [index, file] of unit.files.entries()) {
             const target = targetFor(index);
             if (target === undefined) {
@@ -417,6 +469,7 @@ export async function migrateRunStorage(input: MigrateRunStorageInput): Promise<
                 continue;
             }
             try {
+                mkdirSync(dirname(target), { recursive: true });
                 atomicCopy(file, target);
                 result.entries.push({ ...fileEntry, outcome: 'migrated' });
             } catch (err) {
@@ -433,4 +486,64 @@ export async function migrateRunStorage(input: MigrateRunStorageInput): Promise<
         if (manifestFailure !== undefined) result.failures.push(manifestFailure);
     }
     return result;
+}
+
+/** Durable per-run session dir: `<projectRoot>/.spur/memory/runs/<runId>/agent-sessions` (1026 R3). */
+export function runSessionsDir(cwd: string, runId: string): string {
+    return join(runStoragePaths(cwd).recordsDir, runId, 'agent-sessions');
+}
+
+/** Durable per-run artifact dir: `<projectRoot>/.spur/memory/runs/<runId>/artifacts` (1026 R3). */
+export function runArtifactsDir(cwd: string, runId: string): string {
+    return join(runStoragePaths(cwd).recordsDir, runId, 'artifacts');
+}
+
+/** Repo-local ignore entry that keeps the durable run-record plane out of the git tree. */
+const DURABLE_PLANE_EXCLUDE = '.spur/memory/';
+
+/**
+ * 1026: durable run-record writes must never move the proof-input git tree —
+ * `computeProofInputFingerprint` runs `git add -A`, so an untracked record under
+ * `.spur/memory/` would shift every subsequent fresh capture mid-run. The plane is
+ * therefore excluded via the repo-local `.git/info/exclude` (no tracked `.gitignore`
+ * edit, idempotent, once per repo). Best-effort by contract: outside a normal
+ * checkout (`.git` is a worktree pointer file) the exclusion cannot be installed and
+ * durable files stay tree-visible — the run proceeds; only fingerprint stability is
+ * degraded. ponytail: per-worktree gitdir resolution via `git rev-parse --git-path`
+ * if that ever matters.
+ */
+export function ensureDurablePlaneIgnored(workdir: string): void {
+    try {
+        if (!existsSync(join(workdir, '.git'))) return; // not a git checkout — nothing to exclude from
+        const excludePath = join(workdir, '.git', 'info', 'exclude');
+        let current = '';
+        try {
+            current = readFileSync(excludePath, 'utf8');
+        } catch {
+            current = ''; // first install in this repo
+        }
+        if (current.includes(DURABLE_PLANE_EXCLUDE)) return; // idempotent
+        const sep = current === '' || current.endsWith('\n') ? '' : '\n';
+        appendFileSync(
+            excludePath,
+            `${sep}# spur durable run-record plane (E71/1026): must stay proof-fingerprint-inert\n${DURABLE_PLANE_EXCLUDE}\n`,
+            'utf8',
+        );
+    } catch {
+        // best-effort: an unwritable info dir leaves durable files untracked-visible; never fail a run
+    }
+}
+
+/**
+ * Read-side record resolution (1026 R1): the durable records dir when any of
+ * the run's record files already live there, else the legacy scratch dir.
+ * Invalid run ids resolve to scratch and fail later in the record readers.
+ */
+export function resolveRunRecordDir(cwd: string, runId: string): string {
+    const dirs = runStoragePaths(cwd);
+    if (runId === '' || runId !== basename(runId) || runId.startsWith('.')) return dirs.scratchDir;
+    const durable = [`${runId}.md`, `${runId}.state.json`, `${runId}.log`].some((name) =>
+        existsSync(join(dirs.recordsDir, name)),
+    );
+    return durable ? dirs.recordsDir : dirs.scratchDir;
 }

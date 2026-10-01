@@ -1,15 +1,54 @@
-import { join, resolve } from 'node:path';
+import { createHash } from 'node:crypto';
+import { basename, join, resolve } from 'node:path';
 import type { DbAdapter } from '@gobing-ai/spur-domain';
 import { ArtifactDao, RunDao } from '@gobing-ai/spur-domain';
 import type { ActionResult, ActionRunContext, ActionRunner } from '@gobing-ai/ts-dual-workflow-engine';
 import { createNodeFileSystem, type FileSystem, type ProcessExecutor } from '@gobing-ai/ts-runtime';
+import { ensureDurablePlaneIgnored, runArtifactsDir } from '../../services/run-storage';
 import { parseVerifyVerdict } from '../../services/verify-verdict';
 import { computeProofInputFingerprint, readProofInputContents } from '../proof-input-fingerprint';
 import { resolveRunArtifactPath } from './run-path';
 
+// runtime-boundaries fs rule (no-direct-fs-io): dynamic destructure, not a static import.
+const { copyFile, mkdir, readFile, stat } = await import('node:fs/promises');
+
 const KIND = 'run.artifact';
 /** Canonical proof-input digest shape produced by `proof.fingerprint` (ADR-071). */
 const PROOF_DIGEST_RE = /^sha256:[0-9a-f]{64}$/;
+
+async function sha256File(path: string): Promise<string> {
+    return createHash('sha256')
+        .update(await readFile(path))
+        .digest('hex');
+}
+
+/**
+ * 1026 R3: persist artifact bytes into the durable per-run artifacts dir
+ * (`.spur/memory/runs/<runId>/artifacts/`) BEFORE registration, so the DAO row
+ * references a durable copy. A divergent existing copy under the same basename
+ * fails visibly; an identical copy is idempotent.
+ */
+async function persistDurableArtifact(normalized: string, workdir: string, runId: string): Promise<string> {
+    ensureDurablePlaneIgnored(workdir); // 1026: the durable copy must not shift the proof-input tree
+    const artifactsDir = runArtifactsDir(workdir, runId);
+    const dest = join(artifactsDir, basename(normalized));
+    let existing = false;
+    try {
+        await stat(dest);
+        existing = true;
+    } catch {
+        existing = false;
+    }
+    if (existing) {
+        if ((await sha256File(dest)) !== (await sha256File(normalized))) {
+            throw new Error(`durable artifact path already holds different content: ${dest}`);
+        }
+        return dest;
+    }
+    await mkdir(artifactsDir, { recursive: true });
+    await copyFile(normalized, dest);
+    return dest;
+}
 
 /**
  * Options configuring a deterministic `run.artifact` recording action.
@@ -124,6 +163,16 @@ export class RunArtifactActionRunner implements ActionRunner {
             }
         }
 
+        let registeredPath = normalized;
+        // 1026 R3: empty runId keeps the legacy scratch-only registration.
+        if (context.runId !== '') {
+            try {
+                registeredPath = await persistDurableArtifact(normalized, workdir, context.runId);
+            } catch (error) {
+                return { ok: false, error: `${KIND}: durable persist failed: ${(error as Error).message}` };
+            }
+        }
+
         let dao = this.artifactDao;
         if (!dao && this.getDb) {
             const db = await this.getDb();
@@ -133,7 +182,7 @@ export class RunArtifactActionRunner implements ActionRunner {
         let recordId: string | undefined;
         if (dao) {
             const record = await dao.record({
-                path: normalized,
+                path: registeredPath,
                 kind: artifactKind,
                 runId: context.runId,
             });
@@ -144,7 +193,7 @@ export class RunArtifactActionRunner implements ActionRunner {
             ok: true,
             data: {
                 id: recordId,
-                path: normalized,
+                path: registeredPath,
                 kind: artifactKind,
                 runId: context.runId,
             },
@@ -408,8 +457,15 @@ export class RunArtifactActionRunner implements ActionRunner {
         }
 
         const dao = this.artifactDao ?? new ArtifactDao(db);
+        // 1026 R3: durable copy before registration; the row names the durable path.
+        let registeredPath = normalized;
+        try {
+            registeredPath = await persistDurableArtifact(normalized, workdir, context.runId);
+        } catch (error) {
+            return { ok: false, error: `${KIND}: durable persist failed: ${(error as Error).message}` };
+        }
         const record = await dao.record({
-            path: normalized,
+            path: registeredPath,
             kind: artifactKind,
             runId: context.runId,
         });
@@ -418,7 +474,7 @@ export class RunArtifactActionRunner implements ActionRunner {
             ok: true,
             data: {
                 id: record.id,
-                path: normalized,
+                path: registeredPath,
                 kind: artifactKind,
                 runId: context.runId,
                 proofBinding: 'current',

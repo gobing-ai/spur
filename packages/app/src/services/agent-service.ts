@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { homedir } from 'node:os';
-import { basename, join } from 'node:path';
+import { basename, join, relative } from 'node:path';
 import { isatty } from 'node:tty';
 import { type ExecutorAvailability, normalizeExecutorAvailability, type SpurConfig } from '@gobing-ai/spur-config';
 import {
@@ -77,6 +77,7 @@ import {
 import { classifyDispatch } from './failure-classification';
 import { FleetService } from './fleet-service';
 import { RunSessionObserver, type RunSessionOverlapRegistry } from './run-session-observer';
+import { resolveRunRecordDir } from './run-storage';
 
 // Re-exported so the six existing `AgentExecutorConfig` importers stay untouched (0965 R3).
 export type { AgentExecutorConfig } from './executor-tier';
@@ -2530,12 +2531,14 @@ export class AgentService {
         const refs: CoordinationArtifactRef[] = [];
         // 0927: read through the shared two-file record seam; keep the persisted ref
         // path project-relative, exactly as the legacy `.log` probe reported it.
-        const runDir = join(this.ctx.cwd, '.spur', 'run');
+        // 1026 R1: records resolve outside scratch (durable first, legacy fallback).
+        const runDir = resolveRunRecordDir(this.ctx.cwd, runId);
+        const relDir = relative(this.ctx.cwd, runDir);
         const record = readWorkflowRunRecord(runDir, runId);
         if (record.kind === 'pair' || record.kind === 'incomplete') {
-            refs.push({ kind: 'log', path: join('.spur', 'run', basename(record.markdownPath)) });
+            refs.push({ kind: 'log', path: join(relDir, basename(record.markdownPath)) });
         } else if (record.kind === 'legacy-log') {
-            refs.push({ kind: 'log', path: join('.spur', 'run', basename(record.logPath)) });
+            refs.push({ kind: 'log', path: join(relDir, basename(record.logPath)) });
         }
         return refs;
     }

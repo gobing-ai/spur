@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { InvalidWorkflowRunIdError, openInlineRunProjectDb, persistWorktreeRuns } from '../../src';
+import { InvalidWorkflowRunIdError, openInlineRunProjectDb, persistWorktreeRuns, runStoragePaths } from '../../src';
 
 /**
  * Task 0975 R1 — the app persist-out operation: DB row transfer plus two-file run-record
@@ -34,8 +34,11 @@ async function seedWorktree(workdir: string, runId: string, workflowName = 'wf')
     } finally {
         db.close();
     }
-    writeFileSync(join(workdir, '.spur', 'run', `${runId}.md`), `# spur inline run ${runId}\n`);
-    writeFileSync(join(workdir, '.spur', 'run', `${runId}.state.json`), `{"runId":"${runId}"}\n`);
+    // 1026: the record pair lives in the durable plane, not scratch.
+    const recordsDir = runStoragePaths(workdir).recordsDir;
+    mkdirSync(recordsDir, { recursive: true });
+    writeFileSync(join(recordsDir, `${runId}.md`), `# spur inline run ${runId}\n`);
+    writeFileSync(join(recordsDir, `${runId}.state.json`), `{"runId":"${runId}"}\n`);
 }
 
 describe('persistWorktreeRuns (task 0975 R1)', () => {
@@ -47,8 +50,9 @@ describe('persistWorktreeRuns (task 0975 R1)', () => {
 
             const first = await persistWorktreeRuns({ fromWorkdir: from.dir, toWorkdir: to.dir });
             expect(first).toEqual({ ok: true, persisted: 1, skipped: [] });
-            expect(readFileSync(join(to.dir, '.spur', 'run', 'run_0975.md'), 'utf8')).toContain('run_0975');
-            expect(JSON.parse(readFileSync(join(to.dir, '.spur', 'run', 'run_0975.state.json'), 'utf8'))).toEqual({
+            const toRecords = runStoragePaths(to.dir).recordsDir;
+            expect(readFileSync(join(toRecords, 'run_0975.md'), 'utf8')).toContain('run_0975');
+            expect(JSON.parse(readFileSync(join(toRecords, 'run_0975.state.json'), 'utf8'))).toEqual({
                 runId: 'run_0975',
             });
 
@@ -91,14 +95,15 @@ describe('persistWorktreeRuns (task 0975 R1)', () => {
         const to = makeDir('persist-conflict-to-');
         try {
             await seedWorktree(from.dir, 'run_cf');
-            mkdirSync(join(to.dir, '.spur', 'run'), { recursive: true });
-            writeFileSync(join(to.dir, '.spur', 'run', 'run_cf.state.json'), '{"runId":"someone-else"}\n');
+            const toRecordsCf = runStoragePaths(to.dir).recordsDir;
+            mkdirSync(toRecordsCf, { recursive: true });
+            writeFileSync(join(toRecordsCf, 'run_cf.state.json'), '{"runId":"someone-else"}\n');
 
             const result = await persistWorktreeRuns({ fromWorkdir: from.dir, toWorkdir: to.dir });
             expect(result.ok).toBe(true);
             expect(result.skipped).toContainEqual({ id: 'run_cf', reason: 'record-conflict:run_cf.state.json' });
             // The pre-existing invoking-tree record stands.
-            expect(readFileSync(join(to.dir, '.spur', 'run', 'run_cf.state.json'), 'utf8')).toContain('someone-else');
+            expect(readFileSync(join(toRecordsCf, 'run_cf.state.json'), 'utf8')).toContain('someone-else');
         } finally {
             from.cleanup();
             to.cleanup();
@@ -118,7 +123,7 @@ describe('persistWorktreeRuns (task 0975 R1)', () => {
             });
 
             // Reject: an id planted in the worktree DB that would traverse out of
-            // `.spur/run/` if copied as `<id>.md` throws the named invalid-run-id error
+            // 1026: an unsafe run id copied into `.spur/memory/runs/` as `<id>.md` throws the named invalid-run-id error
             // (task 0975 R2 hardening) — and the target keeps exactly the rows the accept
             // pass inserted, because validation runs before the target DB is opened.
             await seedWorktree(from.dir, '../escape');
@@ -422,8 +427,8 @@ describe('persistWorktreeRuns cited evidence + record tolerance (task 0984)', ()
             } finally {
                 target.close();
             }
-            // The normal run's records still copied.
-            expect(existsSync(join(to.dir, '.spur', 'run', 'run_0984g.md'))).toBe(true);
+            // The normal run's records still copied (1026: records land in the durable plane).
+            expect(existsSync(join(runStoragePaths(to.dir).recordsDir, 'run_0984g.md'))).toBe(true);
         } finally {
             from.cleanup();
             to.cleanup();
@@ -658,9 +663,11 @@ describe('persistWorktreeRuns owned evidence (task 1012)', () => {
                 taskFiles: [taskFile],
             });
             expect(result).toEqual({ ok: true, persisted: 6, skipped: [] });
+            // 1026: records copy into the durable plane; owned scratch evidence stays scratch.
+            const toRecords = runStoragePaths(to.dir).recordsDir;
             const toRun = join(to.dir, '.spur', 'run');
             for (const runId of runIds) {
-                expect(readFileSync(join(toRun, `${runId}.md`), 'utf8')).toBe(`# spur inline run ${runId}\n`);
+                expect(readFileSync(join(toRecords, `${runId}.md`), 'utf8')).toBe(`# spur inline run ${runId}\n`);
                 expect(readFileSync(join(toRun, `${runId}-step11.log`), 'utf8')).toBe(`${runId}\n`);
             }
         } finally {
@@ -702,8 +709,9 @@ describe('persistWorktreeRuns owned evidence (task 1012)', () => {
 
             const result = await persistWorktreeRuns({ fromWorkdir: from.dir, toWorkdir: to.dir, taskFiles: [] });
             expect(result).toEqual({ ok: true, persisted: 1, skipped: [] });
+            // 1026: the record lands in the durable plane; scratch stays scratch.
             const toRun = join(to.dir, '.spur', 'run');
-            expect(existsSync(join(toRun, 'run_1012f.md'))).toBe(true);
+            expect(existsSync(join(runStoragePaths(to.dir).recordsDir, 'run_1012f.md'))).toBe(true);
             expect(existsSync(join(toRun, '1234-verdict.json'))).toBe(false);
             expect(existsSync(join(toRun, 'run_1012f-route-reason.txt'))).toBe(false);
         } finally {
