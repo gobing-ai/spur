@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path';
 import { applyCliMigrations } from '@gobing-ai/spur-domain';
 import { createDbAdapter } from '@gobing-ai/ts-db';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
-import { readVerdictArtifact } from '../../src/services/done-transition-guard';
+import { computeAggregate, readVerdictArtifact } from '../../src/services/done-transition-guard';
 import { runLightGate } from '../../src/services/quality-gate';
 import {
     ensureDurablePlaneIgnored,
@@ -309,15 +309,14 @@ status: done
  * 1027 decisive disposal-equivalence proof (AC1/AC2): removing a completed run's
  * scratch changes nothing observable — the verdict resolves from durable evidence,
  * analytics derive identically, run records/artifacts/sessions stay inspectable
- * (success AND failure AND paused terminals), an unrelated ACTIVE run's scratch
- * survives selective disposal, a symlink escaping scratch cannot take its target
+ * (success AND failure AND paused terminals), a symlink escaping scratch cannot take its target
  * along, and the next temporary gate recreates scratch. Stale-PASS, missing-
  * artifact, migration-write-failure and paused-recovery-resume scenarios are owned
  * by their existing suites (done-transition-guard, quality-gate, the 1025
  * migration tests above, workflow-service staleness checks) and are not duplicated.
  */
 describe('completed scratch disposal equivalence (E71/1027)', () => {
-    test('removing completed scratch leaves acceptance, analytics, inspection and history equal', async () => {
+    test('removing completed scratch twice preserves acceptance, verified analytics, inspection and session bytes', async () => {
         const { root, scratch, dirs } = makeProject();
         const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
         try {
@@ -325,7 +324,14 @@ describe('completed scratch disposal equivalence (E71/1027)', () => {
             // behind as the completed run's last physical trace until disposal.
             writeFileSync(
                 join(scratch, '1027-verdict.json'),
-                JSON.stringify({ wbs: '1027', verdict: 'PASS', proofDigest: 'sha256:abc' }),
+                JSON.stringify({
+                    wbs: '1027',
+                    verdict: 'PASS',
+                    proofDigest: `sha256:${'a'.repeat(64)}`,
+                    requirements: [{ id: 'R1', status: 'MET', evidence: 'disposal fixture' }],
+                    acceptanceCriteria: [],
+                    checks: [],
+                }),
             );
             await migrateRunStorage({ dirs, readRunStatus: statusMap({}), dryRun: false });
             // Record pairs live flat under the durable records dir (1026 R1); sessions and
@@ -348,11 +354,8 @@ describe('completed scratch disposal equivalence (E71/1027)', () => {
             const sessionPath = join(runSessionsDir(root, okRun), 's1.jsonl');
             mkdirSync(dirname(sessionPath), { recursive: true });
             writeFileSync(sessionPath, '{"t":1}\n');
-            // Concurrent unrelated ACTIVE run keeps its scratch; a symlink inside scratch
-            // points outside — disposal must not follow it.
-            const activeFile = join(scratch, 'wfr-active-live', 'attempt.log');
-            mkdirSync(dirname(activeFile), { recursive: true });
-            writeFileSync(activeFile, 'live');
+            // No live owner occupies this disposable fixture. An escaping link must be unlinked,
+            // without deleting the external file it points at.
             const victim = join(root, 'outside-victim.txt');
             writeFileSync(victim, 'keep');
             symlinkSync(victim, join(scratch, 'escape-link'));
@@ -383,6 +386,7 @@ describe('completed scratch disposal equivalence (E71/1027)', () => {
                 const verdict = await readVerdictArtifact(fs, dirs.scratchDir, '1027');
                 return {
                     verdictPass: verdict.artifact?.verdict === 'PASS',
+                    verdictAggregate: verdict.artifact ? computeAggregate(verdict.artifact) : 'UNKNOWN',
                     verdictFromDurable: verdict.path.includes(join('.spur', 'memory', 'evidence')),
                     stat: JSON.stringify(
                         await deriveVerifiedOutcome(
@@ -410,20 +414,21 @@ describe('completed scratch disposal equivalence (E71/1027)', () => {
             };
             const before = await snapshot();
             expect(before.verdictPass).toBeTrue();
+            expect(before.verdictAggregate).toBe('PASS');
             expect(before.ok).toBe('done');
             expect(JSON.parse(before.stat).taskDenominator).toBe(1);
+            expect(JSON.parse(before.stat).verifiedResults).toBe(1);
 
             // Disposal of the completed scratch trace.
-            rmSync(join(scratch, '1027-verdict.json'), { force: true });
+            rmSync(scratch, { recursive: true, force: true });
             const after = await snapshot();
             expect(after).toEqual(before); // durable-first evidence, identical analytics + inspection
 
             // Repeated removal is a no-op.
-            rmSync(join(scratch, '1027-verdict.json'), { force: true });
+            rmSync(scratch, { recursive: true, force: true });
             expect(await snapshot()).toEqual(before);
 
-            // Confinement: active scratch survives, the escaping link left its target alone.
-            expect(existsSync(activeFile)).toBeTrue();
+            // Directory disposal unlinks the escaping link and leaves its target intact.
             expect(readFileSync(victim, 'utf8')).toBe('keep');
             expect(status(badRun)).toBe('failed');
             expect(status(pausedRun)).toBe('paused');

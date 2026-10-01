@@ -4,7 +4,7 @@ name: Verify disposable scratch and reconcile cleanup safeguards
 status: done
 template: feature-impl
 created_at: 2026-09-30T20:13:58.359Z
-updated_at: "2026-10-01T20:40:59.950Z"
+updated_at: "2026-10-01T22:12:31.866Z"
 feature_id: E71
 priority: P2
 tags:
@@ -108,6 +108,12 @@ Execution checks and per-requirement observability are frozen in Design. Preserv
 #### Verification
 
 Decisive disposal-equivalence test `packages/app/tests/services/run-storage.test.ts:291-419`: success/failure/paused terminal pairs, verdict, artifact bytes, sessions and analytics snapshotted before/after/repeated scratch removal — all equal; active-run scratch survives selective disposal; escaping symlinks leave targets intact; the next temporary gate recreates scratch (`runLightGate`). Analytics durable-fallback regression: `packages/app/tests/services/verified-outcome.test.ts:90`. Scenario matrix (stale PASS, missing artifact, migration write failure, paused recovery) stays owned by the existing done-transition-guard, quality-gate, 1025 migration and workflow-service staleness suites — deliberately not duplicated. `bun run plugin-smoke` PASS (installed parity; verified-outcome.ts is app-only, no twin regen). Full gate: `bun run spur-check` exit=0, 9566 pass / 0 fail / 562 files.
+
+**Force verification repair (2026-10-01).**
+
+- `packages/app/tests/services/run-storage.test.ts:321` — the disposal regression now removes the entire settled fixture scratch directory twice, verifies a non-empty PASS aggregate and one verified result, checks the escaping link's external target, and executes the next gate to recreate scratch.
+- The test title now accurately describes retained session bytes; it does not claim to execute the history importer. Active-owner freshness/recovery remains owned by the real workflow/action suites.
+- Residual: fixture session bytes are not imported history, and no before/after feature-check or completed-failure producer path is exercised in that integration. Dependent storage/export requirements remain incomplete. R3/R4 and the corresponding feature scenarios remain PARTIAL after the bounded repair.
 
 ### Testing
 
