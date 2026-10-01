@@ -1,5 +1,6 @@
 import { parse as parseYaml } from 'yaml';
 
+/** YAML frontmatter and the Markdown body extracted for document previews. */
 export interface MarkdownFrontmatterResult {
     /** Raw YAML frontmatter without delimiter fences, or null if document has no frontmatter. */
     frontmatterRaw: string | null;
