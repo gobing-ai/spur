@@ -4,7 +4,7 @@ name: "Persist-out: make the 64-file evidence cap row-aware for multi-task batch
 status: wip
 template: feature-impl
 created_at: 2026-10-01T00:47:12.647Z
-updated_at: "2026-10-01T01:08:30.247Z"
+updated_at: "2026-10-01T01:19:56.091Z"
 feature_id: A9
 
 ac_numbering: task-local
@@ -41,24 +41,27 @@ Captured from the creation title: "Persist-out: make the 64-file evidence cap ro
 
 ### Design
 
-Root defect: 1012 R1 counts run-owned files against a cap that 0984 R3 sized for citations only. The union conflates two budgets with different purposes: cited-file blast radius (human-curated, small) vs owned-file transfer (mechanical, grows with run rows). At 6 run rows the owned set alone (~159 files in runall-A9-485e: ~68 runId-owned + ~91 wbs-owned) exceeds the 64 cap, so every batch of ~3+ tasks fails persist-out and needs a manual archive workaround.
+Root defect: 1012 R1 checks run-owned files against `MAX_CITED_RUN_FILES = 64` (`packages/app/src/services/inline-run-setup.ts:208`), which 0984 R3 sized for citations only. Owned enumeration grows linearly with run rows, so any batch of about 3+ tasks overflows the union. Real shape (runall-A9-485e persistOut): 6 owners, 10–19 files each, 157 in total, and no single owner above 19.
 
-Chosen design — split budgets (recommended):
-- Cited files: keep MAX_CITED_RUN_FILES = 64 unchanged (preserves 0984 R3 blast-radius intent).
-- Owned files: new budget ownCap = OWNED_BASE + OWNED_PER_ROW * runRowCount. Suggest OWNED_BASE=96, OWNED_PER_ROW=32 (6 rows -> 288 >= 159 observed; 1-2-task batches unaffected). Size the constants against the real batch and verify in tests.
-- Both caps hard. Zero-writes abort preserved: any overage throws before any DB row or file is copied.
+Chosen design: per-owner budgets, with no new constants.
+- Citations keep their own 64 cap, as before (0984 R3 blast-radius intent).
+- Each owner prefix (`<wbs>-` or `<runId>-`) gets its own `MAX_CITED_RUN_FILES` budget. A file counts against the first prefix it matches. The total bound scales with row count by construction, and the real batch has about 3× headroom per owner.
+- Overflow throws before any invoking-tree write (zero-writes contract), and the error names the offending owner prefix, which makes it diagnosable without re-running.
 
-Alternative rejected: scale the single union cap by row count — inflates citation risk as owned files grow; the two budgets exist for different reasons.
+Rejected alternatives:
+- `OWNED_BASE + OWNED_PER_ROW × rows` union budget: it adds two tuning constants, a hot owner can still starve the others, and its error cannot name the culprit.
+- Scaling the single union cap: it inflates the citation blast radius.
 
-Error ergonomics (1016 proof-ergonomics theme): the overage error must print a breakdown — cited N/cap, owned M/budget, per-row owned average — so overflow is diagnosable without re-running a session.
+Adjacent, not duplicated: 1025 moves verdict/receipt evidence out of `.spur/run`, which may later shrink what persist-out forwards; 1024 owns run-storage audit/cleanup. This task stays a narrow cap fix.
 
 ### Plan
 
-1. Reproduce (red): extend the fixture in packages/app/tests/services/persist-worktree-runs.test.ts to the real batch shape (6 run rows, 12 records, ~159 owned files, 3 cited); assert current code throws.
-2. Implement in packages/app/src/services/inline-run-setup.ts: add OWNED_BASE/OWNED_PER_ROW next to MAX_CITED_RUN_FILES (:208); replace the two throw sites (:297 cited, :336 owned) with budget-specific checks; thread runRowCount into the owned check.
-3. Update both error messages to include the cited/owned breakdown.
-4. Update persist-out contract text in plugins/sp/skills/spur-dev/references/execution-batch.md (:494-:537) in the same commit (T3).
-5. Green: focused test passes; then bun run spur-check; bun run spur-check-feature once (ADR-119).
+Status: implemented and committed in e8dbc9aa9. What remains is gate → verify → record → done.
+
+1. Red (done): `packages/app/tests/services/persist-worktree-runs.test.ts:613` adds a 6-row batch with 72 owned files. It failed on the old union cap.
+2. Implement (done): an owned loop with per-owner counters (`packages/app/src/services/inline-run-setup.ts:334`), with the doc comment updated. The citation loop is unchanged.
+3. Contract text (done): `plugins/sp/skills/spur-dev/references/execution-batch.md:520`, plus the regenerated `plugins/sp/lib/inline-run.generated.mjs`.
+4. Remaining: run the quality gate (`bun run spur-check`) outside the sandbox. Five env-only tests fail in the sandbox: git hooks in fixtures, and Chromium CDP. Then run inline verify → `task record --solution-from-diff --transition testing` → done.
 
 ### Solution
 
@@ -69,31 +72,26 @@ Error ergonomics (1016 proof-ergonomics theme): the overage error must print a b
 
 ### Testing
 
-- Add to packages/app/tests/services/persist-worktree-runs.test.ts:
-  1. 6-row batch, ~26 owned files/row + 3 cited -> persist-out succeeds; rows/records/files all transferred (regression for the real failure).
-  2. cited-only 65 -> throws; message contains cited count and cap; zero rows written, zero files copied.
-  3. owned > budget -> throws; message contains owned count, budget, per-row average; zero writes.
-  4. hidden subdirectory (.evidence-*) in the run dir is skipped by owned enumeration.
-  5. record-conflict skip still logs and continues; DB rows unchanged on abort paths.
-- Run: (cd packages/app && bun test tests/services/persist-worktree-runs.test.ts)
-- Gates: bun run spur-check (task-local), then bun run spur-check-feature once (ADR-119).
-- Repeatability: test 1 encodes the runall-A9-485e batch shape, so the artifact reruns without a live worktree.
+Pending. `task record` will render this section from the verify verdict artifact.
+
+Planned evidence: `(cd packages/app && bun test tests/services/persist-worktree-runs.test.ts tests/services/inline-run-setup.test.ts)`. It covers the 6-row regression (:613), the per-owner overflow throw with zero writes (:581), the citation cap, and the record-conflict skip in the existing suite.
 
 ### Review
 
-- Confirm the split preserves both contracts: 0984 citation cap unchanged; zero-writes abort on ANY overage (grep both throw paths).
-- Confirm error messages carry the cited/owned breakdown.
-- Confirm execution-batch.md cap text updated in the same commit; no stale "64-file cap" references remain (rg).
-- Confirm 1-2-task batches unaffected (existing tests pass untouched).
-- Cross-ref: foreign task 1025 (evidence-location redesign) is adjacent, not this fix — keep scopes disjoint and note the relationship in the record.
+Pending. The review coordinator writes this. Checks to cover:
+- the citation cap is unchanged, and both throw paths precede any write;
+- the error names the owner prefix;
+- `rg -n "64-file" plugins/sp docs` finds no stale union-cap wording;
+- the existing 1–2-task batch tests pass untouched.
 
 ### References
 
-- packages/app/src/services/inline-run-setup.ts:201,208,222,297,309,331,336
-- packages/app/tests/services/persist-worktree-runs.test.ts
-- plugins/sp/skills/spur-dev/references/execution-batch.md:494-537
-- Related: 0984 R3 (citation cap), 1012 R1 (owned transfer), foreign 1025 (broader evidence-location redesign)
-- Evidence: runall-A9-485e WT-4a persist failure 2026-09-30 ~17:22: 159 owned + 3 cited > 64.
+- `packages/app/src/services/inline-run-setup.ts:208` (cap), `:334` (per-owner loop)
+- `packages/app/tests/services/persist-worktree-runs.test.ts:581`, `:613`
+- `plugins/sp/skills/spur-dev/references/execution-batch.md:520`
+- Commit e8dbc9aa9 (implementation)
+- Related: 0984 R3 (citation cap), 1012 R1 (owned transfer), 1025 (evidence relocation, adjacent), 1024 (run-storage cleanup, adjacent)
+- Evidence: `.spur/run/worktree-runall-A9-485e.json`, persistOut: 6 runs, 157 archived files, max 19 per owner
 
 ### History
 

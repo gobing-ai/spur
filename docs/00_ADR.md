@@ -2015,6 +2015,7 @@ posture); [workflow composition](design/workflow-composition-contract.md#composi
 - **Retains:** ADR-021 (thin transports), ADR-051 (public-surface consent), ADR-065 (plugin entrypoint contract), ADR-115 (composition budgets), ADR-129 (hook cores).
 - **Detail:** [harness surface governance](design/harness-surface-governance.md) §2; plan `docs/plans/A9-script-placement-migration.md`; feature A9.
 - **Amendment (2026-09-30 · task 1035):** `plugins/sp/lib` also holds hand-written helpers shared by ≥2 glue files — today `spur-bin.ts` (`spurCommand`, the one spur-CLI invocation split, task 1019) — beside `env.ts` and the generated bundles. Why: per-script copies of that split drifted; one helper keeps the glue thin without a CLI round-trip. Lib stays under the plugin standalone import rule (no `@gobing-ai/*` value imports).
+- **Correction (2026-09-30 · task 1035):** `spur-bin.ts` was introduced by task 1007 R9; task 1019 adopted it in residual-scan.
 
 ## ADR-131: Completed Run Scratch Is Disposable; Lasting Records Have Durable Owners
 

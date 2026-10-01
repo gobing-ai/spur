@@ -4,7 +4,7 @@ name: "ADR-130: dated amendment for spur-bin.ts facade accuracy note"
 status: wip
 template: feature-impl
 created_at: 2026-10-01T00:47:12.874Z
-updated_at: "2026-10-01T01:10:14.799Z"
+updated_at: "2026-10-01T01:19:57.943Z"
 feature_id: A9
 
 ac_numbering: task-local
@@ -19,11 +19,11 @@ Captured from the creation title: "ADR-130: dated amendment for spur-bin.ts faca
 
 ### Requirements
 
-- [ ] R1. `docs/00_ADR.md` ADR-130 gains one dated amendment line recording that `plugins/sp/lib` also holds the hand-written shared `spur-bin.ts` spur-CLI invocation helper (adopted by task 1019), widening the Decision's "`env.ts` and generated bundles" enumeration. The note dropped by the 2b10712c9 merge is restored in this form.
-- [ ] R2. ADR-130's historical lines (title, Status, Decision, Why, Alternatives, Consequence, Retains, Detail) stay byte-identical; only `version`/`updated_at` frontmatter and the appended amendment line change in `docs/00_ADR.md`.
-- [ ] R3. `repo-wide-tests/adr-supersession.test.ts` (e) admits ADR-130 to its amended set (same precedent as 0911/ADR-123), so the uncommitted diff passes and every other ADR stays frozen.
+- [ ] R1. `docs/00_ADR.md` ADR-130 gains a dated amendment recording that `plugins/sp/lib` also holds hand-written helpers shared by ≥2 glue files — today `spur-bin.ts` (`spurCommand`, the shared spur-CLI invocation split, introduced by task 1007 R9 and adopted by residual-scan in 1019). This widens the Decision's "`env.ts` and generated bundles" enumeration. It replaces the in-place ADR-130 edit from wrap fdf0a62b4, which merge 2b10712c9 dropped by resolving `00_ADR.md` as ours.
+- [ ] R2. ADR-130's historical lines (title, Status, Decision, Why, Alternatives, Consequence, Retains, Detail, and any already-committed amendment) stay byte-identical. Only the `version`/`updated_at` frontmatter changes, plus appended dated lines.
+- [ ] R3. `repo-wide-tests/adr-supersession.test.ts` (e) admits ADR-130 to its amended set (same precedent as 0911/ADR-123), and every other ADR stays frozen.
 
-Out of scope: rewording the Decision line in place; the satellite `docs/design/harness-surface-governance.md:92` (already carries the spur-bin.ts fact); any code change.
+Out of scope: rewording the Decision line in place; `docs/design/harness-surface-governance.md:92`, which already carries the spur-bin.ts fact; any code change.
 
 ### Acceptance Criteria
 
@@ -42,41 +42,48 @@ Out of scope: rewording the Decision line in place; the satellite `docs/design/h
 
 ### Design
 
-ADR-130's Decision text omits that the spur binary is a thin facade (spur-bin.ts) delegating into apps/cli; a post-merge reader of 00_ADR.md alone can misread where lifecycle logic lives. Constitution forbids in-place edits of historical ADR lines, so the correction lands as a dated amendment entry - the sanctioned change class. Dated-amendment detail style has precedent (docs/00_ADR.md:1186).
+Fact (verified 2026-09-30): `plugins/sp/lib/spur-bin.ts` is a hand-written plugin-glue helper. It exports `spurCommand`/`defaultSpurBin` and resolves `--spur-bin` > `SPUR_BIN` > the monorepo CLI entry > the PATH `spur`. It is **not** the binary facade: the `spur` bin is `apps/cli/package.json` → `spur.js`. The real drift is that ADR-130's Decision lists `plugins/sp/lib` contents as only `env.ts` plus generated bundles.
 
-Content: one dated sentence under ADR-130 stating the facade fact with the code path cited. Fact-check the exact file name/location and delegation target against the tree before writing.
+The constitution (99 §6.1) forbids rewriting historical ADR lines, so the fix is a dated `**Amendment (date · task):**` line appended inside ADR-130. Precedent format: `docs/00_ADR.md:1186`. Once committed, an amendment is itself frozen by adr-supersession (e), so later factual corrections append a `**Correction (…)**` line rather than editing it.
 
 ### Plan
 
-1. Fact-check: locate the facade file (rg spur-bin / package.json bin mapping) and confirm what it delegates to.
-2. Read precedent: rg -n "amendment" docs/00_ADR.md; match the established dated-entry format.
-3. Append the dated amendment entry under ADR-130 - additions only; zero modification of historical lines.
-4. Gate: bun run spur-check-feature once (adr-supersession is the critical check). Commit docs(sp).
-5. Blocked on operator authorization: this task executes only on Robin's explicit go; the task record is the authorization trail.
+Status: implemented. The amendment and test admission were committed in 2dc9841ed. The attribution correction line (`docs/00_ADR.md:2018`) is uncommitted.
+
+1. Done: append the amendment at `docs/00_ADR.md:2017` and bump the version to 1.59.0.
+2. Done: add 130 to the amended set at `repo-wide-tests/adr-supersession.test.ts:168`.
+3. Done: append a correction line fixing the task attribution (1007 R9, not 1019). The test passes: 7/7.
+4. Remaining: commit the correction, then run the gate (`bun run spur-check`) outside the sandbox. Then run inline verify → `task record --transition testing` → done.
 
 ### Solution
 
-- Single file change: docs/00_ADR.md, ADR-130 section, dated amendment entry (pure addition).
-- Facade facts to cite (verified 2026-09-30): facade file plugins/sp/lib/spur-bin.ts; bin mapping apps/cli/package.json:23.
-- Draft entry: "2026-09-30 - Accuracy note: the spur binary is a facade (plugins/sp/lib/spur-bin.ts, wired via apps/cli/package.json:23) delegating to apps/cli; lifecycle logic remains in packages/app per this ADR's layering. Added after batch runall-A9-485e."
-- Format precedent: docs/00_ADR.md:1186. No other ADR sections touched; no renumbering; adr-supersession must stay green.
+- `docs/00_ADR.md:2017`: a dated ADR-130 amendment says `plugins/sp/lib` holds hand-written shared helpers, today `spur-bin.ts` (`spurCommand`), beside `env.ts` and the generated bundles. It stays under the plugin standalone import rule.
+- `docs/00_ADR.md:2018`: a dated correction attributes `spur-bin.ts` to task 1007 R9, with 1019 adopting it in residual-scan. It is appended because test (e) freezes the committed amendment.
+- `repo-wide-tests/adr-supersession.test.ts:168`: the amended set is now `[42, 52, 57, 86, 116, 123, 130]`, and the failure message lists 130.
 
 ### Testing
 
-- bun run spur-check-feature (once) - adr-supersession green is the acceptance gate.
-- git diff docs/00_ADR.md shows additions only (git diff --stat + manual scan).
+Pending. `task record` will render this section from the verify verdict artifact.
+
+Planned evidence:
+- `bun test repo-wide-tests/adr-supersession.test.ts` passes (7/7) with the diff uncommitted.
+- `git diff --unified=0 HEAD~N -- docs/00_ADR.md` shows additions plus `version:`/`updated_at:` only.
 
 ### Review
 
-- git diff on 00_ADR.md = pure addition; dated; placed per precedent format.
-- Facade claim matches code (file exists; delegation target correct).
-- No duplicate of an existing note; no historical line modified.
+Pending. The review coordinator writes this. Checks to cover:
+- the amendment describes `spur-bin.ts` as a shared invocation helper, not a bin facade;
+- the attribution is 1007 R9 / 1019;
+- no historical ADR line is modified;
+- the governance satellite (`docs/design/harness-surface-governance.md:92`) is consistent.
 
 ### References
 
-- docs/00_ADR.md (ADR-130; precedent line 1186); adr-supersession rule; constitution ADR governance.
-- Evidence: wrap fdf0a62b4 dropped its ADR-130 edit mid-merge 2026-09-30 (17:15-17:21) rather than amend in place; this task re-lands it properly.
-- Authorization: Robin's go (task = authorization record).
+- `docs/00_ADR.md:2017-2018` (ADR-130 amendment and correction); format precedent `docs/00_ADR.md:1186`
+- `plugins/sp/lib/spur-bin.ts` (helper; introduced by 1007 R9 in commit 04e3505d6); `apps/cli/package.json` (bin `spur.js`)
+- `repo-wide-tests/adr-supersession.test.ts:168`
+- Provenance: wrap fdf0a62b4 edited ADR-130 in place; merge 2b10712c9 resolved `00_ADR.md` as ours and dropped that edit
+- Adjacent: `docs/design/harness-surface-governance.md:92` already states the fact
 
 ### History
 
