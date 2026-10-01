@@ -57,3 +57,4 @@ git ls-files docs/dogfood | grep -Ev '(README|INDEX)\.md$'
 - `2026-09-28-A32-content-verified-twins-dogfood.md`
 - `2026-09-28-A33-release-tooling-dogfood.md`
 - `2026-09-30-I33-dev-review-multi-target-dogfood.md`
+- `2026-09-30-sp-dev-verifyall-A9-dogfood.md`
