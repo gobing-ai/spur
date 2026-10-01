@@ -234,3 +234,42 @@ describe('transitionTaskGuarded — forced override audit trail (R1)', () => {
         h.cleanup();
     });
 });
+
+describe('1042 — foreign-task verdict artifact is rejected at the shared reader (R1)', () => {
+    const FOREIGN_ARTIFACT = { ...PASS_ARTIFACT, wbs: '9999' };
+
+    test('denies an unforced done when the artifact names a different WBS, writing nothing', async () => {
+        const h = makeHarness({ task: GATED_TASK, verdict: FOREIGN_ARTIFACT });
+        await expect(transitionTaskGuarded(h.deps, { wbs: '0001', toStatus: 'done' })).rejects.toThrow(
+            GuardDeniedError,
+        );
+        await expect(transitionTaskGuarded(h.deps, { wbs: '0001', toStatus: 'done' })).rejects.toThrow(
+            /identity mismatch/,
+        );
+        // The denial names both identities and the artifact path.
+        await expect(transitionTaskGuarded(h.deps, { wbs: '0001', toStatus: 'done' })).rejects.toThrow(
+            /0001-verdict\.json.*'0001'.*"9999"/s,
+        );
+        expect(h.calls.updateStatus).toEqual([]);
+        expect(h.calls.updateField).toEqual([]);
+        h.cleanup();
+    });
+
+    test('forced done over a foreign artifact transitions with UNKNOWN verdict attribution', async () => {
+        const h = makeHarness({ task: GATED_TASK, verdict: FOREIGN_ARTIFACT });
+        const out = await transitionTaskGuarded(h.deps, {
+            wbs: '0001',
+            toStatus: 'done',
+            forceDone: true,
+            reason: 'operator override after identity mismatch',
+        });
+        expect(out.kind).toBe('transitioned');
+        if (out.kind === 'transitioned') {
+            // The foreign PASS must not be attributed to this task.
+            expect(out.forced?.verdict).toBe('UNKNOWN');
+        }
+        expect(h.calls.updateStatus).toEqual(['0001:done']);
+        expect(h.calls.updateField).toEqual(['0001:done_forced', '0001:done_reason']);
+        h.cleanup();
+    });
+});

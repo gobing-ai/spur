@@ -86,6 +86,8 @@ export interface GuardInput {
     forced: boolean;
     /** Override reason text (required when `forced` is true; advisory otherwise). */
     reason?: string;
+    /** 1042 R2: present when the artifact file exists but is unusable (parse failure, identity mismatch). */
+    readError?: string;
     /** Pre-loaded artifact, or `undefined` if no verdict file exists. */
     artifact?: VerdictArtifact;
 }
@@ -109,7 +111,7 @@ interface VerdictRead {
 }
 
 /** Read + parse one verdict artifact location; absence is reported, not fatal. */
-async function readVerdictFrom(fs: FileSystem, path: string): Promise<VerdictRead> {
+async function readVerdictFrom(fs: FileSystem, path: string, wbs: string): Promise<VerdictRead> {
     let exists: boolean;
     try {
         exists = await fs.exists(path);
@@ -140,6 +142,26 @@ async function readVerdictFrom(fs: FileSystem, path: string): Promise<VerdictRea
     if (typeof parsed !== 'object' || parsed === null || !('verdict' in parsed)) {
         return { artifact: undefined, path, readError: 'missing required `verdict` field', missing: false };
     }
+    // 1042 R1: bind the artifact's explicit identity to the requested WBS before
+    // its rows can authorize anything. A present `wbs` must match exactly;
+    // absent `wbs` keeps legacy compatibility. Foreign / empty / null /
+    // non-string identity yields no usable artifact with a readError naming
+    // path, expected and actual value. `missing` stays false — a foreign copy
+    // fails closed on its own plane (mirroring the malformed-evidence rule:
+    // no fallback to the other plane), and the caller surfaces the readError
+    // as a deny. Never a silent allow.
+    if ('wbs' in parsed) {
+        const artifactWbs: unknown = parsed.wbs;
+        const actual = typeof artifactWbs === 'string' ? JSON.stringify(artifactWbs) : String(artifactWbs);
+        if (typeof artifactWbs !== 'string' || artifactWbs !== wbs) {
+            return {
+                artifact: undefined,
+                path,
+                readError: `artifact identity mismatch at ${path}: expected wbs '${wbs}', actual ${actual}`,
+                missing: false,
+            };
+        }
+    }
     return { artifact: parsed as VerdictArtifact, path, missing: false };
 }
 
@@ -148,10 +170,11 @@ async function readVerdictFrom(fs: FileSystem, path: string): Promise<VerdictRea
  * durable-evidence dir (`.spur/memory/evidence`, sibling of the scratch run
  * dir — E71/1025) first, then fall back to the scratch plane
  * (`.spur/run/<wbs>-verdict.json`). An evidence copy that exists is
- * authoritative: malformed or unreadable evidence fails closed instead of
- * falling back. Returns `undefined` when no copy exists anywhere — the guard
- * **denies** the transition (no-artifact is no longer a silent allow; dogfood
- * F81 / 0349 class). Operators override with `--force-done --reason`.
+ * authoritative: malformed, unreadable, or foreign-identity (1042 R1) evidence
+ * fails closed instead of falling back. Returns `undefined` artifact when no
+ * usable copy exists anywhere — the guard **denies** the transition
+ * (no-artifact is no longer a silent allow; dogfood F81 / 0349 class).
+ * Operators override with `--force-done --reason`.
  */
 export async function readVerdictArtifact(
     fs: FileSystem,
@@ -159,12 +182,12 @@ export async function readVerdictArtifact(
     wbs: string,
 ): Promise<{ artifact: VerdictArtifact | undefined; readError?: string; path: string }> {
     const evidenceDir = join(dirname(runDir), 'memory', 'evidence');
-    const evidence = await readVerdictFrom(fs, `${evidenceDir}/${wbs}-verdict.json`);
+    const evidence = await readVerdictFrom(fs, `${evidenceDir}/${wbs}-verdict.json`, wbs);
     if (!evidence.missing) {
         const { missing: _missing, ...result } = evidence;
         return result;
     }
-    const scratch = await readVerdictFrom(fs, `${runDir}/${wbs}-verdict.json`);
+    const scratch = await readVerdictFrom(fs, `${runDir}/${wbs}-verdict.json`, wbs);
     const { missing: _scratchMissing, ...result } = scratch;
     return result;
 }
@@ -307,7 +330,7 @@ export function formatNoopMessage(wbs: string, status: string): string {
  *   6. PASS → allow; anything else → deny with the actionable message.
  */
 export function evaluateDoneTransition(input: GuardInput): GuardOutcome {
-    const { wbs, taskFilePath, currentStatus, targetStatus, forced, reason, artifact } = input;
+    const { wbs, taskFilePath, currentStatus, targetStatus, forced, reason, artifact, readError } = input;
 
     // R9: same-status no-op short-circuits before any verdict read.
     if (targetStatus === currentStatus) {
@@ -320,9 +343,25 @@ export function evaluateDoneTransition(input: GuardInput): GuardOutcome {
         return { kind: 'allow', reason: 'forced' };
     }
 
-    // No verdict artifact → deny (no silent done without verify).
+    // No verdict artifact → deny (no silent done without verify). When the
+    // file exists but is unusable (1042 R2: parse failure, identity mismatch),
+    // surface the reader's error instead of the misleading "missing" text.
     if (artifact === undefined) {
         const verdictPath = `.spur/run/${wbs}-verdict.json`;
+        if (readError) {
+            return {
+                kind: 'deny',
+                verdict: 'UNKNOWN',
+                message: [
+                    `Cannot transition task ${wbs} to done: verdict artifact is unusable.`,
+                    `  task:     ${taskFilePath}`,
+                    `  verdict:  ${verdictPath} (present but rejected)`,
+                    `  reason:   ${readError}`,
+                    `  remediation: fix the artifact (re-run \`/sp:dev-verify ${wbs}\` until PASS), ` +
+                        `or override with \`spur task update ${wbs} done --force-done --reason "<why>"\`.`,
+                ].join('\n'),
+            };
+        }
         return {
             kind: 'deny',
             verdict: 'UNKNOWN',

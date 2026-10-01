@@ -3041,6 +3041,54 @@ describe('FeatureCheckService', () => {
         cleanup();
     });
 
+    test('1042 R1: foreign-WBS artifact grants no scenario credit and reports the identity error', async () => {
+        const { result, cleanup } = await setup0410({
+            taskStatus: 'done',
+            rawArtifact: JSON.stringify({
+                wbs: '9999',
+                verdict: 'PASS',
+                requirements: [{ id: 'alpha', status: 'MET', evidence: 'x' }],
+            }),
+        });
+        // The foreign PASS must not verify this task's scenario.
+        expect(result.findings.filter((f) => f.code === 'L4.scenario-unverified')).toHaveLength(1);
+        // The identity mismatch surfaces as a malformed-artifact finding naming both WBS.
+        const malformed = result.findings.filter((f) => f.code === malformedCode);
+        expect(malformed).toHaveLength(1);
+        expect(malformed[0]?.message).toContain('expected wbs');
+        expect(malformed[0]?.message).toContain('9999');
+        // Identity error is not the missing-artifact sentinel — no recovery fallback fires.
+        expect(result.findings.filter((f) => f.code === 'L4.evidence-not-recoverable')).toHaveLength(0);
+        cleanup();
+    });
+
+    test('1042 R1: matching-WBS artifact verifies as before (no regression)', async () => {
+        const { result, cleanup } = await setup0410({
+            taskStatus: 'done',
+            rawArtifact: JSON.stringify({
+                wbs: '0001',
+                verdict: 'PASS',
+                requirements: [{ id: 'alpha', status: 'MET', evidence: 'x' }],
+            }),
+        });
+        expect(result.findings.filter((f) => f.code === 'L4.scenario-unverified')).toHaveLength(0);
+        expect(result.findings.filter((f) => f.code === malformedCode)).toHaveLength(0);
+        cleanup();
+    });
+
+    test('1042 R1: omitted-WBS artifact keeps legacy compatibility (verifies)', async () => {
+        const { result, cleanup } = await setup0410({
+            taskStatus: 'done',
+            rawArtifact: JSON.stringify({
+                verdict: 'PASS',
+                requirements: [{ id: 'alpha', status: 'MET', evidence: 'x' }],
+            }),
+        });
+        expect(result.findings.filter((f) => f.code === 'L4.scenario-unverified')).toHaveLength(0);
+        expect(result.findings.filter((f) => f.code === malformedCode)).toHaveLength(0);
+        cleanup();
+    });
+
     test('R7 (0451): missing artifact does not emit malformed warning (treated as unverified coverer)', async () => {
         const { result, cleanup } = await setup0410({
             taskStatus: 'done',

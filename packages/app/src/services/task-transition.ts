@@ -198,6 +198,9 @@ export async function transitionTaskGuarded(
             forced: input.forceDone === true,
             reason: input.reason,
             artifact: loaded.artifact,
+            // 1042 R2: surface identity/parse read errors in the denial instead
+            // of the misleading "missing verify verdict artifact" text.
+            readError: loaded.readError,
         });
         if (guardOutcome.kind === 'noop') {
             // R9: same-status no-op. The transport exits success so scripts

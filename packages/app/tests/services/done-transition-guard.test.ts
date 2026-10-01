@@ -1,10 +1,12 @@
 import { describe, expect, test } from 'bun:test';
+import type { FileSystem } from '@gobing-ai/ts-runtime';
 import {
     computeAggregate,
     evaluateDoneTransition,
     formatDenialMessage,
     formatNoopMessage,
     type GuardInput,
+    readVerdictArtifact,
     type VerdictArtifact,
     type VerdictRowStatus,
 } from '../../src/services/done-transition-guard';
@@ -462,6 +464,104 @@ describe('formatDenialMessage', () => {
 });
 
 // ─── formatNoopMessage ─────────────────────────────────────────────────
+
+describe('1042 — readVerdictArtifact identity binding (R1)', () => {
+    // Minimal in-memory FS matching the reader's contract (exists/readFile).
+    function memFs(files: Record<string, string>): FileSystem {
+        return {
+            exists: async (p: string) => p in files,
+            readFile: async (p: string) => {
+                const c = files[p];
+                if (c === undefined) throw new Error(`ENOENT: ${p}`);
+                return c;
+            },
+        } as unknown as FileSystem;
+    }
+    const RUN = '/proj/.spur/run';
+
+    test('R1: foreign explicit WBS yields no artifact with identity readError', async () => {
+        const fs = memFs({
+            [`${RUN}/0001-verdict.json`]: JSON.stringify({
+                wbs: '9999',
+                verdict: 'PASS',
+                requirements: [{ id: 'R1', status: 'MET', evidence: 'a' }],
+            }),
+        });
+        const out = await readVerdictArtifact(fs, RUN, '0001');
+        expect(out.artifact).toBeUndefined();
+        expect(out.readError).toContain('0001-verdict.json');
+        expect(out.readError).toContain("expected wbs '0001'");
+        expect(out.readError).toContain('9999');
+    });
+
+    test('R1: empty-string WBS is rejected', async () => {
+        const fs = memFs({
+            [`${RUN}/0001-verdict.json`]: JSON.stringify({ wbs: '', verdict: 'PASS' }),
+        });
+        const out = await readVerdictArtifact(fs, RUN, '0001');
+        expect(out.artifact).toBeUndefined();
+        expect(out.readError).toContain("expected wbs '0001'");
+        expect(out.readError).toContain('actual ""');
+    });
+
+    test('R1: null WBS is rejected', async () => {
+        const fs = memFs({
+            [`${RUN}/0001-verdict.json`]: JSON.stringify({ wbs: null, verdict: 'PASS' }),
+        });
+        const out = await readVerdictArtifact(fs, RUN, '0001');
+        expect(out.artifact).toBeUndefined();
+        expect(out.readError).toContain('null');
+    });
+
+    test('R1: non-string WBS is rejected', async () => {
+        const fs = memFs({
+            [`${RUN}/0001-verdict.json`]: JSON.stringify({ wbs: 42, verdict: 'PASS' }),
+        });
+        const out = await readVerdictArtifact(fs, RUN, '0001');
+        expect(out.artifact).toBeUndefined();
+        expect(out.readError).toContain('42');
+    });
+
+    test('R1: matching explicit WBS stays valid', async () => {
+        const fs = memFs({
+            [`${RUN}/0001-verdict.json`]: JSON.stringify({
+                wbs: '0001',
+                verdict: 'PASS',
+                requirements: [{ id: 'R1', status: 'MET', evidence: 'a' }],
+            }),
+        });
+        const out = await readVerdictArtifact(fs, RUN, '0001');
+        expect(out.artifact).toBeDefined();
+        expect(out.readError).toBeUndefined();
+    });
+
+    test('R1: omitted WBS retains legacy compatibility', async () => {
+        const fs = memFs({
+            [`${RUN}/0001-verdict.json`]: JSON.stringify({
+                verdict: 'PASS',
+                requirements: [{ id: 'R1', status: 'MET', evidence: 'a' }],
+            }),
+        });
+        const out = await readVerdictArtifact(fs, RUN, '0001');
+        expect(out.artifact).toBeDefined();
+    });
+
+    test('R2: evaluateDoneTransition surfaces the identity readError in the denial', async () => {
+        const out = evaluateDoneTransition(
+            baseInput({
+                artifact: undefined,
+                readError: `artifact identity mismatch at /proj/.spur/run/0001-verdict.json: expected wbs '0001', actual 9999`,
+            }),
+        );
+        expect(out.kind).toBe('deny');
+        if (out.kind === 'deny') {
+            expect(out.verdict).toBe('UNKNOWN');
+            expect(out.message).toContain('identity mismatch');
+            expect(out.message).toContain('9999');
+            expect(out.message).not.toContain('missing verify verdict artifact');
+        }
+    });
+});
 
 describe('formatNoopMessage', () => {
     test('names the status and avoids the undefined shape', () => {
