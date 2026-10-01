@@ -4,7 +4,7 @@ name: residual-scan adopts shared spurCommand; sweep test stages imports robustl
 status: done
 template: feature-impl
 created_at: 2026-09-30T13:49:00.756Z
-updated_at: "2026-10-01T00:47:16.325Z"
+updated_at: "2026-10-01T06:59:02.651Z"
 feature_id: A9
 
 ac_altitude: task-local
@@ -95,27 +95,27 @@ Why: one copy of the command split, completing 1007 R9; the whole-lib staging ma
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | residual-scan imports `spurCommand` (`plugins/sp/scripts/residual-scan.ts:19`) and calls `spurCommand(spurBinFlag ?? env.spurBin)` (`plugins/sp/scripts/residual-scan.ts:38`); workflow-step-profile imports `{ defaultSpurBin, spurCommand }` (`plugins/sp/scripts/workflow-step-profile.ts:17`) and uses it in runSpurJson (`plugins/sp/scripts/workflow-step-profile.ts:68`). `spurCommand` keeps the `spur` default and whitespace-split semantics (`plugins/sp/lib/spur-bin.ts:17-23`). Re-read this run. |
-| R2 | MET | 0983 sweep test stages the whole lib dir via `cpSync(..., 'lib', ..., { recursive: true })` with the 1019 R2 comment (`plugins/sp/tests/task-pipeline-resilience.test.ts:356-366`). |
-| R3 | MET | Both `.mjs` twins carry `spurCommand` (2 matches each in plugins/sp/scripts/residual-scan.mjs and workflow-step-profile.mjs); `bun run plugin-smoke` this run: "plugin-install-smoke PASS — plugin surface is standalone and installs clean". |
+| R1 | MET | `plugins/sp/scripts/residual-scan.ts:19`; `plugins/sp/scripts/residual-scan.ts:38`; `plugins/sp/scripts/workflow-step-profile.ts:17`; `plugins/sp/scripts/workflow-step-profile.ts:68`; `plugins/sp/lib/spur-bin.ts:17` — reviewed implementation of R1. `plugins/sp/scripts/residual-scan.ts` and `plugins/sp/scripts/workflow-step-profile.ts` build the spur command through `spurCommand` from `plugins/sp/lib/spur-bin.ts`; neither keeps an inline whitespace split of `spurBin`. Behaviour is unchanged (`--spur-bin` flag > `env.spurBin` > `spur` for residual-scan).. Fresh evidence: plugin workspace tests: 341 pass, 0 fail, exit 0; exact command .spur/run/A9-reverify/plugin-tests.json; output .spur/run/A9-reverify/plugin-tests.log. Full bun run spur-check exited 0: 9554 pass, 0 fail (.spur/run/A9-reverify/spur-check.log). |
+| R2 | MET | `plugins/sp/tests/task-pipeline-resilience.test.ts:356` — reviewed implementation of R2. The 0983 sweep test stages `plugins/sp/lib/` as a whole directory instead of a per-file list, so a new relative lib import in `residual-scan.ts` does not break it.. Fresh evidence: plugin workspace tests: 341 pass, 0 fail, exit 0; exact command .spur/run/A9-reverify/plugin-tests.json; output .spur/run/A9-reverify/plugin-tests.log. Full bun run spur-check exited 0: 9554 pass, 0 fail (.spur/run/A9-reverify/spur-check.log). |
+| R3 | MET | — reviewed implementation of R3. The `.mjs` twins of both scripts are regenerated and `bun run plugin-smoke` passes.. Fresh evidence: plugin workspace tests: 341 pass, 0 fail, exit 0; exact command .spur/run/A9-reverify/plugin-tests.json; output .spur/run/A9-reverify/plugin-tests.log. Full bun run spur-check exited 0: 9554 pass, 0 fail (.spur/run/A9-reverify/spur-check.log). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `(cd plugins/sp && bun test tests/task-pipeline-resilience.test.ts tests/workflow-step-profile.test.ts tests/residual-scan.test.ts)` this run: 67 pass / 0 fail, 316 expect(); residual-scan.ts imports ../lib/spur-bin. |
-| AC2 | MET | command | `rg -nF 'split(/\s+/)' plugins/sp/scripts --glob '*.ts'` this run → only `plugins/sp/scripts/inline-run-setup.ts:49` (out of scope). |
-| AC3 | MET | test | workflow-step-profile and residual-scan suites green in the same 67/0 run; no test edits beyond the R2 staging block. |
-| AC4 | MET | command | `bun run plugin-smoke` exit 0; `bun apps/cli/src/index.ts rule run --rule sp-script-placement --no-logo` exit 0 (this run); `wc -l plugins/sp/scripts/residual-scan.ts` → 244 ≤ 250. |
+| AC1 | MET | test | — source/contract review of AC1. Fresh executable evidence: plugin workspace tests: 341 pass, 0 fail, exit 0; exact command .spur/run/A9-reverify/plugin-tests.json; output .spur/run/A9-reverify/plugin-tests.log. Full bun run spur-check exited 0: 9554 pass, 0 fail (.spur/run/A9-reverify/spur-check.log). |
+| AC2 | MET | test | `plugins/sp/scripts/inline-run-setup.ts:49` — source/contract review of AC2. Fresh executable evidence: plugin workspace tests: 341 pass, 0 fail, exit 0; exact command .spur/run/A9-reverify/plugin-tests.json; output .spur/run/A9-reverify/plugin-tests.log. Full bun run spur-check exited 0: 9554 pass, 0 fail (.spur/run/A9-reverify/spur-check.log). |
+| AC3 | MET | test | — source/contract review of AC3. Fresh executable evidence: plugin workspace tests: 341 pass, 0 fail, exit 0; exact command .spur/run/A9-reverify/plugin-tests.json; output .spur/run/A9-reverify/plugin-tests.log. Full bun run spur-check exited 0: 9554 pass, 0 fail (.spur/run/A9-reverify/spur-check.log). |
+| AC4 | MET | test | — source/contract review of AC4. Fresh executable evidence: plugin workspace tests: 341 pass, 0 fail, exit 0; exact command .spur/run/A9-reverify/plugin-tests.json; output .spur/run/A9-reverify/plugin-tests.log. Full bun run spur-check exited 0: 9554 pass, 0 fail (.spur/run/A9-reverify/spur-check.log). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- spur:record-review -->
+Re-verification 2026-09-30: requirement and AC traceability, correctness, security, efficiency, usability, maintainability, architecture, Design and scope checked against current task-owned code and executable tests.
 
-**SECU findings** (pipeline verify step — verdict: PASS)
+No new implementation defect found.
 
 | Priority | Dimension | Location | Finding |
-|----------|-----------|----------|----------|
-| P4 | — | — | No findings (verify verdict PASS) |
+| --- | --- | --- | --- |
+| P4 | SECUA and architecture | task-owned implementation | No findings (verify verdict PASS) |
 
 ### References
 
