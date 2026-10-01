@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { applyCliMigrations, type DbAdapter } from '@gobing-ai/spur-domain';
@@ -84,6 +84,23 @@ describe('deriveVerifiedOutcome (app derivation smoke)', () => {
         expect(stat?.costCoverage).toEqual({ covered: 0, total: 1 });
         // No run→session mapping exists — measured cost is null, never zero (R4).
         expect(stat?.measuredTokensPerVerifiedResult).toBeNull();
+        db.close();
+    });
+
+    test('reads the verdict from durable evidence when scratch is disposed (E71/1027)', async () => {
+        const { db, cwd } = await makeEnv();
+        rmSync(join(cwd, '.spur', 'run'), { recursive: true, force: true });
+        mkdirSync(join(cwd, '.spur', 'memory', 'evidence'), { recursive: true });
+        writeFileSync(
+            join(cwd, '.spur', 'memory', 'evidence', '0701-verdict.json'),
+            JSON.stringify({ wbs: '0701', verdict: 'PASS', proofDigest: 'sha256:abc' }),
+        );
+        const stat = await deriveVerifiedOutcome({ db, cwd, locator: stubLocator(cwd), fs: stubFs() }, {});
+        // Identical to the scratch-sourced derivation above — completed scratch disposal
+        // must not change the verified population.
+        expect(stat?.taskDenominator).toBe(1);
+        expect(stat?.verifiedResults).toBe(1);
+        expect(stat?.verifiedWithoutCorrection).toBe(1);
         db.close();
     });
 

@@ -32,6 +32,7 @@ import {
     type VerifiedOutcomeTaskInput,
 } from '@gobing-ai/spur-domain';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
+import { readVerdictArtifact } from './done-transition-guard';
 import { parseVerdictLine } from './task-record';
 
 /** Hard cap on tasks derived per analyze call (R7: bounded work, never unbounded). */
@@ -204,13 +205,19 @@ async function deriveTaskInput(
     // The workflow-definition digest the verdict binds to, when it names one (0759 R5).
     let boundDefinitionDigest: string | null = null;
     let measuredTokens: number | null = null;
-    try {
-        const verdictRaw = await deps.fs.readFile(`${deps.cwd}/.spur/run/${wbs}-verdict.json`);
-        const verdict = JSON.parse(verdictRaw) as {
-            verdict?: unknown;
-            proofDigest?: unknown;
-            proof?: { digest?: unknown; runId?: unknown; definitionDigest?: unknown };
-        };
+    // E71/1027: the verify verdict is lasting acceptance evidence, not scratch — resolve it
+    // through the shared durable-first seam (`.spur/memory/evidence`, then scratch fallback,
+    // done-transition-guard precedence) so completed scratch disposal cannot change the
+    // verified population. Absent everywhere → fold routes to missing/synthetic buckets.
+    const verdictRead = await readVerdictArtifact(deps.fs, `${deps.cwd}/.spur/run`, wbs);
+    const verdict = verdictRead.artifact as
+        | {
+              verdict?: unknown;
+              proofDigest?: unknown;
+              proof?: { digest?: unknown; runId?: unknown; definitionDigest?: unknown };
+          }
+        | undefined;
+    if (verdict) {
         verdictPresent = typeof verdict.verdict === 'string';
         passVerdict = verdict.verdict === 'PASS';
         // 0730 §B.1: the pipeline stamps `proof: {digest, runId, …}` (task-pipeline.yaml verify
@@ -225,8 +232,6 @@ async function deriveTaskInput(
         if (typeof verdict.proof?.definitionDigest === 'string' && verdict.proof.definitionDigest.length > 0) {
             boundDefinitionDigest = verdict.proof.definitionDigest;
         }
-    } catch {
-        // No verdict artifact — fold routes to missing/synthetic buckets.
     }
 
     // 0730 §B.2 + 0759 R5: when the verdict names its certifying run, that exact run must have
