@@ -14,6 +14,7 @@ import { applyCliMigrations, MarkdownDocument, TaskRunLinkDao } from '@gobing-ai
 import { createDbAdapter, type DbAdapter } from '@gobing-ai/ts-db';
 import { createNodeFileSystem, type FileSystem } from '@gobing-ai/ts-runtime';
 import { GuardDeniedError } from '../../src/errors';
+import { FeatureCheckService } from '../../src/services/feature-check';
 import type { SectionMatrix } from '../../src/services/planning-check-base';
 import { type EntityRef, type LifecyclePort, PlanningWriteService } from '../../src/services/planning-write-service';
 import type { TaskCheckService } from '../../src/services/task-check';
@@ -30,6 +31,13 @@ import {
 import { sectionIsBare, TaskService } from '../../src/services/task-service';
 import type { TransitionCheckGate } from '../../src/services/task-transition';
 import { aggregateVerifyVerdict, type VerifyVerdict } from '../../src/services/verify-verdict';
+import {
+    captureFeatureReceiptDigest,
+    completeFeatureVerificationReceipt,
+    DEFAULT_FEATURE_VERIFICATION_CMD,
+    startFeatureVerificationReceipt,
+} from '../../src/workflow/feature-verification-receipt';
+import { resolveWorkflowDefinition } from '../../src/workflow/workflow-resolver';
 
 // ─── Helpers ────────────────────────────────────────────────────────────
 
@@ -686,6 +694,119 @@ describe('renderSolutionFromDiff', () => {
 });
 
 describe('TaskService.record', () => {
+    test('real recorded task and feature acceptance remain equal after entire scratch disposal', async () => {
+        const root = mkdtempSync(join(tmpdir(), 'spur-record-dispose-'));
+        const fs = createNodeFileSystem(root);
+        const tasks = join(root, 'tasks');
+        const features = join(root, 'features');
+        const runDir = join(root, '.spur/run');
+        try {
+            await fs.ensureDir(tasks);
+            await fs.ensureDir(features);
+            await fs.ensureDir(runDir);
+            const taskPath = join(tasks, '1027_disposal.md');
+            await fs.writeFile(
+                taskPath,
+                `---
+schema_version: 1
+name: Disposal
+status: done
+feature_id: T1
+created_at: 2026-10-01T00:00:00Z
+updated_at: 2026-10-01T00:00:00Z
+---
+## 1027. Disposal
+### Requirements
+- [ ] R1. Preserve acceptance
+### Acceptance Criteria
+- [ ] AC1 — Retained acceptance (req: R1)
+### Solution
+Persist through the existing owners.
+### Testing
+### Review
+`,
+            );
+            const verdictFile = join(runDir, '1027-verdict.json');
+            await fs.writeFile(
+                verdictFile,
+                JSON.stringify({
+                    wbs: '1027',
+                    verdict: 'PASS',
+                    requirements: [{ id: 'R1', status: 'MET', evidence: 'real owner regression' }],
+                    acceptanceCriteria: [
+                        { id: 'Scenario: Retained acceptance', status: 'MET', evidence: 'real owner regression' },
+                    ],
+                    checks: [],
+                }),
+            );
+            const service = new TaskService({
+                fs,
+                tasksDir: tasks,
+                writeService: new PlanningWriteService({ fs }),
+                sectionMatrix: RECORD_SECTION_MATRIX,
+            });
+            await service.record('1027', { verdictFile });
+            const feature = `---
+schema_version: 1
+id: T1
+name: Disposal
+status: verifying
+priority: P1
+created_at: 2026-10-01T00:00:00Z
+updated_at: 2026-10-01T00:00:00Z
+---
+# T1: Disposal
+## Goal
+Preserve acceptance.
+## Scope
+In scope: disposable scratch.
+## Acceptance Criteria
+\`\`\`gherkin
+Feature: Disposal
+  Scenario: Retained acceptance
+    Given lasting evidence
+    When scratch is removed
+    Then acceptance stays valid
+\`\`\`
+## Tasks
+1027
+`;
+            const featurePath = join(features, 'T1_disposal.md');
+            await fs.writeFile(featurePath, feature);
+            const definition = await resolveWorkflowDefinition(process.cwd(), 'feature-verification');
+            const learningsPath = join(process.cwd(), '.spur/context/learnings.md');
+            const learnings = (await fs.exists(learningsPath)) ? await fs.readFile(learningsPath) : undefined;
+            const digest = await captureFeatureReceiptDigest(process.cwd(), feature, learnings);
+            const running = await startFeatureVerificationReceipt(fs, runDir, {
+                featureId: 'T1',
+                runId: 'receipt-disposal',
+                workdir: root,
+                verifier: {
+                    name: 'feature-verification',
+                    sourcePath: definition.path,
+                    layer: definition.layer,
+                    definitionDigest: definition.digest,
+                },
+                verificationCmd: DEFAULT_FEATURE_VERIFICATION_CMD,
+                inputDigest: digest,
+            });
+            await completeFeatureVerificationReceipt(fs, runDir, running, { status: 'PASS', inputDigest: digest });
+            const checker = new FeatureCheckService(fs);
+            const check = () =>
+                checker.check(featurePath, 'T1', { tasksDir: tasks, featuresDir: features, runDir, asStatus: 'done' });
+            const before = await check();
+            expect(before.findings).toEqual([]);
+            expect(before.pass).toBe(true);
+            rmSync(runDir, { recursive: true, force: true });
+            expect(await check()).toEqual(before);
+            rmSync(runDir, { recursive: true, force: true });
+            expect(await check()).toEqual(before);
+            await fs.writeFile(join(root, '.spur/memory/evidence/1027-verdict.json'), '{broken');
+            expect((await check()).pass).toBe(false);
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
     let tasksDir: string;
 
     let svc: TaskService;

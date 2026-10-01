@@ -3180,7 +3180,7 @@ terminalStates:
             await writeFile(wfPath, RECORD_RESUME_YAML);
             const bus = new EventBus<WorkflowObservabilityEventMap>();
             const svc = new WorkflowAppService({ ...makeCtx(dir), observabilityBus: () => bus });
-            const runDir = join(dir, '.spur', 'run');
+            const runDir = join(dir, '.spur', 'memory', 'runs');
             const counter = join(dir, 'counter.txt');
             const readCounter = async (): Promise<string[]> => {
                 const text = await readFile(counter, 'utf8');
@@ -3227,6 +3227,16 @@ terminalStates:
                 status: 'done',
             });
             expect(stateAfterResume.startedAt).toBe(stateAfterRun.startedAt);
+            const before = { trace: await svc.trace('rec1'), record: readWorkflowRunRecord(runDir, 'rec1') };
+            await mkdir(join(dir, '.spur/run'), { recursive: true });
+            await writeFile(join(dir, '.spur/run/rec1-status.txt'), 'done');
+            for (let i = 0; i < 2; i++) {
+                await rm(join(dir, '.spur/run'), { recursive: true, force: true });
+                expect({ trace: await svc.trace('rec1'), record: readWorkflowRunRecord(runDir, 'rec1') }).toEqual(
+                    before,
+                );
+                expect(await readCounter()).toEqual(['tick']);
+            }
             await rm(dir, { recursive: true, force: true });
         });
     });
