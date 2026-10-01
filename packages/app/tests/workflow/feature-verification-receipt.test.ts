@@ -495,6 +495,18 @@ describe('feature verification receipt (0915, v1 contract)', () => {
             );
             expect(wrongCmd.ok).toBe(false);
             if (!wrongCmd.ok) expect(wrongCmd.reason).toBe('run');
+            // Row digest disagrees with the receipt digest (bundled-vs-source seam artifact).
+            const digestMismatch = await validate(
+                repo,
+                makeRunPort({ 'run-1': { status: 'done', digest: 'sha256:other' } }, [receiptPath]),
+            );
+            expect(digestMismatch.ok).toBe(false);
+            if (!digestMismatch.ok) {
+                expect(digestMismatch.reason).toBe('run');
+                // 1031 R2: the detail names the receipt's definition file and the re-run hint.
+                expect(digestMismatch.detail).toContain(`receipt sourcePath=${VERIFIER.sourcePath}`);
+                expect(digestMismatch.detail).toContain('a different spur install may have attached the run');
+            }
             // Corrupt varsJson is tolerated (effective command unknown → no comparison).
             const corruptVars = await validate(
                 repo,
@@ -518,7 +530,40 @@ describe('feature verification receipt (0915, v1 contract)', () => {
             expect(result.ok).toBe(false);
             if (!result.ok) {
                 expect(result.reason).toBe('contract-mismatch');
-                expect(result.detail).toEndWith('(definitionDigest)');
+                expect(result.detail).toContain('(definitionDigest)');
+                // 1031 R2: equal sourcePaths name both files; the different-install hint is
+                // conditional on the paths actually differing (Q&A hint condition).
+                expect(result.detail).toContain(`receipt sourcePath=${VERIFIER.sourcePath}`);
+                expect(result.detail).toContain(`current sourcePath=${VERIFIER.sourcePath}`);
+                expect(result.detail).not.toContain('different spur install resolved');
+            }
+        } finally {
+            rmSync(repo, { recursive: true, force: true });
+        }
+    });
+
+    // 1031 AC2: differing sourcePaths with drifted identity name both files and print the hint.
+    test('contract mismatch with differing source paths names both files and the re-run hint', async () => {
+        const repo = makeTempGitRepo();
+        try {
+            const digest = await captureFeatureReceiptDigest(repo, FEATURE_MD);
+            await recordPass(repo, digest);
+            const result = await validate(repo, undefined, {
+                ...VERIFIER,
+                definitionDigest: 'sha256:different',
+                sourcePath: ['apps', 'cli', 'config', 'workflows', 'feature-verification.yaml'].join('/'),
+            });
+            expect(result.ok).toBe(false);
+            if (!result.ok) {
+                expect(result.reason).toBe('contract-mismatch');
+                expect(result.detail).toContain(`receipt sourcePath=${VERIFIER.sourcePath}`);
+                expect(result.detail).toContain(
+                    `current sourcePath=${['apps', 'cli', 'config', 'workflows', 'feature-verification.yaml'].join('/')}`,
+                );
+                expect(result.detail).toContain('a different spur install resolved a different definition');
+                expect(result.detail).toContain(
+                    're-run the verification pass and the transition with the same spur binary',
+                );
             }
         } finally {
             rmSync(repo, { recursive: true, force: true });

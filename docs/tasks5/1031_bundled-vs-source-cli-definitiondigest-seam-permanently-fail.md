@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Bundled-vs-source CLI definitionDigest seam permanently fails feature-verification receipt guard
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-30T21:56:16.627Z
-updated_at: "2026-09-30T22:42:05.029Z"
+updated_at: "2026-10-01T07:30:46.864Z"
 feature_id: D9
 
 priority: P2
@@ -106,22 +106,48 @@ Title note: the task title keeps its original creation wording for traceability;
 
 **Verification checks (evidence for the AC above):**
 
-- [ ] `packages/app/tests/workflow/lifecycle-adapter.test.ts:98` passes (R1).
-- [ ] New contract-mismatch test asserts both `sourcePath` values and the hint in `detail` (R2).
-- [ ] New run-row mismatch test asserts the receipt `sourcePath` and the hint (R2).
-- [ ] sourcePath-only test returns `ok: true`; all pre-existing receipt tests pass unchanged (R3).
+- [x] `packages/app/tests/workflow/lifecycle-adapter.test.ts:98` passes (R1).
+- [x] New contract-mismatch test asserts both `sourcePath` values and the hint in `detail` (R2).
+- [x] New run-row mismatch test asserts the receipt `sourcePath` and the hint (R2).
+- [x] sourcePath-only test returns `ok: true`; all pre-existing receipt tests pass unchanged (R3).
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+- R1 (re-verify only): confirmed `62499ad68` — `packages/app/src/workflow/lifecycle-adapter.ts:219` merges the caller's `spurBin` through `options.vars`, which the engine applies last, so guarded transitions of an already-attached run execute with the current caller's binary. Evidence: `feature-lifecycle-adapter.test.ts` 12/12 pass.
+- R2 (message-only): `packages/app/src/workflow/feature-verification-receipt.ts:418` — the `run` definition-digest rejection detail now appends ` (receipt sourcePath=…)` plus `— a different spur install may have attached the run; re-run the verification pass and the transition with the same spur binary`; the `contract-mismatch` rejection at `:463` keeps its original text and appends `; receipt sourcePath=…, current sourcePath=…` with the different-install hint printed only when the two paths differ (Q&A hint condition).
+- Tests: new AC2 case (differing sourcePaths → both files named + hint); run-row digest-mismatch case asserts the receipt's sourcePath and the re-run hint; drift case asserts equal-path variant without hint; AC4 (sourcePath-only → ok:true) unchanged. Receipt suite 22/22, lifecycle-adapter 12/12.
+- `plugins/sp/lib/inline-run.generated.mjs` regenerated with the final wording (the module is bundled — Design's stale note corrected in Review) and shipped in the same change set; bundle determinism gate green.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `62499ad68` merges caller `spurBin` via `options.vars` (lifecycle-adapter.ts:219-224); `feature-lifecycle-adapter.test.ts` 12/12 pass — guard transitions use the current caller's spurBin. |
+| R2 | MET | `feature-verification-receipt.ts` run detail (:418) appends ` (receipt sourcePath=…)` + different-install re-run hint; contract-mismatch detail (:463) appends both sourcePath values with the hint gated on paths differing (Q&A hint condition). Tests assert receipt sourcePath + hint (run-row) and both paths + hint (differing-sourcePath case). |
+| R3 | MET | Invariants held: `drifted` list unchanged (name/layer/definitionDigest); reason values and return shapes untouched; sourcePath-only difference still passes (AC4, ok:true). Receipt suite 22/22 pass. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — a guard runs the caller's spurBin on a run attached by another binary (req: R1) | MET | test | "guards run the caller-resolved spurBin" scenario in feature-lifecycle-adapter.test.ts — transition allowed when second adapter's spurBin differs from snapshot. |
+| AC2 — a verifier-identity mismatch names both definition files (req: R2) | MET | test | New test `contract mismatch with differing source paths names both files and the re-run hint` (feature-verification-receipt.test.ts:540) asserts reason contract-mismatch, both sourcePath values, and the "different spur install" hint; implementation at feature-verification-receipt.ts:463. |
+| AC3 — a run-row digest mismatch names the receipt's definition file (req: R2) | MET | test | Run-row digest-mismatch test asserts `receipt sourcePath=` and `a different spur install may have attached the run` in detail with reason `run`; implementation at feature-verification-receipt.ts:418. |
+| AC4 — sourcePath alone never changes the verdict (req: R3) | MET | test | 0957 test `same definition resolved from a different install path still validates` — equal name/layer/digest, different sourcePath → ok:true. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**Reviewer:** host-inline (fresh-context over recorded diff; P2 → same-executor distinctness permitted)
+
+**Review re-check (remediation hop, digest sha256:da04de57):** implementation now matches the Design section verbatim — `run` detail appends ` (receipt sourcePath=…) — a different spur install may have attached the run; re-run the verification pass and the transition with the same spur binary`; `contract-mismatch` keeps original text, appends both sourcePath values, and prints the different-install hint only when the paths differ (Q&A hint condition honored). New AC2 test covers differing sourcePaths; drift test asserts equal-path variant without hint; AC4 unchanged (ok:true). R1 evidence re-confirmed (feature-lifecycle-adapter 12/12). Gate recheck PASS. Bundle regenerated and committed-with-change (determinism gate green).
+
+| Priority | Finding | Disposition |
+| -------- | ------- | ----------- |
+| P4 | Seam detection remains a digest-comparison heuristic; both CLI kinds self-report the same version | Deferred — detection redesign belongs to 0957; this task's scope is R2 message-only |
+| P4 | Design note "inline-run.generated.mjs does not bundle this module" is stale — the module IS bundled | Resolved in-change — bundle regenerated with the final wording and shipped in the change set; determinism gate enforces source↔bundle sync |
 
 ### References
 
@@ -135,4 +161,7 @@ Title note: the task title keeps its original creation wording for traceability;
 ### History
 
 - 2026-09-30T22:42:05.029Z backlog → todo (system)
+- 2026-10-01T06:32:38.497Z todo → wip (system)
+- 2026-10-01T07:30:28.088Z wip → testing (system)
+- 2026-10-01T07:30:46.864Z testing → done (system)
 

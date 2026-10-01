@@ -415,7 +415,7 @@ export async function validateFeatureVerificationReceipt(
             return {
                 ok: false,
                 reason: 'run',
-                detail: `run ${latest.runId} attached with definition digest ${row.definitionDigest}, receipt records ${latest.verifier.definitionDigest}`,
+                detail: `run ${latest.runId} attached with definition digest ${row.definitionDigest}, receipt records ${latest.verifier.definitionDigest} (receipt sourcePath=${latest.verifier.sourcePath}) — a different spur install may have attached the run; re-run the verification pass and the transition with the same spur binary`,
             };
         }
         let recordedCmd: string | undefined;
@@ -460,7 +460,7 @@ export async function validateFeatureVerificationReceipt(
         return {
             ok: false,
             reason: 'contract-mismatch',
-            detail: `receipt recorded verifier ${verifier.name}@${verifier.layer} (${verifier.definitionDigest}), completion evaluates ${current.name}@${current.layer} (${current.definitionDigest}) — the selected definition changed after the pass (${drifted.join(', ')})`,
+            detail: `receipt recorded verifier ${verifier.name}@${verifier.layer} (${verifier.definitionDigest}), completion evaluates ${current.name}@${current.layer} (${current.definitionDigest}) — the selected definition changed after the pass (${drifted.join(', ')}); receipt sourcePath=${verifier.sourcePath}, current sourcePath=${current.sourcePath}${verifier.sourcePath !== current.sourcePath ? ' — a different spur install resolved a different definition; re-run the verification pass and the transition with the same spur binary' : ''}`,
         };
     }
     if (latest.verificationCmd !== options.currentVerificationCmd) {
