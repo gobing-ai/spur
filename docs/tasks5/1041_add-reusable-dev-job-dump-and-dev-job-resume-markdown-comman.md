@@ -4,7 +4,7 @@ name: Add reusable dev-job-dump and dev-job-resume Markdown commands
 status: done
 template: meta
 created_at: 2026-10-01T19:01:21.073Z
-updated_at: "2026-10-01T21:21:46.213Z"
+updated_at: "2026-10-01T21:23:16.188Z"
 priority: P2
 estimate_hours: 1
 
@@ -82,8 +82,8 @@ Updated the existing operation/role/command indexes, shared flag glossary and ow
 |---------------------|--------|---------------|----------|
 | AC1 | MET | command | bun .spur/run/1041-verify/instruction-contract-check.ts; .spur/run/1041-verify/instruction-contract-check.log:1 verifies both wrappers' required hint/table/usage and procedure links. |
 | AC2 | MET | command | bun .spur/run/1041-verify/instruction-contract-check.ts; .spur/run/1041-verify/instruction-contract-check.log:1 verifies all eight reusable sections and excludes sample-specific content. |
-| AC3 | MET | command | bun .spur/run/1041-verify/instruction-contract-check.ts; .spur/run/1041-verify/instruction-contract-check.log:2 verifies the prompt instructions' input-validation, live-state, missing-data and continuation obligations. Current-host inline dump/read-back/resume reconciliation used a path with spaces; .spur/run/1041-verify/dump-state.json:2 and .spur/run/1041-verify/resume-reconciliation.json:3 show fresh Git/task provenance, implementation skipped and the verification owner retained. This is instruction coverage plus one live inline walkthrough, not an arbitrary second-session/engine end-to-end claim. |
-| AC4 | MET | test | Fresh focused command/flag/role/skill/section suites: .spur/run/1041-verify/focused-tests.log (298 pass); Superskill strict validation for both wrappers: .spur/run/1041-verify/dump-validation.json:2 and .spur/run/1041-verify/resume-validation.json:2; .spur/run/1041-verify/command-validation.log:2; .spur/run/1041-verify/link-check.log:2. |
+| AC3 | MET | command | bun .spur/run/1041-verify/instruction-contract-check.ts; .spur/run/1041-verify/instruction-contract-check.log:2 verifies the prompt instructions' input-validation, live-state, missing-data and continuation obligations. Current-host inline dump/read-back/resume reconciliation used a path with spaces; .spur/run/1041-verify/dump-state.json:2 and .spur/run/1041-verify/resume-reconciliation.json:3 show fresh Git/task provenance, implementation skipped and the verification owner retained. This is instruction coverage plus one live inline walkthrough, not an arbitrary second-session/engine end-to-end claim. Fix-pass handoff artifacts written: .spur/run/1041-verify/instruction-contract-check.ts:1-35; .spur/run/1041-verify/dump-state.json:1-15; .spur/run/1041-verify/resume-reconciliation.json:1-17; .spur/run/1041-verify/handoff with spaces/job transfer.md:1-32. |
+| AC4 | MET | test | Fresh focused command/flag/role/skill/section suites: .spur/run/1041-verify/focused-tests.log (298 pass); Superskill strict validation for both wrappers: .spur/run/1041-verify/dump-validation.json:2 and .spur/run/1041-verify/resume-validation.json:2; .spur/run/1041-verify/command-validation.log:2; .spur/run/1041-verify/link-check.log:2. Fix-pass review/evidence artifacts written: .spur/run/1041-verify/functional-review.md:1-10; .spur/run/1041-verify/secua-review.md:1-6; .spur/run/1041-verify/architecture-review.md:1-1; .spur/run/1041-verify/review.md:1-34; .spur/run/1041-verify/solution.md:1-11. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
