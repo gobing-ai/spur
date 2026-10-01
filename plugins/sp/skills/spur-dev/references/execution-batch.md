@@ -1008,7 +1008,7 @@ git checkout <base-ref> && git merge --no-ff --no-commit <branch>
 # 4. run qualityGateCmd once, after ALL conflicts are resolved
 # 5. commit the merge with the prepared message file
 git commit -F <message-file>
-# 5. persist evidence out (WT-4a), then WT-4b/4c cleanup, and set the marker to merged
+# 6. persist evidence out (WT-4a), then WT-4b/4c cleanup, and set the marker to merged
 inline-run-setup --persist-out --from <worktree> --task-file …
 ```
 
