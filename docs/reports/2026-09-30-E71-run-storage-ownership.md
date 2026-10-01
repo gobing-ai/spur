@@ -288,3 +288,29 @@ diff (`requireDiff` untouched), no source edits (mutationPolicy none).
 - No tests run (no code changed); no cleanup executed; no `.mjs` twins or generated config edited.
 - Candidate-set equality check: 56 non-test source files + 8 workflow YAMLs + self-dev scripts
   enumerated; every located site mapped to a family in §3 or a row in §4/§9.
+
+## 13. Force verification corrections (2026-10-01)
+
+The original inventory is a historical audit, not proof that every current run-storage dependency
+has been retired. A fresh source census was regenerated with
+`rg -n --glob '*.ts' --glob '*.yaml' --glob '*.md' '\.spur/run|runStoragePaths|runSessionsDir|runArtifactsDir|runRoot|runLogDir'`
+over app/CLI/server source, portable plugin surfaces, workflows and self-development scripts.
+The invoking verification retains the rows as `.spur/run/E71-current-storage-census.txt`.
+There is no executable candidate-to-classified-location equality check in this report; the earlier
+file-count statement alone does not prove exhaustive producer/consumer coverage. R1 remains PARTIAL.
+
+Current unresolved ownership and regression mapping:
+
+| Dependency | Current disposition | Required closure |
+| --- | --- | --- |
+| Corpus sweep verdict discovery | Still scans scratch rather than durable evidence | Redirect the existing discovery seam; verify identical sweep inputs after scratch removal (1025 R2) |
+| Feature-sync suppression verdict mtime vector | Still scans scratch | Include canonical evidence changes in invalidation without letting absent scratch change acceptance (1025 R2) |
+| Retained legacy artifact/session migration | Copies bytes but has no metadata-redirection or settled-importer port | Redirect owner references and prove importer obligations before claiming disposable data (1026 R4) |
+| Worktree result export | Carries records with skipped-conflict outcomes; durable evidence is not a complete transferred family | Require truthful failure and repairable replay before teardown (1026 R3; existing follow-up 1043) |
+| Session-history disposal regression | Existing decisive test compares retained session bytes | Execute the real late importer and compare imported history, feature acceptance and producer outcomes (1027 R3) |
+| Classified JSON identity | Migration accepts an object without full family identity validation | Reject and preserve foreign/malformed task, feature and record identities (1025 R4) |
+
+Keep correctness invalidation, atomic publication cleanup and unrelated temporary cleanup.
+No real project scratch was deleted during this re-verification. The repaired record/receipt
+writers and migration confinement do not settle the unresolved consumers above. R4 remains PARTIAL
+until the current candidate set is closed; no unresolved family is silently declared disposable.

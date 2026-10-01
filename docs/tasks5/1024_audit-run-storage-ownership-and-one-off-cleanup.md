@@ -4,7 +4,7 @@ name: Audit run storage ownership and one-off cleanup
 status: done
 template: feature-impl
 created_at: 2026-09-30T20:13:58.349Z
-updated_at: "2026-10-01T08:08:23.014Z"
+updated_at: "2026-10-01T22:14:29.449Z"
 feature_id: E71
 priority: P2
 tags:
@@ -85,6 +85,11 @@ Audit-only task (mutationPolicy: none) — no source, test, workflow, or CLI sur
 
 - docs/reports/2026-09-30-E71-run-storage-ownership.md:1 — Ownership audit (290 lines): §1 live producer/consumer scans with traced citations; §2 lifetime taxonomy keyed to ADR-131 (docs/00_ADR.md:2042); §3 durable destination families; §4 one-off deletion census with §8 dispositions; §8 unmatched candidates X1–X6 (nothing silently disposable); §10 R1–R5 scenario coverage map; §11 handoff.
 - docs/tasks5/1024_audit-run-storage-ownership-and-one-off-cleanup.md:1 — Task record: verdict PASS with proof digest sha256:085c2ad7 (run inline-1024-233245, quality gate PASS, review skipped via fast lane).
+
+**Force verification correction (2026-10-01).**
+
+- `docs/reports/2026-09-30-E71-run-storage-ownership.md:294` — regenerated the current run-storage census and separated historical disposition claims from unresolved corpus/suppression, metadata/importer, export and integration dependencies. No product code or real project scratch deletion belongs to this audit task.
+- Candidate counts alone do not certify exhaustive producer/consumer equality. R1/R4 and the feature scenario remain PARTIAL after the bounded report repair.
 
 ### Testing
 
