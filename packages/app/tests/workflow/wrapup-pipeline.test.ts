@@ -868,8 +868,41 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
                 mkdirSync(join(cwd, '.spur/run'), { recursive: true });
                 writeFileSync(join(cwd, 'package.json'), '{"name":"plain","scripts":{}}');
                 expect(runHop(cwd)).toBe('PASS\n');
-                // AC1: a declared script that fails (an in-place doc edit) records FAIL.
-                writeFileSync(join(cwd, 'package.json'), '{"name":"tripped","scripts":{"test-repo-wide":"exit 1"}}');
+                // Exercise the real ADR tripwire against a clean snapshot, then a historical decision edit.
+                mkdirSync(join(cwd, 'docs'));
+                mkdirSync(join(cwd, 'repo-wide-tests'));
+                const adr = readFileSync(join(REPO_ROOT, 'docs/00_ADR.md'), 'utf8');
+                writeFileSync(join(cwd, 'docs/00_ADR.md'), adr);
+                writeFileSync(
+                    join(cwd, 'repo-wide-tests/adr-supersession.test.ts'),
+                    readFileSync(join(REPO_ROOT, 'repo-wide-tests/adr-supersession.test.ts')),
+                );
+                for (const args of [
+                    ['init', '-q'],
+                    ['add', 'docs/00_ADR.md'],
+                    [
+                        '-c',
+                        'user.name=Tripwire test',
+                        '-c',
+                        'user.email=tripwire@example.invalid',
+                        'commit',
+                        '-qm',
+                        'snapshot',
+                    ],
+                ]) {
+                    expect(spawnSync('git', args, { cwd, encoding: 'utf8' }).status).toBe(0);
+                }
+                writeFileSync(
+                    join(cwd, 'package.json'),
+                    '{"name":"tripped","scripts":{"test-repo-wide":"bun test repo-wide-tests"}}',
+                );
+                expect(runHop(cwd)).toBe('PASS\n');
+                const edited = adr.replace(
+                    '**Decision:** Use `agent.team.<teamId>`',
+                    '**Decision:** Use a rewritten owner',
+                );
+                expect(edited).not.toBe(adr);
+                writeFileSync(join(cwd, 'docs/00_ADR.md'), edited);
                 expect(runHop(cwd)).toBe('FAIL\n');
                 // R2: an empty docTripwireCmd disables the check while still writing PASS.
                 expect(runHop(cwd, { docTripwireCmd: '' })).toBe('PASS\n');
