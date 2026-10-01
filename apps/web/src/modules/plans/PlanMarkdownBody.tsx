@@ -1,4 +1,5 @@
 import { MDEditor } from '@/ui';
+import { stripFrontmatter } from '../../lib/frontmatter';
 import { nodeText, renderCodeBlock } from '../task-kanban/MarkdownBody';
 import { createSlugTracker } from './PlanToc';
 
@@ -8,6 +9,7 @@ export interface PlanMarkdownBodyProps {
 }
 
 export default function PlanMarkdownBody({ source, className }: PlanMarkdownBodyProps) {
+    const cleanSource = stripFrontmatter(source);
     const tracker = createSlugTracker();
 
     const createHeading = (level: number) => {
@@ -43,7 +45,7 @@ export default function PlanMarkdownBody({ source, className }: PlanMarkdownBody
     return (
         <div className={`plan-markdown-container ${className ?? ''}`} data-testid="plan-markdown-body">
             <MDEditor.Markdown
-                source={source}
+                source={cleanSource}
                 wrapperElement={{ 'data-color-mode': 'light' }}
                 components={components}
             />

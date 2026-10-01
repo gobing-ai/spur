@@ -334,4 +334,61 @@ describe('DesignsShell layout and interactions', () => {
         // Right TOC dock is NOT rendered when nothing is selected
         expect(queryByTestId('design-toc-dock')).toBeNull();
     });
+
+    test('strips frontmatter from markdown body and displays metadata in popup modal', async () => {
+        setFetchForTesting((async (req: RequestInfo | URL) => {
+            const url = typeof req === 'string' ? req : req instanceof Request ? req.url : req.toString();
+            if (url.includes('/api/project/designs/file')) {
+                return new Response(
+                    JSON.stringify({
+                        ok: true,
+                        path: 'DESIGN.md',
+                        title: 'Spur UI Design',
+                        content:
+                            '---\nkind: design\nversion: alpha\nname: Spur UI Design\n---\n\n# Spur UI Design\n\n## Overview\n\nTokens and components.',
+                    }),
+                    { status: 200, headers: { 'content-type': 'application/json' } },
+                );
+            }
+            if (url.includes('/api/project/designs')) {
+                return new Response(JSON.stringify({ files: sampleFiles, total: sampleFiles.length }), {
+                    status: 200,
+                    headers: { 'content-type': 'application/json' },
+                });
+            }
+            return new Response('not found', { status: 404 });
+        }) as unknown as typeof fetch);
+
+        const { getByTestId, getByText, getAllByText, queryByRole } = render(
+            <MemoryRouter initialEntries={['/board/designs?file=DESIGN.md']}>
+                <DesignsShell />
+            </MemoryRouter>,
+        );
+
+        await waitFor(() => {
+            expect(getByTestId('mock-markdown')).toBeDefined();
+        });
+
+        // Frontmatter must NOT be in the markdown body
+        const markdownContent = getByTestId('mock-markdown').textContent ?? '';
+        expect(markdownContent).not.toContain('kind: design');
+        expect(markdownContent).not.toContain('version: alpha');
+        expect(markdownContent).toContain('# Spur UI Design');
+
+        // Metadata button exists
+        const metadataBtn = getByTestId('metadata-toggle');
+        expect(metadataBtn).toBeDefined();
+
+        // Modal initially closed
+        expect(queryByRole('dialog')).toBeNull();
+
+        // Click metadata button opens modal
+        fireEvent.click(metadataBtn);
+        await waitFor(() => {
+            expect(queryByRole('dialog')).toBeDefined();
+            expect(getByText('Document Metadata')).toBeDefined();
+            expect(getByText('alpha')).toBeDefined();
+            expect(getAllByText('Spur UI Design').length).toBeGreaterThan(0);
+        });
+    });
 });

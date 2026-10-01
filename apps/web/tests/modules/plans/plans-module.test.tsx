@@ -333,4 +333,61 @@ describe('PlansShell layout and interactions', () => {
         // Right TOC dock is NOT rendered when nothing is selected
         expect(queryByTestId('plan-toc-dock')).toBeNull();
     });
+
+    test('strips frontmatter from markdown body and displays metadata in popup modal', async () => {
+        setFetchForTesting((async (req: RequestInfo | URL) => {
+            const url = typeof req === 'string' ? req : req instanceof Request ? req.url : req.toString();
+            if (url.includes('/api/project/plans/file')) {
+                return new Response(
+                    JSON.stringify({
+                        ok: true,
+                        path: 'docs/02_ROADMAP.md',
+                        title: '02 Roadmap — Spur',
+                        content:
+                            '---\ndoc: 02_ROADMAP\nversion: 1.11.0\nowner: Robin Min\n---\n\n# 02 Roadmap — Spur\n\n## Phase 0\n\nContent here.',
+                    }),
+                    { status: 200, headers: { 'content-type': 'application/json' } },
+                );
+            }
+            if (url.includes('/api/project/plans')) {
+                return new Response(JSON.stringify({ files: sampleFiles, total: sampleFiles.length }), {
+                    status: 200,
+                    headers: { 'content-type': 'application/json' },
+                });
+            }
+            return new Response('not found', { status: 404 });
+        }) as unknown as typeof fetch);
+
+        const { getByTestId, getByText, queryByRole } = render(
+            <MemoryRouter initialEntries={['/board/plans?file=docs/02_ROADMAP.md']}>
+                <PlansShell />
+            </MemoryRouter>,
+        );
+
+        await waitFor(() => {
+            expect(getByTestId('mock-markdown')).toBeDefined();
+        });
+
+        // Frontmatter must NOT be in the markdown body
+        const markdownContent = getByTestId('mock-markdown').textContent ?? '';
+        expect(markdownContent).not.toContain('doc: 02_ROADMAP');
+        expect(markdownContent).not.toContain('owner: Robin Min');
+        expect(markdownContent).toContain('# 02 Roadmap — Spur');
+
+        // Metadata button exists
+        const metadataBtn = getByTestId('metadata-toggle');
+        expect(metadataBtn).toBeDefined();
+
+        // Modal initially closed
+        expect(queryByRole('dialog')).toBeNull();
+
+        // Click metadata button opens modal
+        fireEvent.click(metadataBtn);
+        await waitFor(() => {
+            expect(queryByRole('dialog')).toBeDefined();
+            expect(getByText('Document Metadata')).toBeDefined();
+            expect(getByText('02_ROADMAP')).toBeDefined();
+            expect(getByText('Robin Min')).toBeDefined();
+        });
+    });
 });

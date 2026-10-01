@@ -13,6 +13,7 @@ import {
     transitionFeature,
 } from '../../lib/feature-client';
 import type { FeatureShowData, FeatureSummary, SyncDirection } from '../../lib/feature-types';
+import { stripFrontmatter } from '../../lib/frontmatter';
 import MarkdownBody from '../task-kanban/MarkdownBody';
 import NewTaskPanel from '../task-kanban/NewTaskPanel';
 import type { TaskSummary } from '../task-kanban/types';
@@ -1008,8 +1009,5 @@ export default function FeatureDetail({
 
 /** Strip the YAML frontmatter delimiter block so the editor shows body content only. */
 function stripFrontmatterContent(raw: string): string {
-    // Match `---\n...\n---\n` frontmatter block at the start
-    const match = raw.match(/^---\n[\s\S]*?\n---\n/);
-    if (!match) return raw;
-    return raw.slice(match[0].length);
+    return stripFrontmatter(raw);
 }

@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { Button } from '@/ui';
+import DocumentMetadataModal from '../../components/DocumentMetadataModal';
 import {
     type DesignFileDetail,
     type DesignFileSummary,
     loadDesignContent,
     loadDesignFiles,
 } from '../../lib/design-client';
+import { parseMarkdownFrontmatter } from '../../lib/frontmatter';
 import DesignFileList from './DesignFileList';
 import DesignMarkdownBody from './DesignMarkdownBody';
 import DesignToc from './DesignToc';
@@ -19,6 +21,7 @@ export default function DesignsShell() {
     const [contentCache, setContentCache] = useState<Record<string, DesignFileDetail>>({});
     const [isListOpen, setIsListOpen] = useState(true);
     const [isTocOpen, setIsTocOpen] = useState(true);
+    const [showMetadataModal, setShowMetadataModal] = useState(false);
     const [loadingFiles, setLoadingFiles] = useState(true);
     const [loadingContent, setLoadingContent] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -120,6 +123,13 @@ export default function DesignsShell() {
     };
 
     const activeDetail = selectedPath ? contentCache[selectedPath] : null;
+
+    const { frontmatterRaw, frontmatter, body } = useMemo(() => {
+        if (!activeDetail?.content) {
+            return { frontmatterRaw: null, frontmatter: null, body: '' };
+        }
+        return parseMarkdownFrontmatter(activeDetail.content);
+    }, [activeDetail?.content]);
 
     if (error) {
         return (
@@ -264,16 +274,29 @@ export default function DesignsShell() {
                                                 </h2>
                                             )}
                                         </div>
-                                        <Button
-                                            variant="ghost"
-                                            size="xs"
-                                            className="text-spur-text-muted hover:text-spur-text shrink-0"
-                                            onClick={handleCopyPath}
-                                            aria-label="Copy file path"
-                                            title="Copy file path"
-                                        >
-                                            {copied ? '✓ Copied' : '📋 Copy Path'}
-                                        </Button>
+                                        <div className="flex items-center gap-1.5 shrink-0">
+                                            <Button
+                                                variant="ghost"
+                                                size="xs"
+                                                className="text-spur-text-muted hover:text-spur-accent flex items-center gap-1 shrink-0"
+                                                onClick={() => setShowMetadataModal(true)}
+                                                aria-label="View document metadata"
+                                                title="View document metadata"
+                                                data-testid="metadata-toggle"
+                                            >
+                                                ℹ Metadata
+                                            </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="xs"
+                                                className="text-spur-text-muted hover:text-spur-text shrink-0"
+                                                onClick={handleCopyPath}
+                                                aria-label="Copy file path"
+                                                title="Copy file path"
+                                            >
+                                                {copied ? '✓ Copied' : '📋 Copy Path'}
+                                            </Button>
+                                        </div>
                                     </div>
 
                                     {/* Document Body */}
@@ -287,7 +310,7 @@ export default function DesignsShell() {
                                                 Failed to load document: {contentError}
                                             </div>
                                         ) : activeDetail ? (
-                                            <DesignMarkdownBody source={activeDetail.content} />
+                                            <DesignMarkdownBody source={body} />
                                         ) : null}
                                     </div>
                                 </div>
@@ -305,13 +328,23 @@ export default function DesignsShell() {
                     {/* Right Dock: Table of Contents (Automatically shown when a file is selected) */}
                     {selectedPath && activeDetail?.content && isTocOpen && (
                         <DesignToc
-                            markdown={activeDetail.content}
+                            markdown={body}
                             scrollContainerRef={mainContentScrollRef}
                             onClose={() => setIsTocOpen(false)}
                         />
                     )}
                 </div>
             </div>
+
+            {/* Document Metadata Popup Modal */}
+            <DocumentMetadataModal
+                open={showMetadataModal}
+                onClose={() => setShowMetadataModal(false)}
+                title={activeDetail?.title}
+                filePath={selectedPath}
+                frontmatterRaw={frontmatterRaw}
+                frontmatter={frontmatter}
+            />
         </div>
     );
 }
