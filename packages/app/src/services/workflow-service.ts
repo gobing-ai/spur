@@ -93,6 +93,7 @@ import type { AgentService } from './agent-service';
 import { bridgeEventBus, dropRetiredActionBoundaryAliases, withWorkflowIdentity } from './event-bridge';
 import { FleetService } from './fleet-service';
 import type { RuleService } from './rule-service';
+import { migrateRunStorage, type RunStorageMigrationResult, runStoragePaths } from './run-storage';
 import {
     type SystemEventAction,
     type SystemEventProjectContext,
@@ -913,6 +914,26 @@ export class WorkflowAppService {
             dryRun,
             cleaned: stale.map((r) => ({ runId: r.id, startedAt: r.started_at })),
         };
+    }
+
+    /**
+     * Migrate durable evidence out of the scratch plane (feature E71, task 1025):
+     * task verdicts and feature run/latest receipts byte-copy into
+     * `.spur/memory/evidence`, closed run records into `.spur/memory/runs`.
+     * Sources under `.spur/run` are never removed; units owned by live,
+     * paused or interrupted-recoverable runs are preserved. Dry-run writes
+     * nothing and reports `would-migrate` outcomes.
+     */
+    async migrateRunStorage(opts: { dryRun?: boolean; logsOnly?: boolean } = {}): Promise<RunStorageMigrationResult> {
+        const paths = runStoragePaths(this.ctx.cwd);
+        const db = await this.ctx.getDb();
+        const runDao = new RunDao(db);
+        return migrateRunStorage({
+            dirs: paths,
+            readRunStatus: async (runId) => (await runDao.traceRowById(runId))?.status ?? null,
+            dryRun: opts.dryRun === true,
+            logsOnly: opts.logsOnly === true,
+        });
     }
 
     /**

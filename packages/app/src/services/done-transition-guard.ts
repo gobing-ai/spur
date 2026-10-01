@@ -31,6 +31,7 @@
  *     is auditable in-file (no sidecar FS surface).
  */
 
+import { dirname, join } from 'node:path';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import type { CheckSeverity } from './verify-verdict';
 import { aggregateVerifyVerdict, checkRowName } from './verify-verdict';
@@ -98,12 +99,17 @@ export interface GuardInput {
  * Operators override with `--force-done --reason`. A parse failure is also
  * surfaced as a deny with the parse error named — never silently allowed through.
  */
-export async function readVerdictArtifact(
-    fs: FileSystem,
-    runDir: string,
-    wbs: string,
-): Promise<{ artifact: VerdictArtifact | undefined; readError?: string; path: string }> {
-    const path = `${runDir}/${wbs}-verdict.json`;
+/** Result of reading one verdict location, with a missing marker for fallback routing. */
+interface VerdictRead {
+    artifact: VerdictArtifact | undefined;
+    readError?: string;
+    path: string;
+    /** True when the file is absent (ENOENT/exists-false) — the caller may fall back. */
+    missing: boolean;
+}
+
+/** Read + parse one verdict artifact location; absence is reported, not fatal. */
+async function readVerdictFrom(fs: FileSystem, path: string): Promise<VerdictRead> {
     let exists: boolean;
     try {
         exists = await fs.exists(path);
@@ -113,24 +119,54 @@ export async function readVerdictArtifact(
         exists = true;
     }
     if (!exists) {
-        return { artifact: undefined, path };
+        return { artifact: undefined, path, missing: true };
     }
     let raw: string;
     try {
         raw = await fs.readFile(path);
     } catch (err) {
-        return { artifact: undefined, path, readError: `unreadable artifact: ${(err as Error).message}` };
+        const message = (err as Error).message;
+        if (message.includes('ENOENT')) {
+            return { artifact: undefined, path, missing: true };
+        }
+        return { artifact: undefined, path, readError: `unreadable artifact: ${message}`, missing: false };
     }
     let parsed: unknown;
     try {
         parsed = JSON.parse(raw);
     } catch (err) {
-        return { artifact: undefined, path, readError: `malformed JSON: ${(err as Error).message}` };
+        return { artifact: undefined, path, readError: `malformed JSON: ${(err as Error).message}`, missing: false };
     }
     if (typeof parsed !== 'object' || parsed === null || !('verdict' in parsed)) {
-        return { artifact: undefined, path, readError: 'missing required `verdict` field' };
+        return { artifact: undefined, path, readError: 'missing required `verdict` field', missing: false };
     }
-    return { artifact: parsed as VerdictArtifact, path };
+    return { artifact: parsed as VerdictArtifact, path, missing: false };
+}
+
+/**
+ * Read and parse the verdict artifact for `wbs`. Reads resolve from the
+ * durable-evidence dir (`.spur/memory/evidence`, sibling of the scratch run
+ * dir — E71/1025) first, then fall back to the scratch plane
+ * (`.spur/run/<wbs>-verdict.json`). An evidence copy that exists is
+ * authoritative: malformed or unreadable evidence fails closed instead of
+ * falling back. Returns `undefined` when no copy exists anywhere — the guard
+ * **denies** the transition (no-artifact is no longer a silent allow; dogfood
+ * F81 / 0349 class). Operators override with `--force-done --reason`.
+ */
+export async function readVerdictArtifact(
+    fs: FileSystem,
+    runDir: string,
+    wbs: string,
+): Promise<{ artifact: VerdictArtifact | undefined; readError?: string; path: string }> {
+    const evidenceDir = join(dirname(runDir), 'memory', 'evidence');
+    const evidence = await readVerdictFrom(fs, `${evidenceDir}/${wbs}-verdict.json`);
+    if (!evidence.missing) {
+        const { missing: _missing, ...result } = evidence;
+        return result;
+    }
+    const scratch = await readVerdictFrom(fs, `${runDir}/${wbs}-verdict.json`);
+    const { missing: _scratchMissing, ...result } = scratch;
+    return result;
 }
 
 // ─── Aggregation (R10) ─────────────────────────────────────────────────

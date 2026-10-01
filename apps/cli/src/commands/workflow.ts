@@ -1338,10 +1338,15 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             const retentionDays = resolveWorkflowLogRetentionDays(context.spurConfig ?? null);
             const logResult = await svc.cleanRunLogs(retentionDays, dryRun);
             const checkpointResult = logsOnly ? undefined : await svc.cleanCheckpoints(retentionDays, dryRun);
+            // E71/1025: every clean also reports durable-evidence migration state
+            // (zero-write under --dry-run; idempotent across repeated cleans).
+            const migration = await svc.migrateRunStorage({ dryRun, logsOnly });
             if (options.json) {
                 context.output.write(
                     toEnvelopeJson(
-                        logsOnly ? logResult : { ...result, logs: logResult, checkpoints: checkpointResult },
+                        logsOnly
+                            ? { ...logResult, migration }
+                            : { ...result, logs: logResult, checkpoints: checkpointResult, migration },
                         { enveloped: options.jsonEnvelope },
                     ),
                 );
@@ -1388,6 +1393,12 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                         context.output.error(`Failed to remove checkpoint ${failure.path}: ${failure.error}`);
                     }
                 }
+                const migrated = migration.entries.filter((e) => e.outcome === 'migrated').length;
+                const present = migration.entries.filter((e) => e.outcome === 'already-present').length;
+                const migVerb = dryRun ? 'Evidence migration would affect' : 'Evidence migration';
+                context.output.write(
+                    `${migVerb}: ${migrated} migrated, ${present} already present, ${migration.failures.length} failed.`,
+                );
             }
         });
 

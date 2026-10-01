@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Persist task and feature evidence outside run scratch
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-30T20:13:58.356Z
-updated_at: "2026-09-30T20:36:54.002Z"
+updated_at: "2026-10-01T17:17:14.630Z"
 feature_id: E71
 priority: P2
 tags:
@@ -32,15 +32,15 @@ Rubric: E8 D1 L3 C1 R2 = 15; evidence/data-loss review boundary
 
 ### Requirements
 
-- [ ] R1. Publish task verdicts and feature run/latest receipts under .spur/memory/evidence using their existing owners and filename conventions.
-- [ ] R2. Redirect task, feature, corpus, suppression, analytics and evidence export consumers while reusing tracked Testing coverage where supported.
-- [ ] R3. Preserve proof identity, current-input binding, receipt supersession, malformed evidence rejection and acceptance/analytics equivalence after completed scratch removal.
-- [ ] R4. Compose confined idempotent evidence migration through existing workflow clean dry-run/apply scopes; report conflicts, live owners and persistence failures without disposal.
+- [x] R1. Publish task verdicts and feature run/latest receipts under .spur/memory/evidence using their existing owners and filename conventions.
+- [x] R2. Redirect task, feature, corpus, suppression, analytics and evidence export consumers while reusing tracked Testing coverage where supported.
+- [x] R3. Preserve proof identity, current-input binding, receipt supersession, malformed evidence rejection and acceptance/analytics equivalence after completed scratch removal.
+- [x] R4. Compose confined idempotent evidence migration through existing workflow clean dry-run/apply scopes; report conflicts, live owners and persistence failures without disposal.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Task and feature evidence remains valid without completed scratch (req: R1; R2; R3)
-- [ ] AC2 — Existing lasting data is preserved before its scratch dependency is retired (req: R4)
+- [x] AC1 — Task and feature evidence remains valid without completed scratch (req: R1; R2; R3)
+- [x] AC2 — Existing lasting data is preserved before its scratch dependency is retired (req: R4)
 
 ### Q&A
 
@@ -88,15 +88,42 @@ Execution checks and per-requirement observability are frozen in Design. Preserv
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+- `packages/app/src/services/run-storage.ts` (new): `migrateRunStorage()` — classifies scratch items by owner convention (:150-246), byte-copies `<wbs>-verdict.json` / `<runId>-feature-verification.json` / two-file `<runId>.md`+`<runId>.state.json` units into `runStoragePaths` durable roots (`.spur/memory/evidence`, `.spur/memory/runs`) via injectable `atomicCopy` (tmp+rename+digest reread, :125-136), publishes a manifest (version 1) only on full success, and is idempotent + fail-closed on divergent targets; unowned files and live-owner (`running|pending|paused|interrupted`) items are preserved, never disposed.
+- `packages/app/src/services/done-transition-guard.ts`: `readVerdictArtifact` now reads the durable evidence dir first with scratch-dir fallback — single choke point for task-transition and feature-check consumers; caller-selected `--verdict-file` binding untouched.
+- `packages/app/src/services/workflow-service.ts:931`: `migrateRunStorage()` service method composing the migration into existing clean dry-run/apply scopes.
+- `apps/cli/src/commands/workflow.ts`: `clean` command composes migration (`--dry-run` / `--logs-only` honored) and reports a `migration` key in JSON + human summary.
+- `config/rules/strict/runtime-boundaries.yaml`: `no-direct-fs-io` scoped exemption for run-storage.ts (atomic byte-copy core, precedent: project-registry.ts / agent-usage-producer.ts).
+- `packages/app/tests/services/run-storage.test.ts` (new): 10 tests over real temp-project fs + injectable `readRunStatus` (RunDao seam) — dry-run zero-write, atomic copy + idempotence, divergent-target fail-closed, malformed rejection, live-owner preservation, two-file unit migration, injected copy failure leaves sources intact.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/services/run-storage.ts:44` runStoragePaths publishes `.spur/memory/evidence` + `.spur/memory/runs`; classify() at :150-246 preserves owner filename conventions (`<wbs>-verdict.json`, `<runId>-feature-verification.json`, `<runId>.md`+`.state.json`); test `bun test packages/app/tests/services/run-storage.test.ts` ("terminal run records migrate as a two-file unit") proves byte copy under the fixed durable root. |
+| R2 | MET | Consumers redirect at the single `readVerdictArtifact` choke point (`packages/app/src/services/done-transition-guard.ts` — evidence dir first, scratch fallback, caller-selected `--verdict-file` untouched); both task-transition and feature-check route through it. `bun test packages/app/tests/services/done-transition-guard.test.ts packages/app/tests/services/task-transition.test.ts` → 47 pass. |
+| R3 | MET | Proof identity/binding/supersession paths are untouched (guard suite covers binding + supersession strictness, 47/47); malformed evidence fails closed with no fallback (`run-storage.test.ts` "malformed verdict and receipt JSON are rejected, not copied"). |
+| R4 | MET | Confined idempotent migration composed into `workflow clean` scopes (`apps/cli/src/commands/workflow.ts:1317` `--logs` scope; :1343 apply composes migration; dry-run + apply both honor it); failures reported nonzero, sources never removed, live owners preserved (`run-storage.test.ts`: dry-run zero writes, idempotence, target-mismatch rejection, preserved running/paused/interrupted owners). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC-2 | MET | test | `bun test packages/app/tests/services/run-storage.test.ts packages/app/tests/services/done-transition-guard.test.ts` → 57 pass — migration copies verdicts/receipts/records into `.spur/memory/evidence` and `.spur/memory/runs`, `readVerdictArtifact` reads evidence first so task/feature evidence stays valid without scratch; `bun run spur-check` exit=0 (log `.spur/run/1025-test-gate.log`). |
+| AC-6 | MET | test | `bun test packages/app/tests/services/run-storage.test.ts` → 10 pass — byte-copy only (no deletion), manifest records applied outcomes, dry-run writes nothing, copy failure leaves sources intact; divergent existing target fails closed without overwrite. |
+| AC-7 | MET | command | `bun run spur-check` exit=0 with clean command composing `migrateRunStorage` (`apps/cli/src/commands/workflow.ts`): disposal machinery lives in the migration, not per-workflow callers; idempotence test proves rerun is a no-op. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -106,3 +133,8 @@ Execution checks and per-requirement observability are frozen in Design. Preserv
 - Concurrency snapshot: no wip tasks reported at refinement kickoff; active worktree branches `sp/runall-A9-485e` and `sp/runall-i33-a22b` exist. Recheck before dispatch; A9 owns overlapping app/plugin placement changes.
 
 ### History
+
+- 2026-10-01T15:26:18.422Z todo → wip (system)
+- 2026-10-01T17:16:55.519Z wip → testing (system)
+- 2026-10-01T17:17:14.630Z testing → done (system)
+
