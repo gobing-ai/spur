@@ -2,7 +2,7 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.66.0
+version: 1.67.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
 updated_at: 2026-10-01
@@ -1198,7 +1198,16 @@ in `packages/app/src/services/done-transition-guard.ts`) read lasting structured
 byte-copies valid verdicts, receipts, and terminal run-record pairs into durable roots with atomic digests
 and manifest tracking, and is composed into `spur workflow clean` (dry-run and apply).
 
-Remaining implementation (tasks 1026 and 1027): direct write of new run records, registered artifacts,
-and sessions to `.spur/memory/runs/`, and completed-scratch disposal verification remain in progress.
-Automatic per-workflow terminal deletion and new retention policies are omitted. Exact lifetimes,
-confinement, compatibility and failure behavior: [disposable run storage](design/disposable-run-storage.md).
+New terminal run records (`.md` and `.state.json`) write directly to `recordsDir` (`.spur/memory/runs/`), registered artifact bytes copy to
+`runArtifactsDir` (`.spur/memory/runs/<runId>/artifacts/`) before DAO registration (`persistDurableArtifact`),
+and agent session dirs write to `runSessionsDir` (`.spur/memory/runs/<runId>/agent-sessions/`). Readers
+resolve durable-first with scratch fallback (`resolveRunRecordDir`, `runSessionAugmentedRoots`), worktree
+result export transfers durable run directories before worktree disposal (`carryRunRecordDir`), and `cleanRunLogs`
+sweeps both scratch and durable roots while preserving active runs. Verify analytics (`deriveTaskInput` in
+`packages/app/src/services/verified-outcome.ts`) resolve verify verdicts durable-first via `readVerdictArtifact`.
+Completed-scratch disposal equivalence is proven across verdicts, analytics, run records, artifact bytes, and
+sessions; subsequent gates recreate scratch (`runLightGate`). Cleanup census sites are retained for
+freshness and confinement correctness. The durable plane is kept git-proof-inert via `.git/info/exclude`
+(`ensureDurablePlaneIgnored`). Automatic per-workflow terminal deletion and new retention policies are omitted
+(ADR-131 invariant). Exact lifetimes, confinement, compatibility and failure behavior:
+[disposable run storage](design/disposable-run-storage.md).

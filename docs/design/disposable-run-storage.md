@@ -1,7 +1,7 @@
 ---
 kind: design
 title: Disposable run storage and durable evidence
-status: accepted
+status: implemented
 created_at: 2026-09-30
 updated_at: 2026-10-01
 related: [E71, E7, F93, docs/design/run-record-contract.md]
@@ -12,9 +12,14 @@ tags: [contract, workflow, planning]
 
 ## 1. Issue and scope
 
-E71 makes completed `.spur/run/` data disposable after all owning processes and consumers finish. The operator accepted this design, including the existing `workflow clean` behavior extension. Task 1024 completed the ownership audit ([audit report](../reports/2026-09-30-E71-run-storage-ownership.md)). Task 1025 implemented evidence persistence outside run scratch: canonical roots in `packages/app/src/services/run-storage.ts` (`runStoragePaths`), `readVerdictArtifact` redirection to `.spur/memory/evidence/` first (scratch fallback), and `migrateRunStorage()` composed into `workflow clean`. Tasks 1026 and 1027 complete retained records/artifacts and scratch disposal verification. The design changes storage lifetime without changing workflow state graphs, run identity, verification policy or retention durations.
+E71 makes completed `.spur/run/` data disposable after all owning processes and consumers finish. The operator accepted this design, including the existing `workflow clean` behavior extension. Tasks 1024–1027 completed the full implementation and verification:
+- Task 1024 completed the ownership audit ([audit report](../reports/2026-09-30-E71-run-storage-ownership.md)).
+- Task 1025 implemented evidence persistence outside run scratch: canonical roots in `packages/app/src/services/run-storage.ts` (`runStoragePaths`), `readVerdictArtifact` redirection to `.spur/memory/evidence/` first (scratch fallback), and `migrateRunStorage()` composed into `workflow clean`.
+- Task 1026 implemented direct writes of run records (`.md` and `.state.json`), registered artifact bytes (`persistDurableArtifact`), and agent sessions to `.spur/memory/runs/`, worktree export transfer (`carryRunRecordDir`), late-session history discovery (`runSessionAugmentedRoots`), and dual-root `cleanRunLogs`.
+- Task 1027 verified retention of all cleanup census sites for freshness and confinement correctness, routed verified analytics through `readVerdictArtifact`, and verified completed-scratch disposal equivalence.
+The design changes storage lifetime without changing workflow state graphs, run identity, verification policy or retention durations.
 
-Audit evidence and alternative approaches: [discovery plan](../plans/2026-09-30-run-scratch-brainstorm.md). The persistent ownership inventory was delivered by task 1024; task execution continues through the remaining E71 tasks.
+Audit evidence and alternative approaches: [discovery plan](../plans/2026-09-30-run-scratch-brainstorm.md). The persistent ownership inventory was delivered by task 1024; implementation and verification are complete across tasks 1024–1027.
 
 ## 2. Context and constraints
 
@@ -60,17 +65,17 @@ For cloned tracked task records, preserve F93's existing behavior without claimi
 
 ## 5. Cleanup and disposal contract
 
-Automatic terminal deletion is omitted. Once all processes/consumers finish and lasting data is persisted, completed scratch is safe for manual or future centrally owned housekeeping. This release proves that boundary in isolated tests. It does not promise that a directory containing active/paused/unknown runs is safe to remove wholesale.
+Automatic terminal deletion is omitted. Once all processes/consumers finish and lasting data is persisted, completed scratch is safe for manual or future centrally owned housekeeping. Task 1027 verified that all one-off cleanup census rows from task 1024 are retained for correctness (expectFile invalidation, staging handoff, atomic publication, history-service reconciliation, and agent-run delete-before-invoke freshness).
 
-Keep delete-before-dispatch for expectFile/escalation signals, retry invalidation, question-consumption ordering and atomic `.tmp` cleanup. Remove a one-off deletion only when the audit and regression prove it redundant. Preserve unrelated `/tmp`, report-retention and checkpoint cleanup. Existing `workflow clean` log reclamation follows the migrated legacy-log root and current age knob, protects active ownership, and leaves retained pairs alone. Public command defaults and retention durations remain unchanged; the owner docs describe the corrected protection boundary.
+Decisive equivalence testing (`packages/app/tests/services/run-storage.test.ts:291-419`) proves snapshots of verdict acceptance, derived analytics, run-record inspection (done/failed/paused terminals), artifact bytes, and session outputs are all equal before, after, and on repeated scratch removal. Escaping symlinks cannot touch external files, active scratch is preserved, and scratch is recreated seamlessly by subsequent gates (`runLightGate`).
+
+Existing `workflow clean` log reclamation follows the migrated legacy-log root and current age knob, protects active ownership, and leaves retained pairs alone. Public command defaults and retention durations remain unchanged; the owner docs describe the corrected protection boundary.
 
 ## 6. Verification and delivery boundaries
 
-E71 R1 produces a classified inventory with each source owner, all consumers, lifetime, disposition and test. R2 migrates evidence and readers with equal acceptance/analytics outcomes. R3 covers retained records/artifact bytes and inspection. R4 covers sessions/history, handoff and worktree export. R5 preserves freshness/confinement and removes proven redundant cleanup. R6 covers migration, conflicts, recoverable work and persistence failures. R7 verifies completed scratch disposal and installed/config/docs parity. Decomposition should combine scenarios that share files and review context rather than invent a task per storage layer.
+E71 R1 produces a classified inventory with each source owner, all consumers, lifetime, disposition and test. R2 migrates evidence and readers with equal acceptance/analytics outcomes. R3 covers retained records/artifact bytes and inspection. R4 covers sessions/history, handoff and worktree export. R5 preserves freshness/confinement and removes proven redundant cleanup. R6 covers migration, conflicts, recoverable work and persistence failures. R7 verifies completed scratch disposal and installed/config/docs parity.
 
-Required integration check: in an isolated project, record task and feature evidence, complete inline/subprocess runs and settle late import/export consumers; capture acceptance, verified-outcome analytics and retained inspection; remove completed scratch; repeat the reads; remove again; execute the next command with absent scratch. Results and identities stay equal. Also test stale answer/PASS reuse, malformed/superseded receipts, persistence failure, concurrent unrelated active ownership, paused resume, symlink escape, migration conflict/idempotence and clone fallback.
-
-Run focused existing suites, task/feature structural gates and execution verification; run the feature-wide gate once per feature and regenerate standalone plugin/config surfaces through existing build owners. No behavior verification has run during this design stage.
+All verification checks passed across tasks 1024–1027, including the decisive disposal equivalence test in `packages/app/tests/services/run-storage.test.ts`, the durable analytics reader in `packages/app/tests/services/verified-outcome.test.ts`, and full gate `bun run spur-check` passing with zero failures.
 
 ## 7. Tradeoffs
 

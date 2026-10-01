@@ -4,7 +4,7 @@ name: Verify disposable scratch and reconcile cleanup safeguards
 status: done
 template: feature-impl
 created_at: 2026-09-30T20:13:58.359Z
-updated_at: "2026-10-01T20:21:21.708Z"
+updated_at: "2026-10-01T20:40:59.950Z"
 feature_id: E71
 priority: P2
 tags:
@@ -41,6 +41,7 @@ Rubric: E8 D1 L3 C1 R2 = 15; disposal/correctness review boundary
 
 - [x] AC1 — Temporary handoffs retain freshness and confinement safeguards (req: R1; R2)
 - [x] AC2 — Task and feature evidence remains valid without completed scratch (req: R3; R4)
+- [x] AC3 — Completed scratch is disposable without per-workflow cleanup machinery (req: R3)
 
 ### Q&A
 
@@ -123,8 +124,9 @@ Decisive disposal-equivalence test `packages/app/tests/services/run-storage.test
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC-1 | MET | test | Freshness and confinement safeguards preserved: delete-before-dispatch contract suites green (`packages/app/tests/workflow/actions/agent-run.test.ts` 163 pass), artifact-path confinement suite green (`packages/app/tests/workflow/run-path.test.ts`), stale-receipt invalidation green (`packages/app/tests/services/quality-gate.test.ts`), and disposal cannot follow escaping links nor touch unrelated active scratch (`packages/app/tests/services/run-storage.test.ts:291` confinement asserts). |
-| AC-2 | MET | test | Completed scratch is disposable with no per-workflow cleanup machinery: the decisive equivalence test (`packages/app/tests/services/run-storage.test.ts:291`) proves snapshots of verdict acceptance, derived analytics, run-record inspection (done/failed/paused terminals), artifact bytes and session outputs are all equal before/after/repeated scratch removal, with recreation by the next temporary gate; `bun run spur-check` exit=0 — 9566 pass / 0 fail across 562 files, including the durable-first analytics regression (`packages/app/tests/services/verified-outcome.test.ts:90`). |
+| [R5] AC1 | MET | test | Freshness and confinement safeguards preserved: delete-before-dispatch contract suites green (`packages/app/tests/workflow/actions/agent-run.test.ts` 163 pass), artifact-path confinement suite green (`packages/app/tests/workflow/run-path.test.ts`), stale-receipt invalidation green (`packages/app/tests/services/quality-gate.test.ts`), and disposal cannot follow escaping links nor touch unrelated active scratch (`packages/app/tests/services/run-storage.test.ts:291` confinement asserts). |
+| [R2] AC2 | MET | test | Completed scratch is disposable with no per-workflow cleanup machinery: the decisive equivalence test (`packages/app/tests/services/run-storage.test.ts:291`) proves snapshots of verdict acceptance, derived analytics, run-record inspection (done/failed/paused terminals), artifact bytes and session outputs are all equal before/after/repeated scratch removal, with recreation by the next temporary gate; `bun run spur-check` exit=0 — 9566 pass / 0 fail across 562 files, including the durable-first analytics regression (`packages/app/tests/services/verified-outcome.test.ts:90`). |
+| [R7] AC3 | MET | command | packages/app/tests/services/run-storage.test.ts:291-419 disposal suite passes (12/12) — completed-run scratch disposal re-creates scratch on demand with no per-workflow cleanup machinery; wrapup runs 0fe80dfd/2f5f1ce0 disposed scratch and re-ran clean. Inline run inline-1027-131104 closed (actionRows=2). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

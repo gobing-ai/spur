@@ -757,7 +757,7 @@ clean` reclaims retained logs older than `workflow.logRetentionDays` (default 30
   `--follow` requires a run id, replays that durable timeline, polls every `--poll` milliseconds
   (default 1000; minimum 50), emits changed action rows, and exits at terminal status. It is a
   human stream and cannot be combined with `--json`. `--output` (requires `--follow`) swaps the
-  follow source to a raw tail of the run record `.spur/run/<RUNID>.md` (legacy `.log` fallback),
+  follow source to a raw tail of the run record in `.spur/memory/runs/<RUNID>.md` (scratch `.spur/run/` and legacy `.log` fallback),
   also a human stream rejected with `--json`; a run started with `--no-log` prints a clear no-log message at terminal
   status instead of hanging. `--timeout <ms>` (0930, requires `--follow`, positive integer) bounds
   the watch: when the deadline passes before the run is terminal — including the `Run not found`
@@ -772,7 +772,8 @@ clean` reclaims retained logs older than `workflow.logRetentionDays` (default 30
 - `clean [--older-than <minutes>] [--force] [--logs] [--dry-run]` — housekeeping: finalize orphaned
   runs stuck in `running`/`pending` past a staleness threshold (default 30 min) as failed, and
   reclaim retained run logs older than `workflow.logRetentionDays` (`.spur/config.yaml`, default 30
-  days). Every clean also executes durable evidence migration (`migrateRunStorage`, ADR-131 / E71),
+  days) across both durable run records (`.spur/memory/runs/`) and scratch (`.spur/run/`), protecting
+  active runs. Every clean also executes durable evidence migration (`migrateRunStorage`, ADR-131 / E71),
   persisting eligible lasting task verdicts, feature verification receipts, and terminal run-record
   pairs from `.spur/run/` into `.spur/memory/evidence/` and `.spur/memory/runs/` before housekeeping;
   JSON adds `migration: { dryRun, logsOnly, entries, failures }` (honoring `--dry-run` and `--logs`),

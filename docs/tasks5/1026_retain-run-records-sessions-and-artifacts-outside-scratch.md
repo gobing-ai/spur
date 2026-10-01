@@ -4,7 +4,7 @@ name: Retain run records sessions and artifacts outside scratch
 status: done
 template: feature-impl
 created_at: 2026-09-30T20:13:58.357Z
-updated_at: "2026-10-01T19:51:13.700Z"
+updated_at: "2026-10-01T20:40:59.705Z"
 feature_id: E71
 priority: P2
 tags:
@@ -120,9 +120,9 @@ DB trace stays authoritative (no paused snapshots, no schema change, no new back
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC-1 | MET | test | `bun test packages/app/tests/services/inline-run-driver.test.ts plugins/sp/tests/inline-run-setup.test.ts plugins/sp/tests/inline-run-installed.test.ts` — record pairs are written to and read from `.spur/memory/runs/<runId>.md` + `.state.json` while scratch negative-paths (`inline-setup.json`, `.log`) stay absent; the artifact suite registers the durable `runs/run-123/artifacts` path (run-artifact.test.ts). Inspection data survives scratch removal because the durable pair no longer depends on `.spur/run`. |
-| AC-2 | MET | test | `bun test packages/app/tests/services/agent-run.test.ts packages/app/tests/services/persist-worktree-runs.test.ts packages/app/tests/services/history-service.test.ts` — sessions emit under `recordsDir/<runId>/agent-sessions`, history import reads the durable root first, and worktree export persists records/sessions/artifacts before deletion (24/24). |
-| AC-3 | MET | test | `bun run spur-check` exit=0: 9564 pass / 0 fail across 562 files — includes run-storage migration suite (byte-copy only, dry-run writes nothing, divergent target fails closed, live/unknown owners preserved), workflow clean dual-root reclamation (`apps/cli/tests/commands/workflow.test.ts`) and import-proof invariants (proof-input-fingerprint untouched by the durable plane). |
+| [R3] AC1 | MET | test | `bun test packages/app/tests/services/inline-run-driver.test.ts plugins/sp/tests/inline-run-setup.test.ts plugins/sp/tests/inline-run-installed.test.ts` — record pairs are written to and read from `.spur/memory/runs/<runId>.md` + `.state.json` while scratch negative-paths (`inline-setup.json`, `.log`) stay absent; the artifact suite registers the durable `runs/run-123/artifacts` path (run-artifact.test.ts). Inspection data survives scratch removal because the durable pair no longer depends on `.spur/run`. |
+| [R4] AC2 | MET | test | `bun test packages/app/tests/services/agent-run.test.ts packages/app/tests/services/persist-worktree-runs.test.ts packages/app/tests/services/history-service.test.ts` — sessions emit under `recordsDir/<runId>/agent-sessions`, history import reads the durable root first, and worktree export persists records/sessions/artifacts before deletion (24/24). |
+| [R6] AC3 | MET | test | `bun run spur-check` exit=0: 9564 pass / 0 fail across 562 files — includes run-storage migration suite (byte-copy only, dry-run writes nothing, divergent target fails closed, live/unknown owners preserved), workflow clean dual-root reclamation (`apps/cli/tests/commands/workflow.test.ts`) and import-proof invariants (proof-input-fingerprint untouched by the durable plane). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
