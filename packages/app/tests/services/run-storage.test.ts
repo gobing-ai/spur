@@ -8,6 +8,7 @@ import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { readVerdictArtifact } from '../../src/services/done-transition-guard';
 import { runLightGate } from '../../src/services/quality-gate';
 import {
+    ensureDurablePlaneIgnored,
     type MigrateRunStorageInput,
     migrateRunStorage,
     type RunStorageMigrationEntry,
@@ -413,6 +414,40 @@ describe('completed scratch disposal equivalence (E71/1027)', () => {
             expect(degraded.ok).toBe('done');
         } finally {
             db.close();
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+});
+
+describe('ensureDurablePlaneIgnored (E71/1027)', () => {
+    test('installs the exclusion in a managed (linked) worktree via the common gitdir', () => {
+        const root = mkdtempSync(join(tmpdir(), 'spur-durable-plane-'));
+        const exec = (args: string, cwd: string) => {
+            Bun.spawnSync(['bash', '-c', args], { cwd });
+        };
+        try {
+            const repo = join(root, 'repo');
+            mkdirSync(repo);
+            exec(
+                'git init -q && git config user.email t@t && git config user.name t && touch seed && git add -A && git commit -qm seed',
+                repo,
+            );
+            const worktree = join(root, 'wt');
+            exec(`git worktree add -q "${worktree}"`, repo);
+            // Simulate the managed-worktree shape: `.git` is a pointer file, so the plain
+            // join(workdir, '.git', 'info', 'exclude') path is unusable.
+            expect(readFileSync(join(worktree, '.git'), 'utf8')).toContain('gitdir:');
+
+            ensureDurablePlaneIgnored(worktree);
+
+            const exclude = readFileSync(join(repo, '.git', 'info', 'exclude'), 'utf8');
+            expect(exclude).toContain('.spur/memory/');
+            // The durable plane is invisible to `git add -A` from the worktree...
+            mkdirSync(join(worktree, '.spur', 'memory', 'runs'), { recursive: true });
+            writeFileSync(join(worktree, '.spur', 'memory', 'runs', 'r.state.json'), '{}');
+            const status = Bun.spawnSync(['git', 'status', '--porcelain'], { cwd: worktree });
+            expect(status.stdout.toString()).not.toContain('.spur/memory');
+        } finally {
             rmSync(root, { recursive: true, force: true });
         }
     });
