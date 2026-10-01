@@ -4,7 +4,7 @@ name: "Batch finalize: detect diverged main before fast-forward merge attempt"
 status: done
 template: issue
 created_at: 2026-09-30T13:44:22.451Z
-updated_at: "2026-09-30T19:53:24.700Z"
+updated_at: "2026-10-01T00:07:27.975Z"
 feature_id: A9
 
 ac_numbering: task-local
@@ -125,6 +125,9 @@ TRACEABILITY AND AC EVIDENCE (re-run by reviewer):
 SUMMARY
 
 The commit does exactly what task 1014 specifies and nothing more: a 17-line insertion in WT-5 that replaces the non-FF retention report's one-line merge hint with the ordered five-step operator recipe (merge commit via `--no-ff --no-commit`, regenerate generated files, gate once, `git commit -F`, persist-out then cleanup and marker `merged`), plus the minimal doc-contract pin change from "file-wide no --no-ff" to "exactly one" with the per-section driver pin retained. Technically the recipe is sound — merge-not-rebase preserves the SHAs task evidence cites, regenerate-before-gate is the right order, persist-out-before-cleanup matches WT-4a — with one P3 runbook nit (no `git add` staging hint before `git commit -F`, inherited from the spec's own five steps, loud and recoverable on failure) and P4-only observations otherwise. AC1 (rg order check, runtime-built byte-identical pattern) and AC2 (two-file scope + both doc-contract suites green, 42/42) both verified by re-execution. Recommended disposition: accept as-is; the P3 can be folded in as a one-line comment amendment whenever the doc is next touched, or left to a follow-up without blocking task 1014.
+
+
+Post-batch follow-up (operator instruction, runall-A9-485e merge): the P3 DEFER above is RESOLVED inline — the divergence recipe in execution-batch.md now stages every resolved path and regenerated bundle between conflict resolution and the gate (commit step renumbered to 5). The deferred-residual follow-up task was removed rather than kept; the fix lands with the batch merge.
 
 ### References
 

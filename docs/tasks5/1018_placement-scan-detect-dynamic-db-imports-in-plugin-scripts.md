@@ -4,7 +4,7 @@ name: "Placement scan: detect dynamic DB imports in plugin scripts"
 status: done
 template: feature-impl
 created_at: 2026-09-30T13:48:58.443Z
-updated_at: "2026-09-30T22:23:19.779Z"
+updated_at: "2026-10-01T00:07:28.185Z"
 feature_id: A9
 
 ac_altitude: task-local
@@ -124,6 +124,9 @@ VERDICT: APPROVE-WITH-NOTES — 0 P1, 0 P2, 1 P3 (deferred per closed Q&A), 2 P4
 Summary: Commit 43f745dfa implements R1/R2/R3 exactly to the frozen design — regex, detail strings, baseline reason, and the else-branch ordering all match the task spec verbatim, the three tests genuinely assert the contract (AC1 pins length/kind/exact details, AC2 expects exactly the static fixture `db.ts`, AC3 pins the exact kinds array and a clean real-tree check whose stale-baseline logic transitively proves daily-summary.ts:300 is detected), and all 26 tests plus the `sp-script-placement` rule run pass with exit 0. On the declared implementer note: verified it creates no false-negative hole — trailing comments on code lines do not block matching (probe: `await import('bun:sqlite'); // drv` still detected), template-string content is a false-positive-shaped risk, rg confirms daily-summary.ts:300 is the only real dynamic DB import in the scanned dirs and sits on a plain code line, and the only theoretical false-negative shape is the contrived `*`-prefixed one-liner (P4). The one undeclared residual is the single-line block-comment false positive (P3, deferred per the closed Q&A). Scope clean: commit touches only the baseline, the test file and the checker; daily-summary.ts, its twins, `PlacementFindingKind`, and docs/plans are untouched. Minor cosmetic note: the ponytail comment says "widen only on a false negative" while the unhandled cases it names (trailing comments, template strings) are false-positive-shaped — worth rewording if the file is touched again.
 
 Commands run: `bun test ./scripts/commands/script-contract-check.test.ts` (26 pass / 0 fail); `bun run apps/cli/src/index.ts rule run --rule sp-script-placement --no-logo` (all rules passed, exit 0); `git show 43f745dfa --stat` (3 files: baseline ±4/±2, test +53, checker +17/−1); `rg` dynamic-import and block-comment probes over the scanned dirs; `bun -e` regex/comment-skip probes (14 cases).
+
+
+Post-batch follow-up (operator instruction, runall-A9-485e merge): the P3 DEFER above is RESOLVED inline — the per-line comment skip now also drops single-line `/* … */` block comments (the third shape), the ponytail note declares all three shapes, and a regression fixture was added to the AC2 test (bun test script-contract-check.test.ts: 26 pass / 0 fail). The deferred-residual follow-up task was removed rather than kept; the fix lands with the batch merge.
 
 ### References
 

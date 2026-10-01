@@ -519,6 +519,10 @@ test('checkPlacement skips type imports, comment lines and bare string literals 
         );
         writeFileSync(join(scripts, 'line-comment.ts'), `// await import('bun:sqlite')\nexport const t = 1;\n`);
         writeFileSync(join(scripts, 'jsdoc.ts'), `/**\n * import('bun:sqlite')\n */\nexport const t = 1;\n`);
+        writeFileSync(
+            join(scripts, 'single-line-block.ts'),
+            `/** Opens DB via import('bun:sqlite') */\nexport const t = 1;\n`,
+        );
         writeFileSync(join(scripts, 'bare-literal.ts'), `const x = 'bun:sqlite';\nexport const t = x;\n`);
         const findings = checkPlacement({ repoRoot: root, baselinePath: join(root, 'config', 'missing.json') });
         expect(findings.filter((f) => f.kind === 'db-import').map((f) => f.file)).toEqual(['plugins/sp/scripts/db.ts']);

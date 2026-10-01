@@ -588,11 +588,12 @@ export function checkPlacement(opts: { repoRoot: string; baselinePath: string })
             if (dbImport) {
                 record(rel, 'db-import', `value-import of ${dbImport[1]}`);
             } else {
-                // ponytail: per-line comment skip; trailing comments on code lines and
-                // template-string content are not handled — widen only on a false negative.
+                // ponytail: per-line comment skip — `//`, continuation `*`, and single-line
+                // `/* … */` shapes. Trailing comments on code lines, multi-line block interiors,
+                // and template-string content are not handled — widen only on a false negative.
                 for (const line of content.split('\n')) {
                     const trimmed = line.trim();
-                    if (trimmed.startsWith('//') || trimmed.startsWith('*')) continue;
+                    if (trimmed.startsWith('//') || trimmed.startsWith('*') || trimmed.startsWith('/*')) continue;
                     const dynamic = DB_DYNAMIC_IMPORT_RE.exec(line);
                     if (dynamic) {
                         record(rel, 'db-import', `dynamic import of ${dynamic[1]}`);
