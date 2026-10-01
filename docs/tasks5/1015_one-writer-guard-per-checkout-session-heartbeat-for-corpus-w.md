@@ -4,7 +4,7 @@ name: "One-writer guard: per-checkout session heartbeat for corpus-writing agent
 status: cancelled
 template: issue
 created_at: 2026-09-30T13:44:22.688Z
-updated_at: "2026-10-01T07:07:16.016Z"
+updated_at: "2026-10-01T07:09:34.282Z"
 feature_id: A9
 
 ac_numbering: task-local
@@ -21,14 +21,14 @@ Filed from the A9 post-batch review (open issue O1 + improvement I2). On 2026-09
 
 Cancellation audit 2026-09-30: N/A for delivery verification. Task remains cancelled; the operator has not reactivated the withdrawn proposal. Unticked proposal checkboxes are rendered as historical bullets to avoid suggesting pending delivery work.
 
-- Withdrawn proposal R1. Corpus-writing CLI verbs (`spur task create/update`, `spur feature …`) refresh a heartbeat file `.spur/run/session-lock.json`: `{pid, sessionId, hostname, updatedAt, verb}`.
-- Withdrawn proposal R2. Before writing, the verb checks the heartbeat: another LIVE pid (liveness via `process.kill(pid, 0)`; EPERM counts as alive) that updated within N seconds (default 120) triggers a WARN on stderr naming the other session (advisory default).
-- Withdrawn proposal R3. Opt-in block mode (env/config, e.g. `SPUR_ONE_WRITER=block`) denies the second writer with non-zero exit and the same message.
-- Withdrawn proposal R4. Stale heartbeats (pid dead, or older than N) are overwritten silently — no lockfile deadlock; a heartbeat from a different hostname cannot be liveness-checked and is treated as potentially live (warn, never silently overwrite).
-- Withdrawn proposal R5. Heartbeat writes are atomic (tmp + rename) and safe under concurrent writers.
-- Withdrawn proposal R6. `spur agent status` (existing status surface) shows active-writer info when a live heartbeat exists.
-- Withdrawn proposal R7. Advisory default adds no behavior change for single-writer flows (one small file write per corpus write).
-- Withdrawn proposal R8. Unit tests: fresh/stale/dead-pid/foreign-hostname/block-mode paths with tmp-dir fixtures.
+- **R1.** Withdrawn proposal: Corpus-writing CLI verbs (`spur task create/update`, `spur feature …`) refresh a heartbeat file `.spur/run/session-lock.json`: `{pid, sessionId, hostname, updatedAt, verb}`.
+- **R2.** Withdrawn proposal: Before writing, the verb checks the heartbeat: another LIVE pid (liveness via `process.kill(pid, 0)`; EPERM counts as alive) that updated within N seconds (default 120) triggers a WARN on stderr naming the other session (advisory default).
+- **R3.** Withdrawn proposal: Opt-in block mode (env/config, e.g. `SPUR_ONE_WRITER=block`) denies the second writer with non-zero exit and the same message.
+- **R4.** Withdrawn proposal: Stale heartbeats (pid dead, or older than N) are overwritten silently — no lockfile deadlock; a heartbeat from a different hostname cannot be liveness-checked and is treated as potentially live (warn, never silently overwrite).
+- **R5.** Withdrawn proposal: Heartbeat writes are atomic (tmp + rename) and safe under concurrent writers.
+- **R6.** Withdrawn proposal: `spur agent status` (existing status surface) shows active-writer info when a live heartbeat exists.
+- **R7.** Withdrawn proposal: Advisory default adds no behavior change for single-writer flows (one small file write per corpus write).
+- **R8.** Withdrawn proposal: Unit tests: fresh/stale/dead-pid/foreign-hostname/block-mode paths with tmp-dir fixtures.
 
 ### Acceptance Criteria
 
