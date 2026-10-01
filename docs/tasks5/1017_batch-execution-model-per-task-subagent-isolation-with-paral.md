@@ -4,7 +4,7 @@ name: "Batch execution model: per-task subagent isolation with parallel fan-out"
 status: cancelled
 template: issue
 created_at: 2026-09-30T13:44:23.137Z
-updated_at: "2026-09-30T14:35:21.811Z"
+updated_at: "2026-10-01T06:58:04.028Z"
 feature_id: A9
 
 ac_numbering: task-local
@@ -19,22 +19,26 @@ Filed from the A9 post-batch review (root causes RC2 + RC-E). The A9 batch ran 8
 
 ### Requirements
 
-- [ ] R1. Per-task pipeline execution in a fresh-context subagent: the host stays a thin orchestrator (resolve set → topo-sort → dispatch → collect verdicts); each child runs the task pipeline for ONE task and returns the verdict + artifact paths.
-- [ ] R2. Evidence forwarding: the child's task-cited `.spur/run` artifacts (verdict.json, verify-answer, test-gate receipt, precheck/residuals/diffstat) land in the main tree automatically — extends 1012 persist-out to the full artifact set.
-- [ ] R3. Parallel children get worktree isolation (builds on 0931); one writer per tree; tasks sharing a workspace serialize even when the dependency graph would allow parallelism.
-- [ ] R4. Host context stays bounded: the orchestrator consumes only verdict summaries + artifact paths (no raw logs); target zero compactions during a ≤8-task batch.
-- [ ] R5. Fan-out policy: parallel only when tasks have no dependency edge AND disjoint workspace footprints; max concurrency configurable (default 2).
-- [ ] R6. Failure semantics: child failure → verdict FAIL recorded, dependents skipped per existing topo behavior, batch continues.
-- [ ] R7. Acceptance dry-run: a 2-task independent batch executes concurrently, both evidence sets land in the main tree, and host compaction count is unchanged.
-- [ ] R8. No new public CLI noun — orchestrator behavior extends the existing dev-runall/pipeline driver surfaces (ADR-065/130 public-surface consent respected).
+Cancellation audit 2026-09-30: N/A for delivery verification. Task remains cancelled; the operator has not reactivated the withdrawn proposal. Unticked proposal checkboxes are rendered as historical bullets to avoid suggesting pending delivery work.
+
+- R1. Per-task pipeline execution in a fresh-context subagent: the host stays a thin orchestrator (resolve set → topo-sort → dispatch → collect verdicts); each child runs the task pipeline for ONE task and returns the verdict + artifact paths.
+- R2. Evidence forwarding: the child's task-cited `.spur/run` artifacts (verdict.json, verify-answer, test-gate receipt, precheck/residuals/diffstat) land in the main tree automatically — extends 1012 persist-out to the full artifact set.
+- R3. Parallel children get worktree isolation (builds on 0931); one writer per tree; tasks sharing a workspace serialize even when the dependency graph would allow parallelism.
+- R4. Host context stays bounded: the orchestrator consumes only verdict summaries + artifact paths (no raw logs); target zero compactions during a ≤8-task batch.
+- R5. Fan-out policy: parallel only when tasks have no dependency edge AND disjoint workspace footprints; max concurrency configurable (default 2).
+- R6. Failure semantics: child failure → verdict FAIL recorded, dependents skipped per existing topo behavior, batch continues.
+- R7. Acceptance dry-run: a 2-task independent batch executes concurrently, both evidence sets land in the main tree, and host compaction count is unchanged.
+- R8. No new public CLI noun — orchestrator behavior extends the existing dev-runall/pipeline driver surfaces (ADR-065/130 public-surface consent respected).
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Orchestrator dispatches per-task children with fresh context and collects verdicts without ingesting raw logs (req: R1, R4)
-- [ ] AC2 — Child evidence artifacts land in the main tree without manual copying (req: R2)
-- [ ] AC3 — Independent tasks run concurrently with worktree isolation; workspace-sharing or dependent tasks serialize (req: R3, R5)
-- [ ] AC4 — Child failure records FAIL and skips dependents without corrupting the batch (req: R6)
-- [ ] AC5 — The 2-task dry-run meets R7 targets (req: R7)
+Cancellation audit 2026-09-30: N/A for delivery verification. Task remains cancelled; the operator has not reactivated the withdrawn proposal. Unticked proposal checkboxes are rendered as historical bullets to avoid suggesting pending delivery work.
+
+- AC1 — Orchestrator dispatches per-task children with fresh context and collects verdicts without ingesting raw logs (req: R1, R4)
+- AC2 — Child evidence artifacts land in the main tree without manual copying (req: R2)
+- AC3 — Independent tasks run concurrently with worktree isolation; workspace-sharing or dependent tasks serialize (req: R3, R5)
+- AC4 — Child failure records FAIL and skips dependents without corrupting the batch (req: R6)
+- AC5 — The 2-task dry-run meets R7 targets (req: R7)
 
 ### Q&A
 
@@ -64,13 +68,17 @@ Architectural: one long-lived host context accumulated eight pipelines' worth of
 
 ### Testing
 
+Cancellation audit 2026-09-30: N/A for delivery verification. Task remains cancelled; the operator has not reactivated the withdrawn proposal. Unticked proposal checkboxes are rendered as historical bullets to avoid suggesting pending delivery work.
+
 - Unit tests per R5/R6 (+ artifact landing R2, orchestrator consumption R4).
 - Dogfood dry-run (2 independent tasks): measured concurrency, both evidence sets in main tree, compaction count delta 0, timing vs A9 baseline.
 - Coordinate receipts with 1016's two-tier gate so children inherit receipt reuse.
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+Cancellation audit 2026-09-30: N/A for delivery verification. Task remains cancelled; the operator has not reactivated the withdrawn proposal. Unticked proposal checkboxes are rendered as historical bullets to avoid suggesting pending delivery work.
+
+No implementation is certified. Requirements and proposed tests were reviewed against the retained cancellation decision and task History. The withdrawn design remains historical context; no new writer guard, agent fan-out or allocator was implemented.
 
 ### References
 
