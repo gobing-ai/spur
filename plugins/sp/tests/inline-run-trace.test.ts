@@ -149,13 +149,13 @@ test('R12: an unresolvable writer fails the emission open — recorded to the ru
 
         // And the failure is recorded where the driver can see it — the run-record
         // markdown (task 0927 R1; a fresh run has no legacy `.log` to fall back to).
-        const logPath = join(p.workdir, '.spur', 'run', `${runId}.md`);
+        const logPath = join(p.workdir, '.spur', 'memory', 'runs', `${runId}.md`);
         expect(existsSync(logPath)).toBe(true);
         const log = readFileSync(logPath, 'utf8');
         expect(log).toContain('trace-emission-failed');
         expect(log).toContain(`run=${runId}`);
         expect(log).toContain('node=implement');
-        expect(existsSync(join(p.workdir, '.spur', 'run', `${runId}.log`))).toBe(false);
+        expect(existsSync(join(p.workdir, '.spur', 'memory', 'runs', `${runId}.log`))).toBe(false);
     } finally {
         p.cleanup();
     }
@@ -363,7 +363,9 @@ test('0975 AC4: --close --status done with zero action rows exits 1 with code NO
         } finally {
             db.close();
         }
-        expect(readFileSync(join(p.workdir, '.spur', 'run', `${runId}.md`), 'utf8')).toContain('trace-close-failed');
+        expect(readFileSync(join(p.workdir, '.spur', 'memory', 'runs', `${runId}.md`), 'utf8')).toContain(
+            'trace-close-failed',
+        );
     } finally {
         p.cleanup();
     }

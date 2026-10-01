@@ -49,7 +49,7 @@ test('a valid run id passes the guard and reaches the normal fail-closed path (n
         expect(proc.status).toBe(1);
         expect(proc.stderr).not.toContain('refusing unsafe run id');
         expect(proc.stderr).toContain('could not resolve the workflow definition');
-        const state = JSON.parse(readFileSync(join(dir, '.spur', 'run', `${runId}.state.json`), 'utf8')) as {
+        const state = JSON.parse(readFileSync(join(dir, '.spur', 'memory', 'runs', `${runId}.state.json`), 'utf8')) as {
             runId: string;
             error?: string;
         };
@@ -81,8 +81,8 @@ test('0948 R7: a successful re-setup drops the stale error key and projects ok',
     const dir = mkdtempSync(join(tmpdir(), 'inline-run-setup-r7-'));
     try {
         const runId = 'r7-resetup';
-        const statePath = join(dir, '.spur', 'run', `${runId}.state.json`);
-        const markdownPath = join(dir, '.spur', 'run', `${runId}.md`);
+        const statePath = join(dir, '.spur', 'memory', 'runs', `${runId}.state.json`);
+        const markdownPath = join(dir, '.spur', 'memory', 'runs', `${runId}.md`);
 
         // 1. A failing setup records the failure.
         const failed = spawnSync('bun', [SCRIPT, '--run-id', runId, '--file', 'no-such-workflow'], {
@@ -233,10 +233,9 @@ test('delegate cleanup: setup success closes the DB exactly once and exits 0 (08
         expect(proc.stderr).toContain('created run');
         expect(stub.markers()).toEqual(['open', 'setup', 'close']);
         // 0927 R1: the setup outcome lives in the run-record pair.
-        const state = JSON.parse(readFileSync(join(workdir, '.spur', 'run', `${runId}.state.json`), 'utf8')) as Record<
-            string,
-            unknown
-        >;
+        const state = JSON.parse(
+            readFileSync(join(workdir, '.spur', 'memory', 'runs', `${runId}.state.json`), 'utf8'),
+        ) as Record<string, unknown>;
         expect(state).toMatchObject({
             schemaVersion: 1,
             runId,
@@ -246,39 +245,42 @@ test('delegate cleanup: setup success closes the DB exactly once and exits 0 (08
             layer: 'project',
             ok: true,
         });
-        expect(readFileSync(join(workdir, '.spur', 'run', `${runId}.md`), 'utf8')).toContain(
+        expect(readFileSync(join(workdir, '.spur', 'memory', 'runs', `${runId}.md`), 'utf8')).toContain(
             `# spur inline run ${runId} — fixture`,
         );
         // 0927 AC2: the canary in the resolved inventory never reaches the pair.
-        expect(readFileSync(join(workdir, '.spur', 'run', `${runId}.state.json`), 'utf8')).not.toContain(
+        expect(readFileSync(join(workdir, '.spur', 'memory', 'runs', `${runId}.state.json`), 'utf8')).not.toContain(
             'SPUR-CANARY-0927',
         );
-        expect(readFileSync(join(workdir, '.spur', 'run', `${runId}.md`), 'utf8')).not.toContain('SPUR-CANARY-0927');
+        expect(readFileSync(join(workdir, '.spur', 'memory', 'runs', `${runId}.md`), 'utf8')).not.toContain(
+            'SPUR-CANARY-0927',
+        );
         // 0927 R4: the retired sidecars stay retired for new runs — a consumer still
         // expecting `<run-id>-inline-setup.json` or `<run-id>.log` fails here.
         expect(existsSync(join(workdir, '.spur', 'run', `${runId}-inline-setup.json`))).toBe(false);
         expect(existsSync(join(workdir, '.spur', 'run', `${runId}.log`))).toBe(false);
         // A re-setup of the same run id rewrites the state but appends no second header.
         const startedBefore = (
-            JSON.parse(readFileSync(join(workdir, '.spur', 'run', `${runId}.state.json`), 'utf8')) as {
+            JSON.parse(readFileSync(join(workdir, '.spur', 'memory', 'runs', `${runId}.state.json`), 'utf8')) as {
                 startedAt?: string;
             }
         ).startedAt;
         // A prior failure's error key must not survive a successful re-setup (0948 R7).
-        const seeded = JSON.parse(readFileSync(join(workdir, '.spur', 'run', `${runId}.state.json`), 'utf8')) as Record<
-            string,
-            unknown
-        >;
+        const seeded = JSON.parse(
+            readFileSync(join(workdir, '.spur', 'memory', 'runs', `${runId}.state.json`), 'utf8'),
+        ) as Record<string, unknown>;
         seeded.error = 'stale failure';
-        writeFileSync(join(workdir, '.spur', 'run', `${runId}.state.json`), `${JSON.stringify(seeded)}\n`);
+        writeFileSync(join(workdir, '.spur', 'memory', 'runs', `${runId}.state.json`), `${JSON.stringify(seeded)}\n`);
         const rerun = runDelegate(workdir, runId, stub.appEntry);
         expect(rerun.status).toBe(0);
-        const headers = readFileSync(join(workdir, '.spur', 'run', `${runId}.md`), 'utf8')
+        const headers = readFileSync(join(workdir, '.spur', 'memory', 'runs', `${runId}.md`), 'utf8')
             .split('\n')
             .filter((line) => line.startsWith('# spur inline run'));
         expect(headers).toHaveLength(1);
         // 0927 R2: re-setup carries the original startedAt forward instead of resetting it.
-        const stateAfter = JSON.parse(readFileSync(join(workdir, '.spur', 'run', `${runId}.state.json`), 'utf8')) as {
+        const stateAfter = JSON.parse(
+            readFileSync(join(workdir, '.spur', 'memory', 'runs', `${runId}.state.json`), 'utf8'),
+        ) as {
             startedAt?: string;
         };
         expect(stateAfter.startedAt).toBe(startedBefore);
@@ -299,7 +301,9 @@ test('delegate cleanup: a returned ok:false refusal closes the DB exactly once a
         expect(proc.status).toBe(1);
         expect(proc.stderr).toContain('fixture returned refusal');
         expect(stub.markers()).toEqual(['open', 'setup', 'close']);
-        const state = JSON.parse(readFileSync(join(workdir, '.spur', 'run', `${runId}.state.json`), 'utf8')) as {
+        const state = JSON.parse(
+            readFileSync(join(workdir, '.spur', 'memory', 'runs', `${runId}.state.json`), 'utf8'),
+        ) as {
             runId: string;
             error?: string;
         };
@@ -320,8 +324,8 @@ test('delegate cleanup: a thrown failure after the DB opens still closes it exac
         expect(proc.stderr).toContain('fixture thrown failure');
         expect(stub.markers()).toEqual(['open', 'setup', 'close']);
         // A thrown failure keeps the stderr failure behavior and writes no record files.
-        expect(existsSync(join(workdir, '.spur', 'run', '0809-delegate-throw.state.json'))).toBe(false);
-        expect(existsSync(join(workdir, '.spur', 'run', '0809-delegate-throw.md'))).toBe(false);
+        expect(existsSync(join(workdir, '.spur', 'memory', 'runs', '0809-delegate-throw.state.json'))).toBe(false);
+        expect(existsSync(join(workdir, '.spur', 'memory', 'runs', '0809-delegate-throw.md'))).toBe(false);
     } finally {
         cleanup();
         stub.cleanup();
@@ -477,7 +481,7 @@ test('--decide executes through the app runner: degraded default with the switch
         expect(row.value).toBe('stop');
         expect(row.degraded).toBe(true);
         expect(row.source).toBe('default');
-        expect(readFileSync(join(dir, '.spur', 'run', 'decide-test-1.md'), 'utf8')).toContain(
+        expect(readFileSync(join(dir, '.spur', 'memory', 'runs', 'decide-test-1.md'), 'utf8')).toContain(
             'decide node=classify value=stop source=default reason=disabled',
         );
     } finally {
@@ -648,8 +652,8 @@ test('0975 --persist-out: copies the run row, its action rows and the run record
         } finally {
             db.close();
         }
-        expect(existsSync(join(to, '.spur', 'run', 'run-0975-out.md'))).toBe(true);
-        expect(existsSync(join(to, '.spur', 'run', 'run-0975-out.state.json'))).toBe(true);
+        expect(existsSync(join(to, '.spur', 'memory', 'runs', 'run-0975-out.md'))).toBe(true);
+        expect(existsSync(join(to, '.spur', 'memory', 'runs', 'run-0975-out.state.json'))).toBe(true);
     } finally {
         from.cleanup();
         rmSync(to, { recursive: true, force: true });
@@ -728,6 +732,7 @@ test('0984 --persist-out: --task-file copies the evidence the merged task file c
     const from = makeWorktree('persist-out-cited-from-', 'run-0984-cited');
     const to = mkdtempSync(join(tmpdir(), 'persist-out-cited-to-'));
     try {
+        mkdirSync(join(from.dir, '.spur', 'run'), { recursive: true });
         writeFileSync(join(from.dir, '.spur', 'run', '0984-check-receipt.json'), '{"ok":true}\n');
         mkdirSync(join(to, 'docs'), { recursive: true });
         writeFileSync(
@@ -742,7 +747,7 @@ test('0984 --persist-out: --task-file copies the evidence the merged task file c
         expect(proc.status, proc.stderr).toBe(0);
         expect(JSON.parse(proc.stdout)).toEqual({ ok: true, persisted: 1, skipped: [] });
         // The run-ID record and the WBS-cited artifact both resolve in the invoking tree.
-        expect(existsSync(join(to, '.spur', 'run', 'run-0984-cited.md'))).toBe(true);
+        expect(existsSync(join(to, '.spur', 'memory', 'runs', 'run-0984-cited.md'))).toBe(true);
         expect(existsSync(join(to, '.spur', 'run', '0984-check-receipt.json'))).toBe(true);
     } finally {
         from.cleanup();
@@ -775,6 +780,7 @@ test('1012 --persist-out: --task-file copies uncited <wbs>- and <runId>- evidenc
     const from = makeWorktree('persist-out-owned-from-', 'run-1012-owned');
     const to = mkdtempSync(join(tmpdir(), 'persist-out-owned-to-'));
     try {
+        mkdirSync(join(from.dir, '.spur', 'run'), { recursive: true });
         writeFileSync(join(from.dir, '.spur', 'run', '1234-verdict.json'), '{"verdict":"PASS"}\n');
         writeFileSync(join(from.dir, '.spur', 'run', 'run-1012-owned-route-reason.txt'), 'inline\n');
         writeFileSync(join(from.dir, '.spur', 'run', '9999-verdict.json'), '{"verdict":"FAIL"}\n');

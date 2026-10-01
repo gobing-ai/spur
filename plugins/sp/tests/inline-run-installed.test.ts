@@ -82,22 +82,21 @@ transitions:
         expect(shellAttempt.stderr).toContain('must not contain shell metacharacters');
         expect(existsSync(join(project, 'shell-marker'))).toBe(false);
         // 0927 R1: the setup outcome lives in the run-record pair, also bundle-only.
-        const outcome = JSON.parse(readFileSync(join(project, '.spur/run/installed-run.state.json'), 'utf8')) as Record<
-            string,
-            unknown
-        >;
+        const outcome = JSON.parse(
+            readFileSync(join(project, '.spur/memory/runs/installed-run.state.json'), 'utf8'),
+        ) as Record<string, unknown>;
         expect(outcome).toMatchObject({
             schemaVersion: 1,
             runId: 'installed-run',
             layer: 'shared',
             definitionDigest: inventory.definitionDigest,
         });
-        expect(readFileSync(join(project, '.spur/run/installed-run.md'), 'utf8')).toContain(
+        expect(readFileSync(join(project, '.spur/memory/runs/installed-run.md'), 'utf8')).toContain(
             '# spur inline run installed-run',
         );
         // 0927 R4: the retired sidecars stay retired on the installed path too.
-        expect(existsSync(join(project, '.spur/run/installed-run-inline-setup.json'))).toBe(false);
-        expect(existsSync(join(project, '.spur/run/installed-run.log'))).toBe(false);
+        expect(existsSync(join(project, '.spur/memory/runs/installed-run-inline-setup.json'))).toBe(false);
+        expect(existsSync(join(project, '.spur/memory/runs/installed-run.log'))).toBe(false);
         expect(invoke('--run-id', 'installed-run', '--file', 'installed-smoke').status).toBe(0);
 
         // 0927 R3: a project-layer override produces the same record behavior from the
@@ -136,7 +135,7 @@ transitions:
         const overrideSetup = invoke('--run-id', 'override-run', '--file', 'installed-smoke');
         expect(overrideSetup.status, overrideSetup.stderr).toBe(0);
         const overrideState = JSON.parse(
-            readFileSync(join(project, '.spur/run/override-run.state.json'), 'utf8'),
+            readFileSync(join(project, '.spur/memory/runs/override-run.state.json'), 'utf8'),
         ) as Record<string, unknown>;
         expect(overrideState).toMatchObject({
             schemaVersion: 1,
@@ -144,11 +143,11 @@ transitions:
             layer: 'project',
             definitionDigest: overrideInventory.definitionDigest,
         });
-        expect(readFileSync(join(project, '.spur/run/override-run.md'), 'utf8')).toContain(
+        expect(readFileSync(join(project, '.spur/memory/runs/override-run.md'), 'utf8')).toContain(
             '# spur inline run override-run',
         );
-        expect(existsSync(join(project, '.spur/run/override-run-inline-setup.json'))).toBe(false);
-        expect(existsSync(join(project, '.spur/run/override-run.log'))).toBe(false);
+        expect(existsSync(join(project, '.spur/memory/runs/override-run-inline-setup.json'))).toBe(false);
+        expect(existsSync(join(project, '.spur/memory/runs/override-run.log'))).toBe(false);
         // Restore the shared-layer projection so the drift scenario below keeps pointing at
         // the root definition it rewrites.
         writeFileSync(cli, `console.log(${JSON.stringify(JSON.stringify(inventory))});`);
