@@ -113,6 +113,8 @@ Feature: Corpus gate integrity
 | 1009 | Feature refresh skip-reason fidelity and feature-side --fix fence coverage (1008 P3-1/P3-4) | done |
 | 1010 | Decide L2.unclosed-code-fence suppressibility in REQUIRED_FINDING_CODES (1008 P3-2) | done |
 | 1011 | Server feature refresh reports skipped with reasons (1008 P3-5) | done |
+| 1040 | task record must re-pull newer verdict artifact; refresh done_reason on re-close | todo |
+| 1042 | Reject foreign-task verdict artifacts in shared completion and feature gates | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
