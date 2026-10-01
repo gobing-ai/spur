@@ -2,11 +2,11 @@
 schema_version: 1
 id: "A9"
 name: "Script placement contract: CLI-owned logic, thin plugin glue, and pipeline check diet"
-status: verifying
+status: done
 priority: P2
 tags: []
 created_at: "2026-09-29T06:16:01.355Z"
-updated_at: "2026-10-01T04:08:38.793Z"
+updated_at: "2026-10-01T07:45:04.617Z"
 ---
 
 # A9: Script placement contract: CLI-owned logic, thin plugin glue, and pipeline check diet
@@ -149,4 +149,5 @@ Feature: Script placement contract, CLI-owned logic, thin plugin glue, and pipel
 
 - 2026-09-29T10:34:25.246Z backlog → active (system)
 - 2026-10-01T04:08:38.793Z active → verifying (system)
+- 2026-10-01T07:45:04.617Z verifying → done (system)
 
