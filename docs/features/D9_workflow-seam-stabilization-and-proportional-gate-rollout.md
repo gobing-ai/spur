@@ -2,11 +2,11 @@
 schema_version: 1
 id: "D9"
 name: "Workflow seam stabilization and proportional gate rollout"
-status: active
+status: done
 priority: P1
 tags: []
 created_at: "2026-09-03T20:25:50.515Z"
-updated_at: "2026-09-30T22:38:44.716Z"
+updated_at: "2026-10-01T15:42:59.486Z"
 ---
 
 # D9: Workflow seam stabilization and proportional gate rollout
@@ -199,6 +199,8 @@ Feature: Workflow seam stabilization and proportional gate rollout
 | 0761 | Await the first R1 rejection assertion in proof-input-fingerprint.test.ts | cancelled |
 | 0762 | Add R4 and R6 scenarios to feature D9 acceptance criteria | cancelled |
 | 0764 | Reconcile D9 Option B closure evidence and corpus findings | done |
+| 1031 | Bundled-vs-source CLI definitionDigest seam permanently fails feature-verification receipt guard | done |
+| 1033 | Pipeline execution efficiency: proportional gate, diff-sized fan-out, wrapup pre-flight | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -237,4 +239,6 @@ Tasks 0754, 0757, 0758, 0759, and 0764 are re-verified against this selected bra
 - 2026-09-05T00:58:03.762Z active → verifying (system)
 - 2026-09-05T00:58:04.076Z verifying → done (system)
 - 2026-09-30T22:38:44.716Z done → active (system)
+- 2026-10-01T15:42:58.972Z active → verifying (system)
+- 2026-10-01T15:42:59.486Z verifying → done (system)
 
