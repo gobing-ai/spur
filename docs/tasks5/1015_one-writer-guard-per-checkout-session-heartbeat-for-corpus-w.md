@@ -4,7 +4,7 @@ name: "One-writer guard: per-checkout session heartbeat for corpus-writing agent
 status: cancelled
 template: issue
 created_at: 2026-09-30T13:44:22.688Z
-updated_at: "2026-09-30T14:35:00.639Z"
+updated_at: "2026-10-01T06:58:01.415Z"
 feature_id: A9
 
 ac_numbering: task-local
@@ -19,21 +19,25 @@ Filed from the A9 post-batch review (open issue O1 + improvement I2). On 2026-09
 
 ### Requirements
 
-- [ ] R1. Corpus-writing CLI verbs (`spur task create/update`, `spur feature …`) refresh a heartbeat file `.spur/run/session-lock.json`: `{pid, sessionId, hostname, updatedAt, verb}`.
-- [ ] R2. Before writing, the verb checks the heartbeat: another LIVE pid (liveness via `process.kill(pid, 0)`; EPERM counts as alive) that updated within N seconds (default 120) triggers a WARN on stderr naming the other session (advisory default).
-- [ ] R3. Opt-in block mode (env/config, e.g. `SPUR_ONE_WRITER=block`) denies the second writer with non-zero exit and the same message.
-- [ ] R4. Stale heartbeats (pid dead, or older than N) are overwritten silently — no lockfile deadlock; a heartbeat from a different hostname cannot be liveness-checked and is treated as potentially live (warn, never silently overwrite).
-- [ ] R5. Heartbeat writes are atomic (tmp + rename) and safe under concurrent writers.
-- [ ] R6. `spur agent status` (existing status surface) shows active-writer info when a live heartbeat exists.
-- [ ] R7. Advisory default adds no behavior change for single-writer flows (one small file write per corpus write).
-- [ ] R8. Unit tests: fresh/stale/dead-pid/foreign-hostname/block-mode paths with tmp-dir fixtures.
+Cancellation audit 2026-09-30: N/A for delivery verification. Task remains cancelled; the operator has not reactivated the withdrawn proposal. Unticked proposal checkboxes are rendered as historical bullets to avoid suggesting pending delivery work.
+
+- R1. Corpus-writing CLI verbs (`spur task create/update`, `spur feature …`) refresh a heartbeat file `.spur/run/session-lock.json`: `{pid, sessionId, hostname, updatedAt, verb}`.
+- R2. Before writing, the verb checks the heartbeat: another LIVE pid (liveness via `process.kill(pid, 0)`; EPERM counts as alive) that updated within N seconds (default 120) triggers a WARN on stderr naming the other session (advisory default).
+- R3. Opt-in block mode (env/config, e.g. `SPUR_ONE_WRITER=block`) denies the second writer with non-zero exit and the same message.
+- R4. Stale heartbeats (pid dead, or older than N) are overwritten silently — no lockfile deadlock; a heartbeat from a different hostname cannot be liveness-checked and is treated as potentially live (warn, never silently overwrite).
+- R5. Heartbeat writes are atomic (tmp + rename) and safe under concurrent writers.
+- R6. `spur agent status` (existing status surface) shows active-writer info when a live heartbeat exists.
+- R7. Advisory default adds no behavior change for single-writer flows (one small file write per corpus write).
+- R8. Unit tests: fresh/stale/dead-pid/foreign-hostname/block-mode paths with tmp-dir fixtures.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Two concurrent writers produce a warning naming the other session (req: R1, R2, R8)
-- [ ] AC2 — Stale or dead-pid heartbeats never block a writer (req: R4, R8)
-- [ ] AC3 — Block mode denies the second writer with non-zero exit and message (req: R3, R8)
-- [ ] AC4 — Single-writer flows behave unchanged (req: R7, R8)
+Cancellation audit 2026-09-30: N/A for delivery verification. Task remains cancelled; the operator has not reactivated the withdrawn proposal. Unticked proposal checkboxes are rendered as historical bullets to avoid suggesting pending delivery work.
+
+- AC1 — Two concurrent writers produce a warning naming the other session (req: R1, R2, R8)
+- AC2 — Stale or dead-pid heartbeats never block a writer (req: R4, R8)
+- AC3 — Block mode denies the second writer with non-zero exit and message (req: R3, R8)
+- AC4 — Single-writer flows behave unchanged (req: R7, R8)
 
 ### Q&A
 
@@ -63,13 +67,17 @@ The one-writer rule existed as prose only. No runtime signal distinguished "anot
 
 ### Testing
 
+Cancellation audit 2026-09-30: N/A for delivery verification. Task remains cancelled; the operator has not reactivated the withdrawn proposal. Unticked proposal checkboxes are rendered as historical bullets to avoid suggesting pending delivery work.
+
 - Unit tests per R8 (fresh/stale/dead/foreign-hostname/block).
 - Manual repro: two terminals, second `spur task create` → warning text names session 1; with block env → non-zero exit.
 - Advisory mode regression: normal single-session task create/update unaffected.
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+Cancellation audit 2026-09-30: N/A for delivery verification. Task remains cancelled; the operator has not reactivated the withdrawn proposal. Unticked proposal checkboxes are rendered as historical bullets to avoid suggesting pending delivery work.
+
+No implementation is certified. Requirements and proposed tests were reviewed against the retained cancellation decision and task History. The withdrawn design remains historical context; no new writer guard, agent fan-out or allocator was implemented.
 
 ### References
 
