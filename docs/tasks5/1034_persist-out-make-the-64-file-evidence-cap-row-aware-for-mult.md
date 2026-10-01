@@ -4,7 +4,7 @@ name: "Persist-out: make the 64-file evidence cap row-aware for multi-task batch
 status: done
 template: feature-impl
 created_at: 2026-10-01T00:47:12.647Z
-updated_at: "2026-10-01T06:48:37.329Z"
+updated_at: "2026-10-01T07:07:14.350Z"
 feature_id: A9
 
 ac_numbering: task-local
@@ -66,11 +66,11 @@ Status: implemented and committed in e8dbc9aa9. What remains is gate → verify 
 ### Solution
 
 - `packages/app/src/services/inline-run-setup.ts:334`: the owned-evidence loop replaces the single union cap with per-owner counters. Each name is charged to the first `<wbs>-` / `<runId>-` prefix it matches. An owner over `MAX_CITED_RUN_FILES` throws, naming the owner, before any invoking-tree write (zero-writes contract kept). The citation loop keeps its own 64 cap, and the function doc comment is updated to match.
-- `packages/app/tests/services/persist-worktree-runs.test.ts:613`: new regression test. A 6-run-row batch with 72 owned files persists mechanically, and every row's record and owned file transfers.
-- `packages/app/tests/services/persist-worktree-runs.test.ts:581`: the 1012 union test is rewritten to the per-owner contract. A cited-only file plus 64 owned files now persists; a 65th file for one owner refuses with zero writes.
+- `packages/app/tests/services/persist-worktree-runs.test.ts:641`: new regression test. A 6-run-row batch with 72 owned files persists mechanically, and every row's record and owned file transfers.
+- `packages/app/tests/services/persist-worktree-runs.test.ts:609`: the 1012 union test is rewritten to the per-owner contract. A cited-only file plus 64 owned files now persists; a 65th file for one owner refuses with zero writes.
 - `plugins/sp/skills/spur-dev/references/execution-batch.md:520`: the persist-out reference now describes per-owner budgets. `plugins/sp/lib/inline-run.generated.mjs` was regenerated via `bun run build:plugin-lib`.
 
-Re-verification fix (2026-09-30): `packages/app/src/services/inline-run-setup.ts:336` counts every owned direct child toward its owner budget even when also cited; only two-file run records are excluded. Previously the citation-set early skip allowed 65 files for one owner. `packages/app/tests/services/persist-worktree-runs.test.ts:643` reproduces both WBS-owned and run-owned citation overlap and asserts zero invoking-tree writes on overflow. `plugins/sp/lib/inline-run.generated.mjs` regenerated via `bun run build:plugin-lib`.
+Re-verification fix (2026-09-30): `packages/app/src/services/inline-run-setup.ts:347` counts every owned direct child toward its owner budget even when also cited; only two-file run records are excluded. Previously the citation-set early skip allowed 65 files for one owner. `packages/app/tests/services/persist-worktree-runs.test.ts:672` reproduces both WBS-owned and run-owned citation overlap and asserts zero invoking-tree writes on overflow. `plugins/sp/lib/inline-run.generated.mjs` regenerated via `bun run build:plugin-lib`.
 
 ### Testing
 
@@ -80,15 +80,15 @@ Re-verification fix (2026-09-30): `packages/app/src/services/inline-run-setup.ts
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/inline-run-setup.ts:295` retains the citation cap; `packages/app/src/services/inline-run-setup.ts:336` now includes cited owned files in each owner count. `(cd packages/app && bun test tests/services/persist-worktree-runs.test.ts tests/services/inline-run-driver.test.ts)` exited 0: 37 pass, 0 fail. |
-| R2 | MET | `packages/app/tests/services/persist-worktree-runs.test.ts:643` tests both WBS and run-ID owners with 65 owned files including one citation; overflow rejects before target .spur creation. The regression failed before the fix and passed afterward; same 37/0 command exited 0. |
+| R1 | MET | `packages/app/src/services/inline-run-setup.ts:306` retains the citation cap; `packages/app/src/services/inline-run-setup.ts:347` now includes cited owned files in each owner count. `(cd packages/app && bun test tests/services/persist-worktree-runs.test.ts tests/services/inline-run-driver.test.ts)` exited 0: 37 pass, 0 fail. |
+| R2 | MET | `packages/app/tests/services/persist-worktree-runs.test.ts:672` tests both WBS and run-ID owners with 65 owned files including one citation; overflow rejects before target .spur creation. The regression failed before the fix and passed afterward; same 37/0 command exited 0. |
 | R3 | MET | `packages/app/tests/services/persist-worktree-runs.test.ts:89` preserves divergent-record skip, and the citation/idempotence tests at `packages/app/tests/services/persist-worktree-runs.test.ts:165` passed in the same 37/0 run. Portable inline-run-setup and inline-run-installed tests exited 0. |
-| R4 | MET | `packages/app/tests/services/persist-worktree-runs.test.ts:613` persists six run rows and 72 owned artifacts; same fresh test command exited 0, 37 pass / 0 fail. |
+| R4 | MET | `packages/app/tests/services/persist-worktree-runs.test.ts:641` persists six run rows and 72 owned artifacts; same fresh test command exited 0, 37 pass / 0 fail. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | Six-row/72-file integration case at `packages/app/tests/services/persist-worktree-runs.test.ts:613`; fresh app command exited 0, 37 pass / 0 fail. |
-| AC2 | MET | test | Citation cap at `packages/app/tests/services/persist-worktree-runs.test.ts:376`, owner overflow at `packages/app/tests/services/persist-worktree-runs.test.ts:581`, and cited-owner regression at `packages/app/tests/services/persist-worktree-runs.test.ts:643`; app command exited 0. |
+| AC1 | MET | test | Six-row/72-file integration case at `packages/app/tests/services/persist-worktree-runs.test.ts:641`; fresh app command exited 0, 37 pass / 0 fail. |
+| AC2 | MET | test | Citation cap at `packages/app/tests/services/persist-worktree-runs.test.ts:376`, owner overflow at `packages/app/tests/services/persist-worktree-runs.test.ts:609`, and cited-owner regression at `packages/app/tests/services/persist-worktree-runs.test.ts:672`; app command exited 0. |
 | AC3 | MET | test | Record conflict skip at `packages/app/tests/services/persist-worktree-runs.test.ts:89` and idempotent/cited transfers at `packages/app/tests/services/persist-worktree-runs.test.ts:165`; app and portable plugin test commands exited 0. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
@@ -98,8 +98,8 @@ Re-verification 2026-09-30: correctness, security, efficiency, usability, mainta
 
 | Priority | Dimension | Location | Finding | Disposition |
 | --- | --- | --- | --- | --- |
-| P2 | Correctness | `packages/app/src/services/inline-run-setup.ts:336` | Cited owned files bypassed the per-owner cap. Red/green regression covers WBS and run-ID owners. | FIXED |
-| P4 | SECUA | `packages/app/src/services/inline-run-setup.ts:336` | No findings (verify verdict PASS) | RESOLVED |
+| P2 | Correctness | `packages/app/src/services/inline-run-setup.ts:347` | Cited owned files bypassed the per-owner cap. Red/green regression covers WBS and run-ID owners. | FIXED |
+| P4 | SECUA | `packages/app/src/services/inline-run-setup.ts:347` | No findings (verify verdict PASS) | RESOLVED |
 
 ### References
 
