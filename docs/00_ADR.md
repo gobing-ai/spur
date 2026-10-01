@@ -2,7 +2,7 @@
 doc: 00_ADR
 owns: WHY — lasting architectural choices, context and tradeoffs
 authority: authoritative
-version: 1.58.0
+version: 1.59.0
 owner: Robin Min
 updated_at: 2026-09-30
 read_before: any structural change; before diverging from a decision
@@ -2014,6 +2014,7 @@ posture); [workflow composition](design/workflow-composition-contract.md#composi
 - **Consequence:** Plugin pipelines require a `spur` CLI new enough to carry the moved flags. Spur releases every package in lockstep and an older CLI rejects an unknown flag, so a skewed install fails closed; each wave runs `plugin-smoke`. ADR-129's hook cores remain plugin-local — they are the host adapter boundary, not Spur domain logic.
 - **Retains:** ADR-021 (thin transports), ADR-051 (public-surface consent), ADR-065 (plugin entrypoint contract), ADR-115 (composition budgets), ADR-129 (hook cores).
 - **Detail:** [harness surface governance](design/harness-surface-governance.md) §2; plan `docs/plans/A9-script-placement-migration.md`; feature A9.
+- **Amendment (2026-09-30 · task 1035):** `plugins/sp/lib` also holds hand-written helpers shared by ≥2 glue files — today `spur-bin.ts` (`spurCommand`, the one spur-CLI invocation split, task 1019) — beside `env.ts` and the generated bundles. Why: per-script copies of that split drifted; one helper keeps the glue thin without a CLI round-trip. Lib stays under the plugin standalone import rule (no `@gobing-ai/*` value imports).
 
 ## ADR-131: Completed Run Scratch Is Disposable; Lasting Records Have Durable Owners
 

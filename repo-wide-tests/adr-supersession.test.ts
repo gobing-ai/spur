@@ -164,7 +164,8 @@ describe('no historical ADR text is rewritten (0850/0854 R2)', () => {
         // 0911 added a dated clarification block to ADR-123 (explicit per-action decision modes), so
         // 123 joins the set of ADRs a working diff may touch. The body-freshness assertions above and
         // the removals check below still guard every other ADR.
-        const amended = [42, 52, 57, 86, 116, 123];
+        // 1035 added a dated amendment to ADR-130 (shared spur-bin.ts in plugins/sp/lib), so 130 joins too.
+        const amended = [42, 52, 57, 86, 116, 123, 130];
         const amendedLines = new Set(blocks.filter((b) => amended.includes(b.number)).flatMap((b) => b.lines));
 
         // Only the statuses that ACTUALLY moved may disappear: derive the allowed removals from
@@ -204,7 +205,7 @@ describe('no historical ADR text is rewritten (0850/0854 R2)', () => {
         for (const line of added) {
             expect(
                 amendedLines.has(line) || line.trim() === '' || FRONTMATTER_KEY.test(line),
-                `added line is outside the amended ADRs (42, 52, 57, 86, 116, 123): ${line}`,
+                `added line is outside the amended ADRs (42, 52, 57, 86, 116, 123, 130): ${line}`,
             ).toBe(true);
         }
         for (const line of removed) {
