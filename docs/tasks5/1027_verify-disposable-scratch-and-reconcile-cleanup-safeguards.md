@@ -4,7 +4,7 @@ name: Verify disposable scratch and reconcile cleanup safeguards
 status: done
 template: feature-impl
 created_at: 2026-09-30T20:13:58.359Z
-updated_at: "2026-10-01T22:12:31.866Z"
+updated_at: "2026-10-01T22:23:41.747Z"
 feature_id: E71
 priority: P2
 tags:
@@ -119,31 +119,31 @@ Decisive disposal-equivalence test `packages/app/tests/services/run-storage.test
 
 **Pipeline verify results**
 
-- Verdict: PASS (from verdict artifact)
+- Verdict: PARTIAL (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Every classified one-off cleanup from the 1024 inventory (docs/reports/2026-09-30-E71-run-storage-ownership.md §4) was reviewed against the proven-safe-removal bar and all are retained as correctness, not redundancy: quality-gate expectFile re-verification invalidates stale receipts before PASS (`packages/app/src/services/quality-gate.ts:446-465`); inline-run-setup scratch staging is the handoff payload itself (`packages/app/src/services/inline-run-setup.ts:804`); history-anatomy scratch reads are analysis-time inputs (`packages/app/src/services/history-anatomy.ts:880`); history-service legacy scans and workflow-service `cleanRunLogs` dual-root sweeping are the legacy-retention reconciliation itself (`packages/app/src/services/workflow-service.ts:969-984`, live-skip `:1046`); idea-pipeline W1-W6 rm steps are atomic publication between hops; agent-run delete-before-invoke (`packages/app/src/workflow/actions/agent-run.ts:324`, contract chain `:327-337,809-843`) enforces answer/expect freshness; feature-service terminal deletion is housekeeping of its own generated files (`packages/app/src/services/feature-service.ts:696-703`). Delete-before-dispatch freshness and atomic publication semantics are unchanged and covered by the existing suites (agent-run 163 pass, run-path, command-gate, quality-gate, workflow-service — all green in the full gate). |
-| R2 | MET | Physical confinement unchanged: `resolveRunArtifactPath` realPath walk fails closed on unreadable ancestors and documents the static-symlink scope (`packages/app/src/workflow/actions/run-path.ts:30-44`). Paused recovery preserved: the paused terminal record pair stays inspectable after completed-scratch disposal (asserted in `packages/app/tests/services/run-storage.test.ts:291`), and paused/resume staleness checks remain in workflow-service tests. Concurrent unrelated active ownership: an active run's scratch survives selective completed-run disposal (`activeFile` assert, `packages/app/tests/services/run-storage.test.ts:291`) and `cleanRunLogs` skips live runs when reconciling legacy logs across both roots (`packages/app/src/services/workflow-service.ts:969-984,1046`). |
-| R3 | MET | Terminal disposal regressions covered by one decisive equivalence test (`packages/app/tests/services/run-storage.test.ts:291-419`): a completed SUCCESS run's verdict + registered artifact bytes + session outputs + record pair are snapshotted before and after scratch disposal and stay equal (acceptance resolves durable-first via `readVerdictArtifact`, analytics derive identically), repeated removal is a no-op, the failure and paused terminal pairs stay intact, scratch recreation by the next temporary gate works (`runLightGate` writes back into `.spur/run`), and a symlink escaping scratch cannot take its target along. The production gap this task closed: `deriveTaskInput` read the verify verdict from scratch only (`packages/app/src/services/verified-outcome.ts:212` previously a raw scratch-only read); it now routes through the shared durable-first seam `readVerdictArtifact` (`packages/app/src/services/done-transition-guard.ts:112-137`), so analytics survive completed scratch disposal. Regression: `packages/app/tests/services/verified-outcome.test.ts:90`. |
-| R4 | MET | Inventory dispositions are closed in the Solution section (per-row retain rationale for all seven census rows, one seam fix). No public command/workflow surface changed — the diff adds a seam import/routing change and tests only, so command/workflow contracts are untouched; unit-test contracts synchronized in-run (verified-outcome, run-storage). Docs/generated/installed contract sync happens at the wrap step (E71 runall worker constraint); installed parity verified via `bun run plugin-smoke` PASS (verified-outcome.ts is app-only, not bundled into plugin twins — no regen needed). No per-workflow terminal cleanup machinery was added. |
+| R1 | MET | `docs/reports/2026-09-30-E71-run-storage-ownership.md:139` retains classified correctness cleanup; 371 focused action, quality gate, recovery, disposal and analytics tests pass. |
+| R2 | MET | `packages/app/src/workflow/actions/run-path.ts:46` applies physical confinement to durable paths; fresh action/workflow suites cover scratch confinement, stale answer invalidation and paused/live ownership. |
+| R3 | PARTIAL | `packages/app/tests/services/run-storage.test.ts:420` asserts one verified result and removes the whole settled scratch directory twice; feature acceptance, real imported history and complete terminal producer outcomes are not all exercised. |
+| R4 | PARTIAL | `docs/reports/2026-09-30-E71-run-storage-ownership.md:302` records unresolved dispositions. Generated surfaces and installed checks are exercised; unclosed storage/export dependencies prevent a complete temporary-only contract. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| [R5] AC1 | MET | test | Freshness and confinement safeguards preserved: delete-before-dispatch contract suites green (`packages/app/tests/workflow/actions/agent-run.test.ts` 163 pass), artifact-path confinement suite green (`packages/app/tests/workflow/run-path.test.ts`), stale-receipt invalidation green (`packages/app/tests/services/quality-gate.test.ts`), and disposal cannot follow escaping links nor touch unrelated active scratch (`packages/app/tests/services/run-storage.test.ts:291` confinement asserts). |
-| [R2] AC2 | MET | test | Completed scratch is disposable with no per-workflow cleanup machinery: the decisive equivalence test (`packages/app/tests/services/run-storage.test.ts:291`) proves snapshots of verdict acceptance, derived analytics, run-record inspection (done/failed/paused terminals), artifact bytes and session outputs are all equal before/after/repeated scratch removal, with recreation by the next temporary gate; `bun run spur-check` exit=0 — 9566 pass / 0 fail across 562 files, including the durable-first analytics regression (`packages/app/tests/services/verified-outcome.test.ts:90`). |
-| [R7] AC3 | MET | command | packages/app/tests/services/run-storage.test.ts:291-419 disposal suite passes (12/12) — completed-run scratch disposal re-creates scratch on demand with no per-workflow cleanup machinery; wrapup runs 0fe80dfd/2f5f1ce0 disposed scratch and re-ran clean. Inline run inline-1027-131104 closed (actionRows=2). |
+| Scenario: R5 — Temporary handoffs retain freshness and confinement safeguards | MET | test | 371 focused workflow/action/quality-gate/storage tests pass, including stale handoff and physical confinement paths; `packages/app/src/workflow/actions/run-path.ts:46`. |
+| Scenario: R2 — Task and feature evidence remains valid without completed scratch | PARTIAL | test | Whole-directory and durable receipt regressions pass, but before/after feature-check coverage and remaining corpus/suppression consumers are unresolved; `packages/app/tests/services/run-storage.test.ts:423`. |
+| Scenario: R7 — Completed scratch is disposable without per-workflow cleanup machinery | PARTIAL | test | Directory removed twice and recreated by the next gate; verified count is nonzero. Full imported-history and terminal producer matrix remains missing; `packages/app/tests/services/run-storage.test.ts:423`. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
 <!-- spur:record-review -->
 
-**SECU findings** (pipeline verify step — verdict: PASS)
+**SECU findings** (pipeline verify step — verdict: PARTIAL)
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | — | — | No findings (verify verdict PASS) |
+| P4 | design-conformance | — | Frozen design is partly implemented; unresolved claims are named in requirements and AC above. |
 
 ### References
 
