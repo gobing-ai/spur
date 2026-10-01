@@ -2,11 +2,11 @@
 schema_version: 1
 id: "D9"
 name: "Workflow seam stabilization and proportional gate rollout"
-status: done
+status: active
 priority: P1
 tags: []
 created_at: "2026-09-03T20:25:50.515Z"
-updated_at: "2026-10-01T15:42:59.486Z"
+updated_at: "2026-10-01T16:32:11.996Z"
 ---
 
 # D9: Workflow seam stabilization and proportional gate rollout
@@ -201,6 +201,8 @@ Feature: Workflow seam stabilization and proportional gate rollout
 | 0764 | Reconcile D9 Option B closure evidence and corpus findings | done |
 | 1031 | Bundled-vs-source CLI definitionDigest seam permanently fails feature-verification receipt guard | done |
 | 1033 | Pipeline execution efficiency: proportional gate, diff-sized fan-out, wrapup pre-flight | done |
+| 1038 | Guard quality-gate recheck against empty qualityGateCmd (vacuous PASS) | todo |
+| 1039 | Commit diffstat-arm conformance test (durable AC1/AC2 evidence for 1033) | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -241,4 +243,5 @@ Tasks 0754, 0757, 0758, 0759, and 0764 are re-verified against this selected bra
 - 2026-09-30T22:38:44.716Z done → active (system)
 - 2026-10-01T15:42:58.972Z active → verifying (system)
 - 2026-10-01T15:42:59.486Z verifying → done (system)
+- 2026-10-01T16:32:11.996Z done → active (system)
 
