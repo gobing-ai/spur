@@ -4,7 +4,7 @@ name: Persist task and feature evidence outside run scratch
 status: done
 template: feature-impl
 created_at: 2026-09-30T20:13:58.356Z
-updated_at: "2026-10-01T22:06:31.047Z"
+updated_at: "2026-10-01T22:24:12.131Z"
 feature_id: E71
 priority: P2
 tags:
@@ -109,31 +109,31 @@ Execution checks and per-requirement observability are frozen in Design. Preserv
 
 **Pipeline verify results**
 
-- Verdict: PASS (from verdict artifact)
+- Verdict: PARTIAL (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/run-storage.ts:44` runStoragePaths publishes `.spur/memory/evidence` + `.spur/memory/runs`; classify() at :150-246 preserves owner filename conventions (`<wbs>-verdict.json`, `<runId>-feature-verification.json`, `<runId>.md`+`.state.json`); test `bun test packages/app/tests/services/run-storage.test.ts` ("terminal run records migrate as a two-file unit") proves byte copy under the fixed durable root. |
-| R2 | MET | Consumers redirect at the single `readVerdictArtifact` choke point (`packages/app/src/services/done-transition-guard.ts` — evidence dir first, scratch fallback, caller-selected `--verdict-file` untouched); both task-transition and feature-check route through it. `bun test packages/app/tests/services/done-transition-guard.test.ts packages/app/tests/services/task-transition.test.ts` → 47 pass. |
-| R3 | MET | Proof identity/binding/supersession paths are untouched (guard suite covers binding + supersession strictness, 47/47); malformed evidence fails closed with no fallback (`run-storage.test.ts` "malformed verdict and receipt JSON are rejected, not copied"). |
-| R4 | MET | Confined idempotent migration composed into `workflow clean` scopes (`apps/cli/src/commands/workflow.ts:1317` `--logs` scope; :1343 apply composes migration; dry-run + apply both honor it); failures reported nonzero, sources never removed, live owners preserved (`run-storage.test.ts`: dry-run zero writes, idempotence, target-mismatch rejection, preserved running/paused/interrupted owners). |
+| R1 | MET | `packages/app/src/services/task-service.ts:1414` publishes the selected verdict before Testing; `packages/app/src/workflow/feature-verification-receipt.ts:125` resolves durable receipt copies. Focused app tests: 148 pass, 0 fail. |
+| R2 | PARTIAL | `packages/app/src/services/corpus-sweep.ts:111` still discovers scratch verdicts; `packages/app/src/services/feature-sync-suppression.ts:97` still builds the verdict vector from the supplied scratch root. |
+| R3 | MET | Record and receipt disposal tests pass; `packages/app/tests/workflow/feature-verification-receipt.test.ts:109` retains validation after directory removal; canonical identity/current-input/supersession checks remain in existing reader and receipt suites. |
+| R4 | PARTIAL | `packages/app/src/services/run-storage.ts:442` confines source and target; `apps/cli/src/commands/workflow.ts:1341` prevents housekeeping on migration failure. Family JSON identities and evidence live-owner binding are not fully validated. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC-2 | MET | test | `bun test packages/app/tests/services/run-storage.test.ts packages/app/tests/services/done-transition-guard.test.ts` → 57 pass — migration copies verdicts/receipts/records into `.spur/memory/evidence` and `.spur/memory/runs`, `readVerdictArtifact` reads evidence first so task/feature evidence stays valid without scratch; `bun run spur-check` exit=0 (log `.spur/run/1025-test-gate.log`). |
-| AC-6 | MET | test | `bun test packages/app/tests/services/run-storage.test.ts` → 10 pass — byte-copy only (no deletion), manifest records applied outcomes, dry-run writes nothing, copy failure leaves sources intact; divergent existing target fails closed without overwrite. |
-| AC-7 | MET | command | `bun run spur-check` exit=0 with clean command composing `migrateRunStorage` (`apps/cli/src/commands/workflow.ts`): disposal machinery lives in the migration, not per-workflow callers; idempotence test proves rerun is a no-op. |
+| Scenario: R2 — Task and feature evidence remains valid without completed scratch | PARTIAL | test | Record and receipt directory-disposal regressions pass, but corpus/suppression still depend on scratch; `packages/app/src/services/corpus-sweep.ts:111`. |
+| Scenario: R6 — Existing lasting data is preserved before its scratch dependency is retired | PARTIAL | test | Migration confinement/conflict/dry-run/failure checks and CLI failure ordering pass; `packages/app/src/services/run-storage.ts:442`; full family identity and live-owner validation remain incomplete. |
+| Scenario: R7 — Completed scratch is disposable without per-workflow cleanup machinery | PARTIAL | test | Carry-forward of the earlier scenario identity: record/receipt disposal is covered, but scratch-based corpus/suppression discovery still prevents the full disposable-scratch contract; `packages/app/src/services/corpus-sweep.ts:111`. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
 <!-- spur:record-review -->
 
-**SECU findings** (pipeline verify step — verdict: PASS)
+**SECU findings** (pipeline verify step — verdict: PARTIAL)
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | — | — | No findings (verify verdict PASS) |
+| P4 | design-conformance | — | Frozen design is partly implemented; unresolved claims are named in requirements and AC above. |
 
 ### References
 
