@@ -2,11 +2,11 @@
 schema_version: 1
 id: "A33"
 name: "Repo release-tooling integrity: verified binary installs and single-source generated plugin-lib bindings"
-status: done
+status: active
 priority: P2
 tags: []
 created_at: "2026-09-26T06:34:35.756Z"
-updated_at: "2026-09-28T17:36:39.214Z"
+updated_at: "2026-10-01T21:54:11.687Z"
 ---
 
 # A33: Repo release-tooling integrity: verified binary installs and single-source generated plugin-lib bindings
@@ -63,4 +63,5 @@ Feature: Repo release-tooling integrity
 - 2026-09-28T17:28:40.452Z backlog → active (system)
 - 2026-09-28T17:28:44.489Z active → verifying (system)
 - 2026-09-28T17:36:39.214Z verifying → done (system)
+- 2026-10-01T21:54:11.687Z done → active (system)
 
