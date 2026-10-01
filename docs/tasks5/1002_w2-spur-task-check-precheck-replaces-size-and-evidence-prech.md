@@ -4,7 +4,7 @@ name: W2 spur task check --precheck replaces size and evidence precheck scripts
 status: done
 template: feature-impl
 created_at: 2026-09-29T06:25:03.417Z
-updated_at: "2026-10-01T06:58:40.078Z"
+updated_at: "2026-10-01T07:12:38.966Z"
 feature_id: A9
 priority: P2
 tags:
