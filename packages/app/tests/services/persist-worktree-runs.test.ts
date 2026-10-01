@@ -641,6 +641,29 @@ describe('persistWorktreeRuns owned evidence (task 1012)', () => {
         }
     });
 
+    test('cited owned files still count toward their owner budget (1034 R1/R2)', async () => {
+        for (const prefix of ['1234-', 'run_1034-']) {
+            const from = makeDir('owned-cited-cap-from-');
+            const to = makeDir('owned-cited-cap-to-');
+            try {
+                await seedWorktree(from.dir, 'run_1034');
+                const taskFile = writeUncitingTaskFile(to.dir);
+                writeFileSync(join(to.dir, taskFile), `Evidence: .spur/run/${prefix}0.log\n`);
+                for (let i = 0; i < 65; i++) {
+                    writeFileSync(join(from.dir, '.spur', 'run', `${prefix}${i}.log`), 'owned\n');
+                }
+
+                await expect(
+                    persistWorktreeRuns({ fromWorkdir: from.dir, toWorkdir: to.dir, taskFiles: [taskFile] }),
+                ).rejects.toThrow(`owner ${prefix} owns more than 64`);
+                expect(existsSync(join(to.dir, '.spur'))).toBe(false);
+            } finally {
+                from.cleanup();
+                to.cleanup();
+            }
+        }
+    });
+
     test('an empty taskFiles array keeps the legacy rows/records-only path (R2)', async () => {
         const from = makeDir('owned-empty-from-');
         const to = makeDir('owned-empty-to-');

@@ -333,7 +333,7 @@ export async function persistWorktreeRuns(input: PersistWorktreeRunsInput): Prom
         // outgrow; one runaway owner still refuses, naming itself, before any write (R2).
         const ownedCounts = new Map<string, number>();
         for (const name of entries.sort()) {
-            if (citedNames.has(name) || recordNames.has(name)) continue;
+            if (recordNames.has(name)) continue;
             const owner = prefixes.find((prefix) => name.startsWith(prefix));
             if (owner === undefined) continue;
             const count = (ownedCounts.get(owner) ?? 0) + 1;
