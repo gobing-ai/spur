@@ -4,7 +4,7 @@ name: "ADR-130: dated amendment for spur-bin.ts facade accuracy note"
 status: done
 template: feature-impl
 created_at: 2026-10-01T00:47:12.874Z
-updated_at: "2026-10-01T01:32:25.897Z"
+updated_at: "2026-10-01T06:59:05.308Z"
 feature_id: A9
 
 ac_numbering: task-local
@@ -61,6 +61,8 @@ Status: implemented. The amendment and test admission were committed in 2dc9841e
 - `docs/00_ADR.md:2018`: a dated correction attributes `spur-bin.ts` to task 1007 R9, with 1019 adopting it in residual-scan. It is appended because test (e) freezes the committed amendment.
 - `repo-wide-tests/adr-supersession.test.ts:168`: the amended set is now `[42, 52, 57, 86, 116, 123, 130]`, and the failure message lists 130.
 
+Re-verification 2026-09-30: CHANGED: the old allowed-edit-ID set was superseded by the current constitution section 6.1; ADR identity and decision-specific history tests now enforce permitted editorial maintenance rather than a task-ID allowlist. ADR-130 amendment now at docs/00_ADR.md:2039; historical task commits 2dc9841ed and 5ba34b162 checked for append-only changes. Fresh ADR suite and feature-wide gate receipts are linked from the batch report.
+
 ### Testing
 
 **Pipeline verify results**
@@ -69,26 +71,26 @@ Status: implemented. The amendment and test admission were committed in 2dc9841e
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | ADR-130 dated amendment naming `plugins/sp/lib` hand-written shared helpers and `spur-bin.ts` (`docs/00_ADR.md:2017`), with the 1007 R9 / 1019 attribution correction (`docs/00_ADR.md:2018`). Re-read this run. |
-| R2 | MET | `git show --unified=0 2dc9841ed 5ba34b162 -- docs/00_ADR.md` this run: only `version:` removed/added plus the two appended ADR-130 lines; no historical line rewritten. |
-| R3 | MET | Amended set includes 130 (`repo-wide-tests/adr-supersession.test.ts:168`); `bun test repo-wide-tests/adr-supersession.test.ts` this run: 7 pass / 0 fail. |
+| R1 | MET | `docs/00_ADR.md:2039`; `docs/00_ADR.md:2040` — reviewed implementation of R1. `docs/00_ADR.md` ADR-130 gains a dated amendment recording that `plugins/sp/lib` also holds hand-written helpers shared by ≥2 glue files — today `spur-bin.ts` (`spurCommand`, the shared spur-CLI invocation split, introduced by task 1007 R9 and adopted by residual-scan in 1019). This widens the Decision's "`env.ts` and generated bundles" enumera. Fresh evidence:  Full bun run spur-check exited 0: 9554 pass, 0 fail (.spur/run/A9-reverify/spur-check.log). CHANGED: the old allowed-edit-ID set was superseded by the current constitution section 6.1; ADR identity and decision-specific history tests now enforce permitted editorial maintenance rather than a task-ID allowlist. ADR-130 amendment now at docs/00_ADR.md:2039; historical task commits 2dc9841ed and 5ba34b162 checked for append-only changes. Fresh ADR suite and feature-wide gate receipts are linked from the batch report. |
+| R2 | MET | — reviewed implementation of R2. ADR-130's historical lines (title, Status, Decision, Why, Alternatives, Consequence, Retains, Detail, and any already-committed amendment) stay byte-identical. Only the `version`/`updated_at` frontmatter changes, plus appended dated lines.. Fresh evidence:  Full bun run spur-check exited 0: 9554 pass, 0 fail (.spur/run/A9-reverify/spur-check.log). CHANGED: the old allowed-edit-ID set was superseded by the current constitution section 6.1; ADR identity and decision-specific history tests now enforce permitted editorial maintenance rather than a task-ID allowlist. ADR-130 amendment now at docs/00_ADR.md:2039; historical task commits 2dc9841ed and 5ba34b162 checked for append-only changes. Fresh ADR suite and feature-wide gate receipts are linked from the batch report. |
+| R3 | MET | `repo-wide-tests/adr-supersession.test.ts:168` — reviewed implementation of R3. `repo-wide-tests/adr-supersession.test.ts` (e) admits ADR-130 to its amended set (same precedent as 0911/ADR-123), and every other ADR stays frozen.. Fresh evidence:  Full bun run spur-check exited 0: 9554 pass, 0 fail (.spur/run/A9-reverify/spur-check.log). CHANGED: the old allowed-edit-ID set was superseded by the current constitution section 6.1; ADR identity and decision-specific history tests now enforce permitted editorial maintenance rather than a task-ID allowlist. ADR-130 amendment now at docs/00_ADR.md:2039; historical task commits 2dc9841ed and 5ba34b162 checked for append-only changes. Fresh ADR suite and feature-wide gate receipts are linked from the batch report. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | command | `rg -n "Amendment \(2026-09-30 · task 1035\)" docs/00_ADR.md` → one hit at `docs/00_ADR.md:2017`, inside ADR-130, naming `spur-bin.ts`. |
-| AC2 | MET | test | Diff of 2dc9841ed+5ba34b162 removes only `version:`; `repo-wide-tests/adr-supersession.test.ts:168` admits 130 and the suite is 7/0 this run. |
-| AC3 | MET | command | `bun run spur-check-feature` this run: exit 0 (link, shim, script-contract, parity, promotion, dependency-drift, importer-schema, history-freeze checks + repo-wide tests 7/0). |
+| AC1 | MET | test | `docs/00_ADR.md:2039` — source/contract review of AC1. Fresh executable evidence:  Full bun run spur-check exited 0: 9554 pass, 0 fail (.spur/run/A9-reverify/spur-check.log). CHANGED: the old allowed-edit-ID set was superseded by the current constitution section 6.1; ADR identity and decision-specific history tests now enforce permitted editorial maintenance rather than a task-ID allowlist. ADR-130 amendment now at docs/00_ADR.md:2039; historical task commits 2dc9841ed and 5ba34b162 checked for append-only changes. Fresh ADR suite and feature-wide gate receipts are linked from the batch report. |
+| AC2 | MET | test | `repo-wide-tests/adr-supersession.test.ts:168` — source/contract review of AC2. Fresh executable evidence:  Full bun run spur-check exited 0: 9554 pass, 0 fail (.spur/run/A9-reverify/spur-check.log). CHANGED: the old allowed-edit-ID set was superseded by the current constitution section 6.1; ADR identity and decision-specific history tests now enforce permitted editorial maintenance rather than a task-ID allowlist. ADR-130 amendment now at docs/00_ADR.md:2039; historical task commits 2dc9841ed and 5ba34b162 checked for append-only changes. Fresh ADR suite and feature-wide gate receipts are linked from the batch report. |
+| AC3 | MET | test | — source/contract review of AC3. Fresh executable evidence:  Full bun run spur-check exited 0: 9554 pass, 0 fail (.spur/run/A9-reverify/spur-check.log). CHANGED: the old allowed-edit-ID set was superseded by the current constitution section 6.1; ADR identity and decision-specific history tests now enforce permitted editorial maintenance rather than a task-ID allowlist. ADR-130 amendment now at docs/00_ADR.md:2039; historical task commits 2dc9841ed and 5ba34b162 checked for append-only changes. Fresh ADR suite and feature-wide gate receipts are linked from the batch report. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-**Review** (inline coordinator: functional, SECUA, architecture; scope = commits 2dc9841ed + 5ba34b162)
+Re-verification 2026-09-30: requirement and AC traceability, correctness, security, efficiency, usability, maintainability, architecture, Design and scope checked against current task-owned code and executable tests.
 
-| Priority | Dimension | Location | Finding | Disposition |
-|----------|-----------|----------|---------|-------------|
-| P4 | Functional | `docs/00_ADR.md:2017` | The amendment correctly describes `spur-bin.ts` as a shared spur-CLI invocation helper, not a bin facade (the bin is `spur.js`). R1–R3 traced. | — |
-| P3 | Correctness | `docs/00_ADR.md:2018` | The committed amendment credited `spur-bin.ts` to task 1019, but it was introduced by 1007 R9 (commit 04e3505d6). Corrected by an appended dated line because test (e) freezes committed amendment text. | FIXED (5ba34b162) |
-| P4 | Architecture | `repo-wide-tests/adr-supersession.test.ts:168` | Admitting 130 to the amended set follows the 0911/ADR-123 precedent, and every other ADR stays frozen. `docs/design/harness-surface-governance.md:92` is consistent. | — |
+CHANGED: the old allowed-edit-ID set was superseded by the current constitution section 6.1; ADR identity and decision-specific history tests now enforce permitted editorial maintenance rather than a task-ID allowlist. ADR-130 amendment now at docs/00_ADR.md:2039; historical task commits 2dc9841ed and 5ba34b162 checked for append-only changes. Fresh ADR suite and feature-wide gate receipts are linked from the batch report.
+
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P4 | SECUA and architecture | task-owned implementation | No findings (verify verdict PASS) |
 
 ### References
 
