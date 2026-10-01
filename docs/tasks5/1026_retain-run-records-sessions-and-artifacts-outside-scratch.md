@@ -4,7 +4,7 @@ name: Retain run records sessions and artifacts outside scratch
 status: done
 template: feature-impl
 created_at: 2026-09-30T20:13:58.357Z
-updated_at: "2026-10-01T22:10:48.499Z"
+updated_at: "2026-10-01T22:23:39.354Z"
 feature_id: E71
 priority: P2
 tags:
@@ -116,31 +116,31 @@ DB trace stays authoritative (no paused snapshots, no schema change, no new back
 
 **Pipeline verify results**
 
-- Verdict: PASS (from verdict artifact)
+- Verdict: PARTIAL (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | runStoragePaths publishes recordsDir `.spur/memory/runs` (`packages/app/src/services/run-storage.ts:52`) with session/artifact roots derived per run (`:492-498`); the retained record pair writes there (`writeInlineRunOutcome` `packages/app/src/services/inline-run-setup.ts:822-823`) and both CLI run/continue sinks select recordsDir (`apps/cli/src/commands/workflow.ts:901,1259`). DB trace stays authoritative and no-log/redaction semantics are unchanged (`packages/app/tests/services/inline-run-driver.test.ts` 12 pass, `plugins/sp/tests/inline-run-trace.test.ts` trace-close behavior). |
-| R2 | MET | `persistDurableArtifact` (`packages/app/src/workflow/actions/run-artifact.ts:31-51`) copies artifact bytes into `recordsDir/<runId>/artifacts/` BEFORE DAO registration at both call sites (`:170` unbound, `:463` bound); unequal-basename collisions fail via sha256 divergence (`:43-44`) and identical re-registration is idempotent (`:46`). `packages/app/tests/workflow/actions/run-artifact.test.ts` proves the durable registered path plus collision-free re-record; readers resolve scratch-first with durable fallback (`resolveRunRecordDir` (`packages/app/src/services/run-storage.ts:542-548`)). |
-| R3 | MET | Session roots moved as one unit: `runSessionsDir` (`packages/app/src/services/run-storage.ts:492-493`) drives agent session dirs (`agent-run.ts:577,586`), late import/history discovery reads the durable root first (`runSessionAugmentedRoots` `history-service.ts:491,559`), and worktree export transfers records/sessions/artifacts before removal (`carryRunRecordDir` (`packages/app/src/services/inline-run-setup.ts:780-796`), invoked at `:481`). `packages/app/tests/services/agent-run.test.ts` 163 pass and `packages/app/tests/services/persist-worktree-runs.test.ts` 24 pass. |
-| R4 | MET | Migration extends 1025's engine (no fork): run-subtree walk joins `<runId>/agent-sessions\|artifacts` per-file units (`packages/app/src/services/run-storage.ts:330-343`), subpath classification assigns run-record ownership (`:184-194`), run-scoped receipts map runId===prefix to ownerRunId (`:216-227`), unowned scratch files stay preserved with null family (`:275-284`), and `cleanRunLogs` sweeps both scratch and durable roots while skipping active runs (`workflow-service.ts:954-962,1046`). `packages/app/tests/services/run-storage.test.ts` covers subtree/run-scoped/preserved classification, dry-run, idempotence, fail-closed conflicts and malformed JSON; `ensureDurablePlaneIgnored` (`packages/app/src/services/run-storage.ts:515`, wired `:353`) keeps the durable plane out of proof inputs via `.git/info/exclude`. |
+| R1 | MET | `apps/cli/src/commands/workflow.ts:901` selects durable record sinks; inline producer and retained inspection suites pass within 244 focused tests. |
+| R2 | PARTIAL | `packages/app/src/workflow/actions/run-artifact.ts:31` now atomically persists confined retained bytes and preserves optional missing semantics. Bound evidence input remains scratch-only and source-identity collision coverage is incomplete. |
+| R3 | PARTIAL | `packages/app/src/services/run-storage.ts:537` validates durable session run IDs; session/history producers use durable roots, but `packages/app/src/services/inline-run-setup.ts:481` exports records without a complete evidence-plane transfer and can skip conflicts. |
+| R4 | PARTIAL | `packages/app/src/services/run-storage.ts:335` migration copies owned data and preserves live/unknown owners; no metadata-redirection or settled-importer port is present. Byte preservation alone does not settle retained references. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| [R3] AC1 | MET | test | `bun test packages/app/tests/services/inline-run-driver.test.ts plugins/sp/tests/inline-run-setup.test.ts plugins/sp/tests/inline-run-installed.test.ts` — record pairs are written to and read from `.spur/memory/runs/<runId>.md` + `.state.json` while scratch negative-paths (`inline-setup.json`, `.log`) stay absent; the artifact suite registers the durable `runs/run-123/artifacts` path (run-artifact.test.ts). Inspection data survives scratch removal because the durable pair no longer depends on `.spur/run`. |
-| [R4] AC2 | MET | test | `bun test packages/app/tests/services/agent-run.test.ts packages/app/tests/services/persist-worktree-runs.test.ts packages/app/tests/services/history-service.test.ts` — sessions emit under `recordsDir/<runId>/agent-sessions`, history import reads the durable root first, and worktree export persists records/sessions/artifacts before deletion (24/24). |
-| [R6] AC3 | MET | test | `bun run spur-check` exit=0: 9564 pass / 0 fail across 562 files — includes run-storage migration suite (byte-copy only, dry-run writes nothing, divergent target fails closed, live/unknown owners preserved), workflow clean dual-root reclamation (`apps/cli/tests/commands/workflow.test.ts`) and import-proof invariants (proof-input-fingerprint untouched by the durable plane). |
+| Scenario: R3 — Retained run inspection and artifact references survive scratch removal | PARTIAL | test | 244 focused producer/reader/artifact/export tests pass; optional missing and escaping-root regressions are fixed, but bound durable evidence and legacy metadata redirection remain incomplete. |
+| Scenario: R4 — Session history and exported results remain available outside scratch | PARTIAL | test | Durable session paths are covered; `packages/app/src/services/inline-run-setup.ts:481` still carries record conflicts as skips and omits complete evidence-family export. |
+| Scenario: R6 — Existing lasting data is preserved before its scratch dependency is retired | PARTIAL | test | Migration byte-copy preservation passes; `packages/app/src/services/run-storage.ts:335` lacks reference-redirection/importer eligibility inputs needed by the frozen contract. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
 <!-- spur:record-review -->
 
-**SECU findings** (pipeline verify step — verdict: PASS)
+**SECU findings** (pipeline verify step — verdict: PARTIAL)
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | — | — | No findings (verify verdict PASS) |
+| P4 | design-conformance | — | Frozen design is partly implemented; unresolved claims are named in requirements and AC above. |
 
 ### References
 
