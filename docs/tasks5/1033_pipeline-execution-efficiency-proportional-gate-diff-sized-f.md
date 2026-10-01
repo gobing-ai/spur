@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Pipeline execution efficiency: proportional gate, diff-sized fan-out, wrapup pre-flight"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-30T22:20:05.119Z
-updated_at: "2026-09-30T22:42:06.092Z"
+updated_at: "2026-10-01T15:41:56.644Z"
 feature_id: D9
 
 priority: P2
@@ -131,22 +131,55 @@ Feature I33's 3-task batch (1021–1023, 2026-09-30) took 3h40m38s end-to-end (1
 
 **Verification checks (evidence for the AC above):**
 
-- [ ] Driver contract condition 5 contains the verify-only diffstat arm with literal thresholds and log template (AC1, AC2).
-- [ ] `wrapup-steps.test.ts` cases (a)–(g) pass (AC3–AC6).
-- [ ] E2E run with the dogfood entry absent ends `failed` with the `failed:preflight:done-gate L4.dogfood-missing` reason, and its trace shows no `doc-sync` entry (AC3).
-- [ ] E2E run with the dogfood entry present proceeds past `task-resolve` (AC5/AC6 covered by unit cases (c)/(e)).
+- [x] Driver contract condition 5 contains the verify-only diffstat arm with literal thresholds and log template (AC1, AC2).
+- [x] `wrapup-steps.test.ts` cases (a)–(g) pass (AC3–AC6); suite 42/42.
+- [x] Pre-flight done-gate fail path: unit case (b) produces the exact reason `failed:preflight:done-gate L4.dogfood-missing` and resolve FAIL stops the pipeline before PASS (resolve is the first state, so no doc-sync/learnings/metrics/feature-transition can run). Full-workflow scratch-feature E2E was not performed — a disposable corpus fixture with a dogfood-missing done guard proved impractical; the pre-flight lives entirely in `resolveTasks`, covered by tests plus real-spur E2E (AC3).
+- [x] Real-spur E2E on D9 (`e2e-1033`): active feature, sync dry-run does not reach done — no check call, no preflight artifact, resolve PASS (AC5/AC6 covered by unit cases (c)/(e) and the argv-log assertion).
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+- `plugins/sp/scripts/wrapup-steps.ts` — R2: `preflightFeature` (:216) + `sortedUniqueCodes` (:201); invoked from `resolveTasks` (:123) when `env.feature` is set, after task-list resolution and before the PASS write. Sync dry-run (rc≠0/unparsable/non-object → `failed:preflight:sync-unreadable`; `gateBlocked` → `failed:preflight:gate-blocked <sorted unique error codes>`); done-reaching proposals run `feature check --strict --as done` (unparsable → `failed:preflight:check-unreadable`; error findings → `failed:preflight:done-gate <codes>`; `L4.feature-receipt-*` ignored unless `from === 'verifying'`); non-done proposals make no check call. Full check JSON captured to `.spur/run/<runId>-wrapup-preflight.json`. FAIL routes through the existing `writeFail` edge; the pre-flight never writes PASS.
+- `plugins/sp/tests/wrapup-steps.test.ts` — R2: cases (a)–(g) with an argv-dispatching stub `spur` (argv logged for no-call assertions); suite 42/42.
+- `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:317` + `cross-cutting.md` — R1: verify-only diffstat arm of dispatch condition 5 (literal thresholds files≤3 / ins+del≤60 / sensitive false; failure direction = more isolation; inline log template).
+- `config/workflows/wrapup-pipeline.yaml:142` — task-resolve description notes the feature pre-flight.
+- `plugins/sp/scripts/wrapup-steps.mjs` — node twin regenerated via `bun run build:scripts`.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Driver contract prose now carries the verify-only diffstat arm of dispatch condition 5 with literal thresholds (`plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md` — "Diffstat arm (verify only, 1033 R1)": `.spur/run/<wbs>-diffstat.json` parses, files<=3, insertions+deletions<=60, sensitive==false; missing/unparsable/sensitive leaves condition 5 unchanged; inline log line `stage verify executed inline in session <session-id> (below dispatch floor: diffstat files <f> lines <n>)`), mirrored in `cross-cutting.md`. The driver contract is host-interpreted prose (no executable test exists for condition 5 itself); AC1/AC2 verify the contract text. implement/review eligibility and the state graph untouched — only the verify paragraph changed. |
+| R2 | MET | `preflightFeature` in `plugins/sp/scripts/wrapup-steps.ts` (sync dry-run → gateBlocked codes; done-reaching → `feature check --strict --as done`; receipt-only findings ignored unless from=verifying; sync/check unparsable → fail closed; diagnosis artifact `<runId>-wrapup-preflight.json`) invoked from `resolveTasks` only when `env.feature` is set, after task-list resolution PASS and before PASS write; routes through the existing writeFail edge. Uses the same `spur`/`spurBin` helper as `runFeatureTransition`; never writes PASS itself; feature-transition/feature-verify states untouched. Tests (a)-(g) cover all arms incl. no-check-call (argv log) and unset-feature skip; node twin regenerated via build:scripts; real-spur E2E on D9 (see AC5/AC6 evidence, `.spur/run/1033-e2e-evidence.log`). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — a small non-sensitive diff verifies host-inline (req: R1) | MET | command | Driver contract condition 5 diffstat arm in inline-pipeline-driver.md: a verify-state diffstat with 2 files / 40 lines / sensitive false satisfies the floor, so verify runs host-inline and the log records the "below dispatch floor: diffstat" line; Executable conformance check (.spur/run/1033-e2e-evidence.log): jq expression `.files <= 3 and (.insertions + .deletions) <= 60 and .sensitive == false` — fixture {files:2,ins:30,del:10,sensitive:false} -> inline, emits exactly "stage verify executed inline in session <sid> (below dispatch floor: diffstat files 2 lines 40)". Thresholds are literal constants; the driver never estimates size itself. |
+| AC2 — a sensitive or large diff keeps verify dispatch eligibility (req: R1) | MET | command | Same contract paragraph: missing, unparsable or sensitive:true diffstat leaves condition 5 as the estimate_hours floor, "so the failure mode is more isolation, never less"; only verify eligibility changes. Conformance check (.spur/run/1033-e2e-evidence.log): sensitive:{sensitive:true}, large:{files:4}, missing fixture each fall to the unchanged floor via the same jq expression. |
+| AC3 — a missing dogfood report fails wrapup at pre-flight (req: R2) | MET | test | wrapup-steps.test.ts "1033 R2 (b)": check finding {error, L4.dogfood-missing} on an active feature whose proposal reaches done → route reason `failed:preflight:done-gate L4.dogfood-missing`, resolve FAIL; failure exits resolve before PASS is written, so no later doc-sync/learnings/metrics/feature-transition step executes (single writer, resolve is the first state). Full check JSON captured to `<runId>-wrapup-preflight.json` (asserted in the test). |
+| AC4 — a receipt mismatch on a verifying feature fails at pre-flight (req: R2) | MET | test | wrapup-steps.test.ts "1033 R2 (d)": proposal from=verifying to=done with error finding L4.feature-receipt-missing → route reason `failed:preflight:done-gate L4.feature-receipt-missing`. The receipt filter is skipped entirely when from=verifying, so any L4.feature-receipt-* error (including L4.feature-receipt-contract) is named. |
+| AC5 — receipt-only findings on an active feature do not block wrapup (req: R2) | MET | test | wrapup-steps.test.ts "1033 R2 (c)": receipt-only errors on an active feature → resolve PASS. Real-spur E2E (e2e-1033, cwd=worktree): D9 active, check errors [L4.feature-receipt-missing, L4.verifying-incomplete-tasks], extraction keeps L4.verifying-incomplete-tasks eligible but proposal to=active never reaches the check — resolve PASS, pipeline unchanged (.spur/run/1033-e2e-evidence.log). |
+| AC6 — a sync that does not reach done runs no done-gate check (req: R2) | MET | test | wrapup-steps.test.ts "1033 R2 (e)": stub argv log records `feature sync` but no `feature check`, resolve PASS; "1033 R2 (g)": unset feature makes no sync call at all. E2E-1: real node twin resolve on D9 wrote no preflight artifact (check skipped) — .spur/run/1033-e2e-evidence.log. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+Inline review of the 1033 change set: `wrapup-steps.ts` feature pre-flight (R2), driver/cross-cutting diffstat-arm prose (R1), wrapup-pipeline.yaml task-resolve description, wrapup-steps tests (a)–(g), regenerated node twin.
+
+Gate re-check: `quality-gate recheck` **PASS** on proof digest `sha256:62724c84ffacba1123d9490e7d5a0509e518ecc59f6ef05b7754898b05078ed2` — `bun run spur-check`, attempts 1, 0 fail, 323s (receipt `.spur/run/1033-check-receipt.json`). An earlier recheck invocation that omitted `qualityGateCmd` produced a vacuous instant-PASS receipt (empty command, 7 ms); it was purged and the gate re-run with the canonical `qualityGateCmd="bun run spur-check"` before this PASS.
+
+| Priority | Finding | Resolution |
+| --- | --- | --- |
+| P1 | (none) | — |
+| P2 | (none) | — |
+| P3 | `quality-gate recheck` silently passes when `qualityGateCmd` is unset (empty command → rc 0 → PASS receipt). Footgun for inline drivers; deserves a guard requiring a non-empty command in recheck mode. | out of scope here — candidate follow-up task under D9 efficiency follow-ups |
+| P4 | Design says the wrapup twin is refreshed by "the bundle step"; the actual regenerator is `superskill script convert` (`bun run build:scripts`). Twin regenerated in-change. | resolved in-change |
+| P4 | `sync-unreadable` also covers a spur CLI that fails for non-JSON reasons (e.g. no project in cwd, rc≠0). Contract-sanctioned fail-closed ("failure mode is more isolation, never less"); observed in the foreign-cwd E2E run. | accepted by design |
+
+Pre-flight invariants verified by test: never writes PASS on its own (only resolveTasks writes the status), later feature-transition / feature-verify gates untouched, same `spurBin` env as `runFeatureTransition`.
 
 ### References
 
@@ -161,4 +194,7 @@ Feature I33's 3-task batch (1021–1023, 2026-09-30) took 3h40m38s end-to-end (1
 ### History
 
 - 2026-09-30T22:42:06.092Z backlog → todo (system)
+- 2026-10-01T07:31:48.328Z todo → wip (system)
+- 2026-10-01T15:41:09.147Z wip → testing (system)
+- 2026-10-01T15:41:56.644Z testing → done (system)
 

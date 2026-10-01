@@ -314,6 +314,16 @@ Action semantics come from the YAML and the workflow action contract:
    with no `estimate_hours` passes this condition unchanged. The driver reads the frontmatter value
    directly — never estimates size itself.
 
+   **Diffstat arm (verify only, 1033 R1).** When the current state id is `verify`, condition 5
+   also passes when the triage diffstat file `.spur/run/<wbs>-diffstat.json` exists and shows a
+   small, non-sensitive diff: `.files <= 3 and ((.insertions // 0) + (.deletions // 0)) <= 60 and
+   .sensitive == false` (literal thresholds; the driver reads the file with `jq` — it never
+   estimates size itself). A missing, unparsable or `sensitive: true` diffstat leaves condition 5
+   as above, so the failure mode is more isolation, never less. Below the floor on this arm, the
+   run log carries `stage verify executed inline in session <session-id> (below dispatch floor:
+   diffstat files <f> lines <n>)`. Only `verify` eligibility changes: `implement` and `review`
+   keep the estimate floor, and the pipeline state graph is unchanged.
+
 All five pass → dispatch. Any pre-dispatch failure → execute the stage **once** in the host session.
 An `agent.run` whose `input` is free-form prose rather than a pure slash command fails condition 2
 and is never dispatch-eligible: the driver executes it in the host session and logs it with the

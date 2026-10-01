@@ -116,7 +116,56 @@ function resolveTasks(env, options = {}) {
   }
   writeFileSync(abs(relStatusFile), `PASS
 `);
+  if ((env.feature ?? "") !== "") {
+    const pf = preflightFeature(env, cwd);
+    if (pf)
+      return writeFail(pf);
+  }
   return { status: "PASS", statusFile: relStatusFile, tasksFile: relTasksFile, exitCode: 0 };
+}
+function sortedUniqueCodes(findings) {
+  const codes = findings.filter((f) => f.severity === "error").map((f) => String(f.code ?? "")).filter((c) => c.length > 0);
+  return [...new Set(codes)].sort();
+}
+function preflightFeature(env, cwd) {
+  const feature = env.feature ?? "";
+  const abs = (p) => cwd ? join(cwd, p) : p;
+  const syncOut = spur(env, ["feature", "sync", feature, "--dry-run", "--json"], { cwd });
+  let sync;
+  if (syncOut.status === 0) {
+    try {
+      const parsed = JSON.parse(syncOut.stdout);
+      if (parsed !== null && typeof parsed === "object")
+        sync = parsed;
+    } catch {}
+  }
+  if (sync === undefined)
+    return "failed:preflight:sync-unreadable";
+  const proposal = sync.proposal ?? {};
+  if (proposal.gateBlocked === true) {
+    return `failed:preflight:gate-blocked ${sortedUniqueCodes(proposal.gateFindings ?? []).join(",")}`;
+  }
+  const reachesDone = proposal.to === "done" || (proposal.hops ?? []).includes("done");
+  if (!reachesDone)
+    return null;
+  const checkOut = spur(env, ["feature", "check", feature, "--strict", "--as", "done", "--json"], { cwd });
+  let check;
+  try {
+    check = JSON.parse(checkOut.stdout);
+  } catch {
+    return "failed:preflight:check-unreadable";
+  }
+  const payload = Array.isArray(check) ? check[0] : check;
+  const findings = (payload !== null && typeof payload === "object" ? payload.findings : undefined) ?? [];
+  const eligible = proposal.from === "verifying" ? findings : findings.filter((f) => !String(f.code ?? "").startsWith("L4.feature-receipt-"));
+  const runId = env.__runId ?? "";
+  if (runId.length > 0) {
+    mkdirSync(abs(join(".spur", "run")), { recursive: true });
+    writeFileSync(abs(join(".spur", "run", `${runId}-wrapup-preflight.json`)), `${JSON.stringify(check)}
+`);
+  }
+  const codes = sortedUniqueCodes(eligible);
+  return codes.length > 0 ? `failed:preflight:done-gate ${codes.join(",")}` : null;
 }
 var ROUTE_REASON_TABLE = {
   fast: "fast:evidence complete+consistent",
@@ -410,6 +459,7 @@ export {
   runMetrics,
   runFeatureTransition,
   resolveTasks,
+  preflightFeature,
   main,
   jqPick,
   classifySync,

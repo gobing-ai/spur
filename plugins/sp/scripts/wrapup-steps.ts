@@ -9,6 +9,7 @@
  * the shell-program caps while writing the same `.spur/run` artifacts:
  *   - `<runId>-wrapup-tasks.json`       normalized, deduplicated WBS capture (resolve)
  *   - `<runId>-wrapup-resolve.status`   `PASS`/`FAIL` (resolve)
+ *   - `<runId>-wrapup-preflight.json`   full feature-check JSON (resolve pre-flight, when `feature` is set)
  *   - `<runId>-route-reason.txt`        route reason (route-reason subcommand)
  *   - `.spur/memory/wrapup-metrics.jsonl` one row per task (metrics)
  *   - `<runId>-wrapup-metrics.status`   `PASS`/`FAIL` (metrics)
@@ -175,7 +176,93 @@ export function resolveTasks(env: WrapupStepsEnv, options: WrapupStepsOptions = 
         return writeFail(`failed:unresolved or non-completed task (see ${relTasksFile})`);
     }
     writeFileSync(abs(relStatusFile), 'PASS\n');
+    if ((env.feature ?? '') !== '') {
+        const pf = preflightFeature(env, cwd);
+        if (pf) return writeFail(pf);
+    }
     return { status: 'PASS', statusFile: relStatusFile, tasksFile: relTasksFile, exitCode: 0 };
+}
+
+interface PreflightFinding {
+    severity?: string;
+    code?: string;
+}
+
+interface PreflightSyncPayload {
+    proposal?: {
+        gateBlocked?: boolean;
+        from?: string;
+        to?: string;
+        hops?: string[];
+        gateFindings?: PreflightFinding[];
+    };
+}
+
+function sortedUniqueCodes(findings: PreflightFinding[]): string[] {
+    const codes = findings
+        .filter((f) => f.severity === 'error')
+        .map((f) => String(f.code ?? ''))
+        .filter((c) => c.length > 0);
+    return [...new Set(codes)].sort();
+}
+
+/**
+ * 1033 R2 feature pre-flight for wrapup resolve — runs after the task list resolves and
+ * before any corpus-mutating wrapup state. Returns a `failed:preflight:*` reason on the
+ * first blocking condition, or null when wrapup may proceed. Never writes PASS, never
+ * relaxes the later feature-transition / feature-verify gates, and uses the same `spurBin`
+ * env as `runFeatureTransition`.
+ */
+export function preflightFeature(env: WrapupStepsEnv, cwd?: string): string | null {
+    const feature = env.feature ?? '';
+    const abs = (p: string): string => (cwd ? join(cwd, p) : p);
+
+    const syncOut = spur(env, ['feature', 'sync', feature, '--dry-run', '--json'], { cwd });
+    let sync: PreflightSyncPayload | undefined;
+    if (syncOut.status === 0) {
+        try {
+            const parsed: unknown = JSON.parse(syncOut.stdout);
+            if (parsed !== null && typeof parsed === 'object') sync = parsed as PreflightSyncPayload;
+        } catch {
+            // fall through to the unreadable branch below
+        }
+    }
+    if (sync === undefined) return 'failed:preflight:sync-unreadable';
+    const proposal = sync.proposal ?? {};
+
+    if (proposal.gateBlocked === true) {
+        return `failed:preflight:gate-blocked ${sortedUniqueCodes(proposal.gateFindings ?? []).join(',')}`;
+    }
+
+    const reachesDone = proposal.to === 'done' || (proposal.hops ?? []).includes('done');
+    if (!reachesDone) return null;
+
+    const checkOut = spur(env, ['feature', 'check', feature, '--strict', '--as', 'done', '--json'], { cwd });
+    let check: unknown;
+    try {
+        check = JSON.parse(checkOut.stdout);
+    } catch {
+        return 'failed:preflight:check-unreadable';
+    }
+    const payload = Array.isArray(check) ? check[0] : check;
+    const findings =
+        (payload !== null && typeof payload === 'object'
+            ? (payload as { findings?: PreflightFinding[] }).findings
+            : undefined) ?? [];
+    // The verifying onEnter will produce the receipt, so receipt-only errors on a feature
+    // that is not yet verifying would fail every wrapup forever.
+    const eligible =
+        proposal.from === 'verifying'
+            ? findings
+            : findings.filter((f) => !String(f.code ?? '').startsWith('L4.feature-receipt-'));
+
+    const runId = env.__runId ?? '';
+    if (runId.length > 0) {
+        mkdirSync(abs(join('.spur', 'run')), { recursive: true });
+        writeFileSync(abs(join('.spur', 'run', `${runId}-wrapup-preflight.json`)), `${JSON.stringify(check)}\n`);
+    }
+    const codes = sortedUniqueCodes(eligible);
+    return codes.length > 0 ? `failed:preflight:done-gate ${codes.join(',')}` : null;
 }
 
 /**

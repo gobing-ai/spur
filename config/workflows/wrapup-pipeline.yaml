@@ -139,7 +139,8 @@ states:
   - id: task-resolve
     description: >
       Validate the task list ONCE and evaluate closed proportional routing (0758
-      R1-R4). Validation (0770 + 0783): vars.tasks must be a JSON array of
+      R1-R4). When vars.feature is set, resolve also runs the feature pre-flight
+      (1033 R2). Validation (0770 + 0783): vars.tasks must be a JSON array of
       canonical four-digit WBS strings — non-arrays, non-strings, whitespace or
       other shapes are rejected, not trimmed — deduplicated in first-seen
       order, with __runId present, and every member must resolve via `spur task

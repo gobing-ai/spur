@@ -826,3 +826,218 @@ test('0994 R1: an h1 Testing heading reaches the metrics row', () => {
         cleanup(cwd);
     }
 });
+
+/**
+ * 1033 R2: argv-dispatching stub — `task show`, `feature sync --dry-run` and
+ * `feature check` return distinct payload files; every argv is appended to a log file
+ * so tests can assert a check was never made.
+ */
+function writeDispatchStub(
+    cwd: string,
+    files: { task?: string; sync?: string; check?: string },
+): { stub: string; argvLog: string } {
+    const stub = join(cwd, 'stub-spur');
+    const argvLog = join(cwd, 'stub-argv.log');
+    const branches = [
+        files.task ? `  "task show") cat '${files.task}';;` : '',
+        files.sync ? `  "feature sync") cat '${files.sync}';;` : '',
+        files.check ? `  "feature check") cat '${files.check}';;` : '',
+    ].filter(Boolean);
+    writeFileSync(
+        stub,
+        ['#!/bin/sh', `printf '%s\\n' "$*" >> '${argvLog}'`, 'case "$1 $2" in', ...branches, 'esac', 'exit 0', ''].join(
+            '\n',
+        ),
+    );
+    chmodSync(stub, 0o755);
+    return { stub, argvLog };
+}
+
+function writeJsonFile(cwd: string, name: string, value: unknown): string {
+    const file = join(cwd, name);
+    writeFileSync(file, JSON.stringify(value));
+    return file;
+}
+
+const DONE_TASK = { frontmatter: { status: 'done' } };
+
+test('1033 R2 (a): a gate-blocked dry-run fails with the sorted unique error codes', () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'wrapup-steps-preflight-a-'));
+    try {
+        const syncFile = writeJsonFile(cwd, 'sync.json', {
+            proposal: {
+                gateBlocked: true,
+                gateFindings: [
+                    { severity: 'error', code: 'L2.frozen' },
+                    { severity: 'warn', code: 'W.noise' },
+                    { severity: 'error', code: 'L1.rule' },
+                    { severity: 'error', code: 'L1.rule' },
+                ],
+            },
+            applied: false,
+            appliedHops: [],
+        });
+        const { stub } = writeDispatchStub(cwd, { task: writeJsonFile(cwd, 'task.json', DONE_TASK), sync: syncFile });
+        const run = runSteps(['resolve'], { __runId: 'r-a', tasks: '["0770"]', feature: 'D9', spurBin: stub }, cwd);
+        expect(run.code).toBe(0);
+        expect(readFileSync(join(cwd, '.spur/run/r-a-route-reason.txt'), 'utf8')).toBe(
+            'failed:preflight:gate-blocked L1.rule,L2.frozen',
+        );
+        expect(readFileSync(join(cwd, '.spur/run/r-a-wrapup-resolve.status'), 'utf8')).toContain('FAIL');
+    } finally {
+        cleanup(cwd);
+    }
+});
+
+test('1033 R2 (b): a done-gate error on an active feature fails with its codes', () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'wrapup-steps-preflight-b-'));
+    try {
+        const syncFile = writeJsonFile(cwd, 'sync.json', { proposal: { from: 'active', to: 'done' }, appliedHops: [] });
+        const checkFile = writeJsonFile(cwd, 'check.json', [
+            {
+                findings: [
+                    { severity: 'error', code: 'L4.dogfood-missing' },
+                    { severity: 'warn', code: 'W.noise' },
+                ],
+            },
+        ]);
+        const { stub } = writeDispatchStub(cwd, {
+            task: writeJsonFile(cwd, 'task.json', DONE_TASK),
+            sync: syncFile,
+            check: checkFile,
+        });
+        const run = runSteps(['resolve'], { __runId: 'r-b', tasks: '["0770"]', feature: 'D9', spurBin: stub }, cwd);
+        expect(run.code).toBe(0);
+        expect(readFileSync(join(cwd, '.spur/run/r-b-route-reason.txt'), 'utf8')).toBe(
+            'failed:preflight:done-gate L4.dogfood-missing',
+        );
+        // Diagnosis artifact carries the full check JSON.
+        expect(JSON.parse(readFileSync(join(cwd, '.spur/run/r-b-wrapup-preflight.json'), 'utf8'))).toEqual([
+            {
+                findings: [
+                    { severity: 'error', code: 'L4.dogfood-missing' },
+                    { severity: 'warn', code: 'W.noise' },
+                ],
+            },
+        ]);
+    } finally {
+        cleanup(cwd);
+    }
+});
+
+test('1033 R2 (c): receipt-only errors on an active feature are ignored and resolve passes', () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'wrapup-steps-preflight-c-'));
+    try {
+        const syncFile = writeJsonFile(cwd, 'sync.json', { proposal: { from: 'active', to: 'done' }, appliedHops: [] });
+        const checkFile = writeJsonFile(cwd, 'check.json', [
+            { findings: [{ severity: 'error', code: 'L4.feature-receipt-missing' }] },
+        ]);
+        const { stub } = writeDispatchStub(cwd, {
+            task: writeJsonFile(cwd, 'task.json', DONE_TASK),
+            sync: syncFile,
+            check: checkFile,
+        });
+        const run = runSteps(['resolve'], { __runId: 'r-c', tasks: '["0770"]', feature: 'D9', spurBin: stub }, cwd);
+        expect(run.code).toBe(0);
+        expect(readFileSync(join(cwd, '.spur/run/r-c-wrapup-resolve.status'), 'utf8')).toContain('PASS');
+    } finally {
+        cleanup(cwd);
+    }
+});
+
+test('1033 R2 (d): a receipt error on a verifying feature is not ignored', () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'wrapup-steps-preflight-d-'));
+    try {
+        const syncFile = writeJsonFile(cwd, 'sync.json', {
+            proposal: { from: 'verifying', to: 'done' },
+            appliedHops: ['done'],
+        });
+        const checkFile = writeJsonFile(cwd, 'check.json', [
+            { findings: [{ severity: 'error', code: 'L4.feature-receipt-missing' }] },
+        ]);
+        const { stub } = writeDispatchStub(cwd, {
+            task: writeJsonFile(cwd, 'task.json', DONE_TASK),
+            sync: syncFile,
+            check: checkFile,
+        });
+        const run = runSteps(['resolve'], { __runId: 'r-d', tasks: '["0770"]', feature: 'D9', spurBin: stub }, cwd);
+        expect(run.code).toBe(0);
+        expect(readFileSync(join(cwd, '.spur/run/r-d-route-reason.txt'), 'utf8')).toBe(
+            'failed:preflight:done-gate L4.feature-receipt-missing',
+        );
+    } finally {
+        cleanup(cwd);
+    }
+});
+
+test('1033 R2 (e): a proposal that does not reach done makes no check call', () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'wrapup-steps-preflight-e-'));
+    try {
+        const syncFile = writeJsonFile(cwd, 'sync.json', {
+            proposal: { from: 'active', to: 'active' },
+            appliedHops: [],
+        });
+        const { stub, argvLog } = writeDispatchStub(cwd, {
+            task: writeJsonFile(cwd, 'task.json', DONE_TASK),
+            sync: syncFile,
+        });
+        const run = runSteps(['resolve'], { __runId: 'r-e', tasks: '["0770"]', feature: 'D9', spurBin: stub }, cwd);
+        expect(run.code).toBe(0);
+        expect(readFileSync(join(cwd, '.spur/run/r-e-wrapup-resolve.status'), 'utf8')).toContain('PASS');
+        const argv = readFileSync(argvLog, 'utf8');
+        expect(argv).toContain('feature sync');
+        expect(argv).not.toContain('feature check');
+    } finally {
+        cleanup(cwd);
+    }
+});
+
+test('1033 R2 (f): unparsable sync or check output fails closed', () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'wrapup-steps-preflight-f1-'));
+    try {
+        const syncFile = join(cwd, 'sync-garbage.json');
+        writeFileSync(syncFile, 'not json at all');
+        const { stub } = writeDispatchStub(cwd, { task: writeJsonFile(cwd, 'task.json', DONE_TASK), sync: syncFile });
+        const run = runSteps(['resolve'], { __runId: 'r-f1', tasks: '["0770"]', feature: 'D9', spurBin: stub }, cwd);
+        expect(run.code).toBe(0);
+        expect(readFileSync(join(cwd, '.spur/run/r-f1-route-reason.txt'), 'utf8')).toBe(
+            'failed:preflight:sync-unreadable',
+        );
+    } finally {
+        cleanup(cwd);
+    }
+    const cwd2 = mkdtempSync(join(tmpdir(), 'wrapup-steps-preflight-f2-'));
+    try {
+        const syncFile = writeJsonFile(cwd2, 'sync.json', {
+            proposal: { from: 'active', to: 'done' },
+            appliedHops: [],
+        });
+        const checkFile = join(cwd2, 'check-garbage.json');
+        writeFileSync(checkFile, '<html>nope</html>');
+        const { stub } = writeDispatchStub(cwd2, {
+            task: writeJsonFile(cwd2, 'task.json', DONE_TASK),
+            sync: syncFile,
+            check: checkFile,
+        });
+        const run = runSteps(['resolve'], { __runId: 'r-f2', tasks: '["0770"]', feature: 'D9', spurBin: stub }, cwd2);
+        expect(run.code).toBe(0);
+        expect(readFileSync(join(cwd2, '.spur/run/r-f2-route-reason.txt'), 'utf8')).toBe(
+            'failed:preflight:check-unreadable',
+        );
+    } finally {
+        cleanup(cwd2);
+    }
+});
+
+test('1033 R2 (g): an unset feature skips the pre-flight entirely', () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'wrapup-steps-preflight-g-'));
+    try {
+        const { stub, argvLog } = writeDispatchStub(cwd, { task: writeJsonFile(cwd, 'task.json', DONE_TASK) });
+        const run = runSteps(['resolve'], { __runId: 'r-g', tasks: '["0770"]', spurBin: stub }, cwd);
+        expect(run.code).toBe(0);
+        expect(readFileSync(join(cwd, '.spur/run/r-g-wrapup-resolve.status'), 'utf8')).toContain('PASS');
+        expect(readFileSync(argvLog, 'utf8')).not.toContain('feature sync');
+    } finally {
+        cleanup(cwd);
+    }
+});
