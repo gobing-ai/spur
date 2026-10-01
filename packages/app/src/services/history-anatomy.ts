@@ -34,7 +34,7 @@ import {
 import { join } from 'node:path';
 // Leaf import, not the @gobing-ai/spur-domain barrel: this module is bundled standalone for
 // plugins/sp (task 1005), and the barrel would drag the whole domain graph into the generated lib.
-import { semanticArtifactDigest } from '../../../domain/src/analytics/artifact-digest';
+import { semanticArtifactDigest } from '@gobing-ai/spur-domain/artifact-digest';
 /** The frozen cache identity vocabulary (0658/0660): what the cached report was generated from. */
 export interface CacheIdentity {
     contractVersion: string;
