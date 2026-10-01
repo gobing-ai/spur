@@ -606,10 +606,12 @@ Order matters for the `testing → done` hop. The A3 batch hit the same clobberi
 tasks (0617, 0619) because the sections were hand-written **before** the verdict artifact existed:
 
 1. **Write the verdict artifact first.** `spur task record --solution-from-diff --transition testing`
-   reads `.spur/run/<wbs>-verdict.json` (default). With no artifact it emits a **UNKNOWN** verdict and
-   **overwrites** a hand-authored `## Testing` with an auto-generated "No requirements recorded" table,
-   plus replaces `## Solution` with a bare auto change-map. Creating the artifact first (PASS, with
-   requirement rows keyed by scenario title) makes `task record` the compliant path.
+   reads `.spur/run/<wbs>-verdict.json` (default) on every invocation. A missing or malformed artifact
+   yields **UNKNOWN**: bare Testing receives a "No requirements recorded" stub, while already-authored
+   Testing is preserved. `--solution-from-diff` backfills only a bare Solution. The A3 clobbering above
+   describes the historical behavior, corrected by the authored-Testing safeguard. Creating the
+   artifact first (PASS, with requirement rows keyed by scenario title) remains the standard order;
+   re-running record after a real verdict arrives refreshes Testing from that verdict.
 
    ```bash
    # verdict artifact first (shape: {wbs, verdict, requirements:[{id,status,evidence}], checks:[], source})

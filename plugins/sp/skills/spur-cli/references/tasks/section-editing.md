@@ -58,16 +58,20 @@ exactly: `Background`, `Requirements`, `Acceptance Criteria`, `Q&A`, `Design`, `
 `spur task record 0040 --transition testing` reads `.spur/run/0040-verdict.json`, writes
 `Testing` (per-requirement table), and backfills `Review` (P1–P4 findings table) **only when the
 section is bare** — a standalone compatibility fallback, never an overwrite of the review
-coordinator's authored Review — optionally backfilling a bare `Solution` from `git diff -U0`. It
-never transitions to `done`.
+coordinator's authored Review — optionally backfilling a bare `Solution` from `git diff -U0`.
+Record can also refresh its own earlier Review backfill. The `--transition testing` example stops
+at testing; `--transition done` with a PASS verdict walks the forward lifecycle edges through their
+guards and creates the required pipeline run-link immediately before the done hop.
 
 - **Use `record`** when a verify step produced a verdict artifact — it is the pipeline's record step
   and the deterministic `Testing` writer.
 - **Use `update --section`** when you are authoring a section by hand (planning, design, narrative
   solution) or amending one `record` already wrote.
 
-`record` writes `Testing` unconditionally and `Review` only when bare; a later
-`update --section` overwrites either (file-wins). Both go through the same file-wins atomic write.
+`record` re-reads the verdict on each invocation. PASS/PARTIAL/FAIL artifacts refresh Testing;
+UNKNOWN preserves authored Testing and writes a stub only when Testing is bare. Review remains
+fallback-only: bare content or record's own earlier backfill can be replaced, authored Review cannot.
+A later `update --section` overwrites either section (file-wins). Both use the same atomic write.
 
 ## Which section, when
 
@@ -81,7 +85,7 @@ LLM's job (orchestrated by `sp:spur-dev`); this skill only owns the *mechanism*:
 | `Plan` | before `wip` | the step list |
 | `Solution` | during impl (implement step) | the approach actually taken; L3 `file:line` rule fires once it has real content |
 | `Testing` | testing phase (`record` — deterministic writer) | what was verified and how — gated at `wip→testing` by `check` |
-| `Review` | review phase (`/sp:dev-review` coordinator) | merged SECU findings + verdict — gated at `testing→done` by `check --strict-core` |
+| `Review` | review phase (`/sp:dev-review` coordinator) | merged SECU findings + verdict — gated at `testing→done` by `check --as done` |
 
 Section presence per status is a **runtime contract**, not a table: query
 `spur task sections <wbs> list --json` (permitted present sections) and `spur task check <wbs> --json`

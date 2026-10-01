@@ -39,10 +39,11 @@ each would be scope creep for one-liner procedures.
 > `plugins/sp/skills/history-anatomy/SKILL.md`.
 
 > **`dev-review-session`** is not in this table. It is a thin `Skill()` wrapper over
-> **`sp:session-review`** for an immediate, inline, report-only review of the active conversation.
-> It launches no workflow or agent and performs no import, persistence, or mutation. Use it before
-> the active session ends; use history-anatomy for ended sessions, cross-agent windows, trends, or
-> quantitative forensics.
+> **`sp:session-review`** for an immediate, inline review of the active conversation. Report-only
+> is the default; `--triage` applies pure-doc / one-to-two-line fixes and files remaining actionable
+> findings as implement-ready tasks through the task CLI. It launches no workflow or agent and
+> imports no history. Use it before the active session ends; use history-anatomy for ended sessions,
+> cross-agent windows, trends, or quantitative forensics.
 
 > **`dev-find-conflict`** is not in this table. It is a thin `Skill()` wrapper over
 > **`sp:conflict-finding`** (authority-aware four-pillar semantic audit → optional confirmed,
