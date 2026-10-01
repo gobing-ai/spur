@@ -256,7 +256,8 @@ function asLiteralRunFileName(citation: string): string | undefined {
  * Owned evidence (1012 R1/R2): with `taskFiles`, the worktree's `.spur/run/` direct children
  * named `<wbs>-…` (each forwarded task file's leading four-digit WBS) or `<runId>-…` (each
  * worktree run row, whichever task it ran) are copy obligations too, cited or not — same
- * pipeline, same cap over the deduplicated union. An absent `.spur/run/` means nothing owned;
+ * pipeline, each owner bounded by its own {@link MAX_CITED_RUN_FILES} budget (1034 R1) while
+ * the citation cap stays citations-only. An absent `.spur/run/` means nothing owned;
  * any other listing failure throws before the first invoking-tree write (1012 R4). Without
  * `taskFiles` (or with `[]`) nothing is enumerated.
  *
@@ -327,15 +328,22 @@ export async function persistWorktreeRuns(input: PersistWorktreeRunsInput): Prom
             if (error.code === 'ENOENT') return [] as string[];
             throw error;
         });
+        // 1034 R1: each owner (task WBS / run row) has its own MAX_CITED_RUN_FILES budget, so the
+        // bound scales with the batch's row count instead of a single union cap that ~3+ tasks
+        // outgrow; one runaway owner still refuses, naming itself, before any write (R2).
+        const ownedCounts = new Map<string, number>();
         for (const name of entries.sort()) {
             if (citedNames.has(name) || recordNames.has(name)) continue;
-            if (!prefixes.some((prefix) => name.startsWith(prefix))) continue;
-            if (citedNames.size >= MAX_CITED_RUN_FILES) {
+            const owner = prefixes.find((prefix) => name.startsWith(prefix));
+            if (owner === undefined) continue;
+            const count = (ownedCounts.get(owner) ?? 0) + 1;
+            if (count > MAX_CITED_RUN_FILES) {
                 throw new Error(
-                    `persist-out: cited plus task-owned .spur/run/ files number more than ${MAX_CITED_RUN_FILES} ` +
-                        '— over the fixed citation cap (0984 R3, 1012 R1); split the batch or prune the evidence',
+                    `persist-out: owner ${owner} owns more than ${MAX_CITED_RUN_FILES} .spur/run/ files ` +
+                        '— over the per-owner evidence cap (1012 R1, 1034 R1); split the batch or prune the evidence',
                 );
             }
+            ownedCounts.set(owner, count);
             citedNames.add(name);
         }
     }

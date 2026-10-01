@@ -517,12 +517,13 @@ copy obligations the worktree's `.spur/run/` direct children named `<wbs>-…` (
 forwarded task file's leading four digits before `_`) or `<runId>-…` (every run row in the worktree
 DB, whichever task it ran) — `<wbs>-verdict.json`, check receipts, route reasons — whether or not
 the task file cites them. They join the cited set: same copy / byte-identical no-op /
-divergent-refuse handling, and the 64-file cap applies to the deduplicated union of cited and owned
-names. `<runId>.md` / `<runId>.state.json` stay with the record copy (a conflict there is a
-reported skip). Files matching neither a citation nor an ownership prefix are left behind. An
-absent worktree `.spur/run/` means nothing is owned; any other listing failure (not a directory,
-permission denied) fails the pass before the invoking tree is written → WT-5. Without `--task-file`
-nothing is enumerated.
+divergent-refuse handling. The 64-file cap bounds citations alone; owned names are bounded per
+owner (each `<wbs>-` / `<runId>-` prefix gets its own 64-file budget, task 1034), so the bound
+scales with the batch and one runaway owner refuses by name before any write. `<runId>.md` /
+`<runId>.state.json` stay with the record copy (a conflict there is a reported skip). Files
+matching neither a citation nor an ownership prefix are left behind. An absent worktree `.spur/run/`
+means nothing is owned; any other listing failure (not a directory, permission denied) fails the
+pass before the invoking tree is written → WT-5. Without `--task-file` nothing is enumerated.
 
 The shapes are pinned (task 0975 R1; `record-missing` and citation behavior per 0984): idempotent on re-persist;
 success exits 0 printing

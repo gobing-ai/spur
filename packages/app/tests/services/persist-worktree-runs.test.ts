@@ -578,7 +578,7 @@ describe('persistWorktreeRuns owned evidence (task 1012)', () => {
         }
     });
 
-    test('a cited-only name plus 64 owned names is over the cap; a cited owned name counts once (R2)', async () => {
+    test('owned budgets are per owner: a cited-only name plus 64 owned names persists; a 65th owned name refuses (1034 R1/R2)', async () => {
         const from = makeDir('owned-union-from-');
         const to = makeDir('owned-union-to-');
         try {
@@ -589,19 +589,52 @@ describe('persistWorktreeRuns owned evidence (task 1012)', () => {
             writeFileSync(join(from.dir, '.spur', 'run', 'extra.log'), 'x\n');
             mkdirSync(join(to.dir, 'docs'), { recursive: true });
             const taskFile = 'docs/1234_x.md';
-            // 1 cited-only + 64 owned = 65 distinct names.
             writeFileSync(join(to.dir, taskFile), 'Evidence: `.spur/run/extra.log`\n');
+
+            // One owner over its own budget refuses with zero writes, naming the owner.
+            writeFileSync(join(from.dir, '.spur', 'run', '1234-e64.log'), 'x\n');
             await expect(
                 persistWorktreeRuns({ fromWorkdir: from.dir, toWorkdir: to.dir, taskFiles: [taskFile] }),
-            ).rejects.toThrow(/more than 64/);
+            ).rejects.toThrow(/owner 1234- .*more than 64/);
             expect(existsSync(join(to.dir, '.spur'))).toBe(false);
 
-            // The cited name is also owned: the union is 64, exactly at the cap.
-            writeFileSync(join(to.dir, taskFile), 'Evidence: `.spur/run/1234-e0.log`\n');
+            // At exactly 64 owned files, the cited-only file no longer shares a union cap.
+            rmSync(join(from.dir, '.spur', 'run', '1234-e64.log'));
             const ok = await persistWorktreeRuns({ fromWorkdir: from.dir, toWorkdir: to.dir, taskFiles: [taskFile] });
             expect(ok).toEqual({ ok: true, persisted: 1, skipped: [] });
             expect(existsSync(join(to.dir, '.spur', 'run', '1234-e63.log'))).toBe(true);
-            expect(existsSync(join(to.dir, '.spur', 'run', 'extra.log'))).toBe(false);
+            expect(existsSync(join(to.dir, '.spur', 'run', 'extra.log'))).toBe(true);
+        } finally {
+            from.cleanup();
+            to.cleanup();
+        }
+    });
+
+    test('a 6-run-row batch owning more than 64 files in total persists mechanically (1034 R1/R4)', async () => {
+        const from = makeDir('owned-batch-from-');
+        const to = makeDir('owned-batch-to-');
+        try {
+            const runIds = Array.from({ length: 6 }, (_, i) => `run_batch${i}`);
+            for (const runId of runIds) {
+                await seedWorktree(from.dir, runId);
+                // 12 per row: 72 owned files, over the old union cap of 64.
+                for (let i = 0; i < 12; i += 1) {
+                    writeFileSync(join(from.dir, '.spur', 'run', `${runId}-step${i}.log`), `${runId}\n`);
+                }
+            }
+            const taskFile = writeUncitingTaskFile(to.dir);
+
+            const result = await persistWorktreeRuns({
+                fromWorkdir: from.dir,
+                toWorkdir: to.dir,
+                taskFiles: [taskFile],
+            });
+            expect(result).toEqual({ ok: true, persisted: 6, skipped: [] });
+            const toRun = join(to.dir, '.spur', 'run');
+            for (const runId of runIds) {
+                expect(readFileSync(join(toRun, `${runId}.md`), 'utf8')).toBe(`# spur inline run ${runId}\n`);
+                expect(readFileSync(join(toRun, `${runId}-step11.log`), 'utf8')).toBe(`${runId}\n`);
+            }
         } finally {
             from.cleanup();
             to.cleanup();
