@@ -4,7 +4,7 @@ name: "Placement scan: detect dynamic DB imports in plugin scripts"
 status: done
 template: feature-impl
 created_at: 2026-09-30T13:48:58.443Z
-updated_at: "2026-10-01T00:46:54.572Z"
+updated_at: "2026-10-01T06:59:00.142Z"
 feature_id: A9
 
 ac_altitude: task-local
@@ -96,37 +96,26 @@ Out of scope: moving the history-health read behind a CLI/app bundle, AST parsin
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `DB_DYNAMIC_IMPORT_RE` at `scripts/commands/script-contract-check.ts:537` beside the static `DB_IMPORT_RE` (`scripts/commands/script-contract-check.ts:536`); when the static regex misses, a per-line scan records kind `db-import` with detail `dynamic import of <mod>` (`scripts/commands/script-contract-check.ts:594-599`). Re-read this run. |
-| R2 | MET | `config/script-placement-baseline.json:29-31`: daily-summary kinds `["budget", "db-import"]`, reason names the read-only history-health query via dynamic bun:sqlite import and task 1018. |
-| R3 | MET | Static regex excludes `import type` via `(?!type\b)` (`scripts/commands/script-contract-check.ts:536`); dynamic probe skips `//`, `*` and `/*` lines (`scripts/commands/script-contract-check.ts:596`, widened by 15b63fe35 to single-line block comments) and needs a literal `import(` so bare strings never match (`scripts/commands/script-contract-check.ts:537`). |
+| R1 | MET | `scripts/commands/script-contract-check.ts:537`; `scripts/commands/script-contract-check.ts:536`; `scripts/commands/script-contract-check.ts:594` — reviewed implementation of R1. The placement scan (`checkPlacement`, `scripts/commands/script-contract-check.ts`) reports a `db-import` finding for a dynamic `import('bun:sqlite')` / `import('drizzle-orm…')` in a scanned file under `plugins/sp/scripts` or `plugins/sp/hooks`, the same kind as for a static import.. Fresh evidence: Focused scripts: 246 pass, zero test failures; isolated coverage caused exit 1. Full gate subsequently exited 0. Command and output: .spur/run/A9-reverify/scripts-tests.json and .spur/run/A9-reverify/scripts-tests.log. Full bun run spur-check exited 0: 9554 pass, 0 fail (.spur/run/A9-reverify/spur-check.log). |
+| R2 | MET | `config/script-placement-baseline.json:29` — reviewed implementation of R2. `plugins/sp/scripts/daily-summary/daily-summary.ts` no longer passes silently: its row in `config/script-placement-baseline.json` lists `db-import` next to `budget`, with a reason naming the read-only history-health query and this task.. Fresh evidence: Focused scripts: 246 pass, zero test failures; isolated coverage caused exit 1. Full gate subsequently exited 0. Command and output: .spur/run/A9-reverify/scripts-tests.json and .spur/run/A9-reverify/scripts-tests.log. Full bun run spur-check exited 0: 9554 pass, 0 fail (.spur/run/A9-reverify/spur-check.log). |
+| R3 | MET | `scripts/commands/script-contract-check.ts:536`; `scripts/commands/script-contract-check.ts:596`; `scripts/commands/script-contract-check.ts:537` — reviewed implementation of R3. `import type` statements and comment lines mentioning `bun:sqlite` / `drizzle-orm` stay unreported, and a bare `'bun:sqlite'` string literal without `import(` stays unreported.. Fresh evidence: Focused scripts: 246 pass, zero test failures; isolated coverage caused exit 1. Full gate subsequently exited 0. Command and output: .spur/run/A9-reverify/scripts-tests.json and .spur/run/A9-reverify/scripts-tests.log. Full bun run spur-check exited 0: 9554 pass, 0 fail (.spur/run/A9-reverify/spur-check.log). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `scripts/commands/script-contract-check.test.ts:487-510` dyn-sqlite.ts and dyn-drizzle.ts each yield exactly one db-import finding. `bun test scripts/commands/script-contract-check.test.ts` this run: 26 pass / 0 fail, 81 expect(). |
-| AC2 | MET | test | `scripts/commands/script-contract-check.test.ts:512-530` type import, `//` comment, JSDoc `*` line, single-line `/** … */` block (15b63fe35) and bare `'bun:sqlite'` literal → only the fixture's own db.ts is reported. Same run 26/0. |
-| AC3 | MET | test | `scripts/commands/script-contract-check.test.ts:680-688` asserts daily-summary kinds `['budget','db-import']` and real-tree `checkPlacement` → `[]`; `bun apps/cli/src/index.ts rule run --rule sp-script-placement --no-logo` this run exit 0. |
+| AC1 | MET | test | `scripts/commands/script-contract-check.test.ts:487` — source/contract review of AC1. Fresh executable evidence: Focused scripts: 246 pass, zero test failures; isolated coverage caused exit 1. Full gate subsequently exited 0. Command and output: .spur/run/A9-reverify/scripts-tests.json and .spur/run/A9-reverify/scripts-tests.log. Full bun run spur-check exited 0: 9554 pass, 0 fail (.spur/run/A9-reverify/spur-check.log). |
+| AC2 | MET | test | `scripts/commands/script-contract-check.test.ts:512` — source/contract review of AC2. Fresh executable evidence: Focused scripts: 246 pass, zero test failures; isolated coverage caused exit 1. Full gate subsequently exited 0. Command and output: .spur/run/A9-reverify/scripts-tests.json and .spur/run/A9-reverify/scripts-tests.log. Full bun run spur-check exited 0: 9554 pass, 0 fail (.spur/run/A9-reverify/spur-check.log). |
+| AC3 | MET | test | `scripts/commands/script-contract-check.test.ts:680` — source/contract review of AC3. Fresh executable evidence: Focused scripts: 246 pass, zero test failures; isolated coverage caused exit 1. Full gate subsequently exited 0. Command and output: .spur/run/A9-reverify/scripts-tests.json and .spur/run/A9-reverify/scripts-tests.log. Full bun run spur-check exited 0: 9554 pass, 0 fail (.spur/run/A9-reverify/spur-check.log). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-REVIEW — task 1018 (review-only), commit 43f745dfa, worktree sp/runall-A9-485e
+Re-verification 2026-09-30: requirement and AC traceability, correctness, security, efficiency, usability, maintainability, architecture, Design and scope checked against current task-owned code and executable tests.
 
-VERDICT: APPROVE-WITH-NOTES — 0 P1, 0 P2, 1 P3 (deferred per closed Q&A), 2 P4 advisory.
+No new implementation defect found.
 
-| Priority | Dimension | Location | Finding | Disposition |
-| --- | --- | --- | --- | --- |
-| P1 (blocker) | Traceability | — | none (R1/R2/R3 all verified: dynamic `import('bun:sqlite')` / `import('drizzle-orm/bun-sqlite')` in `plugins/sp/scripts` and `plugins/sp/hooks` yields one `db-import` finding with detail `dynamic import of …` via the frozen `DB_DYNAMIC_IMPORT_RE` (`scripts/commands/script-contract-check.ts:537`); the daily-summary baseline row now lists `["budget", "db-import"]` with the task-frozen reason naming the read-only history-health query and task 1018 and no new rows (dirKeys still 3); `import type`, `//`/`*` comment lines and bare `'bun:sqlite'` literals stay unreported; static path and `value-import of …` detail unchanged) | — |
-| P2 | Quality | — | none (the else-branch at `scripts/commands/script-contract-check.ts:589` runs only after the static regex misses; if/else plus the `break` after the first hit preserves at most one `db-import` finding per file; regex probes confirm `\bimport\(` rejects `ximport(` / `importx(`, accepts inner-paren whitespace, and captures `drizzle-orm/bun-sqlite` exactly as AC1 asserts) | — |
-| P3 | Quality | `scripts/commands/script-contract-check.ts:595` | single-line block comments (trimmed text starting with `/*`, e.g. `/** Opens DB via import('bun:sqlite') */`) are not skipped by the trimmed `//`/`*` rule and would produce a false `db-import` finding (probe-verified); this third comment shape is missing from the declared ponytail note, which lists only trailing comments on code lines and template-string content | DEFER — the closed Q&A froze the skip rule to `//`/`*` prefixes, so deviating would violate the approved design; the static `DB_IMPORT_RE` path has the identical comment exposure and was deliberately left unchanged; no occurrence in the scanned dirs (rg probe returns nothing, rule run exits 0); failure direction is loud-and-safe, widen only on an actual false positive |
-| P4 | Quality | `scripts/commands/script-contract-check.ts:537` | `DB_DYNAMIC_IMPORT_RE` does not match `import ('bun:sqlite')` (space before the paren), two-segment `drizzle-orm/x/y` specifiers, or multi-line dynamic calls; the regex is the task-frozen shape and the static `DB_IMPORT_RE` shares the spacing/subpath limits, so no regression versus the static path | — |
-| P4 | Quality | `scripts/commands/script-contract-check.ts:595` | theoretical false negative: a code statement whose trimmed text starts with `*` (a one-line generator method containing a dynamic DB import) is skipped by the comment rule; contrived and absent from `plugins/sp/scripts` / `plugins/sp/hooks` (rg check) | — |
-
-Summary: Commit 43f745dfa implements R1/R2/R3 exactly to the frozen design — regex, detail strings, baseline reason, and the else-branch ordering all match the task spec verbatim, the three tests genuinely assert the contract (AC1 pins length/kind/exact details, AC2 expects exactly the static fixture `db.ts`, AC3 pins the exact kinds array and a clean real-tree check whose stale-baseline logic transitively proves daily-summary.ts:300 is detected), and all 26 tests plus the `sp-script-placement` rule run pass with exit 0. On the declared implementer note: verified it creates no false-negative hole — trailing comments on code lines do not block matching (probe: `await import('bun:sqlite'); // drv` still detected), template-string content is a false-positive-shaped risk, rg confirms daily-summary.ts:300 is the only real dynamic DB import in the scanned dirs and sits on a plain code line, and the only theoretical false-negative shape is the contrived `*`-prefixed one-liner (P4). The one undeclared residual is the single-line block-comment false positive (P3, deferred per the closed Q&A). Scope clean: commit touches only the baseline, the test file and the checker; daily-summary.ts, its twins, `PlacementFindingKind`, and docs/plans are untouched. Minor cosmetic note: the ponytail comment says "widen only on a false negative" while the unhandled cases it names (trailing comments, template strings) are false-positive-shaped — worth rewording if the file is touched again.
-
-Commands run: `bun test ./scripts/commands/script-contract-check.test.ts` (26 pass / 0 fail); `bun run apps/cli/src/index.ts rule run --rule sp-script-placement --no-logo` (all rules passed, exit 0); `git show 43f745dfa --stat` (3 files: baseline ±4/±2, test +53, checker +17/−1); `rg` dynamic-import and block-comment probes over the scanned dirs; `bun -e` regex/comment-skip probes (14 cases).
-
-
-Post-batch follow-up (operator instruction, runall-A9-485e merge): the P3 DEFER above is RESOLVED inline — the per-line comment skip now also drops single-line `/* … */` block comments (the third shape), the ponytail note declares all three shapes, and a regression fixture was added to the AC2 test (bun test script-contract-check.test.ts: 26 pass / 0 fail). The deferred-residual follow-up task was removed rather than kept; the fix lands with the batch merge.
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P4 | SECUA and architecture | task-owned implementation | No findings (verify verdict PASS) |
 
 ### References
 
