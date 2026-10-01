@@ -424,8 +424,8 @@ describe('task 1023 — dev-review target selectors (--tasks / --feature / --sco
     const VARREF = '$' + '{vars.wbs}';
     test('R6 — pipeline review step forwards the task via --tasks; generated apps/cli/config matches', () => {
         const pipeline = readFileSync(PIPELINE, 'utf8');
-        const forwarded = 'input: /sp:dev-review --tasks ' + VARREF + ' --auto';
-        const bare = 'input: /sp:dev-review ' + VARREF + ' --auto';
+        const forwarded = `input: /sp:dev-review --tasks ${VARREF} --auto`;
+        const bare = `input: /sp:dev-review ${VARREF} --auto`;
         expect(pipeline).toContain(forwarded);
         expect(pipeline).not.toContain(bare);
         expect(readFileSync(BUNDLED_PIPELINE, 'utf8')).toContain(forwarded);
