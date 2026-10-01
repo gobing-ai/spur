@@ -4,7 +4,7 @@ name: W3 fold quality-gate into command.gate and slim inline-run-setup through t
 status: done
 template: feature-impl
 created_at: 2026-09-29T06:25:03.420Z
-updated_at: "2026-10-01T00:42:38.321Z"
+updated_at: "2026-10-01T06:58:45.275Z"
 feature_id: A9
 priority: P2
 tags:
@@ -163,27 +163,27 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/quality-gate.ts:549` runQualityGate; `packages/app/src/services/quality-gate.ts:10` MAX_GATE_ATTEMPTS retry loop; `bun test tests/services/quality-gate.test.ts tests/services/inline-run-setup.test.ts tests/services/inline-run-driver.test.ts` (packages/app) -> 59 pass / 0 fail (re-verify 2026-09-30) |
-| R2 | MET | `scripts/commands/bundle-plugin-lib.ts:17` quality-gate bundle; `plugins/sp/scripts/quality-gate.ts:8` imports the generated bundle; `plugins/sp/scripts/quality-gate.ts:24` QUALITY_GATE_USAGE; `wc -l` -> 64 |
-| R3 | MET | `packages/app/src/services/inline-run-setup.ts:892` runInlineRunTrace; `packages/app/src/services/inline-run-setup.ts:859` inlineRunRecordLogPath; `scripts/commands/bundle-plugin-lib.ts:576` INLINE_RUN_EXPORTS; `plugins/sp/scripts/inline-run-setup.ts:45` resolveAppEntry stays in the script; `wc -l` -> 250 |
-| R4 | MET | `bun test` (plugins/sp) over quality-gate, inline-run-setup, inline-run-trace, inline-run-close-reason, inline-run-installed, inline-pipeline-driver, execution-batch-contract, task-pipeline-resilience and the rest of the plugins/sp suite -> 1160 pass / 0 fail across 48 files (re-verify 2026-09-30) |
-| R5 | MET | `rg -n 'quality-gate\|inline-run-setup' config/script-placement-baseline.json` -> no hits; `spur rule run --rule sp-script-placement` -> All 1 rule passed |
+| R1 | MET | `packages/app/src/services/quality-gate.ts:549`; `packages/app/src/services/quality-gate.ts:10` — reviewed implementation of R1. Move quality-gate's exported logic (constants `MAX_GATE_ATTEMPTS`…`RECEIPT_SCHEMA_VERSION`, `isTransientLock`, `extractFindings`, `tailLines`, `retryMessage`, coverage parse/scan, receipt build/read/status, `lightScope`, `planLightChecks`, `runLightGate`, `runShellCommand`, `runQualityGate`, and private helpers they need) to `packages/app/src/s. Fresh evidence: app workspace tests: 430 pass, 0 fail, exit 0; exact command .spur/run/A9-reverify/app-tests.json; output .spur/run/A9-reverify/app-tests.log. plugin workspace tests: 341 pass, 0 fail, exit 0; exact command .spur/run/A9-reverify/plugin-tests.json; output .spur/run/A9-reverify/plugin-tests.log. Full bun run spur-check exited 0: 9554 pass, 0 fail (.spur/run/A9-reverify/spur-check.log). |
+| R2 | MET | `scripts/commands/bundle-plugin-lib.ts:17`; `plugins/sp/scripts/quality-gate.ts:8`; `plugins/sp/scripts/quality-gate.ts:24` — reviewed implementation of R2. `bundle-plugin-lib.ts` generates `plugins/sp/lib/quality-gate.generated.{mjs,d.mts}`; `plugins/sp/scripts/quality-gate.ts` keeps `main` + `QUALITY_GATE_USAGE`, imports only the bundle / `node:*` / `../lib/env`, is ≤250 LOC, and preserves modes, env vars, stdout/stderr and exit codes; `.mjs` twin regenerated.. Fresh evidence: app workspace tests: 430 pass, 0 fail, exit 0; exact command .spur/run/A9-reverify/app-tests.json; output .spur/run/A9-reverify/app-tests.log. plugin workspace tests: 341 pass, 0 fail, exit 0; exact command .spur/run/A9-reverify/plugin-tests.json; output .spur/run/A9-reverify/plugin-tests.log. Full bun run spur-check exited 0: 9554 pass, 0 fail (.spur/run/A9-reverify/spur-check.log). |
+| R3 | MET | `packages/app/src/services/inline-run-setup.ts:902`; `packages/app/src/services/inline-run-setup.ts:869`; `scripts/commands/bundle-plugin-lib.ts:576`; `plugins/sp/scripts/inline-run-setup.ts:45` — reviewed implementation of R3. Move inline-run-setup's trace mode, outcome writer, run-record log path/append and close/action status guards into `packages/app/src/services/inline-run-setup.ts`, exported via `INLINE_RUN_EXPORTS`; the script keeps argv parsing, `resolveAppEntry`, `readInstalledInventory` and mode dispatch, ≤250 LOC, same flags/output/exit codes; `inline-run.g. Fresh evidence: app workspace tests: 430 pass, 0 fail, exit 0; exact command .spur/run/A9-reverify/app-tests.json; output .spur/run/A9-reverify/app-tests.log. plugin workspace tests: 341 pass, 0 fail, exit 0; exact command .spur/run/A9-reverify/plugin-tests.json; output .spur/run/A9-reverify/plugin-tests.log. Full bun run spur-check exited 0: 9554 pass, 0 fail (.spur/run/A9-reverify/spur-check.log). |
+| R4 | MET | — reviewed implementation of R4. Existing contract tests stay green unchanged in intent: `task-pipeline-resilience` (gate shell resolution), `inline-run-installed` (facade↔twin parity, updated for new exports), `inline-run-trace`, `inline-run-close-reason`, `inline-run-setup`, `inline-pipeline-driver`, `execution-batch-contract`.. Fresh evidence: app workspace tests: 430 pass, 0 fail, exit 0; exact command .spur/run/A9-reverify/app-tests.json; output .spur/run/A9-reverify/app-tests.log. plugin workspace tests: 341 pass, 0 fail, exit 0; exact command .spur/run/A9-reverify/plugin-tests.json; output .spur/run/A9-reverify/plugin-tests.log. Full bun run spur-check exited 0: 9554 pass, 0 fail (.spur/run/A9-reverify/spur-check.log). |
+| R5 | MET | — reviewed implementation of R5. Remove both scripts from `config/script-placement-baseline.json`; `spur rule run --rule sp-script-placement` passes; `task-pipeline.yaml` and `spur-check`/`spur-dev` docs need no invocation change (verified by `rg`).. Fresh evidence: app workspace tests: 430 pass, 0 fail, exit 0; exact command .spur/run/A9-reverify/app-tests.json; output .spur/run/A9-reverify/app-tests.log. plugin workspace tests: 341 pass, 0 fail, exit 0; exact command .spur/run/A9-reverify/plugin-tests.json; output .spur/run/A9-reverify/plugin-tests.log. Full bun run spur-check exited 0: 9554 pass, 0 fail (.spur/run/A9-reverify/spur-check.log). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: R6 — Refactor lands in independently revertible waves | MET | test | packages/app quality-gate, inline-run-setup and inline-run-driver tests (59 pass / 0 fail); full plugins/sp suite (1160 pass / 0 fail) |
-| Scenario: R8 — sp skills, commands and workflows track every CLI move | MET | command | `bun run plugin-smoke` -> plugin-install-smoke PASS; placement rule passes with no baseline rows for either script |
+| Scenario: R6 — Refactor lands in independently revertible waves | MET | test | — source/contract review of Scenario: R6 — Refactor lands in independently revertible waves. Fresh executable evidence: app workspace tests: 430 pass, 0 fail, exit 0; exact command .spur/run/A9-reverify/app-tests.json; output .spur/run/A9-reverify/app-tests.log. plugin workspace tests: 341 pass, 0 fail, exit 0; exact command .spur/run/A9-reverify/plugin-tests.json; output .spur/run/A9-reverify/plugin-tests.log. Full bun run spur-check exited 0: 9554 pass, 0 fail (.spur/run/A9-reverify/spur-check.log). |
+| Scenario: R8 — sp skills, commands and workflows track every CLI move | MET | test | — source/contract review of Scenario: R8 — sp skills, commands and workflows track every CLI move. Fresh executable evidence: app workspace tests: 430 pass, 0 fail, exit 0; exact command .spur/run/A9-reverify/app-tests.json; output .spur/run/A9-reverify/app-tests.log. plugin workspace tests: 341 pass, 0 fail, exit 0; exact command .spur/run/A9-reverify/plugin-tests.json; output .spur/run/A9-reverify/plugin-tests.log. Full bun run spur-check exited 0: 9554 pass, 0 fail (.spur/run/A9-reverify/spur-check.log). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- spur:record-review -->
+Re-verification 2026-09-30: requirement and AC traceability, correctness, security, efficiency, usability, maintainability, architecture, Design and scope checked against current task-owned code and executable tests.
 
-**SECU findings** (pipeline verify step — verdict: PASS)
+No new implementation defect found.
 
 | Priority | Dimension | Location | Finding |
-|----------|-----------|----------|----------|
-| P4 | — | — | No findings (verify verdict PASS) |
+| --- | --- | --- | --- |
+| P4 | SECUA and architecture | task-owned implementation | No findings (verify verdict PASS) |
 
 ### References
 
