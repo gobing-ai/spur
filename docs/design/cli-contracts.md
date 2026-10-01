@@ -3,7 +3,7 @@ kind: design
 title: "CLI grammar, initialization, agents, teams and rules"
 status: implemented
 created_at: 2026-09-09
-updated_at: 2026-09-24
+updated_at: 2026-10-01
 related: ["0822", "0850", "0856", "0857", "0860", "0861"]
 tags: [contract, cli, agent]
 ---
@@ -772,8 +772,12 @@ clean` reclaims retained logs older than `workflow.logRetentionDays` (default 30
 - `clean [--older-than <minutes>] [--force] [--logs] [--dry-run]` — housekeeping: finalize orphaned
   runs stuck in `running`/`pending` past a staleness threshold (default 30 min) as failed, and
   reclaim retained run logs older than `workflow.logRetentionDays` (`.spur/config.yaml`, default 30
-  days). `--logs` scopes to log reclamation only; `--dry-run` lists what would be cleaned without
-  writing; `--force` overrides `--older-than`.
+  days). Every clean also executes durable evidence migration (`migrateRunStorage`, ADR-131 / E71),
+  persisting eligible lasting task verdicts, feature verification receipts, and terminal run-record
+  pairs from `.spur/run/` into `.spur/memory/evidence/` and `.spur/memory/runs/` before housekeeping;
+  JSON adds `migration: { dryRun, logsOnly, entries, failures }` (honoring `--dry-run` and `--logs`),
+  and human mode prints migration counts. `--logs` scopes to log reclamation and log-only migration;
+  `--dry-run` lists what would be cleaned without writing; `--force` overrides `--older-than`.
   Action lines include the action kind, duration when finalized, and an in-flight/success/failure marker.
   **Per-step cost (0311 / task 0559):** `agent.run` lines carry token usage + cache-hit joined from
   `history_message`'s typed token columns through the `history_run_session` mapping — the action's

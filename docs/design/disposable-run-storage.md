@@ -3,7 +3,7 @@ kind: design
 title: Disposable run storage and durable evidence
 status: accepted
 created_at: 2026-09-30
-updated_at: 2026-09-30
+updated_at: 2026-10-01
 related: [E71, E7, F93, docs/design/run-record-contract.md]
 tags: [contract, workflow, planning]
 ---
@@ -12,9 +12,9 @@ tags: [contract, workflow, planning]
 
 ## 1. Issue and scope
 
-E71 makes completed `.spur/run/` data disposable after all owning processes and consumers finish. The operator accepted this design, including the existing `workflow clean` behavior extension; implementation is pending. Current E7 record locations remain as documented in [run-record-contract.md](run-record-contract.md) until implementation. The design changes storage lifetime without changing workflow state graphs, run identity, verification policy or retention durations.
+E71 makes completed `.spur/run/` data disposable after all owning processes and consumers finish. The operator accepted this design, including the existing `workflow clean` behavior extension. Task 1024 completed the ownership audit ([audit report](../reports/2026-09-30-E71-run-storage-ownership.md)). Task 1025 implemented evidence persistence outside run scratch: canonical roots in `packages/app/src/services/run-storage.ts` (`runStoragePaths`), `readVerdictArtifact` redirection to `.spur/memory/evidence/` first (scratch fallback), and `migrateRunStorage()` composed into `workflow clean`. Tasks 1026 and 1027 complete retained records/artifacts and scratch disposal verification. The design changes storage lifetime without changing workflow state graphs, run identity, verification policy or retention durations.
 
-Audit evidence and alternative approaches: [discovery plan](../plans/2026-09-30-run-scratch-brainstorm.md). The audit is lexical discovery plus sampled end-to-end source tracing; task execution must complete the ownership classification.
+Audit evidence and alternative approaches: [discovery plan](../plans/2026-09-30-run-scratch-brainstorm.md). The persistent ownership inventory was delivered by task 1024; task execution continues through the remaining E71 tasks.
 
 ## 2. Context and constraints
 
@@ -50,7 +50,7 @@ Use small path functions/constants at existing app seams where multiple callers 
 
 ## 4. Compatibility and migration
 
-Migration is a bounded explicit operation implemented in `packages/app` and composed by the existing `spur workflow clean` housekeeping surface. `--dry-run` previews classification and storage moves; an apply invocation persists eligible lasting data before existing housekeeping. `--logs` limits migration/reclamation to legacy logs and leaves evidence, sessions and pairs untouched; `--force` retains its existing stale-run meaning and never bypasses path, conflict or active-process protection. Installed execution uses the same app service, with no migration implementation in plugin code. The operator gave explicit consent for this existing-public-verb behavior extension after reviewing this design context. No new noun, verb or flag is proposed. Acceptance of the design does not itself run migration or delete live data.
+Migration is a bounded explicit operation implemented in `packages/app` and composed by the existing `spur workflow clean` housekeeping surface. `--dry-run` previews classification and storage moves; an apply invocation persists eligible lasting data before existing housekeeping. `--logs` limits migration/reclamation to legacy logs and leaves evidence, sessions and pairs untouched; `--force` retains its existing stale-run meaning and never bypasses path, conflict or active-process protection. Installed execution uses the same app service, with no migration implementation in plugin code. The operator gave explicit consent for this existing-public-verb behavior extension after reviewing this design context. No new noun, verb or flag is proposed. Acceptance of the design does not itself run migration or delete live data; task 1025 implemented `migrateRunStorage` in `packages/app/src/services/run-storage.ts`, composed into `workflow clean`, recording applied outcomes in `.spur/memory/run-storage-migration.json`.
 
 The migration persists legacy task verdicts/receipts, retained run pairs/logs, registered artifacts and owned session directories. It preserves relative identity, run/feature/task bindings and contents; updates path-only metadata/coordination references through their owners; and writes a manifest of source, destination, identity, content digest and outcome under `.spur/memory/`. Existing structured identity/digest validation is reused. Atomic files and content comparison make retries idempotent; an existing unequal destination is a conflict, never an overwrite. If a legacy artifact record no longer has bytes, preserve its truthful missing classification rather than invent them.
 

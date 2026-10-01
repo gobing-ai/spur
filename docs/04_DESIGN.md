@@ -2,10 +2,10 @@
 doc: 04_DESIGN
 owns: SURFACE — index of non-UI CLI, API, config, schema and boundary contracts
 authority: derived
-version: 1.86.0
+version: 1.87.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
-updated_at: 2026-09-30
+updated_at: 2026-10-01
 read_before: changing a command, flag, env var, or schema
 edit_rules: 99 §6.5
 sync: [T3, T9]
@@ -79,7 +79,7 @@ Root [DESIGN.md](../DESIGN.md) owns visual and interaction design;
 | Historical spine cost/drift measurement — analysis only | [dev-spine-cost-and-drift.md](design/dev-spine-cost-and-drift.md) |
 | Event tracking — System Event 5W1H SSOT | [event-tracking.md](design/event-tracking.md) |
 | E7 run-record contract — rebaselined, implementation deferred | [run-record-contract.md](design/run-record-contract.md) |
-| E71 disposable run storage and durable evidence — accepted design, implementation pending | [disposable-run-storage.md](design/disposable-run-storage.md) |
+| E71 disposable run storage and durable evidence (ADR-131; evidence migration implemented, records/disposal in progress) | [disposable-run-storage.md](design/disposable-run-storage.md) |
 | Board module-boundary recommendations — **superseded by ADR-116** (the Workspace/Inbox/Teams split is retired; current boundary in [project-switcher.md](design/project-switcher.md)) | [board-module-boundaries.md](design/board-module-boundaries.md) |
 | History Board module — Conversation Analytics & Agent Forensic Plane | [history-board-module.md](design/history-board-module.md) |
 | Design Satellite: History Board Tool Using Tab | [history-board-tool-using-tab.md](design/history-board-tool-using-tab.md) |

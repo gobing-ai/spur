@@ -4152,3 +4152,78 @@ No task/feature corpus was written. The pipeline's own `doc-tripwire` hop gates 
 - **The doc's global `(67 programs)` heading is a dated measurement**, and the task-pipeline table is an explicit snapshot. Do not re-derive a global count inside a wrap doc-sync: fix the affected workflow table and record the local recount.
 - **The wrap doc-sync's repair scope is `docs/00_ADR.md`, `docs/03_ARCHITECTURE.md`, `docs/04_DESIGN.md`, `docs/design/*`.** Stale `learning-capture` references outside it remain and need their own route: `plugins/sp/skills/spur-dev/references/cross-cutting.md:652,667`, `docs/help/how_to_use_dev_slash_commands_for_daily_software_development.md:319`, `docs/help/how_to_use_spur_for_daily_software_development.md:523`.
 - **Bare-name workflow dispatch in a worktree resolves the stale shared-layer copy (ADR-113).** `spur workflow run wrapup-pipeline.yaml` from a worktree probes project/registered `.spur/workflows/` (absent) → shared layer = installed package bundled root = MAIN tree `config/workflows/` — for 1037 that was v6 without the doc-tripwire hop (run `1ddc7fb6` executed it and silently skipped the new state). Worktree runs must pass the explicit relative path (`config/workflows/<file>.yaml`), which bypasses layer resolution; run 2 `50564f3c` did and executed v7.
+### Wrapup Drift Repair Summary
+
+Executed `Skill(skill="sp:doc-evolve", args="wrapup")` to audit and reconcile drift across key architecture and design documents following tasks `1024` and `1025` (Feature `E71`), conforming to [docs/99_PROJECT_CONSTITUTION.md](file:///Users/robin/xprojects/spur-new-runall-e71-a0ce/docs/99_PROJECT_CONSTITUTION.md) (§5 T3, §6.1, §6.4, §6.5, §7.2):
+
+1. [docs/00_ADR.md](file:///Users/robin/xprojects/spur-new-runall-e71-a0ce/docs/00_ADR.md):
+   - Updated `ADR-131` status to reflect implemented evidence persistence (task `1025`) and in-progress records/disposal (`1026`/`1027`).
+   - Updated detail topology pointer from proposed to active in `03 §32`.
+   - Bumped frontmatter `version: 1.61.0`, `updated_at: 2026-10-01`.
+2. [docs/03_ARCHITECTURE.md](file:///Users/robin/xprojects/spur-new-runall-e71-a0ce/docs/03_ARCHITECTURE.md):
+   - Replaced "implementation pending / locations unchanged" in §32 with the active canonical root mapping (`runStoragePaths`: `.spur/run/` scratch, `.spur/memory/evidence/`, `.spur/memory/runs/`), evidence reading precedence (`readVerdictArtifact` reading durable evidence first with scratch fallback), and `migrateRunStorage()` composed into `spur workflow clean`.
+   - Explicitly marked remaining work (tasks `1026`/`1027`: retained records/artifacts and scratch disposal).
+   - Bumped frontmatter `version: 1.66.0`, `updated_at: 2026-10-01`.
+3. [docs/04_DESIGN.md](file:///Users/robin/xprojects/spur-new-runall-e71-a0ce/docs/04_DESIGN.md):
+   - Updated satellite index entry for `disposable-run-storage.md` to note evidence migration implemented with records/disposal in progress.
+   - Bumped frontmatter `version: 1.87.0`, `updated_at: 2026-10-01`.
+4. [docs/design/disposable-run-storage.md](file:///Users/robin/xprojects/spur-new-runall-e71-a0ce/docs/design/disposable-run-storage.md):
+   - Updated §1 and §4 to cite task `1024` audit report completion ([docs/reports/2026-09-30-E71-run-storage-ownership.md](file:///Users/robin/xprojects/spur-new-runall-e71-a0ce/docs/reports/2026-09-30-E71-run-storage-ownership.md)) and task `1025` implementation of `migrateRunStorage`, canonical roots, and manifest recording under `.spur/memory/run-storage-migration.json`.
+   - Updated frontmatter `updated_at: 2026-10-01`.
+5. [docs/design/cli-contracts.md](file:///Users/robin/xprojects/spur-new-runall-e71-a0ce/docs/design/cli-contracts.md):
+   - Updated `spur workflow clean` specification to document execution of `migrateRunStorage`, envelope `migration: { dryRun, logsOnly, entries, failures }`, and human summary output.
+   - Updated frontmatter `updated_at: 2026-10-01`.
+6. **Task & Feature Corpus Invariant:** Zero direct writes to `docs/tasks*` or `docs/features*`.
+7. **Verification:**
+   - `bun test repo-wide-tests/adr-supersession.test.ts`: 7/7 passed.
+   - `bun run test-repo-wide`: 7/7 passed.
+   - `bun run test-pre-check`: 50/50 rules passed.
+   - `bun run test-post-check`: 2/2 rules passed.
+   - `bun run lint`: Biome check clean, TypeScript typecheck clean across all workspaces.
+
+Saved working learnings artifact to: [.spur/run/012bc4dd-daf3-4707-aa5c-8d1d08bd4a96-wrapup-learnings.md](file:///Users/robin/xprojects/spur-new-runall-e71-a0ce/.spur/run/012bc4dd-daf3-4707-aa5c-8d1d08bd4a96-wrapup-learnings.md).
+
+# Working Learnings: Tasks 1024 & 1025 (Feature E71)
+
+### 2026-10-01
+
+#### Task 1024 — Audit run storage ownership and one-off cleanup
+
+- **Conventions:**
+  - Audit deliverables with `mutationPolicy: none` deliver a persistent, independently reviewable inventory under `docs/reports/` (e.g., `docs/reports/2026-09-30-E71-run-storage-ownership.md`) without mutating production code or tests.
+  - Distinguish registered path-only artifacts from persisted bytes, and tracked task `Testing` coverage from structured proof.
+  - Group duplicate references only with an explicit exhaustive location list.
+  - Map every candidate to producer, consumers, lifetime (`attempt`, `run`, `recoverable`, `lasting`, `recomputable`), deletion behavior, disposition, task owner, and test.
+  - Unmatched or dynamic candidates must be tracked explicitly (X1–X6 in report); never silently classify an unmapped candidate as disposable.
+
+- **Errors fixed:**
+  - Scratch receipts referenced as discovery inputs can disappear after planning: regenerate source scans from current code files (`packages/app/src`, `apps/cli/src`, `plugins/sp`, `config/workflows`, etc.) and treat old scratch receipts as optional acceleration rather than prerequisites or completeness thresholds.
+
+- **Patterns:**
+  - Scan both literal `.spur/run` and computed joins (`.spur` + `run`, `runDir`, `runRoot`, `runLogDir`, and deletion calls like `rmSync`, `unlinkSync`, `deleteFile`); trace their callers including config-provided paths. Generated CLI config and plugin twins are parity consumers, not editable owners.
+  - Pair each deletion site with its lifecycle justification: freshness invalidation, atomic publication cleanup, terminal housekeeping, or unrelated temporary storage.
+
+- **Gotchas:**
+  - Lexical discovery counts (e.g., 2378 reference lines, 153 candidate sites) reflect raw scanner hits across tests, comments, and strings; they must not be mistaken for a completeness threshold or a static whitelist.
+  - Verifying an audit deliverable requires checking that spot-checked citations resolve in the current tree and that every candidate maps to a concrete disposition.
+
+#### Task 1025 — Persist task and feature evidence outside run scratch
+
+- **Conventions:**
+  - Canonical run storage roots must be frozen in a shared internal path helper (`packages/app/src/services/run-storage.ts`: `runStoragePaths(cwd)`) returning `scratchDir` (`.spur/run`), `evidenceDir` (`.spur/memory/evidence`), and `recordsDir` (`.spur/memory/runs`), avoiding configurable storage backends or premature pluggable abstractions.
+  - Migration must never delete source files during evidence copy: copy validated bytes atomically, reread and compare digests, and record applied outcomes in `.spur/memory/run-storage-migration.json`. Deletion of completed scratch is separate cleanup work reserved for subsequent tasks.
+  - Dry-run mode (`--dry-run`) must perform zero filesystem or database writes.
+
+- **Errors fixed:**
+  - Generic migration and reader instructions lacked fixed roots: froze shared paths, fixed-root evidence registration, fail-closed migration, and precise caller/test targets before implementation.
+  - Strict rule `no-direct-fs-io` flagged direct fs operations in `packages/app/src/services/run-storage.ts`: resolved via a scoped exemption in `config/rules/strict/runtime-boundaries.yaml` following established precedent for atomic disk persistence cores (`project-registry.ts`, `agent-usage-producer.ts`).
+
+- **Patterns:**
+  - Single choke-point reader redirection: redirecting `readVerdictArtifact` in `packages/app/src/services/done-transition-guard.ts` to read `.spur/memory/evidence/` first (with scratch fallback) automatically covers both task status transitions (`task update <wbs> done`) and feature acceptance checks (`feature check`), avoiding duplicate reader changes across multiple services while leaving caller-selected `--verdict-file` intact.
+  - Two-file run-record unit: `{runId}.md` and `{runId}.state.json` are treated as an atomic unit during migration; migrating only one file would orphan run state.
+  - Injectable seams for testability: `migrateRunStorage` accepts injectable `atomicCopy`, `readRunStatus` (RunDao seam), and `fs`, allowing comprehensive testing of failure injection, live-owner checks, and dry-run behavior on in-memory/temp filesystems without mocking real system state.
+
+- **Gotchas:**
+  - Malformed or stale structured evidence must fail closed; it must never fall back to an old PASS or F93 tracked fallback.
+  - `--force` on `workflow clean` must never bypass physical storage confinement or active-process protection.
+  - `--logs` on `workflow clean` must scope to log-only migration and reclamation, leaving verdicts, receipts, and run pairs untouched.

@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.65.0
+version: 1.66.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-09-30
+updated_at: 2026-10-01
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -1187,13 +1187,18 @@ normalizes `tool_result` / `session_start` / `session_shutdown` into the canonic
 row schema, token cascade, redaction or session reuse — a new host adds a normalizer. Row and
 session-event contracts: [observability contracts](design/observability-contracts.md) §7.8b.
 
-## 32. Disposable Run Storage — accepted design, implementation pending (ADR-131; E71)
+## 32. Disposable Run Storage and Durable Evidence (ADR-131; E71)
 
-Current run/evidence locations remain unchanged. The E71 proposal separates temporary stage data
-in `.spur/run/` from lasting verdict/receipt files in `.spur/memory/evidence/` and retained run
-records, registered artifacts and owned sessions in `.spur/memory/runs/`. Existing app owners
-publish and read their durable data; task Testing remains the tracked portable coverage record.
-The accepted `workflow clean` extension previews/applies bounded migration through its app service
-before existing housekeeping; the operator gave public-surface consent. Automatic per-workflow terminal
-deletion and a new retention policy are omitted. Exact lifetimes, confinement, compatibility and
-failure behavior: [disposable run storage](design/disposable-run-storage.md).
+Canonical run storage roots are defined in `packages/app/src/services/run-storage.ts` (`runStoragePaths`):
+`.spur/run/` for execution scratch, `.spur/memory/evidence/` for lasting structured evidence, and
+`.spur/memory/runs/` for retained run records. Task and feature evidence readers (`readVerdictArtifact`
+in `packages/app/src/services/done-transition-guard.ts`) read lasting structured evidence from
+`.spur/memory/evidence/` first, falling back to scratch `.spur/run/` for backward compatibility.
+`WorkflowAppService.migrateRunStorage({dryRun, logsOnly})` classifies scratch items by owner convention,
+byte-copies valid verdicts, receipts, and terminal run-record pairs into durable roots with atomic digests
+and manifest tracking, and is composed into `spur workflow clean` (dry-run and apply).
+
+Remaining implementation (tasks 1026 and 1027): direct write of new run records, registered artifacts,
+and sessions to `.spur/memory/runs/`, and completed-scratch disposal verification remain in progress.
+Automatic per-workflow terminal deletion and new retention policies are omitted. Exact lifetimes,
+confinement, compatibility and failure behavior: [disposable run storage](design/disposable-run-storage.md).
