@@ -874,3 +874,9 @@ Full trace: `docs/plans/2026-07-03-feature-cycle-prioritization-brainstorm.md`. 
 - Driver fixes only small deterministic gate failures (TS2322/TS2345, env-var hygiene, accept-and-ignore flags, edge re-anchors); substantive work stays with workers.
 - Guard-parity baseline regen: `JSON.stringify` output needs `bunx biome check --write` afterwards or the baseline fails the format gate.
 - When main advances mid-batch under an FF-only merge contract, rebase the batch branch (rebase-before-FF); expect task-file Solution conflicts — keep the authored narrative over auto-generated change-maps, `updated_at` ours.
+
+## 2026-10-01 — D9 runall batch (1031, 1033)
+- `quality-gate recheck` with no `qualityGateCmd` env passes vacuously (empty command → rc 0 → PASS receipt, 7 ms). Always pass `qualityGateCmd="bun run spur-check"` when driving the gate outside the pipeline; P3 follow-up: hard-guard empty command in recheck mode.
+- Proof fingerprint is section-scoped (Background/Requirements/AC): Review/Solution writes don't move the digest, so the review-proof digest captured pre-review stays valid through verify.
+- Wrapup pre-flight now lives in `resolveTasks` (wrapup-steps.ts `preflightFeature`): feature-var runs fail closed at the first corpus mutation when the done gate would reject (receipt findings honored only from `verifying`).
+- `spur task record <wbs> --transition done` runs the strict done gate itself (no `--provenance-bypass` flag exists on task record in this build; that flag belongs to `feature sync`).

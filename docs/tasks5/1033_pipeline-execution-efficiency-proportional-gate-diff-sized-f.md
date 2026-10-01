@@ -4,7 +4,7 @@ name: "Pipeline execution efficiency: proportional gate, diff-sized fan-out, wra
 status: done
 template: feature-impl
 created_at: 2026-09-30T22:20:05.119Z
-updated_at: "2026-10-01T15:41:56.644Z"
+updated_at: "2026-10-01T16:18:38.819Z"
 feature_id: D9
 
 priority: P2
@@ -180,6 +180,9 @@ Gate re-check: `quality-gate recheck` **PASS** on proof digest `sha256:62724c84f
 | P4 | `sync-unreadable` also covers a spur CLI that fails for non-JSON reasons (e.g. no project in cwd, rc≠0). Contract-sanctioned fail-closed ("failure mode is more isolation, never less"); observed in the foreign-cwd E2E run. | accepted by design |
 
 Pre-flight invariants verified by test: never writes PASS on its own (only resolveTasks writes the status), later feature-transition / feature-verify gates untouched, same `spurBin` env as `runFeatureTransition`.
+
+
+Evidence-ephemerality note (session review 2026-10-01): the `.spur/run/1033-*` artifacts cited above (evidence log, verify answer, gate receipt, conformance-check output) lived in the batch worktree and were removed at closeout; the digests, commands and outcomes quoted in this file are the durable record. The diffstat-arm conformance check is filed as a follow-up task to become a committed test.
 
 ### References
 
