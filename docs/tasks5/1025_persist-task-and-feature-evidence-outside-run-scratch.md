@@ -4,7 +4,7 @@ name: Persist task and feature evidence outside run scratch
 status: done
 template: feature-impl
 created_at: 2026-09-30T20:13:58.356Z
-updated_at: "2026-10-01T17:17:14.630Z"
+updated_at: "2026-10-01T22:06:31.047Z"
 feature_id: E71
 priority: P2
 tags:
@@ -94,6 +94,16 @@ Execution checks and per-requirement observability are frozen in Design. Preserv
 - `apps/cli/src/commands/workflow.ts`: `clean` command composes migration (`--dry-run` / `--logs-only` honored) and reports a `migration` key in JSON + human summary.
 - `config/rules/strict/runtime-boundaries.yaml`: `no-direct-fs-io` scoped exemption for run-storage.ts (atomic byte-copy core, precedent: project-registry.ts / agent-usage-producer.ts).
 - `packages/app/tests/services/run-storage.test.ts` (new): 10 tests over real temp-project fs + injectable `readRunStatus` (RunDao seam) — dry-run zero-write, atomic copy + idempotence, divergent-target fail-closed, malformed rejection, live-owner preservation, two-file unit migration, injected copy failure leaves sources intact.
+
+**Force verification repair (2026-10-01).**
+
+- `packages/app/src/services/task-service.ts:1414` — record atomically publishes the selected valid verdict and raw proof fields under durable evidence before Testing.
+- `packages/app/src/workflow/feature-verification-receipt.ts:125` — run/latest receipts use durable evidence; status/log remain temporary. The installed writer registers the durable receipt.
+- `packages/app/src/workflow/actions/run-path.ts:46` — durable writes reuse physical confinement without widening scratch-only gate outputs.
+- `packages/app/src/services/run-storage.ts:373` — logs-only skips every non-log family; apply and preview share target-conflict and confinement checks; unknown status is preserved.
+- `apps/cli/src/commands/workflow.ts:1341` — migration precedes housekeeping; failure returns exit 1 and leaves sources intact.
+- Tests: `packages/app/tests/services/run-storage.test.ts:96`, task-record, feature receipt and CLI cleanup suites; focused application run: 148 pass / 0 fail, CLI cleanup: 14 pass / 0 fail. Generated plugin surfaces rebuilt through their owners.
+- Residual: corpus-sweep and feature-sync suppression still inspect scratch verdict locations; migration JSON checks do not yet bind all family identities or settled importer obligations. These requirements remain PARTIAL after the bounded repair pass.
 
 ### Testing
 

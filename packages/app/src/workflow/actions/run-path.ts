@@ -39,6 +39,30 @@ export async function resolveRunArtifactPath(
     workdir: string,
     pathRaw: string,
 ): Promise<string> {
+    return resolveConfinedArtifactPath(fileSystem, workdir, pathRaw, '.spur/run');
+}
+
+/** Durable storage uses the same physical checks without widening temporary gate outputs. */
+export async function resolveDurableArtifactPath(
+    fileSystem: FileSystem,
+    workdir: string,
+    pathRaw: string,
+    plane: 'evidence' | 'runs' | 'memory',
+): Promise<string> {
+    return resolveConfinedArtifactPath(
+        fileSystem,
+        workdir,
+        pathRaw,
+        plane === 'memory' ? '.spur/memory' : `.spur/memory/${plane}`,
+    );
+}
+
+async function resolveConfinedArtifactPath(
+    fileSystem: FileSystem,
+    workdir: string,
+    pathRaw: string,
+    root: string,
+): Promise<string> {
     if (typeof fileSystem.realPath !== 'function') {
         throw new RunArtifactPathError(
             'physical path confinement requires a FileSystem with realPath support — refusing to skip confinement (0785 R2)',
@@ -48,9 +72,9 @@ export async function resolveRunArtifactPath(
     // 0781 lexical descent, preserved verbatim: traversal and sibling prefixes are rejected before
     // any filesystem access. The run directory itself is not a valid artifact path.
     const lexicalTarget = normalize(resolve(workdir, pathRaw));
-    const lexicalRunRoot = normalize(join(resolve(workdir), '.spur', 'run'));
+    const lexicalRunRoot = normalize(join(resolve(workdir), root));
     if (!lexicalTarget.startsWith(`${lexicalRunRoot}${sep}`)) {
-        throw new RunArtifactPathError(`must resolve beneath .spur/run/ (got ${pathRaw})`);
+        throw new RunArtifactPathError(`must resolve beneath ${root}/ (got ${pathRaw})`);
     }
 
     const workdirAbs = resolve(workdir);
@@ -63,17 +87,17 @@ export async function resolveRunArtifactPath(
 
     // `.spur/run` may legitimately be a symlink, but only to a directory that stays inside the
     // project workdir — otherwise the boundary itself would be defined outside the project.
-    const canonicalRunRootCandidate = join(canonicalWorkdir, '.spur', 'run');
+    const canonicalRunRootCandidate = join(canonicalWorkdir, root);
     let canonicalRunRoot = canonicalRunRootCandidate;
     const rootStat = await fileSystem.stat(canonicalRunRootCandidate);
     if (rootStat !== null) {
         try {
             canonicalRunRoot = fileSystem.realPath(canonicalRunRootCandidate);
         } catch (error) {
-            throw new RunArtifactPathError(`.spur/run could not be canonicalized: ${(error as Error).message}`);
+            throw new RunArtifactPathError(`${root} could not be canonicalized: ${(error as Error).message}`);
         }
         if (!within(canonicalRunRoot, canonicalWorkdir)) {
-            throw new RunArtifactPathError('.spur/run resolves outside the project workdir through a symlink');
+            throw new RunArtifactPathError(`${root} resolves outside the project workdir through a symlink`);
         }
     }
 
@@ -122,7 +146,7 @@ export async function resolveRunArtifactPath(
     // pass; any resolution outside it is rejected before write/dispatch/ledger effects.
     const reconstructed = normalize(join(anchor, relative(probe, lexicalTarget)));
     if (!reconstructed.startsWith(`${canonicalRunRoot}${sep}`)) {
-        throw new RunArtifactPathError(`path escapes .spur/run/ through a symlink (got ${pathRaw})`);
+        throw new RunArtifactPathError(`path escapes ${root}/ through a symlink (got ${pathRaw})`);
     }
     return reconstructed;
 }

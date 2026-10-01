@@ -30,6 +30,7 @@ import {
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { ValidationError } from '@gobing-ai/ts-utils';
 import { GuardDeniedError } from '../errors';
+import { resolveDurableArtifactPath } from '../workflow/actions/run-path';
 import {
     featureScenarioTitles,
     matchedScenarioKeys,
@@ -39,6 +40,7 @@ import {
 import { ensurePipelineRunLink, TASK_FORWARD_CHAIN } from './pipeline-run-link';
 import { type CheckFindings, FINDING_CODES, type SectionMatrix } from './planning-check-base';
 import type { EntityRef, PlanningEventName, PlanningWriteService, WriteResult } from './planning-write-service';
+import { ensureDurablePlaneIgnored, runStoragePaths } from './run-storage';
 import { structuralFindings } from './structural-repair';
 import { GATE_LANGUAGE_SECTIONS, hasGateLanguage, hasSolutionFileLineCitation, TaskCheckService } from './task-check';
 import { TaskLocator } from './task-locator';
@@ -1411,6 +1413,20 @@ export class TaskService {
         // Resolve verdict path.
         const verdictPath = opts.verdictFile ?? `.spur/run/${wbs}-verdict.json`;
         const verdict = await readVerdict(this.ctx.fs, verdictPath, wbs);
+        if (verdict.verdict !== 'UNKNOWN') {
+            if (verdict.wbs !== wbs) throw new Error(`Verdict belongs to ${verdict.wbs}, not task ${wbs}`);
+            const paths = runStoragePaths(this.ctx.fs.resolve('.'));
+            const durablePath = await resolveDurableArtifactPath(
+                this.ctx.fs,
+                paths.projectRoot,
+                join(paths.evidenceDir, `${wbs}-verdict.json`),
+                'evidence',
+            );
+            const bytes = await this.ctx.fs.readFile(verdictPath);
+            ensureDurablePlaneIgnored(paths.projectRoot);
+            await this.ctx.fs.ensureDir(dirname(durablePath));
+            await atomicWriteAsync(durablePath, bytes, wbs, this.ctx.fs, this.ctx.projectName ?? 'spur');
+        }
 
         const result: RecordResult = {
             testingWritten: false,

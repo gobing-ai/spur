@@ -33,7 +33,9 @@ import {
     openSync,
     readdirSync,
     readFileSync,
+    realpathSync,
     renameSync,
+    statSync,
     writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
@@ -45,6 +47,7 @@ const SAFE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 /** Shape of the generated inline bundle / repo app source this script consumes. */
 interface VerificationModule {
+    featureReceiptPaths: typeof import('../../../packages/app/src/workflow/feature-verification-receipt')['featureReceiptPaths'];
     startFeatureVerificationReceipt: typeof import('../../../packages/app/src/workflow/feature-verification-receipt')['startFeatureVerificationReceipt'];
     completeFeatureVerificationReceipt: typeof import('../../../packages/app/src/workflow/feature-verification-receipt')['completeFeatureVerificationReceipt'];
     captureFeatureReceiptDigest: typeof import('../../../packages/app/src/workflow/feature-verification-receipt')['captureFeatureReceiptDigest'];
@@ -143,6 +146,16 @@ function findFeatureFile(featureDir: string, featureId: string): string | undefi
 // FileSystem port; only ensureDir/writeFile/rename are exercised on the
 // start/complete paths. Swap to createNodeFileSystem if more surface is needed.
 const nodeFsShim = {
+    realPath: realpathSync,
+    readDir: readdirSync,
+    stat: (path: string) => {
+        try {
+            return statSync(path);
+        } catch (error) {
+            if ((error as { code?: string }).code === 'ENOENT') return null;
+            throw error;
+        }
+    },
     ensureDir: (dir: string) => {
         mkdirSync(dir, { recursive: true });
     },
@@ -209,7 +222,7 @@ async function verify(
     try {
         await new mod.ArtifactDao(db.adapter as never).record({
             runId,
-            path: join(runDir, `${runId}-feature-verification.json`),
+            path: mod.featureReceiptPaths(runDir, featureId, runId).runScoped,
             kind: 'feature-verification',
         });
     } finally {

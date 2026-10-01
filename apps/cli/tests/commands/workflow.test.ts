@@ -1869,6 +1869,37 @@ failureStates:
         expect(Array.isArray(parsed.logs.reclaimed)).toBe(true);
     });
 
+    test('clean preserves expired logs and returns failure when evidence migration fails', async () => {
+        const cwd = await createTempProject();
+        const runDir = join(cwd, '.spur', 'run');
+        await mkdir(runDir, { recursive: true });
+        const oldLog = join(runDir, 'wf_old.log');
+        await writeFile(oldLog, 'keep until migration succeeds');
+        const oldMtime = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
+        await utimes(oldLog, oldMtime, oldMtime);
+        await writeFile(join(runDir, '1025-verdict.json'), '{malformed');
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['workflow', 'clean', '--json'], { output, cwd, dbUrl: ':memory:' });
+        expect(exitCode).toBe(1);
+        const result = JSON.parse(output.messages[0] ?? '{}');
+        expect(result.migration.failures).toHaveLength(1);
+        expect(result.logs.reclaimed).toEqual([]);
+        expect(await exists(oldLog)).toBe(true);
+
+        // Log-only housekeeping must not inspect or migrate unrelated evidence.
+        const logsOutput = createCapturedOutput();
+        expect(
+            await main(['workflow', 'clean', '--logs', '--json'], {
+                output: logsOutput,
+                cwd,
+                dbUrl: ':memory:',
+            }),
+        ).toBe(0);
+        expect(JSON.parse(logsOutput.messages[0] ?? '{}').migration.failures).toEqual([]);
+        expect(await exists(oldLog)).toBe(false);
+    });
+
     test('clean rejects invalid --older-than', async () => {
         const output = createCapturedOutput();
         const exitCode = await main(['workflow', 'clean', '--older-than', 'abc'], {

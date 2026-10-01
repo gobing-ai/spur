@@ -86,8 +86,35 @@ describe('migrateRunStorage (E71/1025)', () => {
             expect(outcome(result, '1025').outcome).toBe('failed');
             expect(result.failures.length).toBeGreaterThan(0);
             expect(readFileSync(target, 'utf8')).toBe(JSON.stringify({ verdict: 'FAIL' }));
+            const preview = await migrateRunStorage({ dirs, readRunStatus: statusMap({}), dryRun: true });
+            expect(preview.failures[0]?.reason).toBe('target-mismatch');
         } finally {
             rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('migration rejects escaping scratch and durable roots without touching external data', async () => {
+        for (const plane of ['scratch', 'evidence'] as const) {
+            const { root, scratch, dirs } = makeProject();
+            const outside = mkdtempSync(join(tmpdir(), 'run-storage-outside-'));
+            try {
+                const file = '1025-verdict.json';
+                writeFileSync(join(outside, file), '{"verdict":"PASS"}');
+                if (plane === 'scratch') {
+                    rmSync(scratch, { recursive: true });
+                    symlinkSync(outside, scratch);
+                } else {
+                    writeFileSync(join(scratch, file), '{"verdict":"FAIL"}');
+                    mkdirSync(dirname(dirs.evidenceDir), { recursive: true });
+                    symlinkSync(outside, dirs.evidenceDir);
+                }
+                const result = await migrateRunStorage({ dirs, readRunStatus: statusMap({}) });
+                expect(result.failures.length).toBeGreaterThan(0);
+                expect(readFileSync(join(outside, file), 'utf8')).toBe('{"verdict":"PASS"}');
+            } finally {
+                rmSync(root, { recursive: true, force: true });
+                rmSync(outside, { recursive: true, force: true });
+            }
         }
     });
 

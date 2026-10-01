@@ -38,6 +38,8 @@ import {
     writeFileSync,
 } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
+import { resolveDurableArtifactPath, resolveRunArtifactPath } from '../workflow/actions/run-path';
 
 /** Resolved run-storage layout for one project root. */
 export interface RunStoragePaths {
@@ -296,7 +298,12 @@ function classify(name: string, scratchDir: string, files: Set<string>): Classif
 /** True when the owner run is live/paused/interrupted-recoverable or the row is unknown. */
 async function ownerPreserved(readRunStatus: MigrateRunStorageInput['readRunStatus'], runId: string): Promise<boolean> {
     const status = await readRunStatus(runId);
-    return status === null || status === undefined || LIVE_RUN_STATUSES.has(status);
+    return (
+        status === null ||
+        status === undefined ||
+        LIVE_RUN_STATUSES.has(status) ||
+        !['done', 'failed', 'cancelled'].includes(status)
+    );
 }
 
 /** Manifest for applied runs only: `<projectRoot>/.spur/memory/run-storage-migration.json`. */
@@ -331,9 +338,11 @@ export async function migrateRunStorage(input: MigrateRunStorageInput): Promise<
     const atomicCopy = input.atomicCopy ?? defaultAtomicCopy;
     const now = input.now ?? (() => new Date().toISOString());
     const result: RunStorageMigrationResult = { dryRun, logsOnly, entries: [], failures: [] };
+    const fs = createNodeFileSystem(dirs.projectRoot);
 
     let names: string[];
     try {
+        await resolveRunArtifactPath(fs, dirs.projectRoot, join(dirs.scratchDir, 'migration-probe'));
         const dirents = readdirSync(dirs.scratchDir, { withFileTypes: true });
         names = dirents.filter((item) => item.isFile()).map((item) => item.name);
         // 1026 R4: run subtrees (`<runId>/agent-sessions/**`, `<runId>/artifacts/**`)
@@ -350,17 +359,19 @@ export async function migrateRunStorage(input: MigrateRunStorageInput): Promise<
             };
             walk(subtree);
         }
-    } catch {
-        return result; // no scratch dir yet — nothing to migrate
+    } catch (error) {
+        if ((error as { code?: string }).code !== 'ENOENT') {
+            result.failures.push({ source: dirs.scratchDir, reason: String(error) });
+        }
+        return result;
     }
     const fileSet = new Set(names);
-
-    // Logs-only scope excludes task/feature evidence — run records carry the run-log plane.
-    const evidenceExcluded = logsOnly;
 
     // 1026: durable copies must not shift the proof-input tree — exclude the plane repo-locally first.
     if (!dryRun) ensureDurablePlaneIgnored(dirs.projectRoot);
     for (const name of names) {
+        // Logs-only never touches verdicts, receipts, record pairs, sessions or artifacts.
+        if (logsOnly && (name.includes(sep) || !name.endsWith('.log'))) continue;
         const { unit, entry: standalone } = classify(name, dirs.scratchDir, fileSet);
         if (standalone !== undefined) {
             result.entries.push(standalone);
@@ -370,7 +381,6 @@ export async function migrateRunStorage(input: MigrateRunStorageInput): Promise<
             continue;
         }
         if (unit === undefined) continue;
-        if (evidenceExcluded && unit.family !== 'run-record') continue;
 
         const source = unit.files[0];
         if (source === undefined) continue; // units are always constructed with at least one file
@@ -426,6 +436,42 @@ export async function migrateRunStorage(input: MigrateRunStorageInput): Promise<
         // targets is derived 1:1 from unit.files, so every index below is defined.
         const targetFor = (index: number): string => targets[index] as string;
 
+        try {
+            for (const [index, file] of unit.files.entries()) {
+                await resolveRunArtifactPath(fs, dirs.projectRoot, file);
+                await resolveDurableArtifactPath(
+                    fs,
+                    dirs.projectRoot,
+                    targetFor(index),
+                    unit.family === 'run-record' ? 'runs' : 'evidence',
+                );
+            }
+        } catch (error) {
+            const reason = `confinement: ${String(error)}`;
+            result.entries.push({ ...baseEntry, source, contentDigest: fileDigest(source), outcome: 'failed', reason });
+            result.failures.push({ source, reason });
+            continue;
+        }
+
+        // Preview uses the same conflict check as apply, including single-file units.
+        const conflicts = unit.files.filter(
+            (file, index) => existsSync(targetFor(index)) && fileDigest(targetFor(index)) !== fileDigest(file),
+        );
+        if (conflicts.length > 0) {
+            for (const [index, file] of unit.files.entries()) {
+                result.entries.push({
+                    ...baseEntry,
+                    source: file,
+                    target: targetFor(index),
+                    contentDigest: fileDigest(file),
+                    outcome: 'failed',
+                    reason: 'target-mismatch',
+                });
+                result.failures.push({ source: file, reason: 'target-mismatch' });
+            }
+            continue;
+        }
+
         if (dryRun) {
             for (const [index, file] of unit.files.entries()) {
                 result.entries.push({
@@ -437,28 +483,6 @@ export async function migrateRunStorage(input: MigrateRunStorageInput): Promise<
                 });
             }
             continue;
-        }
-
-        // Preflight run-record pair targets: any digest-divergent existing target fails the
-        // whole pair closed — no target is overwritten and no partial record is left behind.
-        if (unit.files.length === 2) {
-            const divergent = unit.files.some(
-                (file, index) => existsSync(targetFor(index)) && fileDigest(targetFor(index)) !== fileDigest(file),
-            );
-            if (divergent) {
-                for (const [index, file] of unit.files.entries()) {
-                    result.entries.push({
-                        ...baseEntry,
-                        source: file,
-                        target: targetFor(index),
-                        contentDigest: fileDigest(file),
-                        outcome: 'failed',
-                        reason: 'target-mismatch',
-                    });
-                    result.failures.push({ source: file, reason: 'target-mismatch' });
-                }
-                continue;
-            }
         }
 
         for (const [index, file] of unit.files.entries()) {
@@ -490,6 +514,17 @@ export async function migrateRunStorage(input: MigrateRunStorageInput): Promise<
     }
 
     if (!dryRun) {
+        try {
+            await resolveDurableArtifactPath(
+                fs,
+                dirs.projectRoot,
+                join(dirs.projectRoot, '.spur', 'memory', 'run-storage-migration.json'),
+                'memory',
+            );
+        } catch (error) {
+            result.failures.push({ source: dirs.projectRoot, reason: `manifest-confinement: ${String(error)}` });
+            return result;
+        }
         const manifestEntries = result.entries.filter((entry) => entry.outcome !== 'preserved');
         const manifestFailure = writeManifest(dirs, manifestEntries, now);
         if (manifestFailure !== undefined) result.failures.push(manifestFailure);

@@ -106,6 +106,23 @@ function makeRunPort(
 }
 
 describe('feature verification receipt (0915, v1 contract)', () => {
+    test('durable receipt copies remain valid after scratch is removed twice', async () => {
+        const repo = makeTempGitRepo();
+        try {
+            const digest = await captureFeatureReceiptDigest(repo, FEATURE_MD);
+            await recordPass(repo, digest);
+            const scratch = join(repo, '.spur', 'run');
+            const paths = featureReceiptPaths(scratch, 'T1', 'run-1');
+            expect(paths.runScoped).toContain(join('.spur', 'memory', 'evidence'));
+            for (let attempt = 0; attempt < 2; attempt++) {
+                rmSync(scratch, { recursive: true, force: true });
+                expect((await validate(repo)).ok).toBe(true);
+                expect(await fs.readFile(paths.featureScoped)).toBe(await fs.readFile(paths.runScoped));
+            }
+        } finally {
+            rmSync(repo, { recursive: true, force: true });
+        }
+    });
     test('valid PASS receipt validates and both copies agree', async () => {
         const repo = makeTempGitRepo();
         try {
@@ -138,7 +155,7 @@ describe('feature verification receipt (0915, v1 contract)', () => {
         try {
             const runDir = join(repo, '.spur', 'run');
             await fs.ensureDir(runDir);
-            await fs.writeFile(join(runDir, 'T1-feature-verification.json'), '{nope');
+            await fs.writeFile(featureReceiptPaths(runDir, 'T1', 'run-1').featureScoped, '{nope');
             const result = await validate(repo);
             expect(result.ok).toBe(false);
             if (!result.ok) expect(result.reason).toBe('malformed');
@@ -165,7 +182,7 @@ describe('feature verification receipt (0915, v1 contract)', () => {
             });
             const forged = await completeFeatureVerificationReceipt(fs, runDir, hijack, { status: 'PASS' });
             const body = `${JSON.stringify(forged, null, 4)}\n`;
-            await fs.writeFile(join(runDir, 'T1-feature-verification.json'), body);
+            await fs.writeFile(featureReceiptPaths(runDir, 'T1', 'run-1').featureScoped, body);
             const result = await validate(repo);
             expect(result.ok).toBe(false);
             if (!result.ok) expect(result.reason).toBe('cross-feature');
@@ -181,7 +198,7 @@ describe('feature verification receipt (0915, v1 contract)', () => {
             await recordPass(repo, digest);
             // Tamper with only the feature-latest copy.
             const runDir = join(repo, '.spur', 'run');
-            const latest = join(runDir, 'T1-feature-verification.json');
+            const latest = featureReceiptPaths(runDir, 'T1', 'run-1').featureScoped;
             const parsed = JSON.parse(await fs.readFile(latest)) as FeatureVerificationReceipt;
             parsed.status = 'FAIL';
             await fs.writeFile(latest, `${JSON.stringify(parsed, null, 4)}\n`);
@@ -263,7 +280,7 @@ describe('feature verification receipt (0915, v1 contract)', () => {
             });
             const result = await validate(
                 repo,
-                makeRunPort({ 'run-1': { status: 'running' } }, [`${join(runDir, 'run-1-feature-verification.json')}`]),
+                makeRunPort({ 'run-1': { status: 'running' } }, [featureReceiptPaths(runDir, 'T1', 'run-1').runScoped]),
             );
             expect(result.ok).toBe(false);
             if (!result.ok) expect(result.reason).toBe('run');
@@ -278,7 +295,7 @@ describe('feature verification receipt (0915, v1 contract)', () => {
             const digest = await captureFeatureReceiptDigest(repo, FEATURE_MD);
             await recordPass(repo, digest);
             const runDir = join(repo, '.spur', 'run');
-            const receiptPath = join(runDir, 'run-1-feature-verification.json');
+            const receiptPath = featureReceiptPaths(runDir, 'T1', 'run-1').runScoped;
             const done = makeRunPort({ 'run-1': { status: 'done', digest: 'sha256:cafe' } });
             // No artifacts registered → run rejection.
             const noArtifact = await validate(repo, done);
@@ -343,8 +360,8 @@ describe('feature verification receipt (0915, v1 contract)', () => {
             // Had the script (wrongly) completed with the BEFORE digest, the
             // boundary rejects: a changed tree cannot ride an old claim.
             const staleBody = `${JSON.stringify({ ...receipt, inputDigest: before }, null, 4)}\n`;
-            await fs.writeFile(join(runDir, 'T1-feature-verification.json'), staleBody);
-            await fs.writeFile(join(runDir, 'run-1-feature-verification.json'), staleBody);
+            await fs.writeFile(featureReceiptPaths(runDir, 'T1', 'run-1').featureScoped, staleBody);
+            await fs.writeFile(featureReceiptPaths(runDir, 'T1', 'run-1').runScoped, staleBody);
             const stale = await validate(repo);
             expect(stale.ok).toBe(false);
             if (!stale.ok) expect(stale.reason).toBe('stale');
@@ -467,7 +484,7 @@ describe('feature verification receipt (0915, v1 contract)', () => {
             const digest = await captureFeatureReceiptDigest(repo, FEATURE_MD);
             await recordPass(repo, digest);
             const runDir = join(repo, '.spur', 'run');
-            const receiptPath = join(runDir, 'run-1-feature-verification.json');
+            const receiptPath = featureReceiptPaths(runDir, 'T1', 'run-1').runScoped;
             // Missing row.
             const noRow = await validate(repo, makeRunPort({}, [receiptPath]));
             expect(noRow.ok).toBe(false);

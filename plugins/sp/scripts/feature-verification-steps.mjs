@@ -10,7 +10,9 @@ import {
   openSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   renameSync,
+  statSync,
   writeFileSync
 } from "fs";
 import { join } from "path";
@@ -74,6 +76,17 @@ function findFeatureFile(featureDir, featureId) {
   return name === undefined ? undefined : join(featureDir, name);
 }
 var nodeFsShim = {
+  realPath: realpathSync,
+  readDir: readdirSync,
+  stat: (path) => {
+    try {
+      return statSync(path);
+    } catch (error) {
+      if (error.code === "ENOENT")
+        return null;
+      throw error;
+    }
+  },
   ensureDir: (dir) => {
     mkdirSync(dir, { recursive: true });
   },
@@ -123,7 +136,7 @@ async function verify(featureId, runId, cmdOverride, spurBin, mode) {
   try {
     await new mod.ArtifactDao(db.adapter).record({
       runId,
-      path: join(runDir, `${runId}-feature-verification.json`),
+      path: mod.featureReceiptPaths(runDir, featureId, runId).runScoped,
       kind: "feature-verification"
     });
   } finally {

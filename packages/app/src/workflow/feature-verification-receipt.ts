@@ -41,8 +41,10 @@
  * `FeatureCheckService`).
  */
 
-import { basename, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
+import { ensureDurablePlaneIgnored } from '../services/run-storage';
+import { resolveDurableArtifactPath } from './actions/run-path';
 import { ProofCaptureError, ProofInputFingerprint } from './proof-input-fingerprint';
 
 /** Receipt schema version persisted in every receipt artifact. */
@@ -125,8 +127,8 @@ export function featureReceiptPaths(runDir: string, featureId: string, runId: st
     assertReceiptId('featureId', featureId);
     assertReceiptId('runId', runId);
     return {
-        runScoped: join(runDir, `${runId}-feature-verification.json`),
-        featureScoped: join(runDir, `${featureId}-feature-verification.json`),
+        runScoped: join(dirname(runDir), 'memory', 'evidence', `${runId}-feature-verification.json`),
+        featureScoped: join(dirname(runDir), 'memory', 'evidence', `${featureId}-feature-verification.json`),
         log: join(runDir, `${runId}-feature-verification.log`),
         status: join(runDir, `${runId}-feature-verification.status`),
     };
@@ -138,6 +140,9 @@ export function featureReceiptPaths(runDir: string, featureId: string, runId: st
  * torn JSON document.
  */
 async function atomicWriteReceipt(fs: FileSystem, path: string, receipt: FeatureVerificationReceipt): Promise<void> {
+    path = await resolveDurableArtifactPath(fs, receipt.workdir, path, 'evidence');
+    ensureDurablePlaneIgnored(receipt.workdir);
+    await fs.ensureDir(dirname(path));
     const body = `${JSON.stringify(receipt, null, 4)}\n`;
     const tmp = `${path}.tmp`;
     await fs.writeFile(tmp, body);
@@ -181,8 +186,8 @@ export async function startFeatureVerificationReceipt(
     };
     const paths = featureReceiptPaths(runDir, options.featureId, options.runId);
     await fs.ensureDir(runDir);
-    await atomicWriteReceipt(fs, paths.runScoped, receipt);
     await atomicWriteReceipt(fs, paths.featureScoped, receipt);
+    await atomicWriteReceipt(fs, paths.runScoped, receipt);
     return receipt;
 }
 
@@ -339,7 +344,7 @@ export async function validateFeatureVerificationReceipt(
     try {
         latest = await readReceiptCopy(
             fs,
-            join(options.runDir, `${options.featureId}-feature-verification.json`),
+            featureReceiptPaths(options.runDir, options.featureId, options.featureId).featureScoped,
             'feature-latest',
         );
     } catch (err) {

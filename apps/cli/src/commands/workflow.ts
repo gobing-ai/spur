@@ -1337,13 +1337,45 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                 return;
             }
             const svc = makeSvc(options.json);
+            // Persist lasting data before any housekeeping; failure preserves all sources.
+            const migration = await svc.migrateRunStorage({ dryRun, logsOnly });
+            if (migration.failures.length > 0) {
+                context.setExitCode(1);
+                const logs = {
+                    retentionDays: resolveWorkflowLogRetentionDays(context.spurConfig ?? null),
+                    dryRun,
+                    reclaimed: [],
+                    failures: [],
+                };
+                if (options.json) {
+                    context.output.write(
+                        toEnvelopeJson(
+                            logsOnly
+                                ? { ...logs, migration }
+                                : {
+                                      olderThanMinutes: minutes,
+                                      dryRun,
+                                      cleaned: [],
+                                      logs,
+                                      checkpoints: { reclaimed: [], skipped: [], failures: [] },
+                                      migration,
+                                  },
+                            { enveloped: options.jsonEnvelope },
+                        ),
+                    );
+                } else {
+                    for (const failure of migration.failures) {
+                        context.output.error(
+                            `Migration failed for ${failure.source}: ${failure.reason}; housekeeping skipped.`,
+                        );
+                    }
+                }
+                return;
+            }
             const result = logsOnly ? undefined : await svc.clean(minutes, dryRun);
             const retentionDays = resolveWorkflowLogRetentionDays(context.spurConfig ?? null);
             const logResult = await svc.cleanRunLogs(retentionDays, dryRun);
             const checkpointResult = logsOnly ? undefined : await svc.cleanCheckpoints(retentionDays, dryRun);
-            // E71/1025: every clean also reports durable-evidence migration state
-            // (zero-write under --dry-run; idempotent across repeated cleans).
-            const migration = await svc.migrateRunStorage({ dryRun, logsOnly });
             if (options.json) {
                 context.output.write(
                     toEnvelopeJson(

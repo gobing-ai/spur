@@ -12,18 +12,18 @@ tags: [contract, workflow, planning]
 
 ## 1. Issue and scope
 
-E71 makes completed `.spur/run/` data disposable after all owning processes and consumers finish. The operator accepted this design, including the existing `workflow clean` behavior extension. Tasks 1024–1027 completed the full implementation and verification:
+E71 makes completed `.spur/run/` data disposable after all owning processes and consumers finish. The operator accepted this design, including the existing `workflow clean` behavior extension. Tasks 1024–1027 own its implementation:
 - Task 1024 completed the ownership audit ([audit report](../reports/2026-09-30-E71-run-storage-ownership.md)).
 - Task 1025 implemented evidence persistence outside run scratch: canonical roots in `packages/app/src/services/run-storage.ts` (`runStoragePaths`), `readVerdictArtifact` redirection to `.spur/memory/evidence/` first (scratch fallback), and `migrateRunStorage()` composed into `workflow clean`.
 - Task 1026 implemented direct writes of run records (`.md` and `.state.json`), registered artifact bytes (`persistDurableArtifact`), and agent sessions to `.spur/memory/runs/`, worktree export transfer (`carryRunRecordDir`), late-session history discovery (`runSessionAugmentedRoots`), and dual-root `cleanRunLogs`.
 - Task 1027 verified retention of all cleanup census sites for freshness and confinement correctness, routed verified analytics through `readVerdictArtifact`, and verified completed-scratch disposal equivalence.
 The design changes storage lifetime without changing workflow state graphs, run identity, verification policy or retention durations.
 
-Audit evidence and alternative approaches: [discovery plan](../plans/2026-09-30-run-scratch-brainstorm.md). The persistent ownership inventory was delivered by task 1024; implementation and verification are complete across tasks 1024–1027.
+Audit evidence and alternative approaches: [discovery plan](../plans/2026-09-30-run-scratch-brainstorm.md). The persistent ownership inventory was delivered by task 1024; task records carry current verification findings.
 
 ## 2. Context and constraints
 
-`task-record.ts` owns `parseTesting` and the tracked Testing renderer. F93 already uses that durable representation when a task verdict artifact is absent during feature coverage resolution; it does not remove the artifact-first reader or preserve every proof field needed by analytics. `verified-outcome.ts` still reads scratch JSON for verdict/proof identity. Reuse that existing parser for its supported fallback, and retain structured evidence where its checks and run binding matter. A local file or database is not a replacement for tracked evidence across clones.
+`task-record.ts` owns `parseTesting` and the tracked Testing renderer. F93 uses that durable representation when a task verdict artifact is absent during feature coverage resolution. `verified-outcome.ts` uses the shared durable-first verdict reader for proof identity. Reuse the tracked parser for its supported fallback and retain structured evidence where its checks and run binding matter. A local file or database is not a replacement for tracked evidence across clones.
 
 E7's two-file record, authoritative workflow DB trace/status, legacy `.log` classification, bounded redacted inspection, `--no-log` and `--trace-file` remain intact. Existing retention does not cover the new pair. This proposal does not select a new retention policy. Source-owned agent histories remain source-owned.
 
@@ -47,7 +47,7 @@ Use small path functions/constants at existing app seams where multiple callers 
 ### Publication and reads
 
 1. Temporary stage files keep existing freshness and lexical/physical confinement checks.
-2. Structured verdict/receipt owners publish atomically to durable evidence paths; readers resolve those paths. Current-input digest, stricter-of-stored-and-computed verdict, receipt latest/run equality, supersession and malformed evidence rejection remain unchanged. F93's tracked fallback retains its current valid-data semantics; malformed durable evidence cannot fall through to an old PASS.
+2. `task verdict` derives attempt evidence in scratch; `task record` atomically publishes the selected valid verdict, including its raw proof fields, under durable evidence before writing Testing. Feature receipt writers publish both structured copies directly under durable evidence; the coarse status and command log remain in scratch. Readers resolve durable evidence. Current-input digest, stricter-of-stored-and-computed verdict, receipt latest/run equality, supersession and malformed evidence rejection remain unchanged. F93's tracked fallback retains its current valid-data semantics; malformed durable evidence cannot fall through to an old PASS.
 3. `run.artifact` accepts scratch output through its existing confined input contract, validates identity/proof as today, atomically persists the retained bytes to its owned durable destination, and records the durable path. Bound canonical evidence already published under `.spur/memory/evidence/` is validated against that fixed root and registered in place. Command-gate output confinement remains scratch-only. Persistence/registration failure reports failure and keeps the source; unregistered data is not claimed persisted. Optional missing artifacts retain truthful path-only semantics without fabricated bytes.
 4. Engine and inline run records write directly to the durable run directory. DB trace/status stays authoritative; `.state.json` is the existing projection, not a replacement engine snapshot. Inspection and coordination references resolve the durable pair with migrated legacy fallback.
 5. Session producer, observer and history importer share the durable session-root convention. Active/paused session identity is stable; no folder move under a running process.
@@ -75,7 +75,7 @@ Existing `workflow clean` log reclamation follows the migrated legacy-log root a
 
 E71 R1 produces a classified inventory with each source owner, all consumers, lifetime, disposition and test. R2 migrates evidence and readers with equal acceptance/analytics outcomes. R3 covers retained records/artifact bytes and inspection. R4 covers sessions/history, handoff and worktree export. R5 preserves freshness/confinement and removes proven redundant cleanup. R6 covers migration, conflicts, recoverable work and persistence failures. R7 verifies completed scratch disposal and installed/config/docs parity.
 
-All verification checks passed across tasks 1024–1027, including the decisive disposal equivalence test in `packages/app/tests/services/run-storage.test.ts`, the durable analytics reader in `packages/app/tests/services/verified-outcome.test.ts`, and full gate `bun run spur-check` passing with zero failures.
+Verification must exercise the real producers and readers, including completed directory removal, bound acceptance, feature receipts and history import. Equal results from synthetic files or a denominator-only analytics check do not alone prove this contract. Task records retain the executable evidence and unresolved findings.
 
 ## 7. Tradeoffs
 

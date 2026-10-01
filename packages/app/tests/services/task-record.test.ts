@@ -728,6 +728,10 @@ describe('TaskService.record', () => {
         expect(result.reviewWritten).toBe(true);
         expect(result.solutionBackfilled).toBe(false);
         expect(result.transitionedTo).toBeUndefined();
+        const durablePath = join(root, '.spur', 'memory', 'evidence', `${wbs}-verdict.json`);
+        expect(await fs.readFile(durablePath)).toBe(await fs.readFile(verdictPath));
+        await fs.deleteFile(verdictPath);
+        expect(JSON.parse(await fs.readFile(durablePath)).verdict).toBe('PASS');
 
         // Verify sections in the file
         const raw = await fs.readFile(`${tasksDir}/${wbs}_record-test-task.md`);
