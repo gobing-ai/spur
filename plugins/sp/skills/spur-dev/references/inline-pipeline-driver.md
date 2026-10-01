@@ -316,10 +316,12 @@ Action semantics come from the YAML and the workflow action contract:
 
    **Diffstat arm (verify only, 1033 R1).** When the current state id is `verify`, condition 5
    fails when the triage diffstat file `.spur/run/<wbs>-diffstat.json` exists and shows a
-   small, non-sensitive diff: `.files <= 3 and ((.insertions // 0) + (.deletions // 0)) <= 60 and
+   small, non-sensitive diff: `([.files, .insertions, .deletions] | all(type == "number")) and
+   .files <= 3 and (.insertions + .deletions) <= 60 and
    .sensitive == false` (literal thresholds; the driver reads the file with `jq` — it never
    estimates size itself). A missing, unparsable or `sensitive: true` diffstat leaves condition 5
-   as above, so the failure mode is more isolation, never less. Below the floor on this arm, the
+   as above, so the failure mode is more isolation, never less. A missing or null count also leaves
+   condition 5 as above. Below the floor on this arm, the
    run log carries `stage verify executed inline in session <session-id> (below dispatch floor:
    diffstat files <f> lines <n>)`. Only `verify` eligibility changes: `implement` and `review`
    keep the estimate floor, and the pipeline state graph is unchanged.

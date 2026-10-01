@@ -188,7 +188,7 @@ describe('task-diffstat (0943)', () => {
 
 /**
  * Transcript of `inline-pipeline-driver.md` condition-5 diffstat arm (verify only):
- * `.files <= 3 and ((.insertions // 0) + (.deletions // 0)) <= 60 and .sensitive == false`.
+ * Counts must be numeric; `.files <= 3 and (.insertions + .deletions) <= 60 and .sensitive == false`.
  * Hand-transcribed on purpose — this suite pins the contract semantics; the doc text
  * itself is pinned separately by command-flag-parity (fd2ab09f5).
  */
@@ -251,7 +251,39 @@ describe('task-diffstat → verify dispatch floor (1039)', () => {
         expect(floorLogLine('sess-1', result)).toBe(
             'stage verify executed inline in session sess-1 (below dispatch floor: diffstat files 1 lines 3)',
         );
+        const driver = readFileSync(
+            join(import.meta.dir, '../skills/spur-dev/references/inline-pipeline-driver.md'),
+            'utf8',
+        );
+        expect(driver.replace(/\s+/g, ' ')).toContain(
+            'stage verify executed inline in session <session-id> (below dispatch floor: diffstat files <f> lines <n>)',
+        );
+        expect(driver.replace(/\s+/g, ' ')).toContain(
+            '([.files, .insertions, .deletions] | all(type == "number")) and .files <= 3 and (.insertions + .deletions) <= 60 and .sensitive == false',
+        );
         rmSync(cwd, { recursive: true, force: true });
+    });
+
+    test('3 changed files ride below the floor; 4 do not', () => {
+        for (const [files, inline] of [
+            [3, true],
+            [4, false],
+        ] as const) {
+            const cwd = makeRepo();
+            try {
+                anchorBase(cwd, '1039');
+                for (let i = 0; i < files; i++) {
+                    writeFileSync(join(cwd, `apps/cli/src/fixture-${i}.ts`), 'export const value = 1;\n');
+                }
+                const result = runDiffstat({ wbs: '1039' }, { cwd });
+                expect(result.files).toBe(files);
+                expect(result.sensitive).toBe(false);
+                expect(belowDiffstatFloor(result)).toBe(inline);
+                expect(belowFloorFromArtifact(cwd)).toBe(inline);
+            } finally {
+                rmSync(cwd, { recursive: true, force: true });
+            }
+        }
     });
 
     test('60 changed lines ride below the floor; 61 do not (threshold boundary bites)', () => {
@@ -309,6 +341,13 @@ describe('task-diffstat → verify dispatch floor (1039)', () => {
             '{"files":null,"insertions":1,"deletions":0,"sensitive":false}',
         );
         expect(belowFloorFromArtifact(cwd)).toBe(false);
+        for (const field of ['files', 'insertions', 'deletions']) {
+            for (const value of [null, undefined]) {
+                const row = { files: 1, insertions: 1, deletions: 0, sensitive: false, [field]: value };
+                writeFileSync(join(cwd, '.spur/run', '1039-diffstat.json'), JSON.stringify(row));
+                expect(belowFloorFromArtifact(cwd)).toBe(false);
+            }
+        }
         rmSync(cwd, { recursive: true, force: true });
     });
 });
