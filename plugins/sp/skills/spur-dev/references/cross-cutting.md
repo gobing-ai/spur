@@ -135,8 +135,8 @@ workflow run` and never redirect silently to `agent.default`. Interactive **omit
 **host-controlled and non-subprocess**, but no longer guarantees host-context execution for every
 model stage (task 0508): an eligible `agent.run` stage — pure-slash input, non-interactive state,
 native subagent with shared-worktree read/write/shell capability, and a task above the
-`estimate_hours` dispatch floor — which a small, non-sensitive triage diffstat
-(`.spur/run/<wbs>-diffstat.json`, verify-only diffstat arm) also satisfies (2026-09-15
+`estimate_hours` dispatch floor — a small, non-sensitive triage diffstat
+(`.spur/run/<wbs>-diffstat.json`, verify only) keeps that stage host-inline (2026-09-15
 subagent-dispatch evaluation; the floor and the
 resume-over-re-dispatch rule for worker-role continuation stages are owned by
 [inline-pipeline-driver.md](inline-pipeline-driver.md)) — dispatches **once** to that

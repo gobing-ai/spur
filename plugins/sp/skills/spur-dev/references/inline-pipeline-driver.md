@@ -315,7 +315,7 @@ Action semantics come from the YAML and the workflow action contract:
    directly — never estimates size itself.
 
    **Diffstat arm (verify only, 1033 R1).** When the current state id is `verify`, condition 5
-   also passes when the triage diffstat file `.spur/run/<wbs>-diffstat.json` exists and shows a
+   fails when the triage diffstat file `.spur/run/<wbs>-diffstat.json` exists and shows a
    small, non-sensitive diff: `.files <= 3 and ((.insertions // 0) + (.deletions // 0)) <= 60 and
    .sensitive == false` (literal thresholds; the driver reads the file with `jq` — it never
    estimates size itself). A missing, unparsable or `sensitive: true` diffstat leaves condition 5
