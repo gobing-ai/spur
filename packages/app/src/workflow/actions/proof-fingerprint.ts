@@ -8,6 +8,15 @@ const KIND = 'proof.fingerprint';
 const VAR_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 /**
+ * The action's accepted option keys (1052 R1). Deliberately separate from `ComputeProofInputOptions`:
+ * this validates the ACTION option map, whose only inputs are the four keys below — legacy
+ * tree-capture options (`gitDiffSummary`, `gitLogHashObject`) and misspelled spec keys must fail
+ * here instead of being silently ignored into a tree-only digest. The shared `readProofInputContents`
+ * reader stays lenient because proof-bound `run.artifact` passes it a larger legitimate map.
+ */
+const ACCEPTED_OPTION_KEYS = ['expect', 'featureFile', 'taskFile', 'var'] as const;
+
+/**
  * Compute the `ProofInputFingerprint` digest into a workflow var, optionally asserting it is unchanged.
  *
  * Options:
@@ -24,6 +33,10 @@ const VAR_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
  *   to tree-only. `undefined`/`''` stay optional: a task without a linked feature is normal, and
  *   the pipeline supplies an empty `featureSpecPath` var in that case.
  * - Invalid option types (non-string `taskFile`/`featureFile`) are rejected by name.
+ * - Since 1052 R1/R2 the option map is validated up front: unknown keys fail with an error naming
+ *   the unexpected and accepted keys, and a supplied non-string `expect` fails instead of
+ *   silently degrading the comparison to capture-only. Both rejections run BEFORE any spec read
+ *   or Git capture.
  *
  * Why this action exists (task 0612, ADR-071): `computeProofInputFingerprint` shipped with task 0603
  * and had **zero runtime call sites**, so "only `verified(D)` may cross the completion boundary" was
@@ -48,12 +61,37 @@ export class ProofFingerprintActionRunner implements ActionRunner {
     ) {}
 
     async execute(options: Record<string, unknown>, context: ActionRunContext): Promise<ActionResult> {
+        // 1052 R1: reject unknown keys before any proof input work — a silently ignored option
+        // (legacy capture keys, a misspelled taskFile) would weaken the proof without notice.
+        const accepted: readonly string[] = ACCEPTED_OPTION_KEYS;
+        const unexpected = Object.keys(options)
+            .filter((key) => !accepted.includes(key))
+            .sort();
+        if (unexpected.length > 0) {
+            return {
+                ok: false,
+                error:
+                    `${KIND}: unexpected option(s): ${unexpected.join(', ')} — accepted keys: ` +
+                    `${[...accepted].sort().join(', ')}`,
+            };
+        }
+
         const varName = options.var;
         if (typeof varName !== 'string' || varName === '') {
             return { ok: false, error: `${KIND}: var is required` };
         }
         if (!VAR_NAME_RE.test(varName)) {
             return { ok: false, error: `${KIND}: var name must match ${VAR_NAME_RE}, got "${varName}"` };
+        }
+
+        // 1052 R2: a supplied non-string expect previously fell through to capture-only, silently
+        // disabling the comparison this action exists to enforce. Absent/empty/blank (after the
+        // type check, a real string) stays capture-only.
+        if (options.expect !== undefined && typeof options.expect !== 'string') {
+            return {
+                ok: false,
+                error: `${KIND}: expect must be a string when supplied (got ${typeof options.expect})`,
+            };
         }
 
         const inputs = await readProofInputContents(this.fileSystem, context.workdir ?? '.', options);

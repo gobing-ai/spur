@@ -110,6 +110,54 @@ describe('proof.fingerprint action', () => {
         expect(bad.error).toContain('var name must match');
     });
 
+    // 1052 R1: unknown action keys are rejected up front, before any spec read or digest
+    // capture. gitDiffSummary/gitLogHashObject are legacy tree-capture options that predate
+    // this action's spec-based input model; a misspelled spec key must not silently degrade
+    // to tree-only proof either.
+    test('rejects unknown action keys before any spec read or digest capture (1052 R1)', async () => {
+        const legacy = await runner.execute(
+            { var: 'd', taskFile: '', gitDiffSummary: true, gitLogHashObject: 'HEAD' },
+            ctx,
+        );
+        expect(legacy.ok).toBeFalse();
+        expect(legacy.error).toContain('gitDiffSummary');
+        expect(legacy.error).toContain('gitLogHashObject');
+        for (const accepted of ['expect', 'featureFile', 'taskFile', 'var']) {
+            expect(legacy.error).toContain(accepted);
+        }
+
+        const misspelled = await runner.execute({ var: 'd', taskFiles: 'task.md' }, ctx);
+        expect(misspelled.ok).toBeFalse();
+        expect(misspelled.error).toContain('taskFiles');
+
+        // Valid action options keep working alongside the stricter boundary.
+        const valid = await runner.execute({ var: 'd', taskFile: '', featureFile: '' }, ctx);
+        expect(valid.ok).toBeTrue();
+    });
+
+    // 1052 R2: a supplied non-string expect used to fall through to capture-only, silently
+    // disabling the proof comparison; it must fail instead. Absent/empty/blank stays
+    // capture-only and whitespace-only spec paths stay explicit invalid paths.
+    test('rejects a non-string expect instead of silently skipping comparison (1052 R2)', async () => {
+        for (const badExpect of [42, true, null, ['sha256:x']]) {
+            const result = await runner.execute({ var: 'd', expect: badExpect }, ctx);
+            expect(result.ok).toBeFalse();
+            expect(result.error).toContain('expect must be a string');
+        }
+        for (const expectValue of [undefined, '', '   ']) {
+            const options: Record<string, unknown> = { var: 'd' };
+            if (expectValue !== undefined) options.expect = expectValue;
+            const result = await runner.execute(options, ctx);
+            expect(result.ok).toBeTrue();
+            expect(matchedFlag(result)).toBeUndefined();
+        }
+    });
+
+    test('whitespace-only spec paths stay explicit invalid paths, not omitted (1052 R2)', async () => {
+        const result = await runner.execute({ var: 'd', taskFile: '   ' }, ctx);
+        expect(result.ok).toBeFalse();
+    });
+
     // 0785 R1: a task with no feature is normal (empty-string stays omitted), but an explicitly
     // supplied spec that cannot be read must fail closed with a named error — a missing spec
     // can no longer silently degrade the proof to tree-only.

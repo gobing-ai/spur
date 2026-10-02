@@ -134,7 +134,8 @@ function wrapperViolations(text: string, contract: WrapperContract): string[] {
 
 const TEMPLATE_HEADINGS = [
     '## Mission',
-    '## Environment',
+    // 1052 R3: exact template lines — the verified-stamps live on the real heading line.
+    '## Environment (verified <timestamp and timezone>)',
     '## Completed so far',
     '## Remaining work, in order',
     '## Execution mode',
@@ -160,11 +161,41 @@ const SAMPLE_DATA_SPECIMENS = [
 
 function templateViolations(template: string): string[] {
     const violations: string[] = [];
+    // 1052 R3: presence is not enough — each declared heading must be an exact line occurring
+    // exactly once, so a duplicated section cannot slip a second template past the slicing.
     for (const heading of TEMPLATE_HEADINGS) {
-        if (!template.includes(heading)) violations.push(`template is missing the declared heading: ${heading}`);
+        const count = headingLineCount(template, heading);
+        if (count === 0) violations.push(`template is missing the declared heading: ${heading}`);
+        else if (count > 1) {
+            violations.push(`template repeats the declared heading ${heading} ${count} times; expected exactly 1`);
+        }
     }
     for (const specimen of SAMPLE_DATA_SPECIMENS) {
         if (template.includes(specimen)) violations.push(`template leaks another job's sample data: ${specimen}`);
+    }
+    return violations;
+}
+
+/** Count exact-line occurrences of a heading (no substring matches, no parser). */
+function headingLineCount(text: string, heading: string): number {
+    return text.split('\n').filter((line) => line === heading).length;
+}
+
+/**
+ * 1052 R3: each reference slicing boundary must occur exactly once in the whole reference — a
+ * duplicate would make indexOf-based slicing silently grab the wrong section half, and a missing
+ * one must be a named violation rather than an implicit null slice.
+ */
+function boundaryViolations(text: string): string[] {
+    const violations: string[] = [];
+    for (const boundary of [DUMP_START, RESUME_START, TEMPLATE_START, NEXT_SECTION_START]) {
+        const count = headingLineCount(text, boundary);
+        if (count === 0) violations.push(`dev-operations.md is missing the slicing boundary: ${boundary}`);
+        else if (count > 1) {
+            violations.push(
+                `dev-operations.md repeats the slicing boundary ${boundary} ${count} times; expected exactly 1`,
+            );
+        }
     }
     return violations;
 }
@@ -276,6 +307,40 @@ describe('1050 R1 — wrappers and the shared handoff template survive clean che
 
     test("the shared handoff template keeps its eight sections and stays free of other jobs' sample data", () => {
         expect(templateViolations(templateSection())).toEqual([]);
+    });
+
+    // 1052 R3: exact uniqueness of the slicing boundaries in the owning reference.
+    test('each slicing boundary occurs exactly once in dev-operations.md', () => {
+        expect(boundaryViolations(OPERATIONS)).toEqual([]);
+    });
+});
+
+// ─── 1052 R3 — isolated duplicate/missing-heading mutations fail with named violations ─────
+
+describe('1052 R3 — duplicate/missing headings produce named violations', () => {
+    test('a duplicated slicing boundary is a named violation', () => {
+        const duplicated = OPERATIONS.replace(`${DUMP_START}\n`, `${DUMP_START}\n${DUMP_START}\n`);
+        expect(duplicated).not.toBe(OPERATIONS);
+        expect(boundaryViolations(duplicated)).toContain(
+            `dev-operations.md repeats the slicing boundary ${DUMP_START} 2 times; expected exactly 1`,
+        );
+    });
+
+    test('a missing slicing boundary is a named violation', () => {
+        const missing = OPERATIONS.replace(`\n${NEXT_SECTION_START}\n`, '\n### 12. brainstorm-renamed\n');
+        expect(missing).not.toBe(OPERATIONS);
+        expect(boundaryViolations(missing)).toContain(
+            `dev-operations.md is missing the slicing boundary: ${NEXT_SECTION_START}`,
+        );
+    });
+
+    test('a duplicated template heading is a named violation', () => {
+        const template = templateSection();
+        const duplicated = template.replace('## Mission\n', '## Mission\n## Mission\n');
+        expect(duplicated).not.toBe(template);
+        expect(templateViolations(duplicated)).toContain(
+            'template repeats the declared heading ## Mission 2 times; expected exactly 1',
+        );
     });
 });
 
@@ -399,6 +464,7 @@ describe('1050 AC2 — material drift is detected, unrelated reference edits are
             'Interactive design review — heuristic discovery interview (grilling)',
         );
         expect(templateViolations(templateSection(unrelatedEdit))).toEqual([]);
+        expect(boundaryViolations(unrelatedEdit)).toEqual([]);
         expect(obligationViolations(dumpSection(unrelatedEdit), 'job-dump', ALL_DUMP_OBLIGATIONS)).toEqual([]);
         expect(obligationViolations(resumeSection(unrelatedEdit), 'job-resume', ALL_RESUME_OBLIGATIONS)).toEqual([]);
 
