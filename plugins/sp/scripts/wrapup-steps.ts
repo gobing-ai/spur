@@ -31,7 +31,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { getEnvVars } from '../lib/env';
 import { spurCommand } from '../lib/spur-bin';
@@ -479,8 +479,10 @@ export function runMetrics(env: WrapupStepsEnv, options: WrapupStepsOptions = {}
         // fast-forwards and removes the tree, taking the gitignored artifact with it — the tracked
         // `Testing` line `task record` already wrote into the task file is the durable copy. Honest
         // UNKNOWN is the last resort, and it is telemetry, never proof of completion.
-        const verdictPath = join('.spur', 'run', `${wbs}-verdict.json`);
-        const artifactVerdict = verdictOfArtifact(abs(verdictPath));
+        const durable = join('.spur', 'memory', 'evidence', `${wbs}-verdict.json`);
+        const hasDurable = existsSync(abs(durable));
+        const verdictPath = hasDurable ? durable : join('.spur', 'run', `${wbs}-verdict.json`);
+        const artifactVerdict = verdictOfArtifact(abs(verdictPath)) ?? (hasDurable ? 'UNKNOWN' : null);
         const trackedVerdict = verdictFromTestingSection(typeof parsed.content === 'string' ? parsed.content : '');
         const verdict = artifactVerdict ?? trackedVerdict ?? 'UNKNOWN';
         if (verdict === 'UNKNOWN') {

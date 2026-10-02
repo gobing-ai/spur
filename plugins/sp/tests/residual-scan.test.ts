@@ -386,12 +386,16 @@ describe('CLI modes', () => {
                 JSON.stringify({ verdict: 'PASS', checks: [{ name: 'tests-pass', status: 'pass', evidence: 'ok' }] }),
             );
             writeFileSync(join(runDir, '0949-test-gate.findings'), 'src/y.ts:1 ');
+            const durable = join(dir, '.spur/memory/evidence/0949-verdict.json');
+            mkdirSync(join(dir, '.spur/memory/evidence'), { recursive: true });
+            writeFileSync(durable, readFileSync(join(runDir, '0949-verdict.json')));
             expect(main(['fold', '0949', '--root', dir], {}, SILENT)).toBe(0);
             const verdict = JSON.parse(readFileSync(join(runDir, '0949-verdict.json'), 'utf8')) as {
                 verdict: string;
                 checks: Array<{ name: string; status: string }>;
             };
             expect(verdict.verdict).toBe('PARTIAL');
+            expect(JSON.parse(readFileSync(durable, 'utf8'))).toEqual(verdict);
             expect(verdict.checks.find((c) => c.name === 'residual-sweep')?.status).toBe('fail');
             expect(readFileSync(join(runDir, '0949-test-gate.findings'), 'utf8').trim().split(/\s+/).sort()).toEqual([
                 'src/y.ts:1',

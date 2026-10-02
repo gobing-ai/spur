@@ -11,7 +11,17 @@
  * task for deferrables, delete `/tmp/<wbs>-*` residue); report <wbs> (write `<wbs>-residual-report.md` when the residual-sweep check failed).
  */
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+    existsSync,
+    lstatSync,
+    mkdirSync,
+    readdirSync,
+    readFileSync,
+    renameSync,
+    rmSync,
+    statSync,
+    writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getEnvVars } from '../lib/env';
@@ -125,8 +135,24 @@ function loadTask(env: ScanEnv, spurBinFlag: string | undefined, wbs: string, ro
         [parsed.feature_id, parsed.frontmatter?.feature_id].find((v): v is string => typeof v === 'string') ?? '';
     return { content: typeof parsed.content === 'string' ? parsed.content : '', featureId };
 }
+function verdictPath(runDir: string, wbs: string): string {
+    const durable = join(runDir, '..', 'memory', 'evidence', `${wbs}-verdict.json`);
+    for (const path of [
+        join(runDir, '..'),
+        join(runDir, '..', 'memory'),
+        join(runDir, '..', 'memory', 'evidence'),
+        durable,
+    ]) {
+        try {
+            if (lstatSync(path).isSymbolicLink()) throw new Error(`residual-scan: symlink evidence path: ${path}`);
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+        }
+    }
+    return existsSync(durable) ? durable : join(runDir, `${wbs}-verdict.json`);
+}
 function loadVerdict(runDir: string, wbs: string): VerdictFile {
-    return JSON.parse(readFileSync(join(runDir, `${wbs}-verdict.json`), 'utf8'));
+    return JSON.parse(readFileSync(verdictPath(runDir, wbs), 'utf8'));
 }
 function scanMode(opts: ParsedArgs, env: ScanEnv, io: ScanIo): number {
     const runDir = join(opts.root, '.spur', 'run');
@@ -142,14 +168,21 @@ function scanMode(opts: ParsedArgs, env: ScanEnv, io: ScanIo): number {
 function foldMode(opts: ParsedArgs, _env: ScanEnv, io: ScanIo): number {
     const runDir = join(opts.root, '.spur', 'run');
     const scan = JSON.parse(readFileSync(join(runDir, `${opts.wbs}-residuals.json`), 'utf8')) as core.ResidualArtifact;
-    const verdictPath = join(runDir, `${opts.wbs}-verdict.json`);
+    const target = verdictPath(runDir, opts.wbs);
     const verdict = loadVerdict(runDir, opts.wbs);
     const findingsPath = join(runDir, `${opts.wbs}-test-gate.findings`);
     const fold = core.foldVerdict(verdict, scan, existsSync(findingsPath) ? readFileSync(findingsPath, 'utf8') : '');
-    writeFileSync(
-        verdictPath,
-        `${JSON.stringify({ ...verdict, verdict: fold.verdict, checks: fold.checks }, null, 2)}\n`,
-    );
+    const bytes = `${JSON.stringify({ ...verdict, verdict: fold.verdict, checks: fold.checks }, null, 2)}\n`;
+    const temporary = `${target}.${process.pid}.tmp`;
+    try {
+        writeFileSync(temporary, bytes, { flag: 'wx' });
+        renameSync(temporary, target);
+    } finally {
+        rmSync(temporary, { force: true });
+    }
+    // The pipeline still consumes the attempt copy after folding; the recorded copy is authoritative.
+    const scratch = join(runDir, `${opts.wbs}-verdict.json`);
+    if (target !== scratch) writeFileSync(scratch, bytes);
     writeFileSync(findingsPath, fold.findings);
     io.out(
         `residual-fold: ${opts.wbs} verdict=${fold.verdict} residual-sweep=${fold.checks.find((c) => c.name === 'residual-sweep')?.status}\n`,

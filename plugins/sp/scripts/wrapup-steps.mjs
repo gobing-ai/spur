@@ -3,7 +3,7 @@
 
 // plugins/sp/scripts/wrapup-steps.ts
 import { spawnSync } from "child_process";
-import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 
 // plugins/sp/lib/env.ts
@@ -297,8 +297,10 @@ function runMetrics(env, options = {}) {
     const frontmatter = parsed.frontmatter !== null && typeof parsed.frontmatter === "object" ? parsed.frontmatter : {};
     const featureId = String(jqPick(frontmatter.feature_id, parsed.feature_id, ""));
     const status2 = String(jqPick(frontmatter.status, parsed.status, "unknown"));
-    const verdictPath = join(".spur", "run", `${wbs}-verdict.json`);
-    const artifactVerdict = verdictOfArtifact(abs(verdictPath));
+    const durable = join(".spur", "memory", "evidence", `${wbs}-verdict.json`);
+    const hasDurable = existsSync(abs(durable));
+    const verdictPath = hasDurable ? durable : join(".spur", "run", `${wbs}-verdict.json`);
+    const artifactVerdict = verdictOfArtifact(abs(verdictPath)) ?? (hasDurable ? "UNKNOWN" : null);
     const trackedVerdict = verdictFromTestingSection(typeof parsed.content === "string" ? parsed.content : "");
     const verdict = artifactVerdict ?? trackedVerdict ?? "UNKNOWN";
     if (verdict === "UNKNOWN") {

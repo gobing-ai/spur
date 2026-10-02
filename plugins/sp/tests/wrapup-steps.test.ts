@@ -387,6 +387,30 @@ test('0994 R1: an existing artifact outranks the tracked Testing verdict', () =>
     }
 });
 
+test('canonical evidence survives scratch loss and malformed canonical evidence cannot fall back to PASS', () => {
+    for (const [bytes, expected] of [
+        ['{"verdict":"PARTIAL"}', 'PARTIAL'],
+        ['{broken', 'UNKNOWN'],
+    ]) {
+        const cwd = mkdtempSync(join(tmpdir(), 'wrapup-durable-'));
+        try {
+            mkdirSync(join(cwd, '.spur/memory/evidence'), { recursive: true });
+            writeFileSync(join(cwd, '.spur/memory/evidence/0967-verdict.json'), bytes as string);
+            // Scratch is recreated only for the next command's temporary capture.
+            mkdirSync(join(cwd, '.spur/run'), { recursive: true });
+            writeFileSync(join(cwd, '.spur/run/r-durable-wrapup-tasks.json'), '["0967"]');
+            const spurBin = writeTaskShowStub(cwd, {
+                frontmatter: { status: 'done' },
+                content: '### Testing\n- Verdict: PASS\n',
+            });
+            expect(runSteps(['metrics'], { __runId: 'r-durable', spurBin }, cwd).code).toBe(0);
+            expect(onlyMetricsRow(cwd).verdict).toBe(expected);
+        } finally {
+            cleanup(cwd);
+        }
+    }
+});
+
 test('0994 R1: an artifact carrying no verdict falls back to the tracked Testing verdict', () => {
     const cwd = mkdtempSync(join(tmpdir(), 'wrapup-steps-metrics-'));
     try {
