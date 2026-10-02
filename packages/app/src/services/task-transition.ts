@@ -34,6 +34,7 @@ import { normalizeTaskStatus } from '@gobing-ai/spur-domain';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { GuardDeniedError } from '../errors';
 import { evaluateDoneTransition, readVerdictArtifact, type VerdictAggregate } from './done-transition-guard';
+import type { WriteResult } from './planning-write-service';
 import type { TaskCheckService } from './task-check';
 import type { TaskService } from './task-service';
 
@@ -90,9 +91,16 @@ export type GuardedTransitionResult =
     | { kind: 'noop'; wbs: string; status: 'done'; message: string }
     | {
           kind: 'transitioned';
-          result: Awaited<ReturnType<TaskService['updateStatus']>>;
+          result: WriteResult;
           /** Present when the transition was a forced override of a non-PASS verdict. */
           forced?: { verdict: VerdictAggregate; auditError?: string };
+          /**
+           * 1040 R2: unforced-close reconciliation failure (best-effort audit
+           * fields after the status write). Reported, never thrown. Absent when
+           * the reconciliation wrote cleanly. Separate from `forced` because a
+           * present `forced` is printed as an operator override.
+           */
+          closeAuditError?: string;
       };
 
 /**
@@ -146,8 +154,48 @@ export function canonicalStatusOrRaw(raw: string): string {
 }
 
 /**
+ * 1040 R2: ONE close-audit reconciliation policy for both done-write paths
+ * (`transitionTaskGuarded` and `TaskService.record`'s auto-walk). Runs ONLY
+ * after a successful done write.
+ *
+ * Forced close → retain the operator-supplied reason and `done_forced: 'true'`
+ * (existing behavior). Unforced close → clear any stale forced flag and write a
+ * `done_reason` describing the artifact actually accepted on this close — never
+ * a fabricated "all requirements MET".
+ *
+ * Best-effort: failures are returned as a string for the caller to report
+ * (mirroring the forced-audit channel), never thrown — the status is already
+ * committed.
+ */
+export async function reconcileDoneCloseAudit(
+    tasks: Pick<TaskService, 'updateField'>,
+    wbs: string,
+    opts: { forced: boolean; reason?: string; passArtifactPath?: string },
+): Promise<string | undefined> {
+    try {
+        if (opts.forced) {
+            await tasks.updateField(wbs, 'done_forced', 'true');
+            if (opts.reason !== undefined && opts.reason.length > 0) {
+                await tasks.updateField(wbs, 'done_reason', opts.reason);
+            }
+            return undefined;
+        }
+        // Unforced close: the forced flag from any earlier override is stale.
+        await tasks.updateField(wbs, 'done_forced', 'false');
+        const described =
+            opts.passArtifactPath !== undefined
+                ? `unforced close; PASS artifact at ${opts.passArtifactPath}`
+                : 'unforced close';
+        await tasks.updateField(wbs, 'done_reason', described);
+        return undefined;
+    } catch (auditErr) {
+        return String(auditErr);
+    }
+}
+
+/**
  * Run one guarded task-status transition: structural check gate (testing/done)
- * → verify-verdict gate (done) → status write → forced-override audit write.
+ * → verify-verdict gate (done) → status write → close-audit reconciliation.
  *
  * Throws {@link GuardDeniedError} when a gate denies; the transport maps that
  * to its own denial envelope (CLI exit 1 + GUARD_DENIED, HTTP 409).
@@ -184,9 +232,13 @@ export async function transitionTaskGuarded(
     // `allow | deny | noop`; a forced `allow` is remembered below so the
     // audit-trail frontmatter is written after the transition commits.
     let forced: { verdict: VerdictAggregate } | undefined;
+    // 1040 R2: the done-gate's selected artifact path feeds the unforced
+    // close reason; kept undefined for non-done targets.
+    let doneLoaded: { path: string } | undefined;
     if (status === 'done') {
         const current = checkedTask ?? (await deps.tasks.show(wbs));
         const loaded = await readVerdictArtifact(deps.fs, deps.runDir, wbs);
+        doneLoaded = loaded;
         const guardOutcome = evaluateDoneTransition({
             wbs,
             taskFilePath: current.filePath,
@@ -219,26 +271,29 @@ export async function transitionTaskGuarded(
 
     const result = await deps.tasks.updateStatus(wbs, status, input.actor);
 
-    // R3 override audit-trail: persist done_forced + done_reason so a later
-    // `spur task show` surfaces that this `done` was an operator override of
-    // a non-PASS verdict. Best-effort — a write failure here leaves the task
-    // at `done` without the audit fields; the transition itself is already
-    // committed, so the failure is reported on the result instead of thrown.
-    let auditError: string | undefined;
-    if (forced !== undefined) {
-        try {
-            await deps.tasks.updateField(wbs, 'done_forced', 'true');
-            if (input.reason !== undefined && input.reason.length > 0) {
-                await deps.tasks.updateField(wbs, 'done_reason', input.reason);
-            }
-        } catch (auditErr) {
-            auditError = String(auditErr);
-        }
+    // 1040 R2 close-audit reconciliation: after EVERY successful done write.
+    // Forced override retains the supplied reason + `done_forced: 'true'`; an
+    // unforced close clears any stale forced flag and describes the accepted
+    // PASS artifact. Best-effort — a write failure here leaves the task at
+    // `done`; the error is reported on the result instead of thrown (the
+    // transition itself is already committed). Noop / denied / failed-hop paths
+    // return or throw above, so they never reconcile.
+    let closeAuditError: string | undefined;
+    if (status === 'done') {
+        const doneArtifactPath = doneLoaded?.path;
+        closeAuditError = await reconcileDoneCloseAudit(deps.tasks, wbs, {
+            forced: forced !== undefined,
+            ...(forced !== undefined ? { reason: input.reason } : {}),
+            ...(forced === undefined && doneArtifactPath !== undefined ? { passArtifactPath: doneArtifactPath } : {}),
+        });
     }
 
     return {
         kind: 'transitioned',
         result,
-        ...(forced !== undefined ? { forced: { ...forced, ...(auditError !== undefined ? { auditError } : {}) } } : {}),
+        ...(forced !== undefined
+            ? { forced: { ...forced, ...(closeAuditError !== undefined ? { auditError: closeAuditError } : {}) } }
+            : {}),
+        ...(forced === undefined && closeAuditError !== undefined ? { closeAuditError } : {}),
     };
 }

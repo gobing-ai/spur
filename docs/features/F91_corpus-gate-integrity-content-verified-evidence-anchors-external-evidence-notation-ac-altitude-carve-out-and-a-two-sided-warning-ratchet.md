@@ -2,11 +2,11 @@
 schema_version: 1
 id: "F91"
 name: "Corpus gate integrity: content-verified evidence anchors, external-evidence notation, AC-altitude carve-out, and a two-sided warning ratchet"
-status: active
+status: verifying
 priority: P2
 tags: []
 created_at: "2026-08-17T22:15:08.187Z"
-updated_at: "2026-09-09T18:30:36.537Z"
+updated_at: "2026-10-02T00:25:03.283Z"
 ---
 
 # F91: Corpus gate integrity: content-verified evidence anchors, external-evidence notation, AC-altitude carve-out, and a two-sided warning ratchet
@@ -113,8 +113,8 @@ Feature: Corpus gate integrity
 | 1009 | Feature refresh skip-reason fidelity and feature-side --fix fence coverage (1008 P3-1/P3-4) | done |
 | 1010 | Decide L2.unclosed-code-fence suppressibility in REQUIRED_FINDING_CODES (1008 P3-2) | done |
 | 1011 | Server feature refresh reports skipped with reasons (1008 P3-5) | done |
-| 1040 | task record must re-pull newer verdict artifact; refresh done_reason on re-close | todo |
-| 1042 | Reject foreign-task verdict artifacts in shared completion and feature gates | todo |
+| 1040 | task record must re-pull newer verdict artifact; refresh done_reason on re-close | done |
+| 1042 | Reject foreign-task verdict artifacts in shared completion and feature gates | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -192,3 +192,5 @@ R3 rename lands, F31's name field are feature-file writes from that task.
 - 2026-08-29T06:17:19.126Z done → active (system)
 - 2026-08-31T02:07:20.914Z active → verifying (system)
 - 2026-08-31T17:06:03.698Z verifying → active (system)
+- 2026-10-02T00:25:03.283Z active → verifying (system)
+

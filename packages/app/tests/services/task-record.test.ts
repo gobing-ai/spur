@@ -1285,7 +1285,9 @@ describe('TaskService.record', () => {
             expect(result.scenarioWarnings?.[0]).toContain('Record preserves scenario keys');
             expect(result.scenarioWarnings?.[0]).toContain('Z1');
             // The bare-placeholder Review backfill (F92 0593 R1) is unchanged by the guard.
-            expect(result.reviewWritten).toBe(true);
+            // 1040 R1: the re-render is byte-identical here (same verdict, no checks),
+            // so the identical section is NOT rewritten — flag stays false.
+            expect(result.reviewWritten).toBe(false);
             const fs = createNodeFileSystem(root());
             const raw = await fs.readFile(`${tasksDir}/${wbs}_record-test-task.md`);
             expect(raw).toContain('### Review');
@@ -1852,6 +1854,362 @@ describe('record with a suppressed lifecycle FSM (0980)', () => {
             expect(result.transitionedTo).toBe('testing');
             expect(portCalls).toContainEqual({ from: 'wip', to: 'testing' });
         } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+});
+
+describe('1040 — record re-pulls verdict state and reconciles close metadata', () => {
+    /** SQLite-backed service for transition/reconciliation probes (0980 pattern). */
+    async function makeSvc(): Promise<{
+        svc: TaskService;
+        fs: FileSystem;
+        root: string;
+        db: DbAdapter;
+        dir: string;
+    }> {
+        const root = mkdtempSync(join(tmpdir(), 'spur-record-1040-'));
+        const dir = join(root, 'tasks');
+        const fs = createNodeFileSystem(root);
+        await fs.ensureDir(dir);
+        await fs.ensureDir(join(root, '.spur', 'run'));
+        const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(db);
+        const svc = new TaskService({
+            fs,
+            tasksDir: dir,
+            writeService: new PlanningWriteService({ fs }),
+            getDb: async () => db,
+            sectionMatrix: RECORD_SECTION_MATRIX,
+        });
+        return { svc, fs, root, db, dir };
+    }
+
+    /** Author a section directly through the write service (simulates a human edit). */
+    async function writeServiceUpdate(fs: FileSystem, filePath: string, section: string, body: string): Promise<void> {
+        const writeService = new PlanningWriteService({ fs });
+        await writeService.updateSection({ kind: 'task', id: 'author', filePath, folder: '.' }, section, body);
+    }
+
+    /** Parse the current task file and return one section body. */
+    async function bodyOf(fs: FileSystem, path: string, section: string): Promise<string | null> {
+        return MarkdownDocument.parse(await fs.readFile(path), 'task').getSection(section);
+    }
+
+    test('(a) missing artifact + bare Testing → missing state with remedy, Testing stub written', async () => {
+        const { svc, root, db } = await makeSvc();
+        try {
+            const created = await svc.create({ title: 'Record 1040a', dedupeWithinSec: null });
+            const wbs = created.ref.id;
+            await svc.updateStatus(wbs, 'wip');
+            const verdictPath = join(root, '.spur', 'run', `${wbs}-verdict.json`);
+
+            const result = await svc.record(wbs, { verdictFile: verdictPath });
+
+            expect(result.verdictState).toBe('missing');
+            expect(result.verdictMessage).toContain(verdictPath);
+            expect(result.verdictMessage).toContain('spur task verify');
+            expect(result.testingWritten).toBe(true);
+        } finally {
+            db.close();
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('(b) malformed artifact + authored Testing → malformed state, Testing preserved', async () => {
+        const { svc, fs, root, db } = await makeSvc();
+        try {
+            const created = await svc.create({ title: 'Record 1040b', dedupeWithinSec: null });
+            const wbs = created.ref.id;
+            await svc.updateStatus(wbs, 'wip');
+            const verdictPath = join(root, '.spur', 'run', `${wbs}-verdict.json`);
+            await svc.record(wbs, { verdictFile: verdictPath }); // stub authored
+            await writeServiceUpdate(
+                fs,
+                created.ref.filePath,
+                'Testing',
+                '| Requirement | Status |\n| --- | --- |\n| R1 | hand-authored |\n',
+            );
+            await fs.writeFile(verdictPath, '{not json');
+
+            const result = await svc.record(wbs, { verdictFile: verdictPath });
+
+            expect(result.verdictState).toBe('malformed');
+            expect(result.verdictMessage).toContain(verdictPath);
+            expect(result.testingWritten).toBe(false);
+            const testing = await bodyOf(fs, created.ref.filePath, 'Testing');
+            expect(testing).toContain('hand-authored');
+        } finally {
+            db.close();
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('(c) foreign explicit WBS → missing state, mismatch message, zero checkbox flips, Testing preserved', async () => {
+        const { svc, fs, root, db } = await makeSvc();
+        try {
+            const created = await svc.create({ title: 'Record 1040c', dedupeWithinSec: null });
+            const wbs = created.ref.id;
+            await svc.updateStatus(wbs, 'wip');
+            const verdictPath = join(root, '.spur', 'run', `${wbs}-verdict.json`);
+            // Authored Requirements with unchecked R1 + authored Testing.
+            await writeServiceUpdate(
+                fs,
+                created.ref.filePath,
+                'Requirements',
+                '- [ ] R1 — First requirement (demonstrates foreign-WBS guard)\n',
+            );
+            await svc.record(wbs, { verdictFile: verdictPath }); // authored Testing stub
+            await writeServiceUpdate(
+                fs,
+                created.ref.filePath,
+                'Testing',
+                '| Requirement | Status |\n| --- | --- |\n| R1 | authored |\n',
+            );
+            await fs.writeFile(
+                verdictPath,
+                JSON.stringify({
+                    wbs: '9999',
+                    verdict: 'PASS',
+                    requirements: [{ id: 'R1', status: 'MET', evidence: 'foreign proof' }],
+                    checks: [],
+                }),
+            );
+
+            const result = await svc.record(wbs, { verdictFile: verdictPath });
+
+            // Frozen mapping: unusable foreign evidence reports as missing + mismatch message.
+            expect(result.verdictState).toBe('missing');
+            expect(result.verdictMessage).toContain(`expected wbs '${wbs}'`);
+            expect(result.verdictMessage).toContain('actual "9999"');
+            expect(result.verdictMessage).toContain(verdictPath);
+            expect(result.testingWritten).toBe(false);
+            const raw = await fs.readFile(created.ref.filePath);
+            const doc = MarkdownDocument.parse(raw, 'task');
+            const testing = doc.getSection('Testing') ?? '';
+            expect(testing).toContain('authored');
+            const reqs = doc.getSection('Requirements') ?? '';
+            expect(reqs).toContain('- [ ] R1');
+            expect(reqs).not.toContain('[x]');
+        } finally {
+            db.close();
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('(d) matching readable PASS → readable state, no message, boxes flip', async () => {
+        const { svc, fs, root, db } = await makeSvc();
+        try {
+            const created = await svc.create({ title: 'Record 1040d', dedupeWithinSec: null });
+            const wbs = created.ref.id;
+            await svc.updateStatus(wbs, 'wip');
+            const verdictPath = join(root, '.spur', 'run', `${wbs}-verdict.json`);
+            await writeServiceUpdate(
+                fs,
+                created.ref.filePath,
+                'Requirements',
+                '- [ ] R1 — First requirement (proves readable PASS flips)\n',
+            );
+            await fs.writeFile(
+                verdictPath,
+                JSON.stringify({
+                    wbs,
+                    verdict: 'PASS',
+                    requirements: [{ id: 'R1', status: 'MET', evidence: 'test passes' }],
+                    checks: [],
+                }),
+            );
+
+            const result = await svc.record(wbs, { verdictFile: verdictPath });
+
+            expect(result.verdictState).toBe('readable');
+            expect(result.verdictMessage).toBeUndefined();
+            const reqs = await bodyOf(fs, created.ref.filePath, 'Requirements');
+            expect(reqs).toContain('- [x] R1');
+        } finally {
+            db.close();
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('(e) omitted-WBS PASS artifact keeps fallback compatibility → readable', async () => {
+        const { svc, fs, root, db } = await makeSvc();
+        try {
+            const created = await svc.create({ title: 'Record 1040e', dedupeWithinSec: null });
+            const wbs = created.ref.id;
+            await svc.updateStatus(wbs, 'wip');
+            const verdictPath = join(root, '.spur', 'run', `${wbs}-verdict.json`);
+            await fs.writeFile(verdictPath, JSON.stringify({ verdict: 'PASS', requirements: [], checks: [] }));
+
+            const result = await svc.record(wbs, { verdictFile: verdictPath });
+
+            expect(result.verdictState).toBe('readable');
+            expect(result.verdictMessage).toBeUndefined();
+            expect(result.testingWritten).toBe(true);
+        } finally {
+            db.close();
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('(f) identical re-record skips Testing and Review rewrites', async () => {
+        const { svc, fs, root, db } = await makeSvc();
+        try {
+            const created = await svc.create({ title: 'Record 1040f', dedupeWithinSec: null });
+            const wbs = created.ref.id;
+            await svc.updateStatus(wbs, 'wip');
+            const verdictPath = join(root, '.spur', 'run', `${wbs}-verdict.json`);
+            await fs.writeFile(
+                verdictPath,
+                JSON.stringify({
+                    wbs,
+                    verdict: 'PASS',
+                    requirements: [{ id: 'R1', status: 'MET', evidence: 'e' }],
+                    checks: [],
+                }),
+            );
+
+            const first = await svc.record(wbs, { verdictFile: verdictPath });
+            expect(first.testingWritten).toBe(true);
+            const second = await svc.record(wbs, { verdictFile: verdictPath });
+            expect(second.testingWritten).toBe(false);
+            expect(second.reviewWritten).toBe(false);
+            expect(second.verdictState).toBe('readable');
+        } finally {
+            db.close();
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('(g) unforced done re-close clears stale forced metadata and names the PASS artifact', async () => {
+        const { svc, fs, root, db } = await makeSvc();
+        try {
+            const created = await svc.create({ title: 'Record 1040g', dedupeWithinSec: null });
+            const wbs = created.ref.id;
+            await svc.updateStatus(wbs, 'wip');
+            const verdictPath = join(root, '.spur', 'run', `${wbs}-verdict.json`);
+            await fs.writeFile(
+                verdictPath,
+                JSON.stringify({
+                    wbs,
+                    verdict: 'PASS',
+                    requirements: [{ id: 'R1', status: 'MET', evidence: 'e' }],
+                    checks: [],
+                }),
+            );
+            // Stale forced-close metadata from an earlier operator override.
+            await svc.updateField(wbs, 'done_forced', 'true');
+            await svc.updateField(wbs, 'done_reason', 'old forced PARTIAL close');
+
+            const result = await svc.record(wbs, { verdictFile: verdictPath, transition: 'done' });
+
+            expect(result.transitionedTo).toBe('done');
+            const raw = await fs.readFile(created.ref.filePath);
+            const doc = MarkdownDocument.parse(raw, 'task');
+            expect(String(doc.frontmatterData?.done_forced)).toBe('false');
+            expect(String(doc.frontmatterData?.done_reason)).toContain('unforced close');
+            expect(String(doc.frontmatterData?.done_reason)).toContain(`${wbs}-verdict.json`);
+        } finally {
+            db.close();
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('(h) failed done hop throws and writes no new close metadata', async () => {
+        const { svc, fs, root, db } = await makeSvc();
+        try {
+            const created = await svc.create({ title: 'Record 1040h', dedupeWithinSec: null });
+            const wbs = created.ref.id;
+            await svc.updateStatus(wbs, 'wip');
+            const verdictPath = join(root, '.spur', 'run', `${wbs}-verdict.json`);
+            await fs.writeFile(
+                verdictPath,
+                JSON.stringify({
+                    wbs,
+                    verdict: 'PASS',
+                    requirements: [{ id: 'R1', status: 'MET', evidence: 'e' }],
+                    checks: [],
+                }),
+            );
+            await svc.updateField(wbs, 'done_forced', 'true');
+            await svc.updateField(wbs, 'done_reason', 'old forced close');
+            const denied = new PlanningWriteService({
+                fs,
+                lifecycle: {
+                    requestTransition(_ref, from, to) {
+                        return to === 'done'
+                            ? { allowed: false, from, to, report: 'simulated done denial' }
+                            : { allowed: true, from, to };
+                    },
+                },
+            });
+            const svcDenied = new TaskService({
+                fs,
+                tasksDir: join(root, 'tasks'),
+                writeService: denied,
+                getDb: async () => db,
+                sectionMatrix: RECORD_SECTION_MATRIX,
+            });
+
+            await expect(
+                svcDenied.record(wbs, { verdictFile: verdictPath, transition: 'done' }),
+            ).rejects.toBeInstanceOf(GuardDeniedError);
+
+            const doc = MarkdownDocument.parse(await fs.readFile(created.ref.filePath), 'task');
+            expect(String(doc.frontmatterData?.done_forced)).toBe('true');
+            expect(String(doc.frontmatterData?.done_reason)).toBe('old forced close');
+        } finally {
+            db.close();
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('(i) no-op re-record at done leaves close metadata byte-unchanged', async () => {
+        const { svc, fs, root, db } = await makeSvc();
+        try {
+            const created = await svc.create({ title: 'Record 1040i', dedupeWithinSec: null });
+            const wbs = created.ref.id;
+            await svc.updateStatus(wbs, 'wip');
+            const verdictPath = join(root, '.spur', 'run', `${wbs}-verdict.json`);
+            await fs.writeFile(verdictPath, JSON.stringify({ wbs, verdict: 'PASS', requirements: [], checks: [] }));
+            await svc.record(wbs, { verdictFile: verdictPath, transition: 'done' });
+            const before = MarkdownDocument.parse(await fs.readFile(created.ref.filePath), 'task');
+            const reasonBefore = String(before.frontmatterData?.done_reason);
+
+            await svc.record(wbs, { verdictFile: verdictPath, transition: 'done' });
+
+            const after = MarkdownDocument.parse(await fs.readFile(created.ref.filePath), 'task');
+            expect(String(after.frontmatterData?.done_reason)).toBe(reasonBefore);
+        } finally {
+            db.close();
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('(j) done close-audit write failure surfaces via result.closeAuditError, not thrown', async () => {
+        const { svc, fs, root, db } = await makeSvc();
+        try {
+            const created = await svc.create({ title: 'Record 1040j', dedupeWithinSec: null });
+            const wbs = created.ref.id;
+            await svc.updateStatus(wbs, 'wip');
+            const verdictPath = join(root, '.spur', 'run', `${wbs}-verdict.json`);
+            await fs.writeFile(verdictPath, JSON.stringify({ wbs, verdict: 'PASS', requirements: [], checks: [] }));
+
+            // Make the audit field writes fail after the status write commits.
+            const realUpdateField = svc.updateField.bind(svc);
+            svc.updateField = async (target: string, field: string, value: string) => {
+                if (field === 'done_forced' || field === 'done_reason') {
+                    throw new Error('audit write failed');
+                }
+                return realUpdateField(target, field, value);
+            };
+
+            const result = await svc.record(wbs, { verdictFile: verdictPath, transition: 'done' });
+
+            expect(result.transitionedTo).toBe('done');
+            expect(result.closeAuditError).toContain('audit write failed');
+        } finally {
+            db.close();
             rmSync(root, { recursive: true, force: true });
         }
     });

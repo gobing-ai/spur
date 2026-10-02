@@ -50,13 +50,13 @@ import {
     parseTesting,
     type RecordOptions,
     type RecordResult,
-    readVerdict,
+    readVerdictClassified,
     renderReview,
     renderSolutionFromDiff,
     renderTesting,
 } from './task-record';
 import { evaluateTaskSize } from './task-size-precheck';
-import { runTransitionCheckGate } from './task-transition';
+import { reconcileDoneCloseAudit, runTransitionCheckGate } from './task-transition';
 import type { VerifyVerdict as CanonicalVerifyVerdict } from './verify-verdict';
 
 /**
@@ -1410,13 +1410,20 @@ export class TaskService {
 
         // Resolve verdict path.
         const verdictPath = opts.verdictFile ?? `.spur/run/${wbs}-verdict.json`;
-        const verdict = await readVerdict(this.ctx.fs, verdictPath, wbs);
+        // 1040 R1/R4: classify the artifact read so the result can report
+        // readable/missing/malformed (foreign explicit-WBS counts as missing)
+        // instead of silently collapsing everything to UNKNOWN.
+        const classified = await readVerdictClassified(this.ctx.fs, verdictPath, wbs);
+        const verdict = classified.verdict;
 
         const result: RecordResult = {
             testingWritten: false,
             reviewWritten: false,
             solutionBackfilled: false,
         };
+        // 1040 R1: carry the artifact state + remedy onto the result (additive).
+        result.verdictState = classified.state;
+        if (classified.message !== undefined) result.verdictMessage = classified.message;
 
         // ── Testing section (R2) — authored-first (0619 F/U) ──
         // When the verify verdict is UNKNOWN (no artifact / verify step skipped),
@@ -1437,8 +1444,13 @@ export class TaskService {
             );
             if (scenarioWarnings.length > 0) result.scenarioWarnings = scenarioWarnings;
             const testingBody = renderTesting(verdict);
-            await this.writeService.updateSection(ref, 'Testing', testingBody);
-            result.testingWritten = true;
+            const currentTesting = doc.getSection('Testing');
+            // 1040 R1: an identical generated section is not rewritten (no
+            // spurious updated_at bump); authored-preservation gate above stands.
+            if (currentTesting === null || currentTesting.trim() !== testingBody.trim()) {
+                await this.writeService.updateSection(ref, 'Testing', testingBody);
+                result.testingWritten = true;
+            }
         }
 
         // ── Review section (R2) — fallback-only (F92 0593 R1) ──
@@ -1450,8 +1462,12 @@ export class TaskService {
         // (0713 R2): before it, a stale FAIL header outlived the verdict that replaced it.
         if (sectionIsBare(doc, 'Review') || isRecordAuthoredReview(doc.getSection('Review'))) {
             const reviewBody = renderReview(verdict);
-            await this.writeService.updateSection(ref, 'Review', reviewBody);
-            result.reviewWritten = true;
+            const currentReview = doc.getSection('Review');
+            // 1040 R1: identical generated Review is not rewritten either.
+            if (currentReview === null || currentReview.trim() !== reviewBody.trim()) {
+                await this.writeService.updateSection(ref, 'Review', reviewBody);
+                result.reviewWritten = true;
+            }
         }
 
         // ── Solution safety-net (R3) ──
@@ -1467,14 +1483,18 @@ export class TaskService {
         // proven boxes in Requirements and Acceptance Criteria, never on
         // PARTIAL/FAIL/UNKNOWN beyond the proven ids and never unmentioned boxes.
         // `AC-<n>` rows resolve through the linked feature's scenario order; a feature read miss only disables that form.
-        const featureAc = await this.resolveFeatureAcBody(filePath).catch(() => null);
-        const scenarioTitles = featureScenarioTitles(featureAc?.ac ?? '');
-        for (const section of ['Requirements', 'Acceptance Criteria']) {
-            const body = doc.getSection(section);
-            if (body === null || body.trim().length === 0) continue;
-            const flipped = flipVerifiedCheckboxes(body, verdict, scenarioTitles);
-            if (flipped !== body) {
-                await this.writeService.updateSection(ref, section, flipped);
+        // 1040 R4: only a readable artifact may prove boxes — the UNKNOWN stub a
+        // missing/malformed/foreign artifact degrades to flips nothing.
+        if (classified.state === 'readable') {
+            const featureAc = await this.resolveFeatureAcBody(filePath).catch(() => null);
+            const scenarioTitles = featureScenarioTitles(featureAc?.ac ?? '');
+            for (const section of ['Requirements', 'Acceptance Criteria']) {
+                const body = doc.getSection(section);
+                if (body === null || body.trim().length === 0) continue;
+                const flipped = flipVerifiedCheckboxes(body, verdict, scenarioTitles);
+                if (flipped !== body) {
+                    await this.writeService.updateSection(ref, section, flipped);
+                }
             }
         }
 
@@ -1531,6 +1551,15 @@ export class TaskService {
                             const hopResult = await this.writeService.transition(ref, hop);
                             reached = hopResult.toStatus ?? hop;
                             result.transitionedTo = reached;
+                            // 1040 R2: successful done write → reconcile close
+                            // audit fields (unforced here: clear stale forced
+                            // flag, describe the accepted PASS artifact).
+                            if (hop === 'done') {
+                                result.closeAuditError = await reconcileDoneCloseAudit(this, wbs, {
+                                    forced: false,
+                                    passArtifactPath: verdictPath,
+                                });
+                            }
                         } catch (err) {
                             const msg = err instanceof Error ? err.message : String(err);
                             throw new GuardDeniedError(
@@ -1546,6 +1575,13 @@ export class TaskService {
                     await this.ensurePipelineRunLink(wbs);
                     const transitionResult = await this.writeService.transition(ref, target);
                     result.transitionedTo = transitionResult.toStatus;
+                    // 1040 R2: reconcile after the successful done write.
+                    if (target === 'done') {
+                        result.closeAuditError = await reconcileDoneCloseAudit(this, wbs, {
+                            forced: false,
+                            passArtifactPath: verdictPath,
+                        });
+                    }
                 }
             } else {
                 const transitionResult = await this.writeService.transition(ref, target);
