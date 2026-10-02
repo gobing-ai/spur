@@ -4,7 +4,7 @@ name: Harden proof options and job handoff contract assertions
 status: done
 template: issue
 created_at: 2026-10-02T17:00:25.447Z
-updated_at: "2026-10-02T20:47:44.494Z"
+updated_at: "2026-10-02T20:54:07.756Z"
 feature_id: D63
 
 ac_numbering: task-local
@@ -78,13 +78,13 @@ Implementation pending. The planned owner is `packages/app/src/workflow/actions/
 
 Triage evidence on current source; implementation verification remains pending.
 
-- Bundle regeneration baseline: `bun test ./scripts/commands/bundle-plugin-lib.test.ts` — 16 passed, 0 failed; `.spur/run/triage-1051-1056/bundle-check.log`.
-- Plugin close/reason/handoff baseline: `(cd plugins/sp && bun test tests/job-handoff-contract.test.ts tests/inline-run-trace.test.ts tests/inline-run-close-reason.test.ts)` — 32 passed, 0 failed; `.spur/run/triage-1051-1056/plugin-check.log`.
-- App write/record/lifecycle/proof baseline: `(cd packages/app && bun test tests/services/planning-write-service.test.ts tests/services/task-record.test.ts tests/workflow/lifecycle-adapter.test.ts tests/workflow/actions/proof-fingerprint.test.ts)` — 200 passed, 0 failed; `.spur/run/triage-1051-1056/app-check.log`.
-- Live fixture reproduction (`bun .spur/run/triage-1051-1056/reproduce.ts`) confirms: legacy unknown proof keys are silently accepted without changing the digest, non-string expect is accepted as capture-only, and whitespace-only taskFile is rejected rather than omitted. Results: `.spur/run/triage-1051-1056/reproduction.json`.
+- Bundle regeneration baseline: `bun test ./scripts/commands/bundle-plugin-lib.test.ts` — 16 passed, 0 failed; `.spur/run/triage-1051-1056-bundle-check.log`.
+- Plugin close/reason/handoff baseline: `(cd plugins/sp && bun test tests/job-handoff-contract.test.ts tests/inline-run-trace.test.ts tests/inline-run-close-reason.test.ts)` — 32 passed, 0 failed; `.spur/run/triage-1051-1056-plugin-check.log`.
+- App write/record/lifecycle/proof baseline: `(cd packages/app && bun test tests/services/planning-write-service.test.ts tests/services/task-record.test.ts tests/workflow/lifecycle-adapter.test.ts tests/workflow/actions/proof-fingerprint.test.ts)` — 200 passed, 0 failed; `.spur/run/triage-1051-1056-app-check.log`.
+- Live fixture reproduction (`bun .spur/run/triage-1051-1056-reproduce.ts`) confirms: legacy unknown proof keys are silently accepted without changing the digest, non-string expect is accepted as capture-only, and whitespace-only taskFile is rejected rather than omitted. Results: `.spur/run/triage-1051-1056-reproduction.json`.
 - Corrected task readiness: `bun run apps/cli/src/index.ts task check 1052 --as todo --strict --json` — passed with no findings after the approved title/file renames and removal of superseded tasks.
 
-Coverage: N/A — corpus consolidation and baseline triage only. No production code changed, no pipeline completion is claimed, and final implementation verification remains outstanding. Original six task snapshots are retained in `.spur/run/triage-1051-1056/original-tasks.json` and in Git history.
+Coverage: N/A — corpus consolidation and baseline triage only. No production code changed, no pipeline completion is claimed, and final implementation verification remains outstanding. Original six task snapshots are retained in `.spur/run/triage-1051-1056-original-tasks.json` and in Git history.
 
 ### Review
 
