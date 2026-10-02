@@ -4,7 +4,7 @@ name: Add missing persist-out branch tests for non-ENOENT abort and external-key
 status: wip
 template: feature-impl
 created_at: 2026-10-01T23:59:13.672Z
-updated_at: "2026-10-02T00:24:47.335Z"
+updated_at: "2026-10-02T00:33:11.911Z"
 feature_id: E71
 
 priority: P2
@@ -78,7 +78,22 @@ they lack direct tests — 1043 P2-3).
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Priority | Dimension | Location | Finding | Disposition |
+| --- | --- | --- | --- | --- |
+| P4 | Functional / SECUA / Architecture | `packages/app/tests/services/persist-worktree-runs.test.ts:45` | Reviewed the final scoped implementation and executable failure/disposal evidence; no unresolved blocker or major finding. | RESOLVED |
+
+#### Functional traceability
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `packages/app/tests/services/persist-worktree-runs.test.ts:45`; EISDIR rejection and target database/record absence |
+| R2 | MET | `packages/app/tests/services/persist-worktree-runs.test.ts:62`; external-key-conflict has no source record and one unchanged target row |
+
+#### SECUA and architecture
+
+Both tests exercise existing production branches directly with deterministic fixtures. The non-ENOENT case checks target database absence, proving target opening did not occur; the tuple-conflict case uses different ids and verifies exact skip/row/file outcomes. Tests reuse existing fixture owners.
+
+Security: confined paths, existing identity validation and secret redaction remain. Correctness: focused regression evidence covers the changed success/failure branches. Efficiency: bounded local storage traversal; no new background collector. Usability: visible outcomes and errors. Architecture: existing app/domain/plugin ownership and standalone bundle contract remain. No speculative refactor is required.
 
 ### References
 
