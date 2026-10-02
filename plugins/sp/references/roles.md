@@ -91,9 +91,9 @@ must not sit below the highest `min_tier` among its folded stages.
   architecture survey, feature-frontier prioritization, and feature-tree restructure. Folds `plan`,
   `refine`, `brainstorm`.
 
-**Placement notes (directory closure, task 0535).** The decided four-row table listed 31 commands;
-the live `plugins/sp/commands/` directory has 38 (39 at the time of the mapping; `dev-history-load`
-was removed in HA-S1 0661). The six additional commands were placed by the
+**Placement notes (directory closure, task 0535).** The decided four-row table listed 31 commands.
+The current command inventory comes from `plugins/sp/commands/`; `dev-history-load`
+was removed in HA-S1 0661. The six additions to the original mapping were placed by the
 same stage logic: `dev-refineall` folds `refine` → planner; `dev-find-next` is planning-side
 frontier work → planner; `dev-feature-change` is planning-half corpus surgery on the feature tree →
 planner; `dev-gtd` is the execution/delivery flow → coder; `dev-find-conflict` and `dev-find-issue`

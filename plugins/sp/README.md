@@ -10,8 +10,8 @@ lifecycle step a deterministic entry point.
 > orchestration, history analytics, and operational visibility. The `sp` plugin is the Claude Code
 > plugin surface for that toolkit.
 
-- **Marketplace entry:** `name: "sp"`, `version: "0.3.41"`, `source: "./plugins/sp"` (`plugin.json`,
-  kept in sync with `.claude-plugin/marketplace.json`).
+- **Marketplace entry:** `name: "sp"`, `source: "./plugins/sp"`; the release version lives in
+  [plugin.json](plugin.json), kept in sync with `.claude-plugin/marketplace.json`.
 - **Owner:** Robin Min.
 
 Read this file first for the map; read [skills/spur-dev/SKILL.md](skills/spur-dev/SKILL.md) for the
@@ -193,7 +193,7 @@ pipeline step.
 
 ```
 plugins/sp/
-├── skills/                          # Domain knowledge + workflow docs (39 skills)
+├── skills/                          # Domain knowledge + workflow docs (see the skills table)
 │   ├── brainstorm/                  # Structured ideation workflow
 │   │   ├── agents/openai.yaml
 │   │   ├── examples/ideation-example.md
@@ -270,7 +270,7 @@ plugins/sp/
 │   ├── taste-refactoring-tests/     # Test-suite failure-sensitivity refactor
 │   ├── taste-refactoring-ui/        # UI hierarchy, layout, typography + interaction refactor
 │   └── wayfinder/                   # Multi-session investigation maps (SKILL.md only)
-├── commands/                        # 39 slash-command wrappers — the SSOT (hand-editable thin wrappers; see Commands below)
+├── commands/                        # Slash-command wrappers — the SSOT (hand-editable thin wrappers; see Commands below)
 ├── agents/                          # 4 specialist subagents (expert-spur, super-coder, super-planner, super-reviewer)
 ├── hooks/                           # hooks.json + task-write-guard.{ts,test.ts} + context-{session-start,post-tool,session-stop}.ts
 │                                    # + careful-guard.{ts,test.ts} + context-hooks.test.ts + token-estimate.test.ts
@@ -386,8 +386,8 @@ Skills contain zero validation logic — the CLI is the gate.
 #### 2. Commands (`commands/`)
 
 Thin slash-command wrappers that parse user arguments and delegate to the corresponding skill. Each
-command is a user-facing entry point that bridges natural language to skill invocation. There are
-**39 commands** (see the Command index above for the full list), organized by the surface they wrap:
+command is a user-facing entry point that bridges natural language to skill invocation. The Command
+index above lists the live inventory, organized by the surface they wrap:
 
 | Prefix       | Count | Delegates to                                                                                                                                                                                                                                                                                                        | Purpose                                                                                |
 | ------------ | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
@@ -401,7 +401,7 @@ Each command file contains:
 - YAML frontmatter (`description`, `argument-hint`, `allowed-tools`).
 - A delegation block: `Skill(skill="sp:<skill-name>", args="<operation> $ARGUMENTS")`.
 
-**Commands as SSOT (ADR-032).** The 39 `.md` files in `commands/` are the authoritative,
+**Commands as SSOT (ADR-032).** The `.md` files in `commands/` are the authoritative,
 hand-editable source for the operator command surface. Per-platform adapters are **install-time
 output** owned by `superskill` (`superskill install sp`) and never committed here. Plugin `sp` ships
 no per-platform artifacts — only the platform-independent thin wrappers.
@@ -409,7 +409,7 @@ no per-platform artifacts — only the platform-independent thin wrappers.
 **Thin-wrapper contract** is enforced by `scripts/commands/validate-commands.ts`:
 
 ```bash
-bun run validate-commands            # validate all 39 commands
+bun run validate-commands            # validate all command wrappers
 bun run validate-commands --json     # machine-readable output
 ```
 
@@ -530,7 +530,7 @@ the hard gate that the soft skill cannot enforce on its own.
 ```mermaid
 graph TB
     subgraph "User entry points"
-        CMD["Commands<br/>39 slash commands<br/>/sp:dev-plan, /sp:dev-runall, /sp:dev-review-session, /sp:rule-add, ..."]
+        CMD["Commands<br/>Slash-command wrappers<br/>/sp:dev-plan, /sp:dev-runall, /sp:dev-review-session, /sp:rule-add, ..."]
         AGENT["Agents<br/>4 subagents<br/>expert-spur, super-coder, super-planner, super-reviewer"]
         HOOK["PreToolUse hook<br/>Write|Edit matcher"]
     end
