@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.67.0
+version: 1.68.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-10-01
+updated_at: 2026-10-02
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -128,7 +128,7 @@ Agent and history workers run in child processes. The diagram shows the CLI path
 flowchart TD
     User([User]) -->|spur <command>| CLI
     subgraph Process["apps/cli (Bun)"]
-        CLI[commander dispatch] --> Ctx[CliContext<br/>config · fs · lazy migrated DB]
+        CLI[commander dispatch] --> Ctx[CliContext<br/>config · fs · injected migrated DB]
         CLI --> APP[packages/app services<br/>Agent · History · Rule · Coordination · Workflow]
         APP --> AR[ts-ai-runner]
         APP --> RE[ts-rule-engine]
@@ -168,8 +168,9 @@ No file inventory here — that rots (99 §6.4 lesson); boundaries only:
   and `--help` rendering.
 - **Commands** parse flags, call a `packages/app` service, format output, return an exit code —
   no business logic in the app (ADR-021).
-- **CliContext** carries cwd/env/fs/output/`setExitCode` and lazily builds + migrates the SQLite
-  adapter on first DB access.
+- **CliContext** carries cwd/env/fs/output/`setExitCode`. The CLI composition root creates and
+  migrates the SQLite adapter before dispatch and injects it; contexts constructed without an
+  adapter retain a lazy migration fallback on first DB access.
 - **DAOs, migrations, analytics** live in `packages/domain` (`dao/`, `migrations.ts` composing
   domain + engine schema SQL, `analytics/`). DAOs use the adapter's prepared-statement API.
 

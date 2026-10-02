@@ -3,7 +3,7 @@ kind: design
 title: "Observability and HTTP read contracts"
 status: implemented
 created_at: 2026-09-09
-updated_at: 2026-09-25
+updated_at: 2026-10-02
 related: ["0853", "0855", "0857", "0860", "0869", "0937"]
 tags: [contract, observability, server]
 ---
@@ -359,11 +359,11 @@ can't express). Web consumes via `fetchWithTimeout` + `resolveApiUrl` and native
 
 <a id="team-routes-appsserversrcmodulesteamindexts"></a>
 
-### Team routes (`apps/server/src/modules/team/index.ts`)
+### Process routes (`apps/server/src/modules/processes/index.ts`)
 
 | Method | Path                             | Body / Query            | Response                                                                     | Notes                                                         |
 | ------ | -------------------------------- | ----------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| GET    | `/api/processes`            | —                       | `{ processes: [{agentId, pid, status, startedAt, exitCode}], count }`        | List supervised processes (0243).                             |
+| GET    | `/api/processes`            | —                       | `{ processes, count, executions, executionsCount }`        | Supervised process entries carry `agentId`, `pid`, `status`, `startedAt`, `exitCode`, compatibility `teamId: null`, and optional `session`; executions are listed separately. |
 | POST   | `/api/agents/:id/start`     | —                       | `{ ok, pid, status }` (201) or `{ error }` (400)                             | Spawn a supervised agent.                                     |
 | POST   | `/api/agents/:id/stop`      | —                       | `{ ok }` or `{ error }` (400)                                                | Stop a supervised agent.                                      |
 | POST   | `/api/processes/:id/stdin`  | `{ line: string }`      | `{ ok }` or `{ error }` (400)                                                | Forward a line to the process stdin.                          |
@@ -375,11 +375,11 @@ can't express). Web consumes via `fetchWithTimeout` + `resolveApiUrl` and native
 
 | Method | Path                      | Body / Query                         | Response                                                                  | Notes                             |
 | ------ | ------------------------- | ------------------------------------ | ------------------------------------------------------------------------- | --------------------------------- |
-| GET    | `/api/messages/inbox`     | `?agent=<id>&limit=<n>`              | `{ messages: [{id, fromId, body, status, createdAt, inReplyTo}], count }` | One agent's inbox queue.          |
+| GET    | `/api/messages/inbox`     | `?agent=<id>&limit=<n>&offset=<n>`              | `{ messages: [{id, fromId, body, status, createdAt, inReplyTo}], count }` | One agent's inbox queue; `agent` is required.          |
 | GET    | `/api/messages`           | `?limit=<n>`                         | `{ messages: [...], count }`                                              | Global message feed (all agents). |
-| POST   | `/api/messages`           | `{ fromId, toId, body, inReplyTo? }` | `{ msgId, toId, status: 'queued' }` (201)                                 | Enqueue a message.                |
-| POST   | `/api/messages/:id/reply` | `{ fromId, body }`                   | `{ msgId, toId, status: 'queued' }` (201)                                 | Reply to a message.               |
+| POST   | `/api/messages`           | `{ to, body, from?, requestKey?, projectPath? }` | `{ msgId, toId, status: 'queued', injected, replayed?, requestKey? }` (201) | Enqueue a message; a mismatched `projectPath` returns 409 before writing. |
+| POST   | `/api/messages/:id/reply` | `{ body }`                   | `{ msgId, toId, status: 'queued', injected }` (201)                                 | Reply to the original sender as the original recipient. |
 
 **Convention:** response envelopes use `{ data…, count }` for lists and `{ ok, ... }` for mutations,
 matching the existing board routes. Error shape: `{ error: string }` with the appropriate HTTP status.
-All team routes are Bun-gated (require `ServerContext`); they return 503 on the Cloudflare Workers path.
+Process and message routes are Bun-gated (require `ServerContext`); they return 503 on the Cloudflare Workers path.

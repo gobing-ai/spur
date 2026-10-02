@@ -2,10 +2,10 @@
 doc: 04_DESIGN
 owns: SURFACE — index of non-UI CLI, API, config, schema and boundary contracts
 authority: derived
-version: 1.88.0
+version: 1.89.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
-updated_at: 2026-10-01
+updated_at: 2026-10-02
 read_before: changing a command, flag, env var, or schema
 edit_rules: 99 §6.5
 sync: [T3, T9]
@@ -385,7 +385,9 @@ See [contract detail](design/observability-contracts.md#workflow-run-store-read-
 
 See [contract detail](design/observability-contracts.md#team--message-http-routes-0256).
 
-### Team routes (`apps/server/src/modules/team/index.ts`)
+<a id="team-routes-appsserversrcmodulesteamindexts"></a>
+
+### Process routes (`apps/server/src/modules/processes/index.ts`)
 
 See [contract detail](design/observability-contracts.md#team-routes-appsserversrcmodulesteamindexts).
 
