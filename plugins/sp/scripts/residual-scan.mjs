@@ -3,19 +3,9 @@
 
 // plugins/sp/scripts/residual-scan.ts
 import { spawnSync } from "child_process";
-import {
-  existsSync,
-  lstatSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  renameSync,
-  rmSync,
-  statSync,
-  writeFileSync
-} from "fs";
+import * as fs2 from "fs";
 import { tmpdir } from "os";
-import { join } from "path";
+import { join as join2 } from "path";
 
 // plugins/sp/lib/env.ts
 function getEnvVars() {
@@ -23,6 +13,8 @@ function getEnvVars() {
 }
 
 // plugins/sp/lib/residual-scan.generated.mjs
+import * as fs from "node:fs";
+import { join } from "node:path";
 import { createHash } from "node:crypto";
 var MARKER_PATTERN = /TODO|FIXME|XXX|HACK/;
 var PRIORITY_PATTERN = /^P[1-4]/;
@@ -218,6 +210,20 @@ function renderReport(wbs, items, attemptCount) {
 `)}
 `;
 }
+function recordedVerdictPath(runDir, wbs) {
+  const evidence = join(runDir, "..", "memory", "evidence");
+  const durable = join(evidence, `${wbs}-verdict.json`);
+  for (const path of [join(runDir, ".."), join(evidence, ".."), evidence, durable]) {
+    try {
+      if (fs.lstatSync(path).isSymbolicLink())
+        throw new Error(`residual-scan: symlink evidence path: ${path}`);
+    } catch (error) {
+      if (error.code !== "ENOENT")
+        throw error;
+    }
+  }
+  return fs.existsSync(durable) ? durable : join(runDir, `${wbs}-verdict.json`);
+}
 
 // plugins/sp/lib/spur-bin.ts
 function spurCommand(spurBin) {
@@ -239,7 +245,7 @@ function spur(env, spurBinFlag, args, cwd) {
 }
 function isRegularFile(path) {
   try {
-    return statSync(path).isFile();
+    return fs2.statSync(path).isFile();
   } catch {
     return false;
   }
@@ -261,9 +267,9 @@ function collectAddedLines(root, base) {
   const untracked = run("git", ["ls-files", "--others", "--exclude-standard"], root);
   for (const f of untracked.stdout.split(`
 `)) {
-    if (f.length === 0 || !isRegularFile(join(root, f)))
+    if (f.length === 0 || !isRegularFile(join2(root, f)))
       continue;
-    for (const [idx, text] of readFileSync(join(root, f), "utf8").split(`
+    for (const [idx, text] of fs2.readFileSync(join2(root, f), "utf8").split(`
 `).entries())
       out.push({ file: f, line: idx + 1, text });
   }
@@ -272,28 +278,28 @@ function collectAddedLines(root, base) {
 function listStagingResidue(tmpDir, wbs) {
   let names;
   try {
-    names = readdirSync(tmpDir);
+    names = fs2.readdirSync(tmpDir);
   } catch {
     return [];
   }
-  return names.filter((n) => n.startsWith(`${wbs}-`) && isRegularFile(join(tmpDir, n))).map((n) => join(tmpDir, n));
+  return names.filter((n) => n.startsWith(`${wbs}-`) && isRegularFile(join2(tmpDir, n))).map((n) => join2(tmpDir, n));
 }
 function readDeferrals(runDir, wbs) {
-  const path = join(runDir, `${wbs}-residual-deferrals.json`);
-  if (!existsSync(path))
+  const path = join2(runDir, `${wbs}-residual-deferrals.json`);
+  if (!fs2.existsSync(path))
     return [];
   const isDeferral = (e) => typeof e === "object" && e !== null && typeof e.id === "string" && typeof e.reason === "string" && e.reason.trim().length > 0;
   try {
-    const parsed = JSON.parse(readFileSync(path, "utf8"));
+    const parsed = JSON.parse(fs2.readFileSync(path, "utf8"));
     return (Array.isArray(parsed) ? parsed : []).filter(isDeferral);
   } catch {
     return [];
   }
 }
 function scanResiduals2(root, wbs, tmpDir, taskContent, _env) {
-  const runDir = join(root, ".spur", "run");
-  const basePath = join(runDir, `${wbs}-base.sha`);
-  const base = existsSync(basePath) ? readFileSync(basePath, "utf8").trim() : null;
+  const runDir = join2(root, ".spur", "run");
+  const basePath = join2(runDir, `${wbs}-base.sha`);
+  const base = fs2.existsSync(basePath) ? fs2.readFileSync(basePath, "utf8").trim() : null;
   const stagingResidue = listStagingResidue(tmpDir, wbs);
   const deferrals = readDeferrals(runDir, wbs);
   const addedLines = base === null ? [] : collectAddedLines(root, base);
@@ -332,58 +338,40 @@ function loadTask(env, spurBinFlag, wbs, root) {
   const featureId = [parsed.feature_id, parsed.frontmatter?.feature_id].find((v) => typeof v === "string") ?? "";
   return { content: typeof parsed.content === "string" ? parsed.content : "", featureId };
 }
-function verdictPath(runDir, wbs) {
-  const durable = join(runDir, "..", "memory", "evidence", `${wbs}-verdict.json`);
-  for (const path of [
-    join(runDir, ".."),
-    join(runDir, "..", "memory"),
-    join(runDir, "..", "memory", "evidence"),
-    durable
-  ]) {
-    try {
-      if (lstatSync(path).isSymbolicLink())
-        throw new Error(`residual-scan: symlink evidence path: ${path}`);
-    } catch (error) {
-      if (error.code !== "ENOENT")
-        throw error;
-    }
-  }
-  return existsSync(durable) ? durable : join(runDir, `${wbs}-verdict.json`);
-}
 function loadVerdict(runDir, wbs) {
-  return JSON.parse(readFileSync(verdictPath(runDir, wbs), "utf8"));
+  return JSON.parse(fs2.readFileSync(recordedVerdictPath(runDir, wbs), "utf8"));
 }
 function scanMode(opts, env, io) {
-  const runDir = join(opts.root, ".spur", "run");
-  mkdirSync(runDir, { recursive: true });
+  const runDir = join2(opts.root, ".spur", "run");
+  fs2.mkdirSync(runDir, { recursive: true });
   const { content } = loadTask(env, opts.spurBin, opts.wbs, opts.root);
   const artifact = scanResiduals2(opts.root, opts.wbs, opts.tmpDir, content, env);
-  writeFileSync(join(runDir, `${opts.wbs}-residuals.json`), `${JSON.stringify(artifact, null, 2)}
+  fs2.writeFileSync(join2(runDir, `${opts.wbs}-residuals.json`), `${JSON.stringify(artifact, null, 2)}
 `);
   io.out(`residual-scan: ${opts.wbs} blocking=${artifact.counts.blocking} deferrable=${artifact.counts.deferrable} advisory=${artifact.counts.advisory} housekeeping=${artifact.counts.housekeeping}
 `);
   return 0;
 }
 function foldMode(opts, _env, io) {
-  const runDir = join(opts.root, ".spur", "run");
-  const scan = JSON.parse(readFileSync(join(runDir, `${opts.wbs}-residuals.json`), "utf8"));
-  const target = verdictPath(runDir, opts.wbs);
+  const runDir = join2(opts.root, ".spur", "run");
+  const scan = JSON.parse(fs2.readFileSync(join2(runDir, `${opts.wbs}-residuals.json`), "utf8"));
+  const target = recordedVerdictPath(runDir, opts.wbs);
   const verdict = loadVerdict(runDir, opts.wbs);
-  const findingsPath = join(runDir, `${opts.wbs}-test-gate.findings`);
-  const fold = foldVerdict(verdict, scan, existsSync(findingsPath) ? readFileSync(findingsPath, "utf8") : "");
+  const findingsPath = join2(runDir, `${opts.wbs}-test-gate.findings`);
+  const fold = foldVerdict(verdict, scan, fs2.existsSync(findingsPath) ? fs2.readFileSync(findingsPath, "utf8") : "");
   const bytes = `${JSON.stringify({ ...verdict, verdict: fold.verdict, checks: fold.checks }, null, 2)}
 `;
   const temporary = `${target}.${process.pid}.tmp`;
   try {
-    writeFileSync(temporary, bytes, { flag: "wx" });
-    renameSync(temporary, target);
+    fs2.writeFileSync(temporary, bytes, { flag: "wx" });
+    fs2.renameSync(temporary, target);
   } finally {
-    rmSync(temporary, { force: true });
+    fs2.rmSync(temporary, { force: true });
   }
-  const scratch = join(runDir, `${opts.wbs}-verdict.json`);
+  const scratch = join2(runDir, `${opts.wbs}-verdict.json`);
   if (target !== scratch)
-    writeFileSync(scratch, bytes);
-  writeFileSync(findingsPath, fold.findings);
+    fs2.writeFileSync(scratch, bytes);
+  fs2.writeFileSync(findingsPath, fold.findings);
   io.out(`residual-fold: ${opts.wbs} verdict=${fold.verdict} residual-sweep=${fold.checks.find((c) => c.name === "residual-sweep")?.status}
 `);
   return 0;
@@ -391,12 +379,12 @@ function foldMode(opts, _env, io) {
 function settleMode(opts, env, io) {
   const wbs = opts.wbs;
   const task = loadTask(env, opts.spurBin, wbs, opts.root);
-  const runDir = join(opts.root, ".spur", "run");
+  const runDir = join2(opts.root, ".spur", "run");
   const scan = scanResiduals2(opts.root, wbs, opts.tmpDir, task.content, env);
-  const residualsPath = join(runDir, `${wbs}-residuals.json`);
+  const residualsPath = join2(runDir, `${wbs}-residuals.json`);
   let prior = {};
-  if (existsSync(residualsPath))
-    prior = JSON.parse(readFileSync(residualsPath, "utf8"));
+  if (fs2.existsSync(residualsPath))
+    prior = JSON.parse(fs2.readFileSync(residualsPath, "utf8"));
   const deferred = scan.items.filter((i) => i.class === "deferrable");
   if (deferred.length > 0 && prior.followUp === undefined) {
     if (task.featureId === "") {
@@ -421,8 +409,8 @@ function settleMode(opts, env, io) {
     }
     const rows = deferred.map((i) => `- ${i.id} \u2014 ${i.location}: ${i.text}`);
     const head = `Source task: ${wbs} (feature ${task.featureId}) \u2014 deferred residuals filed by residual-scan settle.`;
-    const bgFile = join(runDir, `${wbs}-residual-background.md`);
-    writeFileSync(bgFile, `${[head, "", ...rows].join(`
+    const bgFile = join2(runDir, `${wbs}-residual-background.md`);
+    fs2.writeFileSync(bgFile, `${[head, "", ...rows].join(`
 `)}
 `);
     const updArgs = ["task", "update", wbsNew, "--section", "Background", "--from-file", bgFile];
@@ -437,28 +425,28 @@ function settleMode(opts, env, io) {
   }
   for (const path of listStagingResidue(opts.tmpDir, wbs)) {
     try {
-      rmSync(path, { force: true });
+      fs2.rmSync(path, { force: true });
     } catch {
       io.err(`residual-settle: could not remove ${path}; re-run: residual-scan settle ${wbs}
 `);
       return 0;
     }
   }
-  writeFileSync(residualsPath, `${JSON.stringify({ ...scan, ...prior }, null, 2)}
+  fs2.writeFileSync(residualsPath, `${JSON.stringify({ ...scan, ...prior }, null, 2)}
 `);
   return 0;
 }
 function reportMode(opts, env, io) {
-  const runDir = join(opts.root, ".spur", "run");
+  const runDir = join2(opts.root, ".spur", "run");
   const sweep = loadVerdict(runDir, opts.wbs).checks.find((c) => c.name === "residual-sweep");
   if (sweep === undefined || sweep.status !== "fail")
     return 0;
   const { content } = loadTask(env, opts.spurBin, opts.wbs, opts.root);
   const scan = scanResiduals2(opts.root, opts.wbs, opts.tmpDir, content, env);
   const blocking = scan.items.filter((i) => i.class === "blocking");
-  const attemptFile = join(runDir, `${opts.wbs}-test-fix-attempt`);
-  const attempts = existsSync(attemptFile) ? Number.parseInt(readFileSync(attemptFile, "utf8").trim() || "0", 10) : 0;
-  writeFileSync(join(runDir, `${opts.wbs}-residual-report.md`), renderReport(opts.wbs, blocking, Number.isNaN(attempts) ? 0 : attempts));
+  const attemptFile = join2(runDir, `${opts.wbs}-test-fix-attempt`);
+  const attempts = fs2.existsSync(attemptFile) ? Number.parseInt(fs2.readFileSync(attemptFile, "utf8").trim() || "0", 10) : 0;
+  fs2.writeFileSync(join2(runDir, `${opts.wbs}-residual-report.md`), renderReport(opts.wbs, blocking, Number.isNaN(attempts) ? 0 : attempts));
   io.out(`Recovery: fix the items in .spur/run/${opts.wbs}-residual-report.md, then /sp:dev-run ${opts.wbs}
 `);
   return 0;
@@ -477,13 +465,14 @@ function main(argv, env = getEnvVars(), options = {}) {
 `);
     return 2;
   }
-  const resolved = { ...opts, root: opts.root.startsWith("/") ? opts.root : join(cwd, opts.root) };
+  const resolved = { ...opts, root: opts.root.startsWith("/") ? opts.root : join2(cwd, opts.root) };
   return modeFn(resolved, env, io);
 }
 process.exit(main(process.argv.slice(2)));
 export {
   scanResiduals2 as scanResiduals,
   renderReport,
+  recordedVerdictPath,
   parseReviewFindings,
   parseDiffMarkers,
   normalizeAnchor,

@@ -1,5 +1,7 @@
+import * as fs from 'node:fs';
+import { join } from 'node:path';
 /**
- * Residual scan — pure core of the task-leftover scanner (feature F96, ADR-071; task 1003 R5).
+ * Residual scan — task-leftover classification and recorded-verdict discovery (F96, ADR-071).
  *
  * Contract owner: docs/design/task-residual-sweep.md. The plugin script
  * `plugins/sp/scripts/residual-scan.ts` keeps the IO glue (argv, git/spur spawning, file
@@ -7,8 +9,9 @@
  * generated standalone bundle `plugins/sp/lib/residual-scan.generated.mjs` — node-builtin
  * only, no workspace imports, so the bundle satisfies the plugin standalone contract.
  *
- * Everything here is pure: the script collects the base sha, added diff lines, staging
- * residue paths and deferral entries, then calls {@link scanResiduals}.
+ * Classification is pure: the script collects the base sha, added diff lines, staging
+ * residue paths and deferral entries, then calls {@link scanResiduals}. Recorded verdict
+ * discovery also checks the canonical evidence plane without following symlink paths.
  */
 
 import { createHash } from 'node:crypto';
@@ -328,4 +331,17 @@ export function renderReport(wbs: string, items: ResidualItem[], attemptCount: n
         lines.push(`| ${item.category} | ${item.class} | ${item.location} | ${item.text.replace(/\|/g, '\\|')} |`);
     }
     return `${lines.join('\n')}\n`;
+}
+
+export function recordedVerdictPath(runDir: string, wbs: string): string {
+    const evidence = join(runDir, '..', 'memory', 'evidence');
+    const durable = join(evidence, `${wbs}-verdict.json`);
+    for (const path of [join(runDir, '..'), join(evidence, '..'), evidence, durable]) {
+        try {
+            if (fs.lstatSync(path).isSymbolicLink()) throw new Error(`residual-scan: symlink evidence path: ${path}`);
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+        }
+    }
+    return fs.existsSync(durable) ? durable : join(runDir, `${wbs}-verdict.json`);
 }

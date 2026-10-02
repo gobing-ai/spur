@@ -1,4 +1,6 @@
 // packages/app/src/services/residual-scan.ts
+import * as fs from "node:fs";
+import { join } from "node:path";
 import { createHash } from "node:crypto";
 var MARKER_PATTERN = /TODO|FIXME|XXX|HACK/;
 var PRIORITY_PATTERN = /^P[1-4]/;
@@ -194,9 +196,24 @@ function renderReport(wbs, items, attemptCount) {
 `)}
 `;
 }
+function recordedVerdictPath(runDir, wbs) {
+  const evidence = join(runDir, "..", "memory", "evidence");
+  const durable = join(evidence, `${wbs}-verdict.json`);
+  for (const path of [join(runDir, ".."), join(evidence, ".."), evidence, durable]) {
+    try {
+      if (fs.lstatSync(path).isSymbolicLink())
+        throw new Error(`residual-scan: symlink evidence path: ${path}`);
+    } catch (error) {
+      if (error.code !== "ENOENT")
+        throw error;
+    }
+  }
+  return fs.existsSync(durable) ? durable : join(runDir, `${wbs}-verdict.json`);
+}
 export {
   scanResiduals,
   renderReport,
+  recordedVerdictPath,
   parseReviewFindings,
   parseDiffMarkers,
   normalizeAnchor,
