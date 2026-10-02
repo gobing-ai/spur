@@ -20,6 +20,17 @@ import {
 import { deriveVerifiedOutcome } from '../../src/services/verified-outcome';
 import { readWorkflowRunRecord } from '../../src/workflow/run-record';
 
+/** The gate tees its PASS line to stdout; mute it so test runners show no leaked gate output. */
+function silenceStdout<T>(run: () => T): T {
+    const originalWrite = process.stdout.write;
+    process.stdout.write = () => true;
+    try {
+        return run();
+    } finally {
+        process.stdout.write = originalWrite;
+    }
+}
+
 /** Temp project root with a `.spur/run` scratch plane; package.json pins the project-root walk. */
 function makeProject(): { root: string; scratch: string; dirs: ReturnType<typeof runStoragePaths> } {
     const root = mkdtempSync(join(tmpdir(), 'run-storage-'));
@@ -544,7 +555,7 @@ describe('completed scratch disposal equivalence (E71/1027)', () => {
             expect(status(pausedRun)).toBe('paused');
 
             // A later temporary gate recreates scratch and writes back into it.
-            runLightGate({ wbs: '1027' }, { cwd: root });
+            silenceStdout(() => runLightGate({ wbs: '1027' }, { cwd: root }));
             expect(existsSync(join(scratch, '1027-light-gate.log'))).toBeTrue();
             expect(existsSync(join(scratch, '1027-check-receipt.json'))).toBeTrue();
 
