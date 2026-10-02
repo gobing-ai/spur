@@ -29,8 +29,17 @@ import {
 import type { WorkflowObservabilityBus, WorkflowObservabilityEventMap } from '../../../src/workflow/observability';
 import { type SteeringCommand, WorkflowSteeringController } from '../../../src/workflow/steering';
 
+/**
+ * Default workdir must be a tree we own, never `tmpdir()` itself: `resolveRunStorageRoot` latches
+ * onto the nearest ancestor holding `.spur`, so running against `tmpdir()` creates `<tmpdir>/.spur`
+ * and re-roots every later mkdtemp-based test (on Linux `tmpdir()` IS `/tmp`, the parent of all of
+ * them) — projectRoot flips to `/tmp`, the retained-artifact confinement check throws, and the
+ * best-effort partial-artifact write is silently skipped.
+ */
+let defaultWorkdir: string | undefined;
 function makeCtx(overrides: Partial<ActionRunContext> = {}): ActionRunContext {
-    return { runId: 'test-1', stateOrNodeId: 's1', workdir: '/tmp', vars: {}, env: {}, ...overrides };
+    defaultWorkdir ??= mkdtempSync(join(tmpdir(), 'agent-run-default-'));
+    return { runId: 'test-1', stateOrNodeId: 's1', workdir: defaultWorkdir, vars: {}, env: {}, ...overrides };
 }
 
 /**
