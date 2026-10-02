@@ -3,7 +3,7 @@ kind: design
 title: "History CLI and refresh contracts"
 status: implemented
 created_at: 2026-09-09
-updated_at: 2026-09-16
+updated_at: 2026-10-02
 related: []
 tags: [contract, history, cli]
 ---
@@ -402,15 +402,16 @@ beside the `HistoryArtifact` type they canonicalize. The classification
 (`ARTIFACT_ARRAY_CLASSIFICATION`) is type-derived: a recursive array-key type over the artifact plus
 an exhaustive `Record<ArtifactArrayKey, 'ranked' | 'set'>` makes an unclassified new array field a
 `tsc` error naming the field — order-as-evidence must be declared, closing the drift class that hid
-`topSteps`/`bottlenecks` for months. The plugin script consumes this authority through a **generated**
-copy (`plugins/sp/lib/artifact-digest.generated.mjs`, built by `bun run build:plugin-lib` and
-committed) because ADR-065 forbids a monorepo import surviving into the script's `.mjs` twin;
-consequently the domain module has exactly one consumer reached through a generated file, not an
-import. Consequences that are deliberate: no hand-maintained enumeration of artifact array keys may
+`topSteps`/`bottlenecks` for months. The application core in `packages/app/src/services/history-anatomy.ts`
+imports the domain digest directly. The plugin script consumes that core through the generated
+`plugins/sp/lib/history-anatomy.generated.mjs` bundle (task 1005), built by `bun run build:plugin-lib`
+with the domain digest inlined. This preserves ADR-065's standalone contract without a separate
+artifact-digest bundle or a monorepo value import in plugin glue. No hand-maintained enumeration of
+artifact array keys may
 exist in `plugins/sp/scripts/`; the twin's bare-`node` fixture test (R2) backstops the twin-staleness
 hole (script-contract-check regenerates each standard twin and compares it byte-for-byte — mtimes
 are never consulted, task 0970); and
-`REPORT_SECTIONS`/`FINDING_FIELDS` stay local to the script with `skill-structure.test.ts` requiring
+`REPORT_SECTIONS`/`FINDING_FIELDS` live in the application core with `skill-structure.test.ts` requiring
 `report-contract.md` to name every entry of both — full single-owner treatment of the report
 vocabulary was deferred as it has never drifted.
 

@@ -3,7 +3,7 @@ kind: design
 title: "Planning workflow and operation contracts"
 status: implemented
 created_at: 2026-09-09
-updated_at: 2026-10-01
+updated_at: 2026-10-02
 related: ["0889", "0898", "0949", "0976", "0958"]
 tags: [contract, planning, workflow]
 ---
@@ -132,26 +132,24 @@ driver executes host-side actions too, so `--agent inline` never implied a bypas
 liveness, routing, and native capability attestation stay fail-closed at the `agent.run` dispatch
 boundary (0706): precheck does not predict what dispatch proves. The `doctor.probe` built-in
 remains registered for idea-pipeline, which intentionally elects an executor at `start`.
-**Size precheck (0454; count-only since 0723):** `maxImplementReqs` (default `10`) and
-`maxImplementPlanItems` (default `16` — the operator-approved doubling of the original 5/8
-defaults) feed `plugins/sp/scripts/task-size-precheck.ts`, a deterministic count-only check of
-R-items and Plan checklist items with no `--executor` flag and no doctor call. A missing or
-failing size checker writes FAIL (never PASS), so readiness fails closed; a raised limit is an
-explicit size override, not a capability grant. precheck→implement requires
-`.spur/run/<wbs>-precheck-size.status=PASS` plus `spur task check <wbs>` (run exactly once, in
-the guard). Auto-profile feature reactivation is single-shot (`feature sync`, one
+**Size precheck (0454/0723, CLI-owned since 1002):** `spur task check <wbs> --precheck` runs
+the normal task check plus `evaluateTaskSize` from `packages/app/src/services/task-size-precheck.ts`
+and the evidence-channel precheck below. `DEFAULT_TASK_SIZE_LIMITS` supplies 10 R-items and 16
+Plan checklist items; the old pipeline limit vars and plugin checker were removed. Size failures
+are error findings and exit 1. The precheck→implement guard invokes the CLI once and requires
+success, without reading or writing separate precheck status files. Auto-profile feature reactivation
+is single-shot (`feature sync`, one
 `feature update` fallback); a real reactivation failure surfaces and blocks implementation,
 while dirty-tree diagnostics stay advisory.
-**Evidence-channel precheck (0726 R2):** alongside the size check,
-`plugins/sp/scripts/task-evidence-precheck.ts` makes a task's declared live-data evidence
+**Evidence-channel precheck (0726 R2, CLI-owned since 1002):** alongside the size check,
+`packages/app/src/services/task-evidence-precheck.ts` makes a task's declared live-data evidence
 calls deterministic. It parses the task content for `evidence-channel:` declarations; only the
 exact channel `history_tool_call.args_raw[pi]` is allowlisted — any other token is an unknown
-declaration and writes FAIL. With the exact declaration present, one fixed query
-(`SELECT COUNT(*) AS n FROM history_tool_call WHERE args_raw IS NOT NULL AND source = 'pi'`)
-runs on `.spur/spur.db` via bun:sqlite; a missing database, a missing table, or a zero count
-also writes FAIL (fail closed). A task without any `evidence-channel:` declaration passes
-without opening SQLite. The script always exits 0; the precheck→implement guard requires
-`.spur/run/<wbs>-precheck-evidence.status=PASS` in addition to the size status, so a task that
+declaration and produces an error finding. With the exact declaration present, a domain-owned
+read counts pi rows in `history_tool_call` whose `args_raw` is not null; database access stays in
+`packages/domain`. A missing database, a missing table, or a zero count also fails closed. A task
+without any `evidence-channel:` declaration passes without querying the database. Evidence errors
+make `task check --precheck` exit 1, so a task that
 declares live pi bash-command evidence must import real history (safe importer, non-dry-run)
 before implementation begins.
 **Diff-scope guard (task 0487 R1):** the implement step's `requireDiff` also rejects changes outside
@@ -403,10 +401,9 @@ file (missing or short frontmatter, missing required field, wrong schema version
 report-and-ignore, never silently trust (R3). `TERMINAL_CHECKPOINT_STATUSES`
 (`done`/`failed`/`cancelled`/`skipped`) bound cleanup: `WorkflowService.cleanCheckpoints` deletes
 only expired, unreferenced, regenerable state inside its own confined owner path, and never a file
-it cannot prove is a terminal checkpoint (R5). The plugin's
-`plugins/sp/scripts/stage-registry-adapter.ts` keeps a self-contained lean copy of this semantics —
-it installs into foreign repos and cannot import workspace packages — and a parity test pins the two
-together.
+it cannot prove is a terminal checkpoint (R5). Task 1001 retired the unused plugin stage-registry
+adapter and its parity tests. Checkpoint semantics remain owned by the application contract and
+workflow service; the plugin carries no independent checkpoint implementation.
 
 **Resume-side checkpoint mapping (0784 R3).** On `workflow continue`, a checkpoint associated with
 the paused run is validated in the run's recorded launch workdir: `pending`/`running`/`approved`
@@ -432,7 +429,8 @@ values the verdict parser would drop, and empty evidence. The lint's normalizati
 is a strict pre-filter of the verdict parser, never an independent dialect. On retry the verifier
 keeps rows that pass the lint and verifies only the missing IDs.
 
-**Task evidence precheck + verify answer lint (tasks 0726, R2/R3):** `precheck` gains a
+**Historical task evidence precheck + verify answer lint (0726 R2/R3; superseded by 1002/1003):**
+The original `precheck` gained a
 fail-closed `task-evidence-precheck` step (same contract as the size precheck: PASS/FAIL to
 `.spur/run/<wbs>-precheck-evidence.status`, always exit 0; a missing checker fails closed) and the
 precheck→implement guard requires BOTH status files PASS. On the verify stage, the verifier OWNS
@@ -443,7 +441,8 @@ appends progress) — and a deterministic hard-gate lint step
 enforcing verdict-line shape, requirement row completeness/uniqueness/identity, status/evidence
 validity, and AC-label identity against the task checklist (AC completeness stays a verifier
 judgement, not a lint class). A lint failure halts the stage before the verdict step can misread a
-malformed answer.
+malformed answer. The current precheck is the single `task check --precheck` guard described above;
+`spur task verdict --from-answer` now owns answer linting, without a separate plugin lint step.
 
 **Run status (ADR-044):** terminal states partition into success and failure via an optional
 `failureStates` subset of `terminalStates` (declared per workflow; absent ⇒ today's behavior). Landing

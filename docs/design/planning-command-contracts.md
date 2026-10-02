@@ -3,7 +3,7 @@ kind: design
 title: "Feature sync and agent command contracts"
 status: implemented
 created_at: 2026-09-09
-updated_at: 2026-09-09
+updated_at: 2026-10-02
 related: []
 tags: [contract, planning, cli]
 ---
@@ -82,7 +82,7 @@ Scaffold BDD `test.todo` stubs from task Acceptance Criteria into `<workspace>/t
 
 ### 1.3 Agent command surface — commands as SSOT (feature H5 (was O), ADR-032)
 
-The `plugins/sp` agent-facing command surface (33 `/sp:dev-*` wrappers; 39 command wrappers total) is
+The `plugins/sp` agent-facing command surface (inventoried from `commands/*.md`) is
 **hand-authored** — each `commands/<name>.md` is the authoritative, directly-editable source.
 Per-platform adapters are **install-time output** owned by `superskill` (`superskill install sp`)
 and never committed in plugin `sp` (ADR-032).
@@ -90,8 +90,8 @@ and never committed in plugin `sp` (ADR-032).
 | Artifact                                    | Role                                                                                                                               |
 | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | `plugins/sp/commands/<name>.md`             | Hand-editable SSOT — frontmatter + invocation syntax + delegation line only                                                        |
-| `plugins/sp/scripts/validate-commands.ts`   | Thin-wrapper contract validator: (a) heading whitelist, (b) frontmatter schema, (c) target resolution, (d) allowed-tools coherence, (e) dev-command argument contract |
-| `plugins/sp/tests/command-contract.test.ts` | Contract test — validates the same five gates against the live corpus + negative-path coverage                                     |
+| `scripts/commands/validate-commands.ts`   | Thin-wrapper contract validator: (a) heading whitelist, (b) frontmatter schema, (c) target resolution, (d) allowed-tools coherence, (e) dev-command argument contract |
+| `scripts/commands/command-contract.test.ts` | Contract test — validates the same five gates against the live corpus + negative-path coverage                                     |
 
 Invariants: wrappers carry invocation syntax + the delegation line only — lifecycle semantics live
 in the dispatched skill/workflow/procedure (0283 R4). The thin-wrapper contract is enforced by
