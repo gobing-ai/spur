@@ -132,6 +132,74 @@ describe('RunDao', () => {
         });
     });
 
+    // Task 1048: explicit operator cancellation owns a wider, reason-stamped writer.
+    // `clean`'s finalizeStale keeps its narrow stale sweep (running/pending) — R3.
+    describe('cancelRun (task 1048)', () => {
+        async function insertRun(
+            adapter: Awaited<ReturnType<typeof setup>>,
+            id: string,
+            status: string,
+            metadataJson = '{}',
+        ) {
+            await adapter.run(
+                `INSERT INTO runs (id, workflow_name, mode, status, started_at, metadata_json, created_at, updated_at)
+                 VALUES (?, 'task-pipeline', 'state-machine', ?, '2026-06-01T00:00:00.000Z', ?, 0, 0)`,
+                id,
+                status,
+                metadataJson,
+            );
+        }
+
+        test.each([
+            'running',
+            'pending',
+            'paused',
+            'interrupted',
+        ])('finalizes %s with terminal_reason cancelled', async (status) => {
+            const adapter = await setup();
+            const dao = new RunDao(adapter);
+            await insertRun(adapter, `run_${status}`, status);
+
+            await dao.cancelRun(`run_${status}`);
+
+            const row = await dao.traceRowById(`run_${status}`);
+            expect(row?.status).toBe('failed');
+            expect(row?.terminal_reason).toBe('cancelled');
+            expect(row?.completed_at).not.toBeNull();
+            expect(JSON.parse(row?.metadata_json ?? '{}').staleReason).toBe(
+                'cancelled by operator (spur workflow cancel)',
+            );
+            adapter.close();
+        });
+
+        test('preserves pre-existing metadata keys', async () => {
+            const adapter = await setup();
+            const dao = new RunDao(adapter);
+            await insertRun(adapter, 'run_meta', 'paused', '{"launchSource":"cli"}');
+
+            await dao.cancelRun('run_meta');
+
+            const meta = JSON.parse((await dao.traceRowById('run_meta'))?.metadata_json ?? '{}');
+            expect(meta.launchSource).toBe('cli'); // json_set keeps untouched keys
+            expect(meta.staleReason).toBe('cancelled by operator (spur workflow cancel)');
+            adapter.close();
+        });
+
+        test.each(['done', 'failed', 'cancelled'])('does not clobber an already-terminal %s run', async (status) => {
+            const adapter = await setup();
+            const dao = new RunDao(adapter);
+            await insertRun(adapter, `run_${status}`, status);
+
+            await dao.cancelRun(`run_${status}`);
+
+            const row = await dao.traceRowById(`run_${status}`);
+            expect(row?.status).toBe(status); // unchanged — status guard in WHERE
+            expect(row?.terminal_reason).toBeNull(); // no terminal metadata written
+            expect(row?.completed_at).toBeNull();
+            adapter.close();
+        });
+    });
+
     describe('trace queries', () => {
         test('traceRows returns runs matching status filter', async () => {
             const adapter = await setup();

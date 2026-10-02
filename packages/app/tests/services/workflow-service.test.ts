@@ -3481,6 +3481,48 @@ terminalStates:
             expect(result.finalized).toBe(true);
             expect(result.status).toBe('failed');
         });
+
+        // Task 1048 AC1: paused and interrupted runs are cancellation targets too.
+        test.each(['paused', 'interrupted'])('finalizes a %s run as failed/cancelled (task 1048)', async (status) => {
+            const ctx = makeCtx();
+            const db = await ctx.getDb();
+            await seedRun(db, `run_${status}`, status, new Date().toISOString());
+
+            const result = await new WorkflowAppService(ctx).cancel(`run_${status}`);
+
+            expect(result).toEqual({ runId: `run_${status}`, finalized: true, status: 'failed', killed: false });
+            const row = await db.queryFirst<{
+                status: string;
+                terminal_reason: string | null;
+                completed_at: string | null;
+            }>('SELECT status, terminal_reason, completed_at FROM runs WHERE id = ?', `run_${status}`);
+            expect(row?.status).toBe('failed');
+            expect(row?.terminal_reason).toBe('cancelled');
+            expect(row?.completed_at).not.toBeNull();
+        });
+
+        // Task 1048 AC2: a terminal run is never signalled, even with a recorded pid.
+        test('a terminal run with a recorded pid is not signalled (task 1048)', async () => {
+            const ctx = makeCtx();
+            const db = await ctx.getDb();
+            await seedRun(db, 'run_done_pid', 'done', new Date().toISOString());
+            const child = Bun.spawn({ cmd: ['sleep', '30'], stdio: ['ignore', 'ignore', 'ignore'] });
+            await new RunDao(db).setPid('run_done_pid', child.pid);
+
+            const result = await new WorkflowAppService(ctx).cancel('run_done_pid');
+
+            expect(result.finalized).toBe(false);
+            expect(result.status).toBe('done');
+            expect(result.killed).toBe(false);
+            let alive = true; // the untouched worker keeps running — clean up below
+            try {
+                process.kill(child.pid, 0);
+            } catch {
+                alive = false;
+            }
+            expect(alive).toBe(true);
+            child.kill();
+        });
     });
 });
 

@@ -261,6 +261,31 @@ export class RunDao extends EntityDao<typeof runs, typeof runs.id> {
     }
 
     /**
+     * Explicit operator cancellation (task 1048 R1/R2): finalize a resumable run —
+     * `running`, `pending`, `paused`, `interrupted` — as `failed` with the closed
+     * terminal reason `cancelled` (0937 enum), a completion timestamp, and the
+     * existing human-readable metadata message. The WHERE guard is the race fence:
+     * a run that became terminal before this UPDATE lands is left untouched, so a
+     * concurrent engine close can never be clobbered and terminal rows never gain
+     * cancel metadata. Deliberately wider than {@link finalizeStale} — `clean`'s
+     * stale sweep stays running/pending only (R3), while an operator's cancel
+     * reaches every resumable state.
+     */
+    async cancelRun(runId: string): Promise<void> {
+        const nowIso = new Date().toISOString();
+        await this.adapter.run(
+            `UPDATE runs
+             SET status = 'failed', completed_at = ?1, updated_at = ?1,
+                 terminal_reason = 'cancelled',
+                 metadata_json = json_set(COALESCE(NULLIF(metadata_json, ''), '{}'), '$.staleReason', ?2)
+             WHERE id = ?3 AND status IN ('running', 'pending', 'paused', 'interrupted')`,
+            nowIso,
+            'cancelled by operator (spur workflow cancel)',
+            runId,
+        );
+    }
+
+    /**
      * Record the OS pid of the worker subprocess for an async run, so
      * `spur workflow cancel <run-id>` can SIGTERM it. The `pid` column is added
      * by the `0005_spur_cli_run_pid` migration. `null` clears it.

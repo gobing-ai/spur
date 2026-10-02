@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: Preserve terminal reasons and cancel paused or interrupted workflow runs
-status: todo
+status: done
 template: issue
 created_at: 2026-10-02T05:46:39.101Z
-updated_at: "2026-10-02T05:46:43.400Z"
+updated_at: "2026-10-02T10:13:52.778Z"
 feature_id: D64
 
 priority: P2
 ac_altitude: task-local
 ac_numbering: task-local
 dependencies: ["0937"]
+done_forced: "false"
+done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-dev-run-1048-c88b/.spur/memory/evidence/1048-verdict.json
 ---
 
 ## 1048. Preserve terminal reasons and cancel paused or interrupted workflow runs
@@ -23,19 +25,19 @@ The one orphan imported during cleanup was already operationally cancelled; this
 
 ### Requirements
 
-- [ ] R1. Existing workflow cancel must finalize running, pending, paused and interrupted runs as failed with terminal_reason cancelled, completion timestamp and the existing human-readable cancellation metadata.
-- [ ] R2. Use a conditional domain write so terminal rows cannot be clobbered by cancellation races; preserve trace, artifacts, checkpoints and task links.
-- [ ] R3. Keep automatic workflow clean's current stale-run selection and retention behavior unchanged. Preserve missing/terminal run return behavior and bounded process signalling for explicit cancellation.
+- [x] R1. Existing workflow cancel must finalize running, pending, paused and interrupted runs as failed with terminal_reason cancelled, completion timestamp and the existing human-readable cancellation metadata.
+- [x] R2. Use a conditional domain write so terminal rows cannot be clobbered by cancellation races; preserve trace, artifacts, checkpoints and task links.
+- [x] R3. Keep automatic workflow clean's current stale-run selection and retention behavior unchanged. Preserve missing/terminal run return behavior and bounded process signalling for explicit cancellation.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — All explicit non-terminal cancellations carry a reason (req: R1).
+- [x] AC1 — All explicit non-terminal cancellations carry a reason (req: R1).
   Given one fixture run in each of running, pending, paused and interrupted, when WorkflowService.cancel is invoked, then each becomes failed/cancelled with a completion timestamp and retained records.
-- [ ] AC2 — Terminal runs and races are preserved (req: R2, R3).
+- [x] AC2 — Terminal runs and races are preserved (req: R2, R3).
   Given done/failed/missing rows or a run becoming terminal between lookup and write, then cancel reports the actual outcome without changing terminal metadata or signalling a terminal run.
-- [ ] AC3 — Cleanup still protects resumable work (req: R3).
+- [x] AC3 — Cleanup still protects resumable work (req: R3).
   Given old paused/interrupted rows, when automatic workflow clean runs, then it does not newly cancel them because of this change.
-- [ ] AC4 — Cancellation reason reaches the normal consumer (req: R1, R2).
+- [x] AC4 — Cancellation reason reaches the normal consumer (req: R1, R2).
   Given a cancelled fixture, then trace and the existing D64 reason consumer report cancelled rather than unknown; action/artifact/link rows and checkpoint bytes are unchanged.
 
 ### Q&A
@@ -67,15 +69,48 @@ Explicit operator cancellation reuses the stale-run cleanup writer. That writer 
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `packages/app/src/services/workflow-service.ts:1154` |
+| `packages/app/src/services/workflow-service.ts:1181` |
+| `packages/app/src/services/workflow-service.ts:1191` |
+| `packages/app/src/services/workflow-service.ts:1196` |
+| `packages/app/tests/services/workflow-service.test.ts:3484` |
+| `packages/domain/src/dao/run-dao.ts:263` |
+| `packages/domain/tests/dao/run-dao.test.ts:135` |
 
 ### Testing
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | RunDao.cancelRun (packages/domain/src/dao/run-dao.ts:275) writes status=failed, completed_at, terminal_reason='cancelled', staleReason metadata for exactly running/pending/paused/interrupted. Domain test.each x4 states + metadata preservation pass (packages/domain/tests/dao/run-dao.test.ts). |
+| R2 | MET | Conditional UPDATE ... WHERE status IN (4 resumable) is the race fence; trace/artifacts/checkpoints/task-links untouched (single runs-row write). Terminal no-clobber x3 domain tests; service never reads pid for terminal rows (packages/app/src/services/workflow-service.ts:1181-1197). |
+| R3 | MET | finalizeStale (run-dao.ts:236) and listStaleRuns unchanged (still running/pending, no terminal_reason); clean-path tests pass untouched; bounded ESRCH-tolerant signalling preserved via signalSubprocess. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | Service tests pause/interrupt a real worker then cancel: each becomes failed/cancelled with completion timestamp; records retained. Domain x4-status tests pass. |
+| AC2 | MET | test | Terminal rows (done/failed/cancelled) never clobbered nor signalled — service test holds a live pid on a done row and asserts killed=false and process survival; race covered by WHERE guard + finalized=after&&isNonTerminal derivation. |
+| AC3 | MET | test | Existing finalizeStale/listStaleRuns suites pass unchanged; paused/interrupted rows are not newly cancelled by clean. |
+| AC4 | MET | test | Cancel writes terminal_reason='cancelled' (0937 enum; TERMINAL_REASONS includes it); traceRowById reads the column (service test asserts); D64 consumers read runs.terminal_reason directly so cancellations report cancelled, never unknown; no action/artifact/link/checkpoint writes in the cancel path. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -85,3 +120,8 @@ Explicit operator cancellation reuses the stale-run cleanup writer. That writer 
 - Cleanup run run_a3387db5-7f82-44a2-9705-392830c77537; task 0937; D64.
 
 ### History
+
+- 2026-10-02T09:59:05.139Z todo → wip (system)
+- 2026-10-02T10:13:23.373Z wip → testing (system)
+- 2026-10-02T10:13:52.775Z testing → done (system)
+

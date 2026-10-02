@@ -1151,10 +1151,14 @@ export class WorkflowAppService {
 
     /**
      * Cancel a single non-terminal run by id — SIGTERM its worker process group (if
-     * a pid was recorded) and mark the run `failed` with a `cancelled by operator`
-     * reason. The discoverable single-run counterpart to `clean` (which finalizes
-     * stale runs in bulk). Idempotent against already-terminal runs (no-op) and
-     * reports `not_found` for an unknown id.
+     * a pid was recorded) and mark the run `failed` with the closed terminal reason
+     * `cancelled` plus a `cancelled by operator` metadata message. The discoverable
+     * single-run counterpart to `clean` (which finalizes stale runs in bulk). Every
+     * resumable state is a target — `running`, `pending`, and since task 1048 also
+     * `paused`/`interrupted` — with `terminal_reason` stamped so trace and reason
+     * consumers report `cancelled` instead of unknown. Idempotent against
+     * already-terminal runs (no-op, no signalling) and reports `not_found` for an
+     * unknown id.
      *
      * The pid is the async worker's, self-recorded at run creation (see
      * {@link WorkflowRunOptions.recordSelfPid}); the worker is its group leader, so
@@ -1174,16 +1178,25 @@ export class WorkflowAppService {
         if (!before) {
             return { runId, finalized: false, status: 'not_found', killed: false };
         }
-        // Only a non-terminal run has a live subprocess worth killing. Read the pid
-        // before finalizing (finalizeStale's guard leaves terminal runs untouched).
-        const isNonTerminal = before.status === 'running' || before.status === 'pending';
+        // Only a non-terminal run has a live subprocess worth killing — paused and
+        // interrupted workers stay alive too (they are resumable), so they count.
+        // Read the pid before finalizing; a terminal run is never signalled (1048).
+        const isNonTerminal =
+            before.status === 'running' ||
+            before.status === 'pending' ||
+            before.status === 'paused' ||
+            before.status === 'interrupted';
         const pid = isNonTerminal ? await dao.getPid(runId) : null;
         const killed = pid != null ? signalSubprocess(pid) : false;
-        await dao.finalizeStale(runId, 'cancelled by operator (spur workflow cancel)');
+        // Explicit-cancellation owner (1048 R2): the conditional write covers exactly
+        // the resumable statuses, so a run that became terminal between the lookup
+        // and this write is left untouched — no clobbered terminal metadata.
+        await dao.cancelRun(runId);
         const after = await dao.traceRowById(runId);
-        // finalizeStale's WHERE guard only transitions non-terminal runs; if the run
-        // was already terminal, status is unchanged and finalized is false.
-        const finalized = after?.status === 'failed' && before.status !== 'failed';
+        // cancelRun's WHERE guard only transitions resumable runs; if the run was
+        // already terminal (or raced to terminal), status is unchanged and finalized
+        // is false. A pre-existing `failed` row also stays untouched.
+        const finalized = after?.status === 'failed' && isNonTerminal;
         return { runId, finalized, status: after?.status ?? 'not_found', killed };
     }
 
