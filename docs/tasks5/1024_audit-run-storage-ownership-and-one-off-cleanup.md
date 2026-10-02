@@ -4,7 +4,7 @@ name: Audit run storage ownership and one-off cleanup
 status: done
 template: feature-impl
 created_at: 2026-09-30T20:13:58.349Z
-updated_at: "2026-10-02T00:27:07.979Z"
+updated_at: "2026-10-02T00:33:08.736Z"
 feature_id: E71
 priority: P2
 tags:
@@ -113,13 +113,24 @@ Completion audit (2026-10-02): the current census records every candidate locati
 
 ### Review
 
-<!-- spur:record-review -->
+| Priority | Dimension | Location | Finding | Disposition |
+| --- | --- | --- | --- | --- |
+| P4 | Functional / SECUA / Architecture | `docs/reports/2026-10-01-E71-run-storage-census.json:1` | Reviewed the final scoped implementation and executable failure/disposal evidence; no unresolved blocker or major finding. | RESOLVED |
 
-**SECU findings** (pipeline verify step — verdict: PARTIAL)
+#### Functional traceability
 
-| Priority | Dimension | Location | Finding |
-|----------|-----------|----------|----------|
-| P4 | design-conformance | — | Frozen design is partly implemented; unresolved claims are named in requirements and AC above. |
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `docs/reports/2026-10-01-E71-run-storage-census.json:1`; equality checker reports 3222/3222 locations and rejects an injected candidate |
+| R2 | MET | `docs/reports/2026-09-30-E71-run-storage-ownership.md:325`; family/consumer dispositions |
+| R3 | MET | `docs/reports/2026-09-30-E71-run-storage-ownership.md:325`; W1-W14 correctness cleanup and unrelated U/T owners remain |
+| R4 | MET | `scripts/commands/run-storage-census.ts:1`; persistent location/hash equality and regression map |
+
+#### SECUA and architecture
+
+The report and deterministic equality check expose changed, unclassified and duplicate locations. Runtime unknowns remain preserved. This is an audit artifact and read-only self-development check; no product migration or data deletion was executed.
+
+Security: confined paths, existing identity validation and secret redaction remain. Correctness: focused regression evidence covers the changed success/failure branches. Efficiency: bounded local storage traversal; no new background collector. Usability: visible outcomes and errors. Architecture: existing app/domain/plugin ownership and standalone bundle contract remain. No speculative refactor is required.
 
 ### References
 
