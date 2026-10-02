@@ -279,3 +279,4 @@
 - `task verdict --from-answer` writes `<wbs>-verdict.json`; run rows live in the tree that ran setup (close from there).
 
 | 04:20 | E71 remaining gaps and related 1044/1046 complete; integrated other-agent 1043/1045, 9667 tests pass, feature and wrap done; final boundary receipt refreshed after metadata | run-storage owners, E71 corpus/report | PASS | ~session |
+2026-10-02T20:03:01Z wrap(1051): wrapup-pipeline run 9427dce2-5476-4654-8f83-1924a429b444 done — route fast:drift-probe-clean (8 paths clean), metrics PASS; D62 stays active; branch sp/run-1051-465b merged (rebase+FF: 506ec9ebb,7033644f8,e6829ec3a) and deleted; worktree removed. Continuation of failed run 6d88543e (operator-authorized direct flake fix → full gate PASS 9728/9728 → review PASS → verify PASS → record → done).
