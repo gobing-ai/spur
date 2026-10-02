@@ -1,5 +1,75 @@
 # Changelog
 
+## [0.3.98] - 2026-10-02
+
+### Added
+
+- runall batch 1053-1056 — close sidecar semantics, CloseAuditError, anchor citations, subpath citation classification (92cf0af88)
+- guard section writes with --append extend mode (1057) (1250941a7)
+- update plans module icon to compass (25a4db779)
+- validate proof.fingerprint options and pin handoff template headings (1052) (09cd22905)
+- reconcile existing task lifecycle rows after no-lifecycle terminal writes (task 1047) (e2b4c9ae2)
+- preserve terminal reasons and cancel paused or interrupted runs (1048) (41342bc26)
+
+### Fixed
+
+- detect unbuilt links that export dist assets (cce3d7595)
+- validate Board distributions before replacing assets (ef0677bc3)
+- bound dev supervision to owned process groups (5ed0cf7e5)
+- preserve cancellation and release abort listeners (f5506e057)
+- reject non-object JSON request bodies (2fcad3546)
+- align health responses with shared contract (6e6aca677)
+- keep runtime facade generation out of dev server (5f1a07ee9)
+- harden verdict evidence and verified-outcome derivation (5507419cf)
+- repair inline close records and server terminal bookkeeping (1051) (506ec9ebb)
+- repair stale projections without changing correct authority (6b29e276f)
+- preserve fixall scope and pipeline gate ownership (d5be0e8ff)
+- fix issues with .env file (935a11b37)
+- block automatic worktree teardown when provenance is skipped for external-key conflict (1049) (d87c5661a)
+
+### Changed
+
+- file session-review triage tasks 1059-1061 (WT-4 hardening, drift-probe span, AC template alignment) (2bf863dfd)
+- updat tasks after refinment (d5334e9c6)
+- wrap batch 1053-1056 — feature D62 done, doc-sync drift repairs, learnings capture (d353024e6)
+- record runall batch dogfood report for workflow-execution-economy exit gates (34030f8d4)
+- sync planning-workflow-contracts change-map row with the frozen external-evidence form (1055 surface) (fdb7882cd)
+- updat tasks after verification (c8d183969)
+- enrich 1058 with root cause, design, plan, QA, references (9f919a28d)
+- record cwd-drift pitfall (task 1058 protocol) (7512794bc)
+- add task 1058 cwd-deterministic corpus writes (pipeline hardening) (562f42256)
+- stop tracking machine-appended wrapup metrics ledger (936f53d7d)
+- update memory (0df309271)
+- align script gates and workflow parity references (882ef1f47)
+- record 1057 verify verdict and close task done (1057) (afb9f8629)
+- align runtime and HTTP contracts with current behavior (95c90f410)
+- updat tasks after refinment (7b2d0476d)
+- point spur-config at the loader subpath for filesystem loading (03a0a0814)
+- update memory (42928455f)
+- add new tasks (6fc42a59d)
+- flatten 1052 run-evidence citations to direct-child names (0984 persist-out contract) (849829465)
+- add new tasks (6b7f44dad)
+- merge sp/run-1052-782b (1052) — proof option validation and handoff heading pins (43ae83da1)
+- add new tasks (5c8bf44fd)
+- update memory (1fd8f54a0)
+- regenerate inline-run-setup installed twin (e6829ec3a)
+- bound-wait the child-frame lookup in composed-board proof (7033644f8)
+- reference live plugin version and command inventory (1e317ee94)
+- match glossary guidance to live command validation (f3e7c1bf9)
+- align plugin contracts with current implementation owners (014901eb8)
+- updat tasks after refinment (6ff27dc72)
+- file D62 triage tasks 1055/1056 from dev-runall session review (55fd94553)
+- state repair semantics of lifecycle reconciliation rows accurately (c37bb0d86)
+- update memory (e99ed7041)
+- refresh D62 task table after 1047/1050 batch completion (eb267f296)
+- repoint 1050 references to retained 1041 evidence location (f7f6f4124)
+- retain 1041 job-handoff contract checks in the normal repository suite (task 1050) (96183787b)
+- add new tasks (7e504f213)
+- file session-review triage tasks (1051 sidecar sync, 1052 twin freshness gate) (eb24e2401)
+- document conventional-type merge commit requirement (cog forbids type merge) (7361c91a4)
+- update memory (86e8e36ea)
+- merge sp/run-1049-e7e0 (1049) — fail closed on external-key-conflict skip to block automatic WT-4 teardown (68cd107bb)
+
 ## [0.3.97] - 2026-10-01
 
 ### Added
