@@ -530,7 +530,7 @@ pass before the invoking tree is written → WT-5. Without `--task-file` nothing
 The shapes are pinned (task 0975 R1; `record-missing` and citation behavior per 0984): idempotent on re-persist;
 success exits 0 printing
 `{"ok":true,"persisted":<n>,"skipped":[{"id":<run-id>,"reason":"id-exists"|"external-key-conflict"|"record-conflict:<file>"|"record-missing:<file>"|"cited-directory:<name>"|"cited-symlink:<name>"|"cited-non-file:<name>"}]}`
-— an `external-key-conflict` skip leaves the target run unchanged; an `id-exists` replay repairs missing owned artifacts and task links without duplicating them. A
+— an `external-key-conflict` skip leaves the target run unchanged **and fails the pass (1049)**: the delegate exits 1 printing `{"ok":false,"error":…}` naming the skipped source run ids, because that (workflow, external key) identity already belongs to a different receiving run — the batch was not persisted, so reconcile the source worktree by hand (it stays the provenance owner of record) before any teardown: auditable reconciliation names the original archived DB snapshot and the skipped source run identities, verifies the archive by file hash and by merged-commit ancestry of the source branch, and treats any residual deletion as explicit operator-authorized cleanup under the strict canonical evidence rules above. An `id-exists` replay repairs missing owned artifacts and task links without duplicating them. A
 `record-conflict:<file>` never overwrites a divergent invoking-tree record and causes the delegate to exit 1, retaining the worktree. A
 `record-missing:<file>` skip is a known `task-lifecycle`/`feature-lifecycle` row with no record file
 at all (its inserted DB row still counts in `persisted` — 0984 R5). Any failure

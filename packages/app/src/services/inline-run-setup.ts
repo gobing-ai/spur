@@ -1352,10 +1352,17 @@ export async function runInlineRunPersistOut(input: InlineRunPersistOutInput): P
             toWorkdir: process.cwd(),
             ...(input.taskFiles.length > 0 ? { taskFiles: input.taskFiles } : {}),
         });
-        if (result.skipped.some((skip) => skip.reason.startsWith('record-conflict:'))) {
-            process.stdout.write(
-                `${JSON.stringify({ ...result, ok: false, error: 'persist-out: unresolved retained record conflicts; retain the worktree and reconcile copies before teardown' })}\n`,
-            );
+        // 1049: an `external-key-conflict` skip means the source run's provenance identity
+        // (workflow_name, external_key) already belongs to a different receiving run — the
+        // batch was NOT persisted, so automatic worktree teardown would orphan provenance.
+        // Same fail-closed channel as record conflicts: exit 1, driver routes to WT-5.
+        const keyConflicts = result.skipped.filter((skip) => skip.reason === 'external-key-conflict');
+        if (keyConflicts.length > 0 || result.skipped.some((skip) => skip.reason.startsWith('record-conflict:'))) {
+            const error =
+                keyConflicts.length > 0
+                    ? `persist-out: external-key conflict for source runs ${keyConflicts.map((skip) => skip.id).join(', ')}; retain the source worktree and reconcile provenance before teardown`
+                    : 'persist-out: unresolved retained record conflicts; retain the worktree and reconcile copies before teardown';
+            process.stdout.write(`${JSON.stringify({ ...result, ok: false, error })}\n`);
             return 1;
         }
         process.stdout.write(`${JSON.stringify({ ok: true, persisted: result.persisted, skipped: result.skipped })}\n`);
