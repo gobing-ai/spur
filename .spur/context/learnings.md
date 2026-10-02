@@ -885,3 +885,10 @@ Full trace: `docs/plans/2026-07-03-feature-cycle-prioritization-brainstorm.md`. 
 
 - **Convention/quirk:** Retained run/evidence consumers include inline instructions, trace metadata, residual folds and worktree export, not just typed storage readers.
 - **Why it matters:** Verify repeated whole scratch disposal through real record/receipt/importer owners; preserve paused/interrupted owners and fail closed on lookup/publication errors. CLI build:bundle owns generated plugin libraries.
+
+## 2026-10-02 — D62 dev-runall batch (1047, 1050)
+- Task-pipeline `--decide` is feature-gated: it returns `{degraded:true, reason:"disabled"}` — the deterministic A1/A2 diffstat pre-guard is what actually routes lanes (both tasks → safety at >400 insertions).
+- `task verdict --from-answer` demotes any AC row whose Evidence Type contains `manual-review` to PARTIAL and refuses the PASS write (RC=1); use `test`/`static-ref` (+ compounds without manual-review) for rows backed by executed gates.
+- persist-out (0984) extracts `.spur/run/<first-path-segment>` citations from forwarded task files: subdirectory citations resolve to the dir name, worktree-absent names are checked in the durable plane (`.spur/memory/runs`), and stale citations in the INVOKING tree's task-file copy block the transfer — repoint stale citations in BOTH trees via `task update --section` before persist-out.
+- `feature sync` only aligns feature lifecycle status (NOOP active→active); the auto-generated `## Tasks` table needs `feature refresh --feature D62`.
+- Worktree batch + diverged main: rebase the batch branch in the worktree (`git -C <wt> rebase main`), verify zero file overlap first, then `git merge --ff-only --no-edit`; an uncommitted invoking-tree edit blocks FF even when byte-identical to the branch content — verify containment then `git checkout --` it.
