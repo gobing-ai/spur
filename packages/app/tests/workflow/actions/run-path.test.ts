@@ -31,6 +31,17 @@ describe('resolveRunArtifactPath (task 0785 R2)', () => {
         expect(resolved).toBe(join(canonical, '.spur', 'run', 'existing.txt'));
     });
 
+    test('persisted canonical paths resolve through a project-directory alias', async () => {
+        const alias = `${workdir}-alias`;
+        symlinkSync(workdir, alias);
+        try {
+            const path = join(canonical, '.spur/run/existing.txt');
+            expect(await resolveRunArtifactPath(createNodeFileSystem(alias), alias, path)).toBe(path);
+        } finally {
+            rmSync(alias);
+        }
+    });
+
     test('missing leaf segments are reconstructed when the parent exists', async () => {
         const resolved = await resolveRunArtifactPath(
             createNodeFileSystem(workdir),

@@ -497,8 +497,8 @@ async function runSessionAugmentedRoots(
     const roots = getSourceDefinition(source).defaultRoots.map((root) => resolve(home, root));
     const runRoots: Array<{ runId: string; root: string }> = [];
     // 1026 R2: durable session dirs first (`.spur/memory/runs/<id>/agent-sessions/`),
-    // legacy scratch (`.spur/run/<id>/agent-sessions/`) second; realpath dedup keeps a
-    // migrated run's sessions discovered exactly once.
+    // legacy scratch (`.spur/run/<id>/agent-sessions/`) second; run/agent identity and
+    // realpath dedup keep copied and aliased session roots discovered exactly once.
     const runBases = [runStoragePaths(cwd).recordsDir, join(cwd, '.spur', 'run')];
     const seen = new Set<string>();
     const seenRunAgents = new Set<string>();

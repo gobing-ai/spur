@@ -28,6 +28,7 @@ import {
     WorkflowAppService,
     type WorkflowListResult,
 } from '../../src/services/workflow-service';
+import { selectEvidence } from '../../src/workflow/decision-evidence';
 import type { WorkflowObservabilityEventMap } from '../../src/workflow/observability';
 import {
     inspectWorkflowRunRecord,
@@ -207,7 +208,7 @@ function makeCtx(cwd = process.cwd(), spurConfig?: SpurConfig) {
 }
 
 describe('WorkflowAppService', () => {
-    test('DecisionMaker switch composes with real builtins, persisted evidence and original variables', async () => {
+    test('DecisionMaker evidence mode reads retained registered summaries after scratch removal', async () => {
         const dir = await mkdtemp(join(tmpdir(), 'spur-wf-decision-'));
         const file = join(dir, 'decision.yaml');
         await writeFile(
@@ -221,15 +222,34 @@ states:
       - kind: shell
         options:
           command: "printf '10 tests passed'"
+  - id: store
+    onEnter:
+      - kind: shell
+        options:
+          command: write-summary
+      - kind: run.artifact
+        options:
+          path: .spur/run/decision-summary.md
+          artifactKind: summary
+      - kind: shell
+        options:
+          command: discard-scratch
   - id: review
     onEnter:
       - kind: hitl.confirm
         options:
           prompt: "Did tests pass?"
           var: approval
+          decision:
+            mode: evidence
+            statusVar: decisionStatus
+            evidenceNodes: [check]
+            summaryArtifact: .spur/run/decision-summary.md
   - id: done
 transitions:
   - from: check
+    to: store
+  - from: store
     to: review
   - from: review
     to: done
@@ -238,11 +258,46 @@ terminalStates: [done]
         );
         try {
             for (const enabled of [false, true]) {
+                await mkdir(join(dir, '.spur/run'), { recursive: true });
                 let calls = 0;
                 let evidence = '';
                 const ctx = makeCtx(dir, spurConfigSchema.parse({ workflow: { hitlDecisionMaker: enabled } }));
+                const executor = new TestProcessExecutor();
+                const run = executor.run.bind(executor);
+                executor.run = async (options) => {
+                    const command = options.args?.[1];
+                    if (command === 'write-summary') {
+                        const rows = await new ActionRunDao(await ctx.getDb()).actionRowsByRunId(`decision-${enabled}`);
+                        const selected = selectEvidence(rows, ['check'], (text) => text);
+                        if (!selected.ok) throw new Error(selected.reason);
+                        const producer = selected.rows[0];
+                        await writeFile(
+                            join(dir, '.spur/run/decision-summary.md'),
+                            JSON.stringify({
+                                schemaVersion: 1,
+                                runId: `decision-${enabled}`,
+                                producerNode: 'check',
+                                producerActionId: producer?.actionId,
+                                summary: producer?.result,
+                            }),
+                        );
+                    } else if (command === 'discard-scratch') {
+                        await rm(join(dir, '.spur/run'), { recursive: true });
+                    } else {
+                        return run(options);
+                    }
+                    return {
+                        command: options.command,
+                        args: options.args ?? [],
+                        exitCode: 0,
+                        stdout: '',
+                        stderr: '',
+                        durationMs: 1,
+                    };
+                };
                 const service = new WorkflowAppService({
                     ...ctx,
+                    processExecutor: () => executor,
                     hitlResponder: () => ({ respond: async () => ({ value: 'legacy' }) }),
                     decisionMaker: async () =>
                         createDecisionMaker({
@@ -266,10 +321,16 @@ terminalStates: [done]
                 const result = await service.run(file, { runId: `decision-${enabled}` });
                 expect(result.status).toBe('done');
                 expect(calls).toBe(enabled ? 1 : 0);
-                if (enabled) expect(evidence).toContain('"kind":"shell"');
+                if (enabled) {
+                    expect(evidence).toContain('"kind":"shell"');
+                    expect(evidence).toContain('summary');
+                }
                 const rows = await new ActionRunDao(await ctx.getDb()).actionRowsByRunId(`decision-${enabled}`);
                 const answer = JSON.parse(rows.find((row) => row.kind === 'hitl.confirm')?.result_json ?? '{}');
-                expect(answer.setVars).toEqual({ approval: enabled ? 'yes' : 'legacy' });
+                expect(answer.setVars).toEqual({
+                    approval: enabled ? 'yes' : '',
+                    decisionStatus: enabled ? 'accepted' : 'deferred',
+                });
             }
         } finally {
             await rm(dir, { recursive: true });

@@ -45,7 +45,7 @@ import { ValidationError } from '@gobing-ai/ts-utils';
 import { redactAndBound } from '../observability/agent-execution';
 import { createRunLogTraceFailureRecorder, withActionTrace } from '../workflow/action-trace';
 import type { HostAllowlist, HttpRequester } from '../workflow/actions/http-request';
-import { resolveRunArtifactPath } from '../workflow/actions/run-path';
+import { resolveDurableArtifactPath, resolveRunArtifactPath } from '../workflow/actions/run-path';
 import { registerSpurBuiltins } from '../workflow/builtins';
 import {
     type CheckpointMetadata,
@@ -2028,15 +2028,42 @@ export class WorkflowAppService {
         const summary: SummaryResolver = {
             resolve: async (runId, path) => {
                 const fs = createNodeFileSystem(this.ctx.cwd);
-                let canonicalPath: string;
-                try {
-                    canonicalPath = await resolveRunArtifactPath(fs, this.ctx.cwd, path);
-                } catch {
-                    return { ok: false, reason: 'invalid-evidence' };
+                let canonicalPath: string | undefined;
+                for (const root of ['scratch', 'runs', 'evidence'] as const) {
+                    try {
+                        canonicalPath =
+                            root === 'scratch'
+                                ? await resolveRunArtifactPath(fs, this.ctx.cwd, path)
+                                : await resolveDurableArtifactPath(fs, this.ctx.cwd, path, root);
+                        break;
+                    } catch {
+                        /* Try the other owned plane; each enforces physical confinement. */
+                    }
                 }
+                if (canonicalPath === undefined) return { ok: false, reason: 'invalid-evidence' };
                 const dao = new ArtifactDao(await this.ctx.getDb());
                 const registered = await dao.artifactsWithIdByRunId(runId);
-                const match = registered.find((row) => row.path === canonicalPath);
+                let match = registered.find((row) => row.path === canonicalPath);
+                if (match === undefined) {
+                    const source = relative(fs.realPath?.(this.ctx.cwd) ?? this.ctx.cwd, canonicalPath);
+                    for (const row of registered) {
+                        try {
+                            const retained = await resolveDurableArtifactPath(fs, this.ctx.cwd, row.path, 'runs');
+                            const identity = await resolveDurableArtifactPath(
+                                fs,
+                                this.ctx.cwd,
+                                `${row.path}.source`,
+                                'runs',
+                            );
+                            if ((await fs.readFile(identity)) !== source) continue;
+                            canonicalPath = retained;
+                            match = row;
+                            break;
+                        } catch {
+                            /* An unproven source cannot satisfy registered-summary evidence. */
+                        }
+                    }
+                }
                 if (match === undefined) return { ok: false, reason: 'invalid-evidence' };
                 let raw: string;
                 try {

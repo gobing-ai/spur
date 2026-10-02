@@ -69,20 +69,26 @@ async function resolveConfinedArtifactPath(
         );
     }
 
-    // 0781 lexical descent, preserved verbatim: traversal and sibling prefixes are rejected before
-    // any filesystem access. The run directory itself is not a valid artifact path.
-    const lexicalTarget = normalize(resolve(workdir, pathRaw));
-    const lexicalRunRoot = normalize(join(resolve(workdir), root));
-    if (!lexicalTarget.startsWith(`${lexicalRunRoot}${sep}`)) {
-        throw new RunArtifactPathError(`must resolve beneath ${root}/ (got ${pathRaw})`);
-    }
-
     const workdirAbs = resolve(workdir);
     let canonicalWorkdir: string;
     try {
         canonicalWorkdir = fileSystem.realPath(workdirAbs);
     } catch (error) {
         throw new RunArtifactPathError(`project workdir could not be canonicalized: ${(error as Error).message}`);
+    }
+
+    // Traversal and sibling prefixes are rejected before artifact access.
+    // The run directory itself is not a valid artifact path.
+    let lexicalTarget = normalize(resolve(workdir, pathRaw));
+    const lexicalRunRoot = normalize(join(resolve(workdir), root));
+    // Persisted references use real paths (e.g. macOS /private/var); map that project alias
+    // back to the lexical root before applying the same descent and symlink checks.
+    const canonicalAlias = join(canonicalWorkdir, root);
+    if (lexicalTarget.startsWith(`${canonicalAlias}${sep}`)) {
+        lexicalTarget = join(lexicalRunRoot, relative(canonicalAlias, lexicalTarget));
+    }
+    if (!lexicalTarget.startsWith(`${lexicalRunRoot}${sep}`)) {
+        throw new RunArtifactPathError(`must resolve beneath ${root}/ (got ${pathRaw})`);
     }
 
     // `.spur/run` may legitimately be a symlink, but only to a directory that stays inside the
