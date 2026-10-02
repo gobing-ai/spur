@@ -1,5 +1,4 @@
 // packages/app/src/services/residual-scan.ts
-import * as fs from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 var MARKER_PATTERN = /TODO|FIXME|XXX|HACK/;
@@ -196,7 +195,7 @@ function renderReport(wbs, items, attemptCount) {
 `)}
 `;
 }
-function recordedVerdictPath(runDir, wbs) {
+function recordedVerdictPath(runDir, wbs, fs) {
   const evidence = join(runDir, "..", "memory", "evidence");
   const durable = join(evidence, `${wbs}-verdict.json`);
   for (const path of [join(runDir, ".."), join(evidence, ".."), evidence, durable]) {

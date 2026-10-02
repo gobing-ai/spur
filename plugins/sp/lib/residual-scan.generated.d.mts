@@ -37,7 +37,7 @@ export declare interface FoldResult {
     findings: string;
 }
 export declare const ALLOW_PRAGMA: 'residual-scan:allow';
-export declare function recordedVerdictPath(runDir: string, wbs: string): string;
+export declare function recordedVerdictPath(runDir: string, wbs: string, fs: Pick<typeof import('node:fs'), 'lstatSync' | 'existsSync'>): string;
 export declare function makeItemId(category: ResidualCategory, location: string, text: string): string;
 export declare function normalizeAnchor(location: string): string;
 export declare function locationOf(locationCell: string, finding: string): string;

@@ -4,7 +4,7 @@ name: Persist task and feature evidence outside run scratch
 status: done
 template: feature-impl
 created_at: 2026-09-30T20:13:58.356Z
-updated_at: "2026-10-01T22:24:12.131Z"
+updated_at: "2026-10-02T00:29:43.155Z"
 feature_id: E71
 priority: P2
 tags:
@@ -104,6 +104,13 @@ Execution checks and per-requirement observability are frozen in Design. Preserv
 - `apps/cli/src/commands/workflow.ts:1341` — migration precedes housekeeping; failure returns exit 1 and leaves sources intact.
 - Tests: `packages/app/tests/services/run-storage.test.ts:96`, task-record, feature receipt and CLI cleanup suites; focused application run: 148 pass / 0 fail, CLI cleanup: 14 pass / 0 fail. Generated plugin surfaces rebuilt through their owners.
 - Residual: corpus-sweep and feature-sync suppression still inspect scratch verdict locations; migration JSON checks do not yet bind all family identities or settled importer obligations. These requirements remain PARTIAL after the bounded repair pass.
+
+**Completion repair (2026-10-02); supersedes the preceding residual.**
+
+- `packages/app/src/services/corpus-sweep.ts:144` and `packages/app/src/services/feature-sync-suppression.ts:92` now discover durable evidence; their existing tests compare corpus and invalidation inputs after scratch removal.
+- `packages/app/src/services/residual-scan.ts:335` and `plugins/sp/scripts/residual-scan.ts:119` select canonical recorded evidence with symlink refusal. IO stays in the plugin caller; the pure owner receives its filesystem operations. Fold publishes canonical updates atomically before mirroring the scratch attempt; wrap-up metrics reject malformed canonical evidence.
+- `packages/app/src/services/run-storage.ts:252` uses full family parsers, filename/run/task identity checks, receipt and proof live-owner checks, confined immutable byte snapshots and visible manifest failures. Dry-run remains read-only and sources stay intact.
+- `packages/app/tests/services/task-record.test.ts:697` executes the real record/receipt/feature-check owners before and after repeated whole scratch disposal. The original export/consumer gaps are closed by the integrated 1026 and 1043 owners. No acceptance guard or public CLI surface changed.
 
 ### Testing
 

@@ -1,4 +1,3 @@
-import * as fs from 'node:fs';
 import { join } from 'node:path';
 /**
  * Residual scan — task-leftover classification and recorded-verdict discovery (F96, ADR-071).
@@ -333,7 +332,11 @@ export function renderReport(wbs: string, items: ResidualItem[], attemptCount: n
     return `${lines.join('\n')}\n`;
 }
 
-export function recordedVerdictPath(runDir: string, wbs: string): string {
+export function recordedVerdictPath(
+    runDir: string,
+    wbs: string,
+    fs: Pick<typeof import('node:fs'), 'lstatSync' | 'existsSync'>,
+): string {
     const evidence = join(runDir, '..', 'memory', 'evidence');
     const durable = join(evidence, `${wbs}-verdict.json`);
     for (const path of [join(runDir, '..'), join(evidence, '..'), evidence, durable]) {

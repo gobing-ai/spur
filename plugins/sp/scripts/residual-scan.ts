@@ -116,7 +116,7 @@ function loadTask(env: ScanEnv, spurBinFlag: string | undefined, wbs: string, ro
     return { content: typeof parsed.content === 'string' ? parsed.content : '', featureId };
 }
 function loadVerdict(runDir: string, wbs: string): VerdictFile {
-    return JSON.parse(fs.readFileSync(core.recordedVerdictPath(runDir, wbs), 'utf8'));
+    return JSON.parse(fs.readFileSync(core.recordedVerdictPath(runDir, wbs, fs), 'utf8'));
 }
 function scanMode(opts: ParsedArgs, env: ScanEnv, io: ScanIo): number {
     const runDir = join(opts.root, '.spur', 'run');
@@ -134,7 +134,7 @@ function foldMode(opts: ParsedArgs, _env: ScanEnv, io: ScanIo): number {
     const scan = JSON.parse(
         fs.readFileSync(join(runDir, `${opts.wbs}-residuals.json`), 'utf8'),
     ) as core.ResidualArtifact;
-    const target = core.recordedVerdictPath(runDir, opts.wbs);
+    const target = core.recordedVerdictPath(runDir, opts.wbs, fs);
     const verdict = loadVerdict(runDir, opts.wbs);
     const findingsPath = join(runDir, `${opts.wbs}-test-gate.findings`);
     const fold = core.foldVerdict(
