@@ -1370,11 +1370,11 @@
             "path": "packages/app/src/services/residual-scan.ts",
             "families": ["A1", "C6"],
             "candidates": [
-                [52, "7c7425c81d6e7643035d5633f0572cfa2f76c128de03c9a038737ff7f646758b"],
-                [336, "3d765c2e293d99f9986efe718cd9e1d893190623706c5819ceb892c69e9c329a"],
-                [337, "9de1d24c1f4ae7321ebea18612b7bb85b47659c6db36bed190190f2101d12567"],
-                [339, "4c87921f19355de4c1e1355b0491804c6294d08fb0bd61cd41577fb200cf0f2f"],
-                [346, "cc71129785294b50dbc0e236f48e50616d395039908547e636a786487b942c67"]
+                [51, "7c7425c81d6e7643035d5633f0572cfa2f76c128de03c9a038737ff7f646758b"],
+                [336, "bbf80df1a00ba718ed477ec8fa67f20bbd3d978d1eec58123dff283a5ddcda2b"],
+                [340, "9de1d24c1f4ae7321ebea18612b7bb85b47659c6db36bed190190f2101d12567"],
+                [342, "4c87921f19355de4c1e1355b0491804c6294d08fb0bd61cd41577fb200cf0f2f"],
+                [349, "cc71129785294b50dbc0e236f48e50616d395039908547e636a786487b942c67"]
             ]
         },
         {
@@ -3867,13 +3867,13 @@
                 [84, "fbfb995bf19b15eb4ab3643d2e5d71373bab1c9d6091e248448478f1e7a59ada"],
                 [87, "044b53a25f58a7b4205434fcb4b1760bcb3a7413e2c6c2919ceb722f35d8991d"],
                 [118, "7da78da60d4d9f16f34f60356a509f971bb574b6bed331f678d4a0f892dd8d59"],
-                [119, "bbfff84faef295560c69811236f6a13384838030e1724db183d850fe9b5e4c2b"],
+                [119, "162a921a92997bb1a6c438fff9340f4cd8bea3b4fef3d41672e97a994775cf01"],
                 [122, "39a6ad88d35f0c8b80f7a7a1faa1359bf2f362317724a90983b610ce639fa2b1"],
                 [123, "191e3abaaed86c0c96d423f749bf054b60d98bae3aa7ccc6032b5786889dfa2d"],
                 [126, "f501340d1346ed053b8c253534b015faf61a62c0817fe01279c5b327ddcffb3d"],
                 [133, "39a6ad88d35f0c8b80f7a7a1faa1359bf2f362317724a90983b610ce639fa2b1"],
                 [135, "19f59fc03f4631e5fbd7165388571b8c3b463d21b95dd39790ed5334a9d3ccea"],
-                [137, "8339ac4ef38d27ff8371e6b6ab885136063de8a92e75f33f8d6deb568533da60"],
+                [137, "b315f5c6d893f5d120bfd0b9295b06e4cf812fe288ab8357947fe913e382cbf5"],
                 [138, "4dc6af5741a6f99321086bf3bcc081011609f2c606f6df5bf0823c2f03cbf19f"],
                 [139, "80dddc849ff22510e57314f10a05cec8ce26786fd3befb66a5982c1a09295048"],
                 [151, "d9e470d463b9dc914081cfd654b036a0d323ce20500bccd89adc371089fcca4b"],
@@ -4906,7 +4906,7 @@
             "families": ["U5"],
             "candidates": [
                 [23, "b4021708c8b1ab427d046651906ed65fa6992f2f2121c481bda00af17dea570c"],
-                [329, "3e0375a647ee8039059ac18de25e91798a747cdb178ff8fcf5da3308445f1676"],
+                [329, "ec9b0f2c05b2907a0466e40a3e0033932c6f1d9c080fb6552aef6fc3c2dd6d4e"],
                 [622, "6c3fa295f9f28f1359820603996c024e6727818afde39bf5e2c93c6b40a2bb9b"],
                 [692, "5d6027c99e7301742bb409950a9428e87cede5ea0fe41cadf829486c2bd80c72"]
             ]
