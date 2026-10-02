@@ -1,119 +1,49 @@
-import { type ChildProcess, execSync, spawn } from 'node:child_process';
+import { spawn } from 'node:child_process';
+import { constants } from 'node:os';
 import { echoError } from '@gobing-ai/ts-utils';
 
-type ManagedProcess = {
-    label: string;
-    child: ChildProcess;
-};
-
-function writeLine(message: string): void {
-    echoError(message);
-}
-
-/** Kill any process holding a given TCP port. Port is a fixed literal, never user input. */
-function freePort(port: number, label: string): void {
-    try {
-        const pid = execSync(`lsof -ti :${port}`, { encoding: 'utf-8' }).trim();
-        if (pid) {
-            const pids = pid.split('\n');
-            for (const p of pids) {
-                try {
-                    process.kill(Number(p), 'SIGKILL');
-                    writeLine(`[dev:all] Killed stale process PID ${p} on port ${port} (${label})`);
-                } catch {
-                    // Process already gone — fine
-                }
-            }
-        }
-    } catch {
-        // lsof returned non-zero → no process on port
-    }
-}
-
-function spawnManaged(label: string, args: string[]): ManagedProcess {
-    const child = spawn('bun', args, {
-        stdio: 'inherit',
-    });
-
-    child.on('error', (error) => {
-        writeLine(`[${label}] failed to start: ${error.message}`);
-    });
-
-    return { label, child };
-}
-
-/**
- * Run the full dev stack (server + web) under one supervisor: free stale ports,
- * spawn both `dev` processes, and tear them all down on signal or child exit.
- * Long-running — never resolves until a child exits or a signal is received.
- */
+/** Run server and web together; terminate only the process groups this invocation owns. */
 export function devAll(): void {
-    // Clean up any leftover processes from a previous dev:all session.
-    freePort(3000, 'server');
-    freePort(4321, 'web');
-
     const managed = [
-        spawnManaged('server', ['run', '--filter', '@gobing-ai/spur-server', 'dev']),
-        spawnManaged('web', ['run', '--filter', '@gobing-ai/spur-web', 'dev']),
-    ];
-
+        { label: 'server', args: ['run', '--filter', '@gobing-ai/spur-server', 'dev'] },
+        { label: 'web', args: ['run', '--filter', '@gobing-ai/spur-web', 'dev'] },
+    ].map(({ label, args }) => ({ label, child: spawn('bun', args, { stdio: 'inherit', detached: true }) }));
     let shuttingDown = false;
 
-    function stopAll(): void {
-        if (shuttingDown) {
-            return;
-        }
-
-        shuttingDown = true;
-        writeLine('[dev:all] Shutting down...');
-
-        for (const { label, child } of managed) {
-            if (child.pid) {
-                try {
-                    process.kill(child.pid, 'SIGTERM');
-                    writeLine(`[dev:all] Sent SIGTERM to ${label} (PID ${child.pid})`);
-                } catch {
-                    // Process already gone
-                }
+    function signalOwned(signal: NodeJS.Signals): void {
+        for (const { child } of managed) {
+            if (!child.pid) continue;
+            try {
+                process.kill(process.platform === 'win32' ? child.pid : -child.pid, signal);
+            } catch {
+                // The owned group has already exited.
             }
         }
+    }
 
-        // Give 3s for graceful exit, then force-kill anything left on our ports.
+    function stopAll(code: number): void {
+        if (shuttingDown) return;
+        shuttingDown = true;
+        echoError('[dev:all] Shutting down...');
+        signalOwned('SIGTERM');
+        // Roots may exit before their descendants; retain ownership until the bounded cleanup finishes.
         setTimeout(() => {
-            freePort(3000, 'server');
-            freePort(4321, 'web');
+            signalOwned('SIGKILL');
+            process.exit(code);
         }, 3000);
     }
 
     for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) {
-        process.on(signal, () => {
-            writeLine(`[dev:all] Received ${signal}`);
-            stopAll();
-        });
+        process.on(signal, () => stopAll(128 + constants.signals[signal]));
     }
-
-    let completed = 0;
-
     for (const { label, child } of managed) {
+        child.on('error', (error) => {
+            echoError(`[${label}] failed to start: ${error.message}`);
+            stopAll(1);
+        });
         child.on('exit', (code, signal) => {
-            completed += 1;
-
-            if (!shuttingDown) {
-                if (signal) {
-                    writeLine(`[${label}] exited via ${signal}`);
-                    stopAll();
-                } else if (code && code !== 0) {
-                    writeLine(`[${label}] exited with code ${code}`);
-                    stopAll();
-                }
-            }
-
-            if (completed === managed.length) {
-                const failingProcess = managed.find(
-                    ({ child: managedChild }) => managedChild.exitCode && managedChild.exitCode !== 0,
-                );
-                process.exit(failingProcess?.child.exitCode ?? 0);
-            }
+            echoError(`[${label}] exited ${signal ? `via ${signal}` : `with code ${code}`}`);
+            stopAll(signal ? 128 + constants.signals[signal] : (code ?? 1));
         });
     }
 }
