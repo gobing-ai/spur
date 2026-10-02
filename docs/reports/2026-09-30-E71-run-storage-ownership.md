@@ -325,8 +325,8 @@ family dispositions linked to §§3–6 above. The read-only equality check is:
 bun scripts/commands/run-storage-census.ts
 ```
 
-At this closure checkpoint, **3,246 candidate locations = 3,246 classified locations**, across
-276 owners; zero duplicate or unclassified locations. Equality compares location identities,
+At this closure checkpoint, **3,210 candidate locations = 3,210 classified locations**, across
+274 owners; zero duplicate or unclassified locations. Equality compares location identities,
 not file counts. The scan includes direct paths, computed joins, root/helper aliases, and
 deletion calls across app/CLI/server/domain/config source, workflows, plugin instructions,
 hooks and scripts, and tests. Broad deletion matches outside run storage are explicitly
@@ -347,7 +347,8 @@ The earlier unresolved rows now have concrete owners and executable closure evid
 | Bound evidence and registered summaries | Fixed evidence root binding and source-proven retained summary lookup; real decision workflow consumes its registered summary after whole scratch removal |
 | C13/X4 failed-agent handoff | Lasting under the existing run artifact directory, including a redacted latch snapshot; failure writer and tracing regressions retain it after disposal |
 | Feature/producer equivalence | Real task record, receipt writer and feature completion checker remain equal; real paused workflow resumes then retains trace/records after repeated removal |
-| Cleanup sites | W1–W14 correctness invalidation/publication cleanup stays; legacy log reclamation protects live owners; U/T2 cleanup keeps its existing owner |
+| Cleanup sites | W1–W14 correctness invalidation/publication cleanup stays; shared domain ownership protects paused/interrupted logs and checkpoints; unavailable ownership preserves logs |
+| Late trace consumers and installed drivers | Durable trace output references and trace-failure logs survive disposal; inline state/log and partial-handoff instructions point to their durable owners; runtime instruction candidates carry those ownership families |
 
 Task 1043 was completed by the other coding agent and integrated here. It owns record-pass
 prevalidation and replay repair after an earlier row/file tear; the integrated export suite also
