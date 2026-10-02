@@ -325,7 +325,7 @@ family dispositions linked to §§3–6 above. The read-only equality check is:
 bun scripts/commands/run-storage-census.ts
 ```
 
-At this closure checkpoint, **3,216 candidate locations = 3,216 classified locations**, across
+At this closure checkpoint, **3,222 candidate locations = 3,222 classified locations**, across
 276 owners; zero duplicate or unclassified locations. Equality compares location identities,
 not file counts. The scan includes direct paths, computed joins, root/helper aliases, and
 deletion calls across app/CLI/server/domain/config source, workflows, plugin instructions,
@@ -349,7 +349,8 @@ The earlier unresolved rows now have concrete owners and executable closure evid
 | Feature/producer equivalence | Real task record, receipt writer and feature completion checker remain equal; real paused workflow resumes then retains trace/records after repeated removal |
 | Cleanup sites | W1–W14 correctness invalidation/publication cleanup stays; legacy log reclamation protects live owners; U/T2 cleanup keeps its existing owner |
 
-Task 1043 remains separately assigned to the other coding agent. It owns record-pass
-prevalidation and replay repair after an earlier row/file tear; this audit does not certify its
-unfinished implementation. No live project scratch was removed. Test fixtures remove the
+Task 1043 was completed by the other coding agent and integrated here. It owns record-pass
+prevalidation and replay repair after an earlier row/file tear; the integrated export suite also
+covers its two follow-up branches (1045). Task 1046 makes inline trace emission explicit in the
+interpreter loop. No live project scratch was removed. Test fixtures remove the
 whole completed scratch directory only after their retained data and consumers settle.
