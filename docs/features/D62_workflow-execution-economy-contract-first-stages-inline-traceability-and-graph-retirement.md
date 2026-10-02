@@ -216,7 +216,7 @@ Feature: Workflow execution economy: contract-first stages, inline traceability,
 | 0996 | A feature-scenario-keyed verdict AC row never proves its task AC box | done |
 | 1047 | Reconcile existing task lifecycle rows after no-lifecycle terminal writes | done |
 | 1050 | Retain task 1041 job-handoff contract checks in the normal repository suite | done |
-| 1053 | Validate inline-run-setup close before mutation and default terminal reason | todo |
+| 1051 | Repair inline close records and server terminal bookkeeping | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
