@@ -68,9 +68,12 @@ export const FEATURE_LIFECYCLE_PROFILE: LifecycleProfile = {
  *
  * Lookup-only by design: an absent row returns `false` and allocates nothing —
  * run-creation suppression must not be defeated by the reconciliation (R1/AC4).
- * An already-final row also returns `false`, so a terminal re-record replay
- * cannot churn `completed_at`. No guard, link, or engine state is touched:
- * the row is finalized as-is (no reseed, no transition request). A failure
+ * An already-final row — matching engine status AND `terminal_reason` — also
+ * returns `false`, so a terminal re-record replay cannot churn `completed_at`.
+ * Rows not yet at the target (a `done` row with null `terminal_reason`, or a
+ * stale in-flight status) are deliberately repaired by the finalize write;
+ * only their completion fields change. No guard, link, or engine state is
+ * touched (no reseed, no transition request). A failure
  * throws; callers report it post-commit and replay through the same terminal
  * transition, which repairs only this existing row (R3).
  */
