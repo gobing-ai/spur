@@ -75,6 +75,9 @@ the human/native presentation layer — labels are display addresses only, never
 2. Allocate a collision-resistant inline run id (`uuidgen`, with a timestamp/pid fallback), create
    `.spur/run/` for attempt staging and `.spur/memory/runs/` for retained records, and use the two-file run record (task 0927) — append lines to
    `.spur/memory/runs/<run-id>.md` and read machine state from `.spur/memory/runs/<run-id>.state.json`.
+   The run id lives in those two files and the persisted run row — never stage it in an ad-hoc
+   `*.env` file: the `no-env-files` gate rule flags any `.env` name, so run-scoped staging files
+   use `<run-id>-*` names with `.md`/`.json`/`.txt`/`.status` extensions only.
 3. **Authoritative run identity (task 0804 R1, fail-closed).** Persist the run row through the
    internal delegate before any stage executes — this is what makes bound `run.artifact` record
    accept the inline run (0785 R3):
