@@ -4,8 +4,10 @@ name: Make agent-driven corpus writes cwd-deterministic across pipeline surfaces
 status: todo
 template: issue
 created_at: 2026-10-02T22:50:39.301Z
-updated_at: "2026-10-02T22:57:15.802Z"
+updated_at: "2026-10-02T23:26:50.081Z"
 
+feature_id: D63
+ac_altitude: task-local
 ---
 
 ## 1058. Make agent-driven corpus writes cwd-deterministic across pipeline surfaces
@@ -39,6 +41,14 @@ During inline pipeline run `95522d21` (task 1057) the shell working directory dr
 - Q: Why is 1058 unbound to a feature (DD-07 WARN accepted)? A: Scope spans CLI + workflows + upstream pi; binding to a mismatched feature imports DD-09 subset pressure. Bind during refine or wrap into a feature via /sp:dev-idea when scheduled.
 - Q: Why skip-ready? A: Backlog capture per operator request; model-ready refinement deferred to /sp:dev-refine 1058.
 - Q: Why replace wholesale instead of --append for these sections? A: Dogfood note — 1057 shipped `--append` for extend-mode; initial authoring of empty template sections is replace semantics by design.
+
+#### Q&A entry — 2026-10-02T23:26:50.081Z
+
+#### Q&A entry — feature binding (2026-10-02)
+
+- Q: Which feature owns 1058 now that it is scheduled? A: **D63 (Reliable and measured daily-workflow adoption)**. Same origin inline run `95522d21` as sibling task 1057 (already D63); D63's scope covers the supporting CLI transports and wrapup/pipeline completion-reliability integration this task hardens (`--cwd` pinning, task-pipeline/wrapup-pipeline protocol, inline-pipeline-driver).
+- Q: Why not D3? A: D3 is deliberately scoped to three reproduced `workflow run` engine defects (0431–0433); corpus-write cwd determinism is not one of them.
+- Q: What about the earlier DD-09 subset-pressure concern? A: Resolved with `--ac-altitude task-local` — 1058's ACs are task-local hardening (CLI flag, driver protocol, regression test, upstream note), intentionally not D63 feature ship criteria. `spur task check 1058` passes with zero findings.
 
 ### Design
 

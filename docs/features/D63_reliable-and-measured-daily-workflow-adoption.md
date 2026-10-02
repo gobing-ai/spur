@@ -116,7 +116,9 @@ Feature: Reliable and measured daily-workflow adoption
 | 0936 | Preserve feature scenario-key rows when re-verifying and re-recording a task | done |
 | 0979 | Persist-out must skip a record-less run row instead of failing the transfer | cancelled |
 | 0981 | Make the feature-lifecycle R4 (0872) guard test load-deterministic | done |
-| 1052 | Harden proof options and job handoff contract assertions | todo |
+| 1052 | Harden proof options and job handoff contract assertions | done |
+| 1057 | Guard task section writes against silent wholesale overwrite of populated sections | done |
+| 1058 | Make agent-driven corpus writes cwd-deterministic across pipeline surfaces | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
