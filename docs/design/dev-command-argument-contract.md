@@ -3,7 +3,7 @@ kind: design
 title: "Design — Dev-command argument contract"
 status: accepted
 created_at: 2026-08-01
-updated_at: 2026-08-02
+updated_at: 2026-10-02
 related: ["0412"]
 tags: [contract, plugin, cli]
 ---
@@ -89,7 +89,7 @@ are omitted unless they remain canonical public syntax.
 
 ## Validation
 
-`plugins/sp/scripts/validate-commands.ts` retains its JSON result envelope and adds checks for dev
+`scripts/commands/validate-commands.ts` retains its JSON result envelope and checks dev
 commands:
 
 1. exact heading set and order;
@@ -99,7 +99,7 @@ commands:
 5. canonical hint-to-table positional/flag parity;
 6. diagnostics naming the command and offending heading or token.
 
-`plugins/sp/tests/command-flag-parity.test.ts` derives shared-flag membership from all 28 dev
+`plugins/sp/tests/command-flag-parity.test.ts` derives shared-flag membership from all live dev
 commands. Numbered-operation parity remains a separate bidirectional check for commands cataloged
 in `dev-operations.md`. Compatibility aliases use explicit owning-contract assertions instead of
 canonical hint counts.

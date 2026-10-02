@@ -17,17 +17,16 @@ patterns, skill-backed, inline) remains in `dev-operations.md`.
 
 Every flag shared by two or more commands has exactly one entry here. This is the single place a
 shared flag's meaning is stated; command argument-hints and table rows cite it and must not
-re-define it. The shared-flag set is derived mechanically from the 28 command argument-hints (a flag
+re-define it. The shared-flag set is derived mechanically from all live `dev-*` command argument-hints (a flag
 counts as shared when it appears in two or more); flags appearing on a single command stay documented
 in that command's body and are not listed here.
 
-**Reference form (mechanically detectable).** A command file points at a glossary entry with a
-markdown link whose link target is the entry's anchor — `[`--next`](#flag-next)`. The anchor is
-always `#flag-<name>` where `<name>` is the flag minus its leading `--` (so `--keep-going` →
-`#flag-keep-going`). The test gate (`command-flag-parity.test.ts`, task 0403) finds these references
-with the regex ``\[`--<flag>`\]\(#flag-`` over each command file — **a shared flag declared without
-this reference fails the build.** Prose-only citations (the flag name mentioned in a sentence but not
-in the link form) do not count; the reference must be the link.
+**Reference form (mechanically detectable).** Each `dev-*` command carries exactly one canonical
+footer link to `../skills/spur-dev/references/flag-glossary.md`, enforced by
+`scripts/commands/validate-commands.ts` (task 0412). Per-flag deep links are not required.
+`command-flag-parity.test.ts` derives shared flags from all live hints and requires exactly one
+canonical glossary entry per shared flag. Each entry retains its `#flag-<name>` anchor, where
+`<name>` is the flag minus its leading `--` (so `--keep-going` → `#flag-keep-going`), for navigation.
 
 **Availability rule.** Two flags are only declared where the underlying capability already exists:
 `--json` where the command already produces a structured result a script could consume; `--auto`
