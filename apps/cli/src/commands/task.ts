@@ -673,6 +673,14 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                             `warning: failed to record done-forced audit fields: ${outcome.forced.auditError}`,
                         );
                     }
+                    // 1040 R2: unforced close reconciliation failure — same
+                    // best-effort channel, kept separate from `forced` so a
+                    // present `forced` never implies an override happened.
+                    else if (outcome.closeAuditError !== undefined) {
+                        context.output.error(
+                            `warning: failed to record done close audit fields: ${outcome.closeAuditError}`,
+                        );
+                    }
                     if (options.json) {
                         context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
                     } else {
@@ -1235,6 +1243,17 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     if (result.reviewWritten) parts.push('Review written');
                     if (result.solutionBackfilled) parts.push('Solution backfilled');
                     if (result.transitionedTo) parts.push(`${wbs} → ${result.transitionedTo}`);
+                    // 1040 P3 review finding: parity with `task update` —
+                    // surface a failed close-audit write instead of dropping it.
+                    if (result.closeAuditError !== undefined) {
+                        context.output.error(
+                            `warning: failed to record done close audit fields: ${result.closeAuditError}`,
+                        );
+                    }
+                    // 1040 R1: verdict artifact state + remedy, verdict-first.
+                    if (result.verdictMessage !== undefined) {
+                        context.output.error(`ⓘ verdict artifact ${result.verdictState}: ${result.verdictMessage}`);
+                    }
                     context.output.write(parts.join(', ') || 'no changes');
                 }
             } catch (err) {
