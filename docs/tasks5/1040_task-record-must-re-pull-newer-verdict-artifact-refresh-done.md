@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: task record must re-pull newer verdict artifact; refresh done_reason on re-close
-status: todo
+status: done
 template: issue
 created_at: 2026-10-01T18:14:27.154Z
-updated_at: "2026-10-01T20:14:43.742Z"
+updated_at: "2026-10-02T00:10:29.502Z"
 
 feature_id: F91
 ac_altitude: task-local
 ac_numbering: task-local
 priority: P2
 estimate_hours: 2
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/run/1040-verdict.json
 ---
 
 ## 1040. task record must re-pull newer verdict artifact; refresh done_reason on re-close
@@ -37,35 +39,35 @@ estimate_hours: 2
 
 ### Requirements
 
-- [ ] R1. Keep the existing per-invocation artifact read and real-verdict Testing refresh. Add readable/missing/malformed state and an actionable message naming the selected path and verdict-first remedy to the existing record result and human output. Missing/malformed UNKNOWN preserves authored Testing; bare Testing may receive the honest stub. An identical generated section is not rewritten; no mtime ledger or new cache is added.
-- [ ] R2. Reconcile done_forced/done_reason after every successful status change to done, including task update/server guarded transitions and record --transition done. Forced closes retain the current supplied reason and true flag; unforced closes clear the prior forced flag and describe the current accepted PASS artifact. Missing artifacts remain denied by the existing guard. Same-status no-ops and failed intermediate hops write no new close metadata.
-- [ ] R3. Preserve happy-path rendered Testing/Review content, authored Review ownership, checkbox semantics, lifecycle guard order, provenance link timing and best-effort audit-error reporting. Additive artifact-state/message output must not change existing fields or introduce a public verb/flag.
-- [ ] R4. A record artifact explicitly identifying another WBS is unusable for the requested task: report expected/actual WBS and path, derive no PASS or checkbox flips from it, and preserve authored Testing. Artifacts omitting WBS keep the existing fallback-WBS compatibility. PARTIAL still flips only its proven MET boxes; FAIL/UNKNOWN flip none.
+- [x] R1. Keep the existing per-invocation artifact read and real-verdict Testing refresh. Add readable/missing/malformed state and an actionable message naming the selected path and verdict-first remedy to the existing record result and human output. Missing/malformed UNKNOWN preserves authored Testing; bare Testing may receive the honest stub. An identical generated section is not rewritten; no mtime ledger or new cache is added.
+- [x] R2. Reconcile done_forced/done_reason after every successful status change to done, including task update/server guarded transitions and record --transition done. Forced closes retain the current supplied reason and true flag; unforced closes clear the prior forced flag and describe the current accepted PASS artifact. Missing artifacts remain denied by the existing guard. Same-status no-ops and failed intermediate hops write no new close metadata.
+- [x] R3. Preserve happy-path rendered Testing/Review content, authored Review ownership, checkbox semantics, lifecycle guard order, provenance link timing and best-effort audit-error reporting. Additive artifact-state/message output must not change existing fields or introduce a public verb/flag.
+- [x] R4. A record artifact explicitly identifying another WBS is unusable for the requested task: report expected/actual WBS and path, derive no PASS or checkbox flips from it, and preserve authored Testing. Artifacts omitting WBS keep the existing fallback-WBS compatibility. PARTIAL still flips only its proven MET boxes; FAIL/UNKNOWN flip none.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Record reports unavailable evidence and refreshes after a real verdict arrives (req: R1)
+- [x] AC1 — Record reports unavailable evidence and refreshes after a real verdict arrives (req: R1)
   Given a scratch task with bare Testing and no artifact, or a malformed artifact
   When record runs, then a readable verdict is written and record runs again
   Then the first result names the artifact state/path and verdict-first remedy
   And the second Testing contains the current verdict; a third unchanged record performs no section rewrite
   Verify in packages/app/tests/services/task-record.test.ts and a scratch source-CLI JSON/human probe.
 
-- [ ] AC2 — Both unforced close paths replace stale forced-close metadata (req: R2)
+- [x] AC2 — Both unforced close paths replace stale forced-close metadata (req: R2)
   Given a scratch task seeded with an earlier forced flag/reason and a current accepted PASS
   When it reaches done through guarded task update or record --transition done
   Then the forced flag is cleared and the reason describes the current accepted close
   And forced overrides preserve their current supplied reason; no-op, missing-artifact denial and failed-hop cases do not reconcile metadata
   Verify in packages/app/tests/services/task-transition.test.ts and packages/app/tests/services/task-record.test.ts.
 
-- [ ] AC3 — Record rejects foreign-task evidence without changing valid ownership rules (req: R3, R4)
+- [x] AC3 — Record rejects foreign-task evidence without changing valid ownership rules (req: R3, R4)
   Given a readable artifact explicitly tagged for a different WBS, plus authored Testing/Review
   When record reads it for the requested task
   Then the result names the mismatch and no foreign requirement box is checked
   And authored content is preserved; matching and omitted-WBS artifacts retain existing valid behavior
   Verify in packages/app/tests/services/task-record.test.ts.
 
-- [ ] AC4 — Existing record and transition behavior remains green (req: R1, R2, R3, R4)
+- [x] AC4 — Existing record and transition behavior remains green (req: R1, R2, R3, R4)
   Given the targeted service/CLI suites and the root lint, coverage and rule configuration
   When the extended targeted suites and bun run spur-check run
   Then all applicable checks pass with no weakened gate, parser or baseline
@@ -105,12 +107,12 @@ estimate_hours: 2
 
 ### Plan
 
-- [ ] 1. Reproduce missing/malformed diagnostics, record-reader foreign identity and stale forced metadata with scratch fixtures. Confirm readable re-record already refreshes Testing; retain it as the control.
-- [ ] 2. Add artifact state/message and explicit-WBS safety in task-record.ts; wire them through TaskService.record and the existing CLI output. Preserve UNKNOWN/authored-Testing and Review ownership.
-- [ ] 3. Avoid unchanged generated section rewrites. Extend the existing record tests for missing, malformed, matching, omitted and foreign WBS, changed/unchanged re-record and checkbox parity.
-- [ ] 4. Implement one internal close-audit reconciliation routine and invoke it after both successful done write paths. Reuse the existing frontmatter writer; preserve guard order, missing-artifact denial, provenance timing and audit-error reporting.
-- [ ] 5. Extend both record and transition suites for forced/unforced fresh/stale metadata, no-op and failed-hop cases. Run scratch CLI probes for JSON/human state messages and both close paths.
-- [ ] 6. Update the owning design satellite for actual output changes, run targeted suites and bun run spur-check, then verify/record this task with its verdict written first. Do not commit or remediate live 1038 metadata as a shortcut.
+- [x] 1. Reproduce missing/malformed diagnostics, record-reader foreign identity and stale forced metadata with scratch fixtures. Confirm readable re-record already refreshes Testing; retain it as the control.
+- [x] 2. Add artifact state/message and explicit-WBS safety in task-record.ts; wire them through TaskService.record and the existing CLI output. Preserve UNKNOWN/authored-Testing and Review ownership.
+- [x] 3. Avoid unchanged generated section rewrites. Extend the existing record tests for missing, malformed, matching, omitted and foreign WBS, changed/unchanged re-record and checkbox parity.
+- [x] 4. Implement one internal close-audit reconciliation routine and invoke it after both successful done write paths. Reuse the existing frontmatter writer; preserve guard order, missing-artifact denial, provenance timing and audit-error reporting.
+- [x] 5. Extend both record and transition suites for forced/unforced fresh/stale metadata, no-op and failed-hop cases. Run scratch CLI probes for JSON/human state messages and both close paths.
+- [x] 6. Update the owning design satellite for actual output changes, run targeted suites and bun run spur-check, then verify/record this task with its verdict written first. Do not commit or remediate live 1038 metadata as a shortcut.
 
 ### Root Cause
 
@@ -122,15 +124,84 @@ A read-only in-memory probe confirmed an unforced close returned transitioned, m
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**R1/R4 — classified verdict read (task-record.ts).** `RecordResult` gains additive `verdictState`/`verdictMessage` (`packages/app/src/services/task-record.ts:109,113`). New `ClassifiedVerdict` + `readVerdictClassified()` (`packages/app/src/services/task-record.ts:151-253`) returns `readable` (schema-valid, rows usable), `missing` (unreadable/empty file, or explicit foreign `wbs`), or `malformed` (bad JSON / non-object root / invalid structure), each with a verdict-first remedy naming the selected path and `spur task verify <wbs>`. Identity is checked on the RAW JSON (`'wbs' in record`, `packages/app/src/services/task-record.ts:224`) BEFORE `parseVerifyVerdict`, because the schema defaults an omitted `wbs` to `''` — omitted-WBS artifacts keep fallback compatibility, explicit mismatches report `expected wbs '<x>', actual <json>`. Legacy `readVerdict`/`parseVerdict` untouched; the UNKNOWN stub for non-readable artifacts is shared (`unknownStub`, `packages/app/src/services/task-record.ts:251`).
+
+**R1 — record wiring (task-service.ts).** record() classifies once (`packages/app/src/services/task-service.ts:1413-1417`), copies state/message onto the result (`:1424-1426`), skips identical-content Testing/Review rewrites via trimmed compare before `updateSection` (`:1448-1453`, `:1466-1471`), gates the Requirements/AC checkbox flip on `classified.state === 'readable'` (`:1488`) so missing/malformed/foreign evidence (UNKNOWN stub) flips nothing, and keeps the authored-Testing gate (`:1436`) and scenario-key guard order intact.
+
+**R2 — one close-audit reconciliation routine (task-transition.ts).** `reconcileDoneCloseAudit()` (`packages/app/src/services/task-transition.ts:160-193`) is the single policy invoked only after a successful done write: forced → keep supplied reason + `done_forced: 'true'`; unforced → clear the stale flag (`done_forced: 'false'`) and write `done_reason` describing the accepted PASS artifact (path named, nothing fabricated). Best-effort: returns the error string, never throws. `transitionTaskGuarded` captures the done-gate artifact path (`:237,241`) and reconciles after `updateStatus` (`:281-289`); failures surface on a new additive `closeAuditError` union field (`:103`, `:294-295`) — separate from `forced` so a present `forced` still means "operator override". `TaskService.record` reconciles after the auto-walk done hop (`packages/app/src/services/task-service.ts:1554-1562`) and the single-hop done fallback (`:1578-1584`); no-op (`current === target`), denied, and failed-hop paths return/throw before any reconcile.
+
+**CLI (apps/cli/src/commands/task.ts).** Record human output adds one verdict-first `ⓘ` line when a message exists (`apps/cli/src/commands/task.ts:1247-1249`); `--json` is unchanged (envelope auto-serializes the new fields). The done-transition human output adds a best-effort warning for unforced close-audit failures (`apps/cli/src/commands/task.ts:676-683`), mirroring the existing forced `auditError` channel. No new verb/flag.
+
+**Tests.** `packages/app/tests/services/task-transition.test.ts:284-322` (unforced reconcile, forced retention, no-op writes nothing, audit-failure reporting; harness gained `fieldValues` + `showStatus`); `packages/app/tests/services/task-record.test.ts:1862-2158` (missing/malformed/foreign/matching/omitted-WBS states, authored preservation, identical re-record no-rewrite, stale-metadata clearing on unforced re-close, denied-hop and no-op write-nothing pins). One pre-existing 0936 pin updated in place: its second record is byte-identical, so `reviewWritten` is now `false` by R1 (`packages/app/tests/services/task-record.test.ts:1287-1290`).
 
 ### Testing
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | packages/app/src/services/task-record.ts:151-253 (readVerdictClassified returns readable/missing/malformed with a verdict-first remedy naming the path; wired into RecordResult.verdictState/verdictMessage at packages/app/src/services/task-service.ts:1416-1426, identical-content section skip at task-service.ts:1448-1473, CLI line apps/cli/src/commands/task.ts:1247-1248) |
+| R2 | MET | packages/app/src/services/task-transition.ts:170-193 (single reconcileDoneCloseAudit policy: forced keeps supplied reason + true flag, unforced clears flag and names the accepted PASS artifact; invoked only after successful done writes on the guarded path task-transition.ts:281-295 and record auto-walk task-service.ts:1558,1580) |
+| R3 | MET | packages/app/src/services/task-service.ts:1435 (authored-Testing UNKNOWN gate, guard order and provenance timing preserved; identical-content skip avoids rewrites; no new public verb/flag — CLI diff adds output lines only) |
+| R4 | MET | packages/app/src/services/task-record.ts:221-240 (raw-JSON 'wbs' identity check before schema parse: explicit foreign/empty WBS unusable with expected/actual/path, omitted-WBS keeps fallback; checkbox flip gated on readable state at packages/app/src/services/task-service.ts:1488) |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | packages/app/tests/services/task-record.test.ts:1893-1947 (a: missing → state + remedy naming path and `spur task verify`, stub written; b: malformed → authored Testing preserved) and :2055-2085 (f: identical re-record skips Testing/Review rewrites, state readable) |
+| AC2 | MET | test | packages/app/tests/services/task-transition.test.ts:284-333 (unforced clears stale flag and names PASS artifact, forced keeps supplied reason, done no-op writes no fields, audit failure reported via closeAuditError) plus packages/app/tests/services/task-record.test.ts:2086-2188 (g: stale cleared via record --transition done, h: denied hop throws and writes nothing, i: no-op byte-unchanged) |
+| AC3 | MET | test | packages/app/tests/services/task-record.test.ts:1948-2054 (c: foreign wbs 9999 → missing state, expected/actual/path message, zero checkbox flips, authored Testing/Requirements preserved; d: matching readable flips boxes; e: omitted-WBS fallback stays readable) |
+| AC4 | MET | test | Targeted suites run from packages/app: bun test tests/services/task-record.test.ts tests/services/task-transition.test.ts → 129 pass / 0 fail (318 expect calls); 1040 blocks at packages/app/tests/services/task-record.test.ts:1862-2188 and packages/app/tests/services/task-transition.test.ts:284-333 all green with pre-existing pins |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review Report — 1040
+
+**Scope:** working-tree diff vs HEAD (base 48edb0c99) — 7 files: `packages/app/src/services/task-record.ts`, `task-service.ts`, `task-transition.ts`, `apps/cli/src/commands/task.ts`, `tests/services/task-record.test.ts`, `tests/services/task-transition.test.ts`, this task file (662+/43−).
+**Dimensions:** functional, security, efficiency, correctness, usability, architecture
+**Verdict:** PASS (no P1/P2 findings; 1×P3, 3×P4 advisory)
+
+##### Findings (ranked)
+
+| # | Priority | Dimension | Finding | Disposition | Location |
+|---|----------|-----------|---------|-------------|----------|
+| 1 | P3 (minor) | usability | record's done auto-walk discards the error string returned by `reconcileDoneCloseAudit` — a failed close-audit write on the record path is silent, while the identical failure through `transitionTaskGuarded` is reported (`closeAuditError` result field + CLI warning). Reporting parity with the design's "best-effort, reported" audit behavior needs one additive `RecordResult` field or CLI line. | FIXED — additive `RecordResult.closeAuditError` (`packages/app/src/services/task-record.ts:96-101`), captured at `packages/app/src/services/task-service.ts:1558,1580` (both done shapes), CLI warning parity at `apps/cli/src/commands/task.ts:1246-1252`, pinned by record test (j); targeted suites 130 pass / 0 fail. | `packages/app/src/services/task-service.ts:1558,1580` vs `apps/cli/src/commands/task.ts:676-683` |
+| 2 | P4 (advisory) | architecture | `readVerdict` is now production-orphaned (its only caller, `TaskService.record`, switched to `readVerdictClassified`) but remains exported; it still silently collapses missing/malformed/foreign artifacts to UNKNOWN with no identity check — a future importer can regress the exact bug 1040 fixed. Delete the export or re-express it via the classified reader. | ACCEPTED | `packages/app/src/services/task-record.ts:141-149`; `packages/app/src/index.ts:687` |
+| 3 | P4 (advisory) | correctness | record resolves the verdict artifact from scratch `.spur/run/<wbs>-verdict.json` only, while the done gate prefers the durable evidence plane first; an unforced close via record can therefore cite a different artifact path in `done_reason` than a guarded `task update` close of the same task. Pre-existing read divergence (1040 did not change which file record reads), now materialized in audit metadata. | ACCEPTED | `packages/app/src/services/task-service.ts:1416-1420`; `packages/app/src/services/done-transition-guard.ts:179-199` |
+| 4 | P4 (advisory) | correctness | forced close without `--reason` leaves a stale `done_reason` (possibly an earlier "unforced close; PASS artifact …" text) beside a fresh `done_forced: "true"` — mixed audit signal. Faithful preservation of the pre-existing conditional-write behavior; the flag remains the authoritative override signal. | ACCEPTED | `packages/app/src/services/task-transition.ts:175-182` |
+
+##### Functional Traceability
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | `readVerdictClassified` + additive `verdictState`/`verdictMessage` (`packages/app/src/services/task-record.ts:151-253`); identical-content Testing/Review skip via trimmed compare (`packages/app/src/services/task-service.ts:1446-1473`); verdict-first CLI line (`apps/cli/src/commands/task.ts:1246-1249`); authored-Testing UNKNOWN gate untouched (`task-service.ts:1435`); tests a/b/f |
+| R2 | MET | one `reconcileDoneCloseAudit` policy (`packages/app/src/services/task-transition.ts:170-193`) invoked only after successful done writes on both paths (guarded: `task-transition.ts:281-295`; record auto-walk both shapes: `task-service.ts:1556-1563,1578-1584`); forced retention + unforced clearing + no-op/failed-hop non-reconcile pinned by the transition suite and record tests g/h/i |
+| R3 | MET | renders, authored-Review gate, guard order and provenance-link timing untouched (diff edits none of those regions); no new public verb/flag (CLI diff is output-only); server transition response shape unchanged (`apps/server/src/modules/task/handlers.ts:100-107`); `GuardedTransitionResult.result` narrowed `Awaited<ReturnType<TaskService['updateStatus']>>` → `WriteResult` is the same type (updateStatus already returns `WriteResult`) |
+| R4 | MET | raw-JSON identity check before schema parse, so omitted-`wbs` fallback survives while explicit foreign/empty `wbs` fails closed (`packages/app/src/services/task-record.ts:221-240`); checkbox flip gated on `state === 'readable'` (`task-service.ts:1487-1497`); foreign → missing + expected/actual/path, zero flips, authored preserved (test c); PARTIAL flips only proven MET boxes via unchanged `flipVerifiedCheckboxes` |
+
+| AC | Status | Evidence |
+|----|--------|----------|
+| AC1 | MET | test a (missing → state + remedy, stub written), b (malformed → authored preserved), f (identical re-record skips rewrite); targeted suites re-run this review: 129 pass / 0 fail (318 expect calls) |
+| AC2 | MET | transition suite: unforced clears stale flag + names PASS artifact, forced retains supplied reason/true flag, same-status no-op writes nothing, audit failure reported via `closeAuditError`; record tests g (stale cleared), h (denied hop writes nothing), i (no-op byte-identical) |
+| AC3 | MET | test c: mismatch message names expected/actual WBS + path; no foreign box checked; authored Testing/Review preserved; matching (d) and omitted-WBS (e) keep valid behavior |
+| AC4 | MET | targeted suites green on re-run; `bun run spur-check` PASS at the implementation gate (not re-run per stage contract); tsc clean reported in Testing section and consistent with the type-narrowing compile |
+
+##### Drift guard (verified, not edited)
+
+- `git status --short` shows exactly the 7 expected files: `done-transition-guard.ts`, verdict lint/aggregation, `status` JSON mode and `task-pipeline.yaml` are untouched.
+- No new public noun/verb/flag: the CLI diff adds output lines only; the server `task.transition` contract is unchanged.
+- Unforced `done_reason` is truthful by construction: `evaluateDoneTransition` denies missing/unusable/non-PASS before any status write, so reconcile only ever describes an accepted PASS artifact (`packages/app/src/services/done-transition-guard.ts:316-404`).
+
+##### Residual risk
+
+- Already-done tasks with stale forced metadata (e.g. 1038) are repaired only by a future active done write; same-status no-ops intentionally never reconcile (R2), so reopening (done → wip) and re-closing remains the designed remediation.
+- `done_forced: "false"` sentinel accumulates on every newly closed task (`updateField` cannot delete); harmless under the domain schema's string→boolean coercion (`packages/domain/src/planning/schema.ts:314`), mildly noisy in raw YAML.
+- P3 #1 leaves a narrow silent-failure window for close-audit writes on the record path only; status correctness is unaffected (audit writes are best-effort by contract).
+
+**Disposition:** approve-with-notes — P3 #1 (record-path audit-failure reporting parity) should be picked up before merge or in an immediate follow-up; P4 #2–#4 are advisory and can ride the next touching commit.
+
 
 ### References
 
@@ -141,3 +212,8 @@ A read-only in-memory probe confirmed an unforced close returned transitioned, m
 - Anchors: `packages/app/src/services/task-record.ts:39-74,111-135,238` · `task-transition.ts:24,80,219-229` · `task-service.ts:817-835` · `apps/cli/src/commands/task.ts:460` · `packages/app/src/services/done-transition-guard.ts:29`.
 
 ### History
+
+- 2026-10-01T22:02:44.974Z todo → wip (system)
+- 2026-10-02T00:10:10.310Z wip → testing (system)
+- 2026-10-02T00:10:29.495Z testing → done (system)
+

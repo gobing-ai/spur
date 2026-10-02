@@ -93,6 +93,12 @@ export interface RecordResult {
     testingWritten: boolean;
     reviewWritten: boolean;
     solutionBackfilled: boolean;
+    /**
+     * 1040 P3 review finding: unforced-close reconciliation failure from the
+     * record done path — same best-effort channel as `TransitionOutcome
+     * .closeAuditError`. Reported by the CLI, never thrown.
+     */
+    closeAuditError?: string;
     transitionedTo?: string;
     /**
      * 0936 R1: scenario-key carry-forward warnings from the Testing
@@ -101,6 +107,17 @@ export interface RecordResult {
      * to stderr and `--json` carries the array. Absent when silent.
      */
     scenarioWarnings?: string[];
+    /**
+     * 1040 R1/R4: state of the verdict artifact this record actually pulled —
+     * `readable` (parsed, rows usable), `missing` (absent, unreadable, or a
+     * foreign-task artifact), or `malformed` (bad JSON / structurally invalid).
+     */
+    verdictState?: 'readable' | 'missing' | 'malformed';
+    /**
+     * 1040 R1: actionable message for `missing`/`malformed` states naming the
+     * selected path and the verdict-first remedy. Absent when `readable`.
+     */
+    verdictMessage?: string;
 }
 
 // ─── R1: Verdict reader ─────────────────────────────────────────────────
@@ -135,6 +152,110 @@ export async function readVerdict(fs: FileSystem, path: string, fallbackWbs?: st
         return { wbs: fallbackWbs ?? '', verdict: 'UNKNOWN', requirements: [], acceptanceCriteria: [], checks: [] };
     }
     return parseVerdict(raw, fallbackWbs);
+}
+
+/** 1040: classified verdict-artifact read — the state + remedy the record step reports. */
+export interface ClassifiedVerdict {
+    state: 'readable' | 'missing' | 'malformed';
+    verdict: CanonicalVerifyVerdict;
+    /** Set only for missing/malformed: names the selected path and the remedy. */
+    message?: string;
+}
+
+/**
+ * 1040 R1/R4: read the verdict artifact and report its state instead of
+ * collapsing every failure to UNKNOWN.
+ *
+ * Missing = absent/unreadable file, empty file, or a foreign-task artifact
+ * (present `wbs` naming another task — unusable evidence; frozen mapping reports
+ * it as `missing` with a mismatch message). Malformed = bad JSON, non-object
+ * root, or a structurally invalid artifact. An artifact omitting `wbs` keeps
+ * the fallback-WBS compatibility. Identity is checked against the RAW JSON
+ * before schema parse, because `verifyVerdictSchema` defaults an omitted `wbs`
+ * to `''` — post-parse, omitted and explicit-`''` are indistinguishable.
+ */
+export async function readVerdictClassified(
+    fs: FileSystem,
+    path: string,
+    fallbackWbs: string,
+): Promise<ClassifiedVerdict> {
+    let raw: string;
+    try {
+        raw = await fs.readFile(path);
+    } catch {
+        return {
+            state: 'missing',
+            verdict: unknownStub(fallbackWbs),
+            message:
+                `verdict artifact not readable at ${path}. ` +
+                `Run \`spur task verify ${fallbackWbs}\` to produce a PASS verdict, then re-run \`spur task record ${fallbackWbs}\`.`,
+        };
+    }
+    if (raw.trim() === '') {
+        return {
+            state: 'missing',
+            verdict: unknownStub(fallbackWbs),
+            message:
+                `verdict artifact at ${path} is empty. ` +
+                `Run \`spur task verify ${fallbackWbs}\` to produce a PASS verdict, then re-run \`spur task record ${fallbackWbs}\`.`,
+        };
+    }
+
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(raw);
+    } catch (err) {
+        return {
+            state: 'malformed',
+            verdict: unknownStub(fallbackWbs),
+            message:
+                `verdict artifact at ${path} is malformed JSON (${(err as Error).message}). ` +
+                `Re-run \`spur task verify ${fallbackWbs}\` to regenerate it, then re-record.`,
+        };
+    }
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return {
+            state: 'malformed',
+            verdict: unknownStub(fallbackWbs),
+            message:
+                `verdict artifact at ${path} is invalid: root must be a JSON object. ` +
+                `Re-run \`spur task verify ${fallbackWbs}\` to regenerate it, then re-record.`,
+        };
+    }
+    const record = parsed as Record<string, unknown>;
+
+    // 1040 R4: a present `wbs` naming another task makes the artifact unusable
+    // for this task — derive no PASS and flip no checkboxes from it. Frozen
+    // result mapping: unusable reports as `missing` with expected/actual + path.
+    if ('wbs' in record) {
+        const artifactWbs: unknown = record.wbs;
+        if (typeof artifactWbs !== 'string' || artifactWbs !== fallbackWbs) {
+            const actual = typeof artifactWbs === 'string' ? JSON.stringify(artifactWbs) : String(artifactWbs);
+            return {
+                state: 'missing',
+                verdict: unknownStub(fallbackWbs),
+                message:
+                    `artifact identity mismatch at ${path}: expected wbs '${fallbackWbs}', actual ${actual}. ` +
+                    `This task cannot use another task's verdict artifact. ` +
+                    `Run \`spur task verify ${fallbackWbs}\` to produce this task's own PASS verdict, then re-record.`,
+            };
+        }
+    }
+
+    const outcome = parseVerifyVerdict(raw, fallbackWbs);
+    if (outcome.kind === 'valid') return { state: 'readable', verdict: outcome.verdict };
+    return {
+        state: 'malformed',
+        verdict: unknownStub(fallbackWbs),
+        message:
+            `verdict artifact at ${path} is invalid: ${outcome.kind === 'invalid' ? outcome.reason : outcome.kind}. ` +
+            `Re-run \`spur task verify ${fallbackWbs}\` to regenerate it, then re-record.`,
+    };
+}
+
+/** The honest UNKNOWN stub a non-readable artifact degrades to (preserves authored Testing). */
+function unknownStub(wbs: string): CanonicalVerifyVerdict {
+    return { wbs: wbs || '', verdict: 'UNKNOWN', requirements: [], acceptanceCriteria: [], checks: [] };
 }
 
 // ─── R2: Pure generators ────────────────────────────────────────────────

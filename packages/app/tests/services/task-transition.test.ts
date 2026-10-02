@@ -49,7 +49,7 @@ const UNGATED_TASK = [...TASK_HEAD, '### Background', '', 'Text', ''].join('\n')
 
 interface Harness {
     deps: GuardedTransitionDeps;
-    calls: { updateStatus: string[]; updateField: string[] };
+    calls: { updateStatus: string[]; updateField: string[]; fieldValues: Record<string, string> };
     cleanup(): void;
 }
 
@@ -60,6 +60,7 @@ function makeHarness(opts: {
     withCheckGate?: boolean;
     checkServiceThrows?: boolean;
     updateFieldThrows?: boolean;
+    showStatus?: string;
 }): Harness {
     const root = mkdtempSync(join(tmpdir(), 'spur-transition-test-'));
     const taskPath = join(root, '0001_task.md');
@@ -72,8 +73,12 @@ function makeHarness(opts: {
         writeFileSync(join(runDir, '0001-verdict.json'), JSON.stringify(opts.verdict));
     }
 
-    const calls = { updateStatus: [] as string[], updateField: [] as string[] };
-    const current = { filePath: taskPath, frontmatter: { status: 'testing' } };
+    const calls = {
+        updateStatus: [] as string[],
+        updateField: [] as string[],
+        fieldValues: {} as Record<string, string>,
+    };
+    const current = { filePath: taskPath, frontmatter: { status: opts.showStatus ?? 'testing' } };
 
     const checkGate =
         opts.withCheckGate === true
@@ -98,9 +103,11 @@ function makeHarness(opts: {
                     toStatus: status,
                 } as never;
             },
-            updateField: async (wbs: string, key: string) => {
+            updateField: async (wbs: string, key: string, value?: string) => {
                 if (opts.updateFieldThrows === true) throw new Error('audit write failed');
-                calls.updateField.push(`${wbs}:${key}`);
+                const callKey = `${wbs}:${key}`;
+                calls.updateField.push(callKey);
+                if (value !== undefined) calls.fieldValues[callKey] = value;
                 return undefined as never;
             },
         } as unknown as GuardedTransitionDeps['tasks'],
@@ -270,6 +277,57 @@ describe('1042 — foreign-task verdict artifact is rejected at the shared reade
         }
         expect(h.calls.updateStatus).toEqual(['0001:done']);
         expect(h.calls.updateField).toEqual(['0001:done_forced', '0001:done_reason']);
+        h.cleanup();
+    });
+});
+
+describe('1040 — close-audit reconciliation on unforced done (R2)', () => {
+    test('unforced done over a PASS artifact clears stale forced metadata and names the PASS artifact', async () => {
+        const h = makeHarness({ task: GATED_TASK, verdict: PASS_ARTIFACT });
+        const out = await transitionTaskGuarded(h.deps, { wbs: '0001', toStatus: 'done' });
+        expect(out.kind).toBe('transitioned');
+        expect(h.calls.updateStatus).toEqual(['0001:done']);
+        expect(h.calls.updateField).toContain('0001:done_forced');
+        expect(h.calls.updateField).toContain('0001:done_reason');
+        // Stale forced flag cleared; reason describes the accepted PASS artifact.
+        expect(h.calls.fieldValues['0001:done_forced']).toBe('false');
+        expect(h.calls.fieldValues['0001:done_reason']).toContain('PASS artifact at');
+        expect(h.calls.fieldValues['0001:done_reason']).toContain('0001-verdict.json');
+        // Not an override: no forced attribution on the result.
+        if (out.kind === 'transitioned') expect(out.forced).toBeUndefined();
+        h.cleanup();
+    });
+
+    test('forced done keeps the supplied reason and the true flag (current behavior preserved)', async () => {
+        const h = makeHarness({ task: GATED_TASK });
+        const out = await transitionTaskGuarded(h.deps, {
+            wbs: '0001',
+            toStatus: 'done',
+            forceDone: true,
+            reason: 'operator emergency close',
+        });
+        expect(out.kind).toBe('transitioned');
+        expect(h.calls.fieldValues['0001:done_forced']).toBe('true');
+        expect(h.calls.fieldValues['0001:done_reason']).toBe('operator emergency close');
+        h.cleanup();
+    });
+
+    test('same-status done no-op writes no close-audit fields', async () => {
+        const h = makeHarness({ task: GATED_TASK, verdict: PASS_ARTIFACT, showStatus: 'done' });
+        const out = await transitionTaskGuarded(h.deps, { wbs: '0001', toStatus: 'done' });
+        expect(out.kind).toBe('noop');
+        expect(h.calls.updateStatus).toEqual([]);
+        expect(h.calls.updateField).toEqual([]);
+        h.cleanup();
+    });
+
+    test('audit-write failure on an unforced close is reported via closeAuditError, not thrown', async () => {
+        const h = makeHarness({ task: GATED_TASK, verdict: PASS_ARTIFACT, updateFieldThrows: true });
+        const out = await transitionTaskGuarded(h.deps, { wbs: '0001', toStatus: 'done' });
+        expect(out.kind).toBe('transitioned');
+        if (out.kind === 'transitioned') {
+            expect(out.closeAuditError).toContain('audit write failed');
+        }
         h.cleanup();
     });
 });
