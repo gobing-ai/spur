@@ -283,6 +283,13 @@ async function readExistingRunFile(path: string): Promise<Buffer | undefined> {
  * while its inserted DB row still counts in {@link PersistWorktreeRunsSuccess.persisted}.
  * A missing task-pipeline record stays fatal, preserving the green-run evidence guarantee.
  *
+ * Fail-closed records (1043 R1): all record bytes are pre-read BEFORE the target DB is
+ * opened; a task-pipeline ENOENT or any non-ENOENT read error aborts with zero writes, so
+ * inserted rows can never outrun their evidence. Replay repair (1043 R2): ids already
+ * present in the target (`id-exists`) join the copy-if-missing record pass — a torn earlier
+ * attempt (rows without files) is repaired by the next persist-out (`persisted:0` plus the
+ * repaired records); divergent targets still refuse to overwrite (0984 R4).
+ *
  * Any other persistence failure (unreadable worktree DB, unwritable target, or a source run
  * id that is not a safe filename component — rejected as {@link InvalidWorkflowRunIdError}
  * before any target write) throws — the caller routes to WT-5 and the worktree is retained,
@@ -458,10 +465,40 @@ export async function persistWorktreeRuns(input: PersistWorktreeRunsInput): Prom
         for (const row of runRows) {
             if (!SAFE_RUN_ID_RE.test(row.id)) throw new InvalidWorkflowRunIdError(row.id);
         }
+        // 1043 R1: pre-read every row's record bytes while nothing has been written yet — a
+        // task-pipeline ENOENT or any non-ENOENT read error aborts BEFORE the target DB is
+        // opened, so the transfer can never insert rows whose record pass would later fail
+        // (extends the safe-id precheck above to the record plane). The bytes are cached for
+        // the copy pass, which therefore writes exactly what was validated. Absence is legal
+        // only for a known bookkeeping lifecycle row (0984 R5) — the record pass reports
+        // `record-missing` for its un-cached files.
+        const recordBytes = new Map<string, Buffer>();
+        for (const row of runRows) {
+            const bookkeeping =
+                row.workflowName !== null && row.workflowName !== undefined && isBookkeepingWorkflow(row.workflowName);
+            for (const fileName of [`${row.id}.md`, `${row.id}.state.json`]) {
+                try {
+                    recordBytes.set(fileName, await readFile(join(fromRecordsDir, fileName)));
+                } catch (error) {
+                    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+                        if (bookkeeping) continue;
+                        throw new Error(
+                            `persist-out: ${row.workflowName ?? 'unknown'} run ${row.id} is missing its run record ` +
+                                `\`${fileName}\` in the worktree — failing closed before any row transfer ` +
+                                '(green-run evidence guarantee, 0984 R5 / 1043 R1)',
+                        );
+                    }
+                    throw error;
+                }
+            }
+        }
         const target = await openInlineRunProjectDb(toDir);
         try {
             const { persistedIds, skipped } = await transferRunTables(source.adapter, target.adapter);
-            const workflowNameById = new Map(runRows.map((row) => [row.id, row.workflowName]));
+            // 1043 R2: a replay after a torn earlier attempt reports every row as `id-exists`
+            // with an empty `persistedIds` — the record pass must cover those ids too, or the
+            // missing records would never be repaired.
+            const recordIds = [...persistedIds, ...skipped.filter((s) => s.reason === 'id-exists').map((s) => s.id)];
             const recordSkips: Array<{ id: string; reason: string }> = [];
             const referenceMoves: Array<{ source: string; target: string }> = [];
             if (evidenceCopies.length > 0) {
@@ -476,34 +513,20 @@ export async function persistWorktreeRuns(input: PersistWorktreeRunsInput): Prom
                     referenceMoves.push({ source: copy.source, target: fs.realPath?.(copy.target) ?? copy.target });
                 }
             }
-            if (persistedIds.length > 0 || citedCopies.length > 0) {
+            if (recordIds.length > 0 || citedCopies.length > 0) {
                 mkdirSync(toRunDir, { recursive: true });
                 mkdirSync(toRecordsDir, { recursive: true });
                 // 1026: durable record copies must not shift the proof-input tree.
                 ensureDurablePlaneIgnored(toDir);
-                for (const id of persistedIds) {
-                    const workflowName = workflowNameById.get(id);
+                for (const id of recordIds) {
                     for (const fileName of [`${id}.md`, `${id}.state.json`]) {
-                        let sourceBytes: Buffer;
-                        try {
-                            sourceBytes = await readFile(join(fromRecordsDir, fileName));
-                        } catch (error) {
-                            // 0984 R5: a known bookkeeping lifecycle row may have no two-file
-                            // record at all (record-stage transitions create rows with zero
-                            // children) — its source ENOENT is a reported skip, not an aborted
-                            // transfer; the inserted row still counts in `persisted`. Every
-                            // other workflow (task-pipeline runs above all) keeps the fatal
-                            // green-run evidence guarantee, and non-ENOENT read errors stay fatal.
-                            if (
-                                workflowName !== null &&
-                                workflowName !== undefined &&
-                                isBookkeepingWorkflow(workflowName) &&
-                                (error as NodeJS.ErrnoException).code === 'ENOENT'
-                            ) {
-                                recordSkips.push({ id, reason: `record-missing:${fileName}` });
-                                continue;
-                            }
-                            throw error;
+                        const sourceBytes = recordBytes.get(fileName);
+                        if (sourceBytes === undefined) {
+                            // 0984 R5: pre-validation proved only a bookkeeping lifecycle row
+                            // (record-stage transitions create rows with zero children) can be
+                            // absent — its missing record is a reported skip, not a failure.
+                            recordSkips.push({ id, reason: `record-missing:${fileName}` });
+                            continue;
                         }
                         const targetPath = join(toRecordsDir, fileName);
                         const existing = await readExistingRunFile(targetPath);
@@ -534,7 +557,7 @@ export async function persistWorktreeRuns(input: PersistWorktreeRunsInput): Prom
                 }
                 // 1026 R7: carry the durable per-run dirs (the record pair lives inside;
                 // agent sessions and artifacts ride along) with record conflict=skip semantics.
-                for (const id of persistedIds) {
+                for (const id of recordIds) {
                     await carryRunRecordDir(fromRecordsDir, toRecordsDir, '', id, recordSkips, referenceMoves);
                 }
             }

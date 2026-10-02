@@ -864,3 +864,127 @@ describe('persistWorktreeRuns owned evidence (task 1012)', () => {
         }
     });
 });
+
+describe('persistWorktreeRuns fail-closed + replay repair (task 1043)', () => {
+    test('a task-pipeline row with a missing record fails closed before the target DB is opened (R1/AC1)', async () => {
+        const from = makeDir('persist-fc-from-');
+        const to = makeDir('persist-fc-to-');
+        try {
+            // A healthy row WOULD insert if the target DB were opened; the broken
+            // task-pipeline row must abort the whole pass with zero rows transferred.
+            await seedWorktree(from.dir, 'run_1043ok');
+            const db = await openInlineRunProjectDb(from.dir);
+            try {
+                await db.adapter.run(RUN_INSERT, 'run_1043pipe', 'task-pipeline');
+            } finally {
+                db.close();
+            }
+
+            await expect(persistWorktreeRuns({ fromWorkdir: from.dir, toWorkdir: to.dir })).rejects.toThrow(
+                /run_1043pipe\.md/,
+            );
+            const target = await openInlineRunProjectDb(to.dir);
+            try {
+                expect(await target.adapter.queryFirst<{ n: number }>('SELECT COUNT(*) AS n FROM runs')).toEqual({
+                    n: 0,
+                });
+                expect(await target.adapter.queryFirst<{ n: number }>('SELECT COUNT(*) AS n FROM action_runs')).toEqual(
+                    { n: 0 },
+                );
+            } finally {
+                target.close();
+            }
+            // Nothing was written to the invoking tree either (no record dirs created).
+            expect(existsSync(runStoragePaths(to.dir).recordsDir)).toBe(false);
+        } finally {
+            from.cleanup();
+            to.cleanup();
+        }
+    });
+
+    test('a replay after torn state (rows without records) repairs the missing records (R2/AC2)', async () => {
+        const from = makeDir('persist-rep-from-');
+        const to = makeDir('persist-rep-to-');
+        try {
+            await seedWorktree(from.dir, 'run_1043t');
+            // A record-less bookkeeping row replayed beside it must stay a reported skip.
+            const db = await openInlineRunProjectDb(from.dir);
+            try {
+                await db.adapter.run(RUN_INSERT, 'run_1043lc', 'task-lifecycle');
+            } finally {
+                db.close();
+            }
+            // Simulate the torn invoking tree from the E71 incident: the rows exist in the
+            // target DB but no two-file record ever landed (an earlier persist died mid-pass).
+            const torn = await openInlineRunProjectDb(to.dir);
+            try {
+                await torn.adapter.run(RUN_INSERT, 'run_1043t', 'wf');
+                await torn.adapter.run(RUN_INSERT, 'run_1043lc', 'task-lifecycle');
+            } finally {
+                torn.close();
+            }
+            expect(existsSync(runStoragePaths(to.dir).recordsDir)).toBe(false);
+
+            const replay = await persistWorktreeRuns({ fromWorkdir: from.dir, toWorkdir: to.dir });
+            expect(replay).toEqual({
+                ok: true,
+                persisted: 0,
+                skipped: [
+                    { id: 'run_1043t', reason: 'id-exists' },
+                    { id: 'run_1043lc', reason: 'id-exists' },
+                    { id: 'run_1043lc', reason: 'record-missing:run_1043lc.md' },
+                    { id: 'run_1043lc', reason: 'record-missing:run_1043lc.state.json' },
+                ],
+            });
+            const toRecords = runStoragePaths(to.dir).recordsDir;
+            expect(readFileSync(join(toRecords, 'run_1043t.md'), 'utf8')).toContain('run_1043t');
+            expect(JSON.parse(readFileSync(join(toRecords, 'run_1043t.state.json'), 'utf8'))).toEqual({
+                runId: 'run_1043t',
+            });
+            expect(existsSync(join(toRecords, 'run_1043lc.md'))).toBe(false);
+            // The repair is file-plane only: no new or duplicate run rows appeared.
+            const target = await openInlineRunProjectDb(to.dir);
+            try {
+                expect(await target.adapter.queryFirst<{ n: number }>('SELECT COUNT(*) AS n FROM runs')).toEqual({
+                    n: 2,
+                });
+            } finally {
+                target.close();
+            }
+        } finally {
+            from.cleanup();
+            to.cleanup();
+        }
+    });
+
+    test('replay-time divergence still refuses overwrite: conflict skip, target record stands (0984 R4)', async () => {
+        const from = makeDir('persist-div-from-');
+        const to = makeDir('persist-div-to-');
+        try {
+            await seedWorktree(from.dir, 'run_1043d');
+            const torn = await openInlineRunProjectDb(to.dir);
+            try {
+                await torn.adapter.run(RUN_INSERT, 'run_1043d', 'wf');
+            } finally {
+                torn.close();
+            }
+            const toRecords = runStoragePaths(to.dir).recordsDir;
+            mkdirSync(toRecords, { recursive: true });
+            writeFileSync(join(toRecords, 'run_1043d.state.json'), '{"runId":"someone-else"}\n');
+
+            const replay = await persistWorktreeRuns({ fromWorkdir: from.dir, toWorkdir: to.dir });
+            expect(replay.ok).toBe(true);
+            expect(replay.persisted).toBe(0);
+            // The durable-dir carry (1026 R7) re-reports the same conflict under its composite
+            // id, so the pair-pass entries are asserted by containment (same as task 0975).
+            expect(replay.skipped).toContainEqual({ id: 'run_1043d', reason: 'id-exists' });
+            expect(replay.skipped).toContainEqual({ id: 'run_1043d', reason: 'record-conflict:run_1043d.state.json' });
+            // The divergent record stands; the missing sibling record is still repaired.
+            expect(readFileSync(join(toRecords, 'run_1043d.state.json'), 'utf8')).toContain('someone-else');
+            expect(readFileSync(join(toRecords, 'run_1043d.md'), 'utf8')).toContain('run_1043d');
+        } finally {
+            from.cleanup();
+            to.cleanup();
+        }
+    });
+});
