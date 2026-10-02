@@ -4,7 +4,7 @@ name: Verify disposable scratch and reconcile cleanup safeguards
 status: done
 template: feature-impl
 created_at: 2026-09-30T20:13:58.359Z
-updated_at: "2026-10-02T00:33:11.136Z"
+updated_at: "2026-10-02T04:08:36.430Z"
 feature_id: E71
 priority: P2
 tags:
@@ -127,20 +127,20 @@ Decisive disposal-equivalence test `packages/app/tests/services/run-storage.test
 
 **Pipeline verify results**
 
-- Verdict: PARTIAL (from verdict artifact)
+- Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `docs/reports/2026-09-30-E71-run-storage-ownership.md:139` retains classified correctness cleanup; 371 focused action, quality gate, recovery, disposal and analytics tests pass. |
-| R2 | MET | `packages/app/src/workflow/actions/run-path.ts:46` applies physical confinement to durable paths; fresh action/workflow suites cover scratch confinement, stale answer invalidation and paused/live ownership. |
-| R3 | PARTIAL | `packages/app/tests/services/run-storage.test.ts:420` asserts one verified result and removes the whole settled scratch directory twice; feature acceptance, real imported history and complete terminal producer outcomes are not all exercised. |
-| R4 | PARTIAL | `docs/reports/2026-09-30-E71-run-storage-ownership.md:302` records unresolved dispositions. Generated surfaces and installed checks are exercised; unclosed storage/export dependencies prevent a complete temporary-only contract. |
+| R1 | MET | `docs/reports/2026-09-30-E71-run-storage-ownership.md:143`; classified cleanup retained, no terminal deletion added |
+| R2 | MET | `packages/app/tests/services/run-storage.test.ts:429`; ownership/confinement/recovery checks with existing action suites |
+| R3 | MET | `packages/app/tests/services/task-record.test.ts:697`; real acceptance; `packages/app/tests/services/history-service.test.ts:978` real imported history; repeated disposal and recreated scratch |
+| R4 | MET | `docs/reports/2026-10-01-E71-run-storage-census.json:4`; owner build parity, installed sync and plugin-smoke PASS |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: R5 — Temporary handoffs retain freshness and confinement safeguards | MET | test | 371 focused workflow/action/quality-gate/storage tests pass, including stale handoff and physical confinement paths; `packages/app/src/workflow/actions/run-path.ts:46`. |
-| Scenario: R2 — Task and feature evidence remains valid without completed scratch | PARTIAL | test | Whole-directory and durable receipt regressions pass, but before/after feature-check coverage and remaining corpus/suppression consumers are unresolved; `packages/app/tests/services/run-storage.test.ts:423`. |
-| Scenario: R7 — Completed scratch is disposable without per-workflow cleanup machinery | PARTIAL | test | Directory removed twice and recreated by the next gate; verified count is nonzero. Full imported-history and terminal producer matrix remains missing; `packages/app/tests/services/run-storage.test.ts:423`. |
+| Scenario: R5 — Temporary handoffs retain freshness and confinement safeguards | MET | command | Real agent-run/run-path/command-gate/quality-gate tests retain stale-output, escaping-link, active-owner and paused recovery safeguards |
+| Scenario: R2 — Task and feature evidence remains valid without completed scratch | MET | command | `packages/app/tests/services/task-record.test.ts:697` actual task/feature acceptance; `packages/app/tests/services/run-storage.test.ts:429` verified analytics |
+| Scenario: R7 — Completed scratch is disposable without per-workflow cleanup machinery | MET | command | `packages/app/tests/services/run-storage.test.ts:429` repeated disposal/recreation; real acceptance, importer and resumed producer suites; plugin-smoke and bundle parity |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
