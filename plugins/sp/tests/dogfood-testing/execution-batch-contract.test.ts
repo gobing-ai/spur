@@ -248,6 +248,22 @@ describe('execution-batch spec contract (task 0477 — worktree isolation lifecy
         expect(GLOSSARY).toContain('### `--worktree [<name>]` — run the batch in an isolated git worktree');
     });
 
+    test('WT-4a — external-key-conflict teardown refusal names the 1049 reconciliation elements', () => {
+        // Task 1049 AC4: the bounded reconciliation contract must carry every element —
+        // archived snapshot, source identities, file-hash check, merged-commit ancestry,
+        // and operator-authorized cleanup — so a prose regression fails here, not in the field.
+        for (const phrase of [
+            '**and fails the pass (1049)**',
+            'the original archived DB snapshot',
+            'the skipped source run identities',
+            'verifies the archive by file hash',
+            'merged-commit ancestry of the source branch',
+            'explicit operator-authorized cleanup',
+        ]) {
+            expect(SPEC).toContain(phrase);
+        }
+    });
+
     test('R10.1 — portable git only; no Claude-Code-only worktree tools', () => {
         expect(SPEC).toContain('Use portable `git worktree` commands only');
         expect(RUNALL).not.toContain('EnterWorktree');

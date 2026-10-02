@@ -3,7 +3,7 @@ import { execSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { resolveWorkflowDefinition } from '../../src';
+import { openInlineRunProjectDb, resolveWorkflowDefinition, runStoragePaths } from '../../src';
 import {
     appendInlineRunLogLine,
     type InlineRunStateOutcome,
@@ -458,6 +458,63 @@ describe('runInlineRunSetup + runInlineRunTrace (moved driver bodies, 1006 R3)',
                 });
                 expect(readFileSync(target, 'utf8')).toBe(original);
                 expect(readFileSync(source, 'utf8')).toContain('new retained evidence');
+            });
+        } finally {
+            from.cleanup();
+            to.cleanup();
+        }
+    });
+
+    test('persist-out blocks teardown when an external-key conflict skips the source run (1049 R1)', async () => {
+        const from = makeProject('persist-xk-from');
+        const to = makeProject('persist-xk-to');
+        // The receiving tree already holds T; the worktree's S carries the same
+        // (workflow_name, external_key) under a different id — the 1045 transfer seam,
+        // proven here at the driver boundary where teardown is decided.
+        const RUN_INSERT = `INSERT INTO runs (id, workflow_name, mode, status, agent, external_key, started_at, completed_at,
+                                              metadata_json, created_at, updated_at)
+                            VALUES (?, 'wf', 'state-machine', 'done', NULL, NULL, '2026-10-02T00:00:00Z', NULL, '{}', 1, 1)`;
+        const targetSeed = await openInlineRunProjectDb(to.dir);
+        try {
+            await targetSeed.adapter.run(RUN_INSERT, 'run_1049t');
+            await targetSeed.adapter.run("UPDATE runs SET external_key = 'k1049' WHERE id = 'run_1049t'");
+        } finally {
+            targetSeed.close();
+        }
+        const sourceSeed = await openInlineRunProjectDb(from.dir);
+        try {
+            await sourceSeed.adapter.run(RUN_INSERT, 'run_1049s');
+            await sourceSeed.adapter.run("UPDATE runs SET external_key = 'k1049' WHERE id = 'run_1049s'");
+        } finally {
+            sourceSeed.close();
+        }
+        // The source run's own record pair exists (1043 R1 requires it before any transfer);
+        // the conflict still excludes S from the record copy set.
+        const fromRecords = runStoragePaths(from.dir).recordsDir;
+        mkdirSync(fromRecords, { recursive: true });
+        writeFileSync(join(fromRecords, 'run_1049s.md'), '# spur inline run run_1049s\n');
+        writeFileSync(join(fromRecords, 'run_1049s.state.json'), '{"runId":"run_1049s"}\n');
+        try {
+            await inDir(to.dir, async () => {
+                const refused = await captureAsync(() => runInlineRunPersistOut({ from: from.dir, taskFiles: [] }));
+                expect(refused.value).toBe(1);
+                const payload = JSON.parse(refused.out.trimEnd()) as { ok: boolean; error: string; skipped: unknown[] };
+                expect(payload.ok).toBe(false);
+                expect(payload.error).toContain('run_1049s');
+                expect(payload.error).toContain('retain the source worktree');
+                expect(payload.skipped).toContainEqual({ id: 'run_1049s', reason: 'external-key-conflict' });
+                // The receiving row stands untouched; no S rows or records landed.
+                const target = await openInlineRunProjectDb(to.dir);
+                try {
+                    expect(await target.adapter.queryFirst<{ n: number }>('SELECT COUNT(*) AS n FROM runs')).toEqual({
+                        n: 1,
+                    });
+                } finally {
+                    target.close();
+                }
+                const toRecords = runStoragePaths(to.dir).recordsDir;
+                expect(existsSync(join(toRecords, 'run_1049s.md'))).toBe(false);
+                expect(existsSync(join(toRecords, 'run_1049s.state.json'))).toBe(false);
             });
         } finally {
             from.cleanup();

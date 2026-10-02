@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: Block automatic worktree teardown when provenance is skipped for an external-key conflict
-status: todo
+status: done
 template: issue
 created_at: 2026-10-02T05:46:44.406Z
-updated_at: "2026-10-02T06:06:15.242Z"
+updated_at: "2026-10-02T11:01:56.479Z"
 feature_id: E71
 
 priority: P2
 ac_altitude: task-local
 ac_numbering: task-local
 dependencies: ["1043", "1045"]
+done_forced: "false"
+done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-dev-run-1049-e7e0/.spur/memory/evidence/1049-verdict.json
 ---
 
 ## 1049. Block automatic worktree teardown when provenance is skipped for an external-key conflict
@@ -25,19 +27,19 @@ Direct triage repair also copied the cleanup archive out of disposable scratch i
 
 ### Requirements
 
-- [ ] R1. The persist-out delegate must return ok false/nonzero on any external-key-conflict skip and name the skipped source run IDs and the requirement to retain the source worktree.
-- [ ] R2. Preserve the domain skip policy and receiving canonical evidence; never overwrite, merge run identities, backfill children into another run, or copy excluded records as if they belong to it.
-- [ ] R3. Update the existing worktree teardown contract to stop before worktree/branch removal on that result. Explain bounded manual reconciliation: consistent source DB/file archive with hash verification before operator-authorized cleanup, as demonstrated by the retained cleanup manifest.
+- [x] R1. The persist-out delegate must return ok false/nonzero on any external-key-conflict skip and name the skipped source run IDs and the requirement to retain the source worktree.
+- [x] R2. Preserve the domain skip policy and receiving canonical evidence; never overwrite, merge run identities, backfill children into another run, or copy excluded records as if they belong to it.
+- [x] R3. Update the existing worktree teardown contract to stop before worktree/branch removal on that result. Explain bounded manual reconciliation: consistent source DB/file archive with hash verification before operator-authorized cleanup, as demonstrated by the retained cleanup manifest.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Conflict prevents automatic teardown (req: R1, R3).
+- [x] AC1 — Conflict prevents automatic teardown (req: R1, R3).
   Given a source bookkeeping run with an external key already owned by a different receiving run, when the shared delegate persists it, then exit is nonzero, ok is false, the source ID is reported and WT-4 does not remove the worktree or branch.
-- [ ] AC2 — Canonical receiving ownership is unchanged (req: R2).
+- [x] AC2 — Canonical receiving ownership is unchanged (req: R2).
   Given differing source records and unique children, the domain transfer still reports exclusion and does not attach them to the receiving run or overwrite its files.
-- [ ] AC3 — Normal and idempotent exports stay successful (req: R1, R2).
+- [x] AC3 — Normal and idempotent exports stay successful (req: R1, R2).
   Given no external-key conflict, normal export and id-exists replay repair pass; record-conflict and malformed evidence still retain their existing failure behavior.
-- [ ] AC4 — Manual reconciliation is auditable (req: R3).
+- [x] AC4 — Manual reconciliation is auditable (req: R3).
   The worktree contract names the original archived DB snapshot, source run identities, file hash check and verification of merged commit ancestry before explicit cleanup, while retaining strict canonical evidence handling.
 
 ### Q&A
@@ -71,15 +73,45 @@ The domain transfer accurately reports skipped provenance, but the high-level pe
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `packages/app/src/services/inline-run-setup.ts:1355` |
+| `packages/app/tests/services/inline-run-driver.test.ts:468` |
+| `packages/app/tests/services/inline-run-driver.test.ts:6` |
+| `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:251` |
 
 ### Testing
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/services/inline-run-setup.ts:1359-1366` — delegate filters `external-key-conflict` skips, emits `{"ok":false,"error":"persist-out: external-key conflict for source runs <ids>; retain the source worktree and reconcile provenance before teardown"}` and `return 1` (nonzero). Regression `packages/app/tests/services/inline-run-driver.test.ts:503-505` asserts the error names the skipped source run (`run_1049s`), contains "retain the source worktree", and reports `{id:'run_1049s', reason:'external-key-conflict'}` in `skipped`. |
+| R2 | MET | `packages/domain/src/dao/run-transfer.ts` untouched by the diff — external-key exclusion intact (`run-transfer.ts:16,33,123`); preserved domain tests `packages/domain/tests/dao/run-transfer.test.ts:115` and `:138` pass 4/0. Driver test `packages/app/tests/services/inline-run-driver.test.ts:509-517` asserts the receiving run count stays `1` and no source record files land in the target — no overwrite, merge, backfill, or misattributed copy. |
+| R3 | MET | `plugins/sp/skills/spur-dev/references/execution-batch.md:533` — external-key-conflict "fails the pass (1049)": delegate exits 1, names skipped source run ids, source worktree stays provenance owner of record; nonzero persist-out routes to WT-5 (worktree + branch retained) per `plugins/sp/skills/spur-dev/references/execution-batch.md:538-539` and WT-4a guard `:879-883`. Bounded manual reconciliation named in the same sentence: archived DB snapshot, source run identities, file-hash verification, merged-commit ancestry check, residual deletion only as operator-authorized cleanup under strict canonical evidence rules. Design doc aligned at `docs/design/disposable-run-storage.md:55`. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | Fresh run `bun test packages/app/tests/services/inline-run-driver.test.ts` → 14 pass / 0 fail: `packages/app/tests/services/inline-run-driver.test.ts:468-523` asserts exit 1 (:501), `ok:false` (:502), source ID reported (:503,505) with receiving tree seeded as a different run owning the same external key (:477-491); teardown refusal enforced by WT-4a nonzero→WT-5 contract (`plugins/sp/skills/spur-dev/references/execution-batch.md:879-883`, static-ref). |
+| AC2 | MET | test | `packages/app/tests/services/inline-run-driver.test.ts:509-517` — receiving rows unchanged (`COUNT(*)` = 1), source records absent from target; `bun test packages/domain/tests/dao/run-transfer.test.ts` → 4 pass / 0 fail including `packages/domain/tests/dao/run-transfer.test.ts:115-126`. |
+| AC3 | MET | test | Driver 14/0 retains record-conflict refusal (`packages/app/tests/services/inline-run-driver.test.ts:434`) and fail-closed unusable-source (`:525`); domain 4/0 retains `id-exists` replay (`packages/domain/tests/dao/run-transfer.test.ts:93`) and idempotent re-persist (`:138`) — success path exit 0 / `ok:true` unchanged (`packages/app/src/services/inline-run-setup.ts:1368-1369`). |
+| AC4 | MET | test | `plugins/sp/skills/spur-dev/references/execution-batch.md:533` names all four required elements: original archived DB snapshot, skipped source run identities, file-hash verification, merged-commit ancestry of the source branch, plus explicit operator-authorized cleanup "under the strict canonical evidence rules above". Executable evidence: contract pin `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:251-265` asserts all six AC4-element phrases against the shipped spec (each unique, count=1 — element drops fail); fresh run 35 pass / 0 fail. Corroborated by `docs/design/disposable-run-storage.md:55`. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -91,3 +123,8 @@ The domain transfer accurately reports skipped provenance, but the high-level pe
 - Tasks 1043/1045; E71.
 
 ### History
+
+- 2026-10-02T10:03:56.702Z todo → wip (system)
+- 2026-10-02T11:00:40.419Z wip → testing (system)
+- 2026-10-02T11:01:56.476Z testing → done (system)
+
