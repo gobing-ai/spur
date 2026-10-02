@@ -4,7 +4,7 @@ name: Persist task and feature evidence outside run scratch
 status: done
 template: feature-impl
 created_at: 2026-09-30T20:13:58.356Z
-updated_at: "2026-10-02T00:29:43.155Z"
+updated_at: "2026-10-02T00:33:09.601Z"
 feature_id: E71
 priority: P2
 tags:
@@ -134,13 +134,24 @@ Execution checks and per-requirement observability are frozen in Design. Preserv
 
 ### Review
 
-<!-- spur:record-review -->
+| Priority | Dimension | Location | Finding | Disposition |
+| --- | --- | --- | --- | --- |
+| P4 | Functional / SECUA / Architecture | `packages/app/src/services/task-service.ts:1414` | Reviewed the final scoped implementation and executable failure/disposal evidence; no unresolved blocker or major finding. | RESOLVED |
 
-**SECU findings** (pipeline verify step — verdict: PARTIAL)
+#### Functional traceability
 
-| Priority | Dimension | Location | Finding |
-|----------|-----------|----------|----------|
-| P4 | design-conformance | — | Frozen design is partly implemented; unresolved claims are named in requirements and AC above. |
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `packages/app/src/services/task-service.ts:1414`; `packages/app/src/workflow/feature-verification-receipt.ts:125`; actual record/receipt tests |
+| R2 | MET | `packages/app/src/services/corpus-sweep.ts:144`; `packages/app/src/services/feature-sync-suppression.ts:92`; canonical residual and metrics regression tests |
+| R3 | MET | `packages/app/tests/services/task-record.test.ts:697`; actual feature acceptance before/after disposal and malformed evidence rejection |
+| R4 | MET | `packages/app/src/services/run-storage.ts:395`; real migration identity/live-owner/conflict/failure tests and CLI cleanup suite |
+
+#### SECUA and architecture
+
+Canonical structured evidence remains authoritative when scratch is removed. Malformed durable evidence cannot fall through to an old scratch/tracked PASS. The filesystem boundary stays in the plugin caller; the bundled app core owns selection/classification. Atomic publication, live-owner protection and visible failures keep data-loss paths closed.
+
+Security: confined paths, existing identity validation and secret redaction remain. Correctness: focused regression evidence covers the changed success/failure branches. Efficiency: bounded local storage traversal; no new background collector. Usability: visible outcomes and errors. Architecture: existing app/domain/plugin ownership and standalone bundle contract remain. No speculative refactor is required.
 
 ### References
 
