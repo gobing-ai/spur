@@ -332,6 +332,7 @@ export function renderReport(wbs: string, items: ResidualItem[], attemptCount: n
     return `${lines.join('\n')}\n`;
 }
 
+/** Select canonical recorded evidence, refusing linked ancestors; legacy scratch is used only when absent. */
 export function recordedVerdictPath(
     runDir: string,
     wbs: string,
