@@ -1,8 +1,7 @@
 /**
  * Behavioral checks for the linked-package staleness guard.
  *
- * NOTE: `scripts/` is outside the default `bun run test` roots (same as
- * `corpus-check`), so run this explicitly:
+ * Included in `bun run test`; run this focused check with:
  *   bun test scripts/commands/link-check.test.ts
  *
  * The staleness comparison is the whole point of the module and its sense is
@@ -10,7 +9,7 @@
  * the direction rather than just "returns an array".
  */
 import { describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmdirSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { findStaleLinks } from './link-check';
@@ -27,6 +26,10 @@ function scaffold(opts: { srcAge: number; distAge: number | null; srcName?: stri
     const pkg = join(root, 'linked-pkg');
     mkdirSync(join(pkg, 'src'), { recursive: true });
     mkdirSync(join(pkg, 'dist'), { recursive: true });
+    writeFileSync(
+        join(pkg, 'package.json'),
+        JSON.stringify({ exports: { '.': { types: './dist/index.d.ts', import: './dist/index.js' } } }),
+    );
 
     const srcFile = join(pkg, 'src', opts.srcName ?? 'index.ts');
     writeFileSync(srcFile, 'export const a = 1;');
@@ -45,6 +48,21 @@ function scaffold(opts: { srcAge: number; distAge: number | null; srcName?: stri
 }
 
 describe('findStaleLinks', () => {
+    test.each([
+        { '.': './src/index.ts' },
+        { './board': { types: './board/index.d.ts' }, './schemas/*': './schemas/*' },
+    ])('ignores packages that do not export dist output: %j', (exports) => {
+        const consumer = scaffold({ srcAge: T0 + 20, distAge: null });
+        writeFileSync(join(consumer, '..', 'linked-pkg', 'package.json'), JSON.stringify({ exports }));
+        expect(findStaleLinks(consumer)).toEqual([]);
+    });
+    test('flags an unbuilt linked package with no dist directory', () => {
+        const cwd = scaffold({ srcAge: T0, distAge: null });
+        rmdirSync(join(cwd, '..', 'linked-pkg', 'dist'));
+        const stale = findStaleLinks(cwd);
+        expect(stale).toHaveLength(1);
+        expect(stale[0]?.dist).toBeNull();
+    });
     test('flags a linked package whose dist is older than its src', () => {
         const cwd = scaffold({ srcAge: T0 + 500, distAge: T0 });
         const stale = findStaleLinks(cwd);

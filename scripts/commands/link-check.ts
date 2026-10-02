@@ -23,7 +23,7 @@
  * tarball extraction and mean nothing, so comparing them would false-alarm on
  * every install.
  */
-import { existsSync, lstatSync, readdirSync, realpathSync, statSync } from 'node:fs';
+import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 /** Newest file under `root` matching `ext`, or null when the tree has none. */
@@ -41,6 +41,15 @@ interface StaleLink {
 }
 
 const SCOPE = '@gobing-ai';
+
+function exportsDist(value: unknown): boolean {
+    if (typeof value === 'string') return /^\.\/dist(?:\/|$)/.test(value);
+    if (Array.isArray(value)) return value.some(exportsDist);
+    if (value && typeof value === 'object') {
+        return Object.entries(value).some(([key, target]) => key !== 'types' && exportsDist(target));
+    }
+    return false;
+}
 
 function newestFile(root: string, ext: string): Newest | null {
     if (!existsSync(root)) return null;
@@ -83,9 +92,16 @@ export function findStaleLinks(cwd: string = process.cwd()): StaleLink[] {
         }
         // Inside our own node_modules => a Bun store copy, not a `bun link`.
         if (realPath.startsWith(localModules)) continue;
+        const packageFile = join(realPath, 'package.json');
+        if (existsSync(packageFile)) {
+            const manifest = JSON.parse(readFileSync(packageFile, 'utf8')) as { exports?: unknown; main?: string };
+            const entrypoints = manifest.exports ?? manifest.main;
+            // Source-exporting workspaces and packages with only metadata exports do not consume dist/.
+            if (entrypoints !== undefined && !exportsDist(entrypoints)) continue;
+        }
         const srcDir = join(realPath, 'src');
         const distDir = join(realPath, 'dist');
-        if (!existsSync(srcDir) || !existsSync(distDir)) continue;
+        if (!existsSync(srcDir)) continue;
 
         const src = newestFile(srcDir, '.ts');
         if (!src) continue;
