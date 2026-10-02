@@ -113,13 +113,13 @@ between "the audit said X" and "the file now says Y."
 Each approved repair is dispatched through the artifact's **owner surface** — the harness path that
 owns writes to that artifact — not a direct file write. Authority for a repair is the same
 authority model as the audit ([./authority-resolution.md](./authority-resolution.md)): for a given
-subject + claim type, one artifact is normative; derived projections are updated only after their
-authority.
+subject + claim type, one artifact is normative. Inspect it first; correct it only if defective and
+authorized, then update affected projections. A correct authority needs no edit for a stale projection.
 
 | Owner | Repair route | Never |
 |-------|--------------|-------|
 | Task/feature corpus | `sp:spur-cli` — `spur task` / `spur feature` (with `--section`, `--from-file`, `--json` as needed) | Direct file writes to task/feature files. |
-| Numbered docs and AGENTS projections | `sp:doc-evolve` — **authority first, derived projections second** (see below) | Editing `docs/05_FEATURES.md` or an `AGENTS.md` projection before its authoritative source is fixed. |
+| Numbered docs and AGENTS projections | `sp:doc-evolve` — inspect authority first; correct it only if defective, then repair affected projections (see below) | Changing correct authority to repair a stale projection, or projecting a defective authority before its authorized correction. |
 | Source / tests | Create or use a **Spur task** and route through `sp:spur-dev` / build competencies (`sp:code-implementation`, `sp:code-testing`), **unless** the active session already has explicit implementation authority for the change. | Bare in-place edits to source/tests without a task or explicit authority. |
 | Command/skill capability source | Superskill command/skill **lifecycle** (`superskill command …` / `superskill skill …` scaffold/validate/evaluate/refine) in the owning plugin source. | Hand-editing capability source outside the Superskill lifecycle. |
 | Ambiguous authority | **Stop for an operator decision.** Do not mutate either side. | Choosing a winner, editing both sides, or forcing a global ranking. |
@@ -148,12 +148,13 @@ item; never route around it with a direct write.
 
 ### 3.2 Numbered docs and AGENTS projections
 
-Documentation repairs follow **authority first, derived projections second**. If a derived
+Documentation repairs **inspect authority first**. If a derived
 projection (`docs/04_DESIGN.md`, `docs/05_FEATURES.md`, `AGENTS.md`, templates) has drifted from its
 authority (`docs/00_ADR.md`, `docs/01_PRD.md`, `docs/03_ARCHITECTURE.md`,
-`docs/99_PROJECT_CONSTITUTION.md`), the repair fixes the **authority** first, then re-derives the
-projection via `sp:doc-evolve`. Editing a projection without its authority is a prohibited
-anti-pattern (see §6).
+`docs/99_PROJECT_CONSTITUTION.md`), leave a correct authority unchanged and repair the stale
+projection via `sp:doc-evolve`. If the authority itself is defective, correct it first within the
+approved scope, then update affected projections. Incomparable authority still requires an operator
+decision; projection drift alone never authorizes changing the governing contract (see §6).
 
 `sp:doc-evolve` owns the numbered-doc/projection lifecycle: sync checks, contract verification,
 frontmatter checks, and derived-doc refresh. A doc repair is dispatched to it; it is not hand-applied.
@@ -244,7 +245,7 @@ These are the explicit boundaries for remediation. Each is a hard violation, not
 | Anti-pattern | Why it is prohibited |
 |--------------|----------------------|
 | **Automatic mutation merely because `--resolve` is present** | `--resolve` only opens the workflow; it never authorizes automatic repair. Confirmation + freshness + owner surface are all required. |
-| **Editing a derived projection before its authority** | A projection (`docs/04`/`docs/05`, `AGENTS.md`, templates) is not the source of truth; fixing it without its authority (`ADR`/`PRD`/constitution) leaves the real conflict in place. Authority first. |
+| **Changing correct authority for projection drift** | A stale projection is repaired against its governing contract. Correct authority only when defective and authorized; then update affected projections. |
 | **Broad cleanup outside confirmed findings** | Only the artifacts named by confirmed, freshness-checked findings are touched. No opportunistic refactors or doc "improvements" while repairing. |
 | **Ambiguity silently resolved** | Ambiguous/missing authority stops for an operator decision; it is never forced through a global ranking or a guessed owner. |
 | **Partial failure silently continued** | A failed repair is reported, not papered over; siblings are not marked successful and the run does not roll forward silently. |

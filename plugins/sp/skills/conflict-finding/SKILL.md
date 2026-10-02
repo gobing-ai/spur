@@ -249,7 +249,7 @@ Thin wrapper: `Skill(skill="sp:conflict-finding", args="$ARGUMENTS")`.
 - Silently omitting a selected pillar or a tool failure (no coverage accounting).
 - Claiming "comprehensive" when `coverage.complete` is false.
 - Any mutation in audit mode, or automatic mutation merely because `--resolve` is present.
-- Editing a derived projection before its authority.
+- Editing a derived projection before correcting a defective authority, or changing a correct authority merely to repair its stale projection.
 - Adding a production analyzer, index/cache/database, dependency, or dedicated subagent in v1.
 
 ## Reference files

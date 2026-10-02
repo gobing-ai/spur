@@ -206,13 +206,15 @@ authority it governs:
 | Owner | Repair route | Governs (claim types) |
 |-------|--------------|----------------------|
 | Task/feature corpus | `sp:spur-cli` / `spur task` / `spur feature`; never direct file writes | Task obligation/status, feature goal and AC |
-| Numbered docs and AGENTS projections | `sp:doc-evolve`; authority first, derived projections second | Process rules, structural decision, product scope, architecture, command surface |
+| Numbered docs and AGENTS projections | `sp:doc-evolve`; inspect authority first, correct it only if defective, then repair affected projections | Process rules, structural decision, product scope, architecture, command surface |
 | Source/tests | create/use a Spur task and route through `sp:spur-dev` / build competencies | Implementation behavior, architecture mechanism |
 | Command/skill capability source | Superskill command/skill lifecycle in the owning plugin source | Command/API/schema surface |
 | Ambiguous authority | **stop** for an operator decision; do not mutate either side | (all, when unresolved) |
 
-Never edit a derived projection before its authority. The authority column of §2 is always the
-owner surface's source of truth; a projection is brought into line with it, not the reverse.
+Inspect the governing authority before repairing a derived projection. Correct the authority first
+only when it is defective and the correction is authorized; otherwise leave it unchanged and repair
+the projection. The authority column of §2 remains the owner surface's source of truth; a projection
+is brought into line with it, not the reverse.
 
 ## 7. Worked examples
 

@@ -100,9 +100,10 @@ rg --files apps packages                       # real modules
 git log -1 --format='%ci' -- docs/04_DESIGN.md     # last touch vs. recent surface changes
 ```
 
-**Repair protocol (§7):** fix the authoritative statement first, then affected detail/index/entry
-files. Preserve ADR numbers, original titles/dates and decision history; editorial condensation
-follows §6.1, while actual reversals need a superseding decision. Record findings in a task/report.
+**Repair protocol (§7):** inspect the governing statement first. Correct it only if defective and
+authorized, then update affected detail/index/entry files; otherwise leave the authority unchanged
+and repair its stale projections. Preserve ADR numbers, original titles/dates and decision history;
+editorial condensation follows §6.1, while actual reversals need a superseding decision. Record findings in a task/report.
 Routine lessons go to existing learning/context storage (§8); no automatic constitution edits.
 
 Output a **drift report**: per finding, `{ doc, what code says, what the doc says, authority, repair
