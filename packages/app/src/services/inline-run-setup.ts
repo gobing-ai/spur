@@ -1352,6 +1352,12 @@ export async function runInlineRunPersistOut(input: InlineRunPersistOutInput): P
             toWorkdir: process.cwd(),
             ...(input.taskFiles.length > 0 ? { taskFiles: input.taskFiles } : {}),
         });
+        if (result.skipped.some((skip) => skip.reason.startsWith('record-conflict:'))) {
+            process.stdout.write(
+                `${JSON.stringify({ ...result, ok: false, error: 'persist-out: unresolved retained record conflicts; retain the worktree and reconcile copies before teardown' })}\n`,
+            );
+            return 1;
+        }
         process.stdout.write(`${JSON.stringify({ ok: true, persisted: result.persisted, skipped: result.skipped })}\n`);
         return 0;
     } catch (error) {

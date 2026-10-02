@@ -431,6 +431,40 @@ describe('runInlineRunSetup + runInlineRunTrace (moved driver bodies, 1006 R3)',
         }
     });
 
+    test('persist-out prevents teardown when a retained record conflicts', async () => {
+        const from = makeProject('persist-conflict-from');
+        const to = makeProject('persist-conflict-to');
+        const runId = 'run-persist-conflict';
+        try {
+            await inDir(from.dir, async () => {
+                expect(
+                    await runInlineRunSetup({ runId, file: 'inline-smoke', inventory: await INVENTORY(from.dir) }),
+                ).toBe(0);
+            });
+            await inDir(to.dir, async () => {
+                expect(
+                    (await captureAsync(() => runInlineRunPersistOut({ from: from.dir, taskFiles: [] }))).value,
+                ).toBe(0);
+                const source = join(from.dir, '.spur/memory/runs', `${runId}.md`);
+                const target = join(to.dir, '.spur/memory/runs', `${runId}.md`);
+                const original = readFileSync(target, 'utf8');
+                writeFileSync(source, `${original}\nnew retained evidence\n`);
+                const refused = await captureAsync(() => runInlineRunPersistOut({ from: from.dir, taskFiles: [] }));
+                expect(refused.value).toBe(1);
+                expect(JSON.parse(refused.out.trimEnd())).toMatchObject({
+                    ok: false,
+                    error: expect.stringContaining('retain the worktree'),
+                    skipped: expect.arrayContaining([{ id: runId, reason: `record-conflict:${runId}.md` }]),
+                });
+                expect(readFileSync(target, 'utf8')).toBe(original);
+                expect(readFileSync(source, 'utf8')).toContain('new retained evidence');
+            });
+        } finally {
+            from.cleanup();
+            to.cleanup();
+        }
+    });
+
     test('persist-out reports the copy result and fails closed when the source is unusable', async () => {
         const p = makeProject('persist');
         try {

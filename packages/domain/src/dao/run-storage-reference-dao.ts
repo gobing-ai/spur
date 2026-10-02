@@ -1,6 +1,7 @@
 import type { DbAdapter } from '@gobing-ai/ts-db';
 import { normalizeSourceFilePaths } from '@gobing-ai/ts-llm-jsonl-importer';
 
+/** A validated retained-file move and its copied importer checkpoint metadata. */
 export interface RunStorageReferenceMove {
     source: string;
     target: string;
