@@ -4,7 +4,7 @@ name: Retain run records sessions and artifacts outside scratch
 status: done
 template: feature-impl
 created_at: 2026-09-30T20:13:58.357Z
-updated_at: "2026-10-02T01:11:34.039Z"
+updated_at: "2026-10-02T04:08:34.004Z"
 feature_id: E71
 priority: P2
 tags:
@@ -129,20 +129,20 @@ Final consumer audit also fixes `outputArtifactForRun` through the existing dura
 
 **Pipeline verify results**
 
-- Verdict: PARTIAL (from verdict artifact)
+- Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `apps/cli/src/commands/workflow.ts:901` selects durable record sinks; inline producer and retained inspection suites pass within 244 focused tests. |
-| R2 | PARTIAL | `packages/app/src/workflow/actions/run-artifact.ts:31` now atomically persists confined retained bytes and preserves optional missing semantics. Bound evidence input remains scratch-only and source-identity collision coverage is incomplete. |
-| R3 | PARTIAL | `packages/app/src/services/run-storage.ts:537` validates durable session run IDs; session/history producers use durable roots, but `packages/app/src/services/inline-run-setup.ts:481` exports records without a complete evidence-plane transfer and can skip conflicts. |
-| R4 | PARTIAL | `packages/app/src/services/run-storage.ts:335` migration copies owned data and preserves live/unknown owners; no metadata-redirection or settled-importer port is present. Byte preservation alone does not settle retained references. |
+| R1 | MET | `packages/app/src/services/inline-run-setup.ts:1383`; durable records and authoritative trace tests |
+| R2 | MET | `packages/app/src/workflow/actions/run-artifact.ts:53`; provenance/collision/confinement tests and retained registered-summary workflow |
+| R3 | MET | `packages/app/src/services/inline-run-setup.ts:307`; complete evidence/reference export and real session importer disposal tests |
+| R4 | MET | `packages/domain/src/dao/run-storage-reference-dao.ts:12`; rollback/live-consumer tests; `packages/app/tests/services/history-service.test.ts:978` real importer checkpoint equivalence |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: R3 — Retained run inspection and artifact references survive scratch removal | PARTIAL | test | 244 focused producer/reader/artifact/export tests pass; optional missing and escaping-root regressions are fixed, but bound durable evidence and legacy metadata redirection remain incomplete. |
-| Scenario: R4 — Session history and exported results remain available outside scratch | PARTIAL | test | Durable session paths are covered; `packages/app/src/services/inline-run-setup.ts:481` still carries record conflicts as skips and omits complete evidence-family export. |
-| Scenario: R6 — Existing lasting data is preserved before its scratch dependency is retired | PARTIAL | test | Migration byte-copy preservation passes; `packages/app/src/services/run-storage.ts:335` lacks reference-redirection/importer eligibility inputs needed by the frozen contract. |
+| Scenario: R3 — Retained run inspection and artifact references survive scratch removal | MET | command | `packages/app/tests/workflow/actions/run-artifact.test.ts:22` bound evidence, bytes/provenance/collision/confinement; run-record and durable partial-handoff tracing tests |
+| Scenario: R4 — Session history and exported results remain available outside scratch | MET | command | `packages/app/tests/services/history-service.test.ts:978` real importer equivalence; `packages/app/tests/services/persist-worktree-runs.test.ts:45` complete export, source-tree disposal, read-abort, replay and conflict branches |
+| Scenario: R6 — Existing lasting data is preserved before its scratch dependency is retired | MET | command | `packages/app/tests/services/run-storage.test.ts:63` symlink session preservation; identity/live-owner/persistence failure tests; domain transaction rollback suite |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
