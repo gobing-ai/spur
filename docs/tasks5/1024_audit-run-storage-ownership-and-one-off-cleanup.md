@@ -4,7 +4,7 @@ name: Audit run storage ownership and one-off cleanup
 status: done
 template: feature-impl
 created_at: 2026-09-30T20:13:58.349Z
-updated_at: "2026-10-02T00:42:00.880Z"
+updated_at: "2026-10-02T00:43:17.024Z"
 feature_id: E71
 priority: P2
 tags:
@@ -121,7 +121,7 @@ Completion audit (2026-10-02): the current census records every candidate locati
 
 | Req | Status | Evidence |
 | --- | --- | --- |
-| R1 | MET | `docs/reports/2026-10-01-E71-run-storage-census.json:1`; equality checker reports 3222/3222 locations and rejects an injected candidate |
+| R1 | MET | `docs/reports/2026-10-01-E71-run-storage-census.json:1`; equality checker reports 3246/3246 locations and rejects an injected candidate |
 | R2 | MET | `docs/reports/2026-09-30-E71-run-storage-ownership.md:325`; family/consumer dispositions |
 | R3 | MET | `docs/reports/2026-09-30-E71-run-storage-ownership.md:325`; W1-W14 correctness cleanup and unrelated U/T owners remain |
 | R4 | MET | `scripts/commands/run-storage-census.ts:1`; persistent location/hash equality and regression map |
