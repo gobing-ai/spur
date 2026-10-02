@@ -1,14 +1,16 @@
 ---
 schema_version: 1
 name: Emit inline pipeline action rows so run close needs no post-hoc backfill
-status: wip
+status: done
 template: feature-impl
 created_at: 2026-10-01T23:59:14.229Z
-updated_at: "2026-10-02T00:33:12.695Z"
+updated_at: "2026-10-02T04:08:45.857Z"
 feature_id: E71
 
 priority: P2
 estimate_hours: 1
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/run/1046-verdict.json
 ---
 
 ## 1046. Emit inline pipeline action rows so run close needs no post-hoc backfill
@@ -35,13 +37,13 @@ with exit 1 by design (0975 R2, must not be relaxed).
 
 ### Requirements
 
-- [ ] R1. The YAML-interpreter section of
+- [x] R1. The YAML-interpreter section of
   `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md` (`:233-235` loop) states the
   per-action emission obligation inline (pointer to "Structured trace emission" with the exact
   `--action` shape), so a driver following only the loop section cannot reach close with zero rows.
-- [ ] R2. Repo and installed copies of the driver reference are resynced (superskill install path) —
+- [x] R2. Repo and installed copies of the driver reference are resynced (superskill install path) —
   or, if sync is intentionally deferred, the drift is documented in the repo copy's header.
-- [ ] R3. The `NO_ACTION_ROWS` stdout JSON error text (`inline-run-setup.ts:1035`) appends a
+- [x] R3. The `NO_ACTION_ROWS` stdout JSON error text (`inline-run-setup.ts:1035`) appends a
   remediation pointer (emit via `--action`/`--actions-file` during the run, see the driver
   reference); exit code, `code`, and fail-closed semantics are unchanged.
 
@@ -87,7 +89,7 @@ non-execution, 0975 R2).
 
 ### Solution
 
-`plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:241` now requires measured action boundaries inside the interpreter loop, with the exact existing `--action` command, state-boundary batch option and detailed trace pointer. `packages/app/src/services/inline-run-setup.ts:1119` adds the remediation pointer while preserving exit 1, NO_ACTION_ROWS and the already-terminal close semantics. `packages/app/tests/services/inline-run-driver.test.ts:333` asserts both the unchanged failure and the pointer. No new tooling or flags.
+`plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:243` now requires measured action boundaries inside the interpreter loop, with the exact existing `--action` command, state-boundary batch option and detailed trace pointer. `packages/app/src/services/inline-run-setup.ts:1119` adds the remediation pointer while preserving exit 1, NO_ACTION_ROWS and the already-terminal close semantics. `packages/app/tests/services/inline-run-driver.test.ts:342` asserts both the unchanged failure and the pointer. No new tooling or flags.
 
 An isolated CLI-created throwaway task ran through a project override named task-pipeline, using the real setup/action/close delegate and only the interpreter section's emission rule. Seven measured boundaries were emitted before advancing; close returned ok:true/actionRows:7 without a backfill file. The fixture was removed. This rehearses the loop/trace protocol, not the bundled pipeline's model or certification gates. Receipt: `.spur/run/E71-1046-rehearsal.log`.
 
@@ -95,21 +97,37 @@ Superskill synced the repo plugin to Codex. The installed reference differs only
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:243`; exact command in loop; isolated CLI task/run rehearsal emits 7 measured rows before advancing |
+| R2 | MET | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:15`; Superskill sync, with only documented Codex command-spelling conversion |
+| R3 | MET | `packages/app/src/services/inline-run-setup.ts:1119`; `packages/app/tests/services/inline-run-driver.test.ts:342`; unchanged exit/code with actionable pointer |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | command | Isolated real CLI task/run with selected project task-pipeline override: 7 measured boundaries emitted before advancing, close ok:true/actionRows:7, no backfill file, fixture removed; .spur/run/E71-1046-rehearsal.log |
+| AC2 | MET | command | Superskill install sp --marketplace current checkout --targets codex completed; exact equality after documented /sp: → /sp- adapter conversion; source header documents remaining spelling drift |
+| AC3 | MET | command | packages/app trace suite 12 pass; full CLI build:bundle and authoritative bundle suite 16 pass with unchanged bytes; pointer asserted at `packages/app/tests/services/inline-run-driver.test.ts:342` |
+| AC4 | MET | command | `packages/app/tests/services/inline-run-driver.test.ts:342` zero-row done close retains exit 1, code NO_ACTION_ROWS and actionRows:0 |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
 | Priority | Dimension | Location | Finding | Disposition |
 | --- | --- | --- | --- | --- |
-| P4 | Functional / SECUA / Architecture | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:241` | Reviewed the final scoped implementation and executable failure/disposal evidence; no unresolved blocker or major finding. | RESOLVED |
+| P4 | Functional / SECUA / Architecture | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:243` | Reviewed the final scoped implementation and executable failure/disposal evidence; no unresolved blocker or major finding. | RESOLVED |
 
 #### Functional traceability
 
 | Req | Status | Evidence |
 | --- | --- | --- |
-| R1 | MET | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:241`; exact command in loop; isolated CLI task/run rehearsal emits 7 measured rows before advancing |
+| R1 | MET | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:243`; exact command in loop; isolated CLI task/run rehearsal emits 7 measured rows before advancing |
 | R2 | MET | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:15`; Superskill sync, with only documented Codex command-spelling conversion |
-| R3 | MET | `packages/app/src/services/inline-run-setup.ts:1119`; `packages/app/tests/services/inline-run-driver.test.ts:333`; unchanged exit/code with actionable pointer |
+| R3 | MET | `packages/app/src/services/inline-run-setup.ts:1119`; `packages/app/tests/services/inline-run-driver.test.ts:342`; unchanged exit/code with actionable pointer |
 
 #### SECUA and architecture
 
@@ -125,4 +143,6 @@ Security: confined paths, existing identity validation and secret redaction rema
 
 - 2026-10-02T00:08:30.476Z backlog → todo (system)
 - 2026-10-02T00:16:52.094Z todo → wip (system)
+- 2026-10-02T04:08:45.852Z wip → testing (system)
+- 2026-10-02T04:08:45.855Z testing → done (system)
 
