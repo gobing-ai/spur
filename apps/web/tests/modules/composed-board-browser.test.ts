@@ -341,8 +341,17 @@ describe.skipIf(!browserReady)('framed resources share navigation with native to
     }, 60_000);
 
     test('the permitted framed app actually runs inside the frame', async () => {
-        const frames = await browser.childFrames(page);
-        const childFrame = frames.find((candidate) => candidate.url.startsWith(fixtures.origin));
+        // The child frame attaches/commits asynchronously after the parent renders the iframe
+        // (same CDP race class as the refusal log): a one-shot getFrameTree sample passes on an
+        // idle machine and loses under a loaded full-suite run, so bound-wait the lookup.
+        const frameDeadline = Date.now() + 10_000;
+        let childFrame: { frameId: string; url: string } | undefined;
+        for (;;) {
+            const frames = await browser.childFrames(page);
+            childFrame = frames.find((candidate) => candidate.url.startsWith(fixtures.origin));
+            if (childFrame !== undefined || Date.now() >= frameDeadline) break;
+            await new Promise((resolve) => setTimeout(resolve, 50));
+        }
         expect(childFrame).toBeDefined();
         // The execution context is created asynchronously once the child frame commits, so bound-wait
         // for it rather than sampling a snapshot once (same CDP race class as the refusal log).
