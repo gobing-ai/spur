@@ -226,7 +226,7 @@ export class RunDao extends EntityDao<typeof runs, typeof runs.id> {
         return this.adapter.queryAll(
             `SELECT id, status, started_at
              FROM runs
-             WHERE status IN ('running', 'pending')
+             WHERE status NOT IN ('done', 'failed', 'cancelled')
              ORDER BY started_at ASC`,
         );
     }

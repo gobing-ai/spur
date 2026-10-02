@@ -1239,6 +1239,27 @@ ${MINIMAL_WORKFLOW_YAML}`,
             await rm(dir, { recursive: true, force: true });
         });
 
+        test('retains the durable trace output reference after scratch removal', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-trace-durable-'));
+            try {
+                const path = join(dir, 'test.yaml');
+                await writeFile(path, MINIMAL_WORKFLOW_YAML);
+                const svc = new WorkflowAppService(makeCtx(dir));
+                const runId = 'trace-durable';
+                await svc.run(path, { runId });
+                const records = join(dir, '.spur/memory/runs');
+                await mkdir(records, { recursive: true });
+                await writeFile(join(records, `${runId}.md`), '# durable run\n');
+                const before = await svc.trace(runId);
+                await rm(join(dir, '.spur/run'), { recursive: true, force: true });
+                const after = await svc.trace(runId);
+                expect('events' in before && before.outputArtifact).toBe(join('.spur/memory/runs', `${runId}.md`));
+                expect(after).toEqual(before);
+            } finally {
+                await rm(dir, { recursive: true, force: true });
+            }
+        });
+
         test('omits outputArtifact when no run log exists (task 0426)', async () => {
             const dir = await mkdtemp(join(tmpdir(), 'spur-wf-trace-'));
             const path = join(dir, 'test.yaml');
@@ -2841,6 +2862,43 @@ terminalStates:
 
     describe('cleanRunLogs (retained run-log reclamation, 0429)', () => {
         const DAY = 24 * 60 * 60 * 1000;
+
+        test('protects recoverable logs in both roots and preserves all logs on ownership read failure', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-log-'));
+            try {
+                const ctx = makeCtx(dir);
+                const dao = new RunDao(await ctx.getDb());
+                const ids = new Map<string, string>();
+                for (const status of ['running', 'pending', 'paused', 'interrupted', 'done']) {
+                    const run = await dao.open({ status });
+                    ids.set(status, run.id);
+                    const path = await seedLog(dir, run.id, Date.now() - 40 * DAY);
+                    const durable = join(dir, '.spur', 'memory', 'runs');
+                    await mkdir(durable, { recursive: true });
+                    await writeFile(join(durable, `${run.id}.log`), await readFile(path));
+                    const old = new Date(Date.now() - 40 * DAY);
+                    await utimes(join(durable, `${run.id}.log`), old, old);
+                }
+                const broken = {
+                    ...ctx,
+                    getDb: async () => {
+                        throw new Error('ownership unavailable');
+                    },
+                };
+                const refused = await new WorkflowAppService(broken).cleanRunLogs();
+                expect(refused.reclaimed).toEqual([]);
+                expect(refused.failures[0]?.error).toContain('ownership unavailable');
+                const result = await new WorkflowAppService(ctx).cleanRunLogs();
+                expect(result.reclaimed.map((row) => row.runId)).toEqual([ids.get('done')]);
+                for (const status of ['running', 'pending', 'paused', 'interrupted']) {
+                    const id = ids.get(status);
+                    expect(await readFile(join(dir, '.spur', 'run', `${id}.log`), 'utf8')).toContain(id);
+                    expect(await readFile(join(dir, '.spur', 'memory', 'runs', `${id}.log`), 'utf8')).toContain(id);
+                }
+            } finally {
+                await rm(dir, { recursive: true, force: true });
+            }
+        });
 
         async function seedLog(dir: string, runId: string, mtimeMs: number): Promise<string> {
             const logPath = join(dir, '.spur', 'run', `${runId}.log`);

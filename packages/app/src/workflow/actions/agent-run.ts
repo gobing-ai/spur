@@ -171,7 +171,7 @@ export function parseExecutorPin(raw: unknown): ExecutorPin | undefined {
  *
  * On any failed run (non-zero/null exit, signal, or dispatch error), a
  * partial-work handoff artifact is written to
- * `.spur/run/<runId>-<stateOrNodeId>-partial.md` (R2b / G2 + R1 / task 0295):
+ * `.spur/memory/runs/<runId>/artifacts/<runId>-<stateOrNodeId>-partial.md` (with a compatibility scratch mirror) (R2b / G2 + R1 / task 0295):
  * exit reason (signal vs exit code vs dispatch error), elapsed ms, the resolved
  * invocation, `git diff --stat`, and a bounded tail of captured stdout/stderr.
  * Best-effort — a write failure here never masks the underlying `ok:false` result.
@@ -191,7 +191,7 @@ export function parseExecutorPin(raw: unknown): ExecutorPin | undefined {
  *
  * Live output capture (feature D2 / task 0426): the redacted incremental
  * lifecycle events are emitted to the observability bus as `workflow.agent`;
- * the consolidated run-log sink (`.spur/run/<runId>.log`) subscribes there and
+ * the consolidated run-log sink (`.spur/memory/runs/<runId>.log`) subscribes there and
  * captures the child's stdout/stderr (bounded, best-effort) for `spur workflow
  * trace`. The child's output policy is pipe-no-TTY (nonInteractive) and stdin stays `'ignore'`
  * — the observer consumes the `onOutput` relay as-is.

@@ -38,6 +38,8 @@ import {
     type WorkflowStatus,
 } from '@gobing-ai/ts-dual-workflow-engine';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
+import { ensureDurablePlaneIgnored, runStoragePaths } from '../services/run-storage';
+import { resolveDurableArtifactPath } from './actions/run-path';
 import { classifyTerminalReason } from './terminal-reason';
 
 /** The engine does not export its reseed-result type; derive it from the interface. */
@@ -409,7 +411,7 @@ export function createWorkflowActionTraceWriter(
 }
 
 /**
- * Recorder that appends one line per emission failure to `.spur/run/<runId>.log` — the
+ * Recorder that appends one line per emission failure to `.spur/memory/runs/<runId>.log` — the
  * run log the inline driver already owns (ADR-117: the text log stays, demoted to a
  * human convenience). Best-effort and fire-and-forget: the append never throws and never
  * blocks the run.
@@ -418,7 +420,7 @@ export function createRunLogTraceFailureRecorder(cwd: string): ActionTraceFailur
     const fileSystem = createNodeFileSystem();
     return (failure) => {
         const safeRunId = failure.runId.replace(/[^A-Za-z0-9._-]/g, '_');
-        const dir = join(cwd, '.spur', 'run');
+        const dir = runStoragePaths(cwd).recordsDir;
         const location = [
             failure.node !== undefined ? `node=${failure.node}` : '',
             failure.kind !== undefined ? `kind=${failure.kind}` : '',
@@ -427,8 +429,10 @@ export function createRunLogTraceFailureRecorder(cwd: string): ActionTraceFailur
             .join(' ');
         const line = `[${failure.at.replace(/\.\d{3}Z$/, 'Z')}] trace-emission-failed operation=${failure.operation} run=${failure.runId}${location === '' ? '' : ` ${location}`}: ${failure.error}\n`;
         void (async () => {
+            const target = await resolveDurableArtifactPath(fileSystem, cwd, join(dir, `${safeRunId}.log`), 'runs');
+            ensureDurablePlaneIgnored(cwd);
             await fileSystem.ensureDir(dir);
-            await fileSystem.appendFile(join(dir, `${safeRunId}.log`), line);
+            await fileSystem.appendFile(target, line);
         })().catch(() => undefined);
     };
 }

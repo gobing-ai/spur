@@ -101,6 +101,23 @@ describe('cleanCheckpoints (0711 R5–R8)', () => {
         await rm(dir, { recursive: true, force: true });
     });
 
+    test('terminal checkpoints referencing paused or interrupted runs remain protected', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'spur-cp-'));
+        try {
+            const shared = await createMigratedDb({ url: ':memory:' });
+            for (const status of ['paused', 'interrupted']) {
+                const run = await new RunDao(shared).open({ status });
+                await seedCheckpoint(dir, `${status}.md`, checkpointDoc({ run_id: run.id }));
+            }
+            const result = await service(dir, shared).cleanCheckpoints(30, false);
+            expect(result.reclaimed).toEqual([]);
+            expect(result.skipped).toHaveLength(2);
+            expect(result.skipped.every((row) => row.reason.startsWith('active-run reference:'))).toBe(true);
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+
     test('empty run_id skips the active-reference check and is reclaimed on age', async () => {
         const dir = await mkdtemp(join(tmpdir(), 'spur-cp-'));
         await seedCheckpoint(dir, '0703-checkpoint.md', checkpointDoc({ run_id: '' }));

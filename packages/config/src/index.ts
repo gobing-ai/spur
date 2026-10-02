@@ -761,7 +761,7 @@ export const WorkflowsConfigSchema = z.object({
 /**
  * Schema for the `workflow` section (feature D2 / task 0429).
  *
- * - `logRetentionDays` — how old a retained `.spur/run/<RUNID>.log` must be
+ * - `logRetentionDays` — how old a retained `.spur/memory/runs/<RUNID>.log` must be
  *   (mtime) before `spur workflow clean` reclaims it. Default 30. Config
  *   units are days here because retention is a policy; the stale-run
  *   `--older-than` flag stays minutes and is never reused for log age.

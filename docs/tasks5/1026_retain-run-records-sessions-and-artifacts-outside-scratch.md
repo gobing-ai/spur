@@ -4,7 +4,7 @@ name: Retain run records sessions and artifacts outside scratch
 status: done
 template: feature-impl
 created_at: 2026-09-30T20:13:58.357Z
-updated_at: "2026-10-02T00:53:07.977Z"
+updated_at: "2026-10-02T01:11:34.039Z"
 feature_id: E71
 priority: P2
 tags:
@@ -123,6 +123,8 @@ DB trace stays authoritative (no paused snapshots, no schema change, no new back
 
 - `packages/app/src/services/inline-run-setup.ts:1356` now makes the shared persist-out delegate exit 1 / ok:false for reported retained record conflicts, preserving both source and target and blocking worktree teardown. The underlying service retains its existing conflict-skip contract. `packages/app/tests/services/inline-run-driver.test.ts:440` exercises a real copied run followed by divergent record replay; combined export/delegate suite: 46 pass, 0 fail.
 
+Final consumer audit also fixes `outputArtifactForRun` through the existing durable/legacy root resolver, and retains trace-emission failure logs in the durable run root. The domain `listActiveRuns` query now matches its documented non-terminal ownership contract, protecting paused/interrupted logs and checkpoints; failed ownership reads refuse log reclamation. Driver, CLI help and owning contracts use the durable record/partial paths. Focused workflow, checkpoint and action-trace tests: 190 PASS, 0 FAIL.
+
 ### Testing
 
 **Pipeline verify results**
@@ -166,6 +168,8 @@ Security: confined paths, existing identity validation and secret redaction rema
 
 
 The final export review found the teardown delegate accepted a reported retained-record conflict. The shared delegate now fails closed, preserving both copies; the real replay regression passes alongside all 1043/1045 branch tests (46 pass). This resolves the caller-side disposal gap without changing the copy service contract.
+
+Final functional/SECUA/architecture audit: durable trace references and failure logging now survive scratch removal. Shared domain non-terminal ownership protects both cleanup callers, including paused/interrupted runs; ownership failures preserve logs. Installed runtime instructions and CLI help agree with the durable owners. These gaps are resolved, covered by 190 passing focused tests; no unresolved P1–P3 finding remains.
 
 ### References
 

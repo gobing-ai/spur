@@ -197,7 +197,7 @@ export interface PersistWorktreeRunsSuccess {
 }
 
 /**
- * DB-sourced run ids become `.spur/run/<id>.md` / `.state.json` filenames in the invoking
+ * DB-sourced run ids become `.spur/memory/runs/<id>.md` / `.state.json` filenames in the invoking
  * tree, so every id read from the worktree DB must be a single safe filename component —
  * the same charset the script's `SAFE_RUN_ID_RE` arg guard (task 0804 R8) enforces for
  * driver-supplied ids. The script keeps its own copy (portable twin); this persistence
@@ -256,7 +256,7 @@ async function readExistingRunFile(path: string): Promise<Buffer | undefined> {
  * Persist a worktree's inline-run provenance into the invoking tree (task 0975 R1; citations
  * per 0984): transfer the `runs` row plus its `action_runs` / `phase_runs` /
  * `transition_runs` / `workflow_states` children with {@link transferRunTables}, then copy
- * each persisted run's two-file run record (`.spur/run/<id>.md` + `.state.json`). An
+ * each persisted run's two-file run record (`.spur/memory/runs/<id>.md` + `.state.json`). An
  * existing target record is left untouched — identical bytes are an idempotent no-op,
  * divergent bytes are reported as `skipped[{id, reason:'record-conflict:<file>'}]` rather
  * than overwritten.
@@ -837,7 +837,7 @@ export async function runDecideForInlineRun(input: InlineDecideInput): Promise<I
 // ADR-117 trace emission. The plugin script is the argv/env delegate; these are the
 // operations it delegates to through the generated twin (INLINE_RUN_EXPORTS).
 
-/** Setup/driver outcome projected into the run-record state `.spur/run/<run-id>.state.json` (0927 R1). */
+/** Setup/driver outcome projected into the run-record state `.spur/memory/runs/<run-id>.state.json` (0927 R1). */
 export interface InlineRunStateOutcome {
     readonly ok: boolean;
     readonly runId?: string;

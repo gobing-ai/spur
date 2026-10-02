@@ -16,6 +16,12 @@ tags: [contract, E7, I6, workflow, observability]
 
 ---
 
+## Current E71 storage location (2026-10-02)
+
+The pair now lives under `.spur/memory/runs/<runId>.md` and `<runId>.state.json`, including while active. Engine sinks, inline drivers, inspection, trace output references and trace-failure logging use this durable root. Legacy scratch records remain readable. The E7 identity, bounded redaction, atomic state replacement and DB authority contracts below continue to apply; their old scratch locations are historical. Driver instructions append to the durable human record and read its durable state.
+
+Retained partial handoffs and session snapshots live under the run's `artifacts/` directory. Task verdicts and feature receipts have their separate durable evidence owner. Paused/interrupted runs remain protected from log and checkpoint reclamation; ownership read failures preserve data. Pair retention remains unselected. Full lifetime and migration ownership is in [disposable run storage](disposable-run-storage.md).
+
 ## Current E7 contract (2026-09-22 rebaseline)
 
 The original 0598 snapshot predates the History Board, its `historyContract.getToolSequence` API and Tool Using tab (E8/E81), and the removal of Observability's old Tool Using tab (J92). E7 must not build another history contract, tool-use feed, board module, or Tool Using tab. `packages/contracts/src/history.ts`, `apps/web/src/modules/history/ToolUsingTab.tsx`, and `apps/web/src/modules/observability/tabs.ts` are the current baseline. The old tab's source-migration proposal in §5 and the absent-contract claim in §8 are superseded.

@@ -475,7 +475,7 @@ export interface TimelineActionDecision {
     events: TimelineEvent[];
     /**
      * Relative path to the per-run consolidated all-in-one log
-     * (`.spur/run/<runId>.log`, feature D2 / task 0426) when the file exists.
+     * (`.spur/memory/runs/<runId>.log`, feature D2 / task 0426) when the file exists.
      */
     outputArtifact?: string;
 }
@@ -980,14 +980,13 @@ export class WorkflowAppService {
     }
 
     /**
-     * Reclaim retained run logs (`.spur/run/<RUNID>.log`, feature D2 / task 0429):
-     * remove every log whose mtime is older than the retention threshold. Age is
-     * the only gate — a still-running run whose log is old enough is reclaimed
-     * too (rare, and acceptable under the policy). A missing run dir is a no-op.
+     * Reclaim expired terminal or unowned legacy run logs (feature D2 / task 0429).
+     * Non-terminal runs, including paused/interrupted runs, remain protected.
+     * If run ownership cannot be read, preserve all logs and report the failure.
      *
      * Scope (1026 R4): terminal `<runId>.log` files in the durable run-record plane
      * (`.spur/memory/runs/`) first, legacy scratch (`.spur/run/`) second — realpath/name
-     * dedup across roots. A run whose DB row is still live (running) is never reclaimed.
+     * dedup across roots. A run whose DB row is non-terminal is never reclaimed.
      * The two-file run record (`<runId>.md` + `<runId>.state.json`) is NOT reclaimed until
      * a pair retention policy is selected.
      *
@@ -1005,8 +1004,9 @@ export class WorkflowAppService {
             for (const row of await new RunDao(await this.ctx.getDb()).listActiveRuns()) {
                 liveIds.add(row.id);
             }
-        } catch {
-            // No run DB yet — no run can be live, so nothing is protected.
+        } catch (err) {
+            failures.push({ path: runStoragePaths(this.ctx.cwd).recordsDir, error: String(err) });
+            return { retentionDays, dryRun, reclaimed, failures };
         }
 
         const runDirs = [runStoragePaths(this.ctx.cwd).recordsDir, join(this.ctx.cwd, '.spur', 'run')];
@@ -2304,16 +2304,17 @@ function resolveDefaultAgentVar(
 }
 
 /**
- * Relative path to a run's human run record — `.spur/run/<runId>.md` for new
- * runs (E7 / task 0925), with the legacy `.spur/run/<runId>.log` (feature D2 /
+ * Relative path to a run's human run record — `.spur/memory/runs/<runId>.md` for new
+ * runs (E7 / task 0925), with the legacy `.spur/memory/runs/<runId>.log` (feature D2 /
  * task 0426) as a read-only fallback — for `run.artifact` metadata. The pair's
  * `.state.json` is intentionally not linked here; the DB trace stays the
  * completion authority (0925 R2/R3).
  */
 async function outputArtifactForRun(cwd: string, runId: string): Promise<string | undefined> {
+    const dir = resolveRunRecordDir(cwd, runId);
     for (const name of [`${runId}.md`, `${runId}.log`]) {
-        const relative = join('.spur', 'run', name);
-        if (await fileExists(join(cwd, relative))) return relative;
+        const path = join(dir, name);
+        if (await fileExists(path)) return relative(cwd, path);
     }
     return undefined;
 }

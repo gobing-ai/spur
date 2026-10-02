@@ -74,7 +74,7 @@ Automatic terminal deletion is omitted. Once all processes/consumers finish and 
 
 Decisive equivalence testing (`packages/app/tests/services/run-storage.test.ts:291-419`) proves snapshots of verdict acceptance, derived analytics, run-record inspection (done/failed/paused terminals), artifact bytes, and session outputs are all equal before, after, and on repeated scratch removal. Escaping symlinks cannot touch external files, active scratch is preserved, and scratch is recreated seamlessly by subsequent gates (`runLightGate`).
 
-Existing `workflow clean` log reclamation follows the migrated legacy-log root and current age knob, protects active ownership, and leaves retained pairs alone. Public command defaults and retention durations remain unchanged; the owner docs describe the corrected protection boundary.
+Existing `workflow clean` log reclamation follows the migrated legacy-log root and current age knob, protects every non-terminal owner (including paused/interrupted runs), fails closed on ownership lookup errors, and leaves retained pairs alone. Checkpoint reclamation uses the same domain ownership query. Public command defaults and retention durations remain unchanged; the owner docs describe the corrected protection boundary.
 
 ## 6. Verification and delivery boundaries
 

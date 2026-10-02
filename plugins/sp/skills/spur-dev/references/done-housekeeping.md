@@ -77,12 +77,14 @@ timed-out-implement resume runbook in
 tree, and only then force-done if the pipeline is not worth re-driving. F6 below remains the
 recovery when the partial work is not worth keeping or the manual path is already complete.
 
-**1. Recognise it.** A timeout leaves `.spur/run/<runId>-<step>-partial.md` and the run reports
+The writer retains the handoff in the run artifact directory and mirrors it into scratch for immediate compatibility. Older runs may have only the scratch copy.
+
+**1. Recognise it.** A timeout leaves `.spur/memory/runs/<runId>/artifacts/<runId>-<step>-partial.md` and the run reports
 `exited with code 3`. That is a killed subprocess, not a failed assertion - do not read the
 partial file as a verdict.
 
 ```bash
-ls -la .spur/run/*-partial.md          # handoff files, newest last
+ls -la .spur/memory/runs/*/artifacts/*-partial.md          # handoff files, newest last
 spur workflow trace <run-id>           # confirm the terminal state
 ```
 

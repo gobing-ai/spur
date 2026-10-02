@@ -21,6 +21,12 @@ sync: [T3, T9]
 **Status:** built (feature D2, tasks 0426–0429). Rationale lives in `00_ADR ADR-045`; mechanism in
 `03_ARCHITECTURE §6.1`.
 
+## Current E71 contract (2026-10-02)
+
+New logging-enabled runs write the append-only `.spur/memory/runs/<RUNID>.md` and atomic `.state.json` pair, with `--no-log` preserved. Trace output follows this durable record, with legacy `.log` and scratch fallback. Trace-emission failures append a retained `.log` diagnostic. Partial salvage is retained under `.spur/memory/runs/<RUNID>/artifacts/` with a compatibility scratch mirror.
+
+The legacy-log age policy applies in both storage roots and protects every non-terminal run, including paused/interrupted runs. Ownership lookup failures preserve logs. Checkpoint cleanup uses the same run protection. Pair files remain outside reclamation. The D2 sections below preserve the original implementation history; [run-record contract](run-record-contract.md) and [disposable run storage](disposable-run-storage.md) govern current storage.
+
 ## Log contract
 
 `spur workflow run` writes one all-in-one log per run at **`.spur/run/<RUNID>.log`**, from run

@@ -532,7 +532,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
         .option(...SHARED_OPTIONS.verboseWorkflow)
         .option('--detail <level>', 'Human detail level: minimal, invocation, or full')
         .option('--trace-file', 'Append a redacted schema-versioned JSONL trace under .spur/workflow/')
-        .option('--no-log', 'Opt out of writing the two-file run record .spur/run/<RUNID>.md + .state.json')
+        .option('--no-log', 'Opt out of writing the two-file run record .spur/memory/runs/<RUNID>.md + .state.json')
         .option('--steer', 'Accept local in-process steering commands on stdin at declared action boundaries')
         .option(...SHARED_OPTIONS.jsonSupported)
         .option(...SHARED_OPTIONS.jsonEnvelope)
@@ -1060,7 +1060,10 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             'Answer a pending input-gate action gate with free text (H1 R27). Does not imply --yes.',
         )
         .option('--async', 'Detach: resume in a background worker and report started/failed (0901 R4).')
-        .option('--no-log', 'Opt out of appending to the two-file run record .spur/run/<RUNID>.md + .state.json')
+        .option(
+            '--no-log',
+            'Opt out of appending to the two-file run record .spur/memory/runs/<RUNID>.md + .state.json',
+        )
         .option(...SHARED_OPTIONS.jsonSupported)
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (runId, options) => {
@@ -1583,7 +1586,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
         .option(...SHARED_OPTIONS.last, '20')
         .option('--follow', 'Replay a run timeline and poll persisted state until it becomes terminal')
         .option(...SHARED_OPTIONS.pollWorkflow, '1000')
-        .option('--output', 'With --follow: stream .spur/run/<RUNID>.md instead of the DB timeline')
+        .option('--output', 'With --follow: stream .spur/memory/runs/<RUNID>.md instead of the DB timeline')
         .option(...SHARED_OPTIONS.timeout)
         .option(...SHARED_OPTIONS.jsonSupported)
         .option(...SHARED_OPTIONS.jsonEnvelope)
@@ -2065,7 +2068,7 @@ function readRunLogChunk(logPath: string, offset: number): { exists: boolean; li
 }
 
 /**
- * Tail the run record `.spur/run/<RUNID>.md` (legacy `.log` fallback; read-only)
+ * Tail the run record `.spur/memory/runs/<RUNID>.md` (legacy `.log` fallback; read-only)
  * as the run progresses, then exit once
  * the run reaches a terminal status. Best-effort: if the log never appears
  * (e.g. the run was started with `--no-log`), surface a clear message after

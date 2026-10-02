@@ -519,7 +519,7 @@ describe('createRunLogTraceFailureRecorder (task 0868 R3/R4)', () => {
     });
 
     async function waitForLog(runId: string, timeoutMs = 3000): Promise<string> {
-        const path = join(base, '.spur', 'run', `${runId.replace(/[^A-Za-z0-9._-]/g, '_')}.log`);
+        const path = join(base, '.spur', 'memory', 'runs', `${runId.replace(/[^A-Za-z0-9._-]/g, '_')}.log`);
         const deadline = Date.now() + timeoutMs;
         while (Date.now() < deadline) {
             try {
@@ -550,6 +550,8 @@ describe('createRunLogTraceFailureRecorder (task 0868 R3/R4)', () => {
         expect(log).toContain('run=run/unsafe-id');
         expect(log).toContain('node=implement kind=agent.run');
         expect(log).toContain('injected failure');
+        rmSync(join(base, '.spur', 'run'), { recursive: true, force: true });
+        expect(await waitForLog('run/unsafe-id')).toBe(log);
     });
 
     test('omits the node/kind segment when neither is present', async () => {

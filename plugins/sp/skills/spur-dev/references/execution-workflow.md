@@ -135,7 +135,7 @@ spur workflow trace "$RUN" --follow --output   # streams the run; --output shows
 burned ~110 min in 47 sleeps and 55 trace polls waiting on one run; ADR-047 mandates pipe-free
 observation). `--follow` is a blocking human-streaming mode (no `--json`); run it in the session
 background and let its exit report the terminal verdict. Use `spur workflow trace "$RUN" --follow
---output` to stream the non-interactive agent output to `.spur/run/<runId>.md` as it lands.
+--output` to stream the non-interactive agent output to `.spur/memory/runs/<runId>.md` as it lands.
 
 Synchronous invocation (`--json` without `--async`) is acceptable **only** for short pipelines
 (< 2 min, e.g. precheck-only or a dry-run). Do not use it for the full task pipeline.
@@ -302,9 +302,9 @@ rather than raise again without sign-off").
 **2. Timed-out implement — resume from the partial tree, don't restart.** A timeout kills the
 implement `agent.run` (exit 3), the pipeline routes to `failed`, and the task stays `todo` with
 the partial work still in the working tree. The failure output names the partial-work artifact
-(`.spur/run/<runId>-implement-partial.md`) and this runbook. Recovery:
+(`.spur/memory/runs/<runId>/artifacts/<runId>-implement-partial.md`) and this runbook. Recovery:
 
-1. **Recognise.** `.spur/run/<runId>-implement-partial.md` exists, the run reported `exited
+1. **Recognise.** `.spur/memory/runs/<runId>/artifacts/<runId>-implement-partial.md` exists, the run reported `exited
    with code 3`, the task is at `todo`. The artifact's `git diff --stat` section is the partial
    work inventory.
 2. **Establish green from the partial files.** `bun run format` then `bun run lint` + `bun

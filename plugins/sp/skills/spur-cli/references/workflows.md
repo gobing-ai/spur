@@ -204,7 +204,7 @@ spur workflow run ./workflows/approval.yaml --silent               # errors only
 spur workflow run ./workflows/approval.yaml --verbose              # transitions + correlation diagnostics
 spur workflow run ./workflows/approval.yaml --detail minimal       # tersest human output
 spur workflow run ./workflows/approval.yaml --trace-file           # persist redacted JSONL trace
-spur workflow run ./workflows/approval.yaml --no-log               # opt out of the run record .spur/run/<RUNID>.md + .state.json
+spur workflow run ./workflows/approval.yaml --no-log               # opt out of the run record .spur/memory/runs/<RUNID>.md + .state.json
 spur workflow run ./workflows/approval.yaml --steer                # interactive steering on stdin
 ```
 
@@ -214,7 +214,7 @@ spur workflow run ./workflows/approval.yaml --steer                # interactive
   per-step headers), `full` (transitions + correlation). `--verbose` is shorthand for `--detail full`.
 - **`--trace-file`** appends a redacted, schema-versioned JSONL trace under `.spur/workflow/`
   for post-run analysis - independent of human/JSON output.
-- **`--no-log`** opts out of writing the two-file run record (`.spur/run/<RUNID>.md` + `.state.json`).
+- **`--no-log`** opts out of writing the two-file run record (`.spur/memory/runs/<RUNID>.md` + `.state.json`).
   By default the record is written **and retained** after the run ends; this flag skips it entirely
   (propagates to the `--async` detached worker). No `--keep-log` / delete-by-default exists.
 - **`--steer`** is synchronous and in-process: it cannot combine with `--json` or `--async` (exit `2`).
@@ -285,7 +285,7 @@ not advertise `--json-envelope` because its JSON projection is a kept-raw docume
 | `--verbose` | Include transitions and correlation diagnostics in human progress (implies `--detail full`). |
 | `--detail <level>` | Human detail level: `minimal`, `invocation` (default), or `full`. |
 | `--trace-file` | Append a redacted schema-versioned JSONL trace under `.spur/workflow/`. |
-| `--no-log` | Opt out of writing the two-file run record `.spur/run/<RUNID>.md` + `.state.json` (retained by default; propagates to `--async` workers). |
+| `--no-log` | Opt out of writing the two-file run record `.spur/memory/runs/<RUNID>.md` + `.state.json` (retained by default; propagates to `--async` workers). |
 | `--steer` | Accept in-process steering commands on stdin at declared action boundaries (sync only; incompatible with `--json`/`--async`). |
 
 `validate` and `run` exit non-zero on failure (`run` exits non-zero when the final status is not
@@ -302,7 +302,7 @@ Follow a live run to terminal (human streaming mode):
 ```bash
 spur workflow trace <run-id> --follow            # stream until terminal (default 1000ms poll)
 spur workflow trace <run-id> --follow --poll 500 # poll every 500ms
-spur workflow trace <run-id> --follow --output   # stream .spur/run/<RUNID>.md instead of the DB timeline
+spur workflow trace <run-id> --follow --output   # stream .spur/memory/runs/<RUNID>.md instead of the DB timeline
 spur workflow trace <run-id> --follow --timeout 600000 # bound the watch; timeout → one checkpoint, run continues, exit 1
 ```
 
@@ -316,7 +316,7 @@ spur workflow trace <run-id> --follow --timeout 600000 # bound the watch; timeou
   status and exits `1`. A watch timeout never cancels or relaunches the run; resume by re-running the same
   follow command.
 - **`--output`** swaps the follow source from the structured DB timeline to the human run record
-  (`.spur/run/<RUNID>.md`, tail -f equivalent), streaming new lines as they land and exiting at
+  (`.spur/memory/runs/<RUNID>.md`, tail -f equivalent), streaming new lines as they land and exiting at
   terminal status. A pre-0925 run with only a legacy `<RUNID>.log` is followed in place (read-only
   fallback). It requires `--follow` and a `run-id`, is a human stream (rejects `--json`), and is
   a **distinct source** — it never interleaves with the DB timeline. If no record file appears (e.g. the
@@ -360,15 +360,18 @@ redirecting `agent.run` stages (ADR-047).
 
 - **Stale-run finalization** (existing): bulk-finalizes orphaned `running`/`pending` runs as `failed`.
   `--older-than <minutes>` (default 30) and `--force` (all non-terminal regardless of age) apply here only.
-- **Run-log reclamation** (0429): removes retained `.spur/run/<RUNID>.log` files whose mtime is older
-  than `workflow.logRetentionDays` in `.spur/config.yaml` (default 30 days; integer days, not minutes).
-  Age is the only gate; best-effort deletes never abort the rest. Never touches
-  `.spur/workflow/<RUNID>.jsonl` or `*-partial.md`. Scope stays legacy `.log` names only (0925 R4):
-  the two-file record (`.md` + `.state.json`) is not reclaimed until a pair retention policy exists.
-- **`--logs`** scopes to log reclamation only (skips stale-run finalization). `--dry-run` applies to
-  both scopes (lists what would be removed, writes nothing). `--json` returns
-  `{ olderThanMinutes, dryRun, cleaned, logs: { retentionDays, dryRun, reclaimed, failures } }` (with
-  `--logs`, the reclamation object alone).
+- **Run-log reclamation** (0429): removes expired `.log` files from `.spur/memory/runs/`
+  and legacy `.spur/run/`, using `workflow.logRetentionDays` (default 30 days). Non-terminal
+  runs, including paused/interrupted runs, are protected; ownership lookup failures preserve logs.
+  The two-file record (`.md` + `.state.json`) and partial handoffs are retained.
+- **Checkpoint reclamation**: removes expired terminal checkpoints only when confinement,
+  metadata and run-ownership guards pass. Recoverable runs remain protected.
+- **Migration** (E71): verified lasting scratch data is preserved and references redirected before
+  reclamation. Unsettled imports, live dependencies, malformed files and conflicts retain their sources.
+- **`--logs`** scopes to log reclamation and its migration (skips stale-run finalization and
+  checkpoint reclamation). `--dry-run` reports without copying or deleting. `--json` returns
+  `{ olderThanMinutes, dryRun, cleaned, logs, checkpoints, migration }`; with `--logs`, it returns
+  `{ retentionDays, dryRun, reclaimed, failures, migration }`.
 
 ## Behavior
 

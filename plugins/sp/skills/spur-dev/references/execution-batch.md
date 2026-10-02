@@ -490,12 +490,12 @@ disk-full, missing directory) routes to **WT-5** — the worktree and branch are
 batch can never destroy its own evidence. Reuse mode retains its operator-owned tree but still
 persists the Step 5 report under the invoking tree; the reused tree's `.spur/run/` remains the live
 copy while that tree lives on. The per-run provenance — the worktree DB's run/action rows and the
-`.spur/run/<runId>.md` + `.state.json` records — is persisted mechanically by WT-4a's
+`.spur/memory/runs/<runId>.md` + `.state.json` records — is persisted mechanically by WT-4a's
 `inline-run-setup.ts --persist-out --from <worktree> [--task-file <merged-task>]...` call,
 not by hand.
 
 **Stage records are worktree-local too (0948 R9, E7 Finding 5; persisted by 0975 R1).** Each task's
-own per-stage run record (`.spur/run/<runId>.md` + `.state.json`) and the worktree DB's run rows are
+own per-stage run record (`.spur/memory/runs/<runId>.md` + `.state.json`) and the worktree DB's run rows are
 written inside the worktree and **are removed with it** in create mode — the E7 batch lost exactly
 this evidence. Copying them out is no longer a manual audit-time duty: WT-4a (create-mode block
 below) runs `inline-run-setup.ts --persist-out --from "$WT_PATH"` **before** WT-4b holder cleanup,
@@ -512,6 +512,8 @@ obligation; neither do root-qualified paths (`knowledge-kit/.spur/run/…`, `/ab
 which cite another project's evidence — cite foreign run artifacts that way, never bare. A citation missing in BOTH trees, a divergent cited file (never overwritten — reconcile
 by hand), an unreadable task file, or more than 64 distinct cited files fails the pass → WT-5.
 
+**Durable planes ride it too (E71).** Persist-out copies canonical task verdicts, feature run/latest receipts, nested run artifacts and owned sessions before teardown. Artifact and task-run-link rows are exported with run rows, and stored path references are redirected to the invoking tree. Conflicting or unreadable retained evidence refuses teardown.
+
 **Owned evidence rides it too (1012).** With at least one `--task-file`, persist-out also treats as
 copy obligations the worktree's `.spur/run/` direct children named `<wbs>-…` (the WBS is each
 forwarded task file's leading four digits before `_`) or `<runId>-…` (every run row in the worktree
@@ -520,7 +522,7 @@ the task file cites them. They join the cited set: same copy / byte-identical no
 divergent-refuse handling. The 64-file cap bounds citations alone; owned names are bounded per
 owner (each `<wbs>-` / `<runId>-` prefix gets its own 64-file budget, task 1034), so the bound
 scales with the batch and one runaway owner refuses by name before any write. `<runId>.md` /
-`<runId>.state.json` stay with the record copy (a conflict there is a reported skip). Files
+`<runId>.state.json` stay with the record copy (a conflict is reported and the delegate refuses teardown). Files
 matching neither a citation nor an ownership prefix are left behind. An absent worktree `.spur/run/`
 means nothing is owned; any other listing failure (not a directory, permission denied) fails the
 pass before the invoking tree is written → WT-5. Without `--task-file` nothing is enumerated.
@@ -528,8 +530,8 @@ pass before the invoking tree is written → WT-5. Without `--task-file` nothing
 The shapes are pinned (task 0975 R1; `record-missing` and citation behavior per 0984): idempotent on re-persist;
 success exits 0 printing
 `{"ok":true,"persisted":<n>,"skipped":[{"id":<run-id>,"reason":"id-exists"|"external-key-conflict"|"record-conflict:<file>"|"record-missing:<file>"|"cited-directory:<name>"|"cited-symlink:<name>"|"cited-non-file:<name>"}]}`
-— an `id-exists` / `external-key-conflict` skip never modifies the pre-existing target rows, a
-`record-conflict:<file>` skip never overwrites a divergent invoking-tree record, and a
+— an `external-key-conflict` skip leaves the target run unchanged; an `id-exists` replay repairs missing owned artifacts and task links without duplicating them. A
+`record-conflict:<file>` never overwrites a divergent invoking-tree record and causes the delegate to exit 1, retaining the worktree. A
 `record-missing:<file>` skip is a known `task-lifecycle`/`feature-lifecycle` row with no record file
 at all (its inserted DB row still counts in `persisted` — 0984 R5). Any failure
 exits 1 printing `{"ok":false,"error":<message>}` (a worktree DB run id that is not a single safe
@@ -867,7 +869,7 @@ git merge --ff-only "$BRANCH"          # FF-only: never rebase, merge-commit, or
 # Any persistence failure routes to WT-5 — the worktree and branch are retained.
 WT_PATH="$(cd "../<worktree-dir>" && pwd)"   # hoisted: needed by WT-4a AND WT-4b below
 # WT-4a provenance persist-out (task 0975 R1): copy the worktree DB's run rows plus
-# the .spur/run/<runId>.md + .state.json records into THIS tree. Run from the main
+# the .spur/memory/runs/<runId>.md + .state.json records into THIS tree. Run from the main
 # tree (cwd = the invoking tree). --task-file (0984 R2) forwards each merged task
 # file (post-merge path) so the cited .spur/run/<file> evidence is copied/verified
 # too. Resolve the merged path(s) BEFORE this block — an empty value exits 2:

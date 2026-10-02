@@ -44,8 +44,8 @@ const TRUNCATION_MARKER =
  * Two-file workflow run record for logging-enabled runs (E7 / task 0925, on the
  * feature D2 / 0426 sink): a read-only subscriber on the
  * {@link WorkflowObservabilityBus} that appends the human run log to
- * `.spur/run/<RUNID>.md` and atomically replaces the machine state at
- * `.spur/run/<RUNID>.state.json`, from run creation to terminal status.
+ * `.spur/memory/runs/<RUNID>.md` and atomically replaces the machine state at
+ * `.spur/memory/runs/<RUNID>.state.json`, from run creation to terminal status.
  *
  * Privacy is enforced at this persistence boundary (0925 R3): upstream event
  * redaction is best-effort, so every appended line and the state projection are
@@ -54,7 +54,7 @@ const TRUNCATION_MARKER =
  * trace, `run.artifact` metadata, task/feature verdicts, or explicit
  * `--trace-file` output — the markdown log is evidence, never a completion
  * proof. Like the run itself, writes are best-effort: an unwritable
- * `.spur/run/` dir or failing disk degrades the record, never the run.
+ * `.spur/memory/runs/` dir or failing disk degrades the record, never the run.
  */
 export class WorkflowRunLogSink {
     /** Absolute path of the append-only human run log. */
@@ -177,7 +177,7 @@ export class WorkflowRunLogSink {
     }
 
     /**
-     * Atomically replace `.spur/run/<RUNID>.state.json` (0925 R1). Minimal
+     * Atomically replace `.spur/memory/runs/<RUNID>.state.json` (0925 R1). Minimal
      * private projection: schema version, authoritative run identity, and the
      * run status (`running` until the trace event settles a terminal value).
      * Same-directory temp file + rename, so readers never see a partial JSON;

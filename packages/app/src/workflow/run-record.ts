@@ -2,7 +2,7 @@
  * Workflow run-record inspection, retention resolvers and reclamation types.
  *
  * Extracted from the workflow application service (task 0962, review candidate C2). This module
- * owns the confined sync reads under `.spur/run` (realpath + fstat byte-window) plus the run-log
+ * owns the confined sync reads under `.spur/memory/runs` and legacy `.spur/run` (realpath + fstat byte-window) plus the run-log
  * retention/output-config resolvers and the reclamation result shapes; it imports nothing from
  * the service — the dependency edge is service → run-record, never back.
  */
@@ -13,7 +13,7 @@ import type { SpurConfig } from '@gobing-ai/spur-config';
 import { redactAndBound } from '../observability/agent-execution';
 import type { WorkflowRunLogConfig } from '../observability/workflow-run-log-sink';
 
-/** Thrown when a run id cannot be used as a single path segment under `.spur/run` (0948 R5). */
+/** Thrown when a run id cannot be used as a single path segment under the selected run-record root (0948 R5). */
 export class InvalidWorkflowRunIdError extends Error {
     readonly code = 'invalid-run-id' as const;
 
@@ -33,7 +33,7 @@ export interface ReclaimedRunLog {
     mtime: string;
 }
 
-/** Result of retained run-log reclamation (`.spur/run/<RUNID>.log`, task 0429). */
+/** Result of retained run-log reclamation (`.spur/memory/runs/<RUNID>.log`, task 0429). */
 export interface RunLogReclamationResult {
     /** Retention threshold applied, in days. */
     retentionDays: number;
