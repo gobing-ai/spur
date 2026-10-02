@@ -4,7 +4,7 @@ name: Retain task 1041 job-handoff contract checks in the normal repository suit
 status: done
 template: issue
 created_at: 2026-10-02T05:46:49.743Z
-updated_at: "2026-10-02T17:08:55.445Z"
+updated_at: "2026-10-02T17:15:51.430Z"
 feature_id: D62
 
 priority: P3
@@ -19,7 +19,7 @@ done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-de
 
 ### Background
 
-Task 1041 passed verification with zero residual findings: .spur/run/1041-verify/summary.json. At the start of this review, its detailed executable handoff/template checks existed only in .spur/run/1041-handoff-contract-check.ts and .spur/run/1041-verify/instruction-contract-check.ts. The latter also reads a historical current-host reconciliation receipt from scratch. The tracked command-contract tests mention the new commands only in count assertions at scripts/commands/command-contract.test.ts:350 and :438; the normal plugin suite has no job-handoff-specific test. A disposable scratch tree therefore removes the detailed checks needed to catch future shared handoff-contract drift.
+Task 1041 passed verification with zero residual findings: .spur/memory/runs/session-review-1041/source/1041-verify/summary.json. At the start of this review, its detailed executable handoff/template checks existed only in .spur/memory/runs/session-review-1041/source/1041-handoff-contract-check.ts and .spur/memory/runs/session-review-1041/source/1041-verify/instruction-contract-check.ts. The latter also reads a historical current-host reconciliation receipt from scratch. The tracked command-contract tests mention the new commands only in count assertions at scripts/commands/command-contract.test.ts:350 and :438; the normal plugin suite has no job-handoff-specific test. A disposable scratch tree therefore removes the detailed checks needed to catch future shared handoff-contract drift.
 
 This is coverage hardening, not a claim that task 1041's recorded PASS was false. Task 1046's stale prose was corrected inline; this task does not repeat it. Task 1041 supplies the completed command/contract implementation; these are task-local instruction-contract regressions under D62.
 
@@ -135,9 +135,9 @@ Each entry cites the first changed line per file (`file:line`).
 
 ### References
 
-- Task 1041; .spur/run/1041-verify/summary.json
-- .spur/run/1041-handoff-contract-check.ts
-- .spur/run/1041-verify/instruction-contract-check.ts
+- Task 1041; .spur/memory/runs/session-review-1041/source/1041-verify/summary.json
+- .spur/memory/runs/session-review-1041/source/1041-handoff-contract-check.ts
+- .spur/memory/runs/session-review-1041/source/1041-verify/instruction-contract-check.ts
 - scripts/commands/command-contract.test.ts:350
 - plugins/sp/skills/spur-dev/references/dev-operations.md:343
 - D62.
