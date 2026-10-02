@@ -877,3 +877,87 @@ describe('persistWorktreeRuns fail-closed + replay repair (task 1043)', () => {
         }
     });
 });
+
+describe('persistWorktreeRuns non-ENOENT abort + external-key conflict (task 1045)', () => {
+    test('a non-ENOENT record-read error aborts before the target DB is opened (R1/AC1)', async () => {
+        const from = makeDir('persist-eis-from-');
+        const to = makeDir('persist-eis-to-');
+        try {
+            // A healthy row WOULD transfer if the pass reached the target DB; the broken
+            // record read must abort the whole pass with zero target writes (1043 R1's
+            // safe-id precheck extended to the record plane).
+            await seedWorktree(from.dir, 'run_1045ok');
+            // Substitute a directory for the source record: readFile throws EISDIR (not
+            // ENOENT), exercising the bare re-throw branch instead of the bookkeeping
+            // ENOENT tolerance at `inline-run-setup.ts`.
+            const fromRecords = runStoragePaths(from.dir).recordsDir;
+            rmSync(join(fromRecords, 'run_1045ok.md'));
+            mkdirSync(join(fromRecords, 'run_1045ok.md'));
+
+            await expect(persistWorktreeRuns({ fromWorkdir: from.dir, toWorkdir: to.dir })).rejects.toThrow(/EISDIR/);
+            // AC1: the target DB was never opened — no `.spur/spur.db` exists in the
+            // invoking tree, and no record plane was created either.
+            expect(existsSync(join(to.dir, '.spur', 'spur.db'))).toBe(false);
+            expect(existsSync(runStoragePaths(to.dir).recordsDir)).toBe(false);
+            // Post-hoc open proves zero rows were transferred before the abort.
+            const target = await openInlineRunProjectDb(to.dir);
+            try {
+                expect(await target.adapter.queryFirst<{ n: number }>('SELECT COUNT(*) AS n FROM runs')).toEqual({
+                    n: 0,
+                });
+            } finally {
+                target.close();
+            }
+        } finally {
+            from.cleanup();
+            to.cleanup();
+        }
+    });
+
+    test('an external-key-conflicting row is skipped without record copy; the target row stands (R2/AC2)', async () => {
+        const from = makeDir('persist-xk-from-');
+        const to = makeDir('persist-xk-to-');
+        try {
+            // The target already holds T with (workflow_name, external_key) = ('wf', 'k1045');
+            // the source's S has a different id but the same tuple — the partial unique index
+            // `idx_runs_external_key` conflict seam, not an id collision (`run-transfer.ts`).
+            const targetSeed = await openInlineRunProjectDb(to.dir);
+            try {
+                await targetSeed.adapter.run(RUN_INSERT, 'run_1045t', 'wf');
+                await targetSeed.adapter.run("UPDATE runs SET external_key = 'k1045' WHERE id = 'run_1045t'");
+            } finally {
+                targetSeed.close();
+            }
+            await seedWorktree(from.dir, 'run_1045s');
+            const source = await openInlineRunProjectDb(from.dir);
+            try {
+                await source.adapter.run("UPDATE runs SET external_key = 'k1045' WHERE id = 'run_1045s'");
+            } finally {
+                source.close();
+            }
+
+            const result = await persistWorktreeRuns({ fromWorkdir: from.dir, toWorkdir: to.dir });
+            expect(result.ok).toBe(true);
+            expect(result.persisted).toBe(0);
+            expect(result.skipped).toContainEqual({ id: 'run_1045s', reason: 'external-key-conflict' });
+            // Excluded from `recordIds` (persisted + id-exists only): no S record lands
+            // in the invoking tree.
+            const toRecords = runStoragePaths(to.dir).recordsDir;
+            expect(existsSync(join(toRecords, 'run_1045s.md'))).toBe(false);
+            expect(existsSync(join(toRecords, 'run_1045s.state.json'))).toBe(false);
+            // The target keeps exactly its seeded row T.
+            const target = await openInlineRunProjectDb(to.dir);
+            try {
+                expect(await target.adapter.queryFirst<{ n: number }>('SELECT COUNT(*) AS n FROM runs')).toEqual({
+                    n: 1,
+                });
+                expect((await target.adapter.queryFirst<{ id: string }>('SELECT id FROM runs'))?.id).toBe('run_1045t');
+            } finally {
+                target.close();
+            }
+        } finally {
+            from.cleanup();
+            to.cleanup();
+        }
+    });
+});
