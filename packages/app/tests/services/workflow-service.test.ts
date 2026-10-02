@@ -2889,7 +2889,7 @@ terminalStates:
                 expect(refused.reclaimed).toEqual([]);
                 expect(refused.failures[0]?.error).toContain('ownership unavailable');
                 const result = await new WorkflowAppService(ctx).cleanRunLogs();
-                expect(result.reclaimed.map((row) => row.runId)).toEqual([ids.get('done')]);
+                expect(result.reclaimed.map((row) => row.runId)).toEqual([ids.get('done') ?? 'missing-done-run']);
                 for (const status of ['running', 'pending', 'paused', 'interrupted']) {
                     const id = ids.get(status);
                     if (id === undefined) throw new Error(`missing seeded ${status} run`);
