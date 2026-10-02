@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
@@ -119,6 +119,22 @@ function makeHarness(opts: {
 }
 
 describe('transitionTaskGuarded — structural check gate (R1)', () => {
+    test('denial names the selected durable verdict instead of the scratch fallback', async () => {
+        const h = makeHarness({ task: GATED_TASK, verdict: { ...PASS_ARTIFACT, verdict: 'FAIL' } });
+        const evidenceDir = join(h.deps.runDir, '..', 'memory', 'evidence');
+        const evidencePath = join(evidenceDir, '0001-verdict.json');
+        try {
+            mkdirSync(evidenceDir, { recursive: true });
+            renameSync(join(h.deps.runDir, '0001-verdict.json'), evidencePath);
+            await expect(transitionTaskGuarded(h.deps, { wbs: '0001', toStatus: 'done' })).rejects.toThrow(
+                evidencePath,
+            );
+            expect(h.calls.updateStatus).toEqual([]);
+        } finally {
+            h.cleanup();
+        }
+    });
+
     test('denies `done` when the supplied check gate fails, with the CLI-identical message', async () => {
         const h = makeHarness({ task: UNGATED_TASK, withCheckGate: true, verdict: PASS_ARTIFACT });
         await expect(transitionTaskGuarded(h.deps, { wbs: '0001', toStatus: 'done' })).rejects.toThrow(

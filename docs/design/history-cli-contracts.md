@@ -336,10 +336,13 @@ task locator is configured — absence means unknown, never zero). The app deriv
 ⨝ `runs` (window-bounded population, hard row cap), the task-file corpus (frontmatter
 `status`/`done_forced`, `## History` transitions via the shared `parseHistoryLine`, the
 `## Testing` `Verdict:` line via the shared `parseVerdictLine`), and
-`.spur/run/<wbs>-verdict.json` — and the pure domain fold
+the durable `.spur/memory/evidence/<wbs>-verdict.json` (legacy scratch fallback only
+when durable evidence is absent) — and the pure domain fold
 (`packages/domain/src/analytics/verified-outcome.ts`) applies the frozen R1/R2 definitions:
-verified = done ∧ PASS artifact verdict ∧ proof digest present ∧ certifying run completed;
-correction = verified task with a reopen transition or a superseding failed run. Rates null on
+verified = current frontmatter status done (latest history status only when absent) ∧ valid,
+nonempty PASS artifact with a recomputed PASS aggregate ∧ proof digest present ∧ certifying run completed;
+correction = verified task with a reopen transition or a failed/cancelled run that started after
+the certifying run completed. Missing timestamps cannot establish that ordering. Rates null on
 a zero denominator; time-to-verified folds first-wip→done spans; measured cost per verified
 result uses exact run→session mappings only (estimated mappings and dollar figures unread, per
 run-cost R3) and is `null` plus an explicit `costCoverage {covered,total}` pair — absence is

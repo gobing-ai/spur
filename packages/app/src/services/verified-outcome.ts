@@ -9,7 +9,7 @@
  * - Task file corpus — frontmatter `done_forced` / `status`, `## History`
  *   transition lines (first wip, last done, reopen), and the `## Testing`
  *   section `Verdict:` line, via the shared locators/parsers.
- * - `.spur/run/<wbs>-verdict.json` — the recorded verify verdict artifact, its
+ * - Durable verdict evidence, with legacy scratch fallback — the recorded verify verdict artifact, its
  *   proof digest (nested `proof.digest`, or the flat `proofDigest` older
  *   artifacts carry), and the run id the proof block binds it to.
  * - `run_sessions` ⨝ history cost columns — measured token cost per verified
@@ -25,6 +25,7 @@ import {
     attributeActionCost,
     type DbAdapter,
     deriveVerifiedOutcomeStat,
+    MarkdownDocument,
     parseHistoryLine,
     RunDao,
     TaskRunLinkDao,
@@ -32,8 +33,9 @@ import {
     type VerifiedOutcomeTaskInput,
 } from '@gobing-ai/spur-domain';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
-import { readVerdictArtifact } from './done-transition-guard';
+import { computeAggregate, readVerdictArtifact } from './done-transition-guard';
 import { parseVerdictLine } from './task-record';
+import { parseVerifyVerdict } from './verify-verdict';
 
 /** Hard cap on tasks derived per analyze call (R7: bounded work, never unbounded). */
 const MAX_TASKS = 1000;
@@ -47,7 +49,7 @@ export interface VerifiedOutcomeTaskLocator {
 export interface VerifiedOutcomeDeps {
     fs: FileSystem;
     db: DbAdapter;
-    /** Project root; `.spur/run/<wbs>-verdict.json` resolves against it. */
+    /** Project root used to resolve durable evidence and legacy scratch. */
     cwd: string;
     locator?: VerifiedOutcomeTaskLocator;
 }
@@ -161,7 +163,6 @@ async function deriveTaskInput(
     // migrated 'completed'→'done' (0017). 'completed' kept for defensive parity with
     // progress-projection's normalization.
     const runCompleted = (r: LinkedRun) => r.status === 'done' || r.status === 'completed';
-    const supersedingFailedRun = linkedRuns.some((r) => r.status === 'failed' || r.status === 'cancelled');
 
     let done = false;
     let forcedDone = false;
@@ -180,12 +181,14 @@ async function deriveTaskInput(
             raw = null;
         }
         if (raw !== null) {
-            forcedDone = /^done_forced:\s*true\b/m.test(raw);
-            done = /^status:\s*done\b/m.test(raw);
+            const frontmatter = MarkdownDocument.parse(raw, 'task').frontmatterData ?? {};
+            forcedDone = frontmatter.done_forced === true;
+            let historyStatus: string | undefined;
             sectionVerdictPresent = parseVerdictLine(raw.split('\n')) !== null;
             for (const line of raw.split('\n')) {
                 const entry = parseHistoryLine(line, 'task', wbs);
                 if (!entry) continue;
+                historyStatus = entry.to;
                 if (entry.to === 'wip' && firstWipAt === null) firstWipAt = entry.timestamp;
                 if (entry.to === 'done') {
                     reachedDone = true;
@@ -193,7 +196,7 @@ async function deriveTaskInput(
                 }
                 if (reachedDone && entry.from === 'done') reopened = true;
             }
-            done = done || reachedDone;
+            done = String(frontmatter.status ?? historyStatus ?? '').toLowerCase() === 'done';
         }
     }
 
@@ -219,7 +222,13 @@ async function deriveTaskInput(
         | undefined;
     if (verdict) {
         verdictPresent = typeof verdict.verdict === 'string';
-        passVerdict = verdict.verdict === 'PASS';
+        const parsed = parseVerifyVerdict(JSON.stringify(verdict), wbs);
+        passVerdict =
+            parsed.kind === 'valid' &&
+            parsed.verdict.verdict === 'PASS' &&
+            parsed.verdict.requirements.length + parsed.verdict.acceptanceCriteria.length > 0 &&
+            verdictRead.artifact !== undefined &&
+            computeAggregate(verdictRead.artifact) === 'PASS';
         // 0730 §B.1: the pipeline stamps `proof: {digest, runId, …}` (task-pipeline.yaml verify
         // hop); the flat `proofDigest` form is what older/hand-written artifacts carry. Reading
         // only the flat key made `proofDigestPresent` a constant false for every pipeline-shaped
@@ -241,16 +250,23 @@ async function deriveTaskInput(
     // artifacts (no runId) keep the permissive reading; a runId-bound verdict without a
     // definitionDigest is not digest-checked (the pipeline only stamps the digest alongside the
     // runId, and older bound artifacts predate it).
-    const certifyingRunCompleted =
+    const certifyingRun =
         boundRunId !== null
-            ? linkedRuns.some(
+            ? linkedRuns.find(
                   (r) =>
                       r.runId === boundRunId &&
                       runCompleted(r) &&
                       (boundDefinitionDigest === null ||
                           (r.definitionDigest !== null && r.definitionDigest === boundDefinitionDigest)),
               )
-            : linkedRuns.some(runCompleted);
+            : linkedRuns.find(runCompleted);
+    const certifyingRunCompleted = certifyingRun !== undefined;
+    const supersedingFailedRun = linkedRuns.some(
+        (r) =>
+            (r.status === 'failed' || r.status === 'cancelled') &&
+            (certifyingRun === undefined ||
+                Date.parse(r.startedAt ?? '') > Date.parse(certifyingRun.completedAt ?? '')),
+    );
 
     if (passVerdict) {
         let tokens = 0;

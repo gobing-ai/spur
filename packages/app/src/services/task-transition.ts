@@ -250,6 +250,7 @@ export async function transitionTaskGuarded(
             forced: input.forceDone === true,
             reason: input.reason,
             artifact: loaded.artifact,
+            verdictPath: loaded.path,
             // 1042 R2: surface identity/parse read errors in the denial instead
             // of the misleading "missing verify verdict artifact" text.
             readError: loaded.readError,

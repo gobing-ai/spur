@@ -2853,6 +2853,57 @@ describe('TaskCheckService', () => {
     });
 
     describe('R1 (0479): L4_MALFORMED_VERDICT_ARTIFACT check', () => {
+        test.each([
+            '{broken',
+            '{"verdict":"PASS","requirements":"wrong"}',
+            '{"verdict":"UNKNOWN"}',
+            '',
+            '{"wbs":"other","verdict":"PASS"}',
+        ])('rejects unusable durable evidence without falling back to scratch: %s', async (raw) => {
+            const { fs, path, cleanup } = seedEnv({ wbs: '0479', taskContent: taskFm({ status: 'testing' }) });
+            const root = join(path, '..', '..');
+            const evidenceDir = join(root, '.spur', 'memory', 'evidence');
+            const runDir = join(root, '.spur', 'run');
+            const evidencePath = join(evidenceDir, '0479-verdict.json');
+            try {
+                mkdirSync(evidenceDir, { recursive: true });
+                mkdirSync(runDir, { recursive: true });
+                writeFileSync(evidencePath, raw);
+                writeFileSync(
+                    join(runDir, '0479-verdict.json'),
+                    JSON.stringify({ verdict: 'PASS', requirements: [{ id: 'R1', status: 'MET', evidence: 'ok' }] }),
+                );
+                const result = await new TaskCheckService(fs, matrix).check(path, '0479');
+                const finding = result.findings.find((f) => f.code === FINDING_CODES.L4_MALFORMED_VERDICT_ARTIFACT);
+                expect(finding?.severity).toBe('error');
+                expect(finding?.message).toContain(evidencePath);
+            } finally {
+                cleanup();
+            }
+        });
+
+        test('valid durable evidence wins over malformed scratch', async () => {
+            const { fs, path, cleanup } = seedEnv({ wbs: '0479', taskContent: taskFm({ status: 'testing' }) });
+            const root = join(path, '..', '..');
+            const evidenceDir = join(root, '.spur', 'memory', 'evidence');
+            const runDir = join(root, '.spur', 'run');
+            try {
+                mkdirSync(evidenceDir, { recursive: true });
+                mkdirSync(runDir, { recursive: true });
+                writeFileSync(
+                    join(evidenceDir, '0479-verdict.json'),
+                    JSON.stringify({ verdict: 'PASS', requirements: [{ id: 'R1', status: 'MET', evidence: 'ok' }] }),
+                );
+                writeFileSync(join(runDir, '0479-verdict.json'), '{broken');
+                const result = await new TaskCheckService(fs, matrix).check(path, '0479');
+                expect(result.findings.filter((f) => f.code === FINDING_CODES.L4_MALFORMED_VERDICT_ARTIFACT)).toEqual(
+                    [],
+                );
+            } finally {
+                cleanup();
+            }
+        });
+
         test('emits L4_MALFORMED_VERDICT_ARTIFACT when status is testing and verdict artifact has empty requirements and AC', async () => {
             const { fs, path, cleanup } = seedEnv({
                 wbs: '0479',

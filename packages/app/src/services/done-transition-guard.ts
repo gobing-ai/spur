@@ -44,7 +44,7 @@ export type VerdictAggregate = 'PASS' | 'PARTIAL' | 'FAIL' | 'UNKNOWN';
 /** Row-level status (matches `VerdictRequirement.status` / AC `status`). */
 export type VerdictRowStatus = 'MET' | 'PARTIAL' | 'UNMET';
 
-/** Minimal shape this module reads from `.spur/run/<wbs>-verdict.json`. */
+/** Minimal shape this module reads from durable evidence or legacy scratch. */
 export interface VerdictArtifact {
     wbs?: string;
     verdict: VerdictAggregate;
@@ -88,19 +88,14 @@ export interface GuardInput {
     reason?: string;
     /** 1042 R2: present when the artifact file exists but is unusable (parse failure, identity mismatch). */
     readError?: string;
+    /** Selected evidence path, including durable-first resolution. */
+    verdictPath?: string;
     /** Pre-loaded artifact, or `undefined` if no verdict file exists. */
     artifact?: VerdictArtifact;
 }
 
 // ─── Artifact loading ──────────────────────────────────────────────────
 
-/**
- * Read and parse the verdict artifact at `.spur/run/<wbs>-verdict.json`.
- * Returns `undefined` when the file does not exist — the guard **denies** the
- * transition (no-artifact is no longer a silent allow; dogfood F81 / 0349 class).
- * Operators override with `--force-done --reason`. A parse failure is also
- * surfaced as a deny with the parse error named — never silently allowed through.
- */
 /** Result of reading one verdict location, with a missing marker for fallback routing. */
 interface VerdictRead {
     artifact: VerdictArtifact | undefined;
@@ -331,6 +326,7 @@ export function formatNoopMessage(wbs: string, status: string): string {
  */
 export function evaluateDoneTransition(input: GuardInput): GuardOutcome {
     const { wbs, taskFilePath, currentStatus, targetStatus, forced, reason, artifact, readError } = input;
+    const verdictPath = input.verdictPath ?? `.spur/run/${wbs}-verdict.json`;
 
     // R9: same-status no-op short-circuits before any verdict read.
     if (targetStatus === currentStatus) {
@@ -347,7 +343,6 @@ export function evaluateDoneTransition(input: GuardInput): GuardOutcome {
     // file exists but is unusable (1042 R2: parse failure, identity mismatch),
     // surface the reader's error instead of the misleading "missing" text.
     if (artifact === undefined) {
-        const verdictPath = `.spur/run/${wbs}-verdict.json`;
         if (readError) {
             return {
                 kind: 'deny',
@@ -392,7 +387,6 @@ export function evaluateDoneTransition(input: GuardInput): GuardOutcome {
         return { kind: 'allow', reason: 'pass' };
     }
 
-    const verdictPath = `.spur/run/${wbs}-verdict.json`;
     const inconsistency = artifact.verdict !== computed ? { stored: artifact.verdict, computed } : undefined;
     void reason; // advisory; recorded by the caller when forced
     return {

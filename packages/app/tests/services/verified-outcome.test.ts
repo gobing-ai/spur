@@ -31,6 +31,8 @@ status: done
   - Verdict: PASS (from verdict artifact)
 `;
 
+const PASS_REQUIREMENTS = [{ id: 'R1', status: 'MET', evidence: 'fixture implementation verified' }];
+
 async function makeEnv(): Promise<{ db: DbAdapter; cwd: string }> {
     const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
     await applyCliMigrations(db);
@@ -40,7 +42,7 @@ async function makeEnv(): Promise<{ db: DbAdapter; cwd: string }> {
     mkdirSync(join(cwd, '.spur', 'run'), { recursive: true });
     writeFileSync(
         join(cwd, '.spur', 'run', '0701-verdict.json'),
-        JSON.stringify({ wbs: '0701', verdict: 'PASS', proofDigest: 'sha256:abc' }),
+        JSON.stringify({ wbs: '0701', verdict: 'PASS', requirements: PASS_REQUIREMENTS, proofDigest: 'sha256:abc' }),
     );
     const id = 'run_0701';
     db.run(
@@ -69,7 +71,14 @@ const stubLocator = (cwd: string) => ({
 const stubFs = (): FileSystem =>
     ({
         readFile: async (p: string) =>
-            p.endsWith('.md') ? TASK_BODY : JSON.stringify({ wbs: '0701', verdict: 'PASS', proofDigest: 'sha256:abc' }),
+            p.endsWith('.md')
+                ? TASK_BODY
+                : JSON.stringify({
+                      wbs: '0701',
+                      verdict: 'PASS',
+                      requirements: PASS_REQUIREMENTS,
+                      proofDigest: 'sha256:abc',
+                  }),
     }) as unknown as FileSystem;
 
 describe('deriveVerifiedOutcome (app derivation smoke)', () => {
@@ -93,7 +102,12 @@ describe('deriveVerifiedOutcome (app derivation smoke)', () => {
         mkdirSync(join(cwd, '.spur', 'memory', 'evidence'), { recursive: true });
         writeFileSync(
             join(cwd, '.spur', 'memory', 'evidence', '0701-verdict.json'),
-            JSON.stringify({ wbs: '0701', verdict: 'PASS', proofDigest: 'sha256:abc' }),
+            JSON.stringify({
+                wbs: '0701',
+                verdict: 'PASS',
+                requirements: PASS_REQUIREMENTS,
+                proofDigest: 'sha256:abc',
+            }),
         );
         const stat = await deriveVerifiedOutcome({ db, cwd, locator: stubLocator(cwd), fs: stubFs() }, {});
         // Identical to the scratch-sourced derivation above — completed scratch disposal
@@ -136,7 +150,14 @@ describe('deriveVerifiedOutcome (app derivation smoke)', () => {
  */
 async function makeBindingEnv(
     verdict: Record<string, unknown>,
-    runs: readonly { id: string; status: string; definitionDigest?: string }[],
+    runs: readonly {
+        id: string;
+        status: string;
+        definitionDigest?: string;
+        startedAt?: string;
+        completedAt?: string;
+    }[],
+    taskBody = TASK_BODY,
 ): Promise<{ db: DbAdapter; cwd: string; fs: FileSystem }> {
     const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
     await applyCliMigrations(db);
@@ -150,8 +171,8 @@ async function makeBindingEnv(
              VALUES (?, 'task-pipeline', 'auto', ?, NULL, ?, ?, ?)`,
             run.id,
             run.status,
-            '2026-08-29T10:00:00.000Z',
-            '2026-08-29T11:00:00.000Z',
+            run.startedAt ?? '2026-08-29T10:00:00.000Z',
+            run.completedAt ?? '2026-08-29T11:00:00.000Z',
             metadata,
         );
         n += 1;
@@ -163,7 +184,8 @@ async function makeBindingEnv(
         );
     }
     const fs = {
-        readFile: async (p: string) => (p.endsWith('.md') ? TASK_BODY : JSON.stringify(verdict)),
+        readFile: async (p: string) =>
+            p.endsWith('.md') ? taskBody : JSON.stringify({ requirements: PASS_REQUIREMENTS, ...verdict }),
     } as unknown as FileSystem;
     return { db, cwd, fs };
 }
@@ -264,5 +286,71 @@ describe('verdict proof binding (0730 §B)', () => {
         const stat = await deriveVerifiedOutcome({ db, cwd, locator: stubLocator(cwd), fs }, {});
         expect(stat?.verifiedResults).toBe(1);
         db.close();
+    });
+});
+
+describe('verified-outcome conflict regressions', () => {
+    test.each([
+        { requirements: [{ id: 'R1', status: 'UNMET', evidence: 'not implemented' }] },
+        { requirements: [{ id: 'R1', status: 'MET', evidence: ' ' }] },
+        { requirements: [] },
+        { requirements: 'invalid array' },
+        { checks: [{ name: 'review', status: 'fail', severity: 'blocker' }] },
+        { checks: [{ name: 'task check', status: 'fail' }] },
+    ])('rejects a stored PASS with unusable or non-PASS coverage: %j', async (rows) => {
+        const { db, cwd, fs } = await makeBindingEnv(
+            { wbs: '0701', verdict: 'PASS', proof: { digest: 'sha256:abc', runId: 'cert' }, ...rows },
+            [{ id: 'cert', status: 'done' }],
+        );
+        try {
+            const stat = await deriveVerifiedOutcome({ db, cwd, fs, locator: stubLocator(cwd) });
+            expect(stat?.verifiedResults).toBe(0);
+        } finally {
+            db.close();
+            rmSync(cwd, { recursive: true, force: true });
+        }
+    });
+
+    test.each(['wip', 'blocked', 'cancelled'])('past done does not override final status %s', async (status) => {
+        const body = TASK_BODY.replace('status: done', `status: ${status}`).concat(
+            '\n- 2026-08-29T12:00:00.000Z done → wip (system)\n',
+        );
+        const { db, cwd, fs } = await makeBindingEnv(
+            { wbs: '0701', verdict: 'PASS', proofDigest: 'sha256:abc' },
+            [{ id: 'cert', status: 'done' }],
+            body,
+        );
+        try {
+            const stat = await deriveVerifiedOutcome({ db, cwd, fs, locator: stubLocator(cwd) });
+            expect(stat?.verifiedResults).toBe(0);
+            expect(stat?.excludedReasons.notDone).toBe(1);
+        } finally {
+            db.close();
+            rmSync(cwd, { recursive: true, force: true });
+        }
+    });
+
+    test.each([
+        ['2026-08-29T09:00:00.000Z', '2026-08-29T09:30:00.000Z', 0],
+        ['2026-08-29T10:30:00.000Z', '2026-08-29T11:30:00.000Z', 0],
+        ['2026-08-29T12:00:00.000Z', '2026-08-29T13:00:00.000Z', 1],
+        ['', '2026-08-29T13:00:00.000Z', 0],
+    ] as const)('correction requires a run starting after certification: %s', async (startedAt, completedAt, corrections) => {
+        const { db, cwd, fs } = await makeBindingEnv(
+            { wbs: '0701', verdict: 'PASS', proof: { digest: 'sha256:abc', runId: 'cert' } },
+            [
+                { id: 'cert', status: 'done' },
+                { id: 'retry', status: 'failed', startedAt, completedAt },
+            ],
+        );
+        try {
+            const stat = await deriveVerifiedOutcome({ db, cwd, fs, locator: stubLocator(cwd) });
+            expect(stat?.verifiedResults).toBe(1);
+            expect(stat?.correctionCount).toBe(corrections);
+            expect(stat?.verifiedWithoutCorrection).toBe(1 - corrections);
+        } finally {
+            db.close();
+            rmSync(cwd, { recursive: true, force: true });
+        }
     });
 });

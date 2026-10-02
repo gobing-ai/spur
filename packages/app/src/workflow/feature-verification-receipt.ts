@@ -29,11 +29,11 @@
  *   - **the verdict** — only PASS can satisfy completion (failed rejection).
  *
  * Every receipt is written **twice**: a run-scoped copy
- * (`.spur/run/<runId>-feature-verification.json`) and a feature-latest copy
- * (`.spur/run/<featureId>-feature-verification.json`). A PASS is valid only
+ * (`.spur/memory/evidence/<runId>-feature-verification.json`) and a feature-latest copy
+ * (`.spur/memory/evidence/<featureId>-feature-verification.json`). A PASS is valid only
  * when both copies agree (divergent rejection); a newer attempt overwrites the
  * feature-latest copy first and thereby supersedes an older PASS. Writes are
- * atomic (temp file + rename inside `.spur/run`).
+ * atomic (temp file + rename inside `.spur/memory/evidence`).
  *
  * Validation is fail-closed: missing, malformed, cross-feature, divergent,
  * failed, run-integrity, contract-mismatch or stale evidence rejects
@@ -98,9 +98,9 @@ export interface FeatureVerificationReceipt {
 
 /** Artifact paths for one feature's verification evidence. */
 export interface FeatureReceiptPaths {
-    /** Run-scoped bound receipt: `.spur/run/<runId>-feature-verification.json`. */
+    /** Run-scoped bound receipt: `.spur/memory/evidence/<runId>-feature-verification.json`. */
     runScoped: string;
-    /** Feature-latest bound receipt: `.spur/run/<featureId>-feature-verification.json`. */
+    /** Feature-latest bound receipt: `.spur/memory/evidence/<featureId>-feature-verification.json`. */
     featureScoped: string;
     /** Verification command output log (run-scoped). */
     log: string;
@@ -109,9 +109,9 @@ export interface FeatureReceiptPaths {
 }
 
 /**
- * Feature ids and run ids become literal filename segments under `.spur/run`;
+ * Feature ids and run ids become literal filename segments in evidence and scratch;
  * only unambiguous single-segment ids are accepted (no separators, no `..`),
- * which confines every receipt path to the run directory by construction.
+ * which confines paths to their evidence or scratch directory by construction.
  */
 const RECEIPT_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
@@ -136,7 +136,7 @@ export function featureReceiptPaths(runDir: string, featureId: string, runId: st
 
 /**
  * Atomically replace a receipt copy: write the temp sibling, then rename over
- * the target, both inside `.spur/run` so a concurrent reader never observes a
+ * the target, both inside the evidence directory so a concurrent reader never observes a
  * torn JSON document.
  */
 async function atomicWriteReceipt(fs: FileSystem, path: string, receipt: FeatureVerificationReceipt): Promise<void> {

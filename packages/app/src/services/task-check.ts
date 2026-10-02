@@ -19,6 +19,7 @@ import {
 } from '@gobing-ai/spur-domain';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import type { CorpusSeverity } from './corpus-check';
+import { readVerdictArtifact } from './done-transition-guard';
 import { isFeatureFile } from './feature-check';
 import {
     type CheckFindings,
@@ -32,7 +33,7 @@ import { applyStructuralRepairs, type StructuralRepair } from './structural-repa
 import { evaluateTaskEvidence, type TaskEvidenceDeps } from './task-evidence-precheck';
 import { TaskLocator } from './task-locator';
 import { evaluateTaskSize } from './task-size-precheck';
-import { readVerifyVerdict } from './verify-verdict';
+import { parseVerifyVerdict } from './verify-verdict';
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -1834,11 +1835,23 @@ export class TaskCheckService extends PlanningCheckService {
     private async checkVerdictArtifact(wbs: string, tasksDir: string, findings: CheckFindings[]): Promise<void> {
         const projectRoot = resolveProjectRootFromTasksDir(tasksDir);
         const runDir = join(projectRoot, '.spur', 'run');
-        const verdictPath = `${runDir}/${wbs}-verdict.json`;
+        const loaded = await readVerdictArtifact(this.fs, runDir, wbs);
+        const verdictPath = loaded.path;
+        if (loaded.readError) {
+            findings.push({
+                layer: 'L4',
+                code: FINDING_CODES.L4_MALFORMED_VERDICT_ARTIFACT,
+                severity: 'error',
+                section: 'Testing',
+                message: `Verdict artifact at ${verdictPath} is unusable: ${loaded.readError}`,
+            });
+            return;
+        }
+        if (loaded.artifact === undefined) return;
         // Task 0592 R1: consume via the single canonical parser so task validation,
         // feature validation, record rendering, and the done gate all read the same
         // validity verdict (missing / malformed / invalid / valid non-PASS).
-        const outcome = await readVerifyVerdict(this.fs, verdictPath, wbs);
+        const outcome = parseVerifyVerdict(JSON.stringify(loaded.artifact), wbs);
 
         if (outcome.kind === 'missing') return;
 
