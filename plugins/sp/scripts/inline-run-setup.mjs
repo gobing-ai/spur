@@ -15,7 +15,7 @@ function getEnvVar(name, fallback) {
 
 // plugins/sp/scripts/inline-run-setup.ts
 function usage() {
-  console.error([
+  const text = [
     "Usage: bun plugins/sp/scripts/inline-run-setup.ts --run-id <id> --file <definition> [--spur-bin <path>]",
     "       bun plugins/sp/scripts/inline-run-setup.ts --fingerprint --task-file <path> [--feature-file <path>] [--spur-bin <path>]",
     "       bun plugins/sp/scripts/inline-run-setup.ts --action --run-id <id> --node <state> --kind <kind> --status <done|failed> --ok <true|false> --duration-ms <n> [--spur-bin <path>]",
@@ -23,9 +23,11 @@ function usage() {
     "       bun plugins/sp/scripts/inline-run-setup.ts --close --run-id <id> --status <done|failed|paused> [--reason <terminal-reason>] [--spur-bin <path>]",
     "       bun plugins/sp/scripts/inline-run-setup.ts --persist-out --from <worktree-path> [--task-file <path>]... [--spur-bin <path>]",
     "       terminal-reason is a closed enum (0937 R2): done, paused-operator, failed-check, failed-agent, failed-timeout, failed-guard, cancelled, interrupted, retry-exhausted",
+    "       close defaults (1051 AC1): --status done \u2192 reason done, --status paused \u2192 reason paused-operator; --status failed requires an explicit --reason",
     "       bun plugins/sp/scripts/inline-run-setup.ts --decide --run-id <id> --node <state> --options-json <file> [--spur-bin <path>]"
   ].join(`
-`));
+`);
+  console.error(text);
   process.exit(2);
 }
 var SAFE_RUN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
