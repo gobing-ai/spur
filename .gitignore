@@ -207,3 +207,4 @@ docs/.ftree/
 config/workflows/@gobing-ai/
 .spur/@gobing-ai/
 config/@gobing-ai/
+/.spur/memory/wrapup-metrics.jsonl
