@@ -14,6 +14,68 @@ import {
 } from '../../src/lib/rpc-client';
 
 describe('rpc client', () => {
+    test('fetchWithTimeout preserves a request that was already cancelled', async () => {
+        const controller = new AbortController();
+        controller.abort();
+        const fetcher: typeof fetch = Object.assign(
+            async (request: RequestInfo | URL) => {
+                const signal = (request as Request).signal;
+                signal.throwIfAborted();
+                return new Response('unexpected request');
+            },
+            { preconnect: fetch.preconnect },
+        );
+        setFetchForTesting(fetcher);
+        try {
+            await expect(
+                fetchWithTimeout(new Request('http://localhost/test', { signal: controller.signal })),
+            ).rejects.toThrow('aborted');
+        } finally {
+            resetFetchForTesting();
+        }
+    });
+
+    test.each(['success', 'failure'])('fetchWithTimeout removes its abort listener after %s', async (outcome) => {
+        const request = new Request('http://localhost/test');
+        const signal = request.signal;
+        const add = signal.addEventListener.bind(signal);
+        const remove = signal.removeEventListener.bind(signal);
+        let added: unknown;
+        let removed: unknown;
+        signal.addEventListener = (
+            type: string,
+            listener: EventListenerOrEventListenerObject,
+            options?: boolean | AddEventListenerOptions,
+        ) => {
+            if (type === 'abort') added = listener;
+            add(type, listener, options);
+        };
+        signal.removeEventListener = (
+            type: string,
+            listener: EventListenerOrEventListenerObject,
+            options?: boolean | EventListenerOptions,
+        ) => {
+            if (type === 'abort') removed = listener;
+            remove(type, listener, options);
+        };
+        const fetcher: typeof fetch = Object.assign(
+            async () => {
+                if (outcome === 'failure') throw new Error('network failure');
+                return new Response('ok');
+            },
+            { preconnect: fetch.preconnect },
+        );
+        setFetchForTesting(fetcher);
+        try {
+            const result = fetchWithTimeout(request);
+            if (outcome === 'failure') await expect(result).rejects.toThrow('network failure');
+            else expect((await result).status).toBe(200);
+            expect(added).toBeDefined();
+            expect(removed).toBe(added);
+        } finally {
+            resetFetchForTesting();
+        }
+    });
     test('resolveApiUrl returns default URL', () => {
         const url = resolveApiUrl();
         expect(url).toContain('/api');

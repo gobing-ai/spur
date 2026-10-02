@@ -44,15 +44,16 @@ export function resolveApiUrl(
 export function fetchWithTimeout(request: Request, ms = 10_000): Promise<Response> {
     const controller = new AbortController();
     const handle = setTimeout(() => controller.abort(), ms);
-    // Race: if the original request has an abort signal (e.g. useEffect cleanup),
-    // forward it to our controller so the fetch is aborted on either signal.
     const origSignal = request.signal;
-    if (origSignal) {
-        origSignal.addEventListener('abort', () => controller.abort(), { once: true });
-    }
+    const onAbort = () => controller.abort(origSignal.reason);
+    if (origSignal.aborted) onAbort();
+    else origSignal.addEventListener('abort', onAbort, { once: true });
     const req = new Request(request, { signal: controller.signal });
     const fetcher = _testFetch ?? fetch;
-    return fetcher(req).finally(() => clearTimeout(handle));
+    return fetcher(req).finally(() => {
+        clearTimeout(handle);
+        origSignal.removeEventListener('abort', onAbort);
+    });
 }
 
 /**
