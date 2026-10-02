@@ -4,7 +4,7 @@ name: Verify disposable scratch and reconcile cleanup safeguards
 status: done
 template: feature-impl
 created_at: 2026-09-30T20:13:58.359Z
-updated_at: "2026-10-02T00:30:58.804Z"
+updated_at: "2026-10-02T00:33:11.136Z"
 feature_id: E71
 priority: P2
 tags:
@@ -145,13 +145,24 @@ Decisive disposal-equivalence test `packages/app/tests/services/run-storage.test
 
 ### Review
 
-<!-- spur:record-review -->
+| Priority | Dimension | Location | Finding | Disposition |
+| --- | --- | --- | --- | --- |
+| P4 | Functional / SECUA / Architecture | `docs/reports/2026-09-30-E71-run-storage-ownership.md:325` | Reviewed the final scoped implementation and executable failure/disposal evidence; no unresolved blocker or major finding. | RESOLVED |
 
-**SECU findings** (pipeline verify step — verdict: PARTIAL)
+#### Functional traceability
 
-| Priority | Dimension | Location | Finding |
-|----------|-----------|----------|----------|
-| P4 | design-conformance | — | Frozen design is partly implemented; unresolved claims are named in requirements and AC above. |
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `docs/reports/2026-09-30-E71-run-storage-ownership.md:325`; classified cleanup retained, no terminal deletion added |
+| R2 | MET | `packages/app/tests/services/run-storage.test.ts:403`; ownership/confinement/recovery checks with existing action suites |
+| R3 | MET | `packages/app/tests/services/task-record.test.ts:697`; real acceptance; `packages/app/tests/services/history-service.test.ts:978` real imported history; repeated disposal and recreated scratch |
+| R4 | MET | `docs/reports/2026-10-01-E71-run-storage-census.json:1`; owner build parity, installed sync and plugin-smoke PASS |
+
+#### SECUA and architecture
+
+Actual record/receipt/checker, importer and workflow producers cover late consumers rather than mocking their results. Failure and paused paths keep their recovery data. Whole-directory disposal is limited to settled fixtures; cleanup remains owned by its existing freshness/publication/retention rules.
+
+Security: confined paths, existing identity validation and secret redaction remain. Correctness: focused regression evidence covers the changed success/failure branches. Efficiency: bounded local storage traversal; no new background collector. Usability: visible outcomes and errors. Architecture: existing app/domain/plugin ownership and standalone bundle contract remain. No speculative refactor is required.
 
 ### References
 
