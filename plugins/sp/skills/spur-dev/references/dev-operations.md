@@ -534,7 +534,8 @@ is the procedure. The backing is a combination of git CLI, `spur` CLI, and agent
      - **Coverage** — bullet count equals the commit count in `<since>..<until>`, and every short hash appears exactly once.
      - **Mapping** — per-category bullet counts match the conventional-type counts (`feat`→`Added`, `fix`→`Fixed`, other recognized types→`Changed`, unrecognized→`Other`).
      - **Header** — `[<version>] - <date>` matches the resolved `--version` (or detected tag) and the header date.
-     - **HIGH** — all three checks pass. **MEDIUM** — coverage intact but mapping or header deviates. **LOW** — coverage broken (missing/duplicate hashes) or the range cannot be reconciled against git.
+     - **Citations** — a bullet that asserts API/library behavior or a version/dependency claim beyond its commit summary carries a source citation: an official docs URL, or a local `path:line` verified against the installed manifest/lockfile (`package.json`, lockfile, or the cited file). A commit hash is provenance for what shipped, not a citation for what the API/library does; an uncited claim is flagged inline on the bullet (`(uncited: <claim>)`) rather than silently dropped.
+     - **HIGH** — all checks pass with every API/library claim cited. **MEDIUM** — coverage intact but mapping or header deviates, or at least one API/library claim lacks a source citation. **LOW** — coverage broken (missing/duplicate hashes), the range cannot be reconciled against git, or a citation fails verification (dead URL, or a `path:line` that does not support the claim).
 - **Invariants:** Never mutates `CHANGELOG.md` directly — the command surface is stdout-only; writing it to a file (e.g. appending to `CHANGELOG.md`) is the operator's redirect choice, never the command's.
 
 ### 9. gitmsg

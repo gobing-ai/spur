@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Harden runall batch WT-4: recheck main tip before FF, write merged marker only after ref move"
-status: backlog
+status: todo
 template: feature-impl
 created_at: 2026-10-02T23:30:10.890Z
-updated_at: "2026-10-02T23:39:02.649Z"
+updated_at: "2026-10-02T23:41:46.151Z"
 feature_id: D63
 
 ---
@@ -71,3 +71,6 @@ feature_id: D63
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-10-02T23:41:46.151Z backlog → todo (system)
+

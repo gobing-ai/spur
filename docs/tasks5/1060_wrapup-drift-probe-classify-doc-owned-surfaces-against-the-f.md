@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Wrapup drift probe: classify doc-owned surfaces against the feature span, not per-task diffs"
-status: backlog
+status: todo
 template: feature-impl
 created_at: 2026-10-02T23:30:38.595Z
-updated_at: "2026-10-02T23:39:46.371Z"
+updated_at: "2026-10-02T23:41:48.146Z"
 feature_id: D63
 
 ---
@@ -71,3 +71,6 @@ feature_id: D63
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-10-02T23:41:48.146Z backlog → todo (system)
+

@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Align task AC template with done-gate scenario keying (checkbox ACs key L4.uncovered-task-scenario)
-status: backlog
+status: todo
 template: feature-impl
 created_at: 2026-10-02T23:30:56.374Z
-updated_at: "2026-10-02T23:40:56.047Z"
+updated_at: "2026-10-02T23:41:49.875Z"
 feature_id: F96
 
 ---
@@ -75,3 +75,6 @@ feature_id: F96
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-10-02T23:41:49.875Z backlog → todo (system)
+
