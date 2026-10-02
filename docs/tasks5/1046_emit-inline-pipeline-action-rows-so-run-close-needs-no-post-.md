@@ -4,7 +4,7 @@ name: Emit inline pipeline action rows so run close needs no post-hoc backfill
 status: todo
 template: feature-impl
 created_at: 2026-10-01T23:59:14.229Z
-updated_at: "2026-10-02T00:08:30.476Z"
+updated_at: "2026-10-02T00:14:51.504Z"
 feature_id: E71
 
 priority: P2
@@ -35,13 +35,13 @@ with exit 1 by design (0975 R2, must not be relaxed).
 
 ### Requirements
 
-- R1. The YAML-interpreter section of
+- [ ] R1. The YAML-interpreter section of
   `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md` (`:233-235` loop) states the
   per-action emission obligation inline (pointer to "Structured trace emission" with the exact
   `--action` shape), so a driver following only the loop section cannot reach close with zero rows.
-- R2. Repo and installed copies of the driver reference are resynced (superskill install path) —
+- [ ] R2. Repo and installed copies of the driver reference are resynced (superskill install path) —
   or, if sync is intentionally deferred, the drift is documented in the repo copy's header.
-- R3. The `NO_ACTION_ROWS` stdout JSON error text (`inline-run-setup.ts:1035`) appends a
+- [ ] R3. The `NO_ACTION_ROWS` stdout JSON error text (`inline-run-setup.ts:1035`) appends a
   remediation pointer (emit via `--action`/`--actions-file` during the run, see the driver
   reference); exit code, `code`, and fail-closed semantics are unchanged.
 
@@ -80,7 +80,10 @@ non-execution, 0975 R2).
 
 ### Plan
 
-<!-- Ordered implementation checklist. Fill before moving to todo/wip. -->
+1. Put per-action emission and its exact --action payload into the YAML interpreter loop; link the detailed trace contract.
+2. Add a remediation pointer to NO_ACTION_ROWS while retaining its code/exit behavior.
+3. Rehearse incremental emission in an isolated real task/run fixture; extend existing close assertions and regenerate the plugin twin.
+4. Sync the installed driver reference through Superskill, run focused and repository gates, then verify/record/complete through the CLI.
 
 ### Solution
 
