@@ -1,11 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import { resolve } from 'node:path';
-import { applyCliMigrations, type DbAdapter, TaskRunLinkDao } from '@gobing-ai/spur-domain';
+import { applyCliMigrations, createId, type DbAdapter, TaskRunLinkDao } from '@gobing-ai/spur-domain';
 import { createDbAdapter } from '@gobing-ai/ts-db';
+import { DbWorkflowPersistenceAdapter } from '@gobing-ai/ts-dual-workflow-engine';
 import type { EntityRef } from '../../src/services/planning-write-service';
 import {
     LifecycleAdapter,
     type LifecycleAdapterOptions,
+    reconcileExistingLifecycleRow,
     TASK_LIFECYCLE_PROFILE,
 } from '../../src/workflow/lifecycle-adapter';
 
@@ -351,4 +353,156 @@ test('F16/F17: done→wip reopen flips a finalized run back to running', async (
     expect(reopen.allowed).toBe(true);
     expect(await runStatus(db)).toBe('running');
     db.close();
+});
+
+// ── 1047: reconcile an existing lifecycle row after no-lifecycle terminal writes ──
+
+/** Seed the stale shape from the field: a running task-lifecycle row, null terminal reason. */
+async function seedRunningLifecycleRow(db: DbAdapter, wbs: string): Promise<string> {
+    const persistence = new DbWorkflowPersistenceAdapter(db);
+    const runId = createId('run');
+    await persistence.createOrAttachRun({
+        id: runId,
+        workflow_name: 'task-lifecycle',
+        mode: 'state-machine',
+        status: 'running',
+        started_at: new Date().toISOString(),
+        completed_at: null,
+        metadata_json: '{}',
+        external_key: `task:${wbs}`,
+    });
+    return runId;
+}
+
+/** Count task-lifecycle runs and lifecycle links — reconciliation must never grow either. */
+async function lifecycleCounts(db: DbAdapter): Promise<{ runs: number; links: number }> {
+    const runs = await db.queryAll<{ id: string }>("SELECT id FROM runs WHERE workflow_name = 'task-lifecycle'");
+    const links = await db.queryAll<{ run_id: string }>("SELECT run_id FROM task_run_links WHERE kind = 'lifecycle'");
+    return { runs: runs.length, links: links.length };
+}
+
+describe('1047 — reconcileExistingLifecycleRow (post-commit bookkeeping)', () => {
+    async function makeDb(): Promise<DbAdapter> {
+        const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(db);
+        return db;
+    }
+
+    test('R1: finalizes an existing running row to done/reason done with a completion timestamp, allocating nothing', async () => {
+        const db = await makeDb();
+        const runId = await seedRunningLifecycleRow(db, '1041');
+
+        const reconciled = await reconcileExistingLifecycleRow(async () => db, TASK_LIFECYCLE_PROFILE, '1041', 'done');
+
+        expect(reconciled).toBe(true);
+        const after = await new DbWorkflowPersistenceAdapter(db).loadRun(runId);
+        expect(after?.status).toBe('done');
+        expect(after?.terminal_reason).toBe('done');
+        expect(after?.completed_at).not.toBeNull();
+        // Same identity: no second run, no newly-created link (R1).
+        expect(await lifecycleCounts(db)).toEqual({ runs: 1, links: 0 });
+        db.close();
+    });
+
+    test('R1: cancelled maps to engine failed with terminal_reason cancelled (adapter parity)', async () => {
+        const db = await makeDb();
+        const runId = await seedRunningLifecycleRow(db, '1042');
+
+        const reconciled = await reconcileExistingLifecycleRow(
+            async () => db,
+            TASK_LIFECYCLE_PROFILE,
+            '1042',
+            'cancelled',
+        );
+
+        expect(reconciled).toBe(true);
+        const after = await new DbWorkflowPersistenceAdapter(db).loadRun(runId);
+        expect(after?.status).toBe('failed');
+        expect(after?.terminal_reason).toBe('cancelled');
+        expect(after?.completed_at).not.toBeNull();
+        db.close();
+    });
+
+    test('AC4: an absent row allocates nothing (no run, no link)', async () => {
+        const db = await makeDb();
+
+        const reconciled = await reconcileExistingLifecycleRow(async () => db, TASK_LIFECYCLE_PROFILE, '1043', 'done');
+
+        expect(reconciled).toBe(false);
+        expect(await lifecycleCounts(db)).toEqual({ runs: 0, links: 0 });
+        db.close();
+    });
+
+    test('lookup is scoped to the entity: another task stale row is never touched', async () => {
+        const db = await makeDb();
+        const runId = await seedRunningLifecycleRow(db, '1045');
+
+        const reconciled = await reconcileExistingLifecycleRow(async () => db, TASK_LIFECYCLE_PROFILE, '9999', 'done');
+
+        expect(reconciled).toBe(false);
+        const after = await new DbWorkflowPersistenceAdapter(db).loadRun(runId);
+        expect(after?.status).toBe('running');
+        expect(after?.terminal_reason ?? null).toBeNull();
+        db.close();
+    });
+
+    test('AC2: an already-final row is left untouched — replay cannot churn completed_at', async () => {
+        const db = await makeDb();
+        const runId = await seedRunningLifecycleRow(db, '1046');
+        expect(await reconcileExistingLifecycleRow(async () => db, TASK_LIFECYCLE_PROFILE, '1046', 'done')).toBe(true);
+        const first = await new DbWorkflowPersistenceAdapter(db).loadRun(runId);
+
+        const replay = await reconcileExistingLifecycleRow(async () => db, TASK_LIFECYCLE_PROFILE, '1046', 'done');
+
+        expect(replay).toBe(false);
+        const second = await new DbWorkflowPersistenceAdapter(db).loadRun(runId);
+        expect(second?.completed_at).toBe(first?.completed_at);
+        expect(second?.status).toBe('done');
+        db.close();
+    });
+
+    test('a stale-but-not-matching row (done with null reason) is still repaired', async () => {
+        const db = await makeDb();
+        const runId = await seedRunningLifecycleRow(db, '1047a');
+        await db.run("UPDATE runs SET status = 'done', terminal_reason = NULL");
+
+        expect(await reconcileExistingLifecycleRow(async () => db, TASK_LIFECYCLE_PROFILE, '1047a', 'done')).toBe(true);
+        const after = await new DbWorkflowPersistenceAdapter(db).loadRun(runId);
+        expect(after?.status).toBe('done');
+        expect(after?.terminal_reason).toBe('done');
+        db.close();
+    });
+
+    test('a non-terminal target is a no-op (row untouched)', async () => {
+        const db = await makeDb();
+        const runId = await seedRunningLifecycleRow(db, '1047b');
+
+        expect(await reconcileExistingLifecycleRow(async () => db, TASK_LIFECYCLE_PROFILE, '1047b', 'testing')).toBe(
+            false,
+        );
+        const after = await new DbWorkflowPersistenceAdapter(db).loadRun(runId);
+        expect(after?.status).toBe('running');
+        expect(after?.terminal_reason ?? null).toBeNull();
+        db.close();
+    });
+
+    test('R3: a reconciliation failure throws so the caller reports it — the row stays as-is', async () => {
+        const db = await makeDb();
+        const runId = await seedRunningLifecycleRow(db, '1047c');
+
+        await expect(
+            reconcileExistingLifecycleRow(
+                async () => {
+                    throw new Error('db down');
+                },
+                TASK_LIFECYCLE_PROFILE,
+                '1047c',
+                'done',
+            ),
+        ).rejects.toThrow('db down');
+
+        const after = await new DbWorkflowPersistenceAdapter(db).loadRun(runId);
+        expect(after?.status).toBe('running');
+        db.close();
+    });
 });

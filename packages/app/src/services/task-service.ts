@@ -31,6 +31,7 @@ import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { ValidationError } from '@gobing-ai/ts-utils';
 import { GuardDeniedError } from '../errors';
 import { resolveDurableArtifactPath } from '../workflow/actions/run-path';
+import { reconcileExistingLifecycleRow, TASK_LIFECYCLE_PROFILE } from '../workflow/lifecycle-adapter';
 import {
     featureScenarioTitles,
     matchedScenarioKeys,
@@ -1543,6 +1544,11 @@ export class TaskService {
             if (current === target) {
                 // Already there — idempotent no-op (avoids an invalid self-transition).
                 result.transitionedTo = current;
+                // 1047 R2: no writeService transition runs on this branch, so the
+                // composition's post-commit callback never fires. Reconcile the
+                // bookkeeping row directly so an already-terminal re-record repairs
+                // a stale lifecycle row idempotently (AC2 replay).
+                result.bookkeepingError = await this.reconcileTerminalBookkeeping(wbs, target);
             } else if (target === 'done') {
                 if (verdict.verdict !== 'PASS') {
                     throw new GuardDeniedError(
@@ -1567,6 +1573,11 @@ export class TaskService {
                             const hopResult = await this.writeService.transition(ref, hop);
                             reached = hopResult.toStatus ?? hop;
                             result.transitionedTo = reached;
+                            // 1047 R3: a post-commit bookkeeping failure is carried,
+                            // never thrown — the hop's file write is already committed.
+                            if (hopResult.bookkeepingError !== undefined) {
+                                result.bookkeepingError = hopResult.bookkeepingError;
+                            }
                             // 1040 R2: successful done write → reconcile close
                             // audit fields (unforced here: clear stale forced
                             // flag, describe the accepted PASS artifact).
@@ -1591,6 +1602,10 @@ export class TaskService {
                     await this.ensurePipelineRunLink(wbs);
                     const transitionResult = await this.writeService.transition(ref, target);
                     result.transitionedTo = transitionResult.toStatus;
+                    // 1047 R3: carry a post-commit bookkeeping failure (reported, never thrown).
+                    if (transitionResult.bookkeepingError !== undefined) {
+                        result.bookkeepingError = transitionResult.bookkeepingError;
+                    }
                     // 1040 R2: reconcile after the successful done write.
                     if (target === 'done') {
                         result.closeAuditError = await reconcileDoneCloseAudit(this, wbs, {
@@ -1602,6 +1617,10 @@ export class TaskService {
             } else {
                 const transitionResult = await this.writeService.transition(ref, target);
                 result.transitionedTo = transitionResult.toStatus;
+                // 1047 R3: carry a post-commit bookkeeping failure (reported, never thrown).
+                if (transitionResult.bookkeepingError !== undefined) {
+                    result.bookkeepingError = transitionResult.bookkeepingError;
+                }
             }
         }
 
@@ -1619,6 +1638,26 @@ export class TaskService {
         if (getDb === undefined) return;
         const db = await getDb();
         await ensurePipelineRunLink(db, wbs);
+    }
+
+    /**
+     * 1047 R3: best-effort lifecycle-bookkeeping reconciliation for terminal
+     * writes that bypass the write-service post-commit hook (record's
+     * already-terminal replay). Finalizes only an EXISTING row — never allocates
+     * one — and returns the failure message for the caller to report; never
+     * throws (the task file is already committed). No-op without a DB owner or
+     * for non-terminal targets.
+     */
+    private async reconcileTerminalBookkeeping(wbs: string, target: string): Promise<string | undefined> {
+        if (target !== 'done' && target !== 'cancelled') return undefined;
+        const getDb = this.ctx.getDb;
+        if (getDb === undefined) return undefined;
+        try {
+            await reconcileExistingLifecycleRow(getDb, TASK_LIFECYCLE_PROFILE, wbs, target);
+            return undefined;
+        } catch (err) {
+            return err instanceof Error ? err.message : String(err);
+        }
     }
 
     // ── batch-create ──

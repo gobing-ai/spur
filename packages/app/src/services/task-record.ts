@@ -99,6 +99,13 @@ export interface RecordResult {
      * .closeAuditError`. Reported by the CLI, never thrown.
      */
     closeAuditError?: string;
+    /**
+     * 1047 R3: lifecycle-bookkeeping reconciliation failure from a terminal
+     * transition or the already-terminal replay — same best-effort channel as
+     * `closeAuditError`. The task file is committed; the CLI reports it so a
+     * replay of the same terminal transition repairs the row. Never thrown.
+     */
+    bookkeepingError?: string;
     transitionedTo?: string;
     /**
      * 0936 R1: scenario-key carry-forward warnings from the Testing

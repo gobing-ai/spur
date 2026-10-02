@@ -25,6 +25,7 @@ import {
     READY_DONE,
     READY_SKIPPED,
     type ReadinessOutcome,
+    reconcileExistingLifecycleRow,
     resolvePlanningFolders,
     runCorpusCheck,
     SectionMutationError,
@@ -681,6 +682,15 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                             `warning: failed to record done close audit fields: ${outcome.closeAuditError}`,
                         );
                     }
+                    // 1047 R3: bookkeeping reconciliation failure after the committed
+                    // write — reported (exit stays 0), replayable via the same terminal
+                    // transition. Independent of the audit channels above.
+                    if (result.bookkeepingError !== undefined) {
+                        context.output.error(
+                            `warning: failed to reconcile task-lifecycle bookkeeping row: ${result.bookkeepingError} ` +
+                                '(task file is committed; replay the same terminal transition to repair)',
+                        );
+                    }
                     if (options.json) {
                         context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
                     } else {
@@ -1248,6 +1258,14 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     if (result.closeAuditError !== undefined) {
                         context.output.error(
                             `warning: failed to record done close audit fields: ${result.closeAuditError}`,
+                        );
+                    }
+                    // 1047 R3: bookkeeping reconciliation failure — parity with the
+                    // update warning; the JSON envelope carries `bookkeepingError`.
+                    if (result.bookkeepingError !== undefined) {
+                        context.output.error(
+                            `warning: failed to reconcile task-lifecycle bookkeeping row: ${result.bookkeepingError} ` +
+                                '(task file is committed; replay the same terminal transition to repair)',
                         );
                     }
                     // 1040 R1: verdict artifact state + remedy, verdict-first.
@@ -1820,6 +1838,14 @@ export async function makeService(
         fs: context.fs,
         ...(lifecycle ? { lifecycle } : {}),
         emitter: makePlanningEmitter(context),
+        // 1047 R1/R2: after a committed terminal task transition, finalize the
+        // EXISTING task-lifecycle bookkeeping row — including when `--no-lifecycle`
+        // suppressed the adapter (suppression removes run CREATION, not the repair
+        // of a row that already exists). Absent rows allocate nothing; a failure is
+        // carried on the write result, reported by the transport, and replay-safe.
+        onTransitionCommitted: async (ref, _from, to) => {
+            await reconcileExistingLifecycleRow(() => context.getDb(), TASK_LIFECYCLE_PROFILE, ref.id, to);
+        },
     });
     return new TaskService({
         fs: context.fs,

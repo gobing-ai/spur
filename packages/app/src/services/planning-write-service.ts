@@ -162,6 +162,13 @@ export interface WriteResult {
      * seam; empty/omitted when nothing was stripped.
      */
     readonly warnings?: string[];
+    /**
+     * 1047 R3: message from a failed post-commit bookkeeping hook (e.g.
+     * task-lifecycle row reconciliation). The file write itself is committed;
+     * the transport reports this so a replay of the same terminal transition
+     * can repair the row. Absent when the hook succeeded or was not configured.
+     */
+    readonly bookkeepingError?: string;
 }
 
 // ─── Internal mutation descriptor ───────────────────────────────────────
@@ -214,6 +221,17 @@ export interface PlanningWriteServiceOptions {
     emitter?: EventEmitter;
     /** Project name for temp-file composition (defaults to `'spur'`). */
     projectName?: string;
+    /**
+     * 1047 R2: post-commit bookkeeping hook. Invoked AFTER the atomic write has
+     * durably published a status transition (`statusChanged`), with the committed
+     * `from → to`. The composition's DB owner uses it to reconcile bookkeeping
+     * that must follow — never precede or gate — the file write (e.g. finalizing
+     * an existing task-lifecycle row after a `--no-lifecycle` terminal
+     * transition). A thrown error must not fail or revert the committed write:
+     * the service catches it and carries the message on the result's
+     * `bookkeepingError` so the transport reports it and a replay can repair.
+     */
+    onTransitionCommitted?: (ref: EntityRef, fromStatus: string, toStatus: string) => Promise<void>;
 }
 
 /**
@@ -228,12 +246,14 @@ export class PlanningWriteService {
     private readonly lifecycle: LifecyclePort;
     private readonly emitter: EventEmitter;
     private readonly projectName: string;
+    private readonly onTransitionCommitted?: PlanningWriteServiceOptions['onTransitionCommitted'];
 
     constructor(opts: PlanningWriteServiceOptions) {
         this.fs = opts.fs;
         this.lifecycle = opts.lifecycle ?? new SchemaLifecyclePort();
         this.emitter = opts.emitter ?? new NoopEventEmitter();
         this.projectName = opts.projectName ?? 'spur';
+        this.onTransitionCommitted = opts.onTransitionCommitted;
     }
 
     // ── Public operations ──
@@ -473,6 +493,21 @@ export class PlanningWriteService {
         };
         await this.emitter.emit(event);
 
+        // ── Step 8.5 (1047 R2): post-commit bookkeeping hook ──
+        // Fires only for committed transitions (a guard denial or failed write
+        // aborts above) and AFTER the file is durably published. A hook failure
+        // is carried — never thrown — so the committed task file stands and the
+        // transport can report it and replay safely (R3).
+        let bookkeepingError: string | undefined;
+        const committedHook = this.onTransitionCommitted;
+        if (statusChanged && committedHook !== undefined && fromStatus !== undefined && toStatus !== undefined) {
+            try {
+                await committedHook(ref, fromStatus, toStatus);
+            } catch (err) {
+                bookkeepingError = err instanceof Error ? err.message : String(err);
+            }
+        }
+
         const warnings = doc.demotedHeadings.map(
             (line) =>
                 `Demoted same-level heading one level deeper in section body (would become a phantom section): "${line}". ` +
@@ -492,6 +527,7 @@ export class PlanningWriteService {
             ...(fromStatus !== undefined ? { fromStatus } : {}),
             ...(toStatus !== undefined ? { toStatus } : {}),
             ...(warnings.length > 0 ? { warnings } : {}),
+            ...(bookkeepingError !== undefined ? { bookkeepingError } : {}),
         };
     }
 }

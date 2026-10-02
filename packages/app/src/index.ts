@@ -909,6 +909,7 @@ export {
     LifecycleAdapter,
     type LifecycleAdapterOptions,
     type LifecycleProfile,
+    reconcileExistingLifecycleRow,
     TASK_LIFECYCLE_PROFILE,
 } from './workflow/lifecycle-adapter';
 export {

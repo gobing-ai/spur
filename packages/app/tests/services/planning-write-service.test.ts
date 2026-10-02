@@ -742,4 +742,83 @@ describe('PlanningWriteService', () => {
             expect(result.report).toBe('already in this status');
         });
     });
+
+    // ── 1047: post-commit bookkeeping hook ──
+    describe('onTransitionCommitted (1047)', () => {
+        test('fires after a committed transition with the committed from → to and the written file', async () => {
+            const fs = makeFs();
+            const calls: Array<{ id: string; from: string; to: string }> = [];
+            const svc = new PlanningWriteService({
+                fs,
+                onTransitionCommitted: async (ref, from, to) => {
+                    calls.push({ id: ref.id, from, to });
+                },
+            });
+            const ref = makeTaskRef();
+            await fs.writeFile(ref.filePath, makeTaskContent('backlog'));
+
+            const result = await svc.transition(ref, 'done');
+
+            expect(calls).toEqual([{ id: '0042', from: 'backlog', to: 'done' }]);
+            expect(result.bookkeepingError).toBeUndefined();
+            // Post-commit: the file is already durably published when the hook runs.
+            const doc = MarkdownDocument.parse(await readBack(ref), 'task');
+            expect(doc.frontmatterData?.status).toBe('done');
+        });
+
+        test('carries a hook failure as bookkeepingError — the committed write stands (R3)', async () => {
+            const fs = makeFs();
+            const svc = new PlanningWriteService({
+                fs,
+                onTransitionCommitted: async () => {
+                    throw new Error('bookkeeping db down');
+                },
+            });
+            const ref = makeTaskRef();
+            await fs.writeFile(ref.filePath, makeTaskContent('wip'));
+
+            // No throw: the transition itself succeeded.
+            const result = await svc.transition(ref, 'done');
+
+            expect(result.toStatus).toBe('done');
+            expect(result.bookkeepingError).toBe('bookkeeping db down');
+            const doc = MarkdownDocument.parse(await readBack(ref), 'task');
+            expect(doc.frontmatterData?.status).toBe('done');
+        });
+
+        test('never fires when the lifecycle guard denies (no committed write)', async () => {
+            const fs = makeFs();
+            const calls: unknown[] = [];
+            const svc = new PlanningWriteService({
+                fs,
+                lifecycle: new DenyingLifecyclePort(),
+                onTransitionCommitted: async () => {
+                    calls.push('fired');
+                },
+            });
+            const ref = makeTaskRef();
+            await fs.writeFile(ref.filePath, makeTaskContent('backlog'));
+
+            await expect(svc.transition(ref, 'done')).rejects.toThrow(/Lifecycle transition denied/);
+
+            expect(calls).toEqual([]);
+        });
+
+        test('never fires for non-transition writes (section update)', async () => {
+            const fs = makeFs();
+            const calls: unknown[] = [];
+            const svc = new PlanningWriteService({
+                fs,
+                onTransitionCommitted: async () => {
+                    calls.push('fired');
+                },
+            });
+            const ref = makeTaskRef();
+            await fs.writeFile(ref.filePath, makeTaskContent('backlog'));
+
+            await svc.updateSection(ref, 'Solution', 'change-map');
+
+            expect(calls).toEqual([]);
+        });
+    });
 });

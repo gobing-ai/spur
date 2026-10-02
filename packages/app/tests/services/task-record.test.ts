@@ -10,8 +10,9 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
-import { applyCliMigrations, MarkdownDocument, TaskRunLinkDao } from '@gobing-ai/spur-domain';
+import { applyCliMigrations, createId, MarkdownDocument, TaskRunLinkDao } from '@gobing-ai/spur-domain';
 import { createDbAdapter, type DbAdapter } from '@gobing-ai/ts-db';
+import { DbWorkflowPersistenceAdapter } from '@gobing-ai/ts-dual-workflow-engine';
 import { createNodeFileSystem, type FileSystem } from '@gobing-ai/ts-runtime';
 import { GuardDeniedError } from '../../src/errors';
 import { FeatureCheckService } from '../../src/services/feature-check';
@@ -37,6 +38,7 @@ import {
     DEFAULT_FEATURE_VERIFICATION_CMD,
     startFeatureVerificationReceipt,
 } from '../../src/workflow/feature-verification-receipt';
+import { reconcileExistingLifecycleRow, TASK_LIFECYCLE_PROFILE } from '../../src/workflow/lifecycle-adapter';
 import { resolveWorkflowDefinition } from '../../src/workflow/workflow-resolver';
 
 // ─── Helpers ────────────────────────────────────────────────────────────
@@ -2333,6 +2335,322 @@ describe('1040 — record re-pulls verdict state and reconciles close metadata',
 
             expect(result.transitionedTo).toBe('done');
             expect(result.closeAuditError).toContain('audit write failed');
+        } finally {
+            db.close();
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+});
+
+// ── 1047: reconcile an existing task-lifecycle row after no-lifecycle terminal writes ──
+
+describe('1047 — record/update reconcile pre-existing lifecycle bookkeeping', () => {
+    /** Seed the stale field shape: a running task-lifecycle row with a null terminal reason. */
+    async function seedRunningLifecycleRow(db: DbAdapter, wbs: string): Promise<string> {
+        const persistence = new DbWorkflowPersistenceAdapter(db);
+        const runId = createId('run');
+        await persistence.createOrAttachRun({
+            id: runId,
+            workflow_name: 'task-lifecycle',
+            mode: 'state-machine',
+            status: 'running',
+            started_at: new Date().toISOString(),
+            completed_at: null,
+            metadata_json: '{}',
+            external_key: `task:${wbs}`,
+        });
+        return runId;
+    }
+
+    async function loadRun(db: DbAdapter, runId: string) {
+        return new DbWorkflowPersistenceAdapter(db).loadRun(runId);
+    }
+
+    /** Runs + links counts — reconciliation must never grow either. */
+    async function lifecycleCounts(db: DbAdapter): Promise<{ runs: number; links: number }> {
+        const runs = await db.queryAll<{ id: string }>("SELECT id FROM runs WHERE workflow_name = 'task-lifecycle'");
+        const links = await db.queryAll<{ run_id: string }>(
+            "SELECT run_id, kind FROM task_run_links WHERE kind = 'lifecycle'",
+        );
+        return { runs: runs.length, links: links.length };
+    }
+
+    /**
+     * Service wired exactly like the CLI's `makeService` under `--no-lifecycle`
+     * (no lifecycle adapter, post-commit reconciliation over the shared DB owner).
+     */
+    async function makeReconcilingService(
+        callback?: (ref: EntityRef, fromStatus: string, toStatus: string) => Promise<void>,
+    ): Promise<{
+        svc: TaskService;
+        fs: FileSystem;
+        root: string;
+        db: DbAdapter;
+        dir: string;
+    }> {
+        const root = mkdtempSync(join(tmpdir(), 'spur-record-1047-'));
+        const dir = join(root, 'tasks');
+        const fs = createNodeFileSystem(root);
+        await fs.ensureDir(dir);
+        await fs.ensureDir(join(root, '.spur', 'run'));
+        const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(db);
+        const svc = new TaskService({
+            fs,
+            tasksDir: dir,
+            writeService: new PlanningWriteService({
+                fs,
+                onTransitionCommitted:
+                    callback ??
+                    (async (ref, _from, to) => {
+                        await reconcileExistingLifecycleRow(async () => db, TASK_LIFECYCLE_PROFILE, ref.id, to);
+                    }),
+            }),
+            getDb: async () => db,
+            sectionMatrix: RECORD_SECTION_MATRIX,
+        });
+        return { svc, fs, root, db, dir };
+    }
+
+    /** Passing structural gate — the P3 backstop `--no-lifecycle record` supplies (task 0980). */
+    function passingGate(): TransitionCheckGate {
+        return {
+            service: {
+                check: async () => ({ wbs: '', pass: true, findings: [] }),
+            } as unknown as TaskCheckService,
+        };
+    }
+
+    function failingGate(): TransitionCheckGate {
+        return {
+            service: {
+                check: async () => ({
+                    wbs: '',
+                    pass: false,
+                    findings: [
+                        { layer: 'L3', code: 'L3.test', severity: 'error', section: '', message: 'stub denial' },
+                    ],
+                }),
+            } as unknown as TaskCheckService,
+        };
+    }
+
+    test('AC1: guarded no-lifecycle record to done finalizes the existing running row (no new run)', async () => {
+        const { svc, fs, root, db, dir } = await makeReconcilingService();
+        try {
+            const created = await svc.create({ title: 'Record 1047 AC1', dedupeWithinSec: null });
+            const wbs = created.ref.id;
+            await svc.updateStatus(wbs, 'wip');
+            const runId = await seedRunningLifecycleRow(db, wbs);
+            const verdictPath = join(root, '.spur', 'run', `${wbs}-verdict.json`);
+            await fs.writeFile(verdictPath, JSON.stringify({ wbs, verdict: 'PASS', requirements: [], checks: [] }));
+
+            const result = await svc.record(wbs, {
+                verdictFile: verdictPath,
+                transition: 'done',
+                checkGate: passingGate(),
+            });
+
+            expect(result.transitionedTo).toBe('done');
+            expect(result.bookkeepingError).toBeUndefined();
+            const row = await loadRun(db, runId);
+            expect(row?.status).toBe('done');
+            expect(row?.terminal_reason).toBe('done');
+            expect(row?.completed_at).not.toBeNull();
+            // The SAME row was finalized — no new lifecycle run, no new link.
+            expect(await lifecycleCounts(db)).toEqual({ runs: 1, links: 0 });
+            expect((await db.queryAll<{ id: string }>('SELECT id FROM runs'))[0]?.id).toBe(runId);
+            const raw = await fs.readFile(`${dir}/${basename(created.ref.filePath)}`);
+            expect(MarkdownDocument.parse(raw, 'task').frontmatterData?.status).toBe('done');
+        } finally {
+            db.close();
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('AC2: the update seam reconciles an existing named row too', async () => {
+        const { svc, db, root } = await makeReconcilingService();
+        try {
+            const created = await svc.create({ title: 'Record 1047 AC2 update', dedupeWithinSec: null });
+            const wbs = created.ref.id;
+            const runId = await seedRunningLifecycleRow(db, wbs);
+
+            const result = await svc.updateStatus(wbs, 'done');
+
+            expect(result.toStatus).toBe('done');
+            expect(result.bookkeepingError).toBeUndefined();
+            const row = await loadRun(db, runId);
+            expect(row?.status).toBe('done');
+            expect(row?.terminal_reason).toBe('done');
+            expect(await lifecycleCounts(db)).toEqual({ runs: 1, links: 0 });
+        } finally {
+            db.close();
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('AC2: an already-done re-record repairs a stale running row idempotently (replay)', async () => {
+        const { svc, fs, root, db } = await makeReconcilingService();
+        try {
+            const created = await svc.create({ title: 'Record 1047 AC2 replay', dedupeWithinSec: null });
+            const wbs = created.ref.id;
+            await svc.updateStatus(wbs, 'wip');
+            const verdictPath = join(root, '.spur', 'run', `${wbs}-verdict.json`);
+            await fs.writeFile(verdictPath, JSON.stringify({ wbs, verdict: 'PASS', requirements: [], checks: [] }));
+            // First close with no row existing: completion allocates none (AC4 seam).
+            await svc.record(wbs, { verdictFile: verdictPath, transition: 'done', checkGate: passingGate() });
+            expect(await lifecycleCounts(db)).toEqual({ runs: 0, links: 0 });
+
+            // The field drift: a row created BEFORE the no-lifecycle write stays running.
+            const runId = await seedRunningLifecycleRow(db, wbs);
+
+            // Already-terminal re-record: no writeService transition runs, so the
+            // replay path reconciles directly through the service's DB owner.
+            const result = await svc.record(wbs, { verdictFile: verdictPath, transition: 'done' });
+
+            expect(result.transitionedTo).toBe('done');
+            expect(result.bookkeepingError).toBeUndefined();
+            const row = await loadRun(db, runId);
+            expect(row?.status).toBe('done');
+            expect(row?.terminal_reason).toBe('done');
+            expect(row?.completed_at).not.toBeNull();
+            expect(await lifecycleCounts(db)).toEqual({ runs: 1, links: 0 });
+        } finally {
+            db.close();
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('AC3: a denied structural gate leaves the running row untouched (no false finalize)', async () => {
+        const { svc, fs, root, db } = await makeReconcilingService();
+        try {
+            const created = await svc.create({ title: 'Record 1047 AC3 gate', dedupeWithinSec: null });
+            const wbs = created.ref.id;
+            await svc.updateStatus(wbs, 'wip');
+            const runId = await seedRunningLifecycleRow(db, wbs);
+            const verdictPath = join(root, '.spur', 'run', `${wbs}-verdict.json`);
+            await fs.writeFile(verdictPath, JSON.stringify({ wbs, verdict: 'PASS', requirements: [], checks: [] }));
+
+            await expect(
+                svc.record(wbs, {
+                    verdictFile: verdictPath,
+                    transition: 'done',
+                    checkGate: failingGate(),
+                }),
+            ).rejects.toThrow(/Lifecycle transition blocked/);
+
+            const row = await loadRun(db, runId);
+            expect(row?.status).toBe('running');
+            expect(row?.terminal_reason ?? null).toBeNull();
+            expect(row?.completed_at ?? null).toBeNull();
+        } finally {
+            db.close();
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('AC3: a denied done hop (port denial after a committed earlier hop) leaves the row untouched', async () => {
+        const root = mkdtempSync(join(tmpdir(), 'spur-record-1047-denial-'));
+        const dir = join(root, 'tasks');
+        const fs = createNodeFileSystem(root);
+        await fs.ensureDir(dir);
+        await fs.ensureDir(join(root, '.spur', 'run'));
+        const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(db);
+        try {
+            const svc = new TaskService({
+                fs,
+                tasksDir: dir,
+                writeService: new PlanningWriteService({
+                    fs,
+                    lifecycle: {
+                        requestTransition(_ref, from, to) {
+                            return to === 'done'
+                                ? { allowed: false, from, to, report: 'simulated done denial' }
+                                : { allowed: true, from, to };
+                        },
+                    },
+                    onTransitionCommitted: async (ref, _from, to) => {
+                        await reconcileExistingLifecycleRow(async () => db, TASK_LIFECYCLE_PROFILE, ref.id, to);
+                    },
+                }),
+                getDb: async () => db,
+                sectionMatrix: RECORD_SECTION_MATRIX,
+            });
+            const created = await svc.create({ title: 'Record 1047 AC3 hop', dedupeWithinSec: null });
+            const wbs = created.ref.id;
+            await svc.updateStatus(wbs, 'wip');
+            const runId = await seedRunningLifecycleRow(db, wbs);
+            const verdictPath = join(root, '.spur', 'run', `${wbs}-verdict.json`);
+            await fs.writeFile(verdictPath, JSON.stringify({ wbs, verdict: 'PASS', requirements: [], checks: [] }));
+
+            await expect(svc.record(wbs, { verdictFile: verdictPath, transition: 'done' })).rejects.toBeInstanceOf(
+                GuardDeniedError,
+            );
+
+            const row = await loadRun(db, runId);
+            expect(row?.status).toBe('running');
+            expect(row?.terminal_reason ?? null).toBeNull();
+        } finally {
+            db.close();
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('AC4: an injected reconciliation failure is visible and replay repairs only the existing row', async () => {
+        // One-shot failure scoped to the done hop: the terminal write reports it,
+        // the replay path repairs.
+        let injectedDoneFailures = 0;
+        const { svc, fs, root, db, dir } = await makeReconcilingService(async (ref, _from, to) => {
+            if (to === 'done') {
+                injectedDoneFailures += 1;
+                if (injectedDoneFailures === 1) throw new Error('injected bookkeeping failure');
+            }
+            await reconcileExistingLifecycleRow(async () => db, TASK_LIFECYCLE_PROFILE, ref.id, to);
+        });
+        try {
+            const created = await svc.create({ title: 'Record 1047 AC4', dedupeWithinSec: null });
+            const wbs = created.ref.id;
+            await svc.updateStatus(wbs, 'wip');
+            // Pre-existing pipeline identity a replay must preserve (R3).
+            const pipelineLinkId = createId('trl');
+            const pipelineRunId = createId('run');
+            await new TaskRunLinkDao(db).insert({
+                id: pipelineLinkId,
+                wbs,
+                run_id: pipelineRunId,
+                kind: 'pipeline',
+                created_at: new Date().toISOString(),
+            });
+            const runId = await seedRunningLifecycleRow(db, wbs);
+            const verdictPath = join(root, '.spur', 'run', `${wbs}-verdict.json`);
+            await fs.writeFile(verdictPath, JSON.stringify({ wbs, verdict: 'PASS', requirements: [], checks: [] }));
+
+            // The file write commits; the bookkeeping failure is reported, never thrown.
+            const failed = await svc.record(wbs, {
+                verdictFile: verdictPath,
+                transition: 'done',
+                checkGate: passingGate(),
+            });
+            expect(failed.transitionedTo).toBe('done');
+            expect(failed.bookkeepingError).toContain('injected bookkeeping failure');
+            const raw = await fs.readFile(`${dir}/${basename(created.ref.filePath)}`);
+            expect(MarkdownDocument.parse(raw, 'task').frontmatterData?.status).toBe('done');
+            const stale = await loadRun(db, runId);
+            expect(stale?.status).toBe('running');
+
+            // Replay through the same guarded owner repairs ONLY the existing row
+            // and preserves the pipeline link (no new runs, no new links).
+            const replay = await svc.record(wbs, { verdictFile: verdictPath, transition: 'done' });
+            expect(replay.transitionedTo).toBe('done');
+            expect(replay.bookkeepingError).toBeUndefined();
+            const repaired = await loadRun(db, runId);
+            expect(repaired?.status).toBe('done');
+            expect(repaired?.terminal_reason).toBe('done');
+            expect(repaired?.id).toBe(runId);
+            expect(await lifecycleCounts(db)).toEqual({ runs: 1, links: 0 });
+            const links = await db.queryAll<{ id: string; kind: string }>('SELECT id, kind FROM task_run_links');
+            expect(links).toEqual([{ id: pipelineLinkId, kind: 'pipeline' }]);
         } finally {
             db.close();
             rmSync(root, { recursive: true, force: true });

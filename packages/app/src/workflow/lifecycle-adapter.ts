@@ -59,6 +59,37 @@ export const FEATURE_LIFECYCLE_PROFILE: LifecycleProfile = {
     varKey: 'featureId',
 };
 
+/**
+ * 1047 R1: finalize an EXISTING lifecycle bookkeeping run for an entity whose
+ * file just landed in a terminal status — the same status mapping the adapter
+ * applies after its own successful transition (done → 'done', cancelled →
+ * engine 'failed' with reason 'cancelled'), for the committed writes that
+ * never reach the adapter (`--no-lifecycle` terminal task updates/records).
+ *
+ * Lookup-only by design: an absent row returns `false` and allocates nothing —
+ * run-creation suppression must not be defeated by the reconciliation (R1/AC4).
+ * An already-final row also returns `false`, so a terminal re-record replay
+ * cannot churn `completed_at`. No guard, link, or engine state is touched:
+ * the row is finalized as-is (no reseed, no transition request). A failure
+ * throws; callers report it post-commit and replay through the same terminal
+ * transition, which repairs only this existing row (R3).
+ */
+export async function reconcileExistingLifecycleRow(
+    getDb: () => Promise<DbAdapter>,
+    profile: LifecycleProfile,
+    entityId: string,
+    toStatus: string,
+): Promise<boolean> {
+    if (toStatus !== 'done' && toStatus !== 'cancelled') return false;
+    const persistence = new DbWorkflowPersistenceAdapter(await getDb());
+    const run = await persistence.findRunByKey(profile.workflowName, `${profile.entityPrefix}:${entityId}`);
+    if (run === undefined) return false;
+    const engineStatus = toStatus === 'cancelled' ? 'failed' : 'done';
+    if (run.status === engineStatus && run.terminal_reason === toStatus) return false;
+    await persistence.finalizeRun(run.id, engineStatus, new Date().toISOString(), undefined, toStatus);
+    return true;
+}
+
 /** Options for constructing the lifecycle engine adapter. */
 export interface LifecycleAdapterOptions {
     /** Lifecycle profile: task vs feature run binding, workflow, link kind, guard var. */

@@ -36,8 +36,10 @@ import {
     ProcessInventoryService as ProcessInventoryServiceImpl,
     RuleService as RuleServiceImpl,
     RunStoreService as RunStoreServiceImpl,
+    reconcileExistingLifecycleRow,
     SupervisorService as SupervisorServiceImpl,
     type SystemEventProjectContext,
+    TASK_LIFECYCLE_PROFILE,
     TaskCheckService,
     TaskLocator,
     TaskService as TaskServiceImpl,
@@ -442,7 +444,23 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
                 const lazyEmitter = new LazyPlanningEventEmitter(this.getDb.bind(this), eventsBus);
                 taskSvc = new TaskServiceImpl({
                     fs,
-                    writeService: new PlanningWriteServiceImpl({ fs, projectName: 'spur', emitter: lazyEmitter }),
+                    writeService: new PlanningWriteServiceImpl({
+                        fs,
+                        projectName: 'spur',
+                        emitter: lazyEmitter,
+                        // 1047 R2: the server has no lifecycle adapter, so this
+                        // post-commit hook is the only owner that finalizes a
+                        // pre-existing task-lifecycle row after a committed
+                        // terminal task transition (existing rows only).
+                        onTransitionCommitted: async (ref, _from, to) => {
+                            await reconcileExistingLifecycleRow(
+                                this.getDb.bind(this),
+                                TASK_LIFECYCLE_PROFILE,
+                                ref.id,
+                                to,
+                            );
+                        },
+                    }),
                     tasksDir: folders.tasksDir,
                     foldersConfig: folders.foldersConfig,
                     projectName: 'spur',
