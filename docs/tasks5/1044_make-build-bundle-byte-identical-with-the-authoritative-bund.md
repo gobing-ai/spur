@@ -1,12 +1,14 @@
 ---
 schema_version: 1
 name: Make build:bundle byte-identical with the authoritative bundle-plugin-lib test bundler
-status: wip
+status: done
 template: feature-impl
 created_at: 2026-10-01T21:54:16.882Z
-updated_at: "2026-10-02T00:42:37.759Z"
+updated_at: "2026-10-02T04:08:40.386Z"
 feature_id: A33
 
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/run/1044-verdict.json
 ---
 
 ## 1044. Make build:bundle byte-identical with the authoritative bundle-plugin-lib test bundler
@@ -25,10 +27,10 @@ bundlers for one artifact contradicts A33's single-source goal.
 
 ### Requirements
 
-- [ ] R1. `build:bundle` and `scripts/commands/bundle-plugin-lib.test.ts` produce byte-identical
+- [x] R1. `build:bundle` and `scripts/commands/bundle-plugin-lib.test.ts` produce byte-identical
   `plugins/sp/lib/inline-run.generated.mjs` for the same source tree, so a source change fails the
   determinism test at most zero times when build:bundle output is committed.
-- [ ] R2. The single generation path keeps the existing determinism guarantees (only runtime builtin
+- [x] R2. The single generation path keeps the existing determinism guarantees (only runtime builtin
   imports, stable bytes across cwd).
 
 ### Acceptance Criteria
@@ -68,7 +70,20 @@ The dirty-source rehearsal changed a bundled error literal, ran the actual works
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `apps/cli/package.json:52`; dirty-source build and byte-identical authoritative regeneration (.spur/run/E71-1044-dirty-build.log) |
+| R2 | MET | `scripts/commands/bundle-plugin-lib.ts:658`; `scripts/commands/bundle-plugin-lib.test.ts:188`; existing generator and standalone/cwd deterministic tests |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | command | Dirty bundled error literal → actual package build:bundle → 16 authoritative tests → unchanged exact bytes, sha256:37c3f4f77156ac6fc9eee7c5b52d50bd32cad26cb40338c2c9cf5a54fcfc3b1f; source restored and rebuilt |
+| AC2 | MET | command | Final bun run spur-check includes the deterministic generator test; output needs no bundle fixup after package generation |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
@@ -95,4 +110,6 @@ This is one build-entry composition change. It reuses the current generator, pro
 
 - 2026-10-01T21:57:41.142Z backlog → todo (system)
 - 2026-10-02T00:38:48.889Z todo → wip (system)
+- 2026-10-02T04:08:40.381Z wip → testing (system)
+- 2026-10-02T04:08:40.384Z testing → done (system)
 
