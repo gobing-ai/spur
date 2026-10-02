@@ -314,3 +314,42 @@ Keep correctness invalidation, atomic publication cleanup and unrelated temporar
 No real project scratch was deleted during this re-verification. The repaired record/receipt
 writers and migration confinement do not settle the unresolved consumers above. R4 remains PARTIAL
 until the current candidate set is closed; no unresolved family is silently declared disposable.
+
+## 14. Completion audit (2026-10-02)
+
+The current reviewed census is [machine-readable](2026-10-01-E71-run-storage-census.json).
+It records each candidate's file, line and source-line SHA-256, its source owner, and its
+family dispositions linked to §§3–6 above. The read-only equality check is:
+
+```bash
+bun scripts/commands/run-storage-census.ts
+```
+
+At this closure checkpoint, **3,216 candidate locations = 3,216 classified locations**, across
+276 owners; zero duplicate or unclassified locations. Equality compares location identities,
+not file counts. The scan includes direct paths, computed joins, root/helper aliases, and
+deletion calls across app/CLI/server/domain/config source, workflows, plugin instructions,
+hooks and scripts, and tests. Broad deletion matches outside run storage are explicitly
+U1–U6/T2, including fixture teardown and lock/publication cleanup. Generated CLI config and
+the bundled CLI plugin copy are derived consumers excluded from this source census; `.mjs`
+twins are checked through the build/install parity gates. A changed candidate must be
+reviewed before updating the census. Runtime unknowns remain preserved migration candidates.
+
+The earlier unresolved rows now have concrete owners and executable closure evidence:
+
+| Dependency | Disposition and regression |
+| --- | --- |
+| Corpus and suppression inputs | Durable-first discovery; `corpus-sweep.test.ts` and `feature-sync-suppression.test.ts` compare inputs after scratch removal |
+| Residual fold and wrap-up metrics | Canonical evidence is authoritative; fold updates it atomically and mirrors the attempt copy; plugin tests exercise downgrade and malformed durable rejection |
+| Legacy identities and live owners | Existing verdict/receipt parsers plus record identities; migration tests reject foreign identities and preserve proof/receipt live owners |
+| Legacy artifact/session references | Domain owner transaction redirects references and importer checkpoints; real OMP import remains stable before/after repeated disposal and later full import |
+| Worktree durable families | Canonical verdicts, both receipts, artifacts/links, records and session roots transfer; export regression deletes the source tree and reads receiving references; conflicts fail visibly |
+| Bound evidence and registered summaries | Fixed evidence root binding and source-proven retained summary lookup; real decision workflow consumes its registered summary after whole scratch removal |
+| C13/X4 failed-agent handoff | Lasting under the existing run artifact directory, including a redacted latch snapshot; failure writer and tracing regressions retain it after disposal |
+| Feature/producer equivalence | Real task record, receipt writer and feature completion checker remain equal; real paused workflow resumes then retains trace/records after repeated removal |
+| Cleanup sites | W1–W14 correctness invalidation/publication cleanup stays; legacy log reclamation protects live owners; U/T2 cleanup keeps its existing owner |
+
+Task 1043 remains separately assigned to the other coding agent. It owns record-pass
+prevalidation and replay repair after an earlier row/file tear; this audit does not certify its
+unfinished implementation. No live project scratch was removed. Test fixtures remove the
+whole completed scratch directory only after their retained data and consumers settle.

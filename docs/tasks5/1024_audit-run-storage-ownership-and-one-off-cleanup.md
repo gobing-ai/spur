@@ -4,7 +4,7 @@ name: Audit run storage ownership and one-off cleanup
 status: done
 template: feature-impl
 created_at: 2026-09-30T20:13:58.349Z
-updated_at: "2026-10-01T22:22:36.915Z"
+updated_at: "2026-10-02T00:08:23.551Z"
 feature_id: E71
 priority: P2
 tags:
@@ -90,6 +90,8 @@ Audit-only task (mutationPolicy: none) — no source, test, workflow, or CLI sur
 
 - `docs/reports/2026-09-30-E71-run-storage-ownership.md:294` — regenerated the current run-storage census and separated historical disposition claims from unresolved corpus/suppression, metadata/importer, export and integration dependencies. No product code or real project scratch deletion belongs to this audit task.
 - Candidate counts alone do not certify exhaustive producer/consumer equality. R1/R4 and the feature scenario remain PARTIAL after the bounded report repair.
+
+Completion audit (2026-10-02): the current census records every candidate location with its source-line SHA-256 and reviewed owner/family disposition. `bun scripts/commands/run-storage-census.ts` proves 3,216 candidates equal 3,216 classified locations across 276 owners, with zero unclassified or duplicate entries; an injected new candidate is rejected. The historical report §14 closes corpus/suppression, residual/metrics, identities, importer/reference, export, summary and failed-agent handoff dispositions. Task 1043 retains its separate record-pass/replay ownership. No live project scratch was deleted.
 
 ### Testing
 
