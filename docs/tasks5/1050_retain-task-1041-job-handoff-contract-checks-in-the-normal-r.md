@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: Retain task 1041 job-handoff contract checks in the normal repository suite
-status: todo
+status: done
 template: issue
 created_at: 2026-10-02T05:46:49.743Z
-updated_at: "2026-10-02T06:12:00.922Z"
+updated_at: "2026-10-02T17:08:55.445Z"
 feature_id: D62
 
 priority: P3
 ac_altitude: task-local
 ac_numbering: task-local
 dependencies: ["1041"]
+done_forced: "false"
+done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-dev-runall-d62-7b87/.spur/memory/evidence/1050-verdict.json
 ---
 
 ## 1050. Retain task 1041 job-handoff contract checks in the normal repository suite
@@ -25,17 +27,17 @@ Triage preserved the original scripts, verification summary and walkthrough rece
 
 ### Requirements
 
-- [ ] R1. Add one tracked Bun test under plugins/sp/tests that checks the two thin command wrappers against the shared job-dump/job-resume contract and eight-section handoff template, without .spur/run input or a historical receipt.
-- [ ] R2. Cover required --file/path validation, sample-data exclusion, live-state reconciliation, preserving ownership, missing required versus optional evidence, and the prohibitions on replaying completion or inventing approvals. Reuse existing command/link validators where available; do not build a Markdown parser.
-- [ ] R3. Treat these as checks of the declared instructions, not proof that a model executed them. Tests run in the normal root gate, tolerate unrelated reference edits and keep the current instructions and command surface unchanged.
+- [x] R1. Add one tracked Bun test under plugins/sp/tests that checks the two thin command wrappers against the shared job-dump/job-resume contract and eight-section handoff template, without .spur/run input or a historical receipt.
+- [x] R2. Cover required --file/path validation, sample-data exclusion, live-state reconciliation, preserving ownership, missing required versus optional evidence, and the prohibitions on replaying completion or inventing approvals. Reuse existing command/link validators where available; do not build a Markdown parser.
+- [x] R3. Treat these as checks of the declared instructions, not proof that a model executed them. Tests run in the normal root gate, tolerate unrelated reference edits and keep the current instructions and command surface unchanged.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Detailed handoff checks survive scratch disposal (req: R1).
+- [x] AC1 — Detailed handoff checks survive scratch disposal (req: R1).
   Given a clean checkout with .spur/run absent, the tracked test checks both wrappers and the shared template and passes as part of normal Bun discovery.
-- [ ] AC2 — Material contract drift is detected (req: R2).
+- [x] AC2 — Material contract drift is detected (req: R2).
   Removing the required file contract, one template heading, approval boundary or completed-work/live-state reconciliation obligation makes the targeted check fail; legitimate unrelated reference edits do not.
-- [ ] AC3 — No runtime layer or fabricated execution proof (req: R2, R3).
+- [x] AC3 — No runtime layer or fabricated execution proof (req: R2, R3).
   The test neither reads the historical walkthrough receipt nor adds a runtime handoff parser, new helper dependency, public flag or executable command layer; output describes instruction-contract assertions accurately.
 
 ### Q&A
@@ -65,15 +67,71 @@ The useful instruction checks were created as verification-attempt scripts rathe
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `apps/cli/src/commands/task.ts:1263` |
+| `apps/cli/src/commands/task.ts:1841` |
+| `apps/cli/src/commands/task.ts:28` |
+| `apps/cli/src/commands/task.ts:685` |
+| `apps/server/src/context.ts:39` |
+| `apps/server/src/context.ts:42` |
+| `apps/server/src/context.ts:447` |
+| `packages/app/src/index.ts:912` |
+| `packages/app/src/services/planning-write-service.ts:165` |
+| `packages/app/src/services/planning-write-service.ts:224` |
+| `packages/app/src/services/planning-write-service.ts:249` |
+| `packages/app/src/services/planning-write-service.ts:256` |
+| `packages/app/src/services/planning-write-service.ts:496` |
+| `packages/app/src/services/planning-write-service.ts:530` |
+| `packages/app/src/services/task-record.ts:102` |
+| `packages/app/src/services/task-service.ts:1547` |
+| `packages/app/src/services/task-service.ts:1576` |
+| `packages/app/src/services/task-service.ts:1605` |
+| `packages/app/src/services/task-service.ts:1620` |
+| `packages/app/src/services/task-service.ts:1643` |
+| `packages/app/src/services/task-service.ts:34` |
+| `packages/app/src/workflow/lifecycle-adapter.ts:62` |
+| `packages/app/tests/services/planning-write-service.test.ts:745` |
+| `packages/app/tests/services/task-record.test.ts:13` |
+| `packages/app/tests/services/task-record.test.ts:15` |
+| `packages/app/tests/services/task-record.test.ts:2344` |
+| `packages/app/tests/services/task-record.test.ts:41` |
+| `packages/app/tests/workflow/lifecycle-adapter.test.ts:10` |
+| `packages/app/tests/workflow/lifecycle-adapter.test.ts:3` |
+| `packages/app/tests/workflow/lifecycle-adapter.test.ts:357` |
+| `packages/app/tests/workflow/lifecycle-adapter.test.ts:5` |
 
 ### Testing
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | plugins/sp/tests/job-handoff-contract.test.ts (only 1050 code file): one tracked Bun test, 17 tests; checks both wrappers (argument-hint, required flag row, usage line, section anchor, Skill dispatch — verbatim in dev-job-dump.md/dev-job-resume.md) plus the eight-section shared template; zero .spur/run or receipt references |
+| R2 | MET | All 18 dump + 24 resume obligation strings verified verbatim in dev-operations.md:343-366: path validation incl. corpus-write exclusion, --json live-state, ownership/one-writer, missing-required vs optional evidence, no-replay/no-fabricated-snapshot, approvals-stay-pending; includes() + bounded heading slicing, no Markdown parser, no new dependency |
+| R3 | MET | Instruction-contract assertions only: imports bun:test + node:fs + node:path; no runtime layer/flag/dependency; runs in the normal root gate (gate log: repo-wide discovery incl. ./plugins, 9703 pass / 0 fail); control test job-handoff-contract.test.ts:395 proves unrelated reference edits pass |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | Test reads only plugin-root canonical files (test:22-27,60-62); no scratch/receipt path; 1050-test-gate.status=PASS with repo-wide bun test across 566 files proves normal clean-checkout discovery |
+| AC2 | MET | test | 6 mutation tests (test:340-404): wrapper flag-row, template heading, approval boundary, completed-work/live-state reconciliation (resume + dump), specimen leak, plus control test; mutation source strings verified verbatim in live production files |
+| AC3 | MET | test | No receipt read, no parser/runtime layer, no new dependency or public flag; output describes instruction-contract assertions; review APPROVE confirms byte-identical migration of 42 obligation strings from hash-pinned 1041 scratch scripts |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -86,3 +144,8 @@ The useful instruction checks were created as verification-attempt scripts rathe
 - .spur/memory/runs/session-review-1041/input-manifest.json (retained source checks and historical verification inputs)
 
 ### History
+
+- 2026-10-02T16:18:00.152Z todo → wip (system)
+- 2026-10-02T17:08:53.914Z wip → testing (system)
+- 2026-10-02T17:08:55.441Z testing → done (system)
+
