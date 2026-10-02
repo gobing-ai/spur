@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Guard task section writes against silent wholesale overwrite of populated sections
-status: todo
+status: wip
 template: issue
 created_at: 2026-10-02T21:08:29.909Z
-updated_at: "2026-10-02T21:17:54.428Z"
+updated_at: "2026-10-02T21:57:42.450Z"
 feature_id: D63
 
 ---
@@ -83,7 +83,7 @@ Adding a public flag to an existing verb is a public-surface change — per AGEN
 
 ### Root Cause
 
-<!-- Verified underlying cause with file:line evidence. Fill once reproduced/isolated. -->
+`PlanningWriteService.updateSection` (`packages/app/src/services/planning-write-service.ts:305`) forwarded every `--section` write to `doc.replaceSection(...)` unconditionally inside `applyMutation` — `MarkdownDocument.replaceSection` swaps the heading body wholesale and exposes no extend path. The only non-destroying section write was the Q&A-specific `appendQaEntry` (task 0701 R7a), so extending a populated Review/Testing section required authoring the full desired state in one file; a partial body silently dropped the pre-existing content (the 1052 defect), and the testing→done Review L3 gate (`packages/app/src/workflow/lifecycle-adapter.ts:391`) only detected the loss after the data was already gone. Reproduced by RED tests pre-fix: a default-path `updateSection` onto a seeded Review body destroys prior content (retained as the AC2 pin test).
 
 ### Solution
 
@@ -109,3 +109,6 @@ Adding a public flag to an existing verb is a public-surface change — per AGEN
 - Help/section discovery: `spur task sections <wbs> list` (valid canonical names).
 
 ### History
+
+- 2026-10-02T21:57:42.450Z todo → wip (system)
+

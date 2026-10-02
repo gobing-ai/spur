@@ -317,6 +317,47 @@ describe('LifecycleAdapter (engine integration)', () => {
         expect(result.report ?? '').not.toMatch(/Review L3 gate/i);
         db.close();
     });
+
+    test('1057: Review gate accepts an APPENDED section — table survives with narrative after it', async () => {
+        const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(db);
+        await new TaskRunLinkDao(db).insert({
+            id: 'trl_1057',
+            wbs: '1057a',
+            run_id: 'run_pipe',
+            kind: 'pipeline',
+            created_at: new Date().toISOString(),
+        });
+        // Shape of an --append result: pre-existing table first, one blank line, appended narrative.
+        const appended = [
+            '---',
+            'status: testing',
+            '---',
+            '### Review',
+            '| Priority | Dimension | Location | Finding |',
+            '|----------|-----------|----------|---------|',
+            '| P4 | — | — | No P1–P3 findings; verify PASS |',
+            '',
+            'Follow-up narrative appended by a later pipeline state.',
+            '### Testing',
+            'Coverage: N/A',
+        ].join('\n');
+        const adapter = new LifecycleAdapter({
+            profile: TASK_LIFECYCLE_PROFILE,
+            getDb: async () => db,
+            taskRunLinkDao: (a) => new TaskRunLinkDao(a),
+            workflowPath: WORKFLOW_PATH,
+            cwd: process.cwd(),
+            spurBin: 'spur',
+            readTaskMarkdown: async () => appended,
+        });
+        const result = await adapter.requestTransition(makeRef('1057a'), 'testing', 'done');
+        expect(result.allowed).toBe(false);
+        if (result.allowed) throw new Error('expected shell guard denial after Review pass');
+        expect(result.report ?? '').toMatch(/guard/i);
+        expect(result.report ?? '').not.toMatch(/Review L3 gate/i);
+        db.close();
+    });
 });
 
 // ── F16/F17 (0622 R2): finalizeRun maps entity status → durable run status ──

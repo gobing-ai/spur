@@ -665,6 +665,58 @@ describe('spur task CLI', () => {
         expect(output.errors.join('\n')).toContain('Solution must contain at least one `file:line` citation');
     });
 
+    test('update --append without --section exits 2 (1057)', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', '--skip-ready', 'Append guard'], { cwd, output: cOut });
+        const wbs = createdWbs(cOut);
+        const bodyFile = join(cwd, 'append-no-section.md');
+        await Bun.write(bodyFile, 'Orphan append body.\n');
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'update', wbs, '--append', '--from-file', bodyFile], { cwd, output });
+        expect(exitCode).toBe(2);
+        expect(output.errors.at(-1)).toContain('--append requires --section');
+    });
+
+    test('update --append --section Review preserves prior section content (1057 AC1)', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', '--skip-ready', 'Append target'], { cwd, output: cOut });
+        const wbs = createdWbs(cOut);
+        const taskPath = createdPath(cOut);
+
+        const tableFile = join(cwd, 'review-table.md');
+        await Bun.write(
+            tableFile,
+            [
+                '| Priority | Dimension | Location | Finding |',
+                '|----------|-----------|----------|---------|',
+                '| P4 | — | — | No P1–P3 findings |',
+            ].join('\n') + '\n',
+        );
+        expect(
+            await main(['task', 'update', wbs, '--section', 'Review', '--from-file', tableFile], {
+                cwd,
+                output: createCapturedOutput(),
+            }),
+        ).toBe(0);
+
+        const narrativeFile = join(cwd, 'review-append.md');
+        await Bun.write(narrativeFile, 'Appended verify narrative.\n');
+        const output = createCapturedOutput();
+        const exitCode = await main(
+            ['task', 'update', wbs, '--section', 'Review', '--from-file', narrativeFile, '--append'],
+            { cwd, output },
+        );
+        expect(exitCode).toBe(0);
+        expect(lastMessage(output)).toContain("Updated section 'Review'");
+
+        const raw = await Bun.file(taskPath).text();
+        const review = raw.slice(raw.indexOf('### Review'));
+        expect(review).toContain('No P1–P3 findings');
+        expect(review).toContain('Appended verify narrative.');
+        expect(review).toContain('No P1–P3 findings |\n\nAppended verify narrative.');
+    });
+
     test('update --section Notes is byte-identical on a second identical write', async () => {
         const cOut = createCapturedOutput();
         await main(['task', 'create', '--skip-ready', 'Notes round trip'], { cwd, output: cOut });

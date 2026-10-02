@@ -42,13 +42,16 @@ for `Plan`, `Acceptance Criteria`, hand-authored `Solution`, and any narrative s
    spur task update 0040 --section Review --from-file /tmp/review.md
    ```
 
-3. The whole `### Review` body is now that file's contents. To amend rather than overwrite, read
-   the current body (`spur task show 0040`), edit the temp file to the full desired state, and
-   replace again — there is no append mode for ordinary sections.
+3. The whole `### Review` body is now that file's contents. To amend rather than overwrite, either
+   read the current body (`spur task show 0040`), edit the temp file to the full desired state, and
+   replace again — or pass `--append` (task 1057) to write the file's body after the existing
+   section content (existing content + one blank line + new body; surrounding whitespace trimmed; an empty/missing section is
+   created). `--append` requires `--section` and never replaces on its own.
 
 **`Q&A` is the exception.** `--section "Q&A"` APPENDS a timestamped `#### Q&A entry — <ISO>`
 block rather than replacing the section. Start the body with `<!-- qa:replace -->` to replace it
-wholesale.
+wholesale. Explicit `--append` on `Q&A` uses the generic append (no timestamped wrapper); the
+`<!-- qa:replace -->` marker still wins and forces wholesale replace.
 
 `--section` **requires** `--from-file` (exit `2` otherwise). Section names match the DD-08 headings
 exactly: `Background`, `Requirements`, `Acceptance Criteria`, `Q&A`, `Design`, `Plan`, `Solution`, `Root Cause`, `Testing`, `Review`, `References`, `History`, `Notes` (universal sections are `History`, `References`, `Notes`; `Root Cause` is carried by the `issue` template variant).

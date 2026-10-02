@@ -127,6 +127,7 @@ resolve to a spec under `.spur/agents/` — otherwise exit `2` naming the unknow
 |---|---|
 | `--section <name>` | Section name to write (requires `--from-file`; body-only format) |
 | `--from-file <path>` | File to read section body from (requires `--section`) |
+| `--append` | With `--section`: append the new body after the existing section content (existing content + one blank line + new body; surrounding whitespace trimmed) instead of replacing it wholesale (task 1057). An empty/missing section is created. Requires `--section`; section names are case-sensitive |
 | `--feature <id>` | Set the `feature_id` frontmatter field (allow-listed post-create path) |
 | `--priority <p>` | Set the `priority` frontmatter field (`P0`–`P3`) |
 | `--ac-numbering <mode>` | Set the `ac_numbering` frontmatter field (task-local) — opts the task into the Requirements↔AC coverage check |
@@ -145,6 +146,11 @@ Sections replace, with one exception: `--section "Q&A"` **appends** a timestampe
 `#### Q&A entry — <ISO>` block instead of overwriting prior entries. Start the body with
 `<!-- qa:replace -->` to replace the section wholesale.
 
+`--append` generalizes extending a populated section without destroying it (task 1057): the
+new body is written after the existing content separated by one blank line — no timestamp
+wrapper. On `Q&A`, explicit `--append` writes the body generically (skipping the timestamped
+entry wrapper); the `<!-- qa:replace -->` marker still forces wholesale replace.
+
 ### Examples
 
 ```bash
@@ -155,6 +161,7 @@ spur task update 0089 --section Solution --from-file ./solution.md
 spur task update 0089 --feature F71                          # set feature_id edge
 spur task update 0089 --priority P0                          # set priority
 spur task update 0089 wip --no-lifecycle                     # pipeline-only flag
+spur task update 0089 --section Review --from-file ./addendum.md --append   # extend, don't replace
 ```
 
 > **`done` is guarded:** `task update <wbs> done` refuses if the `### Plan` section is empty

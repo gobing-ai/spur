@@ -429,10 +429,18 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                 '`(req: R<n>)` binds a requirement; `ac_altitude: task-local` exempts task-only AC.',
                 'Sections replace, with one exception: `--section "Q&A"` APPENDS a timestamped',
                 '`#### Q&A entry — <ISO>` block. Start the body with `<!-- qa:replace -->` to replace it wholesale.',
+                'Extend instead of replace: `--append` with `--section` writes the new body after the existing',
+                'section content (existing bytes preserved; an empty/missing section is created) — the bounded',
+                'way to extend a populated Review/Testing section without destroying it (task 1057).',
             ].join('\n'),
         )
         .option(...SHARED_OPTIONS.section)
         .option(...SHARED_OPTIONS.fromFile)
+        .option(
+            '--append',
+            'With --section: write the new body after the existing section content (existing content + one blank line + new body; surrounding whitespace trimmed) instead of replacing it wholesale. Requires --section; an empty/missing section is created. Section names are case-sensitive (see `spur task sections <wbs> list`).',
+            false,
+        )
         .option(...SHARED_OPTIONS.featureFrontmatter)
         .option(...SHARED_OPTIONS.prioritySet)
         .option(
@@ -477,6 +485,12 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                 options.provenanceBypass === true,
             );
             try {
+                // `--append` only means something with a section target (task 1057).
+                if (options.append === true && options.section === undefined) {
+                    writeJsonError(context.output, options, '--append requires --section', 'VALIDATION_FAILED');
+                    context.setExitCode(2);
+                    return;
+                }
                 // `--assignee` runs AgentCoordinationService.assignTask (frontmatter write +
                 // task.assigned ledger event), validated at this boundary
                 // against the agent-id format and the on-disk spec set.
@@ -526,7 +540,12 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                         context.setExitCode(2);
                         return;
                     }
-                    const result = await svc.updateSection(wbs, options.section, options.fromFile);
+                    const result = await svc.updateSection(
+                        wbs,
+                        options.section,
+                        options.fromFile,
+                        options.append === true,
+                    );
                     if (options.json) {
                         context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
                     } else {

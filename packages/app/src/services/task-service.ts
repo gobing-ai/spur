@@ -1209,7 +1209,7 @@ export class TaskService {
 
     // ── update (section from file) ──
 
-    async updateSection(wbs: string, sectionName: string, sourceFile: string): Promise<WriteResult> {
+    async updateSection(wbs: string, sectionName: string, sourceFile: string, append = false): Promise<WriteResult> {
         const filePath = await this.resolveTaskFile(wbs);
         const raw = await this.ctx.fs.readFile(sourceFile);
         const body = stripLeadingSectionHeader(raw, sectionName);
@@ -1227,7 +1227,7 @@ export class TaskService {
             );
         }
         const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder: this.ctx.tasksDir };
-        let result = await this.writeService.updateSection(ref, sectionName, body);
+        let result = await this.writeService.updateSection(ref, sectionName, body, append);
 
         if (sectionName === 'Acceptance Criteria') {
             const warnings = await this.checkAcSubsetWarning(filePath, body);

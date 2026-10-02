@@ -98,7 +98,9 @@ check).
 > verdict must be PASS. `--force-done --reason "..."` records an audited override for the
 > verdict only — the structural walk through each hop still applies. `--section "Q&A"` is the
 > one appending section: it adds a timestamped entry instead of replacing (start the body with
-> `<!-- qa:replace -->` to replace wholesale).
+> `<!-- qa:replace -->` to replace wholesale). `--append` extends any `--section` target without
+> replacing: existing content + one blank line + new body (task 1057; requires `--section`,
+> case-sensitive names).
 
 ## spur task list
 

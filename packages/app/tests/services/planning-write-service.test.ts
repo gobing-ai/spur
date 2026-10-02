@@ -246,6 +246,130 @@ describe('PlanningWriteService', () => {
             expect(qa).not.toContain('qa:replace');
         });
 
+        // ── task 1057: generic --append (bounded extend of a populated section) ──
+
+        test('append preserves a populated Review P1–P4 table and appends after one blank line (1057 AC1)', async () => {
+            const fs = makeFs();
+            const svc = new PlanningWriteService({ fs });
+            const ref = makeTaskRef();
+            await fs.writeFile(ref.filePath, makeTaskContent());
+            const table = [
+                '| Priority | Dimension | Location | Finding |',
+                '|----------|-----------|----------|---------|',
+                '| P4 | — | — | No P1–P3 findings; verify PASS |',
+            ].join('\n');
+            await svc.updateSection(ref, 'Review', `${table}\n`);
+
+            await svc.updateSection(ref, 'Review', 'Verify narrative appended later.\n', true);
+
+            const doc = MarkdownDocument.parse(await readBack(ref), 'task');
+            const review = doc.getSection('Review') ?? '';
+            expect(review).toContain('No P1–P3 findings; verify PASS |');
+            expect(review).toContain('Verify narrative appended later.');
+            // Exactly one blank line between the surviving table and the appended body.
+            expect(review).toContain('verify PASS |\n\nVerify narrative');
+        });
+
+        test('default (no append flag) still replaces wholesale (1057 AC2)', async () => {
+            const fs = makeFs();
+            const svc = new PlanningWriteService({ fs });
+            const ref = makeTaskRef();
+            await fs.writeFile(ref.filePath, makeTaskContent());
+            await svc.updateSection(ref, 'Review', 'First disposition table.\n');
+
+            await svc.updateSection(ref, 'Review', 'Second write replaces.\n');
+
+            const doc = MarkdownDocument.parse(await readBack(ref), 'task');
+            const review = doc.getSection('Review') ?? '';
+            expect(review).not.toContain('First disposition table.');
+            expect(review).toContain('Second write replaces.');
+        });
+
+        test('append to an empty existing body creates the body with no stray separator (1057 edge 2)', async () => {
+            const fs = makeFs();
+            const svc = new PlanningWriteService({ fs });
+            const ref = makeTaskRef();
+            await fs.writeFile(ref.filePath, makeTaskContent());
+            // Template Review exists but is empty (whitespace-only body).
+            await svc.updateSection(ref, 'Review', '', true);
+
+            const doc = MarkdownDocument.parse(await readBack(ref), 'task');
+            const review = doc.getSection('Review') ?? '';
+            expect(review.trim()).toBe('');
+
+            await svc.updateSection(ref, 'Review', 'Fresh append onto empty.\n', true);
+            const doc2 = MarkdownDocument.parse(await readBack(ref), 'task');
+            const review2 = doc2.getSection('Review') ?? '';
+            expect(review2.trim()).toBe('Fresh append onto empty.');
+            // Exactly one newline after the heading — no stray blank line (edge 2).
+            expect(review2.startsWith('\n\n')).toBe(false);
+        });
+
+        test('consecutive appends accumulate in call order (1057 edge 3)', async () => {
+            const fs = makeFs();
+            const svc = new PlanningWriteService({ fs });
+            const ref = makeTaskRef();
+            await fs.writeFile(ref.filePath, makeTaskContent());
+
+            await svc.updateSection(ref, 'Review', 'First narrative.\n', true);
+            await svc.updateSection(ref, 'Review', 'Second narrative.\n', true);
+
+            const doc = MarkdownDocument.parse(await readBack(ref), 'task');
+            const review = doc.getSection('Review') ?? '';
+            expect(review.indexOf('First narrative.')).toBeGreaterThanOrEqual(0);
+            expect(review.indexOf('Second narrative.')).toBeGreaterThan(review.indexOf('First narrative.'));
+        });
+
+        test('append on Q&A uses the generic append, not the timestamped wrapper (1057 edge 4)', async () => {
+            const fs = makeFs();
+            const svc = new PlanningWriteService({ fs });
+            const ref = makeTaskRef();
+            await fs.writeFile(ref.filePath, makeTaskContent());
+            await svc.updateSection(ref, 'Q&A', 'First answer.\n');
+            const before = MarkdownDocument.parse(await readBack(ref), 'task');
+            const entriesBefore = (before.getSection('Q&A') ?? '').match(/#### Q&A entry —/g)?.length ?? 0;
+
+            await svc.updateSection(ref, 'Q&A', 'Generic appended line.\n', true);
+
+            const doc = MarkdownDocument.parse(await readBack(ref), 'task');
+            const qa = doc.getSection('Q&A') ?? '';
+            expect(qa).toContain('First answer.');
+            expect(qa).toContain('Generic appended line.');
+            const entriesAfter = qa.match(/#### Q&A entry —/g)?.length ?? 0;
+            expect(entriesAfter).toBe(entriesBefore);
+        });
+
+        test('append on Q&A still honors the qa:replace marker (1057 edge 4)', async () => {
+            const fs = makeFs();
+            const svc = new PlanningWriteService({ fs });
+            const ref = makeTaskRef();
+            await fs.writeFile(ref.filePath, makeTaskContent());
+            await svc.updateSection(ref, 'Q&A', 'First answer.\n');
+
+            await svc.updateSection(ref, 'Q&A', '<!-- qa:replace -->\nWholesale rewrite wins.\n', true);
+
+            const doc = MarkdownDocument.parse(await readBack(ref), 'task');
+            const qa = doc.getSection('Q&A') ?? '';
+            expect(qa).not.toContain('First answer.');
+            expect(qa).toContain('Wholesale rewrite wins.');
+        });
+
+        test('append is case-sensitive: unknown-case "review" is rejected, "Review" untouched (1057 R3)', async () => {
+            const fs = makeFs();
+            const svc = new PlanningWriteService({ fs });
+            const ref = makeTaskRef();
+            await fs.writeFile(ref.filePath, makeTaskContent());
+            await svc.updateSection(ref, 'Review', 'Canonical Review body.\n');
+
+            await expect(svc.updateSection(ref, 'review', 'Wrong-case body.\n', true)).rejects.toThrow(
+                /Unknown section "review"/,
+            );
+
+            const doc = MarkdownDocument.parse(await readBack(ref), 'task');
+            expect(doc.getSection('Review')).toContain('Canonical Review body.');
+            expect(doc.getSection('Review')).not.toContain('Wrong-case body.');
+        });
+
         test('emits task.updated event (non-status change)', async () => {
             const fs = makeFs();
             const events: Array<{ event: string; data?: unknown }> = [];

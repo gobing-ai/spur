@@ -188,6 +188,8 @@ interface MutationDescriptor {
     /** For updateSection: the section name and new body. */
     sectionName?: string;
     sectionBody?: string;
+    /** For updateSection: append the body after the existing section content instead of replacing (task 1057 R1). */
+    append?: boolean;
     /** For updateBody: the new preamble body text. */
     body?: string;
     /** For updateFrontmatter/transition: the key and scalar value. */
@@ -296,14 +298,18 @@ export class PlanningWriteService {
     }
 
     /**
-     * Replace the body of a named section in an existing file.
+     * Replace the body of a named section in an existing file. With `append`, the
+     * new body is written after the existing section content (existing body + one
+     * blank line + new body) instead of replacing it — the bounded extend path for
+     * populated sections (task 1057 R1). A missing/empty section is created either way.
      *
      * @param ref         Entity reference — file must exist.
-     * @param sectionName Canonical section name (validated by MarkdownDocument).
+     * @param sectionName Canonical section name (validated by MarkdownDocument; case-sensitive).
      * @param body        New section body (everything after the heading line).
+     * @param append      Append after existing content instead of wholesale replace.
      */
-    async updateSection(ref: EntityRef, sectionName: string, body: string): Promise<WriteResult> {
-        return this.executePipeline(ref, { kind: 'updateSection', sectionName, sectionBody: body });
+    async updateSection(ref: EntityRef, sectionName: string, body: string, append = false): Promise<WriteResult> {
+        return this.executePipeline(ref, { kind: 'updateSection', sectionName, sectionBody: body, append });
     }
 
     /**
@@ -581,7 +587,22 @@ function applyMutation(doc: MarkdownDocument, mutation: MutationDescriptor): voi
                 if (mutation.sectionName.toLowerCase() === 'q&a') {
                     // Q&A is append-only history (task 0701 R7a): append a
                     // timestamped entry instead of replacing prior entries.
+                    // Precedence (task 1057 edge 4): the replace marker wins over
+                    // everything; an explicit generic `--append` skips the
+                    // timestamped wrapper and uses the plain append.
+                    if (body.trimStart().startsWith(QA_REPLACE_MARKER)) {
+                        doc.replaceSection('Q&A', body.trimStart().slice(QA_REPLACE_MARKER.length).trimStart());
+                        break;
+                    }
+                    if (mutation.append) {
+                        appendSectionBody(doc, 'Q&A', body);
+                        break;
+                    }
                     appendQaEntry(doc, body);
+                    break;
+                }
+                if (mutation.append) {
+                    appendSectionBody(doc, mutation.sectionName, body);
                     break;
                 }
                 doc.replaceSection(mutation.sectionName, body);
@@ -615,21 +636,38 @@ function appendHistoryLine(doc: MarkdownDocument, timestamp: string, from: strin
 }
 
 /**
+ * Q&A wholesale-replace escape hatch (task 0701 R7a): a body starting with this
+ * marker replaces the section instead of appending a history entry.
+ */
+const QA_REPLACE_MARKER = '<!-- qa:replace -->';
+
+/**
  * Append a timestamped entry to the `### Q&A` history section (task 0701 R7a).
  * A plain section write appends rather than replaces, so prior entries survive.
  * An explicit full rewrite stays reachable: start the body with the
  * `<!-- qa:replace -->` marker to replace the section wholesale.
  */
 function appendQaEntry(doc: MarkdownDocument, body: string): void {
-    const REPLACE_MARKER = '<!-- qa:replace -->';
-    if (body.trimStart().startsWith(REPLACE_MARKER)) {
-        doc.replaceSection('Q&A', body.trimStart().slice(REPLACE_MARKER.length).trimStart());
+    if (body.trimStart().startsWith(QA_REPLACE_MARKER)) {
+        doc.replaceSection('Q&A', body.trimStart().slice(QA_REPLACE_MARKER.length).trimStart());
         return;
     }
     const existing = doc.getSection('Q&A') ?? '';
     const entry = `#### Q&A entry — ${new Date().toISOString()}\n\n${body.trim()}\n`;
     const updated = existing.trim().length > 0 ? `${existing.trimEnd()}\n\n${entry}` : entry;
     doc.replaceSection('Q&A', updated);
+}
+
+/**
+ * Generic bounded append (task 1057 R1): existing body + one blank line + new
+ * body, no timestamp wrapper — pipeline Review/verify narratives are state, not
+ * history entries. A missing or whitespace-only existing body normalizes to a
+ * clean create (no stray separator); consecutive appends accumulate in call order.
+ */
+function appendSectionBody(doc: MarkdownDocument, sectionName: string, body: string): void {
+    const existing = doc.getSection(sectionName) ?? '';
+    const updated = existing.trim().length > 0 ? `${existing.trimEnd()}\n\n${body.trim()}\n` : `${body.trim()}\n`;
+    doc.replaceSection(sectionName, updated);
 }
 
 /** Resolve the event name from the mutation kind and whether the status changed. */
