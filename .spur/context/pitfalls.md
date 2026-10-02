@@ -269,3 +269,4 @@ Root bunfig `coverageThreshold = {lines: 0.9, functions: 0.9}` is a PER-FILE gat
 - **Date:** 2026-10-02
 - **Mistake:** A running/pending-only query was treated as all non-terminal ownership; trace failure/output consumers and installed instructions still depended on scratch.
 - **Fix:** Use the domain non-terminal guard in both cleanup callers, retained root resolvers and owner-generated installed surfaces. Always use explicit workdir after continuation.
+- Shell cwd drifts between tool calls (3 silent wrong-tree corpus writes in run 95522d21). Protocol: one self-contained command per call — `(cd <abs-tree> && …)` or `git -C <abs>`; fail-fast tree assert (`[ "$PWD" = "<abs>" ] || exit 91`) before any corpus write; verify the absolute target file after write. Structural fix tracked as task 1058 (spur `--cwd` flag + driver-doc mandate; pi bash tool `cwd` param is upstream).
