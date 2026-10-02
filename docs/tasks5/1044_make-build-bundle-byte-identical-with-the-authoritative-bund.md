@@ -4,7 +4,7 @@ name: Make build:bundle byte-identical with the authoritative bundle-plugin-lib 
 status: wip
 template: feature-impl
 created_at: 2026-10-01T21:54:16.882Z
-updated_at: "2026-10-02T00:41:32.304Z"
+updated_at: "2026-10-02T00:42:37.759Z"
 feature_id: A33
 
 ---
@@ -62,7 +62,7 @@ build output — the test is the authoritative committed-bytes guard per A33.
 
 ### Solution
 
-`apps/cli/package.json:55` now invokes the existing `scripts/commands/bundle-plugin-lib.ts:605` entry before the package build/staging chain. That entry already calls the exported bundleInlineRunLib owner used by `scripts/commands/bundle-plugin-lib.test.ts:188`; the different Bun.build sites target different libraries and did not need consolidation. `docs/design/configuration-contracts.md:166` records the generation order.
+`apps/cli/package.json:55` now invokes the existing `scripts/commands/bundle-plugin-lib.ts:696` entry before the package build/staging chain. That entry already calls the exported bundleInlineRunLib owner used by `scripts/commands/bundle-plugin-lib.test.ts:188`; the different Bun.build sites target different libraries and did not need consolidation. `docs/design/configuration-contracts.md:166` records the generation order.
 
 The dirty-source rehearsal changed a bundled error literal, ran the actual workspace build:bundle, confirmed the generated plugin carried the literal, ran the authoritative 16-test suite, and compared exact pre/post-test bytes. They were identical (sha256:37c3f4f77156ac6fc9eee7c5b52d50bd32cad26cb40338c2c9cf5a54fcfc3b1f). The source was restored in finally and rebuilt; the probe is absent. Receipt: `.spur/run/E71-1044-dirty-build.log`. No new generator, dependency, CLI surface or permanent test fixture was added.
 
