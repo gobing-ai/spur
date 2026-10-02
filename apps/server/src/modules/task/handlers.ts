@@ -98,7 +98,20 @@ export function createTaskHandlers(ctx: ServerContext) {
             // Guarded transition (task 0966 R3): one shared gate with the CLI — the
             // structural `testing`/`done` check plus the done-verdict gate. A denial
             // throws GuardDeniedError → 409 GUARD_DENIED via the error handler.
-            await ctx.transitionTask(input);
+            const guarded = await ctx.transitionTask(input);
+            // 1051 R3: a post-commit bookkeeping failure (task-lifecycle row
+            // reconciliation) must reach the operator log through the existing server
+            // logger — dropping the guarded result also dropped the only record of the
+            // unreconciled row. Same contract as the CLI warning (1047 R3): the task
+            // file write stands, the transport DTO is unchanged, and replaying the same
+            // terminal transition repairs the row.
+            if (guarded.kind === 'transitioned' && guarded.result.bookkeepingError !== undefined) {
+                ctx.logger.error(
+                    `task ${input.wbs}: failed to reconcile task-lifecycle bookkeeping row after transition to ${guarded.result.toStatus}: ${guarded.result.bookkeepingError} ` +
+                        `(task file is committed; replay the same terminal transition, e.g. \`spur task record ${input.wbs} --transition ${input.toStatus}\`, to repair)`,
+                    { wbs: input.wbs, toStatus: guarded.result.toStatus },
+                );
+            }
             return { ok: true as const, data: { wbs: input.wbs, status: input.toStatus } };
         }),
 

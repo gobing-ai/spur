@@ -67,7 +67,7 @@ import { resolveDurableArtifactPath } from '../workflow/actions/run-path';
 import { parseFeatureVerificationReceipt } from '../workflow/feature-verification-receipt';
 import { computeProofInputFingerprint, readProofInputContents } from '../workflow/proof-input-fingerprint';
 import { InvalidWorkflowRunIdError } from '../workflow/run-record';
-import { isBookkeepingWorkflow } from '../workflow/terminal-reason';
+import { isBookkeepingWorkflow, isTerminalReason, TERMINAL_REASONS } from '../workflow/terminal-reason';
 import { assertInventoryIdentity, parseWorkflowInventory } from '../workflow/workflow-inventory';
 import {
     type ResolvedWorkflowDefinition,
@@ -997,6 +997,52 @@ export function writeInlineRunOutcome(runId: string, outcome: InlineRunStateOutc
     }
 }
 
+/**
+ * 1051 AC2: project the committed close status into the run-record state sidecar. The run row
+ * is already terminal when this runs, so the projection must never undo the commit: it merges
+ * into the existing state (setup identity/provenance and `startedAt` preserved, any stale
+ * `error` dropped on success), replaces `status` with the committed one, and publishes
+ * atomically (same-directory temp + rename, the 0925 R1 pattern). A prior sidecar with wrong
+ * content — a stale `running` from an earlier lost write — is repaired by re-running the same
+ * close. Unlike {@link writeInlineRunOutcome} (best-effort setup reporting), a failure is
+ * RETURNED so the close path can report it loudly and be replayed to repair.
+ *
+ * @returns `undefined` on success, else a failure detail carrying replay guidance.
+ */
+export function projectInlineRunClose(runId: string, status: 'done' | 'failed' | 'paused'): string | undefined {
+    try {
+        const runDir = runStoragePaths(process.cwd()).recordsDir;
+        if (!existsSync(runDir)) mkdirSync(runDir, { recursive: true });
+        const statePath = join(runDir, `${runId}.state.json`);
+        let prior: Record<string, unknown> = {};
+        try {
+            const parsed: unknown = JSON.parse(readFileSync(statePath, 'utf8'));
+            if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                prior = parsed as Record<string, unknown>;
+            }
+        } catch {
+            // Missing or unreadable prior state: rebuild from the committed close alone.
+        }
+        const at = new Date().toISOString();
+        const state = {
+            schemaVersion: 1 as const,
+            ...prior,
+            runId,
+            status,
+            ok: true,
+            startedAt: typeof prior.startedAt === 'string' ? prior.startedAt : at,
+            updatedAt: at,
+        };
+        const temp = `${statePath}.tmp`;
+        writeFileSync(temp, `${JSON.stringify(state, null, 4)}\n`);
+        renameSync(temp, statePath);
+        return undefined;
+    } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        return `failed to project the committed ${status} status into the run-record state file for run ${runId}: ${detail} (the run row is committed; replay the same close to repair)`;
+    }
+}
+
 /** Terminal statuses the inline driver may declare when closing its run row. */
 const CLOSE_STATUSES: ReadonlySet<string> = new Set<'done' | 'failed' | 'paused'>(['done', 'failed', 'paused']);
 
@@ -1019,7 +1065,10 @@ export interface InlineRunTraceInput {
     readonly close: boolean;
     readonly node: string;
     readonly kind: string;
-    /** Declared terminal reason (0937 R2) — validated against the closed enum before this point. */
+    /** Declared terminal reason (0937 R2). 1051 AC1: the closed enum is enforced at this
+     * boundary — a failed close without a reason (or with a non-enum one) is refused by name
+     * before any write; `done`/`paused` without a declared reason default to
+     * `done`/`paused-operator`. */
     readonly reason?: string;
     /**
      * Trace status: the finalize vocabulary plus the close-only `paused` (`CLOSE_STATUSES`).
@@ -1072,6 +1121,34 @@ export function appendInlineRunLogLine(runId: string, detail: string): void {
  */
 export async function runInlineRunTrace(input: InlineRunTraceInput): Promise<number> {
     const operation = input.close ? 'run.close' : 'action.finish';
+    // 1051 AC1: the close-reason contract is enforced at the shared boundary so source and
+    // installed plugin callers cannot diverge (0937 R2 held the argv layer; the app layer
+    // trusted its caller). A failed close demands an explicit enum reason; every refusal
+    // below happens BEFORE any write — no run-row mutation, no sidecar change, no log line.
+    if (input.close) {
+        const invalidReason = (error: string): number => {
+            process.stdout.write(
+                `${JSON.stringify({ ok: false, runId: input.runId, error, code: 'INVALID_CLOSE_REASON' })}\n`,
+            );
+            return 1;
+        };
+        if (input.reason !== undefined && !isTerminalReason(input.reason)) {
+            return invalidReason(
+                `close reason "${input.reason}" is not a terminal-reason enum value; pass one of: ${TERMINAL_REASONS.join(', ')}`,
+            );
+        }
+        if (input.status === 'failed' && input.reason === undefined) {
+            return invalidReason(
+                `close status failed requires an explicit reason from the terminal-reason enum (0937 R2); pass one of: ${TERMINAL_REASONS.join(', ')}`,
+            );
+        }
+    }
+    // 1051 AC1: omitted reasons resolve their defaults at the same boundary — `done` → `done`,
+    // `paused` → `paused-operator` (the writer's classifyTerminalReason is idempotent on both).
+    // `failed` cannot reach the fallback: it is rejected above when the reason is omitted.
+    const closeReason = input.close
+        ? (input.reason ?? (input.status === 'paused' ? 'paused-operator' : 'done'))
+        : undefined;
     const fail = (error: string): number => {
         appendInlineRunLogLine(
             input.runId,
@@ -1095,7 +1172,7 @@ export async function runInlineRunTrace(input: InlineRunTraceInput): Promise<num
         });
         const result = (
             input.close
-                ? await writer.closeRun(input.runId, input.status, undefined, input.reason)
+                ? await writer.closeRun(input.runId, input.status, undefined, closeReason)
                 : await writer.recordAction({
                       runId: input.runId,
                       node: input.node,
@@ -1111,15 +1188,30 @@ export async function runInlineRunTrace(input: InlineRunTraceInput): Promise<num
             const failure = result.failure as { error?: string };
             return fail(failure.error ?? 'unknown trace emission failure');
         }
+        // 1051 AC2: the row is committed terminal — project the committed status into the
+        // run-record state sidecar before reporting, so the pair record always agrees with
+        // the database (including the zero-action done defect below, whose commit stands).
+        const stateError = input.close ? projectInlineRunClose(input.runId, input.status) : undefined;
         if (input.close && input.status === 'done' && result.actionRows === 0) {
             // A run finalized `done` with ZERO recorded action rows is a bookkeeping defect
             // (task 0975 R2): the row is already terminal — closeRun ran above — but the
             // driver must surface this instead of reporting a clean close, and must never
             // backfill rows. Exit 1 with the named code; the run record carries the finding.
-            const error = `run ${input.runId} closed done with zero action_runs rows; emit --action/--actions-file during the run (no backfill); see inline-pipeline-driver.md#structured-trace-emission-adr-117-task-0868`;
+            const error = `run ${input.runId} closed done with zero action_runs rows; emit --action/--actions-file during the run (no backfill); see inline-pipeline-driver.md#structured-trace-emission-adr-117-task-0868${
+                stateError !== undefined ? `; run-record state projection also failed: ${stateError}` : ''
+            }`;
             appendInlineRunLogLine(input.runId, `trace-close-failed run=${input.runId}: ${error}`);
             process.stdout.write(
                 `${JSON.stringify({ ok: false, runId: input.runId, error, code: 'NO_ACTION_ROWS', actionRows: 0 })}\n`,
+            );
+            return 1;
+        }
+        if (input.close && stateError !== undefined) {
+            // The committed write stands; only the sidecar projection failed. Report loudly
+            // with a named code — replaying the same close repairs the sidecar (AC2).
+            appendInlineRunLogLine(input.runId, `trace-close-failed run=${input.runId}: ${stateError}`);
+            process.stdout.write(
+                `${JSON.stringify({ ok: false, runId: input.runId, error: stateError, code: 'RUN_RECORD_STATE_FAILED' })}\n`,
             );
             return 1;
         }

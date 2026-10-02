@@ -348,6 +348,8 @@ describe('runInlineRunSetup + runInlineRunTrace (moved driver bodies, 1006 R3)',
                 );
 
                 // Closing an unknown run id fails loudly (RUN_NOT_FOUND), not best-effort.
+                // (1051 AC1: a failed close needs its explicit reason even here — the
+                // boundary validates the input before resolving the run row.)
                 const missing = await captureAsync(() =>
                     runInlineRunTrace({
                         runId: 'run-1006-norow',
@@ -355,6 +357,7 @@ describe('runInlineRunSetup + runInlineRunTrace (moved driver bodies, 1006 R3)',
                         node: '',
                         kind: '',
                         status: 'failed',
+                        reason: 'failed-check',
                         ok: false,
                         durationMs: 0,
                     }),
@@ -542,6 +545,259 @@ describe('runInlineRunSetup + runInlineRunTrace (moved driver bodies, 1006 R3)',
                 );
                 expect(bad.value).toBe(1);
                 expect(JSON.parse(bad.out.trimEnd())).toMatchObject({ ok: false });
+            });
+        } finally {
+            p.cleanup();
+        }
+    });
+});
+
+describe('inline close reasons and state projection (1051)', () => {
+    /** Close input preset: node/kind are ignored on the close path. */
+    const closeInput = (over: Partial<Parameters<typeof runInlineRunTrace>[0]> = {}) => ({
+        runId: 'run-1051',
+        close: true,
+        node: '',
+        kind: '',
+        status: 'done' as const,
+        ok: true,
+        durationMs: 0,
+        ...over,
+    });
+    const readRunState = (dir: string, runId: string): Record<string, unknown> =>
+        JSON.parse(readFileSync(join(dir, '.spur/memory/runs', `${runId}.state.json`), 'utf8')) as Record<
+            string,
+            unknown
+        >;
+    const runRow = async (dir: string, runId: string) => {
+        const db = await openInlineRunProjectDb(dir);
+        try {
+            return await db.adapter.queryFirst<{ status: string; terminal_reason: string | null }>(
+                'SELECT status, terminal_reason FROM runs WHERE id = ?',
+                runId,
+            );
+        } finally {
+            db.close();
+        }
+    };
+    const setupRun = async (dir: string, runId: string) => {
+        const setup = await captureAsync(async () =>
+            runInlineRunSetup({ runId, file: 'inline-smoke', inventory: await INVENTORY(dir) }),
+        );
+        expect(setup.value, setup.out).toBe(0);
+    };
+    const recordAction = async (runId: string) => {
+        const action = await captureAsync(() =>
+            runInlineRunTrace({
+                runId,
+                close: false,
+                node: 'implement',
+                kind: 'agent.run',
+                status: 'done',
+                ok: true,
+                durationMs: 12,
+            }),
+        );
+        expect(action.value, action.out).toBe(0);
+    };
+
+    test('AC1: a done close without a reason stores terminal_reason done and projects the state', async () => {
+        const p = makeProject('r1051-done');
+        try {
+            await inDir(p.dir, async () => {
+                await setupRun(p.dir, 'run-1051');
+                const startedAt = readRunState(p.dir, 'run-1051').startedAt as string;
+                await recordAction('run-1051');
+
+                const closed = await captureAsync(() => runInlineRunTrace(closeInput()));
+                expect(closed.value, closed.out).toBe(0);
+                expect(JSON.parse(closed.out.trimEnd().split('\n')[0] ?? '{}')).toMatchObject({
+                    ok: true,
+                    actionRows: 1,
+                });
+                expect(await runRow(p.dir, 'run-1051')).toEqual({ status: 'done', terminal_reason: 'done' });
+
+                // AC2: the committed status is projected into the pair record with the
+                // setup identity and startedAt preserved.
+                const state = readRunState(p.dir, 'run-1051');
+                expect(state).toMatchObject({
+                    schemaVersion: 1,
+                    runId: 'run-1051',
+                    status: 'done',
+                    ok: true,
+                    workflowName: 'inline-smoke',
+                    layer: 'registered',
+                });
+                expect(state.startedAt).toBe(startedAt);
+                expect(state.error).toBeUndefined();
+            });
+        } finally {
+            p.cleanup();
+        }
+    });
+
+    test('AC1: a paused close without a reason stores terminal_reason paused-operator', async () => {
+        const p = makeProject('r1051-paused');
+        try {
+            await inDir(p.dir, async () => {
+                await setupRun(p.dir, 'run-1051');
+                const startedAt = readRunState(p.dir, 'run-1051').startedAt as string;
+
+                const closed = await captureAsync(() => runInlineRunTrace(closeInput({ status: 'paused' })));
+                expect(closed.value, closed.out).toBe(0);
+                expect(JSON.parse(closed.out.trimEnd().split('\n')[0] ?? '{}')).toMatchObject({ ok: true });
+                expect(await runRow(p.dir, 'run-1051')).toEqual({
+                    status: 'paused',
+                    terminal_reason: 'paused-operator',
+                });
+                expect(readRunState(p.dir, 'run-1051')).toMatchObject({ status: 'paused', ok: true });
+                expect(readRunState(p.dir, 'run-1051').startedAt).toBe(startedAt);
+            });
+        } finally {
+            p.cleanup();
+        }
+    });
+
+    test('AC1: a failed close without a reason is rejected by name before any write', async () => {
+        const p = makeProject('r1051-failed-noreason');
+        try {
+            await inDir(p.dir, async () => {
+                await setupRun(p.dir, 'run-1051');
+                const stateBefore = readRunState(p.dir, 'run-1051');
+
+                const refused = await captureAsync(() =>
+                    runInlineRunTrace(closeInput({ status: 'failed', ok: false })),
+                );
+                expect(refused.value).toBe(1);
+                expect(JSON.parse(refused.out.trimEnd().split('\n')[0] ?? '{}')).toMatchObject({
+                    ok: false,
+                    code: 'INVALID_CLOSE_REASON',
+                });
+                // The refusal precedes every mutation: the row still runs, the record pair
+                // is byte-identical.
+                expect(await runRow(p.dir, 'run-1051')).toEqual({ status: 'running', terminal_reason: null });
+                expect(readRunState(p.dir, 'run-1051')).toEqual(stateBefore);
+            });
+        } finally {
+            p.cleanup();
+        }
+    });
+
+    test('AC1: a non-enum close reason is rejected by name before any write', async () => {
+        const p = makeProject('r1051-bad-reason');
+        try {
+            await inDir(p.dir, async () => {
+                await setupRun(p.dir, 'run-1051');
+                const stateBefore = readRunState(p.dir, 'run-1051');
+
+                const refused = await captureAsync(() =>
+                    runInlineRunTrace(closeInput({ status: 'done', reason: 'banana' })),
+                );
+                expect(refused.value).toBe(1);
+                expect(JSON.parse(refused.out.trimEnd().split('\n')[0] ?? '{}')).toMatchObject({
+                    ok: false,
+                    code: 'INVALID_CLOSE_REASON',
+                });
+                expect(await runRow(p.dir, 'run-1051')).toEqual({ status: 'running', terminal_reason: null });
+                expect(readRunState(p.dir, 'run-1051')).toEqual(stateBefore);
+            });
+        } finally {
+            p.cleanup();
+        }
+    });
+
+    test('AC1: an explicit valid reason is preserved on a failed close', async () => {
+        const p = makeProject('r1051-explicit');
+        try {
+            await inDir(p.dir, async () => {
+                await setupRun(p.dir, 'run-1051');
+                await recordAction('run-1051');
+
+                const closed = await captureAsync(() =>
+                    runInlineRunTrace(closeInput({ status: 'failed', ok: false, reason: 'failed-agent' })),
+                );
+                expect(closed.value, closed.out).toBe(0);
+                expect(await runRow(p.dir, 'run-1051')).toEqual({ status: 'failed', terminal_reason: 'failed-agent' });
+                expect(readRunState(p.dir, 'run-1051')).toMatchObject({ status: 'failed', ok: true });
+            });
+        } finally {
+            p.cleanup();
+        }
+    });
+
+    test('AC2: a zero-action done close still projects done into the state sidecar (0975 report unchanged)', async () => {
+        const p = makeProject('r1051-zero');
+        try {
+            await inDir(p.dir, async () => {
+                await setupRun(p.dir, 'run-1051');
+
+                const empty = await captureAsync(() => runInlineRunTrace(closeInput()));
+                expect(empty.value).toBe(1);
+                expect(JSON.parse(empty.out.trimEnd().split('\n')[0] ?? '{}')).toMatchObject({
+                    ok: false,
+                    code: 'NO_ACTION_ROWS',
+                    actionRows: 0,
+                });
+                // The commit stands and the sidecar agrees with it — the run is done even
+                // though the close was reported as a bookkeeping defect.
+                expect(await runRow(p.dir, 'run-1051')).toEqual({ status: 'done', terminal_reason: 'done' });
+                expect(readRunState(p.dir, 'run-1051')).toMatchObject({ status: 'done', ok: true });
+            });
+        } finally {
+            p.cleanup();
+        }
+    });
+
+    test('AC2: a repeat close repairs a stale state sidecar', async () => {
+        const p = makeProject('r1051-repair');
+        try {
+            await inDir(p.dir, async () => {
+                await setupRun(p.dir, 'run-1051');
+                await recordAction('run-1051');
+                expect((await captureAsync(() => runInlineRunTrace(closeInput()))).value).toBe(0);
+
+                // Simulate the stale sidecar: the close landed in the DB but the state
+                // write did not (or predates the projection).
+                writeFileSync(
+                    join(p.dir, '.spur/memory/runs/run-1051.state.json'),
+                    JSON.stringify({ schemaVersion: 1, runId: 'run-1051', status: 'running', ok: true }),
+                );
+
+                const repaired = await captureAsync(() => runInlineRunTrace(closeInput()));
+                expect(repaired.value, repaired.out).toBe(0);
+                expect(await runRow(p.dir, 'run-1051')).toEqual({ status: 'done', terminal_reason: 'done' });
+                expect(readRunState(p.dir, 'run-1051')).toMatchObject({ status: 'done', ok: true });
+            });
+        } finally {
+            p.cleanup();
+        }
+    });
+
+    test('AC2: an injected state-publication failure is visible and safely retryable', async () => {
+        const p = makeProject('r1051-statefail');
+        try {
+            await inDir(p.dir, async () => {
+                await setupRun(p.dir, 'run-1051');
+                await recordAction('run-1051');
+
+                // Block the sidecar path with a directory: the atomic replace fails.
+                rmSync(join(p.dir, '.spur/memory/runs/run-1051.state.json'));
+                mkdirSync(join(p.dir, '.spur/memory/runs/run-1051.state.json'));
+
+                const blocked = await captureAsync(() => runInlineRunTrace(closeInput()));
+                expect(blocked.value).toBe(1);
+                expect(JSON.parse(blocked.out.trimEnd().split('\n')[0] ?? '{}')).toMatchObject({
+                    ok: false,
+                    code: 'RUN_RECORD_STATE_FAILED',
+                });
+                // The DB commit stands; only the projection failed.
+                expect(await runRow(p.dir, 'run-1051')).toEqual({ status: 'done', terminal_reason: 'done' });
+
+                // Remove the block and retry the same close: the sidecar is repaired.
+                rmSync(join(p.dir, '.spur/memory/runs/run-1051.state.json'), { recursive: true });
+                const retried = await captureAsync(() => runInlineRunTrace(closeInput()));
+                expect(retried.value, retried.out).toBe(0);
+                expect(readRunState(p.dir, 'run-1051')).toMatchObject({ runId: 'run-1051', status: 'done', ok: true });
             });
         } finally {
             p.cleanup();

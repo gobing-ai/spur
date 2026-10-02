@@ -7,7 +7,9 @@ import { globalErrorHandler } from '../../../src/middleware/error-handler';
 import { createTaskHandlers } from '../../../src/modules/task';
 
 describe('task handlers', () => {
-    function makeCtx(overrides?: Record<string, unknown>) {
+    // `ctxOverrides` (1051 R3) replace ServerContext-level members such as `logger` and
+    // `transitionTask`; the first parameter stays a taskService-implementation override.
+    function makeCtx(overrides?: Record<string, unknown>, ctxOverrides?: Record<string, unknown>) {
         const enqueue = async (_type: string, _payload: unknown) => 'run-001';
         return {
             cwd: '/test',
@@ -80,6 +82,7 @@ describe('task handlers', () => {
                 },
             }),
             jobQueue: async () => ({ enqueue }),
+            ...ctxOverrides,
         } as unknown as ServerContext;
     }
 
@@ -206,6 +209,67 @@ describe('task handlers', () => {
         expect(result.ok).toBe(true);
         expect(result.data.wbs).toBe('0001');
         expect(result.data.status).toBe('done');
+    });
+
+    // 1051 R3 — a post-commit bookkeeping failure must reach the operator log through the
+    // existing server logger, with task identity and replay guidance; the committed write
+    // stands and the transport DTO is unchanged.
+    test('transition handler reports a bookkeeping failure via the server logger (1051 R3)', async () => {
+        const errors: Array<{ msg: string; data?: unknown }> = [];
+        const handlers = createTaskHandlers(
+            makeCtx(
+                {},
+                {
+                    logger: {
+                        error: (msg: string, data?: unknown) => {
+                            errors.push({ msg, data });
+                        },
+                    },
+                    transitionTask: async () => ({
+                        kind: 'transitioned' as const,
+                        result: {
+                            ref: { id: '0001', filePath: '/test/0001.md', kind: 'task' as const, folder: '.' },
+                            fromStatus: 'wip',
+                            toStatus: 'done',
+                            bookkeepingError: 'boom reconciling lifecycle row',
+                        },
+                    }),
+                },
+            ),
+        );
+        const fn = handlers.transition['~orpc'].handler as unknown as (opts: {
+            input: { wbs: string; toStatus: string };
+        }) => Promise<{ ok: boolean; data: { wbs: string; status: string } }>;
+        const result = await fn({ input: { wbs: '0001', toStatus: 'done' } });
+        // The committed write stands: ok:true with the unchanged DTO.
+        expect(result).toEqual({ ok: true, data: { wbs: '0001', status: 'done' } });
+        expect(errors).toHaveLength(1);
+        expect(errors[0]?.msg).toContain('0001');
+        expect(errors[0]?.msg).toContain('done');
+        expect(errors[0]?.msg).toContain('boom reconciling lifecycle row');
+        expect(errors[0]?.msg).toContain('replay');
+    });
+
+    test('transition handler stays silent on a clean transition (no logger.error)', async () => {
+        const errors: unknown[] = [];
+        const handlers = createTaskHandlers(
+            makeCtx(
+                {},
+                {
+                    logger: {
+                        error: (msg: string) => {
+                            errors.push(msg);
+                        },
+                    },
+                },
+            ),
+        );
+        const fn = handlers.transition['~orpc'].handler as unknown as (opts: {
+            input: { wbs: string; toStatus: string };
+        }) => Promise<{ ok: boolean; data: { wbs: string; status: string } }>;
+        const result = await fn({ input: { wbs: '0001', toStatus: 'done' } });
+        expect(result.ok).toBe(true);
+        expect(errors).toEqual([]);
     });
 
     test('body handler returns wbs and filePath', async () => {

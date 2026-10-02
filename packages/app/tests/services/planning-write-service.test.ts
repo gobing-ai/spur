@@ -821,4 +821,39 @@ describe('PlanningWriteService', () => {
             expect(calls).toEqual([]);
         });
     });
+
+    // 1051 R4 — the publication boundary: when the atomic task-file write itself fails,
+    // the transition must reject (never commit partially), the previous file state must
+    // survive untouched, and the post-commit bookkeeping hook must never observe a
+    // "committed" write that never landed.
+    describe('failed atomic publication (1051 R4)', () => {
+        test('a failing temp write rejects, keeps the previous file, and never calls the hook', async () => {
+            const fs = makeFs();
+            const hookCalls: string[] = [];
+            const ref = makeTaskRef();
+            const before = makeTaskContent('backlog');
+            await fs.writeFile(ref.filePath, before);
+
+            // Inject the failure at the fs seam: atomicWriteAsync writes its temp payload
+            // through fs.writeFile, so a failing writeFile aborts the pipeline before the
+            // rename swap — the destination file is never touched.
+            const failing = Object.create(fs) as typeof fs;
+            failing.writeFile = async () => {
+                throw new Error('EIO: injected publication failure');
+            };
+            const svc = new PlanningWriteService({
+                fs: failing,
+                onTransitionCommitted: async () => {
+                    hookCalls.push('fired');
+                },
+            });
+
+            await expect(svc.transition(ref, 'done')).rejects.toThrow(/injected publication failure/);
+
+            // The previous task state is unchanged on disk — no partial write, no rename.
+            expect(await readBack(ref)).toBe(before);
+            // The hook never saw a committed write.
+            expect(hookCalls).toEqual([]);
+        });
+    });
 });

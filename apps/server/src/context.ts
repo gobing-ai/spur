@@ -68,7 +68,7 @@ import {
     SystemEventDao,
 } from '@gobing-ai/spur-domain';
 import type { HitlResponder } from '@gobing-ai/ts-dual-workflow-engine';
-import type { EventBus, JobQueue, SchedulerAdapter } from '@gobing-ai/ts-infra';
+import type { EventBus, JobQueue, Logger, SchedulerAdapter } from '@gobing-ai/ts-infra';
 import type { ApplicationRuntime } from '@gobing-ai/ts-infra/application';
 import type { FileSystem, ProcessRegistry } from '@gobing-ai/ts-runtime';
 import { createInMemoryProcessRegistry, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
@@ -140,6 +140,14 @@ export interface ServerContext {
     readonly cwd: string;
     readonly fs: FileSystem;
     readonly webDistPath?: string;
+
+    /**
+     * Structured server logger (1051 R3), wired from the boot ApplicationRuntime.
+     * Module handlers use it for operator-visible bookkeeping findings — e.g. a
+     * post-commit task-lifecycle reconciliation failure — instead of dropping the
+     * guarded result on the floor. Tests stub it with a capturing sink.
+     */
+    readonly logger: Logger;
 
     /**
      * Project Spur config as loaded at boot (task 0902 wave 2). `undefined` when
@@ -414,6 +422,9 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
         runDir: join(cwd, '.spur', 'run'),
         webDistPath: options.webDistPath,
         boardModules: options.boardModules,
+        // 1051 R3: expose the boot logger so handlers can report post-commit
+        // bookkeeping failures (task-lifecycle reconciliation) to the operator log.
+        logger: appRt.logger,
 
         async getDb(): Promise<DbAdapter> {
             if (!dbPromise) {

@@ -188,12 +188,29 @@ transitions:
         const db = new Database(join(project, '.spur/spur.db'), { readonly: true });
         try {
             expect(db.query('SELECT status FROM runs WHERE id = ?').get('installed-run')).toEqual({ status: 'done' });
+            // 1051 AC1: the default reason is applied on the installed twin too — a done
+            // close without --reason stores `done`, not an unspecified reason.
+            expect(db.query('SELECT terminal_reason FROM runs WHERE id = ?').get('installed-run')).toEqual({
+                terminal_reason: 'done',
+            });
             expect(db.query('SELECT COUNT(*) AS count FROM action_runs WHERE run_id = ?').get('installed-run')).toEqual(
                 { count: 1 },
             );
         } finally {
             db.close();
         }
+        // 1051 AC2: the installed twin projects the committed status into the pair record
+        // with the setup identity preserved.
+        const closedState = JSON.parse(
+            readFileSync(join(project, '.spur/memory/runs/installed-run.state.json'), 'utf8'),
+        ) as Record<string, unknown>;
+        expect(closedState).toMatchObject({
+            runId: 'installed-run',
+            status: 'done',
+            ok: true,
+            layer: 'shared',
+            definitionDigest: inventory.definitionDigest,
+        });
         const missingAction = invoke(
             '--action',
             '--run-id',
