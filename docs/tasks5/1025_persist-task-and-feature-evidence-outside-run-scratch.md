@@ -4,7 +4,7 @@ name: Persist task and feature evidence outside run scratch
 status: done
 template: feature-impl
 created_at: 2026-09-30T20:13:58.356Z
-updated_at: "2026-10-02T00:33:09.601Z"
+updated_at: "2026-10-02T04:08:31.570Z"
 feature_id: E71
 priority: P2
 tags:
@@ -116,20 +116,20 @@ Execution checks and per-requirement observability are frozen in Design. Preserv
 
 **Pipeline verify results**
 
-- Verdict: PARTIAL (from verdict artifact)
+- Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/task-service.ts:1414` publishes the selected verdict before Testing; `packages/app/src/workflow/feature-verification-receipt.ts:125` resolves durable receipt copies. Focused app tests: 148 pass, 0 fail. |
-| R2 | PARTIAL | `packages/app/src/services/corpus-sweep.ts:111` still discovers scratch verdicts; `packages/app/src/services/feature-sync-suppression.ts:97` still builds the verdict vector from the supplied scratch root. |
-| R3 | MET | Record and receipt disposal tests pass; `packages/app/tests/workflow/feature-verification-receipt.test.ts:109` retains validation after directory removal; canonical identity/current-input/supersession checks remain in existing reader and receipt suites. |
-| R4 | PARTIAL | `packages/app/src/services/run-storage.ts:442` confines source and target; `apps/cli/src/commands/workflow.ts:1341` prevents housekeeping on migration failure. Family JSON identities and evidence live-owner binding are not fully validated. |
+| R1 | MET | `packages/app/src/services/task-service.ts:1414`; `packages/app/src/workflow/feature-verification-receipt.ts:125`; actual record/receipt tests |
+| R2 | MET | `packages/app/src/services/corpus-sweep.ts:112`; `packages/app/src/services/feature-sync-suppression.ts:92`; canonical residual and metrics regression tests |
+| R3 | MET | `packages/app/tests/services/task-record.test.ts:697`; actual feature acceptance before/after disposal and malformed evidence rejection |
+| R4 | MET | `packages/app/src/services/run-storage.ts:395`; real migration identity/live-owner/conflict/failure tests and CLI cleanup suite |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: R2 — Task and feature evidence remains valid without completed scratch | PARTIAL | test | Record and receipt directory-disposal regressions pass, but corpus/suppression still depend on scratch; `packages/app/src/services/corpus-sweep.ts:111`. |
-| Scenario: R6 — Existing lasting data is preserved before its scratch dependency is retired | PARTIAL | test | Migration confinement/conflict/dry-run/failure checks and CLI failure ordering pass; `packages/app/src/services/run-storage.ts:442`; full family identity and live-owner validation remain incomplete. |
-| Scenario: R7 — Completed scratch is disposable without per-workflow cleanup machinery | PARTIAL | test | Carry-forward of the earlier scenario identity: record/receipt disposal is covered, but scratch-based corpus/suppression discovery still prevents the full disposable-scratch contract; `packages/app/src/services/corpus-sweep.ts:111`. |
+| Scenario: R2 — Task and feature evidence remains valid without completed scratch | MET | command | `packages/app/tests/services/task-record.test.ts:697` actual acceptance after two whole-directory removals; corpus/suppression/metrics/malformed canonical owner tests |
+| Scenario: R6 — Existing lasting data is preserved before its scratch dependency is retired | MET | command | `packages/app/tests/services/run-storage.test.ts:63` owner confinement/preservation; legacy identity/conflict/write-failure tests and CLI dry-run regression |
+| Scenario: R7 — Completed scratch is disposable without per-workflow cleanup machinery | MET | command | `packages/app/tests/services/run-storage.test.ts:429` analytics/inspection remain equal after repeated disposal and the next gate recreates scratch; real acceptance/importer tests |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
