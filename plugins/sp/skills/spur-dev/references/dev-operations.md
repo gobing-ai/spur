@@ -530,6 +530,11 @@ is the procedure. The backing is a combination of git CLI, `spur` CLI, and agent
      - `keepachangelog` (default): `## [<version>] - <date>` header, then category headings per the keepachangelog convention — `### Added` / `### Fixed` / `### Changed` / `### Removed` / `### Other` — mapped from conventional-commit types.
      - `simple`: flat bulleted list grouped by type heading (`### feat`, `### fix`, …).
   6. Print the changelog to stdout. If the operator wants it in `CHANGELOG.md`, they redirect or paste.
+  7. Verify the emitted section against git and close with one line: `Verification: HIGH|MEDIUM|LOW — <first failing check and deviation, or 'all checks passed'>`.
+     - **Coverage** — bullet count equals the commit count in `<since>..<until>`, and every short hash appears exactly once.
+     - **Mapping** — per-category bullet counts match the conventional-type counts (`feat`→`Added`, `fix`→`Fixed`, other recognized types→`Changed`, unrecognized→`Other`).
+     - **Header** — `[<version>] - <date>` matches the resolved `--version` (or detected tag) and the header date.
+     - **HIGH** — all three checks pass. **MEDIUM** — coverage intact but mapping or header deviates. **LOW** — coverage broken (missing/duplicate hashes) or the range cannot be reconciled against git.
 - **Invariants:** Never mutates `CHANGELOG.md` directly — the command surface is stdout-only; writing it to a file (e.g. appending to `CHANGELOG.md`) is the operator's redirect choice, never the command's.
 
 ### 9. gitmsg
