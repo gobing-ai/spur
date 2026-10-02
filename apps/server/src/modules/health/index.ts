@@ -556,6 +556,9 @@ export const healthModule: ServerModule = {
                 // Empty body tolerated if target passed via path query
             }
 
+            if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+                return c.json({ error: 'request body must be a JSON object' }, 400);
+            }
             const target = body.name ?? body.path;
             if (!target) {
                 return c.json({ error: 'Missing name or path in request body' }, 400);
@@ -591,6 +594,9 @@ export const healthModule: ServerModule = {
                 return c.json({ error: 'Invalid JSON request body' }, 400);
             }
 
+            if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+                return c.json({ error: 'request body must be a JSON object' }, 400);
+            }
             const executorName = body.name ?? body.executor;
             if (!executorName || typeof executorName !== 'string' || executorName.trim().length === 0) {
                 return c.json({ error: 'Missing or invalid executor name' }, 400);

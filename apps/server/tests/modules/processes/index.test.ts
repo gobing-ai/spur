@@ -5,6 +5,20 @@ import { Hono } from 'hono';
 import type { ServerContext } from '../../../src/context';
 import { enqueueFrame, processesModule, sendHeartbeat } from '../../../src/modules/processes';
 
+test('stdin rejects null JSON without writing to the supervisor', async () => {
+    const { ctx, stdinCalls } = ctxWithStubs({});
+    const app = new Hono();
+    processesModule.mount(app, ctx);
+    const response = await app.request('/api/processes/unused/stdin', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: 'null',
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: 'request body must be a JSON object' });
+    expect(stdinCalls).toEqual([]);
+});
+
 /**
  * Build a stub ServerContext whose supervisor returns canned process data and
  * captures stdin writes. Unchecked cast — the module only touches `supervisor()`,

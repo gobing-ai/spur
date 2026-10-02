@@ -18,6 +18,25 @@ import type { ServerContext } from '../../src/context';
 import { healthModule } from '../../src/modules/health';
 
 describe('healthModule', () => {
+    test.each([
+        '/api/projects/start',
+        '/api/project/executors/availability',
+    ])('%s rejects null JSON before accessing services', async (path) => {
+        const app = new Hono();
+        const ctx = new Proxy({} as ServerContext, {
+            get() {
+                throw new Error('invalid input must not access services');
+            },
+        });
+        healthModule.mount(app, ctx);
+        const response = await app.request(path, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: 'null',
+        });
+        expect(response.status).toBe(400);
+        expect(await response.json()).toEqual({ error: 'request body must be a JSON object' });
+    });
     let tempDir: string;
     let projectsFile: string;
     const origAllocate = ProjectRegistry.prototype.allocatePort;

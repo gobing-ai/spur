@@ -129,6 +129,9 @@ export const processesModule: ServerModule = {
             } catch {
                 return c.json({ error: 'request body must be valid JSON' }, 400);
             }
+            if (json === null || typeof json !== 'object' || Array.isArray(json)) {
+                return c.json({ error: 'request body must be a JSON object' }, 400);
+            }
             const body = json as { line?: string };
             if (typeof body.line !== 'string' || body.line.length === 0) {
                 return c.json({ error: 'field "line" is required' }, 400);
