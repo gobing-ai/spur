@@ -21,7 +21,7 @@
  * `src/modules/` around its own build (see `tests/test-helpers/board-build.ts`), so a shipped build
  * has no test route or fixture by construction.
  *
- * Run by `astro.config.mjs` in both the dev and the build pipeline. Node loads this file
+ * Installed by `astro.config.mjs`; facade emission runs only in the build pipeline. Node loads this file
  * through Astro's config bundler, so relative imports here stay bundler-resolved.
  */
 import { execFileSync } from 'node:child_process';
@@ -112,6 +112,7 @@ function facadePlugin(
     const sources = new Map<BoardFacadeSpecifier, string>();
     return {
         name: 'spur:board-runtime-facades',
+        apply: 'build',
         resolveId(id) {
             return id.startsWith(FACADE_ID_PREFIX) ? `\0${id}` : null;
         },
