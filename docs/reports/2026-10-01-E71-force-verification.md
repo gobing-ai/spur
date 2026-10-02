@@ -139,7 +139,7 @@ was not advanced as part of this E71 closure.
 | `bun run plugin-smoke` | PASS; installed standalone surface | `.spur/run/E71-final-plugin-smoke.log` |
 | `bun scripts/commands/run-storage-census.ts` | 3,209 / 3,209; zero unclassified | reviewed census JSON and checker |
 | `spur feature check E71 --as done --json` | PASS with no findings | `.spur/run/E71-main-done-check.json` |
-| Configured feature verification | PASS through real workflow, terminal recording run and registered canonical receipt; fresh checked-input digest | `.spur/memory/evidence/E71-feature-verification-latest.json` |
+| Configured feature verification | PASS through real workflow, terminal recording run and registered canonical receipt; fresh checked-input digest | `.spur/memory/evidence/E71-feature-verification.json` |
 | Batch wrap | done, run `ab969139-3afd-4c2c-a345-e7ca1625ee75`; complete evidence fast route after documentation sync | `.spur/run/E71-main-wrap-final.json` |
 
 The first wrap attempt retained its failed nested verification outcome. Main's linked CLI was rebuilt,
