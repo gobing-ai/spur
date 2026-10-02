@@ -4,7 +4,7 @@ name: Verify disposable scratch and reconcile cleanup safeguards
 status: done
 template: feature-impl
 created_at: 2026-09-30T20:13:58.359Z
-updated_at: "2026-10-01T22:23:41.747Z"
+updated_at: "2026-10-02T00:30:58.804Z"
 feature_id: E71
 priority: P2
 tags:
@@ -114,6 +114,14 @@ Decisive disposal-equivalence test `packages/app/tests/services/run-storage.test
 - `packages/app/tests/services/run-storage.test.ts:321` — the disposal regression now removes the entire settled fixture scratch directory twice, verifies a non-empty PASS aggregate and one verified result, checks the escaping link's external target, and executes the next gate to recreate scratch.
 - The test title now accurately describes retained session bytes; it does not claim to execute the history importer. Active-owner freshness/recovery remains owned by the real workflow/action suites.
 - Residual: fixture session bytes are not imported history, and no before/after feature-check or completed-failure producer path is exercised in that integration. Dependent storage/export requirements remain incomplete. R3/R4 and the corresponding feature scenarios remain PARTIAL after the bounded repair.
+
+**Completion repair (2026-10-02); supersedes the preceding residual.**
+
+- `packages/app/tests/services/task-record.test.ts:697` runs actual task record, dual receipt publication and the feature completion checker, then compares acceptance after removing the whole scratch directory twice. Malformed canonical evidence still fails closed.
+- `packages/app/tests/services/history-service.test.ts:978` now proves real imported history and migrated metadata equivalence, rather than only retained session bytes.
+- `packages/app/tests/services/workflow-service.test.ts:211` covers retained registered-summary consumption; the existing paused producer/resume test retains trace and record inspection after repeated removal. Failed producers persist their partial output through the 1026 owner.
+- `packages/app/tests/services/run-storage.test.ts:403` retains success/failure/paused analytics and inspection, escaping-target safety, repeated disposal and scratch recreation; existing workflow/action suites preserve stale-output, active-owner and recovery checks.
+- `docs/reports/2026-09-30-E71-run-storage-ownership.md:325` closes the current dispositions. Generated and installed plugin contracts are checked through owner builds, Superskill sync and plugin smoke. No terminal cleaner, timer, hook or new flags were added; every correctness invalidation stays.
 
 ### Testing
 
