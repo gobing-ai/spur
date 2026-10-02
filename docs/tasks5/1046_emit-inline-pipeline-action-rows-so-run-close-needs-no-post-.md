@@ -4,7 +4,7 @@ name: Emit inline pipeline action rows so run close needs no post-hoc backfill
 status: wip
 template: feature-impl
 created_at: 2026-10-01T23:59:14.229Z
-updated_at: "2026-10-02T00:25:52.773Z"
+updated_at: "2026-10-02T00:33:12.695Z"
 feature_id: E71
 
 priority: P2
@@ -99,7 +99,23 @@ Superskill synced the repo plugin to Codex. The installed reference differs only
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Priority | Dimension | Location | Finding | Disposition |
+| --- | --- | --- | --- | --- |
+| P4 | Functional / SECUA / Architecture | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:241` | Reviewed the final scoped implementation and executable failure/disposal evidence; no unresolved blocker or major finding. | RESOLVED |
+
+#### Functional traceability
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:241`; exact command in loop; isolated CLI task/run rehearsal emits 7 measured rows before advancing |
+| R2 | MET | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:15`; Superskill sync, with only documented Codex command-spelling conversion |
+| R3 | MET | `packages/app/src/services/inline-run-setup.ts:1119`; `packages/app/tests/services/inline-run-driver.test.ts:333`; unchanged exit/code with actionable pointer |
+
+#### SECUA and architecture
+
+The change uses existing trace tooling and leaves strict close semantics intact. The isolated project-override rehearsal proves incremental emission and close, while the focused test covers NO_ACTION_ROWS. It does not claim the bundled model/certification pipeline ran. Superskill owns the installed adapter; its command-spelling difference is documented.
+
+Security: confined paths, existing identity validation and secret redaction remain. Correctness: focused regression evidence covers the changed success/failure branches. Efficiency: bounded local storage traversal; no new background collector. Usability: visible outcomes and errors. Architecture: existing app/domain/plugin ownership and standalone bundle contract remain. No speculative refactor is required.
 
 ### References
 
