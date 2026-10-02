@@ -341,6 +341,15 @@ describe('runInlineRunSetup + runInlineRunTrace (moved driver bodies, 1006 R3)',
                     ok: false,
                     code: 'NO_ACTION_ROWS',
                 });
+                // 1046 AC3: the zero-row error carries the in-run remediation pointer
+                // (emit during the run; named contract section), without changing exit
+                // code or the NO_ACTION_ROWS code (AC4 asserted above).
+                const emptyPayload = JSON.parse(empty.out.trimEnd().split('\n')[0] ?? '{}') as {
+                    error?: string;
+                };
+                expect(emptyPayload.error).toContain('--action');
+                expect(emptyPayload.error).toContain('--actions-file');
+                expect(emptyPayload.error).toContain('Structured trace emission');
 
                 // Closing an unknown run id fails loudly (RUN_NOT_FOUND), not best-effort.
                 const missing = await captureAsync(() =>

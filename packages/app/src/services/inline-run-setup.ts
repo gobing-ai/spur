@@ -1029,7 +1029,13 @@ export async function runInlineRunTrace(input: InlineRunTraceInput): Promise<num
             // (task 0975 R2): the row is already terminal — closeRun ran above — but the
             // driver must surface this instead of reporting a clean close, and must never
             // backfill rows. Exit 1 with the named code; the run record carries the finding.
-            const error = `run ${input.runId} closed done with zero action_runs rows`;
+            // The error carries an in-run remediation pointer (task 1046 R3) so the driver
+            // reading only this JSON knows the fix without a docs hunt.
+            const error =
+                `run ${input.runId} closed done with zero action_runs rows — ` +
+                'emit each action boundary during the run via `inline-run-setup.ts --action` ' +
+                '(or the whole state via `--actions-file`); see the inline pipeline driver ' +
+                'reference, "Structured trace emission" (ADR-117)';
             appendInlineRunLogLine(input.runId, `trace-close-failed run=${input.runId}: ${error}`);
             process.stdout.write(
                 `${JSON.stringify({ ok: false, runId: input.runId, error, code: 'NO_ACTION_ROWS', actionRows: 0 })}\n`,

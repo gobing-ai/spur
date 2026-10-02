@@ -13,6 +13,12 @@ see_also:
 
 **Owner:** `spur-dev-maintainers` (per task 0755 R1). Reach the named owner via the frontmatter; no need to read the originating task.
 
+**Installed-copy note (task 1046 R2):** the superskill install rewrites `/sp:*` command names to each
+target platform's namespace (e.g. `/sp-dev-*`) on install, so `diff` against an installed copy is
+non-empty **by design** even when fully synced. Sync canary: the installed copy must contain the
+interpreter-section emission obligation — grep for `"Trace emission is part of this loop"` (task
+1046 R1); its absence means the installed copy predates 1046 and needs `superskill install sp`.
+
 **Retirement criterion (0755 R5, D8 decision D7):** the per-task interpreter retires once the engine covers per-task execution for `/sp:dev-runall` with real terminal runs **and** the parity check (this doc's documented action/guard set ≡ the resolved action/guard set of every `.spur/workflows/*.yaml`) is green. Recording the criterion is part of this task; acting on it is not — that is a separate A3-gate decision.
 
 ## Supported action and guard set (0755 R2 parity contract)
@@ -235,6 +241,22 @@ savings are observations, never fabricated pass conditions.
 Start at `initialState`. For each current state, execute its `onEnter` actions in declaration order,
 then evaluate outgoing transitions in declaration order and take the first passing guard. Stop only
 at a declared terminal state or a surfaced HITL pause. The `iterationBound` remains mandatory.
+
+**Trace emission is part of this loop, not an optional extra (task 1046).** After each executed
+action settles — host-inline or via a native subagent — record its boundary through the run
+delegate before taking the transition, one row per action:
+
+```bash
+bun "$SETUP_SCRIPT" --action --run-id "$RUN_ID" --node <state-id> --kind <action-kind> \
+  --status <done|failed> --ok <true|false> --duration-ms <measured-ms>
+```
+
+(or the whole state's boundaries in one `--actions-file` batch — same fields, one JSON array).
+A driver that follows only this section still owes every row: `--close --status done` fail-closed
+refuses a run with zero `action_runs` rows (`NO_ACTION_ROWS`, 0975 R2 — reproduced by run
+201a166a), and the remediation is emission during the run, never a post-hoc backfill. Full
+contract, batch shape, and failure semantics: **[Structured trace emission](#structured-trace-emission-adr-117-task-0868)**
+below (ADR-117).
 
 Action semantics come from the YAML and the workflow action contract:
 
