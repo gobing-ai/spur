@@ -3,7 +3,7 @@ kind: design
 title: "Configuration and asset contracts"
 status: implemented
 created_at: 2026-09-09
-updated_at: 2026-09-18
+updated_at: 2026-10-02
 related: ["0857", "0858", "0861", "0890"]
 tags: [contract, config]
 ---
@@ -309,10 +309,11 @@ removed `agent-flag-spec-id` once its scan proved no `--agent <spec-id>` caller 
 `rel`, `contract` (`standard` | `repo-only`), and for `standard` entries the `twin` path (a
 committed `.mjs` beside the `.ts` source).
 
-**Gate.** `bun run script-contract-check` runs **third** in `spur-check` / `spur-check-new` (after
-`transition-shim-check`, before `lint`). It is two-sided against the manifest:
+**Gate.** `bun run script-contract-check` runs **third** in the feature-scoped `spur-check-feature`
+chain (after `link-check` and `transition-shim-check`; ADR-119). It is two-sided against the manifest:
 
-1. a `standard` entry whose `.mjs` twin is missing or older than its `.ts` source fails;
+1. a `standard` entry whose `.mjs` twin is missing or differs from a fresh conversion of its `.ts`
+   source fails, independently of modification times;
 2. a committed `.mjs` with no `standard` entry (or belonging to a `repo-only` entry) fails;
 3. a script file on disk with no manifest entry fails;
 4. the string `bun plugins/sp/scripts/` in `plugins/sp/{commands,skills,agents}` or

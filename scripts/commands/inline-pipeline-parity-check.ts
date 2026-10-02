@@ -2,12 +2,12 @@
 /**
  * inline-pipeline-parity-check — two-sided gate between the inline pipeline
  * driver's documented action/guard set and the resolved action/guard sets in
- * `.spur/workflows/task-pipeline.yaml` and `.spur/workflows/idea-pipeline.yaml`
+ * the shared definitions in `config/workflows/*.yaml`
  * (task 0755 R2/R3).
  *
  * The driver reference at `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md`
- * documents the set of action and guard kinds it implements. The two runtime
- * pipelines are the only consumers the driver needs to keep in step with. The
+ * documents the set of action and guard kinds it implements. All shared
+ * workflows contribute to the supported set. The
  * check is a symmetric set diff: an element present in one and absent in the
  * other fails the check and names the element.
  *
@@ -35,7 +35,7 @@ import { parse as parseYaml } from 'yaml';
 /** Documented action and guard set. Must stay in lockstep with the
  *  "Supported action and guard set (0755 R2 parity contract)" section in
  *  `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md`. The
- *  driver supports a kind if ANY workflow in `.spur/workflows/*.yaml` uses
+ *  driver supports a kind if ANY workflow in `config/workflows/*.yaml` uses
  *  it (the driver applies to any selected pipeline per its reference doc). */
 const DOCUMENTED = {
     actions: new Set([
