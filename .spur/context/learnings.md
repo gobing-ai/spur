@@ -880,3 +880,8 @@ Full trace: `docs/plans/2026-07-03-feature-cycle-prioritization-brainstorm.md`. 
 - Proof fingerprint is section-scoped (Background/Requirements/AC): Review/Solution writes don't move the digest, so the review-proof digest captured pre-review stays valid through verify.
 - Wrapup pre-flight now lives in `resolveTasks` (wrapup-steps.ts `preflightFeature`): feature-var runs fail closed at the first corpus mutation when the done gate would reject (receipt findings honored only from `verifying`).
 - `spur task record <wbs> --transition done` runs the strict done gate itself (no `--provenance-bypass` flag exists on task record in this build; that flag belongs to `feature sync`).
+
+## Learning: E71 durable storage closure
+
+- **Convention/quirk:** Retained run/evidence consumers include inline instructions, trace metadata, residual folds and worktree export, not just typed storage readers.
+- **Why it matters:** Verify repeated whole scratch disposal through real record/receipt/importer owners; preserve paused/interrupted owners and fail closed on lookup/publication errors. CLI build:bundle owns generated plugin libraries.

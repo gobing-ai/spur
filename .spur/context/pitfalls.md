@@ -263,3 +263,9 @@ Root bunfig `coverageThreshold = {lines: 0.9, functions: 0.9}` is a PER-FILE gat
 - [2026-09-25] **A wrong `--feature-file` path silently miscomputes proof-digest fingerprints** (D64/0943 D1: chained against `docs/features5/` which doesn't exist; the stored D1 digest was wrong and only surfaced when verify independently re-derived the fingerprint). Always chain digests against the real tracked feature file (`docs/features/D64_*.md`); nonexistent paths don't error, they produce a wrong-but-plausible fingerprint.
 
 - Stale node_modules vs lockfile silently breaks the check-receipt fingerprint gate: wrapped engine downgrade (ts-dual-workflow-engine 0.5.0 vs 0.5.6) made pass-seam and completion-boundary definition shas diverge (65989f… vs 0c8f0a…) — looks like an in-code canonicalization defect but isn't. Repair: `bun install` + `bun run build:bundle` + `bun link`; verify by re-running `feature check <id> --strict --as done` before diagnosing further. (D64 wrapup, 2026-09-25)
+
+## Do-Not-Repeat: E71 durable storage closure
+
+- **Date:** 2026-10-02
+- **Mistake:** A running/pending-only query was treated as all non-terminal ownership; trace failure/output consumers and installed instructions still depended on scratch.
+- **Fix:** Use the domain non-terminal guard in both cleanup callers, retained root resolvers and owner-generated installed surfaces. Always use explicit workdir after continuation.

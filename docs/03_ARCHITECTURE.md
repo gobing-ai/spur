@@ -1198,13 +1198,19 @@ in `packages/app/src/services/done-transition-guard.ts`) read lasting structured
 byte-copies valid verdicts, receipts, and terminal run-record pairs into durable roots with atomic digests
 and manifest tracking, and is composed into `spur workflow clean` (dry-run and apply).
 
-New terminal run records (`.md` and `.state.json`) write directly to `recordsDir` (`.spur/memory/runs/`), registered artifact bytes copy to
+New run records (`.md` and `.state.json`), including active runs, write directly to `recordsDir` (`.spur/memory/runs/`), registered artifact bytes copy to
 `runArtifactsDir` (`.spur/memory/runs/<runId>/artifacts/`) before DAO registration (`persistDurableArtifact`),
 and agent session dirs write to `runSessionsDir` (`.spur/memory/runs/<runId>/agent-sessions/`). Readers
 resolve durable-first with scratch fallback (`resolveRunRecordDir`, `runSessionAugmentedRoots`), worktree
 result export transfers durable run directories before worktree disposal (`carryRunRecordDir`), and `cleanRunLogs`
-sweeps both scratch and durable roots while preserving active runs. Verify analytics (`deriveTaskInput` in
+sweeps both scratch and durable roots while preserving every non-terminal owner, including paused/interrupted
+runs. Checkpoint reclamation shares this domain ownership query; log ownership lookup failures preserve data. Verify analytics (`deriveTaskInput` in
 `packages/app/src/services/verified-outcome.ts`) resolve verify verdicts durable-first via `readVerdictArtifact`.
+Session migration redirects closed-run variables, artifact references and importer checkpoints in a domain-owned
+transaction after confined byte publication. Import obligations, live references, malformed identities and conflicts
+preserve sources. Export transfers canonical verdicts/receipts, artifact/task-link rows and owned retained directories;
+the persist-out delegate refuses teardown on retained-record conflicts. Trace output references, failure logs and
+installed driver instructions use the retained root.
 Completed-scratch disposal equivalence is proven across verdicts, analytics, run records, artifact bytes, and
 sessions; subsequent gates recreate scratch (`runLightGate`). Cleanup census sites are retained for
 freshness and confinement correctness. The durable plane is kept git-proof-inert via `.git/info/exclude`

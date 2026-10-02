@@ -2090,3 +2090,9 @@
 ## .spur/run/
 
 - `0220-acceptance.md` / `0220-requirements.md` / `0220-plan.md` / `0220-solution.md` / `0220-testing.md` / `0220-review.md` — Scratch section bodies used to update task 0220 through the task CLIs.
+
+### `packages/domain/src/dao/run-storage-reference-dao.ts`
+Transactional exact-path redirection for retained artifact, workflow metadata and importer checkpoint references. Key export: redirectRunStorageReferences. Token estimate: 700.
+
+### `scripts/commands/run-storage-census.ts`
+Read-only equality check for the reviewed E71 candidate locations and source-line hashes; rejects drift or unclassified owners. Token estimate: 500.

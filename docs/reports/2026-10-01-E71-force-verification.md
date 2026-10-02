@@ -1,12 +1,18 @@
 # E71 force-verification report
 
-Verdict: PARTIAL
-Shippable: FAIL
+Verdict: PASS
+Shippable: PASS
 
-The frozen four tasks each retain material requirement gaps after repairs. The task-local and
-feature-wide test gates pass; those gates do not establish the missing feature behavior.
-The source-local shippable check reports all seven scenarios linked but unverified because
-none has a covering PASS verdict.
+E71 is completed on main. The original four task gaps, related build follow-up 1044 and inline-driver
+follow-up 1046 are closed. The other agent completed 1043 and 1045; their work is integrated and
+1045 is freshly reverified against the combined implementation. All seven E71 tasks are done with
+PASS evidence. The original failed audit below is preserved as history; the completion section
+supersedes its stopping condition.
+
+## Initial audit history (2026-10-01)
+
+The initial bounded audit ended PARTIAL with Shippable FAIL. The operator then requested all
+remaining E71 work be completed, superseding that stopping condition.
 
 ## Scope and isolation
 
@@ -105,3 +111,39 @@ Per-task answers, derived/folded verdicts, residual artifacts and the event trac
 worktree `.spur/run/`; canonical verdicts remain in `.spur/memory/evidence/`.
 Failure diagnostics are also copied to the original root under
 `.spur/run/E71-force-verifyall-20261001/`; that export does not mutate its task records.
+
+## Completion (2026-10-02)
+
+The verified branch was fast-forwarded into main after integrating concurrent 1040/1043/1045 work.
+All task/feature mutations used the source-local CLI; no forced-done or provenance bypass was used.
+The final requirement/AC evidence was re-read, CLI-derived, recorded, then residual-scanned/folded
+without downgrade. Task checks pass with no findings. Related task 1044 is done; its A33 feature
+was not advanced as part of this E71 closure.
+
+| Task | Final result | Closure |
+| --- | --- | --- |
+| 1024 | done / PASS | 3,209 exact candidate/classified locations across 274 owners, zero unknowns; persistent source-line hash equality and negative drift check |
+| 1025 | done / PASS | Durable evidence readers, corpus/suppression/residual/metrics inputs and verified migration publication |
+| 1026 | done / PASS | Retained records, bytes/provenance, partial handoffs, importer/reference settlement and fail-closed complete export; retained trace consumers and recoverable cleanup protection |
+| 1027 | done / PASS | Real task/feature acceptance, importer and paused/resumed producer equivalence after repeated whole scratch disposal |
+| 1043 | done / PASS (other agent) | Source record prevalidation and replay repair integrated |
+| 1044 | done / PASS | CLI build:bundle now invokes the existing library generator; dirty-source regeneration and deterministic authoritative byte equality |
+| 1045 | done / PASS (other agent, reverified) | EISDIR abort before target database creation and different-id external-key conflict exclusion; duplicate tests removed |
+| 1046 | done / PASS | Action emission embedded in interpreter loop, strict NO_ACTION_ROWS remediation, installed reference sync and seven-boundary isolated real-CLI rehearsal |
+
+| Final check | Result | Receipt |
+| --- | --- | --- |
+| `bun run spur-check` | 9,667 pass, 0 fail across 565 files; lint/types/coverage and 50 pre / 2 post rules pass | `.spur/run/E71-final-spur-check.log` |
+| `bun run build` | PASS | `.spur/run/E71-final-build.log` |
+| `bun run test-cf` | 1 pass | `.spur/run/E71-final-test-cf.log` |
+| `bun run plugin-smoke` | PASS; installed standalone surface | `.spur/run/E71-final-plugin-smoke.log` |
+| `bun scripts/commands/run-storage-census.ts` | 3,209 / 3,209; zero unclassified | reviewed census JSON and checker |
+| `spur feature check E71 --as done --json` | PASS with no findings | `.spur/run/E71-main-done-check.json` |
+| Configured feature verification | PASS through real workflow, terminal recording run and registered canonical receipt; fresh checked-input digest | `.spur/memory/evidence/E71-feature-verification-latest.json` |
+| Batch wrap | done, run `ab969139-3afd-4c2c-a345-e7ca1625ee75`; complete evidence fast route after documentation sync | `.spur/run/E71-main-wrap-final.json` |
+
+The first wrap attempt retained its failed nested verification outcome. Main's linked CLI was rebuilt,
+the normal feature lifecycle retry completed E71, and the wrap retry completed. Final verification binds
+the post-wrap/report/context tree; earlier receipts cannot substitute for its current digest.
+Lessons, bug/pitfall entries and session context are recorded in their existing owners. No real project
+scratch was deleted. The worktree retains the detailed initial and final diagnostic logs.

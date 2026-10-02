@@ -277,3 +277,5 @@
 - Fold downgrades PASS→PARTIAL on ANY unchecked-box residual; tick requirement/AC/plan boxes via `task update --section --from-file` BEFORE scan/fold; record alone does not transition — `task record --transition done` walks wip→done.
 - Gate-status artifacts: read the FINAL recheck (exit file), not the first attempt's `.status`; bind review-proof digest marker in BOTH trees before jq proof-bind.
 - `task verdict --from-answer` writes `<wbs>-verdict.json`; run rows live in the tree that ran setup (close from there).
+
+| 04:20 | E71 remaining gaps and related 1044/1046 complete; integrated other-agent 1043/1045, 9667 tests pass, feature and wrap done; final boundary receipt refreshed after metadata | run-storage owners, E71 corpus/report | PASS | ~session |

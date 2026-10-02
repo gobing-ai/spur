@@ -6999,3 +6999,11 @@ spur workflow run config/workflows/task-pipe
   preload. Regression: `apps/cli/tests/test-shim-launcher.test.ts` (sentinel global `spur` later on
   PATH, foreign cwd, spaced checkout path, exit-status propagation). Observations above are
   unchanged; this is an appended correction only.
+
+## bug-E71: E71 durable storage closure
+
+- **Date:** 2026-10-02
+- **File:** `packages/app/src/services/run-storage.ts`
+- **Root cause:** Lasting data, references, migration obligations and attempt scratch shared a lifetime.
+- **Fix:** Durable owner publication plus reference/importer redirection, atomic/confined export and executable repeated-disposal checks.
+- **Tags:** run-storage, ownership, evidence, recovery
