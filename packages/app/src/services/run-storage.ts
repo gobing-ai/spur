@@ -40,6 +40,7 @@ import {
     unlinkSync,
     writeFileSync,
 } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { resolveDurableArtifactPath, resolveRunArtifactPath } from '../workflow/actions/run-path';
@@ -73,15 +74,25 @@ export function runStoragePaths(cwd: string): RunStoragePaths {
     };
 }
 
-/** Nearest ancestor of `cwd` with a `.spur` dir or `package.json`; `cwd` itself is the fallback. */
+/**
+ * Nearest ancestor of `cwd` with a `.spur` dir or `package.json`; `cwd` itself is the fallback.
+ * The shared OS temp dir is never a candidate: a stray `<tmpdir>/.spur` (left by any tool run
+ * with a bare-tmp cwd; on Linux CI `tmpdir()` is `/tmp`, the parent of every temp project)
+ * would re-root all unmarked temp projects beneath it and misdirect their durable writes.
+ */
 function resolveRunStorageRoot(cwd: string): string {
-    let current = resolve(cwd);
+    const start = resolve(cwd);
+    const sharedTmp = resolve(tmpdir());
+    let current = start;
     for (;;) {
-        if (existsSync(join(current, '.spur')) || existsSync(join(current, 'package.json'))) {
+        if (
+            current !== sharedTmp &&
+            (existsSync(join(current, '.spur')) || existsSync(join(current, 'package.json')))
+        ) {
             return current;
         }
         const parent = resolve(current, '..');
-        if (parent === current) return resolve(cwd);
+        if (parent === current) return start;
         current = parent;
     }
 }

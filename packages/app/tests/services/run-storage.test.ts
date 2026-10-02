@@ -31,6 +31,21 @@ function silenceStdout<T>(run: () => T): T {
     }
 }
 
+test('run storage root never latches onto the shared OS temp dir, marker or not', () => {
+    const root = mkdtempSync(join(tmpdir(), 'run-storage-tmpguard-'));
+    const sharedSpur = join(tmpdir(), '.spur');
+    const created = !existsSync(sharedSpur);
+    try {
+        if (created) mkdirSync(sharedSpur, { recursive: true });
+        // With the marker present, the walk must still refuse tmpdir() as project root:
+        // otherwise every unmarked temp project re-roots to the shared dir (CI: /tmp).
+        expect(runStoragePaths(root).projectRoot).toBe(root);
+    } finally {
+        if (created) rmSync(sharedSpur, { recursive: true, force: true });
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
 /** Temp project root with a `.spur/run` scratch plane; package.json pins the project-root walk. */
 function makeProject(): { root: string; scratch: string; dirs: ReturnType<typeof runStoragePaths> } {
     const root = mkdtempSync(join(tmpdir(), 'run-storage-'));
