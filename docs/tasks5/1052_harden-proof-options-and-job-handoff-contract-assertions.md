@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: Harden proof options and job handoff contract assertions
-status: todo
+status: done
 template: issue
 created_at: 2026-10-02T17:00:25.447Z
-updated_at: "2026-10-02T18:04:31.765Z"
+updated_at: "2026-10-02T20:47:44.494Z"
 feature_id: D63
 
 ac_numbering: task-local
 ac_altitude: task-local
 priority: P2
 estimate_hours: 3
+done_forced: "false"
+done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-dev-run-1052-782b/.spur/run/1052-verdict.json
 ---
 
 ## 1052. Harden proof options and job handoff contract assertions
@@ -25,17 +27,17 @@ The original task 1052 freshness-gate request is excluded: `scripts/commands/bun
 
 ### Requirements
 
-- [ ] R1. Validate proof.fingerprint action options against its real accepted keys (`var`, `expect`, `taskFile`, `featureFile`), rejecting unknown keys before spec reads or Git capture with an actionable error naming unexpected and accepted keys. Do not confuse these options with the typed computeProofInputFingerprint input object.
-- [ ] R2. Reject a supplied non-string expect instead of silently dropping the proof comparison. Preserve valid var validation, capture-only behavior for absent/empty/blank expect, and existing optional spec behavior: undefined or empty-string taskFile/featureFile is absent; whitespace-only paths remain explicit invalid paths. Keep proof-bound run.artifact and shared spec-reader options compatible.
-- [ ] R3. Extend the existing job-handoff contract test to require exactly one occurrence of each of the four reference slicing boundaries and each of the eight handoff-template headings in its owning reference/template, using exact heading lines. Add isolated duplicate/missing-heading mutations and retain unrelated-edit tolerance and both thin-wrapper assertions; do not add a Markdown parser or change the command instructions.
+- [x] R1. Validate proof.fingerprint action options against its real accepted keys (`var`, `expect`, `taskFile`, `featureFile`), rejecting unknown keys before spec reads or Git capture with an actionable error naming unexpected and accepted keys. Do not confuse these options with the typed computeProofInputFingerprint input object.
+- [x] R2. Reject a supplied non-string expect instead of silently dropping the proof comparison. Preserve valid var validation, capture-only behavior for absent/empty/blank expect, and existing optional spec behavior: undefined or empty-string taskFile/featureFile is absent; whitespace-only paths remain explicit invalid paths. Keep proof-bound run.artifact and shared spec-reader options compatible.
+- [x] R3. Extend the existing job-handoff contract test to require exactly one occurrence of each of the four reference slicing boundaries and each of the eight handoff-template headings in its owning reference/template, using exact heading lines. Add isolated duplicate/missing-heading mutations and retain unrelated-edit tolerance and both thin-wrapper assertions; do not add a Markdown parser or change the command instructions.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Unknown proof action keys fail before any proof input work (req: R1)
+- [x] AC1 — Unknown proof action keys fail before any proof input work (req: R1)
   Given valid var plus legacy keys gitDiffSummary/gitLogHashObject or a misspelled taskFile key, execute returns ok:false naming the unexpected keys and the four accepted keys; no spec read or digest capture occurs, and valid action options continue to work.
-- [ ] AC2 — Invalid expectation types cannot silently weaken proof comparison (req: R2)
+- [x] AC2 — Invalid expectation types cannot silently weaken proof comparison (req: R2)
   Given non-string expect, execute fails; valid matching/mismatching string expectations keep their existing result, absent/empty/blank expect remains capture-only, undefined/empty spec paths stay optional and whitespace-only spec paths remain rejected. Existing proof-bound run.artifact checks stay green.
-- [ ] AC3 — Handoff contract drift fails at the actual heading owner (req: R3)
+- [x] AC3 — Handoff contract drift fails at the actual heading owner (req: R3)
   Given isolated copies of dev-operations.md and its shared template, each duplicated or missing boundary/template heading produces a named violation before incorrect slicing can pass; both wrapper checks and unrelated-edit mutations still pass without scratch input or canonical file changes.
 
 ### Q&A
@@ -98,6 +100,11 @@ Coverage: N/A — corpus consolidation and baseline triage only. No production c
 
 This review assesses the follow-up records; it does not certify the pending implementation.
 
+
+#### Pipeline review — run 782ba320-0fef-4424-a00d-437b203d642c (2026-10-02)
+
+Functional traceability AC1–AC3 all PASS with file:line evidence; SECUA clean. Findings: 2 non-blocking nits — (1) the guard's accepted-keys list is derived from `ACCEPTED_OPTION_KEYS` order, keep it in sync if options grow; (2) the handoff boundary test pins the Environment heading format, so clock-locale template edits must update the pin deliberately. No blocking findings. Diff implements AC1–AC3 with fail-closed semantics at the right boundary; quality gate PASS (first attempt, 4m56s) includes the new tests. Full review answer: `.spur/run/782ba320-0fef-4424-a00d-437b203d642c-review-answer.txt` (worktree run artifacts).
+
 ### References
 
 - Related completed tasks: 1041 (thin job commands), 1050 (retained handoff contract tests), 0785 (shared proof spec validation), 0972 (generated inline export/declaration parity), 1044 (authoritative build:bundle generation order).
@@ -112,4 +119,7 @@ This review assesses the follow-up records; it does not certify the pending impl
 ### History
 
 - 2026-10-02: Consolidated the six simultaneous review captures into 1051–1052; corrected diagnoses and preserved each original finding's disposition. Removed superseded captures 1053–1056 so those IDs can be reused. The operator's "go ahead" authorized the narrow direct title/file rename and deletion exception because the task CLI lacks those operations; sections, metadata and roster refreshes used Spur. Implementation remains todo.
+- 2026-10-02T20:23:17.412Z todo → wip (system)
+- 2026-10-02T20:47:17.233Z wip → testing (system)
+- 2026-10-02T20:47:44.489Z testing → done (system)
 
