@@ -4,7 +4,7 @@ name: Retain run records sessions and artifacts outside scratch
 status: done
 template: feature-impl
 created_at: 2026-09-30T20:13:58.357Z
-updated_at: "2026-10-02T00:30:57.864Z"
+updated_at: "2026-10-02T00:33:10.375Z"
 feature_id: E71
 priority: P2
 tags:
@@ -142,13 +142,24 @@ DB trace stays authoritative (no paused snapshots, no schema change, no new back
 
 ### Review
 
-<!-- spur:record-review -->
+| Priority | Dimension | Location | Finding | Disposition |
+| --- | --- | --- | --- | --- |
+| P4 | Functional / SECUA / Architecture | `packages/app/src/services/inline-run-setup.ts:1090` | Reviewed the final scoped implementation and executable failure/disposal evidence; no unresolved blocker or major finding. | RESOLVED |
 
-**SECU findings** (pipeline verify step — verdict: PARTIAL)
+#### Functional traceability
 
-| Priority | Dimension | Location | Finding |
-|----------|-----------|----------|----------|
-| P4 | design-conformance | — | Frozen design is partly implemented; unresolved claims are named in requirements and AC above. |
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `packages/app/src/services/inline-run-setup.ts:1090`; durable records and authoritative trace tests |
+| R2 | MET | `packages/app/src/workflow/actions/run-artifact.ts:53`; provenance/collision/confinement tests and retained registered-summary workflow |
+| R3 | MET | `packages/app/src/services/inline-run-setup.ts:307`; complete evidence/reference export and real session importer disposal tests |
+| R4 | MET | `packages/domain/src/dao/run-storage-reference-dao.ts:12`; rollback/live-consumer tests; `packages/app/tests/services/history-service.test.ts:978` real importer checkpoint equivalence |
+
+#### SECUA and architecture
+
+Retained bytes and source provenance publish before ledger references. Physical confinement and immutable identity checks cover aliases/collisions. The domain DAO owns transactional reference/importer changes and rolls them back on failure; app services compose it. Complete export retains 1043 prevalidation/replay behavior. No new backend/schema/dependency was added.
+
+Security: confined paths, existing identity validation and secret redaction remain. Correctness: focused regression evidence covers the changed success/failure branches. Efficiency: bounded local storage traversal; no new background collector. Usability: visible outcomes and errors. Architecture: existing app/domain/plugin ownership and standalone bundle contract remain. No speculative refactor is required.
 
 ### References
 
