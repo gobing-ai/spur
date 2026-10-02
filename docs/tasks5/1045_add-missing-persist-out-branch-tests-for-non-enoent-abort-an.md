@@ -4,7 +4,7 @@ name: Add missing persist-out branch tests for non-ENOENT abort and external-key
 status: wip
 template: feature-impl
 created_at: 2026-10-01T23:59:13.672Z
-updated_at: "2026-10-02T00:14:52.766Z"
+updated_at: "2026-10-02T00:24:47.335Z"
 feature_id: E71
 
 priority: P2
@@ -70,7 +70,7 @@ they lack direct tests — 1043 P2-3).
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+`packages/app/tests/services/persist-worktree-runs.test.ts:45` adds the non-ENOENT read regression using existing fixture owners. The source record replaced by a directory raises EISDIR and leaves the receiving `.spur/spur.db` and record directory absent (the task's `runs.db` wording refers to this canonical database). `packages/app/tests/services/persist-worktree-runs.test.ts:62` covers a different source run with the same workflow/external-key tuple: it reports only `external-key-conflict`, copies no record pair and leaves exactly the seeded target row. No production behavior changed. Focused suite: 33 pass, 0 fail.
 
 ### Testing
 
