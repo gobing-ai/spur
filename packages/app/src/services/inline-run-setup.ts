@@ -1116,7 +1116,7 @@ export async function runInlineRunTrace(input: InlineRunTraceInput): Promise<num
             // (task 0975 R2): the row is already terminal — closeRun ran above — but the
             // driver must surface this instead of reporting a clean close, and must never
             // backfill rows. Exit 1 with the named code; the run record carries the finding.
-            const error = `run ${input.runId} closed done with zero action_runs rows`;
+            const error = `run ${input.runId} closed done with zero action_runs rows; emit --action/--actions-file during the run (no backfill); see inline-pipeline-driver.md#structured-trace-emission-adr-117-task-0868`;
             appendInlineRunLogLine(input.runId, `trace-close-failed run=${input.runId}: ${error}`);
             process.stdout.write(
                 `${JSON.stringify({ ok: false, runId: input.runId, error, code: 'NO_ACTION_ROWS', actionRows: 0 })}\n`,

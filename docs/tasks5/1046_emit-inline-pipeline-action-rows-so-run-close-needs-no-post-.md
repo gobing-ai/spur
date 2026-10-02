@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Emit inline pipeline action rows so run close needs no post-hoc backfill
-status: todo
+status: wip
 template: feature-impl
 created_at: 2026-10-01T23:59:14.229Z
-updated_at: "2026-10-02T00:14:51.504Z"
+updated_at: "2026-10-02T00:25:52.773Z"
 feature_id: E71
 
 priority: P2
@@ -87,7 +87,11 @@ non-execution, 0975 R2).
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+`plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:241` now requires measured action boundaries inside the interpreter loop, with the exact existing `--action` command, state-boundary batch option and detailed trace pointer. `packages/app/src/services/inline-run-setup.ts:1119` adds the remediation pointer while preserving exit 1, NO_ACTION_ROWS and the already-terminal close semantics. `packages/app/tests/services/inline-run-driver.test.ts:333` asserts both the unchanged failure and the pointer. No new tooling or flags.
+
+An isolated CLI-created throwaway task ran through a project override named task-pipeline, using the real setup/action/close delegate and only the interpreter section's emission rule. Seven measured boundaries were emitted before advancing; close returned ok:true/actionRows:7 without a backfill file. The fixture was removed. This rehearses the loop/trace protocol, not the bundled pipeline's model or certification gates. Receipt: `.spur/run/E71-1046-rehearsal.log`.
+
+Superskill synced the repo plugin to Codex. The installed reference differs only by its intentional /sp:dev-* → /sp-dev-* adapter conversion; the source header documents that remaining drift (AC2's alternative). Full CLI build:bundle passed, regenerating the plugin application twin; focused app trace suite: 12 pass, 0 fail.
 
 ### Testing
 
@@ -104,4 +108,5 @@ non-execution, 0975 R2).
 ### History
 
 - 2026-10-02T00:08:30.476Z backlog → todo (system)
+- 2026-10-02T00:16:52.094Z todo → wip (system)
 

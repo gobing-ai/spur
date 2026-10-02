@@ -11,6 +11,10 @@ see_also:
 
 # Inline Pipeline Driver
 
+**Installed-copy drift (1046):** Superskill converts `/sp:dev-*` command spellings to
+`/sp-dev-*` for Codex. After `superskill install sp`, this adapter-only difference remains;
+the interpreter and trace instructions must match. Never hand-edit the installed reference.
+
 **Owner:** `spur-dev-maintainers` (per task 0755 R1). Reach the named owner via the frontmatter; no need to read the originating task.
 
 **Retirement criterion (0755 R5, D8 decision D7):** the per-task interpreter retires once the engine covers per-task execution for `/sp:dev-runall` with real terminal runs **and** the parity check (this doc's documented action/guard set ≡ the resolved action/guard set of every `.spur/workflows/*.yaml`) is green. Recording the criterion is part of this task; acting on it is not — that is a separate A3-gate decision.
@@ -235,6 +239,19 @@ savings are observations, never fabricated pass conditions.
 Start at `initialState`. For each current state, execute its `onEnter` actions in declaration order,
 then evaluate outgoing transitions in declaration order and take the first passing guard. Stop only
 at a declared terminal state or a surfaced HITL pause. The `iterationBound` remains mandatory.
+
+After each executed action settles, record its boundary before the next action, transition guard,
+or terminal close. Measure its actual duration and preserve its declared failure policy:
+
+```bash
+bun "$SETUP_SCRIPT" --action --run-id "$RUN_ID" --node <state-id> --kind <action-kind> \
+  --status <done|failed> --ok <true|false> --duration-ms <measured-ms>
+```
+
+For a multi-action state, `--actions-file` may emit the measured boundaries together before leaving
+that state. Follow [Structured trace emission](#structured-trace-emission-adr-117-task-0868) for the
+payload, delegated `decide` emission and best-effort failure handling. Never retry a failed batch
+or backfill at close; a zero-row done close fails with `NO_ACTION_ROWS`.
 
 Action semantics come from the YAML and the workflow action contract:
 

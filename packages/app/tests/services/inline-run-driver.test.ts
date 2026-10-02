@@ -340,7 +340,12 @@ describe('runInlineRunSetup + runInlineRunTrace (moved driver bodies, 1006 R3)',
                 expect(JSON.parse(empty.out.trimEnd().split('\n')[0] ?? '{}')).toMatchObject({
                     ok: false,
                     code: 'NO_ACTION_ROWS',
+                    actionRows: 0,
+                    error: expect.stringContaining('--action/--actions-file during the run (no backfill)'),
                 });
+                expect(JSON.parse(empty.out.trimEnd().split('\n')[0] ?? '{}').error).toContain(
+                    'inline-pipeline-driver.md#structured-trace-emission',
+                );
 
                 // Closing an unknown run id fails loudly (RUN_NOT_FOUND), not best-effort.
                 const missing = await captureAsync(() =>
