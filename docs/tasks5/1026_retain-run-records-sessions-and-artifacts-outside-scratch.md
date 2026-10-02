@@ -4,7 +4,7 @@ name: Retain run records sessions and artifacts outside scratch
 status: done
 template: feature-impl
 created_at: 2026-09-30T20:13:58.357Z
-updated_at: "2026-10-01T22:23:39.354Z"
+updated_at: "2026-10-02T00:30:57.864Z"
 feature_id: E71
 priority: P2
 tags:
@@ -111,6 +111,14 @@ DB trace stays authoritative (no paused snapshots, no schema change, no new back
 - `packages/app/src/services/run-storage.ts:537` — artifact/session path construction validates run IDs before using them as path components.
 - `packages/app/tests/workflow/actions/run-artifact.test.ts:13` — regressions reproduced optional-missing refusal and an escaping durable-root write before the repair. Artifact/agent/inline/export/migration suites now pass: 244 tests across 5 files.
 - Residual: migration has no metadata-redirection or settled-importer port; worktree export can report success while record conflicts are skipped and does not transfer the evidence plane as a complete family. Bound evidence registration still accepts only scratch. These requirements remain PARTIAL after the bounded repair pass; the existing export follow-up 1043 is outside the frozen verify set.
+
+**Completion repair (2026-10-02); supersedes the preceding residual.**
+
+- `packages/app/src/workflow/actions/run-artifact.ts:53` binds retained artifact bytes to canonical project-relative source provenance and rejects basename collisions; fixed durable evidence registration keeps the same run/proof/stage checks.
+- `packages/domain/src/dao/run-storage-reference-dao.ts:12` owns transactional metadata/artifact/importer reference redirection; `packages/app/src/services/workflow-service.ts:934` composes this after confined byte publication. Live importer/reference obligations block retirement and failures preserve sources.
+- `packages/app/src/services/history-service.ts:501` discovers retained session roots first and deduplicates copied/aliased identities. `packages/app/tests/services/history-service.test.ts:978` executes the real OMP importer before disposal, after two removals and during a later full import, preserving imported results and checkpoint positions.
+- `packages/app/src/services/inline-run-setup.ts:307` validates and carries all canonical verdicts/receipts, artifact and task-link rows, retained records and session roots, then redirects copied metadata. Missing/unreadable/conflicting required families fail visibly. Integrated 1043 prevalidation and replay repair remain intact; 1045 adds the two omitted direct branches.
+- `packages/app/src/workflow/actions/agent-run.ts:1670` persists failed-action handoff bytes and a redacted latch snapshot before publishing the compatibility scratch handoff; durable-first tracing survives disposal. `packages/app/tests/services/workflow-service.test.ts:211` proves a real decision workflow still consumes its registered summary using the original source name after scratch removal.
 
 ### Testing
 
