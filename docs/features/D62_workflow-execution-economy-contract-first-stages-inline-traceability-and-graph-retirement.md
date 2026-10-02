@@ -214,6 +214,8 @@ Feature: Workflow execution economy: contract-first stages, inline traceability,
 | 0986 | Assert the wrapup learnings artifact shape before appending it to memory | done |
 | 0994 | Derive the wrap-up metrics verdict from the tracked Testing record | done |
 | 0996 | A feature-scenario-keyed verdict AC row never proves its task AC box | done |
+| 1047 | Reconcile existing task lifecycle rows after no-lifecycle terminal writes | todo |
+| 1050 | Retain task 1041 job-handoff contract checks in the normal repository suite | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

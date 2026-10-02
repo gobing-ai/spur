@@ -4,7 +4,7 @@ name: Emit inline pipeline action rows so run close needs no post-hoc backfill
 status: done
 template: feature-impl
 created_at: 2026-10-01T23:59:14.229Z
-updated_at: "2026-10-02T04:47:32.953Z"
+updated_at: "2026-10-02T06:12:02.188Z"
 feature_id: E71
 
 priority: P2
@@ -89,35 +89,35 @@ non-execution, 0975 R2).
 
 ### Solution
 
-Change map (4 files, docs-first per task Design):
+The merged implementation uses the existing inline trace delegate and preserves strict close validation.
 
-- R1 — `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md` (YAML-interpreter section, after the loop paragraph): new block "Trace emission is part of this loop, not an optional extra (task 1046)" stating the per-action emission obligation inline with the exact `--action` shape (`--run-id/--node/--kind/--status/--ok/--duration-ms`), the `--actions-file` batch alternative, the fail-closed rationale (zero-row done close refused, `NO_ACTION_ROWS`, 0975 R2, reproduced by run 201a166a), and a pointer to the "Structured trace emission" contract (ADR-117). A loop-following driver now cannot reach close with zero rows without contradicting the section it executes from.
-- R2 — same file, header note "Installed-copy note (task 1046 R2)": the superskill install rewrites `/sp:*` to each target namespace (e.g. `/sp-dev-*`), so byte-`diff` against an installed copy is non-empty by design; the sync canary is grep `"Trace emission is part of this loop"` in the installed copy. The installed copy (`~/.agents/skills/sp-spur-dev/references/...`) was resynced through the sanctioned path (`superskill install sp --marketplace <staged worktree marketplace>`, 9 targets) and carries the canary; residual byte-diff is installer namespace adaptation only.
-- R3 — `packages/app/src/services/inline-run-setup.ts:1030-1042` (close path): the zero-row `error` string now appends the in-run remediation pointer (`--action` / `--actions-file` + driver-reference section name); `code: 'NO_ACTION_ROWS'`, exit 1, fail-closed after-close semantics (0975 R2) unchanged.
-- AC3 twin — `plugins/sp/lib/inline-run.generated.mjs` regenerated via `bun run --filter @gobing-ai/spur build:bundle` so the plugin twin carries the same R3 string (1043 lesson; `bundle-plugin-lib` anchor green).
-- Tests — `packages/app/tests/services/inline-run-driver.test.ts:344-356`: the zero-row close case now also asserts the pointer fragments (`--action`, `--actions-file`, `Structured trace emission`) while the pre-existing assertions pin exit 1 + `code: 'NO_ACTION_ROWS'` (AC4) and the one-row close pins `ok:true` (AC1's service-level counterpart).
+- R1 — `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:243` requires each settled action boundary before the next action, transition guard or close. The loop includes the exact `--action` payload and the measured `--actions-file` alternative; failed batches are neither retried nor backfilled at close.
+- R2 — `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:15` documents the Superskill Codex command-spelling adaptation. The inspected installed reference at `~/.agents/skills/sp-spur-dev/references/inline-pipeline-driver.md` contains the same durable record paths and loop obligation. Superskill owns installation; a literal canary from the superseded branch wording is not required.
+- R3 — `packages/app/src/services/inline-run-setup.ts:1119` points the zero-row JSON error to `--action/--actions-file during the run (no backfill)` and the structured-trace section anchor. The error code remains `NO_ACTION_ROWS`, exit remains 1, and the run retains the existing after-close semantics.
+- Regression — `packages/app/tests/services/inline-run-driver.test.ts:340` pins the error code, zero action rows, in-run remediation and reference anchor. The owner-generated `plugins/sp/lib/inline-run.generated.mjs` carries the same implementation; `scripts/commands/bundle-plugin-lib.test.ts:187` checks deterministic bundle parity.
 
-Rationale: the defect was contract placement, not missing tooling (refine correction 1) — the loop section a driver actually follows was silent about emission, so the fix is the obligation at the point of execution plus a remediation pointer at the failure site. No new flags, scripts, or relaxed close validation.
+The independent task branch and its original prose were integrated in merge `5e0a0a3c`. Main retained the already-verified implementation and stronger storage safeguards. This section describes that merged code; the original branch receipts and rehearsal are retained as historical evidence.
 
 ### Testing
 
 **Pipeline verify results**
 
-- Verdict: PASS (from verdict artifact)
+- Verdict: PASS (existing recorded verdict; this correction does not mint a new proof)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | static-ref: `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:245-259` — interpreter-section block with exact `--action` shape, `--actions-file` batch, fail-closed rationale (0975 R2, run 201a166a), pointer to "Structured trace emission" (ADR-117) |
-| R2 | MET | static-ref: installed copy `~/.agents/skills/sp-spur-dev/references/inline-pipeline-driver.md` (external evidence, outside this repo) carries the sync canary in its interpreter section after `superskill install sp` (9 targets); by-design byte-diff documented in the repo copy header note |
-| R3 | MET | test: `packages/app/src/services/inline-run-setup.ts:1032-1040` — error appends remediation pointer; exit 1 + `code: 'NO_ACTION_ROWS'` unchanged (pinned by still-green test assertions) |
+| R1 | MET | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:243` — action boundary precedes the next action, guard or close; exact payload and measured batch alternative appear in the loop. |
+| R2 | MET | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:15` documents the Codex adapter spelling; the inspected installed reference has the same durable record paths and current loop obligation. |
+| R3 | MET | `packages/app/src/services/inline-run-setup.ts:1119` and `packages/app/tests/services/inline-run-driver.test.ts:340` — explicit in-run remediation and section anchor, with unchanged failure code and exit. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | command | rehearsal run `ac1-rehearsal-1046-d973` driven per interpreter section — 10 action rows emitted, `--close --status done` printed `{"ok":true,"actionRows":10}` exit 0; no post-hoc backfill file existed; scratch task file/folder removed |
-| AC2 | MET | command | canary grep hit in the installed copy; residual byte-diff is installer `/sp:` → `/sp-` namespace adaptation, documented in the repo copy header (R2's documented-drift alternative) |
-| AC3 | MET | test | `packages/app/tests/services/inline-run-driver.test.ts:344-356` asserts `--action`, `--actions-file`, `Structured trace emission` in the zero-row error; focused suite 12/12; twin rebuilt via `build:bundle`, anchor `bundle-plugin-lib` 16/16 |
-| AC4 | MET | test | pre-existing assertions pin exit 1 + `code: 'NO_ACTION_ROWS'` on the same case (test file unchanged in that region); source diff shows exit code and code field untouched |
-- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+| AC1 | MET | command | Retained rehearsal `ac1-rehearsal-1046-d973` is terminal done with 10 incrementally emitted action rows; its `.md` and `.state.json` records are retained under `.spur/memory/runs/`. The scratch task was removed after the rehearsal. |
+| AC2 | MET | command | The repo header documents the installer namespace difference, satisfying the documented-drift alternative; installed and repo references contain the current loop obligation and durable record paths. |
+| AC3 | MET | test | Main's focused inline-run-driver suite: 13 pass, 0 fail; deterministic plugin bundle suite: 16 pass, 0 fail. The current assertions check the actual in-run remediation and section anchor rather than superseded branch wording. |
+| AC4 | MET | test | The zero-row close test pins exit 1, `code: NO_ACTION_ROWS` and `actionRows: 0`; the success case still closes after emission. |
+
+The original task-pipeline verification run `8c94ccab-5a16-4106-9f65-baf74d940e1b` and source-tree evidence remain preserved. The subsequent cleanup checks are recorded in `.spur/memory/runs/worktree-cleanup-20261002/cleanup-result.json`. Historical receipts describe their own source tree; live source anchors above describe merged main.
 
 ### Review
 
