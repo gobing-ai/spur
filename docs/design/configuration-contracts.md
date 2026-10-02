@@ -163,6 +163,11 @@ config/
 
 **Build → install → init flow:**
 
+The CLI package's `build:bundle` first invokes `scripts/commands/bundle-plugin-lib.ts`, the
+same generator exported to the deterministic bundle tests, before staging the plugin. Changed
+application source therefore refreshes the committed plugin libraries and their packaged copies
+through one owner; callers do not need a separate regeneration pass.
+
 | Stage                      | Action                                                                                                                                                                                                                                                                                                                                                |
 | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Build (`build:bundle`)     | Copy repo-root `./config` → package-root `apps/cli/config` via `bundle-config`; copy repo-root `plugins/` + `.claude-plugin/` → package-root `apps/cli/plugins` + `apps/cli/.claude-plugin` via `bundle-plugins`; both shipped via the package `files` array as top-level `config/`, `plugins/`, `.claude-plugin/`.                                                                                                                                                                                                         |
