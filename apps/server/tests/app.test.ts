@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { healthResponseSchema } from '@gobing-ai/spur-contracts';
 import type { ApplicationRuntime } from '@gobing-ai/ts-infra/application';
 import { createApp, generateOpenApiSpec } from '../src';
 import worker from '../src/worker';
@@ -9,6 +10,7 @@ describe('server app', () => {
         const body = (await response.json()) as Record<string, unknown>;
 
         expect(response.status).toBe(200);
+        expect(healthResponseSchema.safeParse(body).success).toBe(true);
         expect(body).toMatchObject({
             status: 'ok',
         });

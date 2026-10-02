@@ -27,6 +27,7 @@ import {
 import { CoordinationRunDao, InboxMessageDao, REGISTERED_CANONICAL_STAGES, TIER_RANK } from '@gobing-ai/spur-domain';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import type { Hono } from 'hono';
+import { version } from '../../../package.json';
 import type { ServerContext } from '../../context';
 import type { ServerModule } from '../types';
 
@@ -54,6 +55,9 @@ export const healthModule: ServerModule = {
             const memory = process.memoryUsage();
             return c.json({
                 status: 'ok',
+                timestamp: new Date().toISOString(),
+                service: 'spur',
+                version,
                 uptime_seconds: Math.round(uptime),
                 memory_rss_mb: Math.round((memory.rss / 1_048_576) * 100) / 100,
                 memory_heap_mb: Math.round((memory.heapUsed / 1_048_576) * 100) / 100,

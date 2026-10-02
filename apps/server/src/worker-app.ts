@@ -4,6 +4,7 @@ import { compress } from 'hono/compress';
 import { cors } from 'hono/cors';
 import { csrf } from 'hono/csrf';
 import { secureHeaders } from 'hono/secure-headers';
+import { version } from '../package.json';
 import { generateOpenApiSpec } from './openapi';
 
 interface ProcessMemory {
@@ -46,6 +47,9 @@ export function createWorkerApp(env: Record<string, string | undefined> = {}): H
         const memory = memoryUsage();
         return c.json({
             status: 'ok',
+            timestamp: new Date().toISOString(),
+            service: 'spur',
+            version,
             uptime_seconds: Math.round((Date.now() - startedAt) / 1000),
             memory_rss_mb: Math.round((memory.rss / 1_048_576) * 100) / 100,
             memory_heap_mb: Math.round((memory.heapUsed / 1_048_576) * 100) / 100,

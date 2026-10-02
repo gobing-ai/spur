@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { healthResponseSchema } from '@gobing-ai/spur-contracts';
 import { createWorkerApp } from '../src/worker-app';
 
 describe('Cloudflare Worker app', () => {
@@ -7,7 +8,9 @@ describe('Cloudflare Worker app', () => {
 
         const health = await app.request('/api/health');
         expect(health.status).toBe(200);
-        expect(await health.json()).toMatchObject({
+        const healthBody = await health.json();
+        expect(healthResponseSchema.safeParse(healthBody).success).toBe(true);
+        expect(healthBody).toMatchObject({
             status: 'ok',
             uptime_seconds: expect.any(Number),
             memory_rss_mb: expect.any(Number),

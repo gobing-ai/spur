@@ -1,12 +1,11 @@
 import type { BoardCatalog } from '@gobing-ai/spur-contracts';
 import { contract } from '@gobing-ai/spur-contracts';
 import { implement } from '@orpc/server';
+import { version } from '../package.json';
 import type { ServerContext } from './context';
 import { createFeatureHandlers } from './modules/feature';
 import { createHistoryHandlers } from './modules/history';
 import { createTaskHandlers } from './modules/task';
-
-const version = '0.0.0';
 
 const os = implement(contract);
 /**
