@@ -325,7 +325,7 @@ family dispositions linked to §§3–6 above. The read-only equality check is:
 bun scripts/commands/run-storage-census.ts
 ```
 
-At this closure checkpoint, **3,222 candidate locations = 3,222 classified locations**, across
+At this closure checkpoint, **3,246 candidate locations = 3,246 classified locations**, across
 276 owners; zero duplicate or unclassified locations. Equality compares location identities,
 not file counts. The scan includes direct paths, computed joins, root/helper aliases, and
 deletion calls across app/CLI/server/domain/config source, workflows, plugin instructions,

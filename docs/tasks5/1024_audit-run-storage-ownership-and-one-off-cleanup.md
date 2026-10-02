@@ -4,7 +4,7 @@ name: Audit run storage ownership and one-off cleanup
 status: done
 template: feature-impl
 created_at: 2026-09-30T20:13:58.349Z
-updated_at: "2026-10-02T00:33:08.736Z"
+updated_at: "2026-10-02T00:42:00.880Z"
 feature_id: E71
 priority: P2
 tags:
@@ -91,7 +91,7 @@ Audit-only task (mutationPolicy: none) — no source, test, workflow, or CLI sur
 - `docs/reports/2026-09-30-E71-run-storage-ownership.md:294` — regenerated the current run-storage census and separated historical disposition claims from unresolved corpus/suppression, metadata/importer, export and integration dependencies. No product code or real project scratch deletion belongs to this audit task.
 - Candidate counts alone do not certify exhaustive producer/consumer equality. R1/R4 and the feature scenario remain PARTIAL after the bounded report repair.
 
-Completion audit (2026-10-02): the current census records every candidate location with its source-line SHA-256 and reviewed owner/family disposition. `bun scripts/commands/run-storage-census.ts` proves 3,222 candidates equal 3,222 classified locations across 276 owners, with zero unclassified or duplicate entries; an injected new candidate is rejected. The historical report §14 closes corpus/suppression, residual/metrics, identities, importer/reference, export, summary and failed-agent handoff dispositions. Task 1043's record-pass/replay repair is integrated, with branch tests in 1045 and the trace follow-up in 1046. No live project scratch was deleted.
+Completion audit (2026-10-02): the current census records every candidate location with its source-line SHA-256 and reviewed owner/family disposition. `bun scripts/commands/run-storage-census.ts` proves 3,246 candidates equal 3,246 classified locations across 276 owners, with zero unclassified or duplicate entries; an injected new candidate is rejected. The historical report §14 closes corpus/suppression, residual/metrics, identities, importer/reference, export, summary and failed-agent handoff dispositions. Task 1043's record-pass/replay repair is integrated, with branch tests in 1045 and the trace follow-up in 1046. The related 1044 build correction reuses the existing generator. Integrated 1040 canonical verdict diagnostics retain their A1 owner. No live project scratch was deleted.
 
 ### Testing
 
