@@ -4,7 +4,7 @@ name: Retain run records sessions and artifacts outside scratch
 status: done
 template: feature-impl
 created_at: 2026-09-30T20:13:58.357Z
-updated_at: "2026-10-02T00:33:10.375Z"
+updated_at: "2026-10-02T00:53:07.977Z"
 feature_id: E71
 priority: P2
 tags:
@@ -120,6 +120,9 @@ DB trace stays authoritative (no paused snapshots, no schema change, no new back
 - `packages/app/src/services/inline-run-setup.ts:307` validates and carries all canonical verdicts/receipts, artifact and task-link rows, retained records and session roots, then redirects copied metadata. Missing/unreadable/conflicting required families fail visibly. Integrated 1043 prevalidation and replay repair remain intact; 1045 adds the two omitted direct branches.
 - `packages/app/src/workflow/actions/agent-run.ts:1670` persists failed-action handoff bytes and a redacted latch snapshot before publishing the compatibility scratch handoff; durable-first tracing survives disposal. `packages/app/tests/services/workflow-service.test.ts:211` proves a real decision workflow still consumes its registered summary using the original source name after scratch removal.
 
+
+- `packages/app/src/services/inline-run-setup.ts:1356` now makes the shared persist-out delegate exit 1 / ok:false for reported retained record conflicts, preserving both source and target and blocking worktree teardown. The underlying service retains its existing conflict-skip contract. `packages/app/tests/services/inline-run-driver.test.ts:440` exercises a real copied run followed by divergent record replay; combined export/delegate suite: 46 pass, 0 fail.
+
 ### Testing
 
 **Pipeline verify results**
@@ -160,6 +163,9 @@ DB trace stays authoritative (no paused snapshots, no schema change, no new back
 Retained bytes and source provenance publish before ledger references. Physical confinement and immutable identity checks cover aliases/collisions. The domain DAO owns transactional reference/importer changes and rolls them back on failure; app services compose it. Complete export retains 1043 prevalidation/replay behavior. No new backend/schema/dependency was added.
 
 Security: confined paths, existing identity validation and secret redaction remain. Correctness: focused regression evidence covers the changed success/failure branches. Efficiency: bounded local storage traversal; no new background collector. Usability: visible outcomes and errors. Architecture: existing app/domain/plugin ownership and standalone bundle contract remain. No speculative refactor is required.
+
+
+The final export review found the teardown delegate accepted a reported retained-record conflict. The shared delegate now fails closed, preserving both copies; the real replay regression passes alongside all 1043/1045 branch tests (46 pass). This resolves the caller-side disposal gap without changing the copy service contract.
 
 ### References
 
