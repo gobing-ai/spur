@@ -91,6 +91,16 @@ Generate the code and **cite the source** (doc URL + date, or `pkg@version` + th
 point of use or in the task's notes. A claim about external behavior without a citation is
 unverified — flag it as such rather than presenting it as fact.
 
+### Step 5 — Close with a verification verdict
+
+Before finishing, verify the citations for the API/library claims you emitted and close with one
+line: `Verification: HIGH|MEDIUM|LOW — <first failing check and deviation, or 'all checks passed'>`.
+
+- **Citation coverage** — every API/library claim in the output carries a source citation (doc URL + date, or `pkg@version` + file/symbol); no uncited claim is asserted as fact.
+- **Source authority** — each citation points at the pinned version's primary source (installed signature/source, or official docs for the lockfile version), not the latest docs or memory.
+- **Honest confidence** — the stated HIGH/MEDIUM/LOW matches the evidence: HIGH requires a check against the pinned source this session; MEDIUM/LOW items are labeled, and LOW is never presented as fact.
+- **HIGH** — all three checks pass. **MEDIUM** — coverage intact but some citations are off-version (latest docs for a pinned dependency) or secondary-source only. **LOW** — an API/library claim lacks any citation, or a LOW-confidence claim was asserted as fact.
+
 ## Common Rationalizations
 
 | Rationalization | Reality |
@@ -116,6 +126,7 @@ unverified — flag it as such rather than presenting it as fact.
 - [ ] Both questions answered — the API exists **and** is called within its contract.
 - [ ] Claims about external behavior carry a citation (source + date, or `pkg@version` + symbol); unverifiable ones are flagged, not asserted.
 - [ ] Confidence is stated honestly (HIGH/MEDIUM/LOW); nothing at LOW was presented as fact.
+- [ ] Run closes with the Step 5 verdict line: `Verification: HIGH|MEDIUM|LOW — <first failing check and deviation, or 'all checks passed'>`.
 
 ## See also
 
