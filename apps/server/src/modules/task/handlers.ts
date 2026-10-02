@@ -104,12 +104,25 @@ export function createTaskHandlers(ctx: ServerContext) {
             // logger — dropping the guarded result also dropped the only record of the
             // unreconciled row. Same contract as the CLI warning (1047 R3): the task
             // file write stands, the transport DTO is unchanged, and replaying the same
-            // terminal transition repairs the row.
+            // terminal transition repairs the row. Task 1054: the sibling post-commit
+            // audit signal `closeAuditError` (done close-audit fields, unforced close)
+            // now reports through the same logger for symmetry with the CLI (1051 AC3).
             if (guarded.kind === 'transitioned' && guarded.result.bookkeepingError !== undefined) {
                 ctx.logger.error(
                     `task ${input.wbs}: failed to reconcile task-lifecycle bookkeeping row after transition to ${guarded.result.toStatus}: ${guarded.result.bookkeepingError} ` +
                         `(task file is committed; replay the same terminal transition, e.g. \`spur task record ${input.wbs} --transition ${input.toStatus}\`, to repair)`,
                     { wbs: input.wbs, toStatus: guarded.result.toStatus },
+                );
+            }
+            // 1054 R1: same log-and-continue treatment for closeAuditError — the CLI
+            // reports this field (task.ts:680,:1258) and the producer already sets it on
+            // unforced closes (task-transition.ts:297); the handler previously dropped
+            // it by omission. Transport DTO stays unchanged (non-goal in the 1054 Design).
+            if (guarded.kind === 'transitioned' && guarded.result.closeAuditError !== undefined) {
+                ctx.logger.error(
+                    `task ${input.wbs}: failed to record done close audit fields after transition to ${input.toStatus}: ${guarded.result.closeAuditError} ` +
+                        `(task file is committed; replay the same terminal transition, e.g. \`spur task record ${input.wbs} --transition ${input.toStatus}\`, to repair)`,
+                    { wbs: input.wbs, toStatus: input.toStatus },
                 );
             }
             return { ok: true as const, data: { wbs: input.wbs, status: input.toStatus } };

@@ -1,12 +1,14 @@
 ---
 schema_version: 1
 name: Report closeAuditError from the server task transition handler
-status: todo
+status: done
 template: issue
 created_at: 2026-10-02T20:15:07.141Z
-updated_at: "2026-10-02T20:45:36.274Z"
+updated_at: "2026-10-02T21:59:39.822Z"
 feature_id: D62
 
+done_forced: "false"
+done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-runall-d62-1c23/.spur/memory/evidence/1054-verdict.json
 ---
 
 ## 1054. Report closeAuditError from the server task transition handler
@@ -63,15 +65,38 @@ Verified HIGH 2026-10-02: producer sets the field (`task-transition.ts:281-297`,
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change map (Design applied as proposed):
+
+- **Handler block** — `apps/server/src/modules/task/handlers.ts:118-126`: new `closeAuditError` branch mirroring the 1051 R3 `bookkeepingError` block: `guarded.kind === 'transitioned' && guarded.result.closeAuditError !== undefined` → `ctx.logger.error` with wbs, target status, the error detail, and the same replay guidance (`spur task record <wbs> --transition <toStatus>`), plus structured `{wbs, toStatus}` metadata. Log-and-continue: never throws, transition outcome and DTO `{ok, data:{wbs,status}}` unchanged.
+- **Comment extension** — the 1051 R3 comment above the bookkeeping branch extended by two sentences (task 1054): both post-commit audit signals report through the same logger.
+- **Type surface** — `packages/app/src/services/planning-write-service.ts:165-172`: `WriteResult` gained the documented optional `closeAuditError?: string`. Root-cause note: the producer already spread the field into its result (`packages/app/src/services/task-transition.ts:298`, untouched per the Design non-goal), but nothing ever read it off the `WriteResult` type, so the gap was invisible until this handler read it (typecheck TS2339). `task-transition.ts` itself is unmodified.
+- **Test** — `apps/server/tests/modules/task/handlers.test.ts:266-300`: handler-level test mocks `transitionTask` resolving `closeAuditError`, spies `ctx.logger.error`, asserts the message carries wbs ('0001'), target status ('done'), the detail, replay guidance, structured metadata `{wbs, toStatus}`, and the unchanged DTO.
 
 ### Testing
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | apps/server/src/modules/task/handlers.ts:118 closeAuditError logger.error with wbs/status/error/replay; handlers.test.ts 1054 R1 test asserts all four + unchanged outcome |
+| R2 | MET | DTO assertion {ok:true,data:{wbs,status}} in the new test; apps/server suite green (22/0); full gate 9757/0 |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+SECUA self-review of the full diff, 2026-10-02:
+
+| Priority | Finding | Disposition |
+| --- | --- | --- |
+| P1 | — | None found. |
+| P2 | — | None found. |
+| P3 | `WriteResult` never declared `closeAuditError` although the producer spread it — a latent type gap surfaced as TS2339 when the handler first read the field | Fixed at the type (`planning-write-service.ts:165-172`), the minimal root-cause surface; `task-transition.ts` untouched per the Design non-goal. |
+| P4 | Handler message uses `input.toStatus` while the sibling bookkeeping message uses `guarded.result.toStatus` | Kept per the Design's verbatim mirror instruction; both values are the requested/achieved terminal status in the guarded path, and the structured metadata carries the same status, so operator ambiguity is nil. |
+
+- **Traceability** — R1→AC1 (handler test asserts wbs/status/error/replay + unchanged outcome), R2→AC2 (DTO assertion; full suite green). Symmetry with 1051 AC3 verified line-by-line against the sibling block.
+- **Disposition** — No P1/P2 findings; the P3 type gap is closed with a documented optional field. Residual risk: none identified beyond the P4 cosmetic divergence, which follows the accepted Design.
 
 ### References
 
@@ -82,3 +107,8 @@ Verified HIGH 2026-10-02: producer sets the field (`task-transition.ts:281-297`,
 - Origin: 1051 review finding F5 (P4); session verification pass 2026-10-02 (HIGH confidence).
 
 ### History
+
+- 2026-10-02T21:51:58.815Z todo → wip (system)
+- 2026-10-02T21:59:33.789Z wip → testing (system)
+- 2026-10-02T21:59:39.818Z testing → done (system)
+

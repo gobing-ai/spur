@@ -1596,12 +1596,22 @@ export class TaskCheckService extends PlanningCheckService {
                     exists = false;
                 }
                 if (!exists) {
+                    // Task 1055 R1(b): a scope-shaped path (`@pkg/...`) can never resolve
+                    // repo-relative — it cites an external package. Stay fail-closed (same
+                    // code/severity) but emit the exact frozen external-evidence rewrite
+                    // (task 0584 / ADR-062 form) instead of the generic pointer, so the
+                    // author can fix the citation in one step rather than diagnosing the
+                    // checker's classification rules.
+                    const scoped = /^(@[^/\s]+\/[^/\s]+)\/(.+)$/.exec(cite.path);
+                    const detail = scoped
+                        ? `external package path — rewrite in the frozen external-evidence form: Evidence: ${scoped[1]} \`${scoped[2]}\` line ${cite.startLine}${cite.endLine ? `-${cite.endLine}` : ''} (origin and line number outside the backticks; task 0584 / ADR-062)`
+                        : `file not found at ${cite.path} (from project root). Point the citation at the code that implements this row, or move it to the external-evidence form if the file is not in this repo.`;
                     findings.push({
                         layer: 'L4',
                         code: FINDING_CODES.L4_ANCHOR_UNRESOLVED,
                         severity: resolutionSeverity,
                         section,
-                        message: `Unresolved line anchor \`${cite.raw}\` — file not found at ${cite.path} (from project root). Point the citation at the code that implements this row, or move it to the external-evidence form if the file is not in this repo.`,
+                        message: `Unresolved line anchor \`${cite.raw}\` — ${detail}`,
                     });
                     reported++;
                     continue;

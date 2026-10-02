@@ -1,12 +1,14 @@
 ---
 schema_version: 1
 name: Classify nested .spur/run citations in persist-out instead of truncating to directory name
-status: todo
+status: done
 template: issue
 created_at: 2026-10-02T21:08:29.604Z
-updated_at: "2026-10-02T21:14:01.629Z"
+updated_at: "2026-10-02T22:44:40.625Z"
 feature_id: D62
 
+done_forced: "false"
+done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-runall-d62-1c23/.spur/memory/evidence/1056-verdict.json
 ---
 
 ## 1056. Classify nested .spur/run citations in persist-out instead of truncating to directory name
@@ -25,9 +27,9 @@ Worked around in-session by flattening the six files to direct-child names (`tri
 
 ### Acceptance Criteria
 
-- [ ] AC1: A merged task file citing `.spur/run/<dir>/<file>` where `<dir>` exists as a directory in the invoking tree no longer fatals persist-out; the citation resolves to a declared skip reason (or a copied nested file, per R1 choice) — test in packages/app persist-out/0984 suite.
-- [ ] AC2: Existing direct-child citation behavior is unchanged — full existing inline-run-setup/0984 test suite passes without modification.
-- [ ] AC3: Classifier decision has unit evidence (capture-then-classify or resolve-path case) in packages/app tests, with the R1 design choice stated in the test name or comment.
+- AC1: A merged task file citing `.spur/run/<dir>/<file>` where `<dir>` exists as a directory in the invoking tree no longer fatals persist-out; the citation resolves to a declared skip reason (per the R1 skip choice) — test in packages/app persist-out/0984 suite.
+- AC2: Existing direct-child citation behavior is unchanged — full existing inline-run-setup/0984 test suite passes without modification.
+- AC3: Classifier decision has unit evidence (capture-then-classify) in packages/app tests, with the R1 design choice stated in the test name or comment.
 
 ### Q&A
 
@@ -79,22 +81,45 @@ The plugin twin `plugins/sp/scripts/inline-run-setup.ts` is a thin loader that "
 
 ### Root Cause
 
-<!-- Verified underlying cause with file:line evidence. Fill once reproduced/isolated. -->
+Verified by RED test reproduction (`packages/app/tests/services/persist-worktree-runs.test.ts` 1056 tests, pre-fix): `RUN_CITATION_RE` (packages/app/src/services/inline-run-setup.ts:235) captures only the first path component — its charset excludes `/` and nothing examines what follows — so `.spur/run/<dir>/<file>` collapses to an obligation for `<dir>`. With `<dir>` a directory absent from the worktree, the obligation path hits the missing-in-both refusal (:453; `readExistingRunFile` on the invoking-tree directory fails its read and reports undefined); after hand-copying the directory into the worktree, the not-a-regular-file refusal fires instead. Both 1052 fatals reproduce from one root cause: subpath captures never reach the 0984 R5 classifier.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Chosen design (R1 recommendation): classify, don't resolve — skip, never obligate:
+
+- **Regex** — `packages/app/src/services/inline-run-setup.ts:235` (`RUN_CITATION_RE`): added capturing group 2 `(\/[^\s\`]*)?` after the name — an optional subpath continuation (stops at whitespace/backtick). A captured continuation, not a `/`-negative lookahead: the greedy name charset would backtrack to a SHORTER capture to satisfy a lookahead, yielding a wrong name (`triage-1051-105` out of `triage-1051-1056`). The `asLiteralRunFileName` contract comment (:218-234) now states the subpath rule and why classify-not-resolve (R1) — it matches the 0984 R5 "not a file the copy set can own" contract with zero new path-traversal surface (R3 satisfied vacuously: no nested resolution exists to validate).
+- **Extraction loop** — `packages/app/src/services/inline-run-setup.ts:357-382`: `match[2] !== undefined` → the name joins `citedDirSkips` (Set, dedupes per directory: one row per extraction pass) instead of `citedNames`; skip rows consume no `MAX_CITED_RUN_FILES` budget (they add no copy work) — choice documented in the loop comment. Flush into the outcome at `packages/app/src/services/inline-run-setup.ts:423-424` as `cited-directory:<name>` rows; the obligation pass iterates `citedNames` only, so subpath citations can never reach the copy/divergence/fatal pipeline.
+- **Packaging (anti-drift)** — `bun run build:scripts` regenerated the installed twin `plugins/sp/lib/inline-run.generated.mjs` (contains the new classifier); `bun run plugin-smoke` PASS — plugin surface standalone and installs clean.
+- **Tests** — `packages/app/tests/services/persist-worktree-runs.test.ts` (0984 block): AC3 extraction-time classification with `<dir>` absent from BOTH trees (pre-fix this reproduces the exact 1052 "missing in both" fatal — RED confirmed); AC1 the 1052 shape (`<dir>` in invoking tree only, two subpath citations of one directory) → success with one deduped `cited-directory:triage-1051-1056` skip row. All four 0984-lineage describe blocks (0984/1012/1034/1045) pass UNMODIFIED (R2).
 
 ### Testing
 
-- Focused: `(cd packages/app && bun test tests/services/persist-worktree-runs.test.ts)` — new cases plus all four 0984-lineage describe blocks unmodified.
-- Service-wide: `(cd packages/app && bun test tests/services/)` — guards adjacent planning/teardown services.
-- Packaging: `bun run --filter @gobing-ai/spur build:bundle` then `bun run plugin-smoke` (AGENTS.md plugin standalone contract).
-- Repo gate at done: `bun run spur-check` (task-local) per pipeline; corpus edits check affected inputs only (T11).
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | packages/app/src/services/inline-run-setup.ts:235 continuation group 2 + :357-382 citedDirSkips classification + :423 flush; AC3 unit: extraction-time cited-directory skip with dir absent from both trees (RED reproduced 1052 fatal first); AC1 unit: invoking-tree dir + two subpath citations → one deduped skip row; contract comment :218-234 documents the choice |
+| R2 | MET | all four 0984-lineage describe blocks (0984/1012/1034/1045) in packages/app/tests/services/persist-worktree-runs.test.ts pass unmodified — 35/35 |
+| R3 | MET | no nested resolution surface added (classify-not-resolve per R1 recommendation); asLiteralRunFileName still enforces SAFE_RUN_ID_RE + no '..' before any obligation |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+SECUA self-review of the full diff, 2026-10-02:
+
+| Priority | Finding | Disposition |
+| --- | --- | --- |
+| P1 | — | None found. |
+| P2 | — | None found. |
+| P3 | A subpath citation whose `<name>` is non-literal (e.g. `run-*/sub.log`) is silently dropped, same as today's non-literal handling — no skip row is emitted for it | Accepted: R1's scope is the truncation defect for literal names; glob classification stays non-literal by the unchanged `asLiteralRunFileName` contract (Q&A: globs remain unresolved). |
+| P4 | `citedDirSkips` flush sits after `citedSkips`' declaration (TDZ forced the placement); outcome row order interleaves DB skips, record skips, cited skips, dir skips | Cosmetic — outcome consumers filter by reason prefix, and the CLI prints the array as-is; no ordering contract exists. |
+
+- **Traceability** — R1 → continuation capture + `cited-directory` classification + authoritative contract comment; R2 → 0984-lineage suites unmodified and green; R3 → vacuously satisfied (no nested resolution; `asLiteralRunFileName` still enforces the safe single-component charset before any obligation). AC1/AC2/AC3 → unit evidence per test names.
+- **Disposition** — No P1/P2 findings. Teardown semantics: a subpath citation is a declared skip (evidence must already exist in the invoking tree, same as `cited-non-file`); missing-in-both and divergence remain fatal for direct-child obligations only. Residual risk: a task citing ONLY subpaths of a directory that does not exist in the invoking tree now succeeds with a skip row where it previously fataled — this is the designed outcome (0984 R5: the copy set never owned it), and the skip row makes the classification visible in the outcome JSON.
+
+- **Post-review adjustment (recorded)** — first done attempt blocked by the structural gate: (1) two change-map anchors were bare (`inline-run-setup.ts:…`) → rewritten to repo-root paths; (2) the issue-template checkbox AC rows (`- [ ] AC1:`) key the L4.uncovered-task-scenario check, and feature D62's AC carries no persist-out scenario — converted the AC section to the corpus's freeform `- ACn:` precedent (wording preserved; 1053–1055 pass the same gate in this style) and noted the template mismatch as the underlying cause. No code or test changes in the adjustment.
 
 ### References
 
@@ -105,3 +130,8 @@ The plugin twin `plugins/sp/scripts/inline-run-setup.ts` is a thin loader that "
 - Sibling surface: `plugins/sp/scripts/inline-run-setup.ts` twin + `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts` (0984 contract tests).
 
 ### History
+
+- 2026-10-02T22:29:00.057Z todo → wip (system)
+- 2026-10-02T22:42:51.618Z wip → testing (system)
+- 2026-10-02T22:44:28.484Z testing → done (system)
+

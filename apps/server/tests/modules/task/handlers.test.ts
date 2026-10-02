@@ -250,6 +250,43 @@ describe('task handlers', () => {
         expect(errors[0]?.msg).toContain('replay');
     });
 
+    test('transition handler reports a close-audit failure via the server logger (1054 R1)', async () => {
+        const errors: Array<{ msg: string; data?: unknown }> = [];
+        const handlers = createTaskHandlers(
+            makeCtx(
+                {},
+                {
+                    logger: {
+                        error: (msg: string, data?: unknown) => {
+                            errors.push({ msg, data });
+                        },
+                    },
+                    transitionTask: async () => ({
+                        kind: 'transitioned' as const,
+                        result: {
+                            ref: { id: '0001', filePath: '/test/0001.md', kind: 'task' as const, folder: '.' },
+                            fromStatus: 'testing',
+                            toStatus: 'done',
+                            closeAuditError: 'boom recording close audit fields',
+                        },
+                    }),
+                },
+            ),
+        );
+        const fn = handlers.transition['~orpc'].handler as unknown as (opts: {
+            input: { wbs: string; toStatus: string };
+        }) => Promise<{ ok: boolean; data: { wbs: string; status: string } }>;
+        const result = await fn({ input: { wbs: '0001', toStatus: 'done' } });
+        // The committed write stands: ok:true with the unchanged DTO (1054 R2).
+        expect(result).toEqual({ ok: true, data: { wbs: '0001', status: 'done' } });
+        expect(errors).toHaveLength(1);
+        expect(errors[0]?.msg).toContain('0001');
+        expect(errors[0]?.msg).toContain('done');
+        expect(errors[0]?.msg).toContain('boom recording close audit fields');
+        expect(errors[0]?.msg).toContain('replay');
+        expect(errors[0]?.data).toEqual({ wbs: '0001', toStatus: 'done' });
+    });
+
     test('transition handler stays silent on a clean transition (no logger.error)', async () => {
         const errors: unknown[] = [];
         const handlers = createTaskHandlers(

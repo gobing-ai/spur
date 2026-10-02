@@ -214,17 +214,25 @@ export const MAX_CITED_RUN_FILES = 64;
 
 /**
  * A cited run-evidence reference extracted from a merged task file (0984 R3): `.spur/run/`
- * followed by name characters. The charset deliberately includes template metachars
- * (`*`, `…`, `{`, `<`, `?`, `,`) so abbreviated and glob references stay attached to one
- * capture and are classified non-literal by {@link asLiteralRunFileName}, instead of a
- * truncated prefix (`fadca099-` out of `fadca099-…-wrapup-learnings.md`) masquerading as a
- * real filename. The leading alnum requirement already refuses `<runId>-…` placeholders and
- * `..` traversal outright. The lookbehind keeps only repo-relative citations (`.spur/run/…`,
- * `./.spur/run/…`): a root-qualified path (`knowledge-kit/.spur/run/…`, `/abs/.spur/run/…`,
- * `~/.spur/run/…`) is another project's evidence, which this teardown neither owns nor can
- * lose, so it must not trip the missing-in-both refusal.
+ * followed by name characters, with an optional subpath continuation group. The charset
+ * deliberately includes template metachars (`*`, `…`, `{`, `<`, `?`, `,`) so abbreviated and
+ * glob references stay attached to one capture and are classified non-literal by
+ * {@link asLiteralRunFileName}, instead of a truncated prefix (`fadca099-` out of
+ * `fadca099-…-wrapup-learnings.md`) masquerading as a real filename. The leading alnum
+ * requirement already refuses `<runId>-…` placeholders and `..` traversal outright. The
+ * lookbehind keeps only repo-relative citations (`.spur/run/…`, `./.spur/run/…`): a
+ * root-qualified path (`knowledge-kit/.spur/run/…`, `/abs/.spur/run/…`, `~/.spur/run/…`) is
+ * another project's evidence, which this teardown neither owns nor can lose, so it must not
+ * trip the missing-in-both refusal.
+ *
+ * 1056 R1 (skip, not resolve): when the name is followed by `/rest`, the citation addresses
+ * a subpath of `.spur/run/<name>` — the copy set owns direct-child files only (0984 R5), so
+ * the continuation is captured as group 2 and the extraction loop classifies the citation as
+ * `cited-directory:<name>` instead of obligating `<name>`. A captured continuation — not a
+ * negative lookahead on `/` — is required: the greedy name charset would backtrack to a
+ * SHORTER capture to satisfy a lookahead, yielding a wrong name (`triage-1051-105`).
  */
-const RUN_CITATION_RE = /(?<![\w~:-]|[\w~:-]\/)\.spur\/run\/([A-Za-z0-9][A-Za-z0-9._*?<>{}|,\u2026-]*)/g;
+const RUN_CITATION_RE = /(?<![\w~:-]|[\w~:-]\/)\.spur\/run\/([A-Za-z0-9][A-Za-z0-9._*?<>{}|,\u2026-]*)(\/[^\s`]*)?/g;
 
 /**
  * Reduce one captured reference to a literal direct-child file name, or `undefined` when it
@@ -347,6 +355,7 @@ export async function persistWorktreeRuns(input: PersistWorktreeRunsInput): Prom
     // unresolved/unsafe/over-cap citation fails with zero side effects (the driver blocks
     // teardown on the non-zero exit and retains the worktree via WT-5).
     const citedNames = new Set<string>();
+    const citedDirSkips = new Set<string>();
     for (const taskFile of input.taskFiles ?? []) {
         let content: string;
         try {
@@ -356,7 +365,17 @@ export async function persistWorktreeRuns(input: PersistWorktreeRunsInput): Prom
         }
         for (const match of content.matchAll(RUN_CITATION_RE)) {
             const name = asLiteralRunFileName(match[1] ?? '');
-            if (name === undefined || citedNames.has(name)) continue;
+            if (name === undefined) continue;
+            // 1056 R1: a subpath citation (`.spur/run/<name>/<rest>`) is classified through
+            // the 0984 R5 vocabulary, never obligated — the copy set owns direct-child files
+            // only, and the subpath evidence must already exist in the invoking tree (same
+            // contract as cited-non-file). Skip rows consume no MAX_CITED_RUN_FILES budget
+            // (they add no copy work) and dedupe per directory: one row per extraction pass.
+            if (match[2] !== undefined) {
+                citedDirSkips.add(name);
+                continue;
+            }
+            if (citedNames.has(name)) continue;
             if (citedNames.size >= MAX_CITED_RUN_FILES) {
                 throw new Error(
                     `persist-out: merged task files cite more than ${MAX_CITED_RUN_FILES} distinct ` +
@@ -414,6 +433,9 @@ export async function persistWorktreeRuns(input: PersistWorktreeRunsInput): Prom
     }
     const citedCopies: Array<{ name: string; sourcePath: string; targetPath: string }> = [];
     const citedSkips: Array<{ id: string; reason: string }> = [];
+    // 1056 R1: flush the extraction-time subpath classifications into the outcome's skip
+    // vocabulary; the obligation pass below iterates citedNames only and never sees these.
+    for (const name of citedDirSkips) citedSkips.push({ id: name, reason: `cited-directory:${name}` });
     for (const name of citedNames) {
         // 1026 R1: a citation may name a run record, which now lives in the durable plane.
         // The copy keeps its source plane — scratch evidence lands in the invoking scratch,
@@ -1007,9 +1029,16 @@ export function writeInlineRunOutcome(runId: string, outcome: InlineRunStateOutc
  * close. Unlike {@link writeInlineRunOutcome} (best-effort setup reporting), a failure is
  * RETURNED so the close path can report it loudly and be replayed to repair.
  *
+ * @param context optional authoritative facts from the call site: `startedAt` is the committed
+ *   run row's `started_at` (task 1053 R4), used as the fallback seed when no prior sidecar
+ *   exists so a rebuild-from-nothing never fabricates the projection time as the start time.
  * @returns `undefined` on success, else a failure detail carrying replay guidance.
  */
-export function projectInlineRunClose(runId: string, status: 'done' | 'failed' | 'paused'): string | undefined {
+export function projectInlineRunClose(
+    runId: string,
+    status: 'done' | 'failed' | 'paused',
+    context?: { startedAt?: string },
+): string | undefined {
     try {
         const runDir = runStoragePaths(process.cwd()).recordsDir;
         if (!existsSync(runDir)) mkdirSync(runDir, { recursive: true });
@@ -1024,18 +1053,47 @@ export function projectInlineRunClose(runId: string, status: 'done' | 'failed' |
             // Missing or unreadable prior state: rebuild from the committed close alone.
         }
         const at = new Date().toISOString();
-        const state = {
+        const state: Record<string, unknown> = {
             schemaVersion: 1 as const,
             ...prior,
             runId,
             status,
+            // ok contract (0948 R7 lineage, settled by task 1053 F3): `ok` records the
+            // sidecar projection's integrity — the state file was written — never the run
+            // outcome. The run outcome lives in `status` (+ the DB `terminal_reason`), and
+            // `error` is reserved for projection-write failures, which return without
+            // writing; so a successfully written sidecar is always `ok: true` and never
+            // carries an `error` (the invariant below). Pinned per terminal status by the
+            // close-describe tests in inline-run-driver.test.ts.
             ok: true,
-            startedAt: typeof prior.startedAt === 'string' ? prior.startedAt : at,
+            // task 1053 F4: a missing prior sidecar rebuilds from the committed close; seed
+            // the start time from the authoritative run row (threaded by closeRun) instead of
+            // fabricating the projection time. The projection-time `at` stays as the last
+            // bounded fallback for direct callers that pass no context.
+            startedAt: typeof prior.startedAt === 'string' ? prior.startedAt : (context?.startedAt ?? at),
             updatedAt: at,
         };
+        // task 1053 F1: a successful projection never carries a prior `error` — the doc
+        // comment promises "any stale error dropped on success" (the same 0948 R7 rule
+        // writeInlineRunOutcome applies at re-setup); the spread above would otherwise
+        // keep it. `error` re-enters only through a projection-write failure, which does
+        // not write a sidecar at all.
+        delete state.error;
         const temp = `${statePath}.tmp`;
-        writeFileSync(temp, `${JSON.stringify(state, null, 4)}\n`);
-        renameSync(temp, statePath);
+        try {
+            writeFileSync(temp, `${JSON.stringify(state, null, 4)}\n`);
+            renameSync(temp, statePath);
+        } catch (error) {
+            // task 1053 F2: never leave `.tmp` residue behind (0926 R1 parity with
+            // writeInlineRunOutcome); the failing cleanup must not mask the replay-guidance
+            // detail the outer catch returns.
+            try {
+                unlinkSync(temp);
+            } catch {
+                // Nothing to clean (temp was never created).
+            }
+            throw error;
+        }
         return undefined;
     } catch (error) {
         const detail = error instanceof Error ? error.message : String(error);
@@ -1191,7 +1249,13 @@ export async function runInlineRunTrace(input: InlineRunTraceInput): Promise<num
         // 1051 AC2: the row is committed terminal — project the committed status into the
         // run-record state sidecar before reporting, so the pair record always agrees with
         // the database (including the zero-action done defect below, whose commit stands).
-        const stateError = input.close ? projectInlineRunClose(input.runId, input.status) : undefined;
+        // closeRun threaded the committed run row's started_at (task 1053 F4) as the
+        // rebuild-from-nothing seed.
+        const stateError = input.close
+            ? projectInlineRunClose(input.runId, input.status, {
+                  startedAt: typeof result.startedAt === 'string' ? result.startedAt : undefined,
+              })
+            : undefined;
         if (input.close && input.status === 'done' && result.actionRows === 0) {
             // A run finalized `done` with ZERO recorded action rows is a bookkeeping defect
             // (task 0975 R2): the row is already terminal — closeRun ran above — but the
@@ -1215,7 +1279,11 @@ export async function runInlineRunTrace(input: InlineRunTraceInput): Promise<num
             );
             return 1;
         }
-        process.stdout.write(`${JSON.stringify({ ...result, runId: input.runId })}\n`);
+        // The stdout close shape stays `{ok, runId, actionRows?}` (0868 finding #1): the
+        // task-1053 startedAt thread-through is for the sidecar projection, not a stdout
+        // field — strip it before reporting.
+        const { startedAt: _threaded, ...stdoutResult } = result;
+        process.stdout.write(`${JSON.stringify({ ...stdoutResult, runId: input.runId })}\n`);
         return 0;
     } catch (error) {
         if (input.close && (error as { name?: string }).name === 'RunRowNotFoundError') {

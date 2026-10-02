@@ -288,13 +288,18 @@ export class WorkflowActionTraceWriter implements WorkflowPersistenceAdapter {
      * recorded actions instead of trusting the status alone. Counted through the raw
      * domain DAO; omitted when the writer was built without a raw db handle (the engine
      * path, which never calls closeRun).
+     *
+     * Also returns `startedAt` — the committed run row's `started_at`, read from the row
+     * loaded before the finalize (task 1053 R4): the run-record sidecar projection uses it
+     * as the authoritative fallback seed when no prior sidecar exists, instead of
+     * fabricating the projection time.
      */
     async closeRun(
         runId: string,
         status: WorkflowStatus,
         completedAt?: string,
         reason?: string,
-    ): Promise<{ ok: true; actionRows?: number }> {
+    ): Promise<{ ok: true; actionRows?: number; startedAt?: string }> {
         const existing = await this.inner.loadRun(runId);
         if (existing === undefined) {
             throw new RunRowNotFoundError(runId);
@@ -308,9 +313,9 @@ export class WorkflowActionTraceWriter implements WorkflowPersistenceAdapter {
                 ? undefined
                 : classifyTerminalReason({ status, engineReason: reason, errorText: reason }),
         );
-        if (this.db === undefined) return { ok: true };
+        if (this.db === undefined) return { ok: true, startedAt: existing.started_at };
         const rows = await new ActionRunDao(this.db).actionRowsByRunId(runId);
-        return { ok: true, actionRows: rows.length };
+        return { ok: true, actionRows: rows.length, startedAt: existing.started_at };
     }
 
     private async guard<T>(

@@ -467,6 +467,53 @@ describe('persistWorktreeRuns cited evidence + record tolerance (task 0984)', ()
         }
     });
 
+    // 1056 AC3: the subpath decision is extraction-time classification (R1 skip choice),
+    // independent of tree state — even with the directory absent from BOTH trees, the
+    // citation must not become an obligation for `<dir>` (today it fatals 'missing in both').
+    test('a subpath citation is classified cited-directory at extraction, even when absent from both trees (1056 R1)', async () => {
+        const from = makeDir('subpath-from-');
+        const to = makeDir('subpath-to-');
+        try {
+            await seedWorktree(from.dir, 'run_1056');
+            const taskFile = writeTaskFile(to.dir, 'docs/task-1056a.md', ['triage-1051-1056/bundle-check.log']);
+            const result = await persistWorktreeRuns({
+                fromWorkdir: from.dir,
+                toWorkdir: to.dir,
+                taskFiles: [taskFile],
+            });
+            expect(result.ok).toBe(true);
+            expect(result.skipped).toEqual([{ id: 'triage-1051-1056', reason: 'cited-directory:triage-1051-1056' }]);
+        } finally {
+            from.cleanup();
+            to.cleanup();
+        }
+    });
+
+    // 1056 AC1: the exact 1052 defect shape — `<dir>` exists only in the invoking tree, and
+    // multiple subpath citations of one directory dedupe to a single skip row.
+    test('invoking-tree directory with cited subpaths succeeds with one deduped skip row (1056 AC1)', async () => {
+        const from = makeDir('subpath-from-');
+        const to = makeDir('subpath-to-');
+        try {
+            await seedWorktree(from.dir, 'run_1056b');
+            mkdirSync(join(to.dir, '.spur', 'run', 'triage-1051-1056'), { recursive: true });
+            const taskFile = writeTaskFile(to.dir, 'docs/task-1056b.md', [
+                'triage-1051-1056/bundle-check.log',
+                'triage-1051-1056/spur-check.log',
+            ]);
+            const result = await persistWorktreeRuns({
+                fromWorkdir: from.dir,
+                toWorkdir: to.dir,
+                taskFiles: [taskFile],
+            });
+            expect(result.ok).toBe(true);
+            expect(result.skipped).toEqual([{ id: 'triage-1051-1056', reason: 'cited-directory:triage-1051-1056' }]);
+        } finally {
+            from.cleanup();
+            to.cleanup();
+        }
+    });
+
     test('a citation resolving to a symlink is reported as a symlink, never followed or copied (R3)', async () => {
         const from = makeDir('cited-link-from-');
         const to = makeDir('cited-link-to-');

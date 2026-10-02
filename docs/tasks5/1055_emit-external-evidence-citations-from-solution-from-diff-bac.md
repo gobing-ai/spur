@@ -1,12 +1,14 @@
 ---
 schema_version: 1
 name: Emit external-evidence citations from solution-from-diff backfill
-status: todo
+status: done
 template: issue
 created_at: 2026-10-02T20:15:07.448Z
-updated_at: "2026-10-02T20:45:27.794Z"
+updated_at: "2026-10-02T22:28:49.658Z"
 feature_id: D62
 
+done_forced: "false"
+done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-runall-d62-1c23/.spur/memory/evidence/1055-verdict.json
 ---
 
 ## 1055. Emit external-evidence citations from solution-from-diff backfill
@@ -57,15 +59,38 @@ Root cause is a contract asymmetry, not a rendering bug: the checker's external-
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change map (both Design surfaces; fail-closed preserved):
+
+- **Surface (b) — precise gate failure** — `packages/app/src/services/task-check.ts:1601-1622`: in the L4 unresolved-anchor branch, a scope-shaped path (`^@scope/pkg/...`, regex-captured as origin + rest) now emits the exact frozen external-evidence rewrite in the failure message — `Evidence: @scope/pkg \`rest\` line N` (origin and line number outside the backticks, task 0584 / ADR-062 form) — while keeping `L4.anchor-unresolved` at the same severity/code (fail-closed, R2). Non-scope unresolvable paths keep the generic message verbatim. The accept-path option was not added: `classifyExternalEvidence` already classifies well-formed external citations clean, so accepting anything more would weaken the gate.
+- **Surface (a) — authoring guidance** — `plugins/sp/skills/code-implementation/SKILL.md:187`: the Solution-formatting failure bullet now states the frozen external-evidence form for non-repo paths with a correct example and the wrong `` `@scope/...:line` `` form called out as gate-failing (task 1055).
+- **Renderer untouched** — `renderSolutionFromDiff` stays as-is per the corrected attribution (provably repo-path-only, Background/Q&A).
+- **Tests** — `packages/app/tests/services/task-check.test.ts:3704-3750` (in the `L4.anchor-unresolved` describe): (1) unresolvable `@scope/` anchor → still `error` severity, message carries `Evidence: @gobing-ai/ts-x \`src/persistence.ts\` line 108`; (2) unresolvable plain repo path → unchanged generic message, no `Evidence:` rewrite; (3) AC1 end-to-end repro — a change-map row in the frozen external-evidence form passes the done gate with zero anchor findings (the 1051 blocker shape, now green by construction).
 
 ### Testing
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | (a) plugins/sp/skills/code-implementation/SKILL.md:187 normative external-evidence line + wrong-form example; (b) packages/app/src/services/task-check.ts:1601 precise rewrite message for @scope/ anchors (unit test asserts message); AC1 repro test: external-evidence form change-map passes done gate clean |
+| R2 | MET | plain-path unit test pins unchanged generic message + error severity at done; corpus JSON shows zero L4.anchor-unresolved findings — fail-closed preserved |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+SECUA self-review of the full diff, 2026-10-02:
+
+| Priority | Finding | Disposition |
+| --- | --- | --- |
+| P1 | — | None found. |
+| P2 | — | None found. |
+| P3 | The scope regex `^(@[^/\s]+\/[^/\s]+)\/(.+)$` requires a non-empty rest path; a malformed bare `@scope/pkg:1` anchor (no file path) falls back to the generic message | Accepted: such a citation is already malformed beyond the rewrite can fix; the generic message still fails closed with actionable pointer. |
+| P4 | The rewrite renders a range as `line N-M` when the original cited a range; the frozen form also supports ranges (`classifyExternalEvidence` captures `N-M`) | Consistent with the classifier — no gap. |
+
+- **Traceability** — R1(a)→SKILL.md normative line with example pair; R1(b)→precise failure message (unit-tested, message contains the exact rewrite); R2→same code/severity verified by tests (1) and (2); AC1→end-to-end repro test passes the done gate clean; AC2→plain-path test unchanged behavior.
+- **Disposition** — No P1/P2 findings. Gate remains fail-closed; the improvement removes only the diagnose loop (the 1051 manual-repair class). Residual risk: none — corpus-wide audit confirms zero current findings on the changed path, so no behavior change on existing corpus.
 
 ### References
 
@@ -76,3 +101,8 @@ Root cause is a contract asymmetry, not a rendering bug: the checker's external-
 - Origin evidence: task 1051 Solution rows citing `@gobing-ai/ts-dual-workflow-engine/src/persistence.ts` (lines ~82/:138 post-repair), session record 2026-10-02.
 
 ### History
+
+- 2026-10-02T21:59:49.583Z todo → wip (system)
+- 2026-10-02T22:28:49.141Z wip → testing (system)
+- 2026-10-02T22:28:49.644Z testing → done (system)
+

@@ -1,13 +1,15 @@
 ---
 schema_version: 1
 name: Harden close-projection sidecar semantics in projectInlineRunClose
-status: todo
+status: done
 template: issue
 created_at: 2026-10-02T20:15:00.291Z
-updated_at: "2026-10-02T20:44:30.888Z"
+updated_at: "2026-10-02T21:51:16.533Z"
 feature_id: D62
 
 priority: P2
+done_forced: "false"
+done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-runall-d62-1c23/.spur/memory/evidence/1053-verdict.json
 ---
 
 ## 1053. Harden close-projection sidecar semantics in projectInlineRunClose
@@ -87,15 +89,44 @@ Verified by line inspection 2026-10-02 (session review pass; all HIGH except F4-
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Per-finding change map (Design decisions applied as proposed; see Review for the --auto owner-confirm note):
+
+- **F1 (stale error)** — `packages/app/src/services/inline-run-setup.ts:1050`: `state` is now typed `Record<string, unknown>` and `delete state.error` runs after the `{...prior}` spread, so any successful projection (done/failed/paused) drops a prior `error` — the invariant the doc comment already promised (0948 R7 rule parity with `writeInlineRunOutcome`). `error` can only re-enter via a projection-write failure, which never writes a sidecar.
+- **F2 (.tmp residue)** — `packages/app/src/services/inline-run-setup.ts:1058`: `writeFileSync`+`renameSync` wrapped in try/catch; the failure path best-effort `unlinkSync(temp)` then rethrows so the outer catch still returns the unmasked replay-guidance detail (0926 R1 parity).
+- **F3 (ok contract)** — `packages/app/src/services/inline-run-setup.ts:1035`: the hard-coded `ok: true` is now a documented contract — `ok` = sidecar projection integrity (write succeeded), never run outcome (run outcome is `status` + DB `terminal_reason`); comment cites the 0948 R7 lineage and task 1053. Schema stays v1; `run-record.ts` shape classification unchanged. Pinned per terminal status by the close-describe tests (done/paused/failed each assert `ok: true`).
+- **F4 (startedAt)** — Step 0 found `closeRun` already loads the run row pre-finalize, so the preferred param-threading path was taken: `packages/app/src/workflow/action-trace.ts:299` extends the return to `{ ok: true; actionRows?: number; startedAt?: string }` carrying `existing.started_at` (both db and engine paths); the emit call site (`packages/app/src/services/inline-run-setup.ts:1229`) threads it into the new optional `context.startedAt` param; the projection fallback chain is prior sidecar → committed run row → projection time (the last is now an explicitly documented bounded fallback for context-less direct callers). `projectInlineRunClose` stays fs-only (no DB handle).
+- **Stdout contract preserved** — `packages/app/src/services/inline-run-setup.ts:1259`: the close stdout stays exactly `{ok, runId, actionRows?}` (0868 finding #1); `startedAt` is stripped before reporting — it is sidecar threading, not a stdout field.
+- **Tests** — `packages/app/tests/services/inline-run-driver.test.ts:604`: the vacuous AC1 fixture now seeds `ok:false` + `error:"stale attach mismatch"` before the close; the injected-failure test asserts zero `.tmp` residue; new AC4 test rebuilds from a deleted sidecar and asserts `startedAt === runs.started_at`. `packages/app/tests/workflow/action-trace.test.ts:203`: the two `closeRun` return pins updated to the new shape.
+- **Installed twin** — `plugins/sp/lib/inline-run.generated.mjs` regenerated via `bun run build:scripts`; `bun run script-contract-check` PASS (17 scripts baselined, 0 violations).
 
 ### Testing
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | packages/app/src/services/inline-run-setup.ts:1050 delete state.error after spread; inline-run-driver.test.ts AC1 test seeds ok:false+error before close and asserts dropped |
+| R2 | MET | packages/app/src/services/inline-run-setup.ts:1058 unlink-in-failure path; injected-failure test asserts zero .tmp residue |
+| R3 | MET | contract comment packages/app/src/services/inline-run-setup.ts:1035; per-terminal-status ok:true pins in close-describe tests (done/paused/failed) |
+| R4 | MET | packages/app/src/workflow/action-trace.ts:299 closeRun returns started_at; AC4 test asserts rebuilt sidecar startedAt === runs.started_at |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+SECUA self-review of the full diff (functional traceability + quality), 2026-10-02:
+
+| Priority | Finding | Disposition |
+| --- | --- | --- |
+| P1 | — | None found. |
+| P2 | — | None found. |
+| P3 | `closeRun`'s engine path (no raw db) now also returns `startedAt` | Accepted: additive optional field, no caller depended on absence; no churn. |
+| P4 | `_threaded` unused-destructure at stdout emission | Intentional shape preservation (0868 finding #1); biome-clean under the underscore convention. |
+
+- **Traceability** — R1→AC1 (error-drop test, previously vacuous fixture now repro-shaped), R2→AC2 (residue assert on the injected-failure test), R3→AC3 (contract comment at the projection site + per-status `ok` pins), R4→AC4 (startedAt from `runs.started_at` via closeRun threading; bounded fallback documented in-code). All four ACs verified with file:line evidence in ## Solution.
+- **Disposition** — No P1/P2 findings. The Design's two owner-confirm decisions (F1 error-drop invariant; F3 ok=projection-integrity contract) were applied as proposed per the task's Design section rationale; this batch ran under `--auto`, so the proposals stand as the recorded contract — reversible via the sidecar schema (still v1) and the documented comment if the E7 owner revisits.
+- **Residual risk** — The bounded projection-time fallback remains for context-less direct callers (documented at `packages/app/src/services/inline-run-setup.ts:1043`); the production call site always threads the row value.
 
 ### References
 
@@ -105,3 +136,8 @@ Verified by line inspection 2026-10-02 (session review pass; all HIGH except F4-
 - Session evidence: verification Q&A entry (this task), findings table with confidence levels.
 
 ### History
+
+- 2026-10-02T21:25:31.273Z todo → wip (system)
+- 2026-10-02T21:51:16.036Z wip → testing (system)
+- 2026-10-02T21:51:16.530Z testing → done (system)
+

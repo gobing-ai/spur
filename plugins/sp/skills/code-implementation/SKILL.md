@@ -184,7 +184,7 @@ reproduce → isolate → minimal fix → regression guard.
 
 - Writing code without having read the immediate callers of what you're changing.
 - A `## Solution` section that lists files but not what changed or why.
-- A `## Solution` section with file references that are not in backtick `` `path:line` `` form (L3 requirement: `` `packages/app/src/foo.ts:123` `` or `` `packages/app/src/bar.ts:10-20` ``; paths from repo root).
+- A `## Solution` section with file references that are not in backtick `` `path:line` `` form (L3 requirement: `` `packages/app/src/foo.ts:123` `` or `` `packages/app/src/bar.ts:10-20` ``; paths from repo root). Non-repo paths (external packages, `@scope/...`) can never resolve repo-relative — cite them in the frozen external-evidence form instead: `Evidence: @gobing-ai/ts-x \`src/persistence.ts\` line 108` (origin and line number OUTSIDE the backticks). Wrong: `` `@gobing-ai/ts-x/src/persistence.ts:108` `` — the L4 gate fails it as an unresolvable anchor (task 1055).
 - A new abstraction with exactly one caller and no second use in sight.
 - The diff touches files unrelated to the task's scope.
 - The diff touches another WBS's surfaces, or the pass reads sibling `todo` / `wip` task files.

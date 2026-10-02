@@ -200,7 +200,9 @@ describe('WorkflowActionTraceWriter (task 0868 R4/R12)', () => {
         });
 
         const result = await writer.closeRun(RUN_ID, 'done');
-        expect(result).toEqual({ ok: true, actionRows: 1 });
+        // task 1053: closeRun also threads the committed run row's started_at for the
+        // run-record sidecar projection.
+        expect(result).toEqual({ ok: true, actionRows: 1, startedAt: expect.any(String) });
 
         const row = await new RunDao(projectDb.adapter).traceRowById(RUN_ID);
         expect(row?.status).toBe('done');
@@ -275,7 +277,7 @@ describe('WorkflowActionTraceWriter (task 0868 R4/R12)', () => {
         expect(await new ActionRunDao(projectDb.adapter).actionRowsByRunId(RUN_ID)).toHaveLength(0);
 
         // The run still reaches its declared terminal state.
-        expect(await writer.closeRun(RUN_ID, 'done')).toEqual({ ok: true });
+        expect(await writer.closeRun(RUN_ID, 'done')).toEqual({ ok: true, startedAt: expect.any(String) });
         expect((await new RunDao(projectDb.adapter).traceRowById(RUN_ID))?.status).toBe('done');
     });
 

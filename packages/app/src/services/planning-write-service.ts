@@ -169,6 +169,14 @@ export interface WriteResult {
      * can repair the row. Absent when the hook succeeded or was not configured.
      */
     readonly bookkeepingError?: string;
+    /**
+     * 1054 R1: message from a failed post-commit done close-audit reconciliation
+     * (unforced close). Set by the transition path (task-transition.ts:298); the
+     * CLI reports it and the server transition handler now logs it with the same
+     * log-and-continue contract as {@link bookkeepingError}. Absent on success or
+     * for forced closes.
+     */
+    readonly closeAuditError?: string;
 }
 
 // ─── Internal mutation descriptor ───────────────────────────────────────

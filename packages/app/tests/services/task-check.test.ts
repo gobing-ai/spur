@@ -3709,6 +3709,57 @@ describe('0714 R1 — anchor content matching: terminal suppression + live preci
             expect(noContentWarnings(result)).toHaveLength(0);
         });
 
+        // Task 1055 R1(b): a scope-shaped unresolvable anchor stays fail-closed but the
+        // failure message carries the exact frozen external-evidence rewrite.
+        test('an unresolvable @scope/ anchor fails with the external-evidence rewrite in the message', async () => {
+            const { fs, path, cleanup } = seedChangeMap(
+                '`@gobing-ai/ts-x/src/persistence.ts:108` — closes `registerCancel`',
+                'export function registerCancel() {}\n',
+            );
+            const result = await new TaskCheckService(fs, matrix).check(path, '0001', { asStatus: 'done' });
+            cleanup();
+
+            const unresolved = result.findings.filter((f) => f.code === FINDING_CODES.L4_ANCHOR_UNRESOLVED);
+            expect(unresolved).toHaveLength(1);
+            expect(unresolved[0]?.severity).toBe('error');
+            expect(unresolved[0]?.message).toContain('Evidence: @gobing-ai/ts-x `src/persistence.ts` line 108');
+            expect(unresolved[0]?.message).toContain('external package path');
+        });
+
+        // Task 1055 AC2: the precise rewrite is scoped to scope-shaped paths — a plain
+        // unresolvable repo path keeps the generic unresolved message and severity.
+        test('an unresolvable plain repo path keeps the generic unresolved message', async () => {
+            const { fs, path, cleanup } = seedChangeMap(
+                '`does-not-exist.ts:1` — closes `registerCancel`',
+                'export function registerCancel() {}\n',
+            );
+            const result = await new TaskCheckService(fs, matrix).check(path, '0001', { asStatus: 'done' });
+            cleanup();
+
+            const unresolved = result.findings.filter((f) => f.code === FINDING_CODES.L4_ANCHOR_UNRESOLVED);
+            expect(unresolved).toHaveLength(1);
+            expect(unresolved[0]?.severity).toBe('error');
+            expect(unresolved[0]?.message).toContain('file not found at does-not-exist.ts');
+            expect(unresolved[0]?.message).not.toContain('Evidence:');
+        });
+
+        // Task 1055 AC1 (end-to-end repro of the 1051 blocker): the frozen external-evidence
+        // form in a change-map row passes the done gate with zero L4 findings — no manual
+        // citation repair needed.
+        test('a change-map citing the frozen external-evidence form passes the done gate clean', async () => {
+            const { fs, path, cleanup } = seedChangeMap(
+                'Evidence: @gobing-ai/ts-dual-workflow-engine `src/persistence.ts` line 108 — closes `registerCancel`',
+                'export function registerCancel() {}\n',
+            );
+            const result = await new TaskCheckService(fs, matrix).check(path, '0001', { asStatus: 'done' });
+            cleanup();
+
+            // Anchor codes only (fixture carries unrelated completeness warnings).
+            expect(result.findings.filter((f) => f.code === FINDING_CODES.L4_ANCHOR_UNRESOLVED)).toHaveLength(0);
+            expect(result.findings.filter((f) => f.code === FINDING_CODES.L4_STALE_LINE_ANCHOR)).toHaveLength(0);
+            expect(result.findings.filter((f) => f.code === FINDING_CODES.L4_ANCHOR_SUBJECT_MISMATCH)).toHaveLength(0);
+        });
+
         // Bounded blast radius (the review's Option A): the error fires at the completion
         // target only. Entering `testing` must not be blocked for evidence still being
         // assembled, so the same unresolvable anchor is a warning there.

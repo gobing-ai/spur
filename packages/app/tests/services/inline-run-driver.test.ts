@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { execSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openInlineRunProjectDb, resolveWorkflowDefinition, runStoragePaths } from '../../src';
@@ -609,6 +609,13 @@ describe('inline close reasons and state projection (1051)', () => {
                 const startedAt = readRunState(p.dir, 'run-1051').startedAt as string;
                 await recordAction('run-1051');
 
+                // Seed a stale error into the prior sidecar (task 1053 F1 repro shape: the
+                // 1051 fixture never carried one, which made the error-drop assert vacuous).
+                writeFileSync(
+                    join(p.dir, '.spur/memory/runs/run-1051.state.json'),
+                    JSON.stringify({ ...readRunState(p.dir, 'run-1051'), ok: false, error: 'stale attach mismatch' }),
+                );
+
                 const closed = await captureAsync(() => runInlineRunTrace(closeInput()));
                 expect(closed.value, closed.out).toBe(0);
                 expect(JSON.parse(closed.out.trimEnd().split('\n')[0] ?? '{}')).toMatchObject({
@@ -629,7 +636,10 @@ describe('inline close reasons and state projection (1051)', () => {
                     layer: 'registered',
                 });
                 expect(state.startedAt).toBe(startedAt);
+                // task 1053 F1/AC1: the seeded stale error did not survive the close (non-vacuous —
+                // the prior sidecar above carries `error: 'stale attach mismatch'`).
                 expect(state.error).toBeUndefined();
+                expect(state.ok).toBe(true);
             });
         } finally {
             p.cleanup();
@@ -748,6 +758,41 @@ describe('inline close reasons and state projection (1051)', () => {
         }
     });
 
+    test('AC4: with no prior sidecar, startedAt comes from the committed run row (task 1053)', async () => {
+        const p = makeProject('r1053-nostate');
+        try {
+            await inDir(p.dir, async () => {
+                await setupRun(p.dir, 'run-1053');
+                await recordAction('run-1053');
+
+                // Remove the sidecar entirely: the projection rebuilds from the committed close.
+                rmSync(join(p.dir, '.spur/memory/runs/run-1053.state.json'));
+
+                const db = await openInlineRunProjectDb(p.dir);
+                let rowStartedAt: string | undefined;
+                try {
+                    const row = await db.adapter.queryFirst<{ started_at: string }>(
+                        'SELECT started_at FROM runs WHERE id = ?',
+                        'run-1053',
+                    );
+                    rowStartedAt = row?.started_at;
+                } finally {
+                    db.close();
+                }
+                expect(typeof rowStartedAt).toBe('string');
+
+                const closed = await captureAsync(() => runInlineRunTrace(closeInput({ runId: 'run-1053' })));
+                expect(closed.value, closed.out).toBe(0);
+                const state = readRunState(p.dir, 'run-1053');
+                expect(state).toMatchObject({ runId: 'run-1053', status: 'done', ok: true });
+                // The rebuilt sidecar carries the run row's start time, not the projection time.
+                expect(state.startedAt).toBe(rowStartedAt);
+            });
+        } finally {
+            p.cleanup();
+        }
+    });
+
     test('AC2: a repeat close repairs a stale state sidecar', async () => {
         const p = makeProject('r1051-repair');
         try {
@@ -792,6 +837,8 @@ describe('inline close reasons and state projection (1051)', () => {
                 });
                 // The DB commit stands; only the projection failed.
                 expect(await runRow(p.dir, 'run-1051')).toEqual({ status: 'done', terminal_reason: 'done' });
+                // task 1053 F2/AC2: the failed projection leaves no .tmp residue behind.
+                expect(readdirSync(join(p.dir, '.spur/memory/runs')).filter((f) => f.endsWith('.tmp'))).toEqual([]);
 
                 // Remove the block and retry the same close: the sidecar is repaired.
                 rmSync(join(p.dir, '.spur/memory/runs/run-1051.state.json'), { recursive: true });
