@@ -82,7 +82,7 @@ export default function PlanFileList({ files, selectedPath, onSelect }: PlanFile
                                                         : 'hover:bg-base-300 text-spur-text hover:text-spur-text'
                                                 }`}
                                             >
-                                                <span className="text-sm shrink-0">🗺️</span>
+                                                <span className="text-sm shrink-0">🧭</span>
                                                 <span
                                                     className="flex-1 min-w-0 text-xs truncate font-medium"
                                                     title={file.name}

@@ -51,7 +51,7 @@ describe('plans module definition', () => {
         expect(plansModule.name).toBe('Plans');
         expect(plansModule.sidebarLabel).toBe('Plans');
         expect(plansModule.route).toBe('plans');
-        expect(plansModule.icon).toBe('🗺️');
+        expect(plansModule.icon).toBe('🧭');
         expect(plansModule.order).toBe(24);
         expect(typeof plansModule.component).toBe('function');
     });

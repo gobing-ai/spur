@@ -153,7 +153,7 @@ export default function PlansShell() {
                 <header className="flex flex-wrap items-center justify-between gap-4 border-b border-spur-border pb-3 shrink-0">
                     <div className="flex items-center gap-3">
                         <span className="text-2xl" aria-hidden="true">
-                            🗺️
+                            🧭
                         </span>
                         <div>
                             <h1 className="text-xl font-bold tracking-tight text-spur-text">Plans</h1>
@@ -230,7 +230,7 @@ export default function PlansShell() {
                     >
                         <div className="flex items-center justify-between px-3 py-2 border-b border-spur-border bg-base-300/60 shrink-0">
                             <span className="text-xs font-semibold text-spur-text flex items-center gap-1.5">
-                                <span>🗺️</span> Plan Docs
+                                <span>🧭</span> Plan Docs
                             </span>
                             {files && files.length > 0 && (
                                 <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-spur-accent/15 text-spur-accent font-semibold">
@@ -310,7 +310,7 @@ export default function PlansShell() {
                             ) : (
                                 <div className="flex flex-col items-center justify-center h-full text-spur-text-muted gap-2">
                                     <span className="text-3xl" aria-hidden="true">
-                                        🗺️
+                                        🧭
                                     </span>
                                     <span className="text-sm font-medium">Select a plan document to view</span>
                                 </div>
