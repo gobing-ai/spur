@@ -3,8 +3,8 @@ kind: design
 title: "Planning records and lifecycle contracts"
 status: implemented
 created_at: 2026-09-09
-updated_at: 2026-09-27
-related: []
+updated_at: 2026-10-02
+related: ["1055"]
 tags: [contract, planning]
 ---
 
@@ -181,7 +181,10 @@ Evidence: @gobing-ai/ts-llm-jsonl-importer `src/mappers.ts` line 481 — omp cal
 citation whose basename resolves uniquely inside this repo is in-repo evidence and must use the
 repo-relative backtick form `` `path:line` `` — the external form still reports there (R2). Since the
 0994 follow-up this code is the external-form-in-repo signal on its own; an in-repo backtick
-citation that fails to resolve reports `L4.anchor-unresolved` at error instead.
+citation that fails to resolve reports `L4.anchor-unresolved` at error instead. Task 1055: when L4 finds
+an unresolvable anchor whose path matches `^@scope/pkg/...`, the `task-check` failure message emits the
+exact external-evidence rewrite (`Evidence: @scope/pkg `rest` line N`, ADR-062 form) instead of the
+generic message, fail-closed at error severity.
 
 <a id="732-feature-frontmatter--featurefrontmatterschema"></a>
 

@@ -3,8 +3,8 @@ kind: design
 title: "Run record — two-file contract + the Observability read plane"
 status: implemented
 created_at: 2026-08-18
-updated_at: 2026-09-24
-related: [E7, I6, "0598", "0610", "0683", "0709", "0712", "0925"]
+updated_at: 2026-10-02
+related: [E7, I6, "0598", "0610", "0683", "0709", "0712", "0925", "1051", "1053"]
 tags: [contract, E7, I6, workflow, observability]
 ---
 
@@ -41,6 +41,14 @@ The 0594 injected-file-list cost idea is independent instrumentation, not a prer
 **0928 remaining-catalog baseline (2026-09-24).** The audited classification of the remaining canonical workflows (`idea-pipeline`, `feature-verification`, `feature-lifecycle`, `task-lifecycle`, `wrapup-pipeline`, `history-anatomy`, `pr-review`, `wayfinder-resolution`) found **no record-owned site in any of them** — audited no-change across the board. Every `.spur/run` reference in those definitions is a declared workflow artifact: run-scoped signals, answers, retry counters, batch/handoff data (`<runId>-<name>`, including the `-idea-*` driver artifacts written by `idea-coverage-check.ts` and consumed by `idea-handoff.ts`), WBS/feature-keyed independent proof (`<wbs>-verdict.json`, the `feature-verification` receipts), history-anatomy outputs and its shared `history-anatomy-run.id` pointer, and `.spur/memory/*` route logs. None names the run record (`.md`/`.state.json`) or a legacy single-file `<runId>.log` state — the pair stays owned by the engine sink and the inline setup seam, so every workflow's guard, human decision, retry, and external-effect behavior is untouched. Attested by `plugins/sp/tests/run-record-catalog.test.ts` (catalog-wide record-name sweep + idea-pipeline owner spot-checks); the stale `<RUNID>.log` wording in the `spur-cli` workflow reference and the `spur-dev` execution-workflow reference was corrected to the pair-with-legacy-fallback contract.
 
 **0948 retention disposition.** Two follow-ups from the E7 batch are now closed. (1) The catalog sweep recognised only the placeholder-stripped record spelling (`<runId>.md` → `.md`), so a literally hardcoded record name would have evaded it; the rule now classifies any non-artifact `.spur/run/<segment>` ending in a record suffix (`.md`, `.state.json`, `.log`) as a record reference, while run-id-suffixed artifacts (`-idea-handoff.md`) stay exempt — mutation-checked from both sides in `run-record-catalog.test.ts`. (2) `history-anatomy.yaml`'s `history-anatomy-run.id` is an explicit exemption from reclamation: it is a single fixed-name pointer overwritten on every run, so it does not accumulate and needs no retention path (unlike the pair and legacy `.log` files, which `spur workflow clean --logs` owns).
+
+**1051/1053 close projection sidecar baseline (2026-10-02).** `projectInlineRunClose` (`packages/app/src/services/inline-run-setup.ts`) projects the committed close status into `<runId>.state.json` via atomic replace (same-directory temp + rename, 0925 R1 parity). Semantics hardened in task 1053:
+1. **Drop stale error:** successful terminal projections (`done`/`failed`/`paused`) explicitly drop any prior setup `error` (`delete state.error` after `{...prior}` spread; 0948 R7 parity).
+2. **Zero residue:** rename failure cleans up `${statePath}.tmp` before returning replay guidance (0926 R1 parity).
+3. **`ok` contract:** `ok: true` denotes sidecar projection integrity (write succeeded), never run outcome; run outcome lives in `status` and DB `terminal_reason`.
+4. **Authoritative start time:** `startedAt` uses `runs.started_at` threaded from the committed run row via `closeRun` when prior sidecar state is missing, falling back to projection time only for context-less direct callers.
+
+
 
 ## 0. Historical 0598 rulings and snapshot
 

@@ -2,8 +2,8 @@
 kind: design
 title: "Server-Side Adjustment — Design"
 created_at: 2026-06-14
-updated_at: 2026-07-29
-related: ["0073", "0074", "0134", "0294"]
+updated_at: 2026-10-02
+related: ["0073", "0074", "0134", "0294", "1051", "1054"]
 tags: [system, server, web]
 doc: server-side-adjustment-design
 owns: HOW — mechanism, module interface shapes, wiring, layout, manifest format
@@ -271,6 +271,9 @@ transition. Two choices are deliberate:
 
 Denials surface as `GuardDeniedError` → HTTP 409 `GUARD_DENIED` through the existing error mapping
 (§2.6); a same-status `done` returns 200 with the unchanged `{wbs, status}` payload.
+
+- **Post-commit reconciliation and close-audit reporting (tasks 1051, 1054).** Post-commit bookkeeping errors (`bookkeepingError`: task-lifecycle row reconciliation) and close audit errors (`closeAuditError`: done close-audit fields for unforced closes) are logged at error severity via `ctx.logger.error` with task WBS, target status, the error detail, and replay guidance (`spur task record <wbs> --transition <status>`). Both signals are log-and-continue: the committed task file write stands, and the transport DTO `{ ok: true, data: { wbs, status } }` remains unchanged.
+
 
 **Wiring in `createApp`:**
 

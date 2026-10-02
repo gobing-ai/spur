@@ -2,11 +2,11 @@
 schema_version: 1
 id: "D62"
 name: "Workflow execution economy: contract-first stages, inline traceability, and graph retirement"
-status: active
+status: done
 priority: P2
 tags: []
 created_at: "2026-09-16T10:34:18.496Z"
-updated_at: "2026-09-27T07:22:16.464Z"
+updated_at: "2026-10-02T23:18:43.216Z"
 ---
 
 # D62: Workflow execution economy: contract-first stages, inline traceability, and graph retirement
@@ -216,7 +216,11 @@ Feature: Workflow execution economy: contract-first stages, inline traceability,
 | 0996 | A feature-scenario-keyed verdict AC row never proves its task AC box | done |
 | 1047 | Reconcile existing task lifecycle rows after no-lifecycle terminal writes | done |
 | 1050 | Retain task 1041 job-handoff contract checks in the normal repository suite | done |
-| 1051 | Repair inline close records and server terminal bookkeeping | todo |
+| 1051 | Repair inline close records and server terminal bookkeeping | done |
+| 1053 | Harden close-projection sidecar semantics in projectInlineRunClose | done |
+| 1054 | Report closeAuditError from the server task transition handler | done |
+| 1055 | Emit external-evidence citations from solution-from-diff backfill | done |
+| 1056 | Classify nested .spur/run citations in persist-out instead of truncating to directory name | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -228,4 +232,6 @@ Feature: Workflow execution economy: contract-first stages, inline traceability,
 - 2026-09-23T03:39:39.647Z active → verifying (system)
 - 2026-09-23T03:39:39.677Z verifying → done (system)
 - 2026-09-27T07:22:16.464Z done → active (system)
+- 2026-10-02T23:18:42.674Z active → verifying (system)
+- 2026-10-02T23:18:43.216Z verifying → done (system)
 

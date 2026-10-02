@@ -4478,3 +4478,156 @@ Sources: `docs/tasks5/1027_verify-disposable-scratch-and-reconcile-cleanup-safeg
 
 - **Mocked tests conceal scratch dependencies:** Unit tests that mock reader functions mask hardcoded scratch dependencies; real filesystem integration tests are required to expose lasting scratch readers.
 - **Stale expectFile reuse:** When dispatching retries, stale expectFiles must be explicitly deleted before invoke to prevent stale PASS reuse.
+
+---
+
+## 2026-10-02
+
+### Task 1053: Harden close-projection sidecar semantics in projectInlineRunClose
+
+- **Conventions:**
+  - **Sidecar `.state.json` `ok` semantics (0948 R7 / 1053 F3):** `ok: true` records the sidecar projection's write integrity (the `.state.json` file was successfully serialized and atomically renamed), NOT the run outcome. The run outcome lives strictly in `status` (`done` | `failed` | `paused`) and DB `terminal_reason`.
+  - **Drop stale error on terminal success:** Any successful terminal projection (`done` | `failed` | `paused`) must purge any prior `error` key (`delete state.error` after `{...prior}` spread; 0948 R7 parity). Stale setup errors or transient errors must never contaminate the terminal sidecar.
+  - **Close stdout shape preservation:** Close stdout emission (`closeRun` / `runInlineRunTrace`) retains the exact `{ ok, runId, actionRows? }` shape (0868 finding #1); internal sidecar threading facts like `startedAt` are stripped before emission.
+- **Errors fixed:**
+  - **F1 (stale error survival):** Spreading `{...prior}` without deleting `error` allowed prior setup errors (e.g. `{ ok: false, error: "stale attach mismatch" }`) to survive into a successful `done` projection (`{ status: "done", ok: true, error: "stale attach mismatch" }`), contradicting the doc comment. Fixed via `delete state.error` post-spread.
+  - **F2 (`.tmp` residue):** Rename failure in `projectInlineRunClose` left `${statePath}.tmp` residue in the run directory. Fixed by wrapping write + rename in try/catch and unlinking `temp` in the failure path before rethrowing.
+  - **F3 (silent contract ambiguity):** Addressed undocumented `ok: true` literal for failed/paused terminal states with explicit in-code contract documentation and tests pinning each terminal status.
+  - **F4 (fabricated start time):** When prior sidecar state was missing, projection time `at` was fabricated as `startedAt`. Fixed by threading `runs.started_at` from `closeRun`'s pre-finalize load through optional `context.startedAt`.
+- **Patterns:**
+  - **Atomic write with cleanup-on-failure:** Wrap `writeFileSync` + `renameSync` in a try/catch, best-effort `unlinkSync(temp)` on failure, and rethrow to preserve outer replay-guidance reporting without leaving temporary residue.
+  - **Parameter threading over database coupling:** Keep filesystem utility functions (`projectInlineRunClose`) filesystem-only by threading authoritative DB values from callers (`closeRun`) rather than instantiating DB handles inside fs helpers.
+- **Gotchas:**
+  - **Vacuous assertions:** Fixtures that assert an error is dropped are vacuous if the seeded prior state never contained an error. Ensure prior-state fixtures explicitly seed failure attributes (`ok: false`, `error: "..."`).
+  - **Installed twin synchronization:** Any edit to `packages/app/src/services/inline-run-setup.ts` must be accompanied by rebuilding installed twins (`bun run build:scripts`) and running `bun run script-contract-check`.
+
+---
+
+### Task 1054: Report closeAuditError from the server task transition handler
+
+- **Conventions:**
+  - **Server-driven transition error parity:** Server task transitions must log post-commit bookkeeping and close-audit failures symmetrically with CLI warnings via `ctx.logger.error`.
+  - **Log-and-continue post-commit failures:** Failures in post-commit audits (`closeAuditError`) and bookkeeping (`bookkeepingError`) are logged at error severity with task identity (`{ wbs, toStatus }`) and CLI replay repair guidance (`spur task record <wbs> --transition <toStatus>`). They never throw, the committed task status stands, and the transport DTO `{ ok: true, data: { wbs, status } }` remains unchanged.
+- **Errors fixed:**
+  - The server's `task.transition` handler (`apps/server/src/modules/task/handlers.ts`) dropped `guarded.result.closeAuditError` on unforced closes, hiding done close-audit reconciliation failures.
+  - `WriteResult` in `packages/app/src/services/planning-write-service.ts` did not declare the optional `closeAuditError?: string` property despite `task-transition.ts` spreading it, creating a latent TS2339 typecheck error when read.
+- **Patterns:**
+  - **Sibling handler symmetry:** When surfacing adjacent signals (`closeAuditError` beside `bookkeepingError`), reuse identical log message structure, metadata shapes, and actionable CLI repair guidance.
+- **Gotchas:**
+  - **Object spreads masking undeclared type properties:** Spreading fields into returned result objects can conceal omissions in TypeScript interface declarations until downstream callers attempt to read them.
+
+---
+
+### Task 1055: Emit external-evidence citations from solution-from-diff backfill
+
+- **Conventions:**
+  - **External evidence citation format:** Non-repo evidence citations must use the frozen ADR-062 form: `Evidence: @scope/pkg `src/path.ts` line N` (package origin and line outside the backticks, path enclosed in backticks).
+  - **Actionable fail-closed gate messages:** When gate rules fail, error messages should emit copy-pasteable canonical replacement text while strictly preserving fail-closed behavior at the same finding code and severity.
+- **Errors fixed:**
+  - Task check L4 anchor resolution produced unhelpful `L4.anchor-unresolved` error messages when change-maps cited external `@gobing-ai/ts-*` packages using in-repo `` `@scope/pkg/...:line` `` syntax, blocking the done transition.
+  - Implement-phase authoring guidance in `plugins/sp/skills/code-implementation/SKILL.md` lacked explicit external evidence formatting rules and negative examples.
+- **Patterns:**
+  - **Precise error rewriting over heuristic loosening:** Rather than loosening gates or adding complex resolution logic for `node_modules`, retain strictness and teach the author the correct form via regex pattern matching (`^@scope/pkg/...`) that emits the exact required syntax in the error detail.
+- **Gotchas:**
+  - **Root-cause attribution:** An initial assumption blamed `renderSolutionFromDiff` for emitting invalid citations. Source inspection proved `renderSolutionFromDiff` only emits `+++ b/<path>` repo-relative headers from git diffs; the invalid citations were authored directly by the implement agent in the change-map. Always inspect the true source before altering mechanical backfills.
+
+---
+
+### Task 1056: Classify nested .spur/run citations in persist-out instead of truncating to directory name
+
+- **Conventions:**
+  - **Nested evidence classification:** Task-cited `.spur/run/<name>/<rest>` citations are classified through the 0984 R5 `cited-directory:<name>` skip vocabulary during extraction rather than creating a flat file copy obligation for `<name>`.
+  - **Zero-budget skips:** Skip classifications in persist-out are deduplicated per directory and do not consume entries against the `MAX_CITED_RUN_FILES` (64) file copy budget.
+- **Errors fixed:**
+  - `RUN_CITATION_RE` captured only the first path component of `.spur/run/<dir>/<file>` citations because its character set excluded `/`, truncating citations to `<dir>` and treating it as a flat file copy obligation. This caused worktree teardown to fail either with "destination ... is not a regular file" (when `<dir>` was an existing directory) or "missing in both the worktree and the invoking tree".
+- **Patterns:**
+  - **Captured group over negative lookahead:** In regex matching with greedy character classes (`[A-Za-z0-9._*?<>{}|,…-]*`), avoid using a negative lookahead `(?!/)` because the engine backtracks to a shorter prefix match (e.g. `dir-105` instead of `dir-1056`). Use an explicit second capturing group `(\/[^\s\`]*)?` to detect continuation and classify in application logic.
+  - **Classify-not-resolve:** When handling complex or out-of-scope targets (nested subpaths) in flat artifact copy sets, classify and skip them rather than inventing recursive copy, hashing, and conflict resolution mechanisms.
+- **Gotchas:**
+  - **Teardown blocking on evidence paths:** Citing evidence files in subdirectories under `.spur/run/` in task files will fail worktree teardown unless the persist-out extractor specifically recognises subpaths and classifies them as directory skips.
+### Drift Audit and Repair Summary
+
+Executed [`sp:doc-evolve`](file:///Users/robin/.gemini/config/skills/sp-doc-evolve/SKILL.md) (wrapup) across [`docs/00_ADR.md`](file:///Users/robin/xprojects/spur-new/docs/00_ADR.md), [`docs/03_ARCHITECTURE.md`](file:///Users/robin/xprojects/spur-new/docs/03_ARCHITECTURE.md), [`docs/04_DESIGN.md`](file:///Users/robin/xprojects/spur-new/docs/04_DESIGN.md), and [`docs/design/*`](file:///Users/robin/xprojects/spur-new/docs/design/) for tasks `1053`, `1054`, `1055`, and `1056` ([`.spur/run/a2c2be93-3d0a-4994-9698-2ba5fd506385-wrapup-tasks.json`](file:///Users/robin/xprojects/spur-new/.spur/run/a2c2be93-3d0a-4994-9698-2ba5fd506385-wrapup-tasks.json)).
+
+1. **[`docs/00_ADR.md`](file:///Users/robin/xprojects/spur-new/docs/00_ADR.md) & [`docs/03_ARCHITECTURE.md`](file:///Users/robin/xprojects/spur-new/docs/03_ARCHITECTURE.md):**
+   - **Audit:** Tasks 1053–1056 represent bug fixes, contract hardenings, and diagnostic improvements restoring established invariants (ADR-062, ADR-0948, ADR-0984, ADR-131). No new cross-module architectural choices or reversals were introduced ([Constitution §6.1](file:///Users/robin/xprojects/spur-new/docs/99_PROJECT_CONSTITUTION.md#L150-L177)). Architecture topology in [`docs/03_ARCHITECTURE.md`](file:///Users/robin/xprojects/spur-new/docs/03_ARCHITECTURE.md#L1195-L1221) §32 remains authoritative without adding per-task shipment narratives ([§6.4](file:///Users/robin/xprojects/spur-new/docs/99_PROJECT_CONSTITUTION.md#L191-L196)).
+
+2. **[`docs/04_DESIGN.md`](file:///Users/robin/xprojects/spur-new/docs/04_DESIGN.md) & Non-UI Satellites:**
+   - [`docs/04_DESIGN.md:81`](file:///Users/robin/xprojects/spur-new/docs/04_DESIGN.md#L81): Updated E7 run-record contract satellite description to implemented status.
+   - [`docs/design/run-record-contract.md`](file:///Users/robin/xprojects/spur-new/docs/design/run-record-contract.md): Added the 1051/1053 close projection sidecar baseline ([`projectInlineRunClose`](file:///Users/robin/xprojects/spur-new/packages/app/src/services/inline-run-setup.ts#L1012), stale error drop, `.tmp` cleanup on failure, `ok: true` projection integrity contract, and [`runs.started_at`](file:///Users/robin/xprojects/spur-new/packages/app/src/workflow/action-trace.ts#L299) fallback threading).
+   - [`docs/design/disposable-run-storage.md`](file:///Users/robin/xprojects/spur-new/docs/design/disposable-run-storage.md): Documented worktree persist-out extraction-time `cited-directory:<name>` skip classification for nested `.spur/run/<dir>/<file>` citations (task 1056).
+   - [`docs/design/planning-record-contracts.md`](file:///Users/robin/xprojects/spur-new/docs/design/planning-record-contracts.md): Documented L4 anchor checking error detail providing canonical external-evidence replacements for `@scope/` anchors (task 1055).
+   - [`docs/design/planning-workflow-contracts.md`](file:///Users/robin/xprojects/spur-new/docs/design/planning-workflow-contracts.md): Refined Solution row to describe fail-closed gate diagnostic behavior.
+   - [`docs/design/server-side-adjustment-design.md`](file:///Users/robin/xprojects/spur-new/docs/design/server-side-adjustment-design.md): Added post-commit reconciliation (`bookkeepingError`) and close-audit ([`closeAuditError`](file:///Users/robin/xprojects/spur-new/apps/server/src/modules/task/handlers.ts#L118)) error reporting via `ctx.logger.error` in the server `task.transition` handler (tasks 1051, 1054).
+
+3. **Artifact Output:**
+   - Written to [`.spur/run/a2c2be93-3d0a-4994-9698-2ba5fd506385-wrapup-learnings.md`](file:///Users/robin/xprojects/spur-new/.spur/run/a2c2be93-3d0a-4994-9698-2ba5fd506385-wrapup-learnings.md).
+   - Cleaned stray conversational lines from [`.spur/memory/learnings.md`](file:///Users/robin/xprojects/spur-new/.spur/memory/learnings.md).
+   - Task/feature corpus files were not modified.
+
+# Working learnings
+
+## 2026-10-02
+
+### Task 1053: Harden close-projection sidecar semantics in projectInlineRunClose
+
+- **Conventions:**
+  - **Sidecar `.state.json` `ok` semantics (0948 R7 / 1053 F3):** `ok: true` records the sidecar projection's write integrity (the `.state.json` file was successfully serialized and atomically renamed), NOT the run outcome. The run outcome lives strictly in `status` (`done` | `failed` | `paused`) and DB `terminal_reason`.
+  - **Drop stale error on terminal success:** Any successful terminal projection (`done` | `failed` | `paused`) must purge any prior `error` key (`delete state.error` after `{...prior}` spread; 0948 R7 parity). Stale setup errors or transient errors must never contaminate the terminal sidecar.
+  - **Close stdout shape preservation:** Close stdout emission (`closeRun` / `runInlineRunTrace`) retains the exact `{ ok, runId, actionRows? }` shape (0868 finding #1); internal sidecar threading facts like `startedAt` are stripped before emission.
+- **Errors fixed:**
+  - **F1 (stale error survival):** Spreading `{...prior}` without deleting `error` allowed prior setup errors (e.g. `{ ok: false, error: "stale attach mismatch" }`) to survive into a successful `done` projection (`{ status: "done", ok: true, error: "stale attach mismatch" }`), contradicting the doc comment. Fixed via `delete state.error` post-spread.
+  - **F2 (`.tmp` residue):** Rename failure in `projectInlineRunClose` left `${statePath}.tmp` residue in the run directory. Fixed by wrapping write + rename in try/catch and unlinking `temp` in the failure path before rethrowing.
+  - **F3 (silent contract ambiguity):** Addressed undocumented `ok: true` literal for failed/paused terminal states with explicit in-code contract documentation and tests pinning each terminal status.
+  - **F4 (fabricated start time):** When prior sidecar state was missing, projection time `at` was fabricated as `startedAt`. Fixed by threading `runs.started_at` from `closeRun`'s pre-finalize load through optional `context.startedAt`.
+- **Patterns:**
+  - **Atomic write with cleanup-on-failure:** Wrap `writeFileSync` + `renameSync` in a try/catch, best-effort `unlinkSync(temp)` on failure, and rethrow to preserve outer replay-guidance reporting without leaving temporary residue.
+  - **Parameter threading over database coupling:** Keep filesystem utility functions (`projectInlineRunClose`) filesystem-only by threading authoritative DB values from callers (`closeRun`) rather than instantiating DB handles inside fs helpers.
+- **Gotchas:**
+  - **Vacuous assertions:** Fixtures that assert an error is dropped are vacuous if the seeded prior state never contained an error. Ensure prior-state fixtures explicitly seed failure attributes (`ok: false`, `error: "..."`).
+  - **Installed twin synchronization:** Any edit to `packages/app/src/services/inline-run-setup.ts` must be accompanied by rebuilding installed twins (`bun run build:scripts`) and running `bun run script-contract-check`.
+
+---
+
+### Task 1054: Report closeAuditError from the server task transition handler
+
+- **Conventions:**
+  - **Server-driven transition error parity:** Server task transitions must log post-commit bookkeeping and close-audit failures symmetrically with CLI warnings via `ctx.logger.error`.
+  - **Log-and-continue post-commit failures:** Failures in post-commit audits (`closeAuditError`) and bookkeeping (`bookkeepingError`) are logged at error severity with task identity (`{ wbs, toStatus }`) and CLI replay repair guidance (`spur task record <wbs> --transition <toStatus>`). They never throw, the committed task status stands, and the transport DTO `{ ok: true, data: { wbs, status } }` remains unchanged.
+- **Errors fixed:**
+  - The server's `task.transition` handler (`apps/server/src/modules/task/handlers.ts`) dropped `guarded.result.closeAuditError` on unforced closes, hiding done close-audit reconciliation failures.
+  - `WriteResult` in `packages/app/src/services/planning-write-service.ts` did not declare the optional `closeAuditError?: string` property despite `task-transition.ts` spreading it, creating a latent TS2339 typecheck error when read.
+- **Patterns:**
+  - **Sibling handler symmetry:** When surfacing adjacent signals (`closeAuditError` beside `bookkeepingError`), reuse identical log message structure, metadata shapes, and actionable CLI repair guidance.
+- **Gotchas:**
+  - **Object spreads masking undeclared type properties:** Spreading fields into returned result objects can conceal omissions in TypeScript interface declarations until downstream callers attempt to read them.
+
+---
+
+### Task 1055: Emit external-evidence citations from solution-from-diff backfill
+
+- **Conventions:**
+  - **External evidence citation format:** Non-repo evidence citations must use the frozen ADR-062 form: `Evidence: @scope/pkg `src/path.ts` line N` (package origin and line outside the backticks, path enclosed in backticks).
+  - **Actionable fail-closed gate messages:** When gate rules fail, error messages should emit copy-pasteable canonical replacement text while strictly preserving fail-closed behavior at the same finding code and severity.
+- **Errors fixed:**
+  - Task check L4 anchor resolution produced unhelpful `L4.anchor-unresolved` error messages when change-maps cited external `@gobing-ai/ts-*` packages using in-repo `` `@scope/pkg/...:line` `` syntax, blocking the done transition.
+  - Implement-phase authoring guidance in `plugins/sp/skills/code-implementation/SKILL.md` lacked explicit external evidence formatting rules and negative examples.
+- **Patterns:**
+  - **Precise error rewriting over heuristic loosening:** Rather than loosening gates or adding complex resolution logic for `node_modules`, retain strictness and teach the author the correct form via regex pattern matching (`^@scope/pkg/...`) that emits the exact required syntax in the error detail.
+- **Gotchas:**
+  - **Root-cause attribution:** An initial assumption blamed `renderSolutionFromDiff` for emitting invalid citations. Source inspection proved `renderSolutionFromDiff` only emits `+++ b/<path>` repo-relative headers from git diffs; the invalid citations were authored directly by the implement agent in the change-map. Always inspect the true source before altering mechanical backfills.
+
+---
+
+### Task 1056: Classify nested .spur/run citations in persist-out instead of truncating to directory name
+
+- **Conventions:**
+  - **Nested evidence classification:** Task-cited `.spur/run/<name>/<rest>` citations are classified through the 0984 R5 `cited-directory:<name>` skip vocabulary during extraction rather than creating a flat file copy obligation for `<name>`.
+  - **Zero-budget skips:** Skip classifications in persist-out are deduplicated per directory and do not consume entries against the `MAX_CITED_RUN_FILES` (64) file copy budget.
+- **Errors fixed:**
+  - `RUN_CITATION_RE` captured only the first path component of `.spur/run/<dir>/<file>` citations because its character set excluded `/`, truncating citations to `<dir>` and treating it as a flat file copy obligation. This caused worktree teardown to fail either with "destination ... is not a regular file" (when `<dir>` was an existing directory) or "missing in both the worktree and the invoking tree".
+- **Patterns:**
+  - **Captured group over negative lookahead:** In regex matching with greedy character classes (`[A-Za-z0-9._*?<>{}|,…-]*`), avoid using a negative lookahead `(?!/)` because the engine backtracks to a shorter prefix match (e.g. `dir-105` instead of `dir-1056`). Use an explicit second capturing group `(\/[^\s\`]*)?` to detect continuation and classify in application logic.
+  - **Classify-not-resolve:** When handling complex or out-of-scope targets (nested subpaths) in flat artifact copy sets, classify and skip them rather than inventing recursive copy, hashing, and conflict resolution mechanisms.
+- **Gotchas:**
+  - **Teardown blocking on evidence paths:** Citing evidence files in subdirectories under `.spur/run/` in task files will fail worktree teardown unless the persist-out extractor specifically recognises subpaths and classifies them as directory skips.
