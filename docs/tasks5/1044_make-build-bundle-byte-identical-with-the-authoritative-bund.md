@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Make build:bundle byte-identical with the authoritative bundle-plugin-lib test bundler
-status: todo
+status: wip
 template: feature-impl
 created_at: 2026-10-01T21:54:16.882Z
-updated_at: "2026-10-01T21:57:41.142Z"
+updated_at: "2026-10-02T00:38:48.889Z"
 feature_id: A33
 
 ---
@@ -25,10 +25,10 @@ bundlers for one artifact contradicts A33's single-source goal.
 
 ### Requirements
 
-- R1. `build:bundle` and `scripts/commands/bundle-plugin-lib.test.ts` produce byte-identical
+- [ ] R1. `build:bundle` and `scripts/commands/bundle-plugin-lib.test.ts` produce byte-identical
   `plugins/sp/lib/inline-run.generated.mjs` for the same source tree, so a source change fails the
   determinism test at most zero times when build:bundle output is committed.
-- R2. The single generation path keeps the existing determinism guarantees (only runtime builtin
+- [ ] R2. The single generation path keeps the existing determinism guarantees (only runtime builtin
   imports, stable bytes across cwd).
 
 ### Acceptance Criteria
@@ -52,13 +52,13 @@ Rejected alternatives: (a) delete build:bundle and keep only the test — build:
 the repo gate and release flow, removal is out of scope; (b) loosen the test to compare against
 build output — the test is the authoritative committed-bytes guard per A33.
 
+**Root-cause correction (2026-10-02).** Inspection shows the build sites generate different libraries; the authoritative inline test already calls the exported bundleInlineRunLib owner. The CLI package build:bundle chain never invokes this generator before staging plugins, so changed app source leaves stale committed plugin bytes. Reuse scripts/commands/bundle-plugin-lib.ts directly in apps/cli/package.json before the existing package build/staging chain. No new generator or API is needed. Validate a dirty bundled error literal, compare bytes before/after the existing deterministic test, restore the literal and rebuild. Update the owning configuration contract; no public Spur noun/verb/flag changes.
+
 ### Plan
 
-1. Consolidate the Bun.build invocations behind one shared generator in
-   scripts/commands/bundle-plugin-lib.ts; build:bundle and the test call it.
-2. Reproduce: edit a bundled source trivially, run `bun run build:bundle` then
-   `bun test scripts/commands/bundle-plugin-lib.test.ts` — must pass without regeneration.
-3. Run `bun run build:bundle` + `bun run spur-check` once at the boundary.
+1. Reuse the existing plugin-library generator in apps/cli build:bundle before package staging.
+2. Reproduce a changed bundled literal, build through the package entrypoint, and prove the authoritative test leaves bytes unchanged; restore the literal and rebuild.
+3. Update the configuration owner, run focused checks and the project gate, then review/verify/record through the CLI.
 
 ### Solution
 
@@ -79,4 +79,5 @@ build output — the test is the authoritative committed-bytes guard per A33.
 ### History
 
 - 2026-10-01T21:57:41.142Z backlog → todo (system)
+- 2026-10-02T00:38:48.889Z todo → wip (system)
 
