@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Add missing persist-out branch tests for non-ENOENT abort and external-key-conflict exclusion
-status: todo
+status: wip
 template: feature-impl
 created_at: 2026-10-01T23:59:13.672Z
-updated_at: "2026-10-02T00:05:06.207Z"
+updated_at: "2026-10-02T00:14:52.766Z"
 feature_id: E71
 
 priority: P2
@@ -21,10 +21,10 @@ Captured from the creation title: "Add missing persist-out branch tests for non-
 
 ### Requirements
 
-- R1. A source-read error other than ENOENT during persist-out record-byte pre-validation
+- [ ] R1. A source-read error other than ENOENT during persist-out record-byte pre-validation
   (`packages/app/src/services/inline-run-setup.ts:450` `throw error`) aborts persist-out with the
   error propagating BEFORE the target DB is opened (`:454`), leaving the target side untouched.
-- R2. A source run whose id is new but whose `(workflow_name IS ?, external_key = ?)` tuple
+- [ ] R2. A source run whose id is new but whose `(workflow_name IS ?, external_key = ?)` tuple
   collides with an existing target row is skipped by `transferRunTables` with reason
   `external-key-conflict` (`packages/domain/src/dao/run-transfer.ts:110-121`) and is excluded from
   `recordIds` (`inline-run-setup.ts:459` — only `id-exists` ids are folded in): the record pass
@@ -64,7 +64,9 @@ they lack direct tests — 1043 P2-3).
 
 ### Plan
 
-<!-- Ordered implementation checklist. Fill before moving to todo/wip. -->
+1. Add a deterministic EISDIR source-record regression and assert that the target DB and record directory remain absent.
+2. Add an external-key collision regression with a different source ID and verify zero record copies and exactly the existing target row.
+3. Run the focused persist-out suite, review traceability, derive/record a verify verdict and complete the task through the CLI.
 
 ### Solution
 
@@ -86,4 +88,5 @@ they lack direct tests — 1043 P2-3).
 
 - 2026-10-01T23:59:15.673Z backlog → wip (system)
 - 2026-10-01T23:59:22.041Z wip → todo (system)
+- 2026-10-02T00:14:52.766Z todo → wip (system)
 
