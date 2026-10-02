@@ -60,6 +60,32 @@ function receipt(featureId: string, runId: string, workdir: string) {
 }
 
 describe('migrateRunStorage (E71/1025)', () => {
+    test('a linked owned session subtree is preserved without copying its target', async () => {
+        const { root, scratch, dirs } = makeProject();
+        const outside = mkdtempSync(join(tmpdir(), 'run-storage-linked-sessions-'));
+        try {
+            const subtree = join(scratch, 'closed');
+            mkdirSync(subtree);
+            writeFileSync(join(outside, 'session.jsonl'), 'unsettled session');
+            symlinkSync(outside, join(subtree, 'agent-sessions'));
+            const result = await migrateRunStorage({ dirs, readRunStatus: statusMap({ closed: 'done' }) });
+            expect(result.failures).toEqual([]);
+            expect(outcome(result, 'closed')).toMatchObject({
+                outcome: 'preserved',
+                reason: 'symlink-owned-subtree',
+                target: null,
+            });
+            expect(readFileSync(join(outside, 'session.jsonl'), 'utf8')).toBe('unsettled session');
+            expect(existsSync(join(dirs.recordsDir, 'closed/agent-sessions/session.jsonl'))).toBe(false);
+            expect(
+                JSON.parse(readFileSync(join(root, '.spur/memory/run-storage-migration.json'), 'utf8')).complete,
+            ).toBe(false);
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+            rmSync(outside, { recursive: true, force: true });
+        }
+    });
+
     test('foreign verdict and state identities fail; proof and feature receipt live owners remain protected', async () => {
         const { root, scratch, dirs } = makeProject();
         try {
