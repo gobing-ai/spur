@@ -2892,6 +2892,7 @@ terminalStates:
                 expect(result.reclaimed.map((row) => row.runId)).toEqual([ids.get('done')]);
                 for (const status of ['running', 'pending', 'paused', 'interrupted']) {
                     const id = ids.get(status);
+                    if (id === undefined) throw new Error(`missing seeded ${status} run`);
                     expect(await readFile(join(dir, '.spur', 'run', `${id}.log`), 'utf8')).toContain(id);
                     expect(await readFile(join(dir, '.spur', 'memory', 'runs', `${id}.log`), 'utf8')).toContain(id);
                 }
