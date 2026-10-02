@@ -42,6 +42,55 @@ async function seedWorktree(workdir: string, runId: string, workflowName = 'wf')
 }
 
 describe('persistWorktreeRuns (task 0975 R1)', () => {
+    test('1045: non-ENOENT record read aborts before target database creation', async () => {
+        const from = makeDir('persist-eisdir-from-');
+        const to = makeDir('persist-eisdir-to-');
+        try {
+            await seedWorktree(from.dir, 'read-error', 'task-pipeline');
+            const record = join(runStoragePaths(from.dir).recordsDir, 'read-error.md');
+            rmSync(record);
+            mkdirSync(record);
+            await expect(persistWorktreeRuns({ fromWorkdir: from.dir, toWorkdir: to.dir })).rejects.toThrow('EISDIR');
+            expect(existsSync(join(to.dir, '.spur/spur.db'))).toBe(false);
+            expect(existsSync(runStoragePaths(to.dir).recordsDir)).toBe(false);
+        } finally {
+            from.cleanup();
+            to.cleanup();
+        }
+    });
+
+    test('1045: external-key conflict excludes the new source identity from record copying', async () => {
+        const from = makeDir('persist-key-from-');
+        const to = makeDir('persist-key-to-');
+        try {
+            await seedWorktree(from.dir, 'source-key', 'task-pipeline');
+            const source = await openInlineRunProjectDb(from.dir);
+            await source.adapter.run("UPDATE runs SET external_key='same-key' WHERE id='source-key'");
+            source.close();
+            const target = await openInlineRunProjectDb(to.dir);
+            await target.adapter.run(RUN_INSERT, 'target-key', 'task-pipeline');
+            await target.adapter.run("UPDATE runs SET external_key='same-key' WHERE id='target-key'");
+            target.close();
+            expect(await persistWorktreeRuns({ fromWorkdir: from.dir, toWorkdir: to.dir })).toEqual({
+                ok: true,
+                persisted: 0,
+                skipped: [{ id: 'source-key', reason: 'external-key-conflict' }],
+            });
+            expect(existsSync(join(runStoragePaths(to.dir).recordsDir, 'source-key.md'))).toBe(false);
+            expect(existsSync(join(runStoragePaths(to.dir).recordsDir, 'source-key.state.json'))).toBe(false);
+            const after = await openInlineRunProjectDb(to.dir);
+            try {
+                expect(await after.adapter.queryAll<{ id: string }>('SELECT id FROM runs')).toEqual([
+                    { id: 'target-key' },
+                ]);
+            } finally {
+                after.close();
+            }
+        } finally {
+            from.cleanup();
+            to.cleanup();
+        }
+    });
     test('exports canonical evidence, registered artifacts and session references without scratch', async () => {
         const from = makeDir('persist-durable-from-');
         const to = makeDir('persist-durable-to-');
