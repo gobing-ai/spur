@@ -14,9 +14,11 @@
  * Source: repo-root `dist/web` (produced by `bun run --filter '@gobing-ai/spur-web' build`).
  * Target: `apps/cli/web` by default (override with the first CLI arg).
  */
-import { cp, rm } from 'node:fs/promises';
-import { join } from 'node:path';
+import { cp, realpath, rm } from 'node:fs/promises';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { boardHostRuntimeSchema } from '@gobing-ai/spur-contracts';
+import { BOARD_FACADE_SPECIFIERS } from '../../apps/web/src/modules/runtime/manifest';
 
 const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const DEFAULT_SOURCE = join(REPO_ROOT, 'dist/web');
@@ -41,19 +43,27 @@ async function verifyBoardRuntime(dir: string): Promise<void> {
     if (!(await manifestFile.exists())) {
         throw new Error(`bundle-web: ${manifestPath} is missing — rebuild the board with the boardRuntime integration`);
     }
-    let manifest: { manifestVersion?: number; contributionApiVersion?: number; imports?: Record<string, string> };
+    let raw: unknown;
     try {
-        manifest = JSON.parse(await manifestFile.text()) as typeof manifest;
+        raw = JSON.parse(await manifestFile.text());
     } catch (error) {
         throw new Error(`bundle-web: ${manifestPath} is not valid JSON: ${String(error)}`);
     }
-    if (manifest.manifestVersion !== BOARD_RUNTIME_MANIFEST_VERSION) {
-        throw new Error(
-            `bundle-web: ${manifestPath} advertises manifestVersion ${String(manifest.manifestVersion)}, expected ${BOARD_RUNTIME_MANIFEST_VERSION}`,
-        );
+    const parsed = boardHostRuntimeSchema
+        .extend({ catalogVersion: boardHostRuntimeSchema.shape.manifestVersion })
+        .safeParse(raw);
+    if (!parsed.success)
+        throw new Error(`bundle-web: ${manifestPath} has invalid runtime metadata: ${parsed.error.message}`);
+    const manifest = parsed.data;
+    for (const key of ['manifestVersion', 'catalogVersion', 'contributionApiVersion'] as const) {
+        if (manifest[key] !== BOARD_RUNTIME_MANIFEST_VERSION) {
+            throw new Error(
+                `bundle-web: ${manifestPath} advertises ${key} ${manifest[key]}, expected ${BOARD_RUNTIME_MANIFEST_VERSION}`,
+            );
+        }
     }
-    const imports = manifest.imports ?? {};
-    for (const specifier of ['react', 'react/jsx-runtime', 'react/jsx-dev-runtime']) {
+    const imports = manifest.imports;
+    for (const specifier of BOARD_FACADE_SPECIFIERS) {
         if (!imports[specifier]) {
             throw new Error(`bundle-web: ${manifestPath} does not map "${specifier}" to a facade asset`);
         }
@@ -66,6 +76,42 @@ async function verifyBoardRuntime(dir: string): Promise<void> {
             throw new Error(`bundle-web: facade asset for "${specifier}" is missing from the packaged board`);
         }
     }
+    const html = await Bun.file(join(dir, 'index.html')).text();
+    const importMap = /<script\b[^>]*\btype\s*=\s*["']importmap["'][^>]*>([\s\S]*?)<\/script\s*>/i.exec(html);
+    const moduleScript = /<script\b[^>]*\btype\s*=\s*["']module["']/i.exec(html);
+    if (!importMap || (moduleScript && moduleScript.index < importMap.index)) {
+        throw new Error('bundle-web: import map must precede module scripts in index.html');
+    }
+    let mapped: unknown;
+    try {
+        mapped = JSON.parse(importMap[1] ?? '');
+    } catch {
+        throw new Error('bundle-web: import map in index.html is not valid JSON');
+    }
+    const map = boardHostRuntimeSchema.pick({ imports: true }).safeParse(mapped);
+    if (
+        !map.success ||
+        Object.keys(map.data.imports).length !== Object.keys(imports).length ||
+        Object.entries(imports).some(([key, value]) => map.data.imports[key] !== value)
+    ) {
+        throw new Error('bundle-web: import map in index.html differs from board-runtime.json');
+    }
+}
+
+/** Resolve aliases even when the destination's final directories do not exist yet. */
+async function canonicalPath(path: string): Promise<string> {
+    const absolute = resolve(path);
+    try {
+        return await realpath(absolute);
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+        return join(await canonicalPath(dirname(absolute)), basename(absolute));
+    }
+}
+
+function contains(parent: string, child: string): boolean {
+    const path = relative(parent, child);
+    return path === '' || (!isAbsolute(path) && path !== '..' && !path.startsWith(`..${sep}`));
 }
 
 /**
@@ -105,6 +151,11 @@ export async function bundleWeb(
     source: string = DEFAULT_SOURCE,
 ): Promise<{ source: string; target: string }> {
     const resolvedSource = await ensureWebBuild(source);
+    const sourcePath = await canonicalPath(resolvedSource);
+    const targetPath = await canonicalPath(target);
+    if (contains(sourcePath, targetPath) || contains(targetPath, sourcePath)) {
+        throw new Error('bundle-web: source and destination overlap');
+    }
     await verifyBoardRuntime(resolvedSource);
     await rm(target, { recursive: true, force: true });
     await cp(resolvedSource, target, { recursive: true });
