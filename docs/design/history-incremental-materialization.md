@@ -515,6 +515,14 @@ importer’s `HISTORY_IMPORT_SCHEMA_VERSION` guard in E92.
 Definition `v4` covers the 0763 re-audit corrections: empty loop scope is a no-op, source/day
 coverage is driven from raw rows, and first-seen delta sources participate in alias backfill.
 
+Definition `v7` (E93 task 1029) covers the skill-rollup representative grain: `history_board_skill_5m`
+materializes one representative per (source, session, invocation, invocation kind, capability kind,
+evidence kind) class with class-status precedence, replacing the per-row counts. Because the
+definition bump rebuilds every skill bucket exactly once, cross-run upgrades replay safely — see
+the replay procedure in `history-data-processing.md` §7 (E93 task 1030) and the late-arrival
+repair (`lateSkillResultBuckets`), which re-materializes a session's buckets without advancing
+the watermark.
+
 ### 13.3 Equivalence is exact for integers, bounded for allocations
 
 R4's original "byte-identical" wording conflicts with D10's `_alloc` real-valued measures: floating
