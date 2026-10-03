@@ -4,7 +4,7 @@ name: Emit inline pipeline action rows so run close needs no post-hoc backfill
 status: done
 template: feature-impl
 created_at: 2026-10-01T23:59:14.229Z
-updated_at: "2026-10-02T06:12:02.188Z"
+updated_at: "2026-10-03T01:58:21.838Z"
 feature_id: E71
 
 priority: P2
@@ -102,22 +102,21 @@ The independent task branch and its original prose were integrated in merge `5e0
 
 **Pipeline verify results**
 
-- Verdict: PASS (existing recorded verdict; this correction does not mint a new proof)
+- Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:243` — action boundary precedes the next action, guard or close; exact payload and measured batch alternative appear in the loop. |
-| R2 | MET | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:15` documents the Codex adapter spelling; the inspected installed reference has the same durable record paths and current loop obligation. |
-| R3 | MET | `packages/app/src/services/inline-run-setup.ts:1119` and `packages/app/tests/services/inline-run-driver.test.ts:340` — explicit in-run remediation and section anchor, with unchanged failure code and exit. |
+| R1 | MET | plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:243 action boundary precedes next action/guard/close; exact payload in loop |
+| R2 | MET | Repo copy header documents installer namespace drift (14-line diff, all /sp:dev-* to /sp-dev-* spelling adaptations); installed reference carries same durable record paths and loop obligation (:246) |
+| R3 | MET | packages/app/src/services/inline-run-setup.ts:1119 + inline-run-driver.test.ts:340 explicit in-run remediation with unchanged failure code/exit |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | command | Retained rehearsal `ac1-rehearsal-1046-d973` is terminal done with 10 incrementally emitted action rows; its `.md` and `.state.json` records are retained under `.spur/memory/runs/`. The scratch task was removed after the rehearsal. |
-| AC2 | MET | command | The repo header documents the installer namespace difference, satisfying the documented-drift alternative; installed and repo references contain the current loop obligation and durable record paths. |
-| AC3 | MET | test | Main's focused inline-run-driver suite: 13 pass, 0 fail; deterministic plugin bundle suite: 16 pass, 0 fail. The current assertions check the actual in-run remediation and section anchor rather than superseded branch wording. |
-| AC4 | MET | test | The zero-row close test pins exit 1, `code: NO_ACTION_ROWS` and `actionRows: 0`; the success case still closes after emission. |
-
-The original task-pipeline verification run `8c94ccab-5a16-4106-9f65-baf74d940e1b` and source-tree evidence remain preserved. The subsequent cleanup checks are recorded in `.spur/memory/runs/worktree-cleanup-20261002/cleanup-result.json`. Historical receipts describe their own source tree; live source anchors above describe merged main.
+| AC1 | MET | command | Retained rehearsal .spur/memory/runs/ac1-rehearsal-1046-d973.md + .state.json terminal done with 10 incrementally emitted action rows; re-confirmed this session |
+| AC2 | MET | command | Documented-drift alternative satisfied: diff is namespace spelling only; both copies carry current loop obligation |
+| AC3 | MET | test | inline-run-driver 23 pass / 0 fail (fresh; historical 13 — suite grew); bundle-plugin-lib 16 pass / 0 fail |
+| AC4 | MET | test | zero-row close test pins exit 1, code NO_ACTION_ROWS, actionRows:0; success case still closes after emission |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 

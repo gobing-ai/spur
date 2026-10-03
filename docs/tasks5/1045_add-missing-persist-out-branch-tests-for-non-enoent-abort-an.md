@@ -4,7 +4,7 @@ name: Add missing persist-out branch tests for non-ENOENT abort and external-key
 status: done
 template: feature-impl
 created_at: 2026-10-01T23:59:13.672Z
-updated_at: "2026-10-02T04:09:45.977Z"
+updated_at: "2026-10-03T01:58:21.637Z"
 feature_id: E71
 
 priority: P2
@@ -82,14 +82,14 @@ The other agent independently completed these two cases. Its integrated tests ar
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/tests/services/persist-worktree-runs.test.ts:993`; EISDIR rejection and target database/record absence |
-| R2 | MET | `packages/app/tests/services/persist-worktree-runs.test.ts:1028`; external-key-conflict has no source record and one unchanged target row |
+| R1 | MET | persist-worktree-runs.test.ts:993 EISDIR rejection before target database/record creation |
+| R2 | MET | persist-worktree-runs.test.ts:1028 external-key-conflict has no source record and one unchanged target row |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | command | `packages/app/tests/services/persist-worktree-runs.test.ts:993` EISDIR rejects before target database/record creation |
-| AC2 | MET | command | `packages/app/tests/services/persist-worktree-runs.test.ts:1028` exact external-key-conflict skip, no source records, one unchanged target row |
-| AC3 | MET | command | `bun test tests/services/persist-worktree-runs.test.ts` in packages/app: 33 pass, 0 fail; .spur/run/E71-1045-focused.log |
+| AC1 | MET | test | persist-worktree-runs.test.ts:993 EISDIR rejects before target side effects |
+| AC2 | MET | test | persist-worktree-runs.test.ts:1028 exact external-key-conflict skip, one unchanged target row |
+| AC3 | MET | command | bun test tests/services/persist-worktree-runs.test.ts in packages/app: 35 pass, 0 fail (fresh; historical row said 33 — suite grew) (.spur/run/verifyall-E71-logs/persist-worktree.log) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

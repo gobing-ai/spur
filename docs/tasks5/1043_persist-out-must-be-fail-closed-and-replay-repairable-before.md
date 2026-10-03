@@ -4,7 +4,7 @@ name: Persist-out must be fail-closed and replay-repairable before row transfer
 status: done
 template: feature-impl
 created_at: 2026-10-01T21:54:16.560Z
-updated_at: "2026-10-01T23:46:54.114Z"
+updated_at: "2026-10-03T02:03:35.137Z"
 feature_id: E71
 
 ---
@@ -94,15 +94,15 @@ Rejected: transactional rollback of inserted rows (per Design — no rollback se
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | packages/app/src/services/inline-run-setup.ts:432-452 — recordBytes pre-read of every row's <id>.md/<id>.state.json before openInlineRunProjectDb(toDir) (:454); task-pipeline ENOENT → named fatal (:441-447), non-ENOENT → rethrow (:449-450), bookkeeping ENOENT tolerated only (:440). Test: persist-worktree-runs.test.ts:758-792 |
-| R2 | MET | inline-run-setup.ts:457-461 — recordIds = persistedIds + id-exists skips, gate keyed off recordIds; copy-if-missing wx writes (:466-483); durable carry iterates recordIds (:504-506); id-once in packages/domain/src/dao/run-transfer.ts:103-116 (external-key-conflict excluded). Test: persist-worktree-runs.test.ts:794-847 |
-| R3 | MET | Bookkeeping skip preserved (terminal-reason.ts:34-36 + inline-run-setup.ts:467-472, replay-covered); divergence refusal unchanged (:477-480, 0984 R4 throw untouched); byte-identical no-op intact; test diff purely additive (+124/−0). Tests: persist-worktree-runs.test.ts:849-879 |
+| R1 | MET | inline-run-setup.ts:432-452 recordBytes pre-read before target DB open; ENOENT named fatal, non-ENOENT rethrow; bookkeeping ENOENT tolerated only (persist-worktree-runs.test.ts:758-792) |
+| R2 | MET | inline-run-setup.ts:457-506 recordIds gate + copy-if-missing wx writes + durable carry; id-once in run-transfer.ts:103-116 (persist-worktree-runs.test.ts:794-847) |
+| R3 | MET | bookkeeping skip preserved (terminal-reason.ts:34-36); divergence refusal and byte-identical no-op intact; test diff purely additive (persist-worktree-runs.test.ts:849-879) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | persist-worktree-runs.test.ts:758-792 — rejects /run_1043pipe\.md/; COUNT(runs)=0, COUNT(action_runs)=0; no recordsDir in invoking tree. Corroborated by gate log 9630/0 |
-| AC2 | MET | test | persist-worktree-runs.test.ts:794-847 — torn target replay: persisted:0, exact skip set (id-exists ×2, record-missing ×2 bookkeeping); records repaired byte-checkable; COUNT(runs)=2 no duplicates |
-| AC3 | MET | test | persist-worktree-runs.test.ts:849-879 — replay divergence refused (record-conflict, target bytes stand, sibling repaired); pre-existing 0975/0984 suite unchanged |
+| AC1 | MET | test | persist-worktree-runs.test.ts:758-792 rejects missing record pre-read; COUNT(runs)=0, COUNT(action_runs)=0; no recordsDir in invoking tree |
+| AC2 | MET | test | persist-worktree-runs.test.ts:794-847 torn-target replay repairs byte-checkable records; COUNT(runs)=2 no duplicates |
+| AC3 | MET | test | persist-worktree-runs.test.ts:849-879 replay divergence refused (record-conflict, target bytes stand, sibling repaired) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -124,9 +124,9 @@ Layering per ADR-021: raw SQL in domain, fail-closed/repair policy in app servic
 
 | Priority | Finding | Location | Disposition |
 | --- | --- | --- | --- |
-| P2 | Target-side fatals after `transferRunTables` (target `wx` write failure, non-regular target, `mkdirSync`, `copyFile`) can still leave inserted rows without records — residual window, pre-existing, strictly narrowed by this diff; row rollback rejected by Design (no seam) | inline-run-setup.ts:485, :240, :461-462, :846 | Accepted residual risk |
-| P2 | Deliberate behavior change: pre-validation reads records for all rows, so a re-persist fails closed if a non-bookkeeping source record was deleted after first persist (teardown destroys the record; WT-5 retains the worktree) | inline-run-setup.ts:432-452 | Accepted by design |
-| P2 | Minor test gap: no direct test for the non-ENOENT source-read abort or `external-key-conflict` exclusion from `recordIds` | inline-run-setup.ts:448, :458 | Report only; not AC-required
+| P2 | Target-side fatals after `transferRunTables` (target `wx` write failure, non-regular target, `mkdirSync`, `copyFile`) can still leave inserted rows without records — residual window, pre-existing, strictly narrowed by this diff; row rollback rejected by Design (no seam) | inline-run-setup.ts:485, :240, :461-462, :846 | RESOLVED — accepted residual risk: design rejects row rollback (no seam); window pre-existing and strictly narrowed by this diff |
+| P2 | Deliberate behavior change: pre-validation reads records for all rows, so a re-persist fails closed if a non-bookkeeping source record was deleted after first persist (teardown destroys the record; WT-5 retains the worktree) | inline-run-setup.ts:432-452 | RESOLVED — accepted by design: fail-closed on deleted source records is intended; WT-5 retains the worktree for reconciliation |
+| P2 | Minor test gap: no direct test for the non-ENOENT source-read abort or `external-key-conflict` exclusion from `recordIds` | inline-run-setup.ts:448, :458 | RESOLVED — report-only adjudication held; coverage confirmed by adjacent suites: non-ENOENT source-read abort = EISDIR rejection (persist-worktree-runs.test.ts:993), external-key-conflict end-to-end (inline-run-driver.test.ts:468-523), id-once exclusion (run-transfer.test.ts) |
 
 **Verdict: FINDINGS (P0: 0 / P1: 0 / P2: 3, report-only). Merge: OK with notes.** Reviewer unverified items: base-sha identity attested (no git access in read-only reviewer), gate PASS attested from log (not re-run), bundle twin attested by distinctive-string grep (deterministic regen check executed by supervisor during test-fix: anchor 16/16).
 
