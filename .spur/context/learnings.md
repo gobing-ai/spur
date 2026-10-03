@@ -895,3 +895,10 @@ Full trace: `docs/plans/2026-07-03-feature-cycle-prioritization-brainstorm.md`. 
 - [1059] Worker dispatch on glm-5.3-flash dies stopReason=length in oversized single-turn thinking; chunked dispatches with <150-word thinking caps complete reliably. Verify-answer lint: AC rows resolve ONLY on exact Scenario titles incl. "(req: Rn)" or AC-N (hyphen) positional alias; bare AC1 forms never resolve.
 - [1059] WT-4 now fail-stop end-to-end: pinned BATCH_TIP, fresh BASE_TIP rc-distinguished ancestry pre-FF, --ff-only sole mutation, landed verify before marker/delete, RMW marker preserves WT-3 fields, retained+mergeCommit on landed-but-incomplete, inspection-only recovery.
 - Inline pipeline runs must emit `--action`/`--actions-file` rows as each state settles; `inline-run-setup.ts --close` refuses a run with zero `action_runs` rows (NO_ACTION_ROWS, ADR-117). Post-hoc emission from session-measured durations closed run fbda (1066) but violated the live-emission contract — emit at settle time (task 1066 wrap).
+
+## 2026-10-03 runall-d3 (1065/1067)
+- Driver-side scripts defaulting a peer path from `process.cwd()` are vacuous under worktree isolation: `persist-out-check` initially compared the worktree against itself and printed a green PASS. Root fix: derive the invoke root from `git rev-parse --git-common-dir` (dirname = main repo), never cwd.
+- Redirect-onto-artifact clobber (E71/D63 class) is neutralized by making the write atomic (tmp+rename) AND refusing via inode compare (`fstatSync(1)` vs artifact) — the guard stays honest even if a future edit drops the rename.
+- `residual-scan scan` prints a human banner on stdout BEFORE the JSON; `| tail -n +2` when persisting to `<wbs>-residuals.json`, else fold/settle fail JSON-parse.
+- `task record --solution-from-diff` auto-ticks R/AC boxes matched by verify-answer rows; any task AC omitted from the answer stays unchecked → residual-scan blocking. Include every AC row in the answer table.
+- Branch landing needs commits: batch tasks commit atomically per task (`feat(...)` wbs footer); uncommitted batches mix two tasks' evidence into one diff.
