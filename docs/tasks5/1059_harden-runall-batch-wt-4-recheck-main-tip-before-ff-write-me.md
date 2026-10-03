@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: "Harden runall batch WT-4: recheck main tip before FF, write merged marker only after ref move"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-10-02T23:30:10.890Z
-updated_at: "2026-10-03T00:01:01.937Z"
+updated_at: "2026-10-03T03:29:11.455Z"
 feature_id: D63
 
 priority: P2
 ac_numbering: task-local
 ac_altitude: task-local
 estimate_hours: 4
+done_forced: "false"
+done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-runall-d63-2ebbd97c/.spur/memory/evidence/1059-verdict.json
 ---
 
 ## 1059. Harden runall batch WT-4: recheck main tip before FF, write merged marker only after ref move
@@ -35,9 +37,9 @@ The corrected Requirements, Design and Plan below supersede the historical propo
 
 ### Requirements
 
-- [ ] R1. Harden both WT-4 create/reuse examples with explicit fail-stop control flow, a pinned batch tip and fresh local base-tip/ancestry check immediately before FF. Retain the zero-commit guard. On divergence name both captured tips and divergent commits; retain tree and branch through WT-5.
-- [ ] R2. Define marker and partial-success ordering in both modes: a failed FF never writes success state; successful FF must establish the pinned tip was landed before marking completion or deleting the branch. Persist-out remains mandatory before teardown; persistence or cleanup failure records landed-but-retained facts without falsifying Git history.
-- [ ] R3. Keep strict FF-only policy. Document partial worktree-removal recovery using inspection, owned path verification and explicit cleanup authorization; do not automatically fetch, rebase, prune registrations, kill unrelated holders or recursively remove leftover directories.
+- [x] R1. Harden both WT-4 create/reuse examples with explicit fail-stop control flow, a pinned batch tip and fresh local base-tip/ancestry check immediately before FF. Retain the zero-commit guard. On divergence name both captured tips and divergent commits; retain tree and branch through WT-5.
+- [x] R2. Define marker and partial-success ordering in both modes: a failed FF never writes success state; successful FF must establish the pinned tip was landed before marking completion or deleting the branch. Persist-out remains mandatory before teardown; persistence or cleanup failure records landed-but-retained facts without falsifying Git history.
+- [x] R3. Keep strict FF-only policy. Document partial worktree-removal recovery using inspection, owned path verification and explicit cleanup authorization; do not automatically fetch, rebase, prune registrations, kill unrelated holders or recursively remove leftover directories.
 
 Out of scope: runtime engine changes, new public APIs, unrelated fixes from 1053–1056, production operations or external publication.
 
@@ -87,15 +89,55 @@ No runtime API or new marker schema. Owners: plugins/sp/skills/spur-dev/referenc
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change map (HEAD diff on two files; line anchors at time of writing):
+
+- `plugins/sp/skills/spur-dev/references/execution-batch.md:878`
+  - :878-1012 — WT-4 create mode rewritten as an explicit fail-stop sequence: pinned marker path; fail-stop `git checkout`; zero-commit guard (`git rev-list --count` -> WT-5); `BATCH_TIP="$(git rev-parse "$BRANCH")"` captured before any cleanup; fresh `BASE_TIP`; rc-distinguished `git merge-base --is-ancestor "$BASE_TIP" "$BATCH_TIP"` immediately before the sole mutation (rc > 1 fails closed, rc = 1 halts naming both tips and both divergent ranges); `git merge --ff-only` failure check naming the surviving concurrent-writer race; post-merge landed verify `git merge-base --is-ancestor "$BATCH_TIP" "$LANDED_BASE_TIP"`; `write_marker` helper; persist-out and holder-halt failures record `retained` + `mergeCommit`; existence-guarded `git rev-parse --verify --quiet` before `git branch -D`; success `write_marker merged` written once, last.
+  - :1014-1074 — reuse mode gets the identical fail-stop sequence (guard -> captured tips -> ancestry rc check -> FF-only -> landed verify) plus required Step-5 evidence persistence before the success marker; tree/branch still retained; persistence failure records `retained` + `mergeCommit`.
+  - :1076 — FF-only policy upgraded: `git merge --ff-only` is the sole mutation; local refs only (no fetch anywhere); a failed FF leaves the marker `active`; the concurrent-writer race survives every precheck.
+  - :1089-1098 — auto-decision carve-out justification updated: FF fails closed, branch deletion is post-landing, persisted, existence-guarded; no widening for reuse mode.
+  - :1123-1184 — WT-5 split into frozen-vocabulary classes: pre-merge failure (marker stays `active`) vs landed-but-incomplete (`retained` + `mergeCommit` BATCH_TIP; a removed branch is never queried); retention report gains a `Merge state` line; :1186 adds inspection-only partial-removal recovery with owned-path verification and explicit authorization for recursive deletion.
+  - :1338 — integrate(t) summary reflects the existence-guarded `git branch -D`.
+  - Review hop (F1/F2/F3): `write_marker` (:926 create, :1049 reuse) is read-modify-write — an existing marker keeps its WT-3 fields (`id`, `command`, `selector`, `createdAt`, `adopted`, `adoptedAt`); only `status`/`mergeCommit` change; absent-fallback keeps the 6-field write. `git branch -D` (:1000) is fail-stop — refusal halts via `write_marker retained`; `-D`-over-`-d` rationale stated. WT-5 report sentence is class-conditional: pre-merge keeps "nothing was merged onto the base ref"; landed-but-incomplete states the merge LANDED with mergeCommit/base-ref.
+
+- `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts`
+  - :313-374 — new spec-pin describe (task 1059): pins BATCH_TIP/BASE_TIP capture, "immediately before the sole mutation", rc-distinguished ancestry, landed verify, frozen marker vocabulary (active/merged/retained + mergeCommit), fail-stop delete with retained marker and `-D` rationale, marker read-modify-write in both blocks, class-conditional WT-5 sentence (unconditional claim absent), inspection-only recovery wording, and `no fetch` with `git fetch` absent.
+  - :570-1009 — new executable suite (6 scratch-git cases, real hashes in `.spur/run/1059-wt4-proof/`): canonical `wt4Block` (:637) executes under `sh` and ends in a read-modify-write marker write; cases at :725 (clean FF), :777 (advanced-but-ancestor base merges with stale baseSha preserved), :821 (divergent halt names both tips, tree/branch retained, marker active), :870 (race between ancestry and merge -> `--ff-only` halts, marker active), :911 (post-FF base advance keeps BATCH_TIP an ancestor), :950 (persist failure after landed merge -> `retained` + mergeCommit from the captured variable, exit 1 after the retained marker write, no deleted-branch query). Cases 1 and 6 seed WT-3-like fields (`id`/`command`/`selector`/`createdAt`/`adopted`/`adoptedAt`) onto the active marker and assert they survive the merged and retained rewrites — the read-modify-write proof.
+
+Rationale: the doc prose and the executable cases share one canonical fail-stop WT-4 shape so the contract is checkable rather than aspirational. Key decisions: test ancestry (`--is-ancestor BASE_TIP BATCH_TIP`), not equality with the marker's creation `baseSha` (an advanced-but-ancestor base still FFs; a divergent base halts with evidence); distinguish command/read errors (rc > 1, fail closed) from ordinary non-ancestry (rc = 1); freeze the marker vocabulary (`active` = nothing landed, `merged` = landed + persisted + cleaned, `retained` = landed-but-incomplete with `mergeCommit`); capture BATCH_TIP before cleanup and never query a removed branch; keep partial-removal recovery inspection-only with recursive deletion behind explicit authorization; terminal marker writes preserve prior marker fields (read-modify-write), so cross-command resume metadata survives every terminal transition.
+
+Resolved tension: the chunk brief said "delete branch after marker" (marker first). The canonical `wt4Block`, case 6, and the Q&A "terminal handling" direction all place the single success marker LAST — after landed verification, persistence, and cleanup — so a marker can never precede or outlive its verified integration. Followed the canonical shape: pre-merge failures leave `active`, landed-but-incomplete failures write `retained` + `mergeCommit`, and only full success writes `merged`.
+
+Requirements/AC checkboxes are intentionally untouched; the record stage owns that flip.
 
 ### Testing
 
-Planning-stage validation only: 2026-10-02 source audit and existing regression suites. Implementation proof remains pending; execute the isolated artifacts and focused checks specified in Plan. Do not treat this readiness audit as runtime verification PASS.
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Both WT-4 modes carry explicit fail-stop flow with pinned tips and fresh ancestry check immediately before FF: create `plugins/sp/skills/spur-dev/references/execution-batch.md:898-933` (`BATCH_TIP`/`BASE_TIP` capture, rc-distinguished `--is-ancestor`, `git merge --ff-only` halt), reuse identical at `plugins/sp/skills/spur-dev/references/execution-batch.md:1024-1047`; divergence names both tips and both ranges `plugins/sp/skills/spur-dev/references/execution-batch.md:926-929`; zero-commit guard retained `plugins/sp/skills/spur-dev/references/execution-batch.md:894-896`; WT-5 retention on divergence `plugins/sp/skills/spur-dev/references/execution-batch.md:1123-1131`. Executable: divergent/failed-FF cases halt with tree+branch retained `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:821-869`, `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:870-910`. |
+| R2 | MET | Failed FF never writes success state (`plugins/sp/skills/spur-dev/references/execution-batch.md:1076-1081`; executable `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:870-910` asserts `status: active`, no `mergeCommit`); success marker written once, last, after landed verify + persistence + cleanup (`plugins/sp/skills/spur-dev/references/execution-batch.md:999-1001`, reuse `:1066-1069`); landed-tip verify before marking/deleting `plugins/sp/skills/spur-dev/references/execution-batch.md:934-939`; persist-out mandatory before teardown `plugins/sp/skills/spur-dev/references/execution-batch.md:943-955`; persist/cleanup failures record `retained`+`mergeCommit` from captured tip without querying a removed branch (`plugins/sp/skills/spur-dev/references/execution-batch.md:924-925`, WT-5 classes `:1123-1136`; executable `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:950-1008` asserts `retained`, `mergeCommit == batchTip`, exit 1, no deleted-branch query). Marker read-modify-write preserves WT-3 fields in both blocks (`plugins/sp/skills/spur-dev/references/execution-batch.md:926-936`, `:1049-1059`; proven in cases 1/6). |
+| R3 | MET | FF-only policy: `git merge --ff-only` is the sole mutation, local refs only, no fetch — `plugins/sp/skills/spur-dev/references/execution-batch.md:1076-1085`; test pins `no fetch` present and `git fetch` absent across the whole spec (`plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:354-355`, passing). Partial-removal recovery is inspection-only with owned-path verification and explicit operator authorization for recursive deletion `plugins/sp/skills/spur-dev/references/execution-batch.md:1186-1197`; no automatic rebase/prune/holder-kill pinned in test `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:347-353`. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Fresh base ancestry controls FF eligibility (req: R1) | MET | test | Clean FF (case 1), advanced-but-ancestor base merges with stale baseSha preserved (case 2), divergent base halts naming both tips and both `git log` ranges with tree/branch retained, marker `active` (case 3): `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:725-869`, all passing in reproduced run; doc contract `plugins/sp/skills/spur-dev/references/execution-batch.md:920-933`. |
+| AC2 — Marker state reflects observed integration (req: R2) | MET | test | Failed FF after race keeps marker `active` with no success write (case 4, `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:870-910`); persist failure after landed merge records `retained`+`mergeCommit` from the captured variable, exit 1 after retained write, deleted branch never queried (case 6, `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:950-1008`); frozen vocabulary pinned `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:331-341`. |
+| AC3 — Integration policy and recovery stay bounded (req: R3) | MET | test | FF-only/no-fetch/recovery pins pass in the reproduced contract run (46 pass / 0 fail, 225 expects); inspection-only recovery wording pinned `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:347-353` and implemented `plugins/sp/skills/spur-dev/references/execution-batch.md:1186-1197`; structural gate `spur task check 1059 --json` → `pass: true`, no findings. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -106,4 +148,7 @@ Audit: HEAD 8467f6f6d; only the main worktree was registered; `task list --statu
 ### History
 
 - 2026-10-02T23:41:46.151Z backlog → todo (system)
+- 2026-10-03T02:53:00.321Z todo → wip (system)
+- 2026-10-03T03:28:57.659Z wip → testing (system)
+- 2026-10-03T03:29:11.452Z testing → done (system)
 
