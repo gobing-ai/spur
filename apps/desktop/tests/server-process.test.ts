@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import type { DesktopLayout } from '../src/layout';
 import {
+    DesktopStartupAborted,
     findFreePort,
     nodeSpawner,
     type SpawnedChild,
@@ -282,5 +283,40 @@ describe('server process', () => {
         await expect(
             startDesktopServer({ layout: devLayout, port: 70_000, spawn: { spawn: () => fakeChild() } }),
         ).rejects.toThrow(/Invalid port/);
+    });
+
+    test('abort during health stops the already spawned child', async () => {
+        const child = fakeChild({ exitOnKill: false });
+        const controller = new AbortController();
+        let spawned = false;
+        const pending = startDesktopServer({
+            layout: devLayout,
+            port: 9,
+            healthTimeoutMs: 5_000,
+            healthIntervalMs: 10,
+            killGraceMs: 15,
+            signal: controller.signal,
+            spawn: {
+                spawn() {
+                    spawned = true;
+                    return child;
+                },
+            },
+            fetchImpl: (_input, init) =>
+                new Promise((_resolve, reject) => {
+                    const signal = init?.signal;
+                    if (!signal) return;
+                    if (signal.aborted) {
+                        reject(new Error('aborted'));
+                        return;
+                    }
+                    signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+                }),
+        });
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        expect(spawned).toBe(true);
+        controller.abort();
+        await expect(pending).rejects.toBeInstanceOf(DesktopStartupAborted);
+        expect(child.signals[0]).toBe('SIGTERM');
     });
 });

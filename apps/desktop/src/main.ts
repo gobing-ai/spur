@@ -2,7 +2,7 @@ import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { app, BrowserWindow, dialog } from 'electron';
 import { resolveLayout } from './layout';
-import { type RunningDesktopServer, startDesktopServer } from './server-process';
+import { DesktopStartupAborted, type RunningDesktopServer, startDesktopServer } from './server-process';
 import { createMainWindow, registerWindowIpc } from './window';
 
 // Thin shell only. Do not import the server, bun:sqlite, or startServer.
@@ -19,6 +19,8 @@ if (!app.requestSingleInstanceLock()) {
 } else {
     let server: RunningDesktopServer | undefined;
     let quitting = false;
+    let startupStarted = false;
+    const startupAbort = new AbortController();
 
     const stopServer = async (): Promise<void> => {
         const current = server;
@@ -34,9 +36,13 @@ if (!app.requestSingleInstanceLock()) {
     });
 
     app.on('before-quit', (event) => {
-        if (quitting || !server) return;
+        // Quit during `startDesktopServer()` must kill the child even though `server`
+        // is not assigned until health succeeds. Abort reaches the in-progress spawn.
+        if (quitting) return;
+        if (!server && !startupStarted) return;
         event.preventDefault();
         quitting = true;
+        startupAbort.abort();
         void stopServer().finally(() => app.quit());
     });
 
@@ -46,6 +52,8 @@ if (!app.requestSingleInstanceLock()) {
 
     app.whenReady()
         .then(async () => {
+            startupStarted = true;
+            if (startupAbort.signal.aborted) return;
             const here = dirname(fileURLToPath(import.meta.url));
             const layout = resolveLayout({
                 isPackaged: app.isPackaged,
@@ -55,11 +63,24 @@ if (!app.requestSingleInstanceLock()) {
                 env: process.env,
                 argv: process.argv,
             });
-            server = await startDesktopServer({ layout });
+            server = await startDesktopServer({
+                layout,
+                signal: startupAbort.signal,
+                launchCwd: process.cwd(),
+            });
+            if (startupAbort.signal.aborted) {
+                await stopServer();
+                return;
+            }
             registerWindowIpc();
             createMainWindow({ url: `${server.url}/board`, preloadPath });
         })
         .catch((error: unknown) => {
+            if (quitting || error instanceof DesktopStartupAborted) {
+                quitting = true;
+                void stopServer().finally(() => app.quit());
+                return;
+            }
             dialog.showErrorBox('Spur desktop', errorText(error));
             quitting = true;
             void stopServer().finally(() => app.quit());

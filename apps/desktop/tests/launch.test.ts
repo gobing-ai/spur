@@ -1,5 +1,13 @@
 import { describe, expect, test } from 'bun:test';
-import { binaryKind, buildDevCliLaunch, childEnv, listProdBinaryCandidates, resolveServeLaunch } from '../src/launch';
+import {
+    binaryKind,
+    buildDevCliLaunch,
+    childEnv,
+    listProdBinaryCandidates,
+    resolveDesktopBin,
+    resolveServeLaunch,
+    standaloneServerCliCompanion,
+} from '../src/launch';
 import type { DesktopLayout } from '../src/layout';
 
 const devLayout: DesktopLayout = {
@@ -182,5 +190,36 @@ describe('launch', () => {
                 arch: 'x64',
             }),
         ).toThrow(/bun run build/);
+    });
+
+    test('relative SPUR_DESKTOP_BIN is resolved against the launch directory', () => {
+        const layout: DesktopLayout = {
+            mode: 'prod',
+            repoRoot: '/repo',
+            projectRoot: '/work',
+            resourcesDir: '/res/spur',
+        };
+        const launch = resolveServeLaunch({
+            layout,
+            port: 9,
+            parentEnv: { SPUR_DESKTOP_BIN: 'bin/spur' },
+            bunPath: 'bun',
+            launchCwd: '/launch',
+            exists: (path) => path === '/launch/bin/spur',
+            platform: 'linux',
+            arch: 'x64',
+        });
+        expect(launch.command).toBe('/launch/bin/spur');
+        expect(launch.cwd).toBe('/work');
+        expect(resolveDesktopBin('/opt/spur', '/launch')).toBe('/opt/spur');
+    });
+
+    test('standalone server companion matches dirname(execPath)/../cli/spur', () => {
+        expect(standaloneServerCliCompanion('/app/resources/spur/spur-server', 'linux')).toBe(
+            '/app/resources/cli/spur',
+        );
+        expect(standaloneServerCliCompanion('/app/resources/spur/spur-server.exe', 'win32')).toBe(
+            '/app/resources/cli/spur.exe',
+        );
     });
 });

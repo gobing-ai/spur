@@ -1,4 +1,4 @@
-import { basename, join } from 'node:path';
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import type { DesktopLayout } from './layout';
 import { platformBinarySuffix } from './layout';
 
@@ -95,6 +95,27 @@ export function buildProdLaunch(input: {
     };
 }
 
+/**
+ * Absolute path for `SPUR_DESKTOP_BIN`. A relative override is resolved against the
+ * directory Electron was launched from, not the child `cwd` (the project root).
+ * `spawn` would otherwise look up the same relative command from `projectRoot`.
+ */
+export function resolveDesktopBin(bin: string, launchCwd: string): string {
+    return isAbsolute(bin) ? bin : resolve(launchCwd, bin);
+}
+
+/**
+ * Path the standalone server uses for history refresh:
+ * `dirname(execPath)/../cli/spur` (`resolveStandaloneSpurInvocation`).
+ */
+export function standaloneServerCliCompanion(
+    serverBinary: string,
+    platform: NodeJS.Platform = process.platform,
+): string {
+    const name = platform === 'win32' ? 'spur.exe' : 'spur';
+    return join(dirname(serverBinary), '..', 'cli', name);
+}
+
 /** Candidate compiled binaries, most specific first. Windows names include `.exe`. */
 export function listProdBinaryCandidates(input: {
     envBin?: string;
@@ -126,6 +147,8 @@ export function resolveServeLaunch(input: {
     parentEnv: Record<string, string | undefined>;
     bunPath: string;
     exists: (path: string) => boolean;
+    /** Directory Electron was launched from. Relative `SPUR_DESKTOP_BIN` resolves against this. */
+    launchCwd?: string;
     platform?: NodeJS.Platform;
     arch?: string;
 }): ServeLaunch {
@@ -146,9 +169,10 @@ export function resolveServeLaunch(input: {
 
     const envBin = input.parentEnv.SPUR_DESKTOP_BIN;
     if (envBin) {
-        if (!input.exists(envBin)) throw new Error(`SPUR_DESKTOP_BIN does not exist: ${envBin}`);
+        const binary = resolveDesktopBin(envBin, input.launchCwd ?? process.cwd());
+        if (!input.exists(binary)) throw new Error(`SPUR_DESKTOP_BIN does not exist: ${binary}`);
         return buildProdLaunch({
-            binary: envBin,
+            binary,
             projectRoot: input.layout.projectRoot,
             port: input.port,
             parentEnv: input.parentEnv,

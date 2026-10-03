@@ -94,6 +94,28 @@ function isHealthOk(body: unknown): boolean {
     return typeof body === 'object' && body !== null && 'status' in body && body.status === 'ok';
 }
 
+/** Thrown when desktop startup is cancelled (quit) before `/api/health` succeeds. */
+export class DesktopStartupAborted extends Error {
+    constructor() {
+        super('desktop startup aborted');
+        this.name = 'DesktopStartupAborted';
+    }
+}
+
+function healthSignal(timeoutMs: number, cancel?: AbortSignal): AbortSignal {
+    const timeout = AbortSignal.timeout(timeoutMs);
+    if (!cancel) return timeout;
+    const controller = new AbortController();
+    const abort = (): void => controller.abort();
+    if (cancel.aborted || timeout.aborted) {
+        controller.abort();
+        return controller.signal;
+    }
+    cancel.addEventListener('abort', abort, { once: true });
+    timeout.addEventListener('abort', abort, { once: true });
+    return controller.signal;
+}
+
 /** Poll `GET /api/health` until the payload is `{ status: 'ok' }` or the deadline passes. */
 export async function waitForHealth(
     url: string,
@@ -103,19 +125,34 @@ export async function waitForHealth(
         fetchImpl?: HealthFetch;
         failure?: () => string | undefined;
         sleep?: (ms: number) => Promise<void>;
+        signal?: AbortSignal;
     },
 ): Promise<void> {
     const interval = options.intervalMs ?? 200;
     const fetchImpl = options.fetchImpl ?? fetch;
-    const sleep = options.sleep ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
+    const sleep =
+        options.sleep ??
+        ((ms: number) =>
+            new Promise<void>((resolve) => {
+                const onAbort = (): void => {
+                    clearTimeout(timer);
+                    resolve();
+                };
+                const timer = setTimeout(() => {
+                    options.signal?.removeEventListener('abort', onAbort);
+                    resolve();
+                }, ms);
+                options.signal?.addEventListener('abort', onAbort, { once: true });
+            }));
     const deadline = Date.now() + options.timeoutMs;
     let last = 'no response';
     while (Date.now() <= deadline) {
+        if (options.signal?.aborted) throw new DesktopStartupAborted();
         const early = options.failure?.();
         if (early) throw new Error(early);
         try {
             const response = await fetchImpl(url, {
-                signal: AbortSignal.timeout(Math.min(2_000, Math.max(1, options.timeoutMs))),
+                signal: healthSignal(Math.min(2_000, Math.max(1, options.timeoutMs)), options.signal),
             });
             if (response.ok) {
                 const body: unknown = await response.json();
@@ -130,6 +167,7 @@ export async function waitForHealth(
         if (Date.now() >= deadline) break;
         await sleep(interval);
     }
+    if (options.signal?.aborted) throw new DesktopStartupAborted();
     const early = options.failure?.();
     throw new Error(early ?? `Timed out waiting for ${url} (${last})`);
 }
@@ -174,6 +212,10 @@ export interface StartDesktopServerOptions {
     fetchImpl?: HealthFetch;
     platform?: NodeJS.Platform;
     arch?: string;
+    /** Aborted by quit so an in-progress child is killed before health resolves. */
+    signal?: AbortSignal;
+    /** Directory Electron was launched from. Forwarded to {@link resolveServeLaunch}. */
+    launchCwd?: string;
 }
 
 function formatSpawnFailure(error: Error, launch: ServeLaunch): string {
@@ -189,7 +231,9 @@ function formatSpawnFailure(error: Error, launch: ServeLaunch): string {
  * The Electron process never opens the database; the child does.
  */
 export async function startDesktopServer(options: StartDesktopServerOptions): Promise<RunningDesktopServer> {
+    if (options.signal?.aborted) throw new DesktopStartupAborted();
     const port = options.port ?? (await findFreePort());
+    if (options.signal?.aborted) throw new DesktopStartupAborted();
     if (!Number.isInteger(port) || port < 1 || port > 65_535) {
         throw new Error(`Invalid port: ${String(port)}`);
     }
@@ -202,7 +246,9 @@ export async function startDesktopServer(options: StartDesktopServerOptions): Pr
         exists: options.exists ?? existsSync,
         platform: options.platform,
         arch: options.arch,
+        launchCwd: options.launchCwd,
     });
+    if (options.signal?.aborted) throw new DesktopStartupAborted();
     const child = (options.spawn ?? nodeSpawner()).spawn(launch.command, launch.args, {
         cwd: launch.cwd,
         env: launch.env,
@@ -227,28 +273,43 @@ export async function startDesktopServer(options: StartDesktopServerOptions): Pr
         return undefined;
     };
 
+    const startupGrace = options.killGraceMs ?? 2_000;
+    let stopping: Promise<void> | undefined;
+    const stopSpawned = (graceMs: number): Promise<void> => {
+        if (!stopping) stopping = stopChild(child, graceMs);
+        return stopping;
+    };
+    const onAbort = (): void => {
+        void stopSpawned(startupGrace);
+    };
+    if (options.signal?.aborted) {
+        await stopSpawned(startupGrace);
+        throw new DesktopStartupAborted();
+    }
+    options.signal?.addEventListener('abort', onAbort, { once: true });
+
     try {
         await waitForHealth(healthUrl, {
             timeoutMs: options.healthTimeoutMs ?? 60_000,
             intervalMs: options.healthIntervalMs ?? 200,
             fetchImpl: options.fetchImpl,
-            failure,
+            failure: () => (options.signal?.aborted ? 'desktop startup aborted' : failure()),
+            signal: options.signal,
         });
+        if (options.signal?.aborted) throw new DesktopStartupAborted();
     } catch (error) {
-        await stopChild(child, options.killGraceMs ?? 2_000);
+        await stopSpawned(startupGrace);
+        options.signal?.removeEventListener('abort', onAbort);
+        if (options.signal?.aborted || error instanceof DesktopStartupAborted) throw new DesktopStartupAborted();
         throw error;
     }
+    options.signal?.removeEventListener('abort', onAbort);
 
-    let stopped = false;
     return {
         port,
         url: `http://${DESKTOP_HOST}:${port}`,
         kind: launch.kind,
         pid: child.pid,
-        stop: async () => {
-            if (stopped) return;
-            stopped = true;
-            await stopChild(child, options.killGraceMs ?? 5_000);
-        },
+        stop: () => stopSpawned(options.killGraceMs ?? 5_000),
     };
 }

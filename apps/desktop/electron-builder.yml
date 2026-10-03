@@ -9,6 +9,9 @@ files:
 extraResources:
   - from: resources/spur
     to: spur
+  # Companion CLI for standalone spur-server history refresh: dirname(execPath)/../cli/spur
+  - from: resources/cli
+    to: cli
 asar: true
 linux:
   target:

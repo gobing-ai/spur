@@ -134,3 +134,42 @@ body {
         flex-shrink: 0;
     }
 }
+
+/*
+ * Windows/Linux Electron titleBarOverlay draws native controls on top of the
+ * web content. DOM under that band is not clickable. Reserve the overlay height
+ * for every column (not only the sidebar drag strip) and keep the drag region
+ * inside the titlebar area so it does not cover the controls.
+ * `titlebar-area-*` are set by Electron; 36px matches titleBarOverlay.height.
+ */
+html[data-spur-desktop-platform="win32"] .board-layout,
+html[data-spur-desktop-platform="linux"] .board-layout {
+    box-sizing: border-box;
+    padding-top: env(titlebar-area-height, 36px);
+    grid-template-rows: minmax(0, 1fr);
+}
+
+html[data-spur-desktop-platform="win32"] .board-layout::before,
+html[data-spur-desktop-platform="linux"] .board-layout::before {
+    content: "";
+    position: fixed;
+    z-index: 80;
+    top: env(titlebar-area-y, 0px);
+    left: env(titlebar-area-x, 0px);
+    width: env(titlebar-area-width, 100%);
+    height: env(titlebar-area-height, 36px);
+    -webkit-app-region: drag;
+    app-region: drag;
+}
+
+html[data-spur-desktop-platform="win32"] [data-spur-drag-region],
+html[data-spur-desktop-platform="linux"] [data-spur-drag-region] {
+    height: 0;
+}
+
+@media (max-width: 767px) {
+    html[data-spur-desktop-platform="win32"] .board-layout > aside:first-of-type,
+    html[data-spur-desktop-platform="linux"] .board-layout > aside:first-of-type {
+        top: env(titlebar-area-height, 36px);
+    }
+}

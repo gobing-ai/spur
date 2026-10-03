@@ -27,7 +27,7 @@ The default project root is this checkout. Point it at another project with `SPU
 SPUR_PROJECT_ROOT=/path/to/project bun run desktop:dev
 ```
 
-`bun` must be on `PATH`, or set `BUN_PATH`. Quit kills the child (SIGTERM, then SIGKILL). A second launch focuses the existing window instead of opening another database.
+`bun` must be on `PATH`, or set `BUN_PATH`. Quit kills the child (SIGTERM, then SIGKILL), including a quit during the health wait before the child handle is published. A second launch focuses the existing window instead of opening another database.
 
 ## Prod
 
@@ -39,9 +39,11 @@ bun run desktop:stage
 SPUR_DESKTOP_MODE=prod SPUR_PROJECT_ROOT=/path/to/project bun run desktop:start
 ```
 
-`desktop:stage` copies the CLI binary if that platform's artifact exists, otherwise `dist/server/spur-server`, and places `dist/web` beside it as `web/`. The server's `resolveWebDistPath` finds that sibling directory via `dirname(execPath)/web`. The CLI binary is invoked with the same `serve --host --port --no-open --cwd` flags. The standalone server binary has no flag parser; it is spawned with `cwd=<projectRoot>`, `HOST=127.0.0.1`, and `PORT=<free>`, and it does not open a browser.
+`desktop:stage` copies the CLI binary if that platform's artifact exists, otherwise `dist/server/spur-server`, and places `dist/web` beside it as `web/`. The server's `resolveWebDistPath` finds that sibling directory via `dirname(execPath)/web`. The CLI binary is invoked with the same `serve --host --port --no-open --cwd` flags. The standalone server binary has no flag parser; it is spawned with `cwd=<projectRoot>`, `HOST=127.0.0.1`, and `PORT=<free>`, and it does not open a browser. That server resolves history refresh as `dirname(execPath)/../cli/spur`, so stage also copies (or compiles, via `scripts/spur-dev.ts build-cli`) a CLI companion to `resources/cli/spur`.
 
-`SPUR_DESKTOP_BIN` forces a binary. Packaged builds (`bun run --filter @gobing-ai/spur-desktop pack`) ship that staged directory as `extraResources/spur` next to Electron. `scripts/install.sh` still rejects Windows; Windows users get the binary through this stage/pack path, not the curl installer.
+`SPUR_DESKTOP_BIN` forces a binary. A relative path is resolved against the directory Electron was launched from before the existence check, so spawn does not look it up from `projectRoot`. Packaged builds (`bun run --filter @gobing-ai/spur-desktop pack`) ship `extraResources/spur` and `extraResources/cli` next to Electron. The shell pins a supported Electron release (currently 44.5.1). `scripts/install.sh` still rejects Windows; Windows users get the binary through this stage/pack path, not the curl installer.
+
+On Windows and Linux the frameless window uses `titleBarOverlay` (36px). The Board reserves `env(titlebar-area-height)` across the whole layout and limits the drag region to `env(titlebar-area-width)`. macOS keeps the sidebar drag strip for the hidden title bar.
 
 ## Smoke
 

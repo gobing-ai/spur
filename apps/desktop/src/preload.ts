@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('spurDesktop', {
 /** Gate the Board drag strip. Browsers and the Cloudflare worker never set this. */
 function markDesktop(): void {
     document.documentElement.dataset.spurDesktop = '1';
+    document.documentElement.dataset.spurDesktopPlatform = process.platform;
 }
 
 markDesktop();

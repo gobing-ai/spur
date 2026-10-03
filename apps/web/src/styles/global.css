@@ -337,7 +337,10 @@
 
 /* Electron frameless drag strip. Inert unless the desktop preload sets
    html[data-spur-desktop], so the browser board and the Cloudflare worker
-   keep the h-0 placeholder and an unchanged layout. */
+   keep the h-0 placeholder and an unchanged layout. macOS uses this sidebar
+   strip for the hidden title bar. Windows and Linux use titleBarOverlay;
+   board-layout.css reserves that overlay across the whole window and clears
+   this strip so it is not a second inset. */
 html[data-spur-desktop] [data-spur-drag-region] {
     -webkit-app-region: drag;
     app-region: drag;

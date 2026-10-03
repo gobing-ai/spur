@@ -20,7 +20,7 @@
     },
     "devDependencies": {
         "@types/bun": "catalog:",
-        "electron": "35.7.5",
+        "electron": "44.5.1",
         "typescript": "catalog:"
     }
 }
