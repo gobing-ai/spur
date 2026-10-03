@@ -2,11 +2,11 @@
 schema_version: 1
 id: "E93"
 name: "History capability detection for commands subagents and skills"
-status: backlog
+status: active
 priority: P1
 tags: []
 created_at: "2026-09-30T20:10:43.892Z"
-updated_at: "2026-09-30T20:29:40.867Z"
+updated_at: "2026-10-03T20:26:18.189Z"
 ---
 
 # E93: History capability detection for commands subagents and skills
@@ -128,7 +128,7 @@ Feature: History capability detection for commands subagents and skills
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 1028 | Identify history capabilities across native and converted agent formats | todo |
-| 1029 | Expose classified capability usage through existing Histories breakdowns | todo |
+| 1029 | Expose classified capability usage through existing Histories breakdowns | testing |
 | 1030 | Verify safe historical capability replay and stable Histories results | todo |
 <!-- END AUTO-GENERATED -->
 
@@ -143,3 +143,6 @@ Task batch 1028, 1029, 1030 is created through the task CLI, with dependency ord
 Planning stops at handoff. No production implementation, upstream release or live-data reimport has run.
 
 ## History
+
+- 2026-10-03T20:26:18.189Z backlog → active (system)
+
