@@ -4,7 +4,7 @@ name: Make installed inline workflow execution use the authoritative application
 status: done
 template: standard
 created_at: 2026-09-22T02:56:46.296Z
-updated_at: "2026-09-23T22:42:22.633Z"
+updated_at: "2026-10-03T04:14:24.670Z"
 feature_id: D63
 priority: P2
 tags:
@@ -113,11 +113,11 @@ Recovery: the original worktree under .spur was excluded by Biome; run d63-0914-
 
 ##### Findings (ranked)
 
-| # | Priority | Dimension | Finding | Location |
-|---|---|---|---|---|
-| 1 | P3 (minor) | Correctness | Resolved: array-valued source layers are rejected before identity persistence; regression asserts the specific error against unchanged definition inputs. | `packages/app/src/workflow/workflow-inventory.ts:70` |
-| 2 | P3 (minor) | Correctness | Resolved: the actual loaded definition must be a state machine, even when a supplied inventory claims otherwise with a matching digest. | `packages/app/src/services/inline-run-setup.ts:162` |
-| 3 | P4 (advisory) | Architecture | No remaining P1–P3 findings after independent review; existing resolver, fingerprint and trace owners are reused. The installed runtime still requires Bun. | `plugins/sp/scripts/inline-run-setup.ts:146` |
+| # | Priority | Dimension | Finding | Location | Disposition |
+|---|---|---|---|---|---|
+| 1 | P3 (minor) | Correctness | Resolved: array-valued source layers are rejected before identity persistence; regression asserts the specific error against unchanged definition inputs. | `packages/app/src/workflow/workflow-inventory.ts:70` | RESOLVED |
+| 2 | P3 (minor) | Correctness | Resolved: the actual loaded definition must be a state machine, even when a supplied inventory claims otherwise with a matching digest. | `packages/app/src/services/inline-run-setup.ts:162` | RESOLVED |
+| 3 | P4 (advisory) | Architecture | No remaining P1–P3 findings after independent review; existing resolver, fingerprint and trace owners are reused. The installed runtime still requires Bun. | `plugins/sp/scripts/inline-run-setup.ts:146` | — |
 
 ##### Functional Traceability
 
