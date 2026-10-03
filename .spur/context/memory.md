@@ -287,3 +287,4 @@
 - Gate iterations: format fix → TS2532/TS2322 noUncheckedIndexedAccess fixes → sp-runtime-path forbids literal config/... paths → bundledConfigRoot() resolution (import from @gobing-ai/spur-config/loader, comment text also matched the rule — reworded).
 - Final: spur-check PASS 9816/0; review+verify single fresh sp-super-reviewer (fa9c1d11) PASS, 4×P4 advisory + 1 FIXED during review; verdict PASS; record→done guard PASS; 1063 done; F96 closed.
 - Commits: 846fe4225 (test+task doc), 565e5b0da (F96 close). Concurrent Robin commits preserved (0330b46d9, 16000cb5e).
+- 2026-10-03 dev-run 1066 inline-full (worktree, auto): chunked-dispatch contract codified in inline-pipeline-driver.md; gate/review/verify/record/done all PASS; merged f637dcecb. Learnings: emit action rows per state at settle time.
