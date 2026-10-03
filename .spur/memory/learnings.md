@@ -4675,3 +4675,41 @@ Executed [`sp:doc-evolve`](file:///Users/robin/.gemini/config/skills/sp-doc-evol
   - **Transition-target severity escalation:** `L3.unchecked-checklist` emits a warning during intermediate checks, but escalates to an error when checked with `--as done` (`isTransitionTarget ? 'error' : 'warning'`). Declaring `ac_altitude: task-local` does not waive this check.
   - **Regex emphasis mismatches:** `R_ITEM_RE` allowed `[*_]{0,2}` emphasis for format validation, but the requirement-binding extraction regex lacked the emphasis wrapper, causing bolded requirements to silently fail coverage binding.
   - **Multi-copy template drift risk:** AC guidance comments exist in 7 locations (6 templates + style guide) plus test fixtures. Without an automated consistency check (filed as task 1062), any guidance change requires manual lockstep coordination.
+### Conclusion & Verification
+
+`sp:doc-evolve` wrap-up audit complete for task batch `["1064"]` (feature `D3`). Drift was detected in owning design satellites reflecting CLI observability output timing and `WorkflowRunLogSink` lifecycle, and repaired per [Constitution §6.5 and §7](file:///Users/robin/xprojects/spur-new/docs/99_PROJECT_CONSTITUTION.md#L198-L205).
+
+### Findings & Synchronization (T3 / T9)
+
+1. [docs/00_ADR.md](file:///Users/robin/xprojects/spur-new/docs/00_ADR.md): **No change**. Task 1064 restores existing invariants and fixes an uncommitted-id defect; it establishes no new architectural boundary and reverses no ADR ([Constitution §6.1](file:///Users/robin/xprojects/spur-new/docs/99_PROJECT_CONSTITUTION.md#L150-L177)).
+2. [docs/03_ARCHITECTURE.md](file:///Users/robin/xprojects/spur-new/docs/03_ARCHITECTURE.md): **No change**. System topology, storage roots, and event bus mechanisms remain as documented in §6.1 and §32 ([Constitution §6.4](file:///Users/robin/xprojects/spur-new/docs/99_PROJECT_CONSTITUTION.md#L191-L196)).
+3. [docs/04_DESIGN.md](file:///Users/robin/xprojects/spur-new/docs/04_DESIGN.md): **No change**. Satellites own the detailed contracts; index pointers and summaries remain unchanged ([Constitution §4.5](file:///Users/robin/xprojects/spur-new/docs/99_PROJECT_CONSTITUTION.md#L108-L118)).
+4. [docs/design/run-record-contract.md](file:///Users/robin/xprojects/spur-new/docs/design/run-record-contract.md#L48-L54): **Updated**. Recorded the 1064 baseline: `WorkflowRunLogSink` lazy file opening (`ensureOpen`) and CLI event-driven header preventing orphan files and uncommitted run IDs.
+5. [docs/design/workflow-run-log.md](file:///Users/robin/xprojects/spur-new/docs/design/workflow-run-log.md#L24-L29): **Updated**. Added task 1064 lazy open contract note and updated `related` frontmatter.
+6. [docs/design/cli-contracts.md](file:///Users/robin/xprojects/spur-new/docs/design/cli-contracts.md#L710-L718): **Updated**. Clarified that synchronous human `spur workflow run` withholds `Run: <id>` and plan preview until `workflow.run.started` fires.
+7. [docs/design/workflow-observability.md](file:///Users/robin/xprojects/spur-new/docs/design/workflow-observability.md#L85-L91): **Updated**. Documented `workflow.run.started` emission gate for foreground run header and plan preview.
+
+Task/feature corpus files were preserved without modification.
+
+Target artifact written to [.spur/run/d9511f50-a9f7-47b7-b74d-a0d7cb7c490b-wrapup-learnings.md](file:///Users/robin/xprojects/spur-new/.spur/run/d9511f50-a9f7-47b7-b74d-a0d7cb7c490b-wrapup-learnings.md).
+
+---
+
+## 2026-10-02 — 1064 (feature D3)
+
+### Errors fixed
+- **Pre-row workflow run ID leakage:** `spur workflow run` printed `Run: <id>` and plan preview synchronously before invoking the engine service. Any failure during pre-engine setup (such as `--vars` leaving declared variables unset) threw an error after the ID was displayed, causing subsequent `spur workflow trace <id>` calls to fail with `Run not found`.
+- **Eager empty log sink creation:** `WorkflowRunLogSink` constructor eagerly executed `mkdirSync` and `openSync(<id>.md, 'a')`, leaving orphan 0-byte `.md` files in `.spur/memory/runs/` whenever pre-row validation or initialization aborted before persistence.
+
+### Conventions
+- **Committed-row ordering invariant:** Every run-id-bearing side effect on the synchronous CLI execution path (`Run: <id>` stdout header, plan preview, `<id>.md`, `<id>.state.json`) must be downstream of `workflow.run.started`, which is only emitted after `createRun` commits the run row to SQLite.
+- **Prevent rather than clean up:** Prefer deferring side-effect creation until after commit boundaries rather than attempting rollback/cleanup branches on catch, which fail to cover external process kills (SIGINT/SIGTERM/OOM).
+- **Lazy record sink initialization:** Observability file sinks should defer directory creation and file descriptor acquisition to the first emitted event via an `ensureOpen()` helper with an `openFailed` latch for failure isolation.
+
+### Patterns
+- **Latched event subscription:** When subscribing to bus events that may emit duplicate projections or lack single-fire primitives, guard handler actions with a local boolean latch (e.g. `headerPrinted`) to preserve single-invocation execution.
+- **In-process CLI testing across invocations:** Multi-command lifecycle tests (`run` followed by `trace`) using in-process `main()` must configure a file-backed SQLite database in a temp project rather than `:memory:`, because separate `main()` invocations instantiate distinct database connections.
+
+### Gotchas
+- **ADR scope confusion:** ADR-091 governs `--json` contract envelopes, not human-mode error hint strings or line counts.
+- **`createRun` vs `workflow.run.started`:** In `ts-dual-workflow-engine`, `RunLifecycle.run` delegates row creation to `persistence.createRun` as its first step; `ObservableWorkflowAdapter` emits `workflow.run.started` only after `createRun` resolves, making that event the authoritative signal of row commitment.

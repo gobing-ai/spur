@@ -4,7 +4,7 @@ title: "Run record — two-file contract + the Observability read plane"
 status: implemented
 created_at: 2026-08-18
 updated_at: 2026-10-02
-related: [E7, I6, "0598", "0610", "0683", "0709", "0712", "0925", "1051", "1053"]
+related: [E7, I6, D3, "0598", "0610", "0683", "0709", "0712", "0925", "1051", "1053", "1064"]
 tags: [contract, E7, I6, workflow, observability]
 ---
 
@@ -47,6 +47,11 @@ The 0594 injected-file-list cost idea is independent instrumentation, not a prer
 2. **Zero residue:** rename failure cleans up `${statePath}.tmp` before returning replay guidance (0926 R1 parity).
 3. **`ok` contract:** `ok: true` denotes sidecar projection integrity (write succeeded), never run outcome; run outcome lives in `status` and DB `terminal_reason`.
 4. **Authoritative start time:** `startedAt` uses `runs.started_at` threaded from the committed run row via `closeRun` when prior sidecar state is missing, falling back to projection time only for context-less direct callers.
+
+**1064 run registration and lazy record open baseline (2026-10-02).** `WorkflowRunLogSink` and the sync `spur workflow run` path eliminate orphan run records and unqueryable run IDs (feature D3):
+1. **Event-driven header:** The sync CLI human progress stream withholds `Run: <id>` and plan preview until the committed `workflow.run.started` event fires (`apps/cli/src/commands/workflow.ts`). Pre-row failures (such as `--vars` validation or engine setup) print no run ID.
+2. **Lazy record open:** `WorkflowRunLogSink` (`packages/app/src/observability/workflow-run-log-sink.ts`) defers directory creation and opening `<id>.md` to `ensureOpen()` on the first emitted event (with an `openFailed` latch for R8 inert degradation), so constructing a sink before row commit leaves no 0-byte `.md` or `.state.json` files.
+
 
 
 

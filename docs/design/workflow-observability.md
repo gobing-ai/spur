@@ -3,8 +3,8 @@ kind: design
 title: "Workflow run observability"
 status: implemented
 created_at: 2026-06-25
-updated_at: 2026-09-21
-related: [D2, D9, "0109", "0114", "0365", "0597", "0603", "0604"]
+updated_at: 2026-10-02
+related: [D2, D3, D9, "0109", "0114", "0365", "0597", "0603", "0604", "1064"]
 tags: [system, D2, D9, workflow, observability]
 ---
 
@@ -85,6 +85,7 @@ lifecycle; prompt content remains deliberately absent.
 | `--json` | no prose | no prose | no prose | no prose | no prose | one existing JSON result |
 
 `--quiet` conflicts with `--verbose`; `--silent` conflicts with both. `--no-plan` remains orthogonal.
+The run header (`Run: <id>`) and plan preview are printed on the committed `workflow.run.started` bus event (task 1064 / D3), ensuring pre-row failures print no run ID and any printed run ID is immediately queryable.
 Foreground action lines identify run, state/node, kind, declared agent/model, safe invocation summary,
 timeout budget, duration, outcome, and `usage unavailable`. Once dispatch resolves the actual profile, the
 agent-start event supersedes declared metadata and its heartbeat replaces the generic action heartbeat.

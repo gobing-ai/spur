@@ -111,6 +111,8 @@ Feature: Workflow run reliability defects
 | 0902 | Design upstream ts-dual-workflow-engine checkpoint/interruption contract (ts-libs packages/dual-workflow-engine) — prerequisite for 0901 R2 safe-resume | done |
 | 0980 | Lifecycle runs created by a record-stage transition must reach a terminal status | done |
 | 1064 | Workflow run registration: reported run ids must be queryable | done |
+| 1065 | make residual scan fold freshness aware between run and durable verdict copies | todo |
+| 1067 | enforce e71 persist out before worktree removal in wt4 landings | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
