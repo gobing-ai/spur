@@ -36,9 +36,10 @@ When the guard runs
 Then the input is rejected
 `;
 
-function answer(reqs: string[], acs: string[], verdict = 'Verdict: PASS'): string {
+function answer(reqs: string[], acs: string[], verdict = 'Verdict: PASS', confidence = 'Confidence: HIGH'): string {
     return [
         verdict,
+        confidence,
         '',
         '### Per-Requirement Traceability',
         '| Req | Status | Evidence |',
@@ -75,6 +76,34 @@ describe('lintVerifyAnswer (task 1003 R1)', () => {
         expect(findings.length).toBe(1);
         expect(findings[0]?.line).toBe(1);
         expect(findings[0]?.message).toContain('invalid Verdict value "DONE"');
+    });
+
+    test('missing `Confidence:` line is rejected (1068 R2)', () => {
+        const findings = lintVerifyAnswer(answer(CLEAN_REQS, CLEAN_ACS, 'Verdict: PASS', ''), TASK, null);
+        expect(findings.length).toBe(1);
+        expect(findings[0]?.rule).toBe('confidence-missing');
+        expect(findings[0]?.message).toContain('`Confidence:`');
+    });
+
+    test('invalid Confidence value is rejected with the line number (1068 R2)', () => {
+        const findings = lintVerifyAnswer(
+            answer(CLEAN_REQS, CLEAN_ACS, 'Verdict: PASS', 'Confidence: SURE'),
+            TASK,
+            null,
+        );
+        expect(findings.length).toBe(1);
+        expect(findings[0]?.rule).toBe('confidence-value');
+        expect(findings[0]?.line).toBe(2);
+        expect(findings[0]?.message).toContain('invalid Confidence value "SURE"');
+    });
+
+    test.each(['HIGH', 'MEDIUM', 'LOW'])('Confidence: %s is accepted (1068 R2)', (level) => {
+        const findings = lintVerifyAnswer(
+            answer(CLEAN_REQS, CLEAN_ACS, 'Verdict: PASS', `Confidence: ${level}`),
+            TASK,
+            null,
+        );
+        expect(findings).toEqual([]);
     });
 
     test('unknown requirement ID is rejected', () => {
@@ -181,6 +210,7 @@ describe('lintVerifyAnswer (task 1003 R1)', () => {
     test('AC header row closes a requirement table without a heading between', () => {
         const body = [
             'Verdict: PASS',
+            'Confidence: HIGH',
             '',
             '### Per-Requirement Traceability',
             '| Req | Status | Evidence |',

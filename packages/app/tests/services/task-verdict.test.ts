@@ -94,6 +94,16 @@ describe('deriveVerdict', () => {
         expect(result.requirements[1]?.status).toBe('MET');
     });
 
+    test('carries the answer Confidence line into the result (1068 R3)', () => {
+        const result = deriveVerdict(`Confidence: MEDIUM\n${MET_ANSWER}`, true);
+        expect(result.confidence).toBe('MEDIUM');
+    });
+
+    test('omits confidence when the answer has no valid Confidence line (1068 R3)', () => {
+        const result = deriveVerdict(MET_ANSWER, true);
+        expect(result.confidence).toBeUndefined();
+    });
+
     test('PARTIAL: mixed MET + PARTIAL, no UNMET', () => {
         const result = deriveVerdict(PARTIAL_ANSWER, true);
         expect(result.verdict).toBe('PARTIAL');

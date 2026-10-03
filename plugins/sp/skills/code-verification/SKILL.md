@@ -336,6 +336,7 @@ Verdict: PASS    (or PARTIAL / FAIL)
 
 ```markdown
 Verdict: PASS
+Confidence: HIGH
 
 ### Per-Requirement Traceability
 | Req | Status | Evidence |
@@ -354,6 +355,7 @@ Verdict: PASS
 ```
 
 The per-requirement traceability table MUST use `| Req | Status | Evidence |` (exactly this header, no `R#`/`R`/`Requirement` variant — `Status` in column 2 — and no extra columns between Req and Status). The Acceptance Criteria table MUST use `| AC | Status | Evidence Type | Evidence |`.
+The answer MUST carry exactly one `Confidence: HIGH|MEDIUM|LOW` line (task 1068): the verifier's stated confidence in the verdict — HIGH = fresh executable evidence + re-read anchors this run; MEDIUM = partial reliance on prior evidence, external/delegated outcomes, or an unstable tree; LOW = key evidence not re-executed. A missing or out-of-vocabulary line fails lint (`confidence-missing` / `confidence-value`) and blocks derivation; the value lands in the verdict artifact's `confidence` field and the recorded `## Testing` section.
 **MUST NOT:** place a `Severity` column between `Req` and `Status` in the authoring contract.
 The parser is tolerant of these variants (defense-in-depth), but the authoring contract is
 canonical.

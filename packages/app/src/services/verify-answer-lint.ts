@@ -60,6 +60,18 @@ export function lintVerifyAnswer(
         );
     }
 
+    // 1068 R2: the confidence line is verified like the verdict line — one line,
+    // closed vocabulary.
+    if (tables.confidence === null) {
+        add(0, 'confidence-missing', 'no `Confidence:` line (expected exactly one `Confidence: HIGH|MEDIUM|LOW` line)');
+    } else if (!/^(HIGH|MEDIUM|LOW)$/i.test(tables.confidence.value)) {
+        add(
+            tables.confidence.line,
+            'confidence-value',
+            `invalid Confidence value "${tables.confidence.value}" (HIGH | MEDIUM | LOW)`,
+        );
+    }
+
     const reqIds = extractRequirementIds(taskContent);
     const acIndex = buildAcIdentityIndex(taskContent, featureContent ?? null);
 
@@ -194,14 +206,19 @@ function normalizeEvidenceType(raw: string): string | null {
     return EVIDENCE_TYPE_PRECEDENCE.find((candidate) => tokens.includes(candidate)) ?? null;
 }
 
+const CONFIDENCE_LEVELS = ['HIGH', 'MEDIUM', 'LOW'] as const;
+/** Verifier's stated confidence in the verdict (task 1068 R1). */
+export type VerdictConfidence = (typeof CONFIDENCE_LEVELS)[number];
+
 interface AnswerTables {
     verdict: { value: string; line: number } | null;
+    confidence: { value: string; line: number } | null;
     reqs: ReqRow[];
     acs: AcRow[];
 }
 
 function parseAnswer(text: string): AnswerTables {
-    const out: AnswerTables = { verdict: null, reqs: [], acs: [] };
+    const out: AnswerTables = { verdict: null, confidence: null, reqs: [], acs: [] };
     const lines = text.split('\n');
     let reqTable = false;
     let acTable = false;
@@ -273,7 +290,29 @@ function parseAnswer(text: string): AnswerTables {
             line: text.slice(0, verdictMatches[0]?.index ?? 0).split('\n').length,
         };
     }
+    // 1068 R1: same exactly-one-line contract as `Verdict:` — zero or duplicate
+    // Confidence lines both surface as `confidence-missing`.
+    const confidenceMatches = [...text.matchAll(/^\s*Confidence:\s*(\S+)\s*$/gim)];
+    if (confidenceMatches.length === 1) {
+        out.confidence = {
+            value: confidenceMatches[0]?.[1] ?? '',
+            line: text.slice(0, confidenceMatches[0]?.index ?? 0).split('\n').length,
+        };
+    }
     return out;
+}
+
+/**
+ * Extract a normalized confidence level from an answer text (task 1068 R3).
+ * Returns `undefined` when the line is missing, duplicated, or carries an
+ * invalid value — the lint rejects those answers before derivation runs, so
+ * this helper stays total for `deriveVerdict` and never throws.
+ */
+export function extractAnswerConfidence(text: string): VerdictConfidence | undefined {
+    const matches = [...text.matchAll(/^\s*Confidence:\s*(\S+)\s*$/gim)];
+    if (matches.length !== 1) return undefined;
+    const value = (matches[0]?.[1] ?? '').toUpperCase();
+    return (CONFIDENCE_LEVELS as readonly string[]).includes(value) ? (value as VerdictConfidence) : undefined;
 }
 
 // ─── Task-side identity extraction ───────────────────────────────────────────

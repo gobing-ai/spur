@@ -7,6 +7,7 @@
 
 import type { TaskStatus } from '@gobing-ai/spur-domain/schema';
 import type { VerdictCheck, VerdictRequirement, VerifyVerdict } from './task-record';
+import { extractAnswerConfidence, type VerdictConfidence } from './verify-answer-lint';
 import { aggregateVerifyVerdict } from './verify-verdict';
 
 // ─── Types ──────────────────────────────────────────────────────────────
@@ -17,6 +18,8 @@ export type AnswerText = string;
 /** Outcome of verdict derivation. */
 export interface VerdictResult {
     verdict: 'PASS' | 'PARTIAL' | 'FAIL' | 'UNKNOWN';
+    /** Verifier's stated confidence (task 1068 R3); absent when the answer carries no valid line. */
+    confidence?: VerdictConfidence;
     requirements: VerdictRequirement[];
     acceptanceCriteria?: VerdictAcceptanceCriteria[];
     checks: VerdictCheck[];
@@ -46,10 +49,17 @@ export function deriveVerdict(answerText: AnswerText, taskCheckPassed: boolean):
     const parsedAc = extractAcceptanceCriteria(answerText);
     const acceptanceCriteria = applyAcceptanceCriteriaEvidenceRule(parsedAc.rows);
     const checks = extractChecks(answerText, taskCheckPassed, requirements, acceptanceCriteria, parsedAc.dropped);
+    const confidence = extractAnswerConfidence(answerText);
 
     // If we couldn't parse any requirements, the answer is unparseable.
     if (requirements.length === 0) {
-        return { verdict: 'UNKNOWN', requirements, acceptanceCriteria, checks };
+        return {
+            verdict: 'UNKNOWN',
+            ...(confidence !== undefined ? { confidence } : {}),
+            requirements,
+            acceptanceCriteria,
+            checks,
+        };
     }
 
     // Task 0592 R2: derive the aggregate with the one shared aggregation policy so
@@ -64,7 +74,13 @@ export function deriveVerdict(answerText: AnswerText, taskCheckPassed: boolean):
         checks: [],
         taskCheckPassed,
     });
-    return { verdict: aggregate, requirements, acceptanceCriteria, checks };
+    return {
+        verdict: aggregate,
+        ...(confidence !== undefined ? { confidence } : {}),
+        requirements,
+        acceptanceCriteria,
+        checks,
+    };
 }
 
 // ─── Parsers ────────────────────────────────────────────────────────────

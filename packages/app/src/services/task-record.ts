@@ -280,6 +280,9 @@ export function renderTesting(v: CanonicalVerifyVerdict): string {
     lines.push('**Pipeline verify results**');
     lines.push('');
     lines.push(`- Verdict: ${v.verdict} (from verdict artifact)`);
+    // 1068 R3: render the verifier's stated confidence when the artifact carries it;
+    // pre-1068 artifacts have no field and render no line (optional on read).
+    if (v.confidence !== undefined) lines.push(`- Confidence: ${v.confidence}`);
     lines.push('');
 
     if (v.requirements.length === 0) {

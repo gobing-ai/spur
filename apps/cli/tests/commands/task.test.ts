@@ -3982,6 +3982,7 @@ describe('spur task CLI — verdict scenario-key gate (0958)', () => {
                 answerPath,
                 [
                     'Verdict: PASS',
+                    'Confidence: HIGH',
                     '',
                     '### Per-Requirement Traceability',
                     '| Req | Status | Evidence |',
@@ -4018,6 +4019,7 @@ describe('spur task CLI — verdict scenario-key gate (0958)', () => {
                 answerPath,
                 [
                     'Verdict: PASS',
+                    'Confidence: HIGH',
                     '',
                     '### Per-Requirement Traceability',
                     '| Req | Status | Evidence |',
