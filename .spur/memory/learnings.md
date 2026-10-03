@@ -4631,3 +4631,47 @@ Executed [`sp:doc-evolve`](file:///Users/robin/.gemini/config/skills/sp-doc-evol
   - **Classify-not-resolve:** When handling complex or out-of-scope targets (nested subpaths) in flat artifact copy sets, classify and skip them rather than inventing recursive copy, hashing, and conflict resolution mechanisms.
 - **Gotchas:**
   - **Teardown blocking on evidence paths:** Citing evidence files in subdirectories under `.spur/run/` in task files will fail worktree teardown unless the persist-out extractor specifically recognises subpaths and classifies them as directory skips.
+### Drift Audit and Repair Summary
+
+Executed [`sp:doc-evolve`](file:///Users/robin/.gemini/config/skills/sp-doc-evolve/SKILL.md) (wrapup) across [`docs/00_ADR.md`](file:///Users/robin/xprojects/spur-new/docs/00_ADR.md), [`docs/03_ARCHITECTURE.md`](file:///Users/robin/xprojects/spur-new/docs/03_ARCHITECTURE.md), [`docs/04_DESIGN.md`](file:///Users/robin/xprojects/spur-new/docs/04_DESIGN.md), and [`docs/design/*`](file:///Users/robin/xprojects/spur-new/docs/design/) for task `1061` read from [`.spur/run/3f3e8ffc-21bd-46ed-81ff-56fab9d6bbaf-wrapup-tasks.json`](file:///Users/robin/xprojects/spur-new/.spur/run/3f3e8ffc-21bd-46ed-81ff-56fab9d6bbaf-wrapup-tasks.json):
+
+1. **[`docs/00_ADR.md`](file:///Users/robin/xprojects/spur-new/docs/00_ADR.md) & [`docs/03_ARCHITECTURE.md`](file:///Users/robin/xprojects/spur-new/docs/03_ARCHITECTURE.md):**
+   - **Audit:** Task 1061 aligns authoring guidance and template comments with established checker semantics in `packages/app/src/services/task-check.ts` and adds isolated canaries. It introduces no new cross-module architectural decisions, schema breaking changes, or reversals ([Constitution §6.1](file:///Users/robin/xprojects/spur-new/docs/99_PROJECT_CONSTITUTION.md#L150-L177)). [ADR-062](file:///Users/robin/xprojects/spur-new/docs/00_ADR.md#L685) ("Scenario coverage respects declared task-versus-feature altitude") and [`docs/03_ARCHITECTURE.md:438`](file:///Users/robin/xprojects/spur-new/docs/03_ARCHITECTURE.md#L438) §12.3 remain authoritative without requiring amendment.
+
+2. **[`docs/04_DESIGN.md`](file:///Users/robin/xprojects/spur-new/docs/04_DESIGN.md) & [`docs/design/*`](file:///Users/robin/xprojects/spur-new/docs/design/):**
+   - [`docs/04_DESIGN.md:35`](file:///Users/robin/xprojects/spur-new/docs/04_DESIGN.md#L35): Pointer to [`design/planning-record-contracts.md`](file:///Users/robin/xprojects/spur-new/docs/design/planning-record-contracts.md) remains unchanged; no ceremonial index edit required ([Constitution §4.5](file:///Users/robin/xprojects/spur-new/docs/99_PROJECT_CONSTITUTION.md#L108-L118)).
+   - [`docs/design/planning-record-contracts.md:7`](file:///Users/robin/xprojects/spur-new/docs/design/planning-record-contracts.md#L7): Added `1061` to `related` frontmatter.
+   - [`docs/design/planning-record-contracts.md:163`](file:///Users/robin/xprojects/spur-new/docs/design/planning-record-contracts.md#L163) (§7.3.1): Documented `ac_numbering: z.literal('task-local').optional()` as the task-local requirement-binding opt-in for `L3.ac-requirement-coverage`, clarified the `ac_altitude` distinction (skipping feature subset checks under DD-09 vs requirement bindings), and added `done_forced`, `done_reason`, and `feature_link_declined` to match `taskFrontmatterSchema`.
+
+3. **Artifact and Corpus Invariants:**
+   - Artifact written to [`.spur/run/3f3e8ffc-21bd-46ed-81ff-56fab9d6bbaf-wrapup-learnings.md`](file:///Users/robin/xprojects/spur-new/.spur/run/3f3e8ffc-21bd-46ed-81ff-56fab9d6bbaf-wrapup-learnings.md).
+   - Validated against structural gate awk shape (`d+w+b == 3`: date, WBS, bullet).
+   - Task and feature corpus files were not modified.
+
+# Working learnings
+
+## 2026-10-02
+
+### Task 1061: Align task AC template with done-gate scenario keying (checkbox ACs key L4.uncovered-task-scenario)
+
+- **Conventions:**
+  - **Two-control distinction for task ACs:** `ac_altitude: task-local` controls feature-level traceability (DD-09) by skipping the feature scenario title-subset check. It never waives terminal checklist completion (`L3.unchecked-checklist`), required sections, verdict artifacts, line anchors, or other done gates. `ac_numbering: task-local` controls task-local requirement bindings by opting into the `L3.ac-requirement-coverage` loop.
+  - **Preferred task-local AC authoring form:** For regression and task-local work, author `Scenario: AC1 — <concrete outcome> (req: R1)` blocks with Given/When/Then, declaring both `ac_altitude: task-local` and `ac_numbering: task-local` in frontmatter.
+  - **Enforcement limits of parsed checkbox ACs:** Checkbox rows (`- [ ] AC1 — <title>`) join checklist parsing and feature subset matching, but do not enter the `Scenario:`-only requirement binding loop. They are supported for graduating criteria, but cannot bind task-local requirements.
+  - **Legacy freeform bullets:** Raw `- AC1` / `- ACn:` bullets parse as nothing (no subset match, no requirement binding, no box counting). They are legacy unparsed records, not an approved authoring convention to bypass traceability.
+  - **Canonical requirements format:** Requirements must use the template checklist format `- [ ] R1. <text>`. Emphasized forms like bold `**R1**` pass format ratio checks but fail requirement-binding extraction.
+
+- **Errors fixed:**
+  - Contradictory authoring guidance across the 6 task templates (`config/templates/task/*.md`) and `ac-style-guide.md` where altitude and numbering were conflated, prompting agents to author unparsed freeform AC rows to pass the done gate.
+  - Outdated guidance in `ac-style-guide.md` recommending bold requirement heads (`**R1**`), which passed `L3.requirements-format` but failed requirement binding in `task-check.ts`.
+  - Stale `AC_PLACEHOLDER` sed pattern in `apps/cli/tests/commands/task.test.ts` (0788 ready-by-default contract test) that expected the old template comment.
+
+- **Patterns:**
+  - **Semantic pinning via isolated canaries:** Pin individual checker codes and severities with isolated unit tests (`packages/app/tests/services/task-check.test.ts:2040` "1061 canaries") evaluating exact codes (`L4.uncovered-task-scenario`, `L3.ac-requirement-coverage`, `L3.unchecked-checklist`), avoiding reliance on full-check passes that mask specific rules.
+  - **Byte-identical corpus verification:** When updating authoring rules and style guides, run baseline and post-edit checks against real corpus tasks (1053–1056) to ensure no regressions or unexpected finding shifts occur in existing records.
+  - **Lockstep template synchronization:** When updating task template instructions across multiple templates (`standard`, `feature-impl`, `issue`, `brainstorm`, `review`, `meta`), ensure all template comment bodies remain byte-identical.
+
+- **Gotchas:**
+  - **Transition-target severity escalation:** `L3.unchecked-checklist` emits a warning during intermediate checks, but escalates to an error when checked with `--as done` (`isTransitionTarget ? 'error' : 'warning'`). Declaring `ac_altitude: task-local` does not waive this check.
+  - **Regex emphasis mismatches:** `R_ITEM_RE` allowed `[*_]{0,2}` emphasis for format validation, but the requirement-binding extraction regex lacked the emphasis wrapper, causing bolded requirements to silently fail coverage binding.
+  - **Multi-copy template drift risk:** AC guidance comments exist in 7 locations (6 templates + style guide) plus test fixtures. Without an automated consistency check (filed as task 1062), any guidance change requires manual lockstep coordination.
