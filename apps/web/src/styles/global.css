@@ -334,3 +334,12 @@
     white-space: pre-line;
     text-align: left;
 }
+
+/* Electron frameless drag strip. Inert unless the desktop preload sets
+   html[data-spur-desktop], so the browser board and the Cloudflare worker
+   keep the h-0 placeholder and an unchanged layout. */
+html[data-spur-desktop] [data-spur-drag-region] {
+    -webkit-app-region: drag;
+    app-region: drag;
+    height: 2.25rem;
+}

@@ -1,0 +1,26 @@
+{
+    "name": "@gobing-ai/spur-desktop",
+    "version": "0.3.98",
+    "description": "Spur desktop shell. Electron loads the Board from a child Bun server and does not open SQLite.",
+    "license": "Apache-2.0",
+    "author": "Robin Min <minlongbing@gmail.com>",
+    "private": true,
+    "type": "module",
+    "main": "dist/main.js",
+    "scripts": {
+        "build:js": "bun build src/main.ts --outfile dist/main.js --target node --format esm --external electron && bun build src/preload.ts --outfile dist/preload.cjs --target node --format cjs --external electron",
+        "dev": "bun run build:js && electron .",
+        "start": "bun run build:js && electron .",
+        "stage": "bun scripts/stage-resources.ts",
+        "pack": "bun run stage && bun run build:js && bunx electron-builder --config electron-builder.yml",
+        "smoke": "bun test tests",
+        "smoke:serve": "bun scripts/smoke-serve.ts",
+        "test": "bun test tests",
+        "typecheck": "tsc --noEmit"
+    },
+    "devDependencies": {
+        "@types/bun": "catalog:",
+        "electron": "35.7.5",
+        "typescript": "catalog:"
+    }
+}

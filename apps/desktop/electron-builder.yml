@@ -1,0 +1,23 @@
+appId: ai.gobing.spur.desktop
+productName: Spur
+copyright: Copyright © Gobing AI
+directories:
+  output: ../../dist/desktop
+files:
+  - dist/**
+  - package.json
+extraResources:
+  - from: resources/spur
+    to: spur
+asar: true
+linux:
+  target:
+    - AppImage
+  category: Development
+mac:
+  target:
+    - dmg
+  category: public.app-category.developer-tools
+win:
+  target:
+    - nsis

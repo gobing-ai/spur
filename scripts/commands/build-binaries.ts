@@ -1,10 +1,12 @@
 /**
  * Cross-compile the `spur` CLI into per-platform standalone binaries for GitHub
  * Release assets. Bun's `--compile --target` cross-compiles from any host, so CI
- * can produce all four artifacts on a single Linux runner.
+ * can produce every artifact on a single Linux runner.
  *
- * Output: `dist/cli/spur-<os>-<arch>` matching the asset names that
- * `scripts/install.sh` downloads, plus `dist/cli/SHA256SUMS` that it verifies them against.
+ * Output: `dist/cli/spur-<os>-<arch>` (Windows assets end in `.exe`, which is what
+ * `bun build --compile` writes) plus `dist/cli/SHA256SUMS`. `scripts/install.sh`
+ * downloads the macOS and Linux names. It still rejects Windows; the desktop
+ * stage script consumes `spur-windows-*` directly.
  */
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -14,13 +16,20 @@ import { patchTsRuntimeImport } from './build-cli';
 const CLI_ENTRY = fileURLToPath(new URL('../../apps/cli/src/index.ts', import.meta.url));
 const OUT_DIR = fileURLToPath(new URL('../../dist/cli', import.meta.url));
 
-// asset suffix -> Bun --target triple. Suffixes mirror scripts/install.sh.
+// asset suffix -> Bun --target triple. macOS and Linux names match scripts/install.sh.
 const TARGETS: Record<string, string> = {
     'darwin-arm64': 'bun-darwin-arm64',
     'darwin-x64': 'bun-darwin-x64',
     'linux-arm64': 'bun-linux-arm64',
     'linux-x64': 'bun-linux-x64',
+    'windows-x64': 'bun-windows-x64',
+    'windows-arm64': 'bun-windows-arm64',
 };
+
+/** Release asset file name. Passing `--outfile` ending in `.exe` is what Bun writes for Windows targets. */
+export function binaryAssetName(suffix: string): string {
+    return suffix.startsWith('windows-') ? `spur-${suffix}.exe` : `spur-${suffix}`;
+}
 
 /**
  * Write `<dir>/SHA256SUMS` in GNU `sha256sum` format (`<hex>  <name>`), one line per asset in the
@@ -44,7 +53,7 @@ export async function buildBinaries(): Promise<void> {
     let failed = false;
     try {
         for (const [suffix, target] of Object.entries(TARGETS)) {
-            const outfile = `${OUT_DIR}/spur-${suffix}`;
+            const outfile = `${OUT_DIR}/${binaryAssetName(suffix)}`;
             console.log(`Compiling ${target} -> ${outfile}`);
             const result = Bun.spawnSync(
                 ['bun', 'build', CLI_ENTRY, '--compile', `--target=${target}`, '--outfile', outfile],
@@ -60,7 +69,7 @@ export async function buildBinaries(): Promise<void> {
     }
 
     if (failed) throw new Error('one or more targets failed to compile');
-    const assets = Object.keys(TARGETS).map((suffix) => `spur-${suffix}`);
+    const assets = Object.keys(TARGETS).map((suffix) => binaryAssetName(suffix));
     await writeSha256Sums(OUT_DIR, assets);
     console.log(`\nBuilt ${assets.length} binaries into ${OUT_DIR}; wrote SHA256SUMS (${assets.length} entries)`);
 }

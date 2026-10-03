@@ -35,6 +35,17 @@ function renderSidebar(collapsed = false, onToggle: () => void = () => {}) {
     );
 }
 
+describe('LeftSidebar desktop drag strip', () => {
+    test('is present but zero-height so web and CF layouts stay unchanged', () => {
+        silentProjectFetch();
+        const { getByTestId } = renderSidebar();
+        const strip = getByTestId('desktop-drag-region');
+        expect(strip.className).toContain('h-0');
+        expect(strip.getAttribute('data-spur-drag-region')).toBe('');
+        expect(strip.getAttribute('aria-hidden')).toBe('true');
+    });
+});
+
 describe('LeftSidebar project name', () => {
     test('shows the project name returned by /api/project instead of Modules', async () => {
         setFetchForTesting(
