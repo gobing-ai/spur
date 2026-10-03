@@ -97,6 +97,9 @@ function terminalReason(db: Database, runId: string): { status: string; terminal
         .get(runId) as { status: string; terminal_reason: string | null };
 }
 
+// Per-test headroom only (E93 1029 fix hop 2): five sequential spawnSync bun cold starts
+// (~1s each) straddle bun's 5s default — gate runs failed at 7187ms and 5079ms; load flake,
+// not a regression. Assertions unchanged.
 test('1051 AC1: done and paused closes without --reason store done and paused-operator', () => {
     const p = makeDefaultsProject();
     try {
@@ -167,4 +170,4 @@ test('1051 AC1: done and paused closes without --reason store done and paused-op
     } finally {
         p.cleanup();
     }
-});
+}, 20000);
