@@ -4,7 +4,7 @@ name: "Split validation by scope: repo-wide checks move to a feature-scoped veri
 status: done
 template: feature-impl
 created_at: 2026-09-16T10:45:25.226Z
-updated_at: "2026-09-17T19:05:51.063Z"
+updated_at: "2026-10-03T00:51:47.491Z"
 feature_id: D62
 priority: P1
 tags:
@@ -118,9 +118,7 @@ Classification is the deliverable and the risky part — a check moved to the wr
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | spur task check | — | task check passed |
-| P4 | design-conformance | — | Scope split + feature-verification pass + lifecycle guard match ADR-119 design; no deviation. |
-| P4 | secua | — | Done gate fails closed on missing/corrupt/FAIL verdict; no findings this run. |
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 

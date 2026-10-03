@@ -4,7 +4,7 @@ name: Harden close-projection sidecar semantics in projectInlineRunClose
 status: done
 template: issue
 created_at: 2026-10-02T20:15:00.291Z
-updated_at: "2026-10-02T21:51:16.533Z"
+updated_at: "2026-10-03T01:29:28.749Z"
 feature_id: D62
 
 priority: P2
@@ -107,10 +107,17 @@ Per-finding change map (Design decisions applied as proposed; see Review for the
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | packages/app/src/services/inline-run-setup.ts:1050 delete state.error after spread; inline-run-driver.test.ts AC1 test seeds ok:false+error before close and asserts dropped |
-| R2 | MET | packages/app/src/services/inline-run-setup.ts:1058 unlink-in-failure path; injected-failure test asserts zero .tmp residue |
-| R3 | MET | contract comment packages/app/src/services/inline-run-setup.ts:1035; per-terminal-status ok:true pins in close-describe tests (done/paused/failed) |
-| R4 | MET | packages/app/src/workflow/action-trace.ts:299 closeRun returns started_at; AC4 test asserts rebuilt sidecar startedAt === runs.started_at |
+| R1 | MET | delete state.error after `{...prior}` spread — projection function re-read at `packages/app/src/services/inline-run-setup.ts:1037-1060`; AC1 fixture seeds ok:false+error, close-describe tests green this run. |
+| R2 | MET | try/catch + best-effort unlink on the temp path at `packages/app/src/services/inline-run-setup.ts:1058`; injected-failure test asserts zero .tmp residue — green this run. |
+| R3 | MET | ok = projection-integrity contract comment re-read at `:1033-1035` (0948 R7 lineage, task 1053); per-terminal ok:true pins (done/paused/failed) green this run. |
+| R4 | MET | `packages/app/src/workflow/action-trace.ts:297-301` closeRun return re-read (startedAt threaded); AC4 rebuilt-sidecar startedAt === runs.started_at test green this run. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | Targeted suite re-run green this run (see per-requirement evidence); task Testing rows re-validated against current tree. |
+| AC2 | MET | test | Targeted suite re-run green this run (see per-requirement evidence); task Testing rows re-validated against current tree. |
+| AC3 | MET | test | Targeted suite re-run green this run (see per-requirement evidence); task Testing rows re-validated against current tree. |
+| AC4 | MET | test | Targeted suite re-run green this run (see per-requirement evidence); task Testing rows re-validated against current tree. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -121,7 +128,7 @@ SECUA self-review of the full diff (functional traceability + quality), 2026-10-
 | --- | --- | --- |
 | P1 | — | None found. |
 | P2 | — | None found. |
-| P3 | `closeRun`'s engine path (no raw db) now also returns `startedAt` | Accepted: additive optional field, no caller depended on absence; no churn. |
+| P3 | `closeRun`'s engine path (no raw db) now also returns `startedAt` | RESOLVED 2026-10-02 (accepted): additive optional field, no caller depended on absence; no churn. |
 | P4 | `_threaded` unused-destructure at stdout emission | Intentional shape preservation (0868 finding #1); biome-clean under the underscore convention. |
 
 - **Traceability** — R1→AC1 (error-drop test, previously vacuous fixture now repro-shaped), R2→AC2 (residue assert on the injected-failure test), R3→AC3 (contract comment at the projection site + per-status `ok` pins), R4→AC4 (startedAt from `runs.started_at` via closeRun threading; bounded fallback documented in-code). All four ACs verified with file:line evidence in ## Solution.

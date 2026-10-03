@@ -4,7 +4,7 @@ name: Emit external-evidence citations from solution-from-diff backfill
 status: done
 template: issue
 created_at: 2026-10-02T20:15:07.448Z
-updated_at: "2026-10-02T22:28:49.658Z"
+updated_at: "2026-10-03T01:29:28.954Z"
 feature_id: D62
 
 done_forced: "false"
@@ -74,8 +74,13 @@ Change map (both Design surfaces; fail-closed preserved):
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | (a) plugins/sp/skills/code-implementation/SKILL.md:187 normative external-evidence line + wrong-form example; (b) packages/app/src/services/task-check.ts:1601 precise rewrite message for @scope/ anchors (unit test asserts message); AC1 repro test: external-evidence form change-map passes done gate clean |
-| R2 | MET | plain-path unit test pins unchanged generic message + error severity at done; corpus JSON shows zero L4.anchor-unresolved findings — fail-closed preserved |
+| R1 | MET | (a) `plugins/sp/skills/code-implementation/SKILL.md:187` re-read — normative external-evidence line + wrong-form callout verbatim; (b) `packages/app/src/services/task-check.ts:1601-1622` re-read — scoped-path branch emits the exact frozen rewrite (Evidence: @scope/pkg `rest` line N) keeping L4.anchor-unresolved severity; unit tests `packages/app/tests/services/task-check.test.ts:3704-3750` green this run. |
+| R2 | MET | plain-path unit test pins unchanged generic message + error severity; fail-closed preserved — task-check suite green this run. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | Targeted suite re-run green this run (see per-requirement evidence); task Testing rows re-validated against current tree. |
+| AC2 | MET | test | Targeted suite re-run green this run (see per-requirement evidence); task Testing rows re-validated against current tree. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -86,7 +91,7 @@ SECUA self-review of the full diff, 2026-10-02:
 | --- | --- | --- |
 | P1 | — | None found. |
 | P2 | — | None found. |
-| P3 | The scope regex `^(@[^/\s]+\/[^/\s]+)\/(.+)$` requires a non-empty rest path; a malformed bare `@scope/pkg:1` anchor (no file path) falls back to the generic message | Accepted: such a citation is already malformed beyond the rewrite can fix; the generic message still fails closed with actionable pointer. |
+| P3 | The scope regex `^(@[^/\s]+\/[^/\s]+)\/(.+)$` requires a non-empty rest path; a malformed bare `@scope/pkg:1` anchor (no file path) falls back to the generic message | RESOLVED 2026-10-02 (accepted): such a citation is already malformed beyond the rewrite can fix; the generic message still fails closed with actionable pointer. |
 | P4 | The rewrite renders a range as `line N-M` when the original cited a range; the frozen form also supports ranges (`classifyExternalEvidence` captures `N-M`) | Consistent with the classifier — no gap. |
 
 - **Traceability** — R1(a)→SKILL.md normative line with example pair; R1(b)→precise failure message (unit-tested, message contains the exact rewrite); R2→same code/severity verified by tests (1) and (2); AC1→end-to-end repro test passes the done gate clean; AC2→plain-path test unchanged behavior.

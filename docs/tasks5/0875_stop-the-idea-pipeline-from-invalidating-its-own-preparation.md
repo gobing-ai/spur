@@ -4,7 +4,7 @@ name: Stop the idea pipeline from invalidating its own preparation evidence
 status: done
 template: feature-impl
 created_at: 2026-09-16T11:04:31.573Z
-updated_at: "2026-09-17T18:40:54.941Z"
+updated_at: "2026-10-03T00:51:49.612Z"
 feature_id: D62
 
 priority: P2
@@ -110,9 +110,7 @@ post-preparation change, violating R3.
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | spur task check | — | task check passed |
-| P4 | design-conformance | — | Digest unbinding matches Design; contract comment + test updated as required. |
-| P4 | secua | — | Genuine edits still degrade to refine — no validation weakening; no findings this run. |
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 

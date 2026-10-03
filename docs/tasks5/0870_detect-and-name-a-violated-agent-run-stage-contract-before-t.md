@@ -4,7 +4,7 @@ name: Detect and name a violated agent.run stage contract before the result is a
 status: done
 template: feature-impl
 created_at: 2026-09-16T10:45:25.225Z
-updated_at: "2026-09-17T18:34:17.905Z"
+updated_at: "2026-10-03T00:51:46.107Z"
 feature_id: D62
 priority: P0
 tags:
@@ -102,9 +102,7 @@ Introduce the third `agent.run` stage outcome (ADR-118). A clean exit that viola
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | spur task check | — | task check passed |
-| P4 | design-conformance | — | Contract vocabulary, discriminator shape, sink line format all match Design; no deviation on re-read. |
-| P4 | secua | — | Violation naming is deterministic; executor semantics unchanged; no findings this run. |
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 

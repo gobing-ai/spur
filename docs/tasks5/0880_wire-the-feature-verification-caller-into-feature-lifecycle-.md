@@ -4,7 +4,7 @@ name: Wire the feature verification caller into feature-lifecycle and drop the s
 status: done
 template: feature-impl
 created_at: 2026-09-17T17:41:13.462Z
-updated_at: "2026-09-17T19:00:53.590Z"
+updated_at: "2026-10-03T00:51:53.279Z"
 feature_id: D62
 
 ---
@@ -77,9 +77,7 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | spur task check | — | task check passed |
-| P4 | design-conformance | — | Caller-in-lifecycle design matches ADR-119; clause removal documented same-commit per T3. |
-| P4 | secua | — | Fail-closed guard preserved; caller adds no model surface; no findings this run. |
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 

@@ -4,7 +4,7 @@ name: Refuse retiring workflow definitions that still have real non-dry runs
 status: done
 template: feature-impl
 created_at: 2026-09-17T17:41:14.081Z
-updated_at: "2026-09-17T19:02:35.705Z"
+updated_at: "2026-10-03T00:51:54.769Z"
 feature_id: D62
 
 ---
@@ -83,9 +83,7 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | spur task check | — | task check passed |
-| P4 | design-conformance | — | Refusal-by-check (not verdict table) matches the design; recorded decisions for historical retirements present. |
-| P4 | secua | — | Fail-closed on unrecorded retirement with real traffic; dry runs excluded via metadata_json.dryRun; no findings this run. |
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 

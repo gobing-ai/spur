@@ -4,7 +4,7 @@ name: Make the guard-parity harness enumerate both reference sets and catch spur
 status: done
 template: feature-impl
 created_at: 2026-09-17T17:41:13.770Z
-updated_at: "2026-09-17T19:02:35.504Z"
+updated_at: "2026-10-03T00:51:54.072Z"
 feature_id: D62
 
 ---
@@ -60,8 +60,8 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Both reference sets enumerated: `plugins/sp/scripts/inline-pipeline-parity-check.ts` parses markdown reference kinds as a second set; deleted-reference fixture test in `plugins/sp/tests/inline-pipeline-parity-check.test.ts` — re-run 4 pass / 0 fail (2026-09-17). |
-| R2 | MET | Spurious dependencies[] edges flagged (wbs-shaped ^\d{3,4}$ only); 'spurious dependency edge caught' test in the 4-test pass; live harness re-run: `bun run inline-pipeline-parity-check` -> ok (9 actions, 4 guards, 9 workflows, both reference sets; 0 spurious edges). |
+| R1 | MET | Both reference sets enumerated: `plugins/sp/scripts/inline-pipeline-parity-check.ts` parses markdown reference kinds as a second set; deleted-reference fixture test in `plugins/sp/tests/inline-pipeline-parity-check.test.ts` — re-run 4 pass / 0 fail (2026-09-17). Anchor-move repair 2026-10-02 (verifyall-D62-force-2026-10-02): gate + test now at `scripts/commands/inline-pipeline-parity-check.ts` / `scripts/commands/inline-pipeline-parity-check.test.ts` (A9 W1 consolidation); gate re-run green this run via spur-check-feature — ok (11 actions, 4 guards agree across 9 workflows and both reference sets; 0 spurious dependency edges). |
+| R2 | MET | Spurious dependencies[] edges flagged (wbs-shaped ^\d{3,4}$ only); 'spurious dependency edge caught' test in the 4-test pass; live harness re-run: `bun run inline-pipeline-parity-check` -> ok (9 actions, 4 guards, 9 workflows, both reference sets; 0 spurious edges). Anchor-move repair 2026-10-02 (verifyall-D62-force-2026-10-02): gate + test now at `scripts/commands/inline-pipeline-parity-check.ts` / `scripts/commands/inline-pipeline-parity-check.test.ts` (A9 W1 consolidation); gate re-run green this run via spur-check-feature — ok (11 actions, 4 guards agree across 9 workflows and both reference sets; 0 spurious dependency edges). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
@@ -77,9 +77,7 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | spur task check | — | task check passed |
-| P4 | design-conformance | — | Two-reference-set enumeration + spurious-edge detection match the design; lint fix is style-only. |
-| P4 | secua | — | Repair: 4 useOptionalChain rewrites in inline-pipeline-parity-check.ts (harness behavior re-verified green after). Residual: none. |
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 

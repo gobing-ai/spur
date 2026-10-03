@@ -4,7 +4,7 @@ name: Assert the wrapup learnings artifact shape before appending it to memory
 status: done
 template: feature-impl
 created_at: 2026-09-27T07:21:49.963Z
-updated_at: "2026-09-28T23:23:47.532Z"
+updated_at: "2026-10-03T00:51:56.197Z"
 feature_id: D62
 
 ac_altitude: task-local
@@ -106,14 +106,14 @@ Each entry cites the first changed line per file (`file:line`).
 |-------------|--------|----------|
 | R1 | MET | `config/workflows/wrapup-pipeline.yaml:269` — date, standalone four-digit WBS (fix: a date's year no longer satisfies it), and markdown-bullet predicates; `packages/app/tests/workflow/wrapup-pipeline.test.ts:738` dated bullet without WBS rejected |
 | R2 | MET | `config/workflows/wrapup-pipeline.yaml:528` invalid-shape edge to repair; `config/workflows/wrapup-pipeline.yaml:314` distinct repair status; `packages/app/tests/workflow/wrapup-pipeline.test.ts:688` narration-only rejected, memory untouched |
-| R3 | MET | `config/workflows/wrapup-pipeline.yaml:289` byte-for-byte append with soft skip; `packages/app/tests/workflow/wrapup-pipeline.test.ts:716` append once; `packages/app/tests/workflow/wrapup-pipeline.test.ts:750` empty/missing soft skip |
+| R3 | MET | `config/workflows/wrapup-pipeline.yaml:289` byte-for-byte append with soft skip; `packages/app/tests/workflow/wrapup-pipeline.test.ts:716` append once; `packages/app/tests/workflow/wrapup-pipeline.test.ts:750` empty/missing soft skip Anchor-drift repair 2026-10-02 (verifyall-D62-force-2026-10-02): test 'R3: empty and missing captures keep the soft skip' now at `packages/app/tests/workflow/wrapup-pipeline.test.ts:763` (file grew; prior :750 blank); green in this run's repo-wide suite (spur-check: 9802 pass / 0 fail). |
 | R4 | MET | `packages/app/tests/workflow/wrapup-pipeline.test.ts:610` executor-failure edge pinned; `(cd packages/app && bun test tests/workflow/wrapup-pipeline.test.ts)` 36 pass / 0 fail |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
 | AC1 | MET | test | `packages/app/tests/workflow/wrapup-pipeline.test.ts:688` — narration-only → invalid-learnings-shape, repair route, memory absent (36 pass / 0 fail) |
 | AC2 | MET | test | `packages/app/tests/workflow/wrapup-pipeline.test.ts:716` — memory equals capture + newline |
-| AC3 | MET | test | `packages/app/tests/workflow/wrapup-pipeline.test.ts:750` soft skip; `packages/app/tests/workflow/wrapup-pipeline.test.ts:610` executor-failure edge unchanged |
+| AC3 | MET | test | `packages/app/tests/workflow/wrapup-pipeline.test.ts:750` soft skip; `packages/app/tests/workflow/wrapup-pipeline.test.ts:610` executor-failure edge unchanged Anchor-drift repair 2026-10-02 (verifyall-D62-force-2026-10-02): test 'R3: empty and missing captures keep the soft skip' now at `packages/app/tests/workflow/wrapup-pipeline.test.ts:763` (file grew; prior :750 blank); green in this run's repo-wide suite (spur-check: 9802 pass / 0 fail). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -124,8 +124,7 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | spur task check | — | task check passed |
-| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 

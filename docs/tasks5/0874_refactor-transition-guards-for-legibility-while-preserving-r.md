@@ -4,7 +4,7 @@ name: Refactor transition guards for legibility while preserving routing semanti
 status: done
 template: feature-impl
 created_at: 2026-09-16T10:45:25.227Z
-updated_at: "2026-09-17T18:40:04.848Z"
+updated_at: "2026-10-03T00:51:48.929Z"
 feature_id: D62
 priority: P2
 tags:
@@ -124,9 +124,7 @@ that no test of the happy path catches. The harness is the regression guard for 
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | spur task check | — | task check passed |
-| P4 | design-conformance | — | Legibility rewrites with baseline-pinned parity harness match Design; no deviation. |
-| P4 | secua | — | Semantics-preserving rewrite proven by executed parity; no findings this run. |
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 

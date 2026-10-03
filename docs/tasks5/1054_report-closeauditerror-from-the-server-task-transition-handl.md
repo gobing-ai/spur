@@ -4,7 +4,7 @@ name: Report closeAuditError from the server task transition handler
 status: done
 template: issue
 created_at: 2026-10-02T20:15:07.141Z
-updated_at: "2026-10-02T21:59:39.822Z"
+updated_at: "2026-10-03T00:57:41.917Z"
 feature_id: D62
 
 done_forced: "false"
@@ -80,8 +80,13 @@ Change map (Design applied as proposed):
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | apps/server/src/modules/task/handlers.ts:118 closeAuditError logger.error with wbs/status/error/replay; handlers.test.ts 1054 R1 test asserts all four + unchanged outcome |
-| R2 | MET | DTO assertion {ok:true,data:{wbs,status}} in the new test; apps/server suite green (22/0); full gate 9757/0 |
+| R1 | MET | `apps/server/src/modules/task/handlers.ts:118-126` re-read verbatim: closeAuditError branch with 1054 R1 comment, wbs + toStatus + error + replay guidance, structured metadata; `closeAuditError?: string` confirmed on WriteResult at `packages/app/src/services/planning-write-service.ts:179`; handler test `apps/server/tests/modules/task/handlers.test.ts:266-300` green this run (22/22). |
+| R2 | MET | DTO assertion {ok,data:{wbs,status}} in the new test — transport unchanged; server suite 22/22 this run; repo-wide 9802/0. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | Targeted suite re-run green this run (see per-requirement evidence); task Testing rows re-validated against current tree. |
+| AC2 | MET | test | Targeted suite re-run green this run (see per-requirement evidence); task Testing rows re-validated against current tree. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
