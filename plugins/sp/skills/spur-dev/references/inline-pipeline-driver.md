@@ -276,6 +276,31 @@ substituted. A dispatched subagent inherits the same duty: its own tool calls ma
 an arbitrary directory, so every shell call the delegate makes re-pins the execution tree with
 the identity supplied in the dispatch payload — never re-derived.
 
+## Chunked implement dispatch contract (cap-limited worker models, task 1066)
+
+Cap-limited worker executors die on monolithic implement briefs: the output cap is consumed by
+one giant thinking block before any file action lands. Recognized failure signature —
+consecutive implement dispatches end with `stopReason=length` and **zero output** (no tool
+call, no file write), optionally with a `contact_supervisor` call mid-death. The trigger is
+the observed signature, never a model name: any executor that exhibits it is treated as
+cap-limited for the rest of the run.
+
+Before dispatching an `implement` stage to a worker executor:
+
+1. **Chunk the brief.** Split the implement scope into small, independent dispatches ordered
+   by dependency (e.g. test cases → doc rewrite → task sections), one bounded objective per
+   dispatch. Never pack the whole task plan into one dispatch.
+2. **Cap thinking.** Instruct the worker to keep every thinking block under ~150 words and act
+   between thoughts; never plan the whole task in one block.
+3. **Fallback ladder.** A worker still dying with the signature: re-chunk the remaining scope
+   smaller once; still failing → execute the stage host-inline (the driver's inline stage
+   fallback) and record the fallback in the run log.
+
+Evidence (2026-10-02, task 1059 implement stage, runall-D63-2ebbd97c): 4/4 single-shot
+implement dispatches died `stopReason=length` on a 16k-output-cap worker; the same scope in
+three chunked dispatches with the thinking cap succeeded 3/3. See the pitfalls 2026-10-02
+entry and `.spur/memory/runs/runall-D63-2ebbd97c.md`.
+
 ## Comprehensive-check retention and evidence (R7/R8)
 
 ## Comprehensive-check retention and evidence (R7/R8)
@@ -377,6 +402,10 @@ Action semantics come from the YAML and the workflow action contract:
   inline host writes a ledger.
 
 **Native-subagent dispatch (R2 eligibility, evaluated before each action):**
+
+Before dispatching an `implement` stage to a worker executor, apply the chunked implement
+dispatch contract (§ Chunked implement dispatch contract): chunk the brief, cap thinking
+blocks, and know the fallback ladder before spending a dispatch.
 
 1. The invocation is one of the two interactive inline full-pipeline surfaces (`dev-run --mode full`
    or sequential `dev-runall`) and the resolved selector is inline — i.e. `--agent` **omitted**
