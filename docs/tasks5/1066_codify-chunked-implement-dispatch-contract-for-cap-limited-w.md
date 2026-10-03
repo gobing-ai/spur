@@ -4,7 +4,7 @@ name: codify chunked implement dispatch contract for cap limited worker models
 status: done
 template: issue
 created_at: 2026-10-03T04:25:11.249Z
-updated_at: "2026-10-03T05:05:33.631Z"
+updated_at: "2026-10-03T05:19:57.542Z"
 
 feature_id: B1
 priority: P3
@@ -97,15 +97,15 @@ Findings table:
 
 | Priority | Finding | Disposition |
 | --- | --- | --- |
-| P4 | Task References cite `docs/dogfood/2026-10-02-D63-runall-batch-wt4-dogfood.md`, which does not exist — D63 findings were filed as tasks 1065-1067 (commit 781a2789); the surviving local report is `.spur/memory/runs/runall-D63-2ebbd97c.md`. | Disclosed in Solution; run log cross-linked to the contract instead. |
+| P4 (resolved) | Stale citation: this task's References pointed at `docs/dogfood/2026-10-02-D63-runall-batch-wt4-dogfood.md`, which never existed — D63 findings were filed as tasks 1065-1067 (commit 781a2789) and the surviving evidence carrier is the run log. | Resolved 2026-10-03: References section corrected to the actual carriers (run log + tasks 1065-1067); contract cross-link from the run log already in place. |
 
-No P1–P3 findings. Residual risk: none material. Disposition: approved.
+No P1–P3 findings; no open P4. Residual risk: none material. Disposition: approved.
 
 ### References
 
-- Driver doc: plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md (per-call execution-tree pin :145-147 is the nearest existing contract section).
+- Driver doc: plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md (contract section at :279; dispatch-guidance link at :406).
 - Evidence: 1059 implement dispatch log (4 failed attempts, 3 chunked successes), runall-D63-2ebbd97c run log (.spur/memory/runs/, main tree).
-- Dogfood: docs/dogfood/2026-10-02-D63-runall-batch-wt4-dogfood.md F2 (local).
+- Dogfood: none — no docs/dogfood report exists for D63; its findings were filed as tasks 1065-1067 (commit 781a2789). Evidence carrier: .spur/memory/runs/runall-D63-2ebbd97c.md.
 - Pitfalls: .spur/context/pitfalls.md 2026-10-02 entry.
 
 ### History
