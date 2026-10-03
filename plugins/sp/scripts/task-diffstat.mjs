@@ -3,7 +3,7 @@
 
 // plugins/sp/scripts/task-diffstat.ts
 import { spawnSync } from "child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "fs";
+import { fstatSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "fs";
 import { join } from "path";
 
 // plugins/sp/lib/env.ts
@@ -85,10 +85,14 @@ function runDiffstat(env, options = {}, git = defaultGitRunner(options.cwd)) {
     process.stderr.write(`task-diffstat: ${reason} \u2014 failing safe (sensitive)
 `);
     const row2 = { files: 0, insertions: 0, deletions: 0, paths: [], sensitive: true };
-    writeFileSync(abs(relResult), `${JSON.stringify(row2)}
-`);
+    writeArtifact(abs(relResult), row2);
     return { ...row2, resultFile: relResult, exitCode: 0 };
   };
+  let stdoutIsArtifact = false;
+  try {
+    const [out, art] = [fstatSync(1), statSync(abs(relResult))];
+    stdoutIsArtifact = out.dev === art.dev && out.ino === art.ino;
+  } catch {}
   let base = "";
   try {
     base = readFileSync(abs(join(relRun, `${wbs}-base.sha`)), "utf8").trim();
@@ -125,9 +129,17 @@ function runDiffstat(env, options = {}, git = defaultGitRunner(options.cwd)) {
   const all = [...paths].filter((p) => p.length > 0).sort();
   const sensitive = all.some((p) => sensitiveReasonForPath(p) !== null);
   const row = { files: all.length, insertions, deletions, paths: all, sensitive };
-  writeFileSync(abs(relResult), `${JSON.stringify(row)}
+  writeArtifact(abs(relResult), row);
+  if (stdoutIsArtifact)
+    process.stderr.write(`task-diffstat: stdout redirected onto the artifact \u2014 kept; redirect stdout elsewhere
 `);
-  return { ...row, resultFile: relResult, exitCode: 0 };
+  return { ...row, resultFile: relResult, exitCode: stdoutIsArtifact ? 1 : 0 };
+}
+function writeArtifact(absPath, row) {
+  const tmp = `${absPath}.tmp`;
+  writeFileSync(tmp, `${JSON.stringify(row)}
+`);
+  renameSync(tmp, absPath);
 }
 var TASK_DIFFSTAT_USAGE = "usage: task-diffstat  (env: wbs)";
 function main(argv, env = getEnvVars(), options = {}) {
