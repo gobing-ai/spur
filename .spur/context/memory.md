@@ -280,3 +280,10 @@
 
 | 04:20 | E71 remaining gaps and related 1044/1046 complete; integrated other-agent 1043/1045, 9667 tests pass, feature and wrap done; final boundary receipt refreshed after metadata | run-storage owners, E71 corpus/report | PASS | ~session |
 2026-10-02T20:03:01Z wrap(1051): wrapup-pipeline run 9427dce2-5476-4654-8f83-1924a429b444 done — route fast:drift-probe-clean (8 paths clean), metrics PASS; D62 stays active; branch sp/run-1051-465b merged (rebase+FF: 506ec9ebb,7033644f8,e6829ec3a) and deleted; worktree removed. Continuation of failed run 6d88543e (operator-authorized direct flake fix → full gate PASS 9728/9728 → review PASS → verify PASS → record → done).
+## 2026-10-03 — 1063 inline pipeline (session 01a0ff2e)
+- 1062 collision: settle-filed 1062 (residuals from 1061) vs D62 sweep 1062 (Robin, cancelled) → re-keyed to 1063 (4a81ad603), orphan 1062 removed.
+- Executor attempts failed (8ac925f3 capability gate; 8e41fcca pi-zai 30m timeout, 0 diff) → inline implement: new ac-guidance-consistency.test.ts (4 tests, 13 expects).
+- Drift finding: 5/6 templates differ from standard.md only in closing tail sentence → contract corrected to shared-body identity + pinned per-template tails (EXPECTED_TAILS).
+- Gate iterations: format fix → TS2532/TS2322 noUncheckedIndexedAccess fixes → sp-runtime-path forbids literal config/... paths → bundledConfigRoot() resolution (import from @gobing-ai/spur-config/loader, comment text also matched the rule — reworded).
+- Final: spur-check PASS 9816/0; review+verify single fresh sp-super-reviewer (fa9c1d11) PASS, 4×P4 advisory + 1 FIXED during review; verdict PASS; record→done guard PASS; 1063 done; F96 closed.
+- Commits: 846fe4225 (test+task doc), 565e5b0da (F96 close). Concurrent Robin commits preserved (0330b46d9, 16000cb5e).
