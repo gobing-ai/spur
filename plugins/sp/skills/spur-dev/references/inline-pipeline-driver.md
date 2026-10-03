@@ -142,7 +142,10 @@ the human/native presentation layer — labels are display addresses only, never
    safety checks succeed, create/adopt and `cd` into the execution tree; confirm absolute cwd,
    branch, base SHA, and ownership. An invalid/empty target, unsupported mode, ambiguous ownership,
    or stale target stops without creating a tree or discarding work. All subsequent tools, agents,
-   corpus writes, and run artifacts use the confirmed execution tree.
+   corpus writes, and run artifacts use the confirmed execution tree — **re-selected per call, not
+   inherited**: a host shell call starts in an arbitrary directory and carries no cwd from the
+   previous call, so every later call runs inside the **Per-call execution-tree pin** protocol
+   below (task 1058), which consumes the identity confirmed here.
 8. **Publish the workflow inventory (R4), BEFORE reading the YAML.** Resolve the selected workflow
    through the same project/bundled resolver as execution and run
    `spur workflow show <resolved-file> --no-logo --format todo --json`. Validate the projection with
@@ -214,6 +217,66 @@ Expected artifacts per stage (all run-scoped under `.spur/run/<run-id>-*`):
 | batch-create-run | `-idea-batch-create-result.json`, `-idea-batch-create.done`/`.failed` |
 | ready-prepare | `-idea-ready.json` |
 | handoff-finalize | `-idea-handoff.md` |
+
+## Per-call execution-tree pin (task 1058)
+
+A host shell tool call may start in an arbitrary directory; no earlier call's `cd` is input to the
+next call. During inline run `95522d21` that drift silently landed corpus writes in the invoking
+tree instead of the run worktree. Every host-session corpus command — reads, writes, absolute
+section-input files and output artifacts — therefore selects the confirmed execution tree **within
+the same tool call**, in a self-contained subshell. The identity is never re-derived: it is the
+tree path, branch and resolved Spur invocation confirmed at bootstrap isolation (step 7) and, for
+batch worktrees, recorded in the WT-3 marker (execution-batch.md). The resolved invocation is
+field 4 of the dispatch payload — never a bare `spur`.
+
+Template — every host shell call follows this shape; paths are quoted because trees may contain
+spaces:
+
+```bash
+(
+  cd -- "$SPUR_TREE" || { echo "tree missing: expected $SPUR_TREE" >&2; exit 1; }
+  ACTUAL_TREE="$(pwd -P)"
+  [ "$ACTUAL_TREE" = "$SPUR_TREE" ] || { echo "tree mismatch: expected $SPUR_TREE, got $ACTUAL_TREE" >&2; exit 1; }
+  GIT_TOP="$(git rev-parse --show-toplevel)" || exit 1
+  [ "$GIT_TOP" = "$SPUR_TREE" ] || { echo "toplevel mismatch: expected $SPUR_TREE, got $GIT_TOP" >&2; exit 1; }
+  ACTUAL_BRANCH="$(git branch --show-current)"
+  [ "$ACTUAL_BRANCH" = "$SPUR_BRANCH" ] || { echo "branch mismatch: expected $SPUR_BRANCH, got $ACTUAL_BRANCH" >&2; exit 1; }
+  exec <resolved-spur-invocation> task show <wbs> --json   # the already-resolved CLI command
+)
+```
+
+Rules (R1):
+
+- **Pin reads as well as writes.** `task show`, `feature show`, `workflow show` and `task check`
+  use the same subshell — a read from the wrong tree is a wrong answer, not a harmless one.
+- **Validate the returned `filePath`.** A pinned `task show --json` must return a `filePath`
+  inside the expected configured corpus/tree. Configured task folders may intentionally live
+  outside the default `docs/tasks` — check membership in the configured folder set, not one
+  literal path.
+- **Prove sections with a fresh pinned read.** After a section write, re-run a pinned
+  `task show <wbs> --json` and assert the new body there; a heading-only grep is not proof of
+  section contents.
+- **Resolve section input/output paths before changing tree.** `--section <name> --from-file
+  <path>`, `answerFile`/`expectFile` and run artifacts are resolved against the confirmed tree
+  (dispatch field 5) before the subshell `cd`s.
+- **Fail closed before writing.** A failed `cd` or any identity mismatch exits nonzero naming
+  expected vs actual, before the CLI runs — there is no designated exit code; consumers read
+  nonzero and the named expected/actual trees. A PWD assertion alone cannot select a tree: `cd`
+  first, then verify the physical path and repository identity.
+- **Native tool cwd options are additive.** A tool-level cwd/`cd` pin may additionally set the
+  call's directory, but never replaces the identity checks above.
+- **Host-only scope.** Engine `shell` actions already bind `context.workdir`
+  (`packages/app/src/workflow/actions/shell.ts:98`) — leave them alone. No service-wide
+  `process.chdir`, no new public flag, no helper framework.
+
+The `spur …` command examples in this driver (run setup, workflow inventory, `task run-link`,
+fingerprint capture, record/done sequencing) abbreviate the pinned subshell form for readability;
+each executes inside the template above with the confirmed tree, branch and resolved invocation
+substituted. A dispatched subagent inherits the same duty: its own tool calls may each start in
+an arbitrary directory, so every shell call the delegate makes re-pins the execution tree with
+the identity supplied in the dispatch payload — never re-derived.
+
+## Comprehensive-check retention and evidence (R7/R8)
 
 ## Comprehensive-check retention and evidence (R7/R8)
 
@@ -296,7 +359,8 @@ Action semantics come from the YAML and the workflow action contract:
   `verify-verdict`: verdict `PASS`), `proofBinding: current` is honored against a freshly captured
   proof digest — capture it with `bun "$SETUP_SCRIPT" --fingerprint --task-file <task path>
   [--feature-file <feature path>]`, the same entry point used at Run setup, which prints the engine
-  `sha256:<hex>` digest. Run it from the worktree root (cwd feeds the git-tree half of the digest)
+  `sha256:<hex>` digest. Run it inside a per-call pin subshell for the confirmed execution tree
+  (the cwd feeds the git-tree half of the digest)
   and pass the same `--feature-file` the run folded in — omitting it, or running from elsewhere,
   yields a different digest and the mismatch surfaces later as a refused `run.artifact`
   registration — and the run-scoped review-completion marker exists — then appends one provenance
@@ -391,7 +455,10 @@ boundary, and a delegate left to re-derive them re-derives them against its own 
    that invocation and MUST NOT rely on a bare `spur`: a competing `spur` earlier on the delegate's
    PATH otherwise wins. Setting `SPUR_BIN` alone does **not** change bare-command resolution — only
    using the supplied invocation does. Spur-owned scripted calls take it through the existing
-   `--spur-bin` flag rather than a new mechanism.
+   `--spur-bin` flag rather than a new mechanism. A delegate's tool calls may each start in an
+   arbitrary directory, so every shell call the delegate makes re-pins the execution tree per the
+   **Per-call execution-tree pin** protocol using this supplied identity — never an inherited cwd
+   and never a re-derivation.
 5. The **resolved absolute output path** (`answerFile`/`expectFile`, resolved as above) and the
    **owning stage's artifact contract** — for a verify stage, the compact contract below.
 6. **The implement-stage acceptance-evidence requirement** — for the implement stage and any stage
@@ -636,6 +703,8 @@ tasks (0617, 0619) because the sections were hand-written **before** the verdict
    ```bash
    # verdict artifact first (shape: {wbs, verdict, requirements:[{id,status,evidence}], checks:[], source})
    # then the record hop; then re-write Testing/Solution if record's backfill is thinner than intended.
+   # Both calls are per-call pinned (task 1058): the record hop selects the execution tree inside
+   # the same tool call — never through a cwd a previous call happened to leave behind.
    spur task update <wbs> wip --no-lifecycle
    spur task record <wbs> --solution-from-diff --transition testing
    ```

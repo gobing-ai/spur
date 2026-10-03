@@ -1,6 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { getEnvVars } from '@gobing-ai/ts-utils';
 
 const SPEC = readFileSync(join(import.meta.dir, '../../skills/spur-dev/references/execution-batch.md'), 'utf8');
 
@@ -267,5 +270,232 @@ describe('execution-batch spec contract (task 0477 — worktree isolation lifecy
     test('R10.1 — portable git only; no Claude-Code-only worktree tools', () => {
         expect(SPEC).toContain('Use portable `git worktree` commands only');
         expect(RUNALL).not.toContain('EnterWorktree');
+    });
+});
+
+const DRIVER = readFileSync(
+    join(import.meta.dir, '../../skills/spur-dev/references/inline-pipeline-driver.md'),
+    'utf8',
+);
+
+describe('execution-batch + inline-driver spec contract (task 1058 — per-call tree pin)', () => {
+    test('inline driver — the canonical per-call pin protocol is defined (R1)', () => {
+        expect(DRIVER).toContain('## Per-call execution-tree pin (task 1058)');
+        // The template: cd first, then verify physical path and repository identity.
+        expect(DRIVER).toContain('cd -- "$SPUR_TREE"');
+        expect(DRIVER).toContain('pwd -P');
+        expect(DRIVER).toContain('git rev-parse --show-toplevel');
+        expect(DRIVER).toContain('git branch --show-current');
+        expect(DRIVER).toContain('tree mismatch: expected');
+        expect(DRIVER).toContain('branch mismatch: expected');
+        expect(DRIVER).toContain('Pin reads as well as writes');
+        expect(DRIVER).toContain('heading-only grep is not proof');
+        // Fail closed BEFORE the CLI runs, with named expected/actual — no magic exit-91
+        // contract (task 1058 Q&A, 2026-10-02).
+        expect(DRIVER).toContain('before the CLI runs');
+        expect(DRIVER).not.toContain('exit 91');
+        // Engine shell actions already bind context.workdir — the protocol is host-only.
+        expect(DRIVER).toContain('packages/app/src/workflow/actions/shell.ts:98');
+    });
+
+    test('execution batch — host boundaries pin their tree; WT-4 selects the invoking tree (R2)', () => {
+        // Collapse markdown reflow so multi-word pins match across wrapped lines.
+        const spec = SPEC.replace(/\s+/g, ' ');
+        expect(spec).toContain('Per-call tree pinning (task 1058)');
+        expect(spec).toContain('canonical per-call pin protocol');
+        expect(spec).toContain('select the **invoking** tree');
+        expect(spec).toContain('FF ancestry, marker and cleanup sequencing remain owned by 1059');
+        // WT-3b runs as a pinned subshell, not a persistent cd + `cd -` reliance.
+        expect(spec).toContain('cd -- "../<worktree-dir>"');
+    });
+});
+
+// --- task 1058 R3: two-tree subprocess canary against the real source CLI -------------------
+
+const CANARY_ROOT = join(import.meta.dir, '..', '..', '..', '..');
+const CANARY_CLI = join(CANARY_ROOT, 'apps', 'cli', 'src', 'index.ts');
+const CANARY_PROOF_DIR = join(CANARY_ROOT, '.spur', 'run', '1058-cwd-proof');
+const CANARY_WBS = '1100';
+const CANARY_SEED = [
+    '---',
+    'schema_version: 1',
+    'name: pin canary task',
+    'status: todo',
+    'template: issue',
+    'created_at: 2026-10-02T22:50:39.301Z',
+    'updated_at: "2026-10-02T22:50:39.301Z"',
+    'feature_id: D63',
+    'priority: P2',
+    'estimate_hours: 1',
+    '---',
+    '',
+    `## ${CANARY_WBS}. pin canary task`,
+    '',
+    '### Background',
+    '',
+    'Seed background body.',
+    '',
+    '### Requirements',
+    '',
+    '- [ ] R1. Canary requirement.',
+    '',
+    '### Solution',
+    '',
+    '<!-- Filled during implementation. -->',
+    '',
+    '### History',
+    '',
+].join('\n');
+
+/** The exact per-call pin subshell the driver spec documents — the test subject, not a mock. */
+function pinnedCall(cliCommand: string): string {
+    return `(
+  cd -- "$SPUR_TREE" || { echo "tree missing: expected $SPUR_TREE" >&2; exit 1; }
+  ACTUAL_TREE="$(pwd -P)"
+  [ "$ACTUAL_TREE" = "$SPUR_TREE" ] || { echo "tree mismatch: expected $SPUR_TREE, got $ACTUAL_TREE" >&2; exit 1; }
+  GIT_TOP="$(git rev-parse --show-toplevel)" || exit 1
+  [ "$GIT_TOP" = "$SPUR_TREE" ] || { echo "toplevel mismatch: expected $SPUR_TREE, got $GIT_TOP" >&2; exit 1; }
+  ACTUAL_BRANCH="$(git branch --show-current)"
+  [ "$ACTUAL_BRANCH" = "$SPUR_BRANCH" ] || { echo "branch mismatch: expected $SPUR_BRANCH, got $ACTUAL_BRANCH" >&2; exit 1; }
+  exec $SPUR_INVOCATION ${cliCommand}
+)`;
+}
+
+describe('task 1058 — two-tree subprocess canary (R3, real source CLI)', () => {
+    const canaryTaskFile = (tree: string): string => join(tree, 'docs', 'tasks', `${CANARY_WBS}_pin_canary_task.md`);
+    const hashFile = (path: string): string => createHash('sha256').update(readFileSync(path)).digest('hex');
+
+    function seedTree(baseDir: string, name: string, branch: string): string {
+        const tree = join(baseDir, name);
+        mkdirSync(join(tree, 'docs', 'tasks'), { recursive: true });
+        writeFileSync(canaryTaskFile(tree), CANARY_SEED);
+        const git = (args: string[]): void => {
+            const result = Bun.spawnSync(['git', ...args], { cwd: tree, stdout: 'pipe', stderr: 'pipe' });
+            if (result.exitCode !== 0) throw new Error(`git ${args.join(' ')} failed: ${result.stderr.toString()}`);
+        };
+        git(['init', '-q', '-b', branch]);
+        git(['config', 'user.email', 'canary@example.invalid']);
+        git(['config', 'user.name', 'pin canary']);
+        git(['add', '.']);
+        git(['commit', '-q', '-m', 'seed corpus']);
+        // The recorded identity is the PHYSICAL tree — what `pwd -P` reports.
+        return realpathSync(tree);
+    }
+
+    function runPinned(script: string, staleCwd: string, vars: Record<string, string>) {
+        const result = Bun.spawnSync(['sh', '-c', script], {
+            cwd: staleCwd, // intentionally stale host cwd — each call may start anywhere
+            env: { ...getEnvVars(), ...vars },
+            stdout: 'pipe',
+            stderr: 'pipe',
+        });
+        return { exitCode: result.exitCode, stdout: result.stdout.toString(), stderr: result.stderr.toString() };
+    }
+
+    test('a pinned call from a stale cwd updates only the selected tree; wrong identities abort before writing', () => {
+        const base = mkdtempSync(join(tmpdir(), 'spur-1058-cwd-'));
+        try {
+            // Distinct execution and invoking trees; the selected tree path contains spaces.
+            const treeA = seedTree(base, 'spur exec tree a', 'sp/canary-alpha');
+            const treeB = seedTree(base, 'tree-b', 'sp/canary-beta');
+            const before = { treeA: hashFile(canaryTaskFile(treeA)), treeB: hashFile(canaryTaskFile(treeB)) };
+            const newBody = 'Pinned canary body — written from an intentionally stale cwd.';
+            const bodyFile = join(base, 'background-body.md');
+            writeFileSync(bodyFile, `${newBody}\n`);
+            // Source invocation form: the existing resolved command (bun + CLI entry).
+            const vars = {
+                SPUR_TREE: treeA,
+                SPUR_BRANCH: 'sp/canary-alpha',
+                SPUR_INVOCATION: `${process.execPath} ${CANARY_CLI}`,
+                BODY_FILE: bodyFile,
+            };
+
+            // AC1 — host write from a stale cwd (tree B) lands only in the selected tree (tree A).
+            const write = runPinned(
+                pinnedCall(`task update ${CANARY_WBS} --section Background --from-file "$BODY_FILE" --json`),
+                treeB,
+                vars,
+            );
+            expect(write.exitCode).toBe(0);
+
+            // Fresh pinned read proves the section — never a heading-only grep.
+            const read = runPinned(pinnedCall(`task show ${CANARY_WBS} --json`), treeB, vars);
+            expect(read.exitCode).toBe(0);
+            const shown = JSON.parse(read.stdout) as { filePath: string; content: string };
+            expect(shown.filePath.startsWith(treeA)).toBe(true); // returned filePath belongs to the selected tree
+            expect(shown.content).toContain(newBody);
+            expect(shown.content).not.toContain('Seed background body.');
+
+            const after = { treeA: hashFile(canaryTaskFile(treeA)), treeB: hashFile(canaryTaskFile(treeB)) };
+            expect(after.treeA).not.toBe(before.treeA); // selected task changed
+            expect(after.treeB).toBe(before.treeB); // the other corpus is untouched
+
+            // AC3 — missing tree: cd fails before the CLI runs; neither corpus changes.
+            const missing = runPinned(pinnedCall(`task show ${CANARY_WBS} --json`), treeA, {
+                ...vars,
+                SPUR_TREE: join(base, 'missing tree'),
+            });
+            expect(missing.exitCode).not.toBe(0);
+            expect(missing.stderr).toContain('tree missing: expected');
+
+            // AC3 — wrong branch: cd succeeds, the identity check aborts before the CLI runs.
+            const wrongBranch = runPinned(pinnedCall(`task show ${CANARY_WBS} --json`), treeA, {
+                ...vars,
+                SPUR_TREE: treeB,
+                SPUR_BRANCH: 'sp/canary-alpha',
+            });
+            expect(wrongBranch.exitCode).not.toBe(0);
+            expect(wrongBranch.stderr).toContain('branch mismatch: expected sp/canary-alpha, got sp/canary-beta');
+
+            const afterNegative = { treeA: hashFile(canaryTaskFile(treeA)), treeB: hashFile(canaryTaskFile(treeB)) };
+            expect(afterNegative.treeA).toBe(after.treeA);
+            expect(afterNegative.treeB).toBe(before.treeB);
+
+            // Repeatable proof artifacts (AC1/AC3) under .spur/run/1058-cwd-proof/.
+            mkdirSync(CANARY_PROOF_DIR, { recursive: true });
+            writeFileSync(
+                join(CANARY_PROOF_DIR, 'canary-ac1-pinned-write.json'),
+                `${JSON.stringify(
+                    {
+                        task: '1058',
+                        ac: 'AC1 — Host writes select the execution tree (req: R1)',
+                        cli: 'source',
+                        invocation: vars.SPUR_INVOCATION,
+                        staleCwd: treeB,
+                        selectedTree: treeA,
+                        branch: vars.SPUR_BRANCH,
+                        updateEnvelope: JSON.parse(write.stdout) as unknown,
+                        pinnedShow: shown,
+                        hashes: { before, after },
+                    },
+                    null,
+                    4,
+                )}\n`,
+            );
+            writeFileSync(
+                join(CANARY_PROOF_DIR, 'canary-ac3-negative.json'),
+                `${JSON.stringify(
+                    {
+                        task: '1058',
+                        ac: 'AC3 — Wrong identities fail before writing (req: R3)',
+                        cases: [
+                            { name: 'missing-tree', exitCode: missing.exitCode, stderr: missing.stderr.trim() },
+                            {
+                                name: 'wrong-branch',
+                                exitCode: wrongBranch.exitCode,
+                                stderr: wrongBranch.stderr.trim(),
+                            },
+                        ],
+                        hashes: { before, afterNegative },
+                        bothCorporaUnchanged:
+                            afterNegative.treeA === after.treeA && afterNegative.treeB === before.treeB,
+                    },
+                    null,
+                    4,
+                )}\n`,
+            );
+        } finally {
+            rmSync(base, { recursive: true, force: true });
+        }
     });
 });

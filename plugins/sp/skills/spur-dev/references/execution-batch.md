@@ -626,6 +626,20 @@ resolution runs, the loop executes with the worktree as process cwd, and a termi
 retains after the batch report is emitted. Steps 1–5 themselves are not modified — only their cwd
 differs.
 
+**Per-call tree pinning (task 1058).** A host shell call starts in an arbitrary directory and
+inherits no cwd from the previous call, so "the loop runs with the worktree as process cwd" is a
+bootstrap convenience, never a carried guarantee. Every host command boundary in this lifecycle —
+corpus reads/writes, the WT-3b commit, WT-4's merge and evidence persistence, the WT-4a
+persist-out — re-selects its intended tree within the same call via the canonical per-call pin
+protocol ([inline-pipeline-driver.md](inline-pipeline-driver.md) § "Per-call execution-tree
+pin"): `cd --` to the quoted absolute tree, verify `pwd -P` against the recorded physical tree,
+verify Git top-level and expected branch, then execute the already-resolved Spur invocation. The
+identity is consumed, not re-derived: it is the WT-3 marker's confirmed `path` + `branch` (or the
+resolved worktree's physical path + checked-out branch in reuse mode). The one deliberate tree
+change is WT-4: the terminal merge actions select the **invoking** tree, not the execution tree —
+and pin it explicitly the same way. FF ancestry, marker and cleanup sequencing remain owned by
+1059.
+
 **Portability (R10).** Use portable `git worktree` commands only. Do **not** depend on the Claude
 Code `EnterWorktree`/`ExitWorktree` tools — the `sp` plugin ships to Codex, Gemini CLI, pi, omp, and
 OpenCode. The underlying git mechanics (create / list / remove / prune, sibling-directory naming,
@@ -765,6 +779,10 @@ the tree's own source:
 
     cd "<worktree>" && bun apps/cli/src/index.ts task check <wbs> --json
 
+Run that as a per-call pin subshell (task 1058) — `cd --` plus the `pwd -P` / git-top-level /
+branch identity checks of the canonical protocol (inline-pipeline-driver.md § "Per-call
+execution-tree pin") — rather than relying on a persistent `cd` between host tool calls.
+
 Confirm isolation by making a distinctive change in the worktree and checking that
 the command reflects it.
 
@@ -832,13 +850,19 @@ Reuse mode resolves the marker by the resolved worktree's `path` (not by `comman
 ### WT-3b — Commit the batch's writes on `$BRANCH` (task 0701 R1)
 
 Before any terminal action, commit the batch's corpus writes **on `$BRANCH`, inside the
-worktree** — including the generated task files under `docs/tasks*/` and the kanban index:
+worktree** — including the generated task files under `docs/tasks*/` and the kanban index. The
+commit runs as a per-call pinned subshell (task 1058): it selects the execution tree inside the
+same call, verifies the WT-3 identity, and never relies on a persistent `cd` or a trailing
+`cd -` to restore the caller's directory:
 
 ```bash
-cd "../<worktree-dir>"
-git add <files-the-batch-wrote>
-git commit -m "<type>(<scope>): <command> <selector> batch writes"
-cd - >/dev/null
+(
+  cd -- "../<worktree-dir>" || { echo "tree missing: expected ../<worktree-dir>" >&2; exit 1; }
+  [ "$(git branch --show-current)" = "$BRANCH" ] \
+    || { echo "branch mismatch: expected $BRANCH, got $(git branch --show-current)" >&2; exit 1; }
+  git add <files-the-batch-wrote>
+  git commit -m "<type>(<scope>): <command> <selector> batch writes"
+)
 ```
 
 The FF-only git merge carries only commits — uncommitted writes in the worktree would be left
@@ -855,7 +879,9 @@ only what it created*):
 
 ```bash
 # Run these from the main tree (not inside the worktree) - you merge the worktree branch
-# back onto the base ref there:
+# back onto the base ref there. Per-call pin (task 1058): WT-4 deliberately changes trees —
+# every command below selects the INVOKING tree (where the WT-3 marker lives), re-pinned with
+# the canonical identity checks in its own subshell before anything runs; never the execution tree:
 git checkout "$BASE_REF"
 # Guard (task 0701 R1): a zero-commit branch makes the FF-only git merge exit 0
 # ("Already up to date") while merging nothing — the two lines below would then delete

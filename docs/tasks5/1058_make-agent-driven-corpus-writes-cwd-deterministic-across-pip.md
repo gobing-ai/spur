@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: Make agent-driven corpus writes cwd-deterministic across pipeline surfaces
-status: todo
+status: done
 template: issue
 created_at: 2026-10-02T22:50:39.301Z
-updated_at: "2026-10-02T23:58:05.977Z"
+updated_at: "2026-10-03T01:55:50.890Z"
 
 feature_id: D63
 ac_altitude: task-local
 priority: P2
 ac_numbering: task-local
 estimate_hours: 3
+done_forced: "false"
+done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-runall-d63-2ebbd97c/.spur/memory/evidence/1058-verdict.json
 ---
 
 ## 1058. Make agent-driven corpus writes cwd-deterministic across pipeline surfaces
@@ -27,9 +29,9 @@ The corrected Requirements, Design and Plan below supersede the historical propo
 
 ### Requirements
 
-- [ ] R1. Make each host-session corpus command select the confirmed absolute execution tree within the same tool call, independently of earlier calls, in inline-pipeline-driver.md. Pin reads, writes, absolute section-input files and output artifacts; fail before writing when the selected tree or expected Git identity is wrong.
-- [ ] R2. Apply the same protocol at execution-batch.md host command boundaries, including the deliberate change from execution tree to invoking tree at WT-4. Consume the already-confirmed WT-3 path/branch identity; leave integration safety and marker ordering to 1059.
-- [ ] R3. Provide a repeatable two-tree subprocess proof using the real source CLI and scratch task corpus: a call starting in the wrong tree updates only the explicitly selected tree; a missing/wrong identity aborts without changing either corpus. Source and installed invocation examples use their existing resolved command, with quoted paths containing spaces.
+- [x] R1. Make each host-session corpus command select the confirmed absolute execution tree within the same tool call, independently of earlier calls, in inline-pipeline-driver.md. Pin reads, writes, absolute section-input files and output artifacts; fail before writing when the selected tree or expected Git identity is wrong.
+- [x] R2. Apply the same protocol at execution-batch.md host command boundaries, including the deliberate change from execution tree to invoking tree at WT-4. Consume the already-confirmed WT-3 path/branch identity; leave integration safety and marker ordering to 1059.
+- [x] R3. Provide a repeatable two-tree subprocess proof using the real source CLI and scratch task corpus: a call starting in the wrong tree updates only the explicitly selected tree; a missing/wrong identity aborts without changing either corpus. Source and installed invocation examples use their existing resolved command, with quoted paths containing spaces.
 
 Out of scope: runtime engine changes, new public APIs, unrelated fixes from 1053–1056, production operations or external publication.
 
@@ -93,15 +95,60 @@ The reported host commands assumed a prior shell call had left the next call in 
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**R1 — Host writes select the execution tree** (`plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md`):
+
+- `:221` — new section `## Per-call execution-tree pin (task 1058)`: canonical pin subshell template (`cd --` to the quoted tree → `pwd -P` → `git rev-parse --show-toplevel` → `git branch --show-current` → `exec <resolved-spur-invocation> …`); rules: pin reads as well as writes, validate the returned `filePath` against the configured corpus, prove sections with a fresh pinned `task show --json` (heading-only grep is not proof), resolve section input/output paths before changing tree, fail closed nonzero naming expected/actual **before the CLI runs** (no designated exit code; Q&A 2026-10-02), native tool cwd options additive only, host-only scope (`packages/app/src/workflow/actions/shell.ts:98` engine binding untouched), dispatched subagents re-pin every shell call from the dispatch payload identity. No new flag, API, or helper framework.
+- `:145` — Run setup step 7: bootstrap `cd` confirms the tree once; every later call re-selects it (a host shell carries no cwd between calls). `:225` blanket rule: all `spur …` examples in the driver (workflow inventory, run-link, fingerprint, record/done) abbreviate the pinned subshell form.
+- `:459` — dispatch payload field 4: delegates re-pin with the supplied invocation/identity, never re-derive.
+- `:362` — fingerprint capture runs inside a per-call pin subshell (cwd feeds the git-tree digest half).
+- `:706` — record/done sequencing: both hops per-call pinned.
+
+**R2 — Batch boundaries select the intended tree** (`plugins/sp/skills/spur-dev/references/execution-batch.md`):
+
+- `:629` — Worktree isolation intro: "process cwd" is a bootstrap convenience, never a carried guarantee; every host command boundary (corpus reads/writes, WT-3b commit, WT-4 merge/evidence, WT-4a persist-out) re-selects its tree in-call via the canonical protocol; identity is consumed from the WT-3 marker (`path` + `branch`), not re-derived; WT-4's invoking-tree selection is the one deliberate tree change; FF ancestry, marker and cleanup sequencing remain owned by 1059.
+- `:854` — WT-3b commit block rewritten as a pinned subshell (`cd --` + branch check on `$BRANCH`; no persistent `cd`, no trailing `cd -`).
+- `:882` — WT-4 create-mode comment: every terminal merge command explicitly pins the **invoking** tree.
+- `:782` — "`spur` on PATH" example: run via pin subshell instead of relying on a persistent `cd`.
+
+**R3 — Wrong identities fail before writing** (`plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts`):
+
+- `:277` — spec pins: both docs carry the protocol elements; WT-4 selects the invoking tree; 1059 ownership; `exit 91` absent.
+- `:360` — two-tree subprocess canary against the real source CLI: scratch git trees (selected path contains spaces), pinned write from a stale cwd updates only the selected task file, pinned `show --json` returns `filePath` inside the selected tree with the new body, missing-tree and wrong-branch cases abort nonzero with named expected/actual and both corpora hashes unchanged; writes repeatable proof JSON on every run.
+
+Proof artifacts (repeatable, gitignored): `.spur/run/1058-cwd-proof/canary-ac1-pinned-write.json`, `.spur/run/1058-cwd-proof/canary-ac3-negative.json`.
+
+Validation: execution-batch/startup/dispatch-handoff/command-flag-parity/task-diffstat contract tests 181 pass; scripts/commands inline-execution + parity-check tests 25 pass; `inline-pipeline-parity-check.ts` ok (11 actions, 4 guards, 0 spurious edges); `bun run plugin-smoke` PASS; `superskill install sp --dry-run` clean (40 skills detected, nothing written).
+
+Deviations: none beyond deferring Plan step 4 (checking this task done) — the delegation forbids status/lifecycle writes; the pipeline owns transitions. No workflow YAML, no engine code, no public surface changes; 1053–1056 untouched.
 
 ### Testing
 
-Planning-stage validation only: 2026-10-02 source audit and existing regression suites. Implementation proof remains pending; execute the isolated artifacts and focused checks specified in Plan. Do not treat this readiness audit as runtime verification PASS.
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | R1 — Host writes select the execution tree: `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:221` new canonical section `## Per-call execution-tree pin (task 1058)`: template at `:231-245` (`cd -- "$SPUR_TREE"` → `pwd -P` → `git rev-parse --show-toplevel` → `git branch --show-current` → `exec` resolved invocation, all quoted paths); rules pin **reads** (`:247-249`), validate returned `filePath` against the configured folder set (`:250-254`), prove sections via fresh pinned `task show --json`, not heading-grep (`:255-257`), resolve section input/output paths before `cd` (`:258-260`), fail closed nonzero naming expected/actual **before the CLI runs**, explicitly no designated exit code (`:261-264`), native cwd options additive only (`:265-266`), host-only scope (`:267-270`). Applied at bootstrap step 7 (`:144-148`), blanket abbreviation rule (`:272-276`), fingerprint capture (`:362-363`), dispatch payload field 4 (`:459-461`), record/done hops (`:706-708`). Engine untouched, confirmed at source: `packages/app/src/workflow/actions/shell.ts:98` = `const cwd = stringOption(options, 'cwd', context.workdir);`. Diff contains no engine, workflow-YAML, flag, or API change. |
+| R2 | MET | R2 — Batch boundaries select the intended tree: `plugins/sp/skills/spur-dev/references/execution-batch.md:629-642` — every host command boundary (corpus reads/writes, WT-3b commit, WT-4 merge/evidence, WT-4a persist-out) re-selects its tree in-call via the canonical protocol by reference; identity **consumed** from the WT-3 marker `path` + `branch`, not re-derived (`:639-640`); WT-4's invoking-tree selection is the one deliberate tree change (`:637-639`); "FF ancestry, marker and cleanup sequencing remain owned by 1059" (`:640-641`). Concrete forms: WT-3b rewritten as a real pinned subshell — `cd --` + branch check on `$BRANCH`, no persistent `cd`, no trailing `cd -` (`:854-870`); WT-4 create-mode comment pins the INVOKING tree (`:882-886`, narrative — see residual); `spur`-on-PATH example re-run via pin subshell (`:782-785`). Spec-pinned in `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:301-309`. 1059 integration surface left alone as required. |
+| R3 | MET | R3 — Wrong identities fail before writing: `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:281-309` spec pins (both docs carry protocol elements; WT-4 selects the **invoking** tree; 1059 ownership; `exit 91` negatively asserted at `:296` — grep confirms `exit 91` appears in neither reference doc). `:313-497` two-tree subprocess canary against the **real source CLI** (`process.execPath` + `apps/cli/src/index.ts`): scratch git trees seeded via `git init -b` (`:351-364`), selected tree path contains spaces (`spur exec tree a`, `:377`), write executed from a stale cwd (tree-b) via `runPinned` (`:384-394`, `:404-409`), fresh pinned `show --json` asserts `filePath` inside the selected tree and the new body while the seed body is gone (`:411-419`), sha256 hashes prove only the selected corpus changed (`:421-424`), missing-tree/wrong-branch abort nonzero with named expected/actual and both corpora unchanged (`:426-436`, `:437-442`), repeatable proof JSON written every run (`:444-492`). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Host writes select the execution tree (req: R1) | MET | test | Canary (`plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:404-424`): pinned `task update 1100 --section Background --from-file` from stale cwd in tree-b → exit 0; pinned `task show --json` returns `filePath` inside spaced tree-a with the new body (seed body absent); treeA hash `bc3ede64…→3722ee99…`, treeB unchanged. Artifact `.spur/run/1058-cwd-proof/canary-ac1-pinned-write.json` (real CLI run) shows exactly this: `updateEnvelope.ref.filePath/folder` inside `"…/spur exec tree a/docs/tasks"`, `pinnedShow.content` contains "Pinned canary body — written from an intentionally stale cwd.", hash deltas as above. |
+| AC2 — Batch boundaries select the intended tree (req: R2) | MET | test | `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:301-309` (whitespace-collapsed containment: `Per-call tree pinning (task 1058)`, `canonical per-call pin protocol`, `select the **invoking** tree`, 1059 ownership, WT-3b `cd -- "../<worktree-dir>"`); doc evidence `plugins/sp/skills/spur-dev/references/execution-batch.md:629-642`, `:782-785`, `:854-870`, `:882-886`. Note: AC2's evidence is static containment of the doc contract, not a subprocess proof of the WT-3b/WT-4 forms — appropriate for a doc deliverable, flagged as residual. |
+| AC3 — Wrong identities fail before writing (req: R3) | MET | test | Canary negatives (`plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:426-442`): missing tree (`missing tree`, spaced) → nonzero + `tree missing: expected …`; wrong branch → nonzero + `branch mismatch: expected sp/canary-alpha, got sp/canary-beta`; `afterNegative` equals post-AC1 state for treeA and seed for treeB. Artifact `.spur/run/1058-cwd-proof/canary-ac3-negative.json`: both cases `exitCode: 1` with those exact stderr strings, `bothCorporaUnchanged: true`, hash chains cross-consistent with the AC1 artifact (before `bc3ede64…` both trees; afterNegative treeA `3722ee99…` = AC1's post-write state — i.e., the failing calls changed nothing). |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -110,3 +157,8 @@ apps/cli/src/index.ts:56; apps/cli/src/context.ts:132; apps/cli/src/commands/tas
 Audit: HEAD 8467f6f6d; only the main worktree was registered; `task list --status wip --json` returned []; active todo titles reviewed for duplicate ownership. Recheck before delegation. No implementation dependencies. 1058 and 1059 share execution-batch.md: serialize their writes or use isolated worktrees and review integration.
 
 ### History
+
+- 2026-10-03T01:04:36.947Z todo → wip (system)
+- 2026-10-03T01:53:04.997Z wip → testing (system)
+- 2026-10-03T01:55:50.885Z testing → done (system)
+
