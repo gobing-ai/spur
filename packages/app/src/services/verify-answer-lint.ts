@@ -89,6 +89,14 @@ export function lintVerifyAnswer(
         if (normalizeReqStatus(row.status) === null)
             add(row.line, 'req-status', `"${row.id}" invalid status "${row.status}" (MET | PARTIAL | UNMET)`);
         if (!row.evidence.trim()) add(row.line, 'req-evidence', `"${row.id}" has empty evidence`);
+        else if (hasClaimMarker(row.evidence) && !hasCitationForm(row.evidence)) {
+            add(
+                row.line,
+                'evidence-citation',
+                `"${row.id}" evidence asserts an external API/library/version claim without a citation ` +
+                    '(add a repo `path:line`, an external `@origin `path` line N`, or a URL in the same cell)',
+            );
+        }
     }
     for (const id of reqIds) {
         if (!seenReq.has(id)) add(0, 'req-missing', `missing requirement row for "${id}"`);
@@ -133,6 +141,14 @@ export function lintVerifyAnswer(
                 `invalid evidence type "${row.evidenceType}" (test | command | static-ref | manual-review | llm-judge | n/a, or a + compound)`,
             );
         if (!row.evidence.trim()) add(row.line, 'ac-evidence', `AC "${row.id.slice(0, 40)}" has empty evidence`);
+        else if (hasClaimMarker(row.evidence) && !hasCitationForm(row.evidence)) {
+            add(
+                row.line,
+                'evidence-citation',
+                `AC "${row.id.slice(0, 40)}" evidence asserts an external API/library/version claim without a citation ` +
+                    '(add a repo `path:line`, an external `@origin `path` line N`, or a URL in the same cell)',
+            );
+        }
     }
 
     return findings;
@@ -152,6 +168,42 @@ interface AcRow {
     evidenceType: string;
     evidence: string;
     line: number;
+}
+
+// ─── Claim/citation detection (task 1070 R1/R2) ─────────────────────────────
+
+/**
+ * External API/library claim markers (1070 R1). A hit means the evidence cell
+ * asserts something about an external package, installed artifact, version, or
+ * API behavior — a claim that must carry a verifiable citation in the same cell.
+ * The set is deliberately closed: widening it is a contract change.
+ */
+const CLAIM_MARKERS: readonly RegExp[] = [
+    /@[a-z0-9._-]+\/[a-z0-9._-]+/i, // scoped package mention (@scope/name)
+    /\bnode_modules\//, // installed-package path reference
+    /\b\d+\.\d+\.\d+\b/, // semver version claim (dates use dashes; times lack a third segment)
+    /`[A-Za-z_$][\w.$]*\s*\([^`]*\)`/, // backticked function-call-shaped API token
+];
+
+/**
+ * Accepted citation forms (1070 R2); any one clears a claim-bearing cell.
+ * Presence-only by design: which citation proves which claim is not
+ * deterministically decidable, and bare vs backticked anchors are both legal
+ * (verifiability over formatting).
+ */
+const CITATION_FORMS: readonly RegExp[] = [
+    /`[^`\s]+:\d+(?:-\d+)?`/, // backticked path:line(-end)
+    /`[^`]+`\s+lines?\s+\d+/i, // external named-origin form: `path` line N (line outside backticks)
+    /\b[\w./-]+\.[A-Za-z0-9]+:\d+(?:-\d+)?\b/, // bare path.ext:line(-end) — the extension avoids 00:04-style times
+    /https?:\/\/\S+/i, // URL
+];
+
+function hasClaimMarker(evidence: string): boolean {
+    return CLAIM_MARKERS.some((re) => re.test(evidence));
+}
+
+function hasCitationForm(evidence: string): boolean {
+    return CITATION_FORMS.some((re) => re.test(evidence));
 }
 
 function splitTableCells(line: string): string[] {
