@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Wrapup drift probe: classify doc-owned surfaces against the feature span, not per-task diffs"
-status: todo
+status: cancelled
 template: feature-impl
 created_at: 2026-10-02T23:30:38.595Z
-updated_at: "2026-10-02T23:41:48.146Z"
+updated_at: "2026-10-03T00:00:20.014Z"
 feature_id: D63
 
 ---
@@ -23,19 +23,17 @@ feature_id: D63
 
 **Excluded:** the doc-sync content itself (landed, `fdb7882cd`); the preflight L4 gate behavior (separate concern, working as designed); 0944's original composition-budget scope (D64, done).
 
+**Refine corrections (2026-10-02)**
+
+The original per-task Git-diff diagnosis is false: the probe reads historical Solution paths. The claim of stale unsolved drift is also unsupported: wrapup-drift-probe.ts:12 and tests/wrapup-drift-probe.test.ts:76 explicitly define any doc-owned change as conservative routing evidence, not an assertion that sync is absent. A changed owner file in an arbitrary Git span cannot prove the relevant contract was reconciled, and a completed D62 wrap does not prove arbitrary future HEAD inputs. Therefore cancel this proposed bugfix; no safe fast-path optimization is justified by its evidence. A future measured optimization needs an affirmative current-input reconciliation proof and a separately frozen design; do not suppress the probe, alter immutable Solution records or retrofit a receipt framework here.
+
 ### Requirements
 
-1. **Reconciliation signal:** give the probe a way to recognize already-reconciled drift. Preferred: for each flagged doc-owned path, check the actual span (merge-base of the batch/base ref..HEAD, or main-tip delta at wrap time) — if the owning design surface for the flagged path changed in-span, classify reconciled → clean with an explanatory reason (e.g. `reconciled-in-span:<path>`). Alternative (simpler): a scope note in the change-map format the probe honors, set by the driver at wrap time after verifying the sync exists in-span.
-2. **Fail-safe preserved:** any lookup, parse, path-resolution, or git-read failure still routes dirty; the reconciled path is an affirmative positive finding, never a default.
-3. **Dirty remains a route, not a failure:** unchanged for genuinely unreconciled drift — full wrapup mode with doc-sync step, exactly as today.
-4. **Artifacts contract stable:** `drift-probe.json` / `mode.txt` shapes and consumers (wrapup-pipeline.yaml task-resolve, route-reason.txt) stay compatible; new reason strings must not break existing parsers (check `wrapup-steps.ts` consumers).
+- [x] R1. Resolve the diagnostic by source verification: no defect established against the conservative routing contract; cancel this task and withdraw its span-based reconciliation shortcut. This checkbox records completed triage, not runtime implementation.
 
 ### Acceptance Criteria
 
-- AC1: regression test — a task whose Solution lists a doc-owned surface path with the owning sync present in-span routes clean (reason names the reconciliation); pinned in `plugins/sp/tests/wrapup-drift-probe.test.ts`.
-- AC2: regression test — same input without any in-span sync still routes dirty (fail-safe intact).
-- AC3: regression test — corrupted/unreadable task Solution or git failure routes dirty (never clean).
-- AC4: a real wrapup re-run over merged D62 tasks no longer prints the stale `1055: plugins/sp/skills/code-implementation/SKILL.md` reason; run artifact referenced in Testing.
+Not applicable: cancelled diagnostic; no claim of implementation or runtime verification PASS.
 
 ### Q&A
 
@@ -43,13 +41,19 @@ feature_id: D63
      condition. Not a parking lot for open questions — an unanswered question here means the task
      is not ready to hand off. Keep empty if none. -->
 
+#### Q&A entry — 2026-10-02T23:58:12.837Z
+
+Closed: cancelled, not deferred as an implementable bug. Performance optimization is a separate measured product decision with a proof design, not a diagnostic fix. Existing full-wrapup route is expected behavior. No overlap transferred to 1058, 1059 or 1061.
+
 ### Design
 
-<!-- Chosen implementation approach, key tradeoffs, invariants, and impacted surfaces. -->
+Keep current probe and routing unchanged. Existing script explicitly defines doc-owned paths as safety-route evidence regardless of earlier synchronization. Owner-file presence in a Git diff is insufficient semantic proof. No new flag, schema, receipt, workflow step or dependency.
 
 ### Plan
 
-<!-- Ordered implementation checklist. Fill before moving to todo/wip. -->
+1. Preserve historical incident and record the source-verified correction.
+2. Cancel through the task CLI; retain the ID and history so future reviews can deduplicate this same conservative-routing observation.
+3. Do not delegate runtime implementation from this task.
 
 ### Solution
 
@@ -57,10 +61,7 @@ feature_id: D63
 
 ### Testing
 
-- `(cd plugins/sp && bun test tests/wrapup-drift-probe.test.ts)` for the probe unit tests (extend with AC1-AC3 cases; use temp-dir task fixtures, not corpus).
-- `(cd packages/app && bun test tests/workflow/wrapup-pipeline.test.ts)` for pipeline routing parity.
-- `bun run build:scripts` to regen the `.mjs` twin, then `bun run script-contract-check` and `bun run plugin-smoke`.
-- Live check for AC4: re-run wrapup over a merged D62 task set (`spur workflow run wrapup-pipeline.yaml --vars '{"tasks":"[\"1055\"]","profile":"auto","merge":"false","agent":"coder"}'` — or the lighter task-resolve-only path if available) and reference the new run's `drift-probe.json` + `route-reason.txt` as evidence.
+Audit only: `(cd plugins/sp && bun test tests/wrapup-drift-probe.test.ts tests/dogfood-testing/execution-batch-contract.test.ts)` passed 45 tests, including all ten drift-probe cases. The tests intentionally require doc-owned paths to remain dirty. No production wrapup or feature transition was run.
 
 ### Review
 
@@ -68,9 +69,10 @@ feature_id: D63
 
 ### References
 
-<!-- Links to the parent feature, design docs, related tasks, or external references. -->
+plugins/sp/scripts/wrapup-drift-probe.ts:12; plugins/sp/scripts/wrapup-drift-probe.ts:234; plugins/sp/tests/wrapup-drift-probe.test.ts:76; config/workflows/wrapup-pipeline.yaml:179. Audit HEAD 8467f6f6d. Historical D62 session artifact claims are retained as narrative, not proof of a current defect.
 
 ### History
 
 - 2026-10-02T23:41:48.146Z backlog → todo (system)
+- 2026-10-02T23:58:13.620Z todo → cancelled (system)
 
