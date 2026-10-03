@@ -43,7 +43,7 @@ already-supported agents.
 | 0119 | Add --next auto-chain option to dev-refine, dev-run, dev-verify | done |
 | 0126 | Make agent auto resolution phase-aware with executor profiles | done |
 | 0128 | Harden implement-agent Solution prompt + re-measure pipeline cache hit rate | done |
-| 1068 | codify chunked implement dispatch contract for cap limited worker models | todo |
+| 1066 | codify chunked implement dispatch contract for cap limited worker models | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
