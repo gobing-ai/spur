@@ -48,7 +48,7 @@ export function lockKeyPackageName(lockKey: string): string {
     const segs = lockKey.split('/');
     const last = segs[segs.length - 1] ?? lockKey;
     const scope = segs[segs.length - 2];
-    if (scope !== undefined && scope.startsWith('@')) {
+    if (scope?.startsWith('@')) {
         return `${scope}/${last}`;
     }
     return last;

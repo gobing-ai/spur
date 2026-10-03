@@ -92,7 +92,7 @@ test('1064 AC2: a successful sync run prints the header first and the id resolve
             dbUrl,
         });
         expect(exitCode).toBe(0);
-        const headerIdx = output.messages.findIndex((message) => message === 'Run: reg-ok-probe');
+        const headerIdx = output.messages.indexOf('Run: reg-ok-probe');
         expect(headerIdx).toBeGreaterThanOrEqual(0);
         // The header must precede every progress line (no action/phase render before it).
         const firstProgressIdx = output.messages.findIndex(
