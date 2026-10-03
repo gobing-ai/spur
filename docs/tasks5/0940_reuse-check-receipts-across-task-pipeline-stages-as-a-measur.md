@@ -4,7 +4,7 @@ name: Reuse check receipts across task-pipeline stages as a measured candidate
 status: done
 template: feature-impl
 created_at: 2026-09-24T00:13:17.004Z
-updated_at: "2026-09-26T02:50:00.160Z"
+updated_at: "2026-10-03T03:42:31.124Z"
 feature_id: D64
 priority: P2
 tags:
@@ -258,16 +258,16 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | gate-checklists.md:92-94 + secu-review.md:85-87 replace lint/test re-runs with quality-gate.ts status reuse:true confirmation, spur-check only on stale/missing; full-gate-before-review invariant intact (task-pipeline.yaml:141-142, plugins/sp/scripts/quality-gate.ts:627-646 only run-mode writes receipt; light writes only -light-gate.log plugins/sp/scripts/quality-gate.ts:424) |
-| R2 | MET | quality-gate.ts:557-565 noProgressSkip evaluated before probe (probe block :568-575 guarded); receiptFailsAtDigest plugins/sp/scripts/quality-gate.ts:260-270 requires tier full + status FAIL + inputDigest equality; skip writes FAIL to -test-gate.status :621 + check.skipped-no-progress teed stdout+log :561-564; attempt counter untouched (:546 run-only reset; test quality-gate-receipt.test.ts:468-470) |
-| R3 | MET | check.reused at status-mode reuse (quality-gate.ts:672-680) and light accumulation (:459-464); check.skipped-no-progress (:561-564); all teed stdout+gate log; single main() dispatch :660-685 no surface branch, both YAML resolutions same script (task-pipeline.yaml:428,511) |
-| R4 | MET | task-pipeline-check-dedup.test.ts:24-34 negative (precheck/verify/record free of qualityGateCmd/quality-gate.ts) + positive (test/test-recheck keep gate); verify reads only status file via jq proof-stamp (config/workflows/task-pipeline.yaml:733 observe-only) |
-| R5 | MET | config/workflow-candidates.json check-dedup-task-pipeline: canonical task-pipeline; delta.baselineAgentRunCount=0 matches 0938 baseline agentRunCountMedian 0 (wall median 7983000ms); deadline 2026-11-24 = +60d; verdict null honestly pending promotion evaluate post-shadow-run (ADR-076 revert) |
+| R1 | MET | receipt-reuse replaces re-run in review/verify gates: `/Users/robin/.agents/skills/sp-spur-dev/references/gate-checklists.md:91` and `/Users/robin/.agents/skills/sp-code-verification/references/secu-review.md:85-86` (re-read: `quality-gate.ts status` reuse:true, spur-check only on stale/missing) |
+| R2 | MET | recheck no-progress skip: `plugins/sp/tests/quality-gate-receipt.test.ts:455-513` — FAIL-at-same-digest skips probe, writes FAIL + `check.skipped-no-progress` to log and stdout (28 pass across receipt+gate suites, re-run this session); attempt counter untouched |
+| R3 | MET | `check.reused` / `check.skipped-no-progress` markers asserted in both log and stdout (`plugins/sp/tests/quality-gate-receipt.test.ts:480,483` re-run); single quality-gate.ts dispatch on both surfaces |
+| R4 | MET | regression test `packages/app/tests/workflow/task-pipeline-check-dedup.test.ts` — 2 pass (re-run this session): precheck/verify/record free of qualityGateCmd, test/test-recheck keep the gate |
+| R5 | MET | `config/workflow-candidates.json` record check-dedup-task-pipeline: canonical task-pipeline, deadline 2026-11-24 (+60d), verdict null pending measured evaluate (re-read via jq this session; ADR-076 revert-or-keep) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — The comprehensive check runs once at the quality boundary | MET | test | Check runs once at boundary: recheck no-progress skip (quality-gate.ts:557-575), receipt confirmation at model stages (gate-checklists.md:92-94, secu-review.md:85-87), light accumulation skip at same digest (plugins/sp/scripts/quality-gate.ts:453-462), precheck/verify/record gate-free (R4 test); 23/23 receipt tests + 2/2 dedup tests + gate attempt-2 PASS 9127/523 |
-| [non-behavior] AC2 — Workflow shape changes are accepted only on measured benefit | MET | static-ref | Candidate bound to 0938 baseline with 60-day evaluate-or-revert deadline (ADR-076); measured confirmation sequenced post-shadow-run per Plan step 5; no unmeasured promotion |
+| Scenario: R7 — The comprehensive check runs once at the quality boundary | MET | test | recheck no-progress skip + receipt confirmation at model stages + precheck/verify/record gate-free (suites re-run this session: quality-gate-receipt 28 pass, task-pipeline-check-dedup 2 pass) |
+| [non-behavior] AC2 — Workflow shape changes are accepted only on measured benefit | MET | static-ref | candidate bound to 0938 baseline with 2026-11-24 evaluate-or-revert deadline; verdict honestly null pending shadow-run measurement — no unmeasured promotion |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

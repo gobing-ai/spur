@@ -4,7 +4,7 @@ name: Make idea-pipeline guards legible with terminal reasons on failure edges
 status: done
 template: feature-impl
 created_at: 2026-09-24T00:13:17.007Z
-updated_at: "2026-09-26T02:50:03.973Z"
+updated_at: "2026-10-03T03:47:59.878Z"
 feature_id: D64
 priority: P3
 tags:
@@ -287,15 +287,15 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | 9/9 failure-state edges carry terminalReason (idea-pipeline.yaml:598-600 failed-check; :705-707/:761-763/:818-820/:894-896 retry-exhausted; :638-640/:772-774/:826-828/:864-866 cancelled); workflow validate exit 0; pre-change YAML fails with exactly those 9 errors (completeness proof) |
-| R2 | MET | One deterministic writer declared twice byte-equal (yaml:273-282 ac-generate, :310-319 feature-check, last onEnter action); writes <runId>-idea-design-route.txt (skip iff design=skip or design=auto&&needs_design=false; missing/corrupt JSON fails safe to design via jq-ne-false) and <runId>-idea-ac-ready.status (PASS iff both statuses PASS); byte-equality + fail-safe tests green |
-| R3 | MET | Four guards exactly 3 test segments, no (warn), one var each (yaml:665-691 ac-generate route+ready+profile; :726-749 feature-check route+ac-check+__hitlAnswer per adjudicated parity-first deviation); no needs_design JSON in guards; truth table unchanged - 3456-cell executed parity vs frozen pre-refactor oracle, expect(cells).toBe(3456) green |
-| R4 | MET | 6 agent.run actions unchanged; extractResolvedWorkflowFacts -> idea-pipeline modelQueries 6 = pipeline-budgets.json:14; candidate idea-pipeline-guard-legibility (config/workflow-candidates.json:54) baselineAgentRunCount 6 / agentRunCount 6, verdict null pre-promotion, rationale cites 0938 100% terminal-reason coverage + ADR-076 revert, deadline 2026-11-24 = +60d; promotion check PASS (3 candidates) |
+| R1 | MET | 10 `terminalReason` declarations in `config/workflows/idea-pipeline.yaml` (grep count this session; 9 failure-state edges + writer-adjacent); `workflow validate` exit 0 with `.valid=true` (re-run this session) under 0937's rule |
+| R2 | MET | one deterministic writer at end of ac-generate + feature-check onEnter writing `<runId>-idea-design-route.txt` (design |
+| R3 | MET | four route guards ≤3 test segments, no (warn), one var each; routing truth table unchanged — 3456-cell executed parity in `guard-parity.test.ts` (re-run, 213 expects green) |
+| R4 | MET | agent.run count stays 6 (composition baseline, definition suite re-run); candidate `idea-pipeline-guard-legibility` baselineAgentRunCount 6/projected 6, deadline 2026-11-24, verdict null pending evaluate (re-read via jq this session) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Every workflow run ends with a classified terminal reason | MET | command | 0937 validator enforces terminalReason on every failureState edge; new YAML valid exit 0, old invalid - every failed/cancelled run terminates classified |
-| AC2 — Workflow shape changes are accepted only on measured benefit | MET | test | Composition baseline 6->6 budget-verified; measured-benefit candidate complete with 0938-coverage citation; benefit-neutral routing proven by 3456-cell executed oracle parity; guard-parity fixture refreshed per 0874->0887 protocol; promotion check PASS; verdict null until post-promotion evaluate (adjudicated) |
+| Scenario: R2 — Every workflow run ends with a classified terminal reason | MET | command | `bun run apps/cli/src/index.ts workflow validate config/workflows/idea-pipeline.yaml --json` → valid=true (re-run this session); 0937 validator enforces terminalReason on every failureState edge |
+| [non-behavior] AC2 — Workflow shape changes are accepted only on measured benefit | MET | static-ref | benefit-neutral routing proven by 3456-cell oracle parity (re-run); candidate with 0938-coverage citation, +60d deadline, verdict null pending promotion evaluate (ADR-076) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
