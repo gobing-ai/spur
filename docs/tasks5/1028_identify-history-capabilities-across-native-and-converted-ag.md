@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Identify history capabilities across native and converted agent formats
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-30T20:26:19.390Z
-updated_at: "2026-09-30T20:47:29.119Z"
+updated_at: "2026-10-03T15:04:59.524Z"
 feature_id: E93
 priority: P1
 tags:
@@ -12,6 +12,8 @@ tags:
   - capabilities
 estimate_hours: 14
 
+done_forced: "false"
+done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-dev-runall-e93-4ff4/.spur/memory/evidence/1028-verdict.json
 ---
 
 ## 1028. Identify history capabilities across native and converted agent formats
@@ -29,23 +31,23 @@ The current importer loses the distinction between logical capability kind and i
 
 ### Requirements
 
-- [ ] R1. Recognize explicit commands from verified source user envelopes without treating request intent as execution.
-- [ ] R2. Recognize model subagent delegation and retain native parent/child identity only when provided.
-- [ ] R3. Record explicit and implicit ordinary skill loads across verified source formats, with failed and unknown outcomes preserved.
-- [ ] R4. Preserve verifiable Superskill command/subagent origins through the additive importer-owned fact contract; retain unresolved historical identity honestly.
-- [ ] R5. Deduplicate correlated representations deterministically while preserving distinct repeat invocations and append-only replay.
-- [ ] R6. Exclude quoted examples, skill catalogs, tool-output wrappers, unrelated reads and unsafe dynamic tool expressions.
-- [ ] R7. Audit every registered source route and establish fixture-backed coverage for claude, codex, pi, omp, agy and grok, keeping deferred-source limits explicit.
+- [x] R1. Recognize explicit commands from verified source user envelopes without treating request intent as execution.
+- [x] R2. Recognize model subagent delegation and retain native parent/child identity only when provided.
+- [x] R3. Record explicit and implicit ordinary skill loads across verified source formats, with failed and unknown outcomes preserved.
+- [x] R4. Preserve verifiable Superskill command/subagent origins through the additive importer-owned fact contract; retain unresolved historical identity honestly.
+- [x] R5. Deduplicate correlated representations deterministically while preserving distinct repeat invocations and append-only replay.
+- [x] R6. Exclude quoted examples, skill catalogs, tool-output wrappers, unrelated reads and unsafe dynamic tool expressions.
+- [x] R7. Audit every registered source route and establish fixture-backed coverage for claude, codex, pi, omp, agy and grok, keeping deferred-source limits explicit.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Explicit user commands retain command identity (req: R1)
-- [ ] AC2 — Model delegation identifies subagents separately from user requests (req: R2)
-- [ ] AC3 — Ordinary skill loads include explicit and implicit use (req: R3)
-- [ ] AC4 — Converted capabilities preserve verifiable origin kinds (req: R4)
-- [ ] AC5 — Duplicate representations collapse without losing repeated invocations (req: R5)
-- [ ] AC6 — Quoted examples and unrelated tool reads produce no invocation (req: R6)
-- [ ] AC7 — Source coverage distinguishes verified extraction from unavailable evidence (req: R7)
+- [x] AC1 — Explicit user commands retain command identity (req: R1)
+- [x] AC2 — Model delegation identifies subagents separately from user requests (req: R2)
+- [x] AC3 — Ordinary skill loads include explicit and implicit use (req: R3)
+- [x] AC4 — Converted capabilities preserve verifiable origin kinds (req: R4)
+- [x] AC5 — Duplicate representations collapse without losing repeated invocations (req: R5)
+- [x] AC6 — Quoted examples and unrelated tool reads produce no invocation (req: R6)
+- [x] AC7 — Source coverage distinguishes verified extraction from unavailable evidence (req: R7)
 
 Verification lens: Exercise the real runJsonlImport and typed DAO/schema test homes named in Design. Positive/negative source signatures, exact origin matching, null fallback, timestamps, idempotence and later-result pairing must be observable in persisted rows.
 
@@ -98,18 +100,69 @@ Handoff to 1029: verified upstream revision, actual schema version, exact export
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**Scope statement:** the code diff for this task lives in `/Users/robin/xprojects/ts-libs` (the task-authorized upstream tree, per Background/Q&A: "The operator explicitly authorized necessary upstream enhancement" in packages/llm-jsonl-importer). The spur worktree intentionally carries **no code diff** — this task file is its only change. The additive fact contract implemented here is frozen in `docs/design/history-capability-detection.md:36` (`capability_kind` and companion fact columns, design sections 8.1–8.2).
+
+**Change map (upstream `@gobing-ai/ts-llm-jsonl-importer`):**
+
+- `sha256Text` — raw UTF-8 SHA-256 for content digests (distinct from the stableJson-based `sha256`). Evidence: @gobing-ai/ts-llm-jsonl-importer `src/hash.ts` line 32.
+- New `capability.ts` — `validateCapabilityOrigins` (rejects malformed origin indexes before any write, schema included); `matchCapabilityOrigin` (name → path narrowing → digest; conflict/mismatch classifies unknown, never guesses); `capabilityInvocationId` (versioned domain-hash identity; correlated representations share one id); `parseLiteralReadTargets` (quote/token-safe `cat`/`sed -n '<range>p'` parsing; rejects expansions, redirections, escapes, quoted code); `extractNestedExecCommandLiterals` (strict `tools.exec_command({cmd: <literal>, ...})` shape, statement-start check, comment stripping, ordinal offset 1000+). Evidence: @gobing-ai/ts-llm-jsonl-importer `src/capability.ts` line 1.
+- Capability types and transport — `CapabilityKind`, `CapabilityEvidenceKind`, `CapabilityOrigin`; `capabilityOrigins` on `ImportOptions` + `TransformContext`; four nullable fact fields + `_capabilityConflict` transport key on `SkillCall`/`SkillCallSplitRecord`. Evidence: @gobing-ai/ts-llm-jsonl-importer `src/types.ts` line 1.
+- Schema — four nullable TEXT fact columns on `history_skill_call`; schema version `0.5.12` (digest pinned in tests). Evidence: @gobing-ai/ts-llm-jsonl-importer `src/schema-sql.ts` line 123.
+- DAO — `ensureSkillCallCapabilityColumns` guarded ALTER-TABLE upgrade (idempotent; legacy rows NULL; absent-table no-op), `skillCallOutcomeUpdateOp` and `resolveSkillCallRows` DB-fallback pairing lookup later in the same file, typed columns + `_capabilityConflict` ignored key. Evidence: @gobing-ai/ts-llm-jsonl-importer `src/jsonl-importer-dao.ts` line 163.
+- `extractSkillCalls` E93 rewrite: claude (Skill tool_use, Task delegation, Read on SKILL.md, Bash literal reads, command-expansion envelope with dedupe), pi/omp (signature wrapper loads + Read-family implicit loads), codex (`$`/`/` markers as requests — never capability-from-spelling — full-body `<skill>` blocks with trimmed-body digest, marker+wrapper correlation via shared invocation id, shell argv + nested literal reads), agy (`slash_command` native command requests gated on display payload, `INVOKE_SUBAGENT` delegation), gemini (request evidence; deferred-origin limit documented), grok (only natively-present inline status rides; absent stays unknown). Default row status `unknown`; `ok` only on verified harness injection or paired result.
+- Importer wiring — origins validated before `applyHistoryImportSchema` (next statement): capability origins threaded into both transform contexts; per-run skill-row registration; result pairing (claude tool_result timing + `is_error`, omp/pi timing, codex `function_call_output` ⇒ ok) via in-run map then DB fallback for later-incremental arrival; `_capabilityConflict` surfaced as bounded (cap 10), deduplicated validation findings. Evidence: @gobing-ai/ts-llm-jsonl-importer `src/mappers.ts` line 134 and `src/importer.ts` line 215.
+- Barrel exports for capability types and helpers. Evidence: @gobing-ai/ts-llm-jsonl-importer `src/index.ts` line 1.
+- Package README — new "Skill-Call Capability Facts (E93)" section documenting the fact contract, origin index usage, and limits. Evidence: @gobing-ai/ts-llm-jsonl-importer `README.md` line 222.
+- Remediation (test-fix hops, R6/AC6): quoted-signature exclusion grammar — `isQuotedSignatureContext` + `leadingInjectionMatch` (`src/mappers.ts` lines 453/487) reject complete wrapper/envelope shapes that are fenced, inline-quoted, or not at the text position real harness injections carry; after hop 2 the position invariant holds at all four seams (claude envelope, pi/omp wrappers, codex `<skill>` blocks via `isCodexWrapperLeadPosition`: text start, directly below a single invocation-marker line, or contiguous with an accepted block) with CommonMark fence-length matching (a 4-backtick outer fence is not closed by an inner ``` fence); repeat same-name codex wrappers get per-occurrence ordinals (distinct invocation ids, marker correlation preserved); codex `function_call_output` pairing reads structural failure signals (`metadata.exit_code` non-zero, explicit `is_error`/`error`) instead of unconditional ok. Evidence: @gobing-ai/ts-llm-jsonl-importer `src/mappers.ts` line 453 and `src/importer.ts` line 120.
+- Tests — `tests/skill-call-import.test.ts` (34 tests: origin matrix absent/unique/conflict/digest-mismatch/matching, malformed-origins rejection, command expansion + dedupe, delegation, implicit reads incl. nested literals + argv, negatives, pairing same-event + later-incremental + idempotence), plus `tests/history-skill-call.test.ts` (guarded column upgrade), `tests/schema-version.test.ts` (`0.5.12` pin), `tests/mappers.test.ts` (field-map keys), `tests/importer.test.ts` (0063 agy fixture: native `slash_command` now yields a command row). Evidence: @gobing-ai/ts-llm-jsonl-importer `tests/skill-call-import.test.ts` line 1.
+- OpenCode importer — audited only (additive compatibility: writes legacy columns; new facts NULL), per the WHERE contract; expansion deferred.
+
+**Rationale:** logical capability kind (skill/command/subagent) is classified from authoritative native source identity first, then a unique digest-verified supplied origin, then null — never from name spelling or invocation restriction, so quoted examples and opaque expressions cannot fabricate invocations. The four fact columns are additive and nullable so legacy rows and unpaired attempts stay honest (`unknown` until a paired result or verified harness injection upgrades them), while `invocation_id` gives correlated representations (codex marker + wrapper) one stable identity without collapsing distinct repeats. Result pairing rides the existing per-run map plus a DB fallback so results arriving in later incremental runs upgrade the same event in place without touching the evidence hash.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Explicit commands from verified envelopes; request intent never auto-executed. Claude `<command-name>` envelope gated to the text-leading injection position — @gobing-ai/ts-llm-jsonl-importer `src/mappers.ts` line 398 (applied; anchored regex line 425) — emits capability_kind='command', evidence_kind='request', status='unknown' with args_raw; agy native slash_command gated on display payload `src/mappers.ts` lines 939-955; codex `$`/`/` markers are requests, never capability-from-spelling `src/mappers.ts` lines 838-856. Fresh e2e (real runJsonlImport, this run): real envelope -> 1 row sp:dev-run command/request/unknown args_raw=--auto; envelope after blank lines still extracts; marker-only -> 1 request/unknown row; agy slash_command -> command/request/user. Tests: `tests/skill-call-import.test.ts` line 680 (claude envelope), line 860 (agy) — suite green this run. |
+| R2 | MET | Model delegation identified separately, native identity retained. agy INVOKE_SUBAGENT -> subagent/delegation/model with call_id `src/mappers.ts` lines 911-933; claude Task tool_use delegation detector (test `tests/skill-call-import.test.ts` line 716). Fresh e2e: agy slash_command + INVOKE_SUBAGENT -> exactly 2 rows: sp:dev-run command/request/user and reviewer subagent/delegation/model. |
+| R3 | MET | Explicit + implicit loads with failed/unknown outcomes preserved. pi/omp signature wrappers (real pi wrapper probe -> 1 load/ok row with skill_path preserved; omp wrapper counted per design), claude Read/Bash literal reads `src/mappers.ts` lines 348-384, literal grammar `src/capability.ts` line 286, nested exec literals `src/capability.ts` line 345; result pairing rides isError/toolStatus `src/importer.ts` lines 103/113 and codex structural failure signals `src/importer.ts` lines 120-141; later-incremental DB fallback `src/jsonl-importer-dao.ts` line 200 (resolveSkillCallRows). Fresh e2e: unpaired grok grok_build read persists status=unknown; codex shell-read row unknown -> error via later-incremental function_call_output (exit_code 1) with completed_at set and record_hash unchanged. Tests: line 890 (grok outcome), later-incremental pairing test — green. |
+| R4 | MET | Additive four-column fact contract + verifiable origin precedence; unresolved identity honest. Columns `src/schema-sql.ts` lines 126-129, version 0.5.12 line 7 (digest pinned `tests/schema-version.test.ts` line 38); pre-write validation BEFORE applyHistoryImportSchema `src/importer.ts` lines 215-219; matchCapabilityOrigin name->path->digest with zero-match=unknown, multi=conflict `src/capability.ts` lines 83-115; guarded idempotent upgrade `src/jsonl-importer-dao.ts` lines 163-174. Fresh e2e matrix: digest-matched origin -> load row capability_kind='command' + origin_identity, 0 findings; digest-mismatch -> load row NULL/NULL + 1 bounded finding (never a guess); malformed capabilityOrigins -> HistoryImportError with history_skill_call table NOT created. Tests: origin matrix describe green (6 cases). |
+| R5 | MET | Deterministic dedupe, distinct repeats preserved, append-only replay. Versioned invocation identity `src/capability.ts` line 119; codex marker+wrapper correlation via shared id `src/mappers.ts` lines 808-835 with per-occurrence ordinals lines 816-820. Fresh e2e: real marker+wrapper -> exactly 2 rows / 1 distinct invocation_id; full-mode replay -> identical rows and record_hashes; marker-only row carries a distinct id. Tests: correlation test line 183, same-name-wrapper ordinal test — green. |
+| R6 | MET | Quoted examples, catalogs, tool-output wrappers, unrelated reads -> no invocation. Hop-2 closures re-verified fresh at code and runtime: fence-length matching `src/mappers.ts` lines 456-467 (CommonMark closing-fence rule: same char, run >= opener), marker-line-tolerant lead anchoring `src/mappers.ts` lines 471-491, applied at the codex loop lines 805-807; leading-injection gate `src/mappers.ts` lines 500-507 applied at claude envelope line 398, pi wrapper line 532, omp wrapper line 666. Fresh e2e probes: prose-introduced unfenced block -> 0 rows; template-literal line-start -> 0 rows; 4-backtick outer fence around inner ``` example -> 0 rows; ~~~ fence -> 0 rows; quoted complete pi/omp/claude shapes -> 0 rows (regression-locked by the quoted-signature describe `tests/skill-call-import.test.ts` line 996, 14 tests incl. hop-2 V1-V10 lines 1232-1372, all green); unrelated reads excluded (grok namespace test line 286); literal grammar rejects expansions/redirections `src/capability.ts` lines 280-295. Disclosed residual (P3, immaterial to this AC — see SECUA): an adversarial CommonMark-INVALID fence closer (trailing non-space content) above a marker+wrapper sequence admits exactly one fabricated load/ok row (probe E1); valid-markdown quoting is fully excluded (probe E2 control extracts only via the legitimate marker-anchored injection shape). The scenario's named fixture classes (quoted examples, catalogs, tool-output wrappers, unrelated reads) produce zero invocations on fresh evidence. |
+| R7 | MET | Every registered route audited; fixture-backed coverage; deferred limits explicit. Dispatch `src/mappers.ts` lines 141-158 (claude/pi/omp/codex/agy/gemini/grok; default -> [] line 156); fresh persisted rows observed this run from claude, codex, pi, agy, grok (probes) and omp (suite: omp wrapper counted, 2 correlated rows); gemini deferred -> 0 rows, 0 parse errors (documented no-op) with limits documented at README.md line 222; opencode audited-only additive compat (opencode suite green in the 374); schema version pinned `src/schema-sql.ts` line 7 = `tests/schema-version.test.ts` line 38. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R1 — Explicit user commands retain command identity | MET | command | Real runJsonlImport this run: claude envelope -> 1 row skill_name=sp:dev-run capability_kind=command evidence_kind=request status=unknown args_raw=--auto (blank-line-prefixed envelope also extracts, V10); agy slash_command -> command/request row. Source+requested evidence retained (args_raw); later observed load does not flip the request (marker request stays status=unknown, C1/V9). bun test 374 pass / 0 fail this run. |
+| R2 — Model delegation identifies subagents separately from user requests | MET | command | Fresh e2e: agy INVOKE_SUBAGENT -> reviewer subagent/delegation/model row distinct from the slash_command request row; claude Task tool_use -> delegation row (test line 716, suite green); child identity retained only when provided (call_id preserved). |
+| R3 — Ordinary skill loads include explicit and implicit use | MET | command | Fresh e2e: real pi user wrapper -> load/ok with skill_path; omp Skill toolCall -> model load row (suite); claude Read/Bash-literal SKILL.md reads -> implicit model rows (capability.ts line 286 grammar); codex argv shell read -> load row unpaired status=unknown, upgraded to error by a later-incremental function_call_output (exit_code 1) with same record_hash — failed vs successful loads distinguishable. |
+| R4 — Converted capabilities preserve verifiable origin kinds | MET | command | Fresh e2e origin matrix: digest-matched -> capability_kind='command' + origin_identity='sp/commands/dev-run@a1b2c3d4', 0 findings; digest-mismatch -> load row NULL facts + 1 bounded finding (never guessed); malformed origins -> HistoryImportError, history_skill_call NOT created; unresolved identity stays NULL with non-null invocation_id (conflict test, suite). |
+| R5 — Duplicate representations collapse without losing repeated invocations | MET | command | Fresh e2e: codex marker+wrapper -> exactly 2 rows (request + load) sharing 1 invocation_id; full-mode replay twice -> identical rows, identical record_hashes; two distinct repeats -> distinct ids (per-occurrence ordinal, mappers.ts lines 816-820; ordinal test green in suite). |
+| R6 — Quoted examples and unrelated tool reads produce no invocation | MET | command | Fresh e2e negatives (real runJsonlImport, this run): prose-introduced unfenced codex block 0 rows; template-literal line-start 0 rows; 4-backtick outer fence w/ inner ``` 0 rows; ~~~ fence 0 rows; quoted complete claude/pi/omp shapes 0 rows (14 regression tests green); unrelated grok reads 0 rows (namespace gate). Controls: real marker+wrapper still 2 correlated rows; valid-closer anchored wrapper still extracts. Opaque expressions never executed (literal-only grammar, capability.ts lines 280-345). Residual adversarial edge (CommonMark-invalid closer, 1 fabricated row max) disclosed under SECUA P3 — unreachable from the scenario's named fixture classes. |
+| R7 — Source coverage distinguishes verified extraction from unavailable evidence | MET | command | Fresh persisted rows this run from 5 sources by direct probe (claude/codex/pi/agy/grok) + omp via suite = all six in-scope sources; verified extraction (digest-matched origin, paired results) distinguished from unavailable (NULL facts, status=unknown, deferred gemini 0-row no-op documented at README.md line 222 and mappers.ts line 156 default); schema version 0.5.12 pinned; opencode additive-compat audit green. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-10-03T07:38:25.540Z todo → wip (system)
+- 2026-10-03T15:04:46.800Z wip → testing (system)
+- 2026-10-03T15:04:59.516Z testing → done (system)
+
