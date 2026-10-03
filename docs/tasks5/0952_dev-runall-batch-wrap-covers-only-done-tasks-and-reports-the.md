@@ -4,7 +4,7 @@ name: dev-runall batch wrap covers only done tasks and reports the rest
 status: done
 template: feature-impl
 created_at: 2026-09-24T18:59:37.121Z
-updated_at: "2026-09-25T00:21:47.738Z"
+updated_at: "2026-10-03T03:07:05.258Z"
 feature_id: F96
 priority: P2
 tags:
@@ -80,14 +80,14 @@ Rationale: driver-side filtering preserves wrapup-pipeline's hard refusal of non
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `plugins/sp/skills/spur-dev/references/execution-batch.md:482` Step 6 batch wrap over done subset only |
-| R2 | MET | `plugins/sp/skills/spur-dev/references/execution-batch.md:448` excluded from wrap table with C6 and A-row recovery commands |
-| R3 | MET | `plugins/sp/commands/dev-runall.md:23` flag row, `plugins/sp/skills/spur-dev/references/dev-operations.md:355` runall entry, and help doc |
+| R1 | MET | `plugins/sp/skills/spur-dev/references/execution-batch.md:543` 'Step 6 — Batch wrap (`--wrap` / `--next`) (F96 task 0952 R1)': done subset only as `vars.tasks`; `:555` `vars.feature` only when every frozen task is done/cancelled, else `feature lifecycle not advanced: <n> task(s) unfinished`; empty done subset skips with a reason. Re-read this run. |
+| R2 | MET | `plugins/sp/skills/spur-dev/references/execution-batch.md:452` excluded-from-wrap table row shows a residual task with the C6 recovery line (report path + `/sp:dev-run 0042`); `:457` states every other excluded task uses the next-router A-row command. Re-read this run. |
+| R3 | MET | `plugins/sp/commands/dev-runall.md:23` `--wrap` row: once for the batch over the done subset only; `plugins/sp/skills/spur-dev/references/dev-operations.md:432` runall entry: same batch-once wording; `docs/help/how_to_use_dev_slash_commands_for_daily_software_development.md:291` --next chain section: empty done subset skips the wrap with a reason. Re-read this run. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:1` passing tests |
-| Scenario: R7 — Batch wrap covers only completed tasks | MET | test | `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:1` |
+| AC1 | MET | test | Fresh run this turn: `(cd plugins/sp && bun test tests/dogfood-testing/execution-batch-contract.test.ts)` → 35 pass, 0 fail, 113 expect() calls (suite grew since record; still green). Covers done-subset filtering, feature gating, excluded-task reporting, batch-once wording. |
+| Scenario: R7 — Batch wrap covers only completed tasks | MET | test | Same fresh suite (35 pass / 0 fail); Step 6 contract + excluded-task recovery re-read this run. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -98,9 +98,7 @@ Rationale: driver-side filtering preserves wrapup-pipeline's hard refusal of non
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | spur task check | — | task check passed |
-| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
-| P4 | residual-sweep | — | blocking=0 deferrable=0 advisory=2 housekeeping=0 |
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 

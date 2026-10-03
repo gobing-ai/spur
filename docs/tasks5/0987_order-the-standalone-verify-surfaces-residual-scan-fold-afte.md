@@ -4,7 +4,7 @@ name: Order the standalone verify surfaces' residual-scan fold after record flip
 status: done
 template: feature-impl
 created_at: 2026-09-27T20:48:32.768Z
-updated_at: "2026-09-28T03:24:12.064Z"
+updated_at: "2026-10-03T03:08:23.251Z"
 feature_id: F96
 
 priority: P2
@@ -69,16 +69,16 @@ Mirror the pipeline `record` state (0983) on the standalone surfaces: `task verd
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `plugins/sp/commands/dev-verify.md:43` sweep after `spur task record` + downgrade-only re-record; delegated skill block `plugins/sp/skills/code-verification/SKILL.md:262`; pinned by `plugins/sp/tests/task-pipeline-resilience.test.ts:676` |
-| R2 | MET | `plugins/sp/commands/dev-verifyall.md:75` same post-record per-task contract; pinned by `plugins/sp/tests/task-pipeline-resilience.test.ts:676` |
-| R3 | MET | `docs/design/task-residual-sweep.md:62-66` mode table; `docs/design/task-residual-sweep.md:118-123` terminal path; `docs/design/task-residual-sweep.md:140` surface table |
-| R4 | MET | `plugins/sp/tests/task-pipeline-resilience.test.ts:676` (3 surface pins) + `plugins/sp/tests/task-pipeline-resilience.test.ts:693` record < scan < fold < re-record; `bun test tests/task-pipeline-resilience.test.ts tests/residual-scan.test.ts` (plugins/sp) 50 pass / 0 fail; mutation: 4 fail against HEAD~ surfaces |
+| R1 | MET | `plugins/sp/commands/dev-verify.md:43-52` 'Residual sweep (F96 R1, post-record since 0987)': scan+fold after `task verdict` + `spur task record` flips, downgrade-only re-record, superskill script resolution; delegated skill block `plugins/sp/skills/code-verification/SKILL.md:286-301` (shifted from record-time :262, same post-record contract). Re-read this run. |
+| R2 | MET | `plugins/sp/commands/dev-verifyall.md:75-79` same post-record per-task contract with re-record only on downgrade + settle on --next done. Re-read this run. |
+| R3 | MET | `docs/design/task-residual-sweep.md` mode table (:62-66): pipeline record post-record (0983) + standalone surfaces after `spur task record` (0987); terminal-path table (:118-123) standalone folded-PARTIAL row; surface table (:140) downgrade-only re-record row. Re-read this run. |
+| R4 | MET | `plugins/sp/tests/task-pipeline-resilience.test.ts:688-700` 'standalone verify residual-sweep ordering (0987 R4)': per-surface pins assert post-record wording and reject 'before spur task record'; order pin (:711 area) record < scan < fold < re-record. Part of the fresh 33 pass / 0 fail run this turn. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `plugins/sp/tests/task-pipeline-resilience.test.ts:368` post-record sweep passes a flipped task and downgrades an open box (same scanner the standalone surfaces now run after record); `plugins/sp/tests/task-pipeline-resilience.test.ts:693` standalone order |
-| AC2 | MET | test | `plugins/sp/tests/task-pipeline-resilience.test.ts:676` asserts every surface cites 0987 and drops "before spur task record"; doc rows `docs/design/task-residual-sweep.md:62-66` |
-| AC3 | MET | test | `plugins/sp/tests/task-pipeline-resilience.test.ts:676`, `plugins/sp/tests/task-pipeline-resilience.test.ts:693` — 50 pass / 0 fail; mutation-checked (4 fail on pre-fix text) |
+| AC1 | MET | test | Post-record sweep no longer reads unticked-but-proven boxes: record-then-scan order pinned (:688-700) and exercised by the record-state pass path (residual-sweep pass assertion) — 33 pass / 0 fail fresh this turn; live demonstration this batch: standalone 0949/0950 sweeps ran post-record and stayed PASS. |
+| AC2 | MET | test | Doc rows re-read: satellite mode/terminal/surface tables match the shipped post-record order on both standalone surfaces (:62-66, :118-123, :140). |
+| AC3 | MET | test | Ordering pinned by tests in task-pipeline-resilience.test.ts (33/0 fresh this turn; mutation-checked at record time: 4 failures against pre-fix text). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -89,8 +89,7 @@ Mirror the pipeline `record` state (0983) on the standalone surfaces: `task verd
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | spur task check | — | task check passed |
-| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 

@@ -4,7 +4,7 @@ name: Residuals from 1061
 status: done
 template: feature-impl
 created_at: 2026-10-03T01:53:33.466Z
-updated_at: "2026-10-03T02:52:17.418Z"
+updated_at: "2026-10-03T03:12:53.560Z"
 feature_id: F96
 
 priority: P3
@@ -77,8 +77,14 @@ Scenario: AC3 — self-contained, dependency-free check (req: R2)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | All 8 copies pinned: 6 template bodies byte-identical to standard.md + per-template tails pinned via EXPECTED_TAILS (ac-guidance-consistency.test.ts:61-75, :43-50); escaped copy vs task.test.ts:3695-3696 (:77-84); condensed clauses at ac-style-guide.md:36,39,45 (:86-96). Perturbed copy names drifted file (:97-101); committed tree passes (4/4 fresh run). |
-| R2 | MET | Imports only bun:test/node:fs/node:path (:1-3); git status shows zero changes to templates, package.json, lockfiles — only the new test dir + task doc. All copies remain inline/self-contained. |
+| R1 | MET | `apps/cli/tests/templates/ac-guidance-consistency.test.ts` pins all 8 copies: 6 template bodies byte-identical to standard.md with pinned per-template tails (:61-75, :43-50), sed-escaped copy vs `apps/cli/tests/commands/task.test.ts:3695-3696` (:84), condensed style-guide clauses (:94-101); drift canary names the drifted file (:105). Fresh run this turn: 4 pass / 0 fail, 13 expect() calls. Re-read this run. |
+| R2 | MET | Imports only bun:test + node:fs/node:path (no dependencies); templates remain self-contained inline copies (no generator/manifest). Live confirmation this run: `git status` in this batch touches only .spur/run/ artifacts — zero changes to templates or manifests. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: AC1 — perturbed copy fails with drifted file named (req: R1) | MET | test | AC1 canary test 'a perturbed copy fails and names the drifted file' (:105) — green in the fresh 4/0 run this turn. |
+| Scenario: AC2 — committed tree passes (req: R1) | MET | test | Fresh run this turn: `(cd apps/cli && bun test tests/templates/ac-guidance-consistency.test.ts)` → 4 pass / 0 fail on the committed tree. |
+| Scenario: AC3 — self-contained, dependency-free check (req: R2) | MET | test | Import review (:1-3 bun:test/node builtins only) + zero manifest/template changes in the current tree (git status clean apart from .spur/run/ artifacts this batch). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

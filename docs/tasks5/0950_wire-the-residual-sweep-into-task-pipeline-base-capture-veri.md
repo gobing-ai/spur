@@ -4,7 +4,7 @@ name: "Wire the residual sweep into task-pipeline: base capture, verify fold, do
 status: done
 template: feature-impl
 created_at: 2026-09-24T18:59:37.119Z
-updated_at: "2026-09-25T00:20:39.524Z"
+updated_at: "2026-10-03T03:05:24.204Z"
 feature_id: F96
 priority: P2
 tags:
@@ -102,23 +102,23 @@ Rationale: the fold rewrites the verdict artifact BEFORE the jq bind, so the bin
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `config/workflows/task-pipeline.yaml:221` precheck captures base.sha only when absent (resume-safe) |
-| R2 | MET | `config/workflows/task-pipeline.yaml:637` verify hard scan+fold shell between task verdict and jq proof bind |
-| R3 | MET | `config/workflows/task-pipeline.yaml:454` test-fix separate shell appends residuals to log; `plugins/sp/commands/dev-fixall.md:60` documents deferrals |
-| R4 | MET | `config/workflows/task-pipeline.yaml:715` done onEnter soft settle shell |
-| R5 | MET | `config/workflows/task-pipeline.yaml:762` failed onEnter soft report shell |
-| R6 | MET | `apps/cli/config/workflows/task-pipeline.yaml:637` and `plugins/sp/tests/task-pipeline-resilience.test.ts:292` bundled copies and resilience tests |
+| R1 | MET | `config/workflows/task-pipeline.yaml:198` precheck shell: `mkdir -p .spur/run; [ -f ".spur/run/$wbs-base.sha" ] \|\| git rev-parse HEAD > ".spur/run/$wbs-base.sha"` — writes only when absent, resume-safe. Re-read this run. |
+| R2 | MET | scan+fold run after verdict derivation, before the record proof bind — placement refined by sibling task 0983 into the record state (test comment `plugins/sp/tests/task-pipeline-resilience.test.ts:299`: 'F96 residual sweep (0950, reordered 0983): scan/fold wired into record'); fold resolves source-repo .ts via bun / installed .mjs via node (test :338-339); blocking residual still downgrades PASS→PARTIAL onto the verify→test-fix edge (residual-scan.test.ts fold tests, 21 pass this run). Re-read this run. |
+| R3 | MET | `config/workflows/task-pipeline.yaml:440` test-fix shell appends `<wbs>-residuals.json` to `<wbs>-test-gate.log` (merged anchor carry-over per F96 design); `plugins/sp/commands/dev-fixall.md:33-37` documents residual items as fix targets and `.spur/run/<wbs>-residual-deferrals.json` `{id, reason}` for P3 findings/markers only. Re-read this run. |
+| R4 | MET | `config/workflows/task-pipeline.yaml:786` done onEnter soft-settle shell: runs residual-scan settle, `exit 0`, failure prints re-run command. Exercised this batch on 0949 (settle exit 0). Re-read this run. |
+| R5 | MET | `config/workflows/task-pipeline.yaml:832` failed onEnter soft-report shell: runs residual-scan report, `exit 0`, prints re-run command on failure; task stays out of done. Re-read this run. |
+| R6 | MET | Bundled copy `apps/cli/config/workflows/task-pipeline.yaml` carries 6 residual-scan occurrences (regenerated); fresh run: task-pipeline-resilience.test.ts + inline-pipeline-driver.test.ts → 33 pass, 0 fail, 302 expect() calls. Re-run this turn. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `plugins/sp/tests/task-pipeline-resilience.test.ts:292` verify ordering test passes |
-| AC2 | MET | test | `plugins/sp/tests/residual-scan.test.ts:250` test-fix remediation test passes |
-| AC3 | MET | test | `plugins/sp/tests/residual-scan.test.ts:316` settle follow-up creation test passes |
-| AC4 | MET | test | `plugins/sp/tests/task-pipeline-resilience.test.ts:333` failed onEnter report test passes |
-| Scenario: R2 — In-scope residuals downgrade a PASS verdict | MET | test | `plugins/sp/tests/task-pipeline-resilience.test.ts:292` |
-| Scenario: R3 — Existing remediation loop fixes residuals within budget | MET | test | `plugins/sp/tests/residual-scan.test.ts:250` |
-| Scenario: R4 — Deferrable leftovers become linked follow-up tasks | MET | test | `plugins/sp/tests/residual-scan.test.ts:316` |
-| Scenario: R5 — Unfixable leftovers end in an honest routable terminal state | MET | test | `plugins/sp/tests/task-pipeline-resilience.test.ts:333` |
+| AC1 | MET | test | task-pipeline-resilience.test.ts verify/record-ordering tests pass (33/0 this run) + residual-scan.test.ts fold downgrade tests (21/0 this run). Scenario R2. |
+| AC2 | MET | test | test-fix remediation wiring tested in task-pipeline-resilience.test.ts; dev-fixall.md:33-37 re-read; remediation loop itself proven by residual-scan.test.ts. Scenario R3. |
+| AC3 | MET | test | done onEnter settle at task-pipeline.yaml:786; settle follow-up creation proven in residual-scan.test.ts (21/0 this run). Scenario R4. |
+| AC4 | MET | test | failed onEnter report at task-pipeline.yaml:832; report mode behavior proven in residual-scan.test.ts; resilience test asserts failed-entry report shell (33/0 this run). Scenario R5. |
+| Scenario: R2 — In-scope residuals downgrade a PASS verdict | MET | test | task-pipeline-resilience.test.ts (33 pass/0 fail this run) + fold downgrade in residual-scan.test.ts (21 pass/0 fail this run). |
+| Scenario: R3 — Existing remediation loop fixes residuals within budget | MET | test | Same fresh suites; fix targets + deferrals contract re-read at dev-fixall.md:33-37 and task-pipeline.yaml:440. |
+| Scenario: R4 — Deferrable leftovers become linked follow-up tasks | MET | test | Same fresh suites; settle wiring re-read at task-pipeline.yaml:786. |
+| Scenario: R5 — Unfixable leftovers end in an honest routable terminal state | MET | test | Same fresh suites; report wiring re-read at task-pipeline.yaml:832. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -129,9 +129,7 @@ Rationale: the fold rewrites the verdict artifact BEFORE the jq bind, so the bin
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | spur task check | — | task check passed |
-| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
-| P4 | residual-sweep | — | blocking=0 deferrable=0 advisory=2 housekeeping=0 |
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
