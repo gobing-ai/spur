@@ -4,56 +4,70 @@ name: "Workflow run registration: reported run ids must be queryable"
 status: todo
 template: feature-impl
 created_at: 2026-10-03T03:01:26.649Z
-updated_at: "2026-10-03T03:18:46.337Z"
+updated_at: "2026-10-03T03:29:51.648Z"
 feature_id: D3
 
+ac_altitude: task-local
 ---
 
 ## 1064. Workflow run registration: reported run ids must be queryable
 
 ### Background
 
-**Symptom chain (2026-10-02, 1061 wrap-up session):**
+**Symptom (2026-10-02, 1061 wrap-up session):** a sync `spur workflow run wrapup-pipeline.yaml` produced nothing useful but left an empty `.spur/memory/runs/095fb377-5e99-4824-b9e5-909b77f13fc6.md`; `spur workflow trace 095fb377…` → `Run not found`. A later `--no-plan` rerun (`3f3e8ffc…`) succeeded.
 
-1. Synchronous invocation of `spur workflow run wrapup-pipeline.yaml` (no `--no-plan`) silently produced nothing observable, but left an empty run log `.spur/memory/runs/095fb377-5e99-4824-b9e5-909b77f13fc6.md` (operator removed it manually — no in-tool cleanup exists).
-2. A `--no-plan` re-run of the same command worked end to end (run `3f3e8ffc-21bd-46ed-81ff-56fab9d6bbaf`, wrap PASS).
-3. Post-session review: `spur workflow trace 095fb377-5e99-4824-b9e5-909b77f13fc6` → `Run not found` (re-verified read-only 2026-10-02). The CLI emitted/derived a run identity that no store row backs — provenance, `--next` chains, and resume for that invocation are all broken, silently.
+**Re-verification (2026-10-02, refinement): defect CONFIRMED, root cause found, and it recurs.**
 
-**Counterpart evidence the adjacent paths are healthy:** executor-failure run `8e41fcca` produced a proper terminal `failed` row (`outcome=failure`, exit 3, actionable error + artifact paths), so agent.run failure handling works; the defect is specifically run-row creation vs id/log emission on the sync invocation path.
+- A second orphan already exists: `.spur/memory/runs/39d39982-4729-4a6e-a63b-39dd5d0a2888.md` (0 bytes, no `.state.json`, 15:35 local, next to the successful `a9b42460` wrapup run). `spur workflow trace 39d39982…` → `Run not found`, with zero rows in `runs` and zero `system_events`. (Left in place for the operator.)
+- Deterministic repro, with no actions run: `spur workflow run wrapup-pipeline.yaml --vars '{"profile":""}'` prints `Run: <id>` plus the plan, then fails with `--vars leaves declared vars unset: profile` (exit 1). It leaves an empty `<id>.md`, and `spur workflow trace <id>` → `Run not found`. `--no-plan` gives the same orphan. `--json` prints no id but still leaves the empty `.md`. (Repro files were removed afterward.)
 
-**Code anchors (observed 2026-10-02):**
+**Root cause:** the sync CLI path makes two run-id side effects before the run row exists.
 
-- `packages/app/src/services/workflow-service.ts:159-182` and `:254-256` — persistence proxies around `createRun` / `createOrAttachRun` ("row the instant the engine creates it").
-- `packages/app/src/services/workflow-service.ts:1752` — trace resolution: `if (!row) throw new Error(\`Run not found: ${runId}\`)`.
-- `packages/app/src/observability/workflow-run-log-sink.ts:47-57` — writes `.spur/memory/runs/<RUNID>.md` + `<RUNID>.state.json`; comment states a failing sink "degrades the record, never the run" (deliberately non-fatal).
-- `packages/app/src/workflow/action-trace.ts:419` — emission-failure recorder appending to `.spur/memory/runs/<runId>.log`.
+1. `apps/cli/src/commands/workflow.ts:896-906` constructs `WorkflowRunLogSink`, whose constructor eagerly runs `openSync(<id>.md, 'a')` (`packages/app/src/observability/workflow-run-log-sink.ts:101-107`). That creates the empty file right away.
+2. `apps/cli/src/commands/workflow.ts:912` prints `Run: ${runId}` (human mode) before `svc.run()` is called (`:1005`).
 
-**Hypotheses (unconfirmed — P1 must confirm before fixing):**
+The row is created only later, inside the engine (`RunLifecycle.run` → `persistence.createRun`, which is the engine's first act; see `ts-dual-workflow-engine/src/run-lifecycle.ts:156`). Every Spur step in between can throw or be killed, and then an id/log exists with no row. Those steps are:
 
-- H1: the log sink created the file while persistence `createRun` never ran on the sync (default plan) path — the deliberate non-fatal sink design (`workflow-run-log-sink.ts:57`) means a sink-without-row state is reachable and nothing reconciles it.
-- H2: the sync invocation aborted between id allocation/log creation and row insert, with the error swallowed by plan resolution (the `--no-plan` rerun bypassing the failing branch supports this).
-- H3 (ruled out): caller-side invented id — the log file naming requires a run id generated inside the CLI.
+- `WorkflowAppService.run` pre-engine work (`packages/app/src/services/workflow-service.ts:697-761`): `createEngineService` (agent-config reload, `registerSpurBuiltins`, `loadWorkflowExtensions`, `getDb`) and `mergeWorkflowRunVars` (`:2214`, which throws on blanked declared vars, 0948 R2).
+- CLI-side `makeEscalationPacketSink` / steering setup.
+- A process kill (timeout or Ctrl-C) during that window.
 
-**Constraints and non-goals:**
+**Hypothesis disposition:**
 
-- No behavior change to `--async`, `--plan`, resume, trace, or per-run log contracts (R3; D1/D2).
-- No new public noun/verb (public-surface consent rule); fix lives inside the existing workflow noun.
-- Root-cause fix only: do NOT "fix" by suppressing log creation or deleting orphan artifacts at trace time.
-- Any new user-facing error text follows the ADR-091 envelope (single line + "Next:" hint, as seen in the `8e41fcca` trace row).
+- H1 (sink before row): CONFIRMED.
+- H2 (plan resolution swallowing the error): KILLED, because `--no-plan` orphans identically. The `3f3e8ffc` success was a different invocation, not a path difference.
+- H3 (caller-invented id): KILLED.
+
+The exact pre-engine throw for `095fb377` is unrecoverable: no events were persisted. The fix closes the whole window regardless of which step threw.
+
+**Correct ordering signal:** `ObservableWorkflowAdapter.createRun` (`packages/app/src/workflow/observability.ts:463-470`) awaits the inner `createRun`, including the identity/pid stamping proxies (`workflow-service.ts:174-256`), before it emits `workflow.run.started`. That event therefore marks "row committed".
+
+**Already-correct adjacent paths (no change):**
+
+- The `--async` launcher refuses to print an id until `waitForRunRegistration` sees the row (0484 R2, `workflow.ts:695-720`). The worker runs the same sync path, so fixing the sync path covers it.
+- `WorkflowTraceWriter` (`packages/app/src/workflow/trace-writer.ts`) is lazy: it writes only on bus events.
+- The `<id>.log` emission-failure recorder (`packages/app/src/workflow/action-trace.ts:419`) writes only for post-row action emissions.
+- Executor-failure run `8e41fcca` finalized correctly.
+
+**Correction to the original draft:** ADR-091 is the `--json` contracts-envelope ADR. It is not a "single line + Next: hint" rule. Errors here keep the existing CLI error path: a thrown message, exit 1, and the `--json` error shape unchanged.
 
 ### Requirements
 
-- R1. A workflow invocation must never return (or print) a run id that `spur workflow trace` cannot resolve: the run row must be durably created before the id reaches the caller or any log/state artifact is written (write-ahead ordering), for sync and async paths alike.
-- R2. When run-row creation fails, the CLI exits nonzero with an actionable ADR-091-envelope error naming the failure, emits no orphan id, and removes any partially created `.spur/memory/runs/<id>.*` artifact for the aborted run.
-- R3. No behavior change for already-working paths: `--async`, `--plan`, resume, trace, and per-run run-log contracts (D1/D2) stay as-is; the log sink's "degrade the record, never the run" design is preserved for post-row disk failures.
-- R4. Directory invariant: a `.spur/memory/runs/<id>.md`, `<id>.state.json`, or `<id>.log` may exist only while a queryable run row exists; row insert happens first, sink init second.
+- [ ] R1. The sync `spur workflow run` path (also used by the `--async` worker) must not print `Run: <id>` until the run row is committed, as signalled by `workflow.run.started`. The plan preview stays printed directly after that header.
+- [ ] R2. `WorkflowRunLogSink` must not create `<id>.md` (or `<id>.state.json`) before its first event. The file opens lazily on the first append, and events only flow after the row exists (`ObservableWorkflowAdapter.createRun` emits `workflow.run.started` after the inner insert). This applies to fresh runs and to resume (`continue`), where the row already exists.
+- [ ] R3. A pre-row failure (any throw or kill before `createRun` commits) exits nonzero through the existing error path, prints no run id, and leaves no `.spur/memory/runs/<id>.*` artifact. No cleanup code is needed, because nothing is created.
+- [ ] R4. No behavior change for already-working paths:
+  - the R8 "unwritable dir → inert sink, run unaffected" contract;
+  - `--no-log`, `--json` output bytes, `--trace-file`, the `--async` launcher's registration gate, `continue`/resume run logs (0926 state carry-forward), and plan-preview content;
+  - the order header → plan → progress lines on success.
 
 ### Acceptance Criteria
 
 <!-- See docs/04_DESIGN.md "Task AC guidance". -->
-- [ ] AC1. Given a sync workflow invocation whose run-row creation fails, when the CLI returns, then it exits nonzero, prints no run id, and leaves no empty run log (failure injection in a test).
-- [ ] AC2. Given every successful invocation, when the reported run id is passed to `spur workflow trace <id>`, then the row resolves (regression test covers the sync path that previously printed `095fb377…` and later returned "Run not found").
-- [ ] AC3. Given existing `--async`/`--plan`/resume flows, when the full `bun run spur-check` gate runs, then all existing workflow tests pass unchanged.
+- [ ] AC1. Given a sync `workflow run` whose pre-row step fails (`--vars` blanking a declared var), when the CLI returns, then it exits nonzero, its captured output contains no `Run: ` line, and `.spur/memory/runs/` contains no `<run-id>.*` file.
+- [ ] AC2. Given a successful sync `workflow run --run-id <id>` in human mode, when it returns, then the output contains `Run: <id>` before the plan preview and before the first progress line, and `spur workflow trace <id>` in the same project DB resolves the row.
+- [ ] AC3. Given a `WorkflowRunLogSink` constructed with no events emitted, when it is closed, then neither `<id>.md` nor `<id>.state.json` exists. Given the first event, then the file is created and receives it. The existing R8 unwritable-dir test still passes.
+- [ ] AC4. Given the existing workflow/run-log/async/continue suites, when `bun run spur-check` runs, then they pass with no assertion weakened.
 
 ### Q&A
 
@@ -61,15 +75,51 @@ feature_id: D3
      condition. Not a parking lot for open questions — an unanswered question here means the task
      is not ready to hand off. Keep empty if none. -->
 
+#### Q&A entry — 2026-10-03T03:29:07.979Z
+
+- **Prevent vs. clean up:** prevent. The original R2 asked for cleanup of partial artifacts on failure. Lazy sink open plus event-driven header means no artifact or id ever exists before the row, so there is nothing to clean. That is a smaller diff, and it also covers process kills, which a cleanup branch cannot.
+- **Where the fix lives:** in the CLI header and the sink, not the engine. The engine already inserts the row first (`run-lifecycle.ts:156`). Reordering engine or app internals to pre-create the row would change engine ownership (`createRun` vs `createOrAttachRun`/externalKey) for no gain.
+- **Async plan artifact (`.spur/run/<id>-workflow-plan.json`):** deferred. The launcher already withholds the id when registration fails (0484 R2). Deleting the plan artifact on registration timeout could race a slow worker that registers late and still needs it. Revisit only if orphan plan artifacts are observed.
+- **Identity-stamp failure after insert** (`withRunIdentityRecording` throwing after `createRun`): out of scope. The row exists, so trace resolves (no orphan id), and the stale `running` row is already handled by `spur workflow clean`.
+- **Existing orphan `39d39982…md`:** not deleted by this task. It is operator data; `rm` is a one-off manual step.
+- **ADR-091 "Next:" hint:** dropped. ADR-091 governs the `--json` envelope, not error hint text. Existing error output is unchanged.
+
 ### Design
 
-<!-- Chosen implementation approach, key tradeoffs, invariants, and impacted surfaces. -->
+Two local edits, no new surface:
+
+1. **Lazy sink open** (`packages/app/src/observability/workflow-run-log-sink.ts`):
+   - The constructor stops calling `mkdirSync`/`openSync`; keep `dir` on the instance.
+   - Add a private `ensureOpen(): boolean`. On first use it does `mkdirSync(dir, {recursive: true})` plus `openSync(filePath, 'a')`. On failure it latches an `openFailed` flag so the sink stays inert (R8) and never retries per line.
+   - `append()` and every `if (this.fd === undefined …)` early-return go through `ensureOpen()`.
+   - `writeState()` already writes by path; it only runs from `onRunStarted`/`onRunFinalized`, which fire post-row, so leave it as is.
+   - `close()` is unchanged: it closes the fd only if one was opened.
+   - Update the class doc comment to say the record is created at the first event, not at construction.
+2. **Event-driven header** (`apps/cli/src/commands/workflow.ts`, `humanProgress` block ~`:911-913`):
+   - Replace the eager `context.output.write(\`Run: ${runId}\`)` plus plan-preview write with a one-shot `workflow.run.started` subscription that writes both, then unsubscribes.
+   - Guard it with a local `headerPrinted` boolean. The bus can carry two `workflow.run.started` projections (see the sink's `headerWritten` comment), and `EventBus` may lack `once`.
+   - Subscribe it before the other `report` handlers so the header precedes the first progress line.
+
+**Invariant:** every run-id-bearing side effect on the sync path (stdout header, `<id>.md`, `<id>.state.json`) is downstream of `workflow.run.started`, which is downstream of the committed row.
+
+**Blast radius:**
+
+- `WorkflowRunLogSink` is built in two places: `workflow.ts:896` (run) and `:1257` (continue). Continue emits events only after `claimRunOwnership` on an existing row, so lazy open is behavior-neutral there.
+- No DB, schema, contract, or public-CLI change.
 
 ### Plan
 
-- [ ] P1. Trace the sync `workflow run` path (default, no `--no-plan`): find where the run id is allocated, where the log sink initializes (`packages/app/src/observability/workflow-run-log-sink.ts`), and where persistence `createRun`/`createOrAttachRun` is invoked (`packages/app/src/services/workflow-service.ts:159-182`, `:254-256`). Identify the early-return or swallowed error that can skip the insert while the id/log already exist. Confirm/kill H1–H2 from Background with a repro before touching code.
-- [ ] P2. Failing-first regression tests in `packages/app` (in-memory SQLite; fault-inject persistence `createRun`): (a) AC1 — invocation exits nonzero, prints no run id, leaves no `.spur/memory/runs/<id>.*` artifact; (b) AC2 — every run id emitted on the sync path resolves via the trace lookup (`workflow-service.ts:1752` path), covering the previous `095fb377…`-style orphan.
-- [ ] P3. Fix: reorder to write-ahead row creation (R1/R4), add the R2 failure path (error + artifact cleanup), then run focused tests and `bun run spur-check`. Manual probe: one sync invocation (default plan path) then `spur workflow trace <id>` resolves; repeat with `--no-plan` to confirm both paths intact.
+- [ ] P1. Failing-first tests:
+  - (a) New `apps/cli/tests/commands/workflow-run-registration.test.ts`, using the in-process `main()` plus `createTempProject` harness from `workflow-vars-merge.test.ts`. AC1: a probe YAML with declared var `alpha` and `--vars '{"alpha":""}'` gives nonzero exit, no `Run: ` in captured output, and no `<runId>.*` under `runStoragePaths(dir).recordsDir`. AC2: a succeeding probe gives `Run: <id>` before the plan text; then `main(['workflow','trace',id])` on the same project resolves. Use a file-backed DB inside the temp project, not `:memory:`, because each `main()` call opens its own DB.
+  - (b) AC3 in `packages/app/tests/observability/workflow-run-log-sink.test.ts`: construct then close with no events → `existsSync(filePath) === false`.
+  - Run both and confirm they fail on current code.
+- [ ] P2. Implement Design §1 (lazy sink open). The AC3 and existing sink tests go green, including R8 and `close is idempotent`.
+- [ ] P3. Implement Design §2 (event-driven header). AC1 and AC2 go green. Run the focused CLI workflow suites: `(cd apps/cli && bun test tests/commands/workflow.test.ts tests/commands/workflow-vars-merge.test.ts tests/commands/workflow-system-events.test.ts tests/commands/workflow-preflight.test.ts)`. Fix only genuine order expectations; never weaken an assertion.
+- [ ] P4. Gate and probe:
+  - Run `bun run spur-check` (AC4).
+  - Manual probe A: `spur workflow run wrapup-pipeline.yaml --vars '{"profile":""}'` → no `Run:` line and no new file in `.spur/memory/runs/`.
+  - Manual probe B: one succeeding trivial workflow (`--run-id probe-1064`) → `spur workflow trace probe-1064` resolves.
+  - Remove the probe artifacts afterward.
 
 ### Solution
 
@@ -85,7 +135,9 @@ feature_id: D3
 
 ### References
 
-<!-- Links to the parent feature, design docs, related tasks, or external references. -->
+- Feature D3. Related: 0484 R2 (async registration gate), 0925/0926 (two-file run record), 0948 R2 (`mergeWorkflowRunVars` blank-var refusal, the repro trigger), ADR-117/0868 (action-trace writer).
+- Code: `apps/cli/src/commands/workflow.ts:896-912,1005`, `packages/app/src/observability/workflow-run-log-sink.ts:101-107`, `packages/app/src/workflow/observability.ts:463-470`, `packages/app/src/services/workflow-service.ts:697-761,2214`, `node_modules/@gobing-ai/ts-dual-workflow-engine/src/run-lifecycle.ts:156`.
+- Test harness precedent: `apps/cli/tests/commands/workflow-vars-merge.test.ts`.
 
 ### History
 
