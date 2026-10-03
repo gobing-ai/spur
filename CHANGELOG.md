@@ -1,5 +1,82 @@
 # Changelog
 
+## [0.3.99] - 2026-10-03
+
+### Added
+
+- require source citations for API/library claims in verify answers (1070) (1bd2cd2f8)
+- require Confidence: HIGH|MEDIUM|LOW in verify answers (1068) (75646f421)
+- classify imported skill calls by capability origin (1029) (78f1412d8)
+- enforce E71 persist-out before WT-4 removal; guard task-diffstat stdout redirect (1067) (b0371f8e1)
+- make residual-scan fold freshness-aware across run and durable planes (1065) (7ae597b4f)
+- harden runall batch WT-4 fail-stop FF control flow (task 1059, D63) (dbe90f8a2)
+- per-call execution-tree pin for agent corpus writes (task 1058, D63) (86d13106e)
+- distinguish altitude subset skips from task-local requirement bindings in task AC guidance (1061) (14bd1fd47)
+
+### Fixed
+
+- add more unit tests (7658915ff)
+- restore plugin lib bundles after determinism test runs (bb1369d16)
+- pin provenance recording to the task execution tree (cd7672d5f)
+- resolve nested bun.lock keys to nested install paths (18b5b6730)
+- report workflow run ids only after the run row commits (1064) (92248bb60)
+- add more unit tests (0330b46d9)
+- re-key 1061 residuals follow-up to 1063 — WBS 1062 collision with D62 sweep task (4a81ad603)
+
+### Changed
+
+- apply biome fixes so the lint gate is green at HEAD (92a2b1ee2)
+- record E93 verifyall re-audit — 3 PASS force re-verifies (1028-1030) (9cc42510e)
+- file 1069 — dependency-drift-check scoped-key path bug (E93 follow-up) (b86c2a476)
+- merge sp/runall-e93-4ff4 (E93) — capability batch 1028-1030 done, E93 done, ts-* catalog ^0.5.12 (b1b853de7 — verified package.json:32)
+- file 1068 — dependency-drift-check scoped-key path bug (E93 follow-up) (98b33ca7a)
+- align ts-* catalog to ^0.5.12 (E93 wrap) (f99bf3b38 — verified package.json:32)
+- record 1030 verify-safe-historical-capability-replay sections (E93) (6e04e71ca)
+- pin isolated capability replay with frozen 8/3 oracle (1030) (00fbe15ef)
+- record 1029 verification and restore 1028 done state (E93) (c4b3b7ecf)
+- add spawn-boundary headroom to inline-run close-reason test (1029) (847420db9)
+- record D3 verifyall re-audit — 12/12 PASS, shippable PASS (cc76fe93d)
+- transition D3 to done after landing and verification pass (8d16c80c3)
+- record D3 runall batch landing dogfood report (abdb2c4dc)
+- record runall-d3 WT-4 landing lessons (0324c0103)
+- record runall-d3 wrap learnings (1065/1067) (3f9b0fd9c)
+- record residual-scan fold freshness semantics in the sweep satellite (1065) (a396fbb7c)
+- updat tasks after verification (b16f8a1da)
+- record 1066 wrap learnings (e0cc427c0)
+- merge sp/run-1066-fbda (1066) — codify chunked implement dispatch contract (f637dcecb)
+- add items into .spur/context/pitfalls.md (ce1b2cb9d)
+- sync B1 status after task 1066 completion (080799d9c)
+- codify chunked implement dispatch contract in inline driver (1066) (0bac340c1)
+- file D63 session findings as tasks 1065-1067 (781a27894)
+- sync 1064 design satellites and learnings (wrap doc-evolve) (4fdd8db05)
+- feature D3 → verifying after 1064 done (1064) (3927a693c)
+- encode RESOLVED dispositions in D63 review records (0914, 0915, 0935) (3a4dcf541)
+- updat tasks after verification (3b527afa2)
+- updat tasks after verification (9a1d21fc3)
+- updat tasks after verification (4111452bf)
+- land D63 batch wrap corpus writes (task 1059, D63) (2039f5b90)
+- register D63 runall batch dogfood report in ledger (task 1059, D63) (269980669)
+- updat tasks after verification (80062a3e7)
+- updat tasks after refinment (99768b3d0)
+- file 1064 workflow-run traceability follow-up under D3 (6c62e64a6)
+- re-verify F96 batch to 8 PASS and settle residual dispositions (b7a36bbb9)
+- update memory (97cd198d2)
+- close feature F96 — all linked tasks terminal (1063 done) (565e5b0da)
+- pin AC-guidance comment across all 8 synchronized copies (1063) (846fe4225)
+- record E71 verifyall verdicts (1024,1025,1026,1027,1043,1045,1046,1049) — 8 PASS (16000cb5e)
+- refresh E71 run-storage census for post-baseline drift (1024) (d1a4c377b)
+- 1061 wrap — doc-sync planning-record contract (task-local AC numbering), learnings append (67fe625b0)
+- sync planning-record-contracts frontmatter schema with ac_numbering (1061) (c1e3b1d03)
+- re-verify D62 forced batch to 28 PASS and settle residual dispositions (9e8b97fe9)
+- annotate retired basic/docs-pipeline/feature-dev definitions (0866) (0cfc5d8cb)
+
+### Other
+
+- Revert "docs(tasks): file 1068 — dependency-drift-check scoped-key path bug (E93 follow-up)" (fba7c741b)
+
+> Verification: HIGH — coverage 60/60 hashes unique; mapping Added 8 / Fixed 7 / Changed 44 / Other 1;
+> header [0.3.99] - 2026-10-03 vs `--version 0.3.99`; dependency claim cited (`package.json:32`).
+
 ## [0.3.98] - 2026-10-02
 
 ### Added
