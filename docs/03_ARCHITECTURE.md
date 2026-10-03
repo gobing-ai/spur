@@ -19,7 +19,7 @@ and interaction rules live in root [DESIGN.md](../DESIGN.md). Task receipts stay
 
 ## 1. Topology
 
-Bun-workspace monorepo (no Turborepo, ADR-002). Spur owns three apps and four local packages
+Bun-workspace monorepo (no Turborepo, ADR-002). Spur owns four apps and four local packages
 (ADR-001 as amended); all reusable engines are external `@gobing-ai/ts-*` packages (ADR-006).
 
 ```text
@@ -27,7 +27,8 @@ spur/
 ├── apps/
 │   ├── cli/         Primary surface — commander dispatch (ADR-014) + transport-wrapper commands
 │   ├── server/      Hono + oRPC OpenAPI handler; Bun + Cloudflare Worker entrypoints
-│   └── web/         Static Astro/React Board; typed oRPC OpenAPI client
+│   ├── web/         Static Astro/React Board; typed oRPC OpenAPI client
+│   └── desktop/     Electron shell; spawns the Bun server and loads /board (no SQLite)
 ├── packages/
 │   ├── app/         Application services — agents, coordination, fleets, history, planning, rules, workflows (ADR-021)
 │   ├── contracts/   oRPC transport contracts ONLY (health/DTOs) — @gobing-ai/spur-contracts
@@ -52,6 +53,7 @@ Runtime ownership (manifests also include build and test dependencies):
 apps/cli ────► packages/{app, config, contracts, domain} + engine/runtime facades
 apps/server ─► packages/{app, config, contracts, domain} + engine/runtime facades
 apps/web ────► packages/contracts (oRPC) + domain status vocabulary
+apps/desktop ► child `spur serve` only — no server, domain, or SQLite import
 packages/app ───► packages/{config, contracts, domain} + engine packages
 packages/domain ► @gobing-ai/ts-db (persistence owner — §8.1)
 ```
@@ -158,6 +160,18 @@ The server/web tier is a local-first planning and operations board. Its bootstra
 `src/server-config.ts` is shared and runtime-agnostic. `src/bootstrap.ts` is the Bun composition
 root; `src/worker-app.ts` is the Worker-safe HTTP root. The Worker graph must not import
 `node:*`, `bun:*`, local filesystem, SQLite, scheduler, queue, or process-control implementations.
+
+### Desktop shell (`apps/desktop`)
+
+The Electron app is a window around the existing Board. It does not import the server, open
+SQLite, or ship a second UI build. In development it takes a free loopback port and spawns
+`bun run apps/cli/src/index.ts serve --host 127.0.0.1 --port <port> --no-open --cwd <projectRoot>`.
+Packaged builds spawn the compiled `spur` binary the same way, or `dist/server/spur-server` with
+`PORT` and `HOST` when that CLI binary is absent. Web assets stay on the server's
+`resolveWebDistPath` search (a sibling `web/` directory next to the shipped binary). The child is
+the only SQLite owner (`<projectRoot>/.spur/spur.db`). Renderer IPC goes through the preload
+bridge; the page has Node integration disabled. A frameless drag strip turns on only when the
+preload sets `html[data-spur-desktop]`, so the browser and Cloudflare boards are unchanged.
 
 ## 3. CLI Architecture (`apps/cli`)
 

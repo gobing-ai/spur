@@ -126,6 +126,7 @@ Bun + TypeScript + Biome monorepo using Bun workspaces; no Turborepo:
 apps/cli       commander transport
 apps/server    Hono / Cloudflare Worker; oRPC OpenAPI
 apps/web       static Astro/React Board; typed oRPC client
+apps/desktop   Electron shell; spawns the Bun server and loads /board (no DB)
 packages/app   application services
 packages/contracts  transport DTOs only
 packages/config     Zod config/environment

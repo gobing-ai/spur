@@ -128,6 +128,13 @@ export default function LeftSidebar({ collapsed, onToggle, onMobileClose }: Prop
                 collapsed ? 'overflow-visible' : 'overflow-hidden'
             }`}
         >
+            {/* Zero height until the Electron preload sets html[data-spur-desktop]. */}
+            <div
+                data-spur-drag-region=""
+                data-testid="desktop-drag-region"
+                className="h-0 w-full shrink-0"
+                aria-hidden="true"
+            />
             {collapsed ? (
                 // Collapsed rail: project icon/switcher at the top of the icon list.
                 <div className="flex items-center justify-center border-b border-spur-border shrink-0 py-2">
