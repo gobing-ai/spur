@@ -4,7 +4,7 @@ title: "Planning records and lifecycle contracts"
 status: implemented
 created_at: 2026-09-09
 updated_at: 2026-10-02
-related: ["1055"]
+related: ["1055", "1061"]
 tags: [contract, planning]
 ---
 
@@ -161,8 +161,12 @@ Mirrors `docs/design/rd3-migration-design.md` §2.1. Exported by
 | `parent_wbs`     | `z.string().regex(/^\d{4}$/).nullable().optional()`       | —   | Single sub-task convention (X02).              |
 | `priority`       | `z.enum(['P0','P1','P2','P3']).optional()`                | —   | Aligned with the feature priority scale.       |
 | `tags`           | `z.array(z.string()).optional()`                          | —   | Free-form filtering.                           |
-| `ac_altitude`    | `z.enum(['graduating','task-local']).optional()`          | —   | DD-09 altitude contract (ADR-062, task 0584): `task-local` skips the subset rule; absent/`graduating` enforces it. Field-only, never inferred (R4). |
 | `dependencies`   | `z.array(z.string()).optional()`                          | —   | Soft WBS refs; `check` warns on dangling.      |
+| `ac_numbering`   | `z.literal('task-local').optional()`                      | —   | Task-local requirement-binding opt-in (task 1061). `task-local` reads `(req: R<n>)` from `Scenario:` titles into `L3.ac-requirement-coverage`. Absent leaves cross-check off. |
+| `ac_altitude`    | `z.enum(['graduating','task-local']).optional()`          | —   | DD-09 altitude contract (ADR-062, task 0584; clarified 1061): `task-local` skips the feature subset check; absent/`graduating` enforces it. Independent of `ac_numbering`. |
+| `done_forced`    | `z.boolean().optional()`                                  | —   | Operator override of the verdict gate (R3, task 0292). Normalizes string booleans from `updateField`. |
+| `done_reason`    | `z.string().optional()`                                   | —   | Operator rationale accompanying `done_forced` (task 0292). |
+| `feature_link_declined` | `z.boolean().optional()`                           | —   | Operator declined feature linkage (task 0328). |
 | `created_at`     | ISO 8601 string                                           | ✔   | Write-service-owned.                           |
 | `updated_at`     | ISO 8601 string                                           | ✔   | Written **only** by the write service.         |
 
