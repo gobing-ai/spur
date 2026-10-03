@@ -3,7 +3,8 @@ import { join } from "node:path";
 import { createHash } from "node:crypto";
 var MARKER_PATTERN = /TODO|FIXME|XXX|HACK/;
 var PRIORITY_PATTERN = /^P[1-4]/;
-var NONE_FINDING = /^(none( found)?|no (findings?|issues?)( found)?|—)\s*(\(.*\))?\.?$/i;
+var RANGE_PRIORITY = /^P[1-4]\s*[\u2013\u2014-]\s*P?[1-4]/;
+var NONE_FINDING = /^(none( found)?|no (findings?|issues?)( found)?|\u2014)\s*(\(.*\))?\.?$/i;
 var DISPOSITION_HEADER = /^(Disposition|Action|Status|Resolution|Fixed)$/i;
 var RESOLVED_DISPOSITION = /^(FIXED|RESOLVED|DONE)\b/i;
 var DEFERRED_DISPOSITION = /^DEFER(RED)?\b/i;
@@ -60,7 +61,7 @@ function parseReviewFindings(taskContent) {
       const priority = (cells[priorityCol] ?? "").trim();
       const finding = (cells[findingCol] ?? "").trim();
       const disposition = dispositionCol === -1 ? "" : (cells[dispositionCol] ?? "").trim();
-      if (PRIORITY_PATTERN.test(priority) && !NONE_FINDING.test(finding) && finding.length > 0 && !RESOLVED_DISPOSITION.test(disposition)) {
+      if (PRIORITY_PATTERN.test(priority) && !RANGE_PRIORITY.test(priority) && !NONE_FINDING.test(finding) && finding.length > 0 && !RESOLVED_DISPOSITION.test(disposition)) {
         const location = locationOf(cells[locationCol] ?? "", finding);
         out.push(DEFERRED_DISPOSITION.test(disposition) ? { priority, location, text: finding, deferral: disposition } : { priority, location, text: finding });
       }
@@ -70,7 +71,7 @@ function parseReviewFindings(taskContent) {
   return out;
 }
 function splitRow(line) {
-  return line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => c.trim());
+  return line.trim().replace(/^\|/, "").replace(/\|$/, "").split(/(?<!\\)\|/).map((c) => c.trim());
 }
 function parseDiffMarkers(addedLines) {
   return addedLines.filter((l) => !EXCLUDED_PATHS.some((p) => l.file.startsWith(p))).filter((l) => !l.text.includes(ALLOW_PRAGMA)).filter((l) => MARKER_PATTERN.test(l.text)).map((l) => ({ location: `${l.file}:${l.line}`, text: l.text.trim() }));
@@ -198,7 +199,8 @@ function renderReport(wbs, items, attemptCount) {
 function recordedVerdictPath(runDir, wbs, fs) {
   const evidence = join(runDir, "..", "memory", "evidence");
   const durable = join(evidence, `${wbs}-verdict.json`);
-  for (const path of [join(runDir, ".."), join(evidence, ".."), evidence, durable]) {
+  const run = join(runDir, `${wbs}-verdict.json`);
+  for (const path of [join(runDir, ".."), join(evidence, ".."), evidence, durable, run]) {
     try {
       if (fs.lstatSync(path).isSymbolicLink())
         throw new Error(`residual-scan: symlink evidence path: ${path}`);
@@ -207,9 +209,47 @@ function recordedVerdictPath(runDir, wbs, fs) {
         throw error;
     }
   }
-  return fs.existsSync(durable) ? durable : join(runDir, `${wbs}-verdict.json`);
+  if (!fs.existsSync(durable))
+    return run;
+  if (!fs.existsSync(run))
+    return durable;
+  const newer = (a, b) => mtimeOf(fs, b) > mtimeOf(fs, a) ? b : a;
+  return newer(run, durable);
+}
+function mtimeOf(fs, path) {
+  try {
+    return fs.statSync(path).mtimeMs;
+  } catch {
+    return 0;
+  }
+}
+function verdictDisagreementNote(runDir, wbs, fs) {
+  const run = join(runDir, `${wbs}-verdict.json`);
+  const durable = join(runDir, "..", "memory", "evidence", `${wbs}-verdict.json`);
+  if (!fs.existsSync(run) || !fs.existsSync(durable))
+    return null;
+  const bytes = (path) => {
+    try {
+      return fs.statSync(path).isFile() ? fs.readFileSync(path, "utf8") : null;
+    } catch {
+      return null;
+    }
+  };
+  const runBytes = bytes(run);
+  if (runBytes === null || runBytes === bytes(durable))
+    return null;
+  const value = (path) => {
+    try {
+      return JSON.parse(bytes(path) ?? "{}").verdict ?? "?";
+    } catch {
+      return "?";
+    }
+  };
+  const winner = mtimeOf(fs, durable) > mtimeOf(fs, run) ? "durable" : "run";
+  return `residual-fold: ${wbs} verdict copies disagree — run=${run} (${value(run)}) durable=${durable} (${value(durable)})` + ` → chose ${winner} (newer mtime)`;
 }
 export {
+  verdictDisagreementNote,
   scanResiduals,
   renderReport,
   recordedVerdictPath,

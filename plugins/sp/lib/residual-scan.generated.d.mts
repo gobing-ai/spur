@@ -61,3 +61,8 @@ export declare function foldVerdict(
     maxFindings?: number,
 ): FoldResult;
 export declare function renderReport(wbs: string, items: ResidualItem[], attemptCount: number): string;
+export declare function verdictDisagreementNote(
+    runDir: string,
+    wbs: string,
+    fs: Pick<typeof import('node:fs'), 'existsSync' | 'readFileSync' | 'statSync'>,
+): string | null;

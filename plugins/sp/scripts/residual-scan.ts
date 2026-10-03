@@ -115,9 +115,8 @@ function loadTask(env: ScanEnv, spurBinFlag: string | undefined, wbs: string, ro
         [parsed.feature_id, parsed.frontmatter?.feature_id].find((v): v is string => typeof v === 'string') ?? '';
     return { content: typeof parsed.content === 'string' ? parsed.content : '', featureId };
 }
-function loadVerdict(runDir: string, wbs: string): VerdictFile {
-    return JSON.parse(fs.readFileSync(core.recordedVerdictPath(runDir, wbs, fs), 'utf8'));
-}
+const loadVerdict = (runDir: string, wbs: string): VerdictFile =>
+    JSON.parse(fs.readFileSync(core.recordedVerdictPath(runDir, wbs, fs), 'utf8'));
 function scanMode(opts: ParsedArgs, env: ScanEnv, io: ScanIo): number {
     const runDir = join(opts.root, '.spur', 'run');
     fs.mkdirSync(runDir, { recursive: true });
@@ -135,6 +134,8 @@ function foldMode(opts: ParsedArgs, _env: ScanEnv, io: ScanIo): number {
         fs.readFileSync(join(runDir, `${opts.wbs}-residuals.json`), 'utf8'),
     ) as core.ResidualArtifact;
     const target = core.recordedVerdictPath(runDir, opts.wbs, fs);
+    const note = core.verdictDisagreementNote(runDir, opts.wbs, fs);
+    if (note !== null) io.out(`${note}\n`);
     const verdict = loadVerdict(runDir, opts.wbs);
     const findingsPath = join(runDir, `${opts.wbs}-test-gate.findings`);
     const fold = core.foldVerdict(

@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: enforce e71 persist out before worktree removal in wt4 landings
-status: todo
+status: wip
 template: issue
 created_at: 2026-10-03T04:25:11.012Z
-updated_at: "2026-10-03T04:42:35.895Z"
+updated_at: "2026-10-03T06:03:26.361Z"
 
 feature_id: D3
 priority: P3
@@ -73,3 +73,6 @@ Both are batch-landing tooling robustness gaps from the same dogfood, so they la
 - Dogfood findings F4 + landing-retro: docs/dogfood/2026-10-02-D63-runall-batch-wt4-dogfood.md (local, indexed in docs/dogfood/INDEX.md).
 
 ### History
+
+- 2026-10-03T06:03:26.361Z todo → wip (system)
+

@@ -61,8 +61,12 @@ export interface ResidualScanInputs {
 
 const MARKER_PATTERN = /TODO|FIXME|XXX|HACK/;
 const PRIORITY_PATTERN = /^P[1-4]/;
+// Range priorities (`P1–P3`) mark clean-report summary rows, never a single real finding (task 1065 R4).
+// Regexes below stay ASCII-only (`\u` escapes): shebang'd standalone twins can decode non-ASCII
+// regex literals as latin1, silently breaking the class (observed under bun).
+const RANGE_PRIORITY = /^P[1-4]\s*[\u2013\u2014-]\s*P?[1-4]/;
 // Placeholder "no finding" cells, optionally with a trailing "(…)" note; "None of X…" is a real finding.
-const NONE_FINDING = /^(none( found)?|no (findings?|issues?)( found)?|—)\s*(\(.*\))?\.?$/i;
+const NONE_FINDING = /^(none( found)?|no (findings?|issues?)( found)?|\u2014)\s*(\(.*\))?\.?$/i;
 const DISPOSITION_HEADER = /^(Disposition|Action|Status|Resolution|Fixed)$/i;
 const RESOLVED_DISPOSITION = /^(FIXED|RESOLVED|DONE)\b/i;
 const DEFERRED_DISPOSITION = /^DEFER(RED)?\b/i;
@@ -132,6 +136,7 @@ export function parseReviewFindings(
             const disposition = dispositionCol === -1 ? '' : (cells[dispositionCol] ?? '').trim();
             if (
                 PRIORITY_PATTERN.test(priority) &&
+                !RANGE_PRIORITY.test(priority) &&
                 !NONE_FINDING.test(finding) &&
                 finding.length > 0 &&
                 !RESOLVED_DISPOSITION.test(disposition)
@@ -150,12 +155,15 @@ export function parseReviewFindings(
 }
 
 function splitRow(line: string): string[] {
-    return line
-        .trim()
-        .replace(/^\|/, '')
-        .replace(/\|$/, '')
-        .split('|')
-        .map((c) => c.trim());
+    return (
+        line
+            .trim()
+            .replace(/^\|/, '')
+            .replace(/\|$/, '')
+            // Escape-aware: `\|` inside a cell is content, not a column break (task 1065 R4).
+            .split(/(?<!\\)\|/)
+            .map((c) => c.trim())
+    );
 }
 
 /** TODO/FIXME/XXX/HACK markers on added lines, honoring path exclusions + allow pragma. */
@@ -332,20 +340,78 @@ export function renderReport(wbs: string, items: ResidualItem[], attemptCount: n
     return `${lines.join('\n')}\n`;
 }
 
-/** Select canonical recorded evidence, refusing linked ancestors; legacy scratch is used only when absent. */
+/**
+ * Select canonical recorded evidence, refusing linked ancestors.
+ *
+ * Freshness-aware (task 1065): when both the run copy (`.spur/run/<wbs>-verdict.json`)
+ * and the durable copy (`.spur/memory/evidence/<wbs>-verdict.json`) exist, the newer
+ * mtime wins — ties resolve to the run copy, the pipeline's fresh attempt copy. This
+ * breaks the self-reinforcing stale loop observed in the D63 sweep, where an older
+ * durable PARTIAL (written by a prior downgrade) was re-folded over a fresh PASS and
+ * written back, re-deriving PARTIAL forever. Disagreement reporting is the fold IO
+ * glue's job (task 1065 R2); this function only chooses.
+ */
 export function recordedVerdictPath(
     runDir: string,
     wbs: string,
-    fs: Pick<typeof import('node:fs'), 'lstatSync' | 'existsSync'>,
+    fs: Pick<typeof import('node:fs'), 'lstatSync' | 'existsSync' | 'statSync'>,
 ): string {
     const evidence = join(runDir, '..', 'memory', 'evidence');
     const durable = join(evidence, `${wbs}-verdict.json`);
-    for (const path of [join(runDir, '..'), join(evidence, '..'), evidence, durable]) {
+    const run = join(runDir, `${wbs}-verdict.json`);
+    for (const path of [join(runDir, '..'), join(evidence, '..'), evidence, durable, run]) {
         try {
             if (fs.lstatSync(path).isSymbolicLink()) throw new Error(`residual-scan: symlink evidence path: ${path}`);
         } catch (error) {
             if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
         }
     }
-    return fs.existsSync(durable) ? durable : join(runDir, `${wbs}-verdict.json`);
+    if (!fs.existsSync(durable)) return run;
+    if (!fs.existsSync(run)) return durable;
+    const newer = (a: string, b: string): string => (mtimeOf(fs, b) > mtimeOf(fs, a) ? b : a);
+    return newer(run, durable);
+}
+
+function mtimeOf(fs: Pick<typeof import('node:fs'), 'statSync'>, path: string): number {
+    try {
+        return fs.statSync(path).mtimeMs;
+    } catch {
+        return 0;
+    }
+}
+
+/**
+ * Task 1065 R2: fold-side report for verdict-copy disagreement, or null when either copy
+ * is absent or the bytes are equal (R3c — no noise). Names both paths, both verdict values,
+ * and the freshness winner, so a stale durable being overridden is visible to the operator.
+ */
+export function verdictDisagreementNote(
+    runDir: string,
+    wbs: string,
+    fs: Pick<typeof import('node:fs'), 'existsSync' | 'readFileSync' | 'statSync'>,
+): string | null {
+    const run = join(runDir, `${wbs}-verdict.json`);
+    const durable = join(runDir, '..', 'memory', 'evidence', `${wbs}-verdict.json`);
+    if (!fs.existsSync(run) || !fs.existsSync(durable)) return null;
+    const bytes = (path: string): string | null => {
+        try {
+            return fs.statSync(path).isFile() ? fs.readFileSync(path, 'utf8') : null;
+        } catch {
+            return null;
+        }
+    };
+    const runBytes = bytes(run);
+    if (runBytes === null || runBytes === bytes(durable)) return null;
+    const value = (path: string): string => {
+        try {
+            return (JSON.parse(bytes(path) ?? '{}') as { verdict?: string }).verdict ?? '?';
+        } catch {
+            return '?';
+        }
+    };
+    const winner = mtimeOf(fs, durable) > mtimeOf(fs, run) ? 'durable' : 'run';
+    return (
+        `residual-fold: ${wbs} verdict copies disagree — run=${run} (${value(run)}) durable=${durable} (${value(durable)})` +
+        ` → chose ${winner} (newer mtime)`
+    );
 }

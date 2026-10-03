@@ -4,7 +4,7 @@ name: Make idea-pipeline guards legible with terminal reasons on failure edges
 status: done
 template: feature-impl
 created_at: 2026-09-24T00:13:17.007Z
-updated_at: "2026-10-03T03:47:59.878Z"
+updated_at: "2026-10-03T05:38:02.695Z"
 feature_id: D64
 priority: P3
 tags:
@@ -304,7 +304,7 @@ Verdict: PASS (full review 874ac65c; fingerprint sha256:2d7c48e8… reproduced b
 
 | Finding | Priority | Disposition |
 | --- | --- | --- |
-| F1: Out-of-contract `design` values (≠auto\|skip) shift fail-closed→fail-open (old guards dead-end; new writer folds any non-skip value to design-route) | P3 | ACCEPTED — fail-open-to-design is R2's own letter ("Otherwise it is design … fails safe to design"); a fail-closed writer would violate R2 AND shift out-of-domain cells away from old-guard parity. Declared-domain scoping documented in routing test :46-49. Typo risk noted as residual |
+ F1: Out-of-contract `design` values (≠auto\|skip) shift fail-closed→fail-open (old guards dead-end; new writer folds any non-skip value to design-route) | RESOLVED — P3| ACCEPTED — fail-open-to-design is R2's own letter ("Otherwise it is design … fails safe to design"); a fail-closed writer would violate R2 AND shift out-of-domain cells away from old-guard parity. Declared-domain scoping documented in routing test :46-49. Typo risk noted as residual 
 | F2: "Test green pre/post rewrite" is by construction (file untracked, no pre-run record) | P4 | ACCEPTED — reviewer byte-verified all four frozen oracle guards against git 34d3dd0de; oracle ≡ old guard makes pre-green tautological (stronger than a historical run) |
 | F3: R4 "verdict cites 0938 coverage" lives in candidate rationale; verdict field null until post-merge promotion evaluate | P4 | ACCEPTED — per protocol; citation content present and correct (100% classified for new runs, all nine edges) |
 | F4: Writer measures 7 logical commands (above ADR-115's 5) on both onEnter lists | P4 | ACCEPTED — declared honestly via (warn) 7 commands comment; validate exits 0 advisory; rewritten guards dropped 4–5+warn to 3 no-warn |

@@ -1,4 +1,8 @@
 import { describe, expect, test } from 'bun:test';
+import * as fsp from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
     blockingAnchors,
     classify,
@@ -8,9 +12,72 @@ import {
     makeItemId,
     normalizeAnchor,
     parseDiffMarkers,
+    parseReviewFindings,
+    recordedVerdictPath,
     renderReport,
     scanResiduals,
+    verdictDisagreementNote,
 } from '../../src/services/residual-scan';
+
+/** Task 1065 R3: fold freshness between run and durable verdict copies. */
+describe('verdict copy freshness (task 1065)', () => {
+    const scratch = () => {
+        const dir = mkdtempSync(join(tmpdir(), 'rs-svc-'));
+        mkdirSync(join(dir, '.spur', 'run'), { recursive: true });
+        return dir;
+    };
+    const write = (dir: string, where: 'run' | 'durable', body: string, age = 0): string => {
+        const path =
+            where === 'run'
+                ? join(dir, '.spur', 'run', '1065-verdict.json')
+                : join(dir, '.spur', 'memory', 'evidence', '1065-verdict.json');
+        mkdirSync(join(path, '..'), { recursive: true });
+        writeFileSync(path, body);
+        const t = new Date(Date.now() - age * 1000);
+        utimesSync(path, t, t);
+        return path;
+    };
+    const PASS = '{"verdict":"PASS","checks":[]}\n';
+    const PARTIAL = '{"verdict":"PARTIAL","checks":[]}\n';
+
+    test('newer copy wins; single copies short-circuit (R1)', () => {
+        const dir = scratch();
+        try {
+            const runDir = join(dir, '.spur', 'run');
+            const runCopy = join(runDir, '1065-verdict.json');
+            const durableCopy = join(dir, '.spur', 'memory', 'evidence', '1065-verdict.json');
+            expect(recordedVerdictPath(runDir, '1065', fsp)).toBe(runCopy);
+            write(dir, 'durable', PARTIAL, 30);
+            expect(recordedVerdictPath(runDir, '1065', fsp)).toBe(durableCopy);
+            const run = write(dir, 'run', PASS, 0);
+            expect(recordedVerdictPath(runDir, '1065', fsp)).toBe(run); // fresh run beats stale durable
+            utimesSync(durableCopy, new Date(Date.now() + 60_000), new Date(Date.now() + 60_000));
+            expect(recordedVerdictPath(runDir, '1065', fsp)).toBe(durableCopy); // genuinely newer durable wins
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('disagreement note names both copies and the winner; quiet when equal or absent (R2/R3c)', () => {
+        const dir = scratch();
+        try {
+            const runDir = join(dir, '.spur', 'run');
+            expect(verdictDisagreementNote(runDir, '1065', fsp)).toBeNull();
+            write(dir, 'durable', PARTIAL, 30);
+            write(dir, 'run', PASS, 0);
+            const note = verdictDisagreementNote(runDir, '1065', fsp) ?? '';
+            expect(note).toContain('(PASS)');
+            expect(note).toContain('(PARTIAL)');
+            expect(note).toContain('chose run');
+            write(dir, 'durable', PASS, 0);
+            expect(verdictDisagreementNote(runDir, '1065', fsp)).toBeNull(); // equal bytes
+            write(dir, 'durable', PARTIAL, -60); // differing bytes + newer mtime → durable wins
+            expect(verdictDisagreementNote(runDir, '1065', fsp) ?? '').toContain('chose durable');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+});
 
 describe('makeItemId', () => {
     test('deterministic, category+location+text keyed', () => {
@@ -221,5 +288,28 @@ describe('renderReport', () => {
         expect(report).toContain('# Residual report — 9001');
         expect(report).toContain('Attempt: 2');
         expect(report).toContain('| review-finding | blocking | src/a.ts:12 | a\\|b |');
+    });
+});
+
+describe('review-finding parser hardening (task 1065 R4)', () => {
+    const table = (row: string): string =>
+        `### Review\n\n| Priority | Dimension | Location | Finding | Disposition |\n| --- | --- | --- | --- | --- |\n${row}\n`;
+
+    test('range-priority clean-report marker rows are not findings', () => {
+        const rows = parseReviewFindings(table('| P1\u2013P3 | none (clean) | \u2014 | no findings here |'));
+        expect(rows).toEqual([]);
+    });
+
+    test('escaped pipe inside a finding cell keeps the disposition cell recognized', () => {
+        const rows = parseReviewFindings(
+            table("| P2 | shape | a.ts:1 | tuple ('paused' \\| 'held') widened | RESOLVED: loosened pre-release |"),
+        );
+        expect(rows).toEqual([]);
+    });
+
+    test('same row without a recognized disposition is still a finding', () => {
+        const rows = parseReviewFindings(table("| P2 | shape | a.ts:1 | tuple ('paused' \\| 'held') widened | OPEN |"));
+        expect(rows).toHaveLength(1);
+        expect(rows[0]?.location).toContain('a.ts:1');
     });
 });

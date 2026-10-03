@@ -4,7 +4,7 @@ name: Design upstream ts-dual-workflow-engine checkpoint/interruption contract (
 status: done
 template: issue
 created_at: 2026-09-19T20:04:11.204Z
-updated_at: "2026-09-19T20:40:36.229Z"
+updated_at: "2026-10-03T05:36:00.233Z"
 feature_id: D3
 
 ---
@@ -81,11 +81,11 @@ Full mapping in ts-libs ADR-025 and the README section "Interruption & resume ow
 ### Review
 
 **Upstream delivery review** (self-review during implementation + contract tests — disposition: shipped, P2/P3 fixed inline)
-| Priority | Dimension | Location | Finding |
+| Priority | Dimension | Location | Finding | Disposition |
 |----------|-----------|----------|----------|
-| P2 | API shape | ts-libs `types.ts:25`; `persistence.ts:112` | Initial `expectedStatuses` was a strict `[paused, interrupted]` tuple — broke callers resuming from a single status. Loosened to `readonly ('paused' \| 'interrupted')[]` in both adapter impls before release. |
-| P3 | Conventions | ts-libs `persistence.ts` → `schema-sql.ts:77` | Migration ALTERs first drafted inline in `persistence.ts`; moved to exported `WORKFLOW_ENGINE_MIGRATIONS_SQL` so DDL text lives in schema-sql (single seam for the no-inline-DDL rule both repos follow). |
-| P3 | Release ops | npm registry | CI trusted publishing lag: npm still showed 0.4.69 minutes after push, blocking spur-new's `bun install` against `^0.5.0`. Open, owned by task 0901 adoption step. |
+| P2 | API shape | ts-libs `types.ts:25`; `persistence.ts:112` | RESOLVED: Initial `expectedStatuses` was a strict `[paused, interrupted]` tuple — broke callers resuming from a single status. Loosened to `readonly ('paused' \| 'interrupted')[]` in both adapter impls before release.| RESOLVED: confirmed during task 1065 R4 corpus audit |
+| P3 | Conventions | ts-libs `persistence.ts` → `schema-sql.ts:77` | RESOLVED: Migration ALTERs first drafted inline in `persistence.ts`; moved to exported `WORKFLOW_ENGINE_MIGRATIONS_SQL` so DDL text lives in schema-sql (single seam for the no-inline-DDL rule both repos follow).| RESOLVED: confirmed during task 1065 R4 corpus audit |
+| P3 | Release ops | npm registry | RESOLVED: CI trusted publishing lag: npm still showed 0.4.69 minutes after push, blocking spur-new's `bun install` against `^0.5.0`. Open, owned by task 0901 adoption step.| RESOLVED: confirmed during task 1065 R4 corpus audit |
 | P4 | Repo hygiene | ts-libs tags | Stale `ts-utils-v0.4.43` tag rejected on push (already existed remotely); harmless, other tags landed. |
 
 Residual risk: rerun-enter is at-least-once — hosts must persist durable state before side effects (documented in ADR-025/README, enforced by contract tests, not by the type system).

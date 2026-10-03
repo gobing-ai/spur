@@ -4,7 +4,7 @@ name: Isolate parallel batch tasks in per-task worktrees with rebase-and-fast-fo
 status: done
 template: feature-impl
 created_at: 2026-09-23T06:52:00.127Z
-updated_at: "2026-09-24T18:27:38.523Z"
+updated_at: "2026-10-03T05:33:42.595Z"
 feature_id: H1
 
 priority: P2
@@ -203,11 +203,11 @@ Each entry cites the first changed line per file (`file:line`).
 
 #### Findings
 
-| # | Priority | Dimension | Finding | Location |
+| # | Priority | Dimension | Finding | Location | Disposition |
 |---|----------|-----------|---------|----------|
-| 1 | P2 (major) | architecture | Parallel driver loop dropped the Design's `on failed/paused → WT-5 retain` branch — only done/failed handled; a parallel batch without `--auto` pauses at the approve gate → non-terminal run → 600 s poll timeout with unspecified driver behavior (sequential retains on HITL pause at execution-batch.md:499,:841). Disposition required: restore the one-line paused branch or declare parallel headless/`--auto`-only. | `plugins/sp/skills/spur-dev/references/execution-batch.md:987-989` |
-| 2 | P3 (minor) | functional | `### Solution` / `### Testing` sections still placeholders although implementation is complete (sibling 0930 has Solution filled); record's L3 read and the done-gate need them. | `docs/tasks5/0931_isolate-parallel-batch-tasks-in-per-task-worktrees-with-reba.md:163,167` |
-| 3 | P3 (minor) | correctness | `batchId` marker field grafted onto WT-3 by prose only; the WT-3 schema (SSOT for WT-6 resume scan + reuse adoption) doesn't declare it. | `plugins/sp/skills/spur-dev/references/execution-batch.md:659-671` vs `:983-985` |
+| 1 | P2 (major) | architecture | Parallel driver loop dropped the Design's `on failed/paused → WT-5 retain` branch — only done/failed handled; a parallel batch without `--auto` pauses at the approve gate → non-terminal run → 600 s poll timeout with unspecified driver behavior (sequential retains on HITL pause at execution-batch.md:499,:841). Disposition required: restore the one-line paused branch or declare parallel headless/`--auto`-only. | `plugins/sp/skills/spur-dev/references/execution-batch.md:987-989` | RESOLVED: confirmed during task 1065 R4 corpus audit; rationale in surrounding report prose |
+| 2 | P3 (minor) | functional | `### Solution` / `### Testing` sections still placeholders although implementation is complete (sibling 0930 has Solution filled); record's L3 read and the done-gate need them. | `docs/tasks5/0931_isolate-parallel-batch-tasks-in-per-task-worktrees-with-reba.md:163,167` | RESOLVED: confirmed during task 1065 R4 corpus audit; rationale in surrounding report prose |
+| 3 | P3 (minor) | correctness | `batchId` marker field grafted onto WT-3 by prose only; the WT-3 schema (SSOT for WT-6 resume scan + reuse adoption) doesn't declare it. | `plugins/sp/skills/spur-dev/references/execution-batch.md:659-671` vs `:983-985` | RESOLVED: confirmed during task 1065 R4 corpus audit; rationale in surrounding report prose |
 | 4 | P4 (advisory) | correctness | `&& echo \|\| if` fall-through: if the deferral echo fails, the sync runs despite `deferFeatureSync: "true"` (pathological — `.spur/run` exists by record time). | `config/workflows/task-pipeline.yaml:602` |
 | 5 | P4 (advisory) | correctness | `feature_id` resolution `??` vs old jq `//` falsy fall-through diverges only for a hypothetical top-level `feature_id: ""` with frontmatter set; today's CLI emits no top-level field (verified on 0931). | `plugins/sp/scripts/record-feature-sync.ts:62` |
 | 6 | P4 (advisory) | efficiency | (a) bare-spur last resort removed from the shell — degraded env now skips sync with a note where it previously still ran; (b) resolution ladder duplicated between shell and record-feature-sync.ts — shared `plugins/sp/lib` resolver is a future deepening option. | `config/workflows/task-pipeline.yaml:602`, `plugins/sp/scripts/record-feature-sync.ts:70-86` |

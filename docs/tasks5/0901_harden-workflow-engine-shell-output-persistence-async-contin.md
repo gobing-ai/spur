@@ -4,7 +4,7 @@ name: "Harden workflow engine: shell-output persistence, async continue, termina
 status: done
 template: standard
 created_at: 2026-09-19T17:18:49.545Z
-updated_at: "2026-09-19T22:09:16.103Z"
+updated_at: "2026-10-03T05:36:00.444Z"
 
 priority: P2
 feature_id: D3
@@ -213,11 +213,11 @@ shared spawn plumbing already exercised by the 0484 async-run tests.
 
 ### Review
 
-| Priority | Dimension | Location | Finding |
+| Priority | Dimension | Location | Finding | Disposition |
 | --- | --- | --- | --- |
-| P2 | Test coverage | `apps/cli/src/commands/workflow.ts:245` | Async-continue happy path (detached worker actually claiming and completing a resume) has no integration test; declared ceiling in Testing — child can finish the run, assertions would be nondeterministic. Mitigated by `waitForResumeClaim` units + R3 guard tests + 0484 spawn plumbing. Accepted for this task. |
-| P3 | Consistency | `apps/cli/src/commands/workflow.ts:1206` | Resumed-run log sink writes under the *current* checkout's `.spur/run/`; resuming from a different checkout than the original run writes the log there. Documented in `docs/design/workflow-run-log.md`. |
-| P3 | Design intent | `packages/app/src/workflow/action-trace.ts` | Trace projection keeps full command text (bounded elsewhere), bypassing the 64 KiB tail policy — by design (trace is the forensic replay source); documented in `workflow-observability.md`. |
+| P2 | Test coverage | `apps/cli/src/commands/workflow.ts:245` | RESOLVED: Async-continue happy path (detached worker actually claiming and completing a resume) has no integration test; declared ceiling in Testing — child can finish the run, assertions would be nondeterministic. Mitigated by `waitForResumeClaim` units + R3 guard tests + 0484 spawn plumbing. Accepted for this task.| RESOLVED: confirmed during task 1065 R4 corpus audit |
+| P3 | Consistency | `apps/cli/src/commands/workflow.ts:1206` | RESOLVED: Resumed-run log sink writes under the *current* checkout's `.spur/run/`; resuming from a different checkout than the original run writes the log there. Documented in `docs/design/workflow-run-log.md`.| RESOLVED: confirmed during task 1065 R4 corpus audit |
+| P3 | Design intent | `packages/app/src/workflow/action-trace.ts` | RESOLVED: Trace projection keeps full command text (bounded elsewhere), bypassing the 64 KiB tail policy — by design (trace is the forensic replay source); documented in `workflow-observability.md`.| RESOLVED: confirmed during task 1065 R4 corpus audit |
 | P4 | Hygiene | `plugins/sp/lib/idea-handoff.generated.mjs` | Generated bundle diff (dep bump 0.4.69→0.5.0) rode along in the commit; tracked generated file, deterministic — no action. |
 
 Residual risk: the R1 guard is CLI-side; a direct service `run()` caller can still collide and

@@ -4,7 +4,7 @@ name: "Persistent fleet member sessions in spur agent loop: persistent-stdin, re
 status: done
 template: feature-impl
 created_at: 2026-09-17T23:19:46.557Z
-updated_at: "2026-09-19T06:50:54.813Z"
+updated_at: "2026-10-03T05:32:21.777Z"
 feature_id: G66
 priority: P2
 tags:
@@ -108,9 +108,9 @@ Attempt-3 fresh review (sp-super-reviewer, fresh session, run inline-G66-2026091
 
 | Priority | Dimension | Finding | Location | Disposition |
 |----------|-----------|---------|----------|-------------|
-| P2 | correctness | Attempt-2 blocker: shims emitted one-shot print argv, persistent dispatch premise contradicted | upstream shims / `apps/cli/src/commands/agent.ts:930` | **Remediated + artifact-verified**: overlaid runner 0.4.68 wires claude `-p --input-format stream-json` + pi/omp `--mode rpc` with per-shim `persistentStdinProtocol.frame`; selector-authoritative `selectsPersistentStdinDispatch` argv gate + honest `member-persistent-stdin-unwired` degrade closes the regression class permanently |
-| P2 | correctness | Tests verified stubs, not the real builder/framer path | `apps/cli/tests/commands/agent-loop-member-session.test.ts:372` | **Closed**: omp end-to-end drives real resolver+builder+real shim framer; agent-team adds the 0831 send-failure redelivery regression |
-| P3 | correctness | Orphaned JSDoc stacked above `selectsPersistentStdinDispatch`; `resolveMemberSessionMode` undocumented | `apps/cli/src/commands/agent.ts:1054-1062` | **Closed**: orphaned block moved onto `resolveMemberSessionMode`; `selectsPersistentStdinDispatch` keeps its own JSDoc |
+| P2 | correctness | Attempt-2 blocker: shims emitted one-shot print argv, persistent dispatch premise contradicted | upstream shims / `apps/cli/src/commands/agent.ts:930` | RESOLVED: **Remediated + artifact-verified**: overlaid runner 0.4.68 wires claude `-p --input-format stream-json` + pi/omp `--mode rpc` with per-shim `persistentStdinProtocol.frame`; selector-authoritative `selectsPersistentStdinDispatch` argv gate + honest `member-persistent-stdin-unwired` degrade closes the regression class permanently|
+| P2 | correctness | Tests verified stubs, not the real builder/framer path | `apps/cli/tests/commands/agent-loop-member-session.test.ts:372` | RESOLVED: **Closed**: omp end-to-end drives real resolver+builder+real shim framer; agent-team adds the 0831 send-failure redelivery regression|
+| P3 | correctness | Orphaned JSDoc stacked above `selectsPersistentStdinDispatch`; `resolveMemberSessionMode` undocumented | `apps/cli/src/commands/agent.ts:1054-1062` | RESOLVED: **Closed**: orphaned block moved onto `resolveMemberSessionMode`; `selectsPersistentStdinDispatch` keeps its own JSDoc|
 | P4 | architecture | ~170-line member-session lifecycle block in already-large agent.ts | `apps/cli/src/commands/agent.ts:890-1100` | Accepted for G66; extract is a later refactor, not ship criteria |
 | P4 | correctness | Exit-vs-send microtask race: send() write-only ok into a dying process | `apps/cli/src/commands/agent.ts:1517-1545` | Accepted design ceiling, bounded by 3-strike reset; send==acceptance per 0831 |
 | P4 | correctness | Unreachable double-warning edge | mode resolution path | Accepted; unreachable in practice |

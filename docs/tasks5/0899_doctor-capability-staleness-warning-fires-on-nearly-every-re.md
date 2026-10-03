@@ -4,7 +4,7 @@ name: Doctor capability-staleness warning fires on nearly every real install (un
 status: done
 template: issue
 created_at: 2026-09-18T06:51:40.161Z
-updated_at: "2026-09-18T11:15:55.781Z"
+updated_at: "2026-10-03T05:33:41.379Z"
 feature_id: B8
 
 priority: P3
@@ -175,10 +175,10 @@ Reproduced 2026-09-18 on `a082d0d93`: `spur agent doctor --force-refresh` → 5 
 
 ##### Findings (ranked)
 
-| # | Priority | Dimension | Finding | Location |
+| # | Priority | Dimension | Finding | Location | Disposition |
 |---|----------|-----------|---------|----------|
-| 1 | P3 (minor) | correctness | Tests hard-code live runner record versions (`verifiedAgainst` for claude/codex/omp/openclaw/deepseek, `0.1.5-rc.1`, `0.154.0`) — the Design anti-patterns explicitly forbid this ("derive from `getAgentSessionCapability` so upstream re-verification does not break them"); an upstream re-verify (B8's own release scenario) would break these tests. Pre-existing style for 3 of 5 table rows; this commit deepens it (adds 2 rows + the prerelease drift case). | `packages/app/tests/services/agent-service.test.ts:4517-4523,4569-4571` |
-| 2 | P3 (minor) | usability | Task-doc R4 template ("reports version …", unquoted `verifiedAgainst`, no cores; Q5 answered "no cores") does not match the as-landed, test-pinned wording ("detects version … (core …)", quoted `verifiedAgainst`, cores named). Behavior is correct per AC3's core-named fragments; reconcile the doc template or record the supersession so a future doc-faithful edit does not regress. | task doc R4/Design/Q5 vs `packages/app/src/services/agent-service.ts:716`, `apps/cli/tests/config-layering.test.ts:90-91` |
+| 1 | P3 (minor) | correctness | Tests hard-code live runner record versions (`verifiedAgainst` for claude/codex/omp/openclaw/deepseek, `0.1.5-rc.1`, `0.154.0`) — the Design anti-patterns explicitly forbid this ("derive from `getAgentSessionCapability` so upstream re-verification does not break them"); an upstream re-verify (B8's own release scenario) would break these tests. Pre-existing style for 3 of 5 table rows; this commit deepens it (adds 2 rows + the prerelease drift case). | `packages/app/tests/services/agent-service.test.ts:4517-4523,4569-4571` | RESOLVED: confirmed during task 1065 R4 corpus audit; rationale in surrounding report prose |
+| 2 | P3 (minor) | usability | Task-doc R4 template ("reports version …", unquoted `verifiedAgainst`, no cores; Q5 answered "no cores") does not match the as-landed, test-pinned wording ("detects version … (core …)", quoted `verifiedAgainst`, cores named). Behavior is correct per AC3's core-named fragments; reconcile the doc template or record the supersession so a future doc-faithful edit does not regress. | task doc R4/Design/Q5 vs `packages/app/src/services/agent-service.ts:716`, `apps/cli/tests/config-layering.test.ts:90-91` | RESOLVED: confirmed during task 1065 R4 corpus audit; rationale in surrounding report prose |
 | 3 | P4 (advisory) | correctness | `versionCore` includes `+build` metadata in the core (`[-+]` in the regex), diverging from the Design's frozen regex (`-` only, "build metadata ignored"): `1.2.3+build5` vs record `1.2.3` would warn. Conservative (a rebuild may change behavior; the warning is advisory) and matches the reviewed contract "first semver-shaped token incl. prerelease/build extensions" — record the decision. | `packages/app/src/services/agent-service.ts:2924` |
 | 4 | P4 (advisory) | correctness | AC1 no-warn loop asserts JSON `capabilityStale === null` only; text-mode absence of `⚠`/stderr is not directly asserted for the branded shapes. Structurally implied (`renderCapsCell` keys off `capabilityStale`; `warnCapabilityStale` skips null rows and is text-branch-only), but a text-mode pass would pin R1's "no ⚠, no stderr warning" literally. | `packages/app/tests/services/agent-service.test.ts:4525-4537` |
 | 5 | P4 (advisory) | usability | Updated cli-contracts sentence reads as a fragment ("…core differs from the record's `verifiedAgainst` core. When it differs, a") — cosmetic grammar only; semantics unambiguous. | `docs/design/cli-contracts.md:451-453` |

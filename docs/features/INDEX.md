@@ -31,7 +31,7 @@
 [done] **D**: Workflows ([D_workflows.md](./D_workflows.md))
     ├── [done] **D1**: workflow run observability — enriched step lines, FSM transitions, async follow ([D1_workflow-run-observability-enriched-step-lines-fsm-transitions-async-follow.md](./D1_workflow-run-observability-enriched-step-lines-fsm-transitions-async-follow.md))
     ├── [done] **D2**: All-in-one per-run workflow run log ([D2_all-in-one-per-run-workflow-run-log.md](./D2_all-in-one-per-run-workflow-run-log.md))
-    ├── [verifying] **D3**: Workflow run reliability defects: schema resolution, shell interpolation, headless HITL ([D3_workflow-run-reliability-defects-schema-resolution-shell-interpolation-headless-hitl.md](./D3_workflow-run-reliability-defects-schema-resolution-shell-interpolation-headless-hitl.md))
+    ├── [active] **D3**: Workflow run reliability defects: schema resolution, shell interpolation, headless HITL ([D3_workflow-run-reliability-defects-schema-resolution-shell-interpolation-headless-hitl.md](./D3_workflow-run-reliability-defects-schema-resolution-shell-interpolation-headless-hitl.md))
     ├── [done] **D4**: Workflow YAML rule-style extensions ([D4_workflow-yaml-rule-style-extensions.md](./D4_workflow-yaml-rule-style-extensions.md))
     ├── [done] **D5**: Workflow pipeline contract, progress projection, and staged consolidation ([D5_task-pipeline2-promotion-gated-by-the-eval-suite-bar.md](./D5_task-pipeline2-promotion-gated-by-the-eval-suite-bar.md))
     ├── [active] **D6**: Workflow cost, deterministic ownership surface, and role-addressed coordination ([D6_workflow-cost-deterministic-ownership-surface-and-role-addressed-coordination.md](./D6_workflow-cost-deterministic-ownership-surface-and-role-addressed-coordination.md))
