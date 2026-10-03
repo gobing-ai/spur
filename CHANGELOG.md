@@ -4,7 +4,7 @@
 
 ### Added
 
-- require source citations for API/library claims in verify answers (1070) (1bd2cd2f8)
+- require source citations for API/library claims in verify answers (1070) (15e4b0596)
 - require Confidence: HIGH|MEDIUM|LOW in verify answers (1068) (75646f421)
 - classify imported skill calls by capability origin (1029) (78f1412d8)
 - enforce E71 persist-out before WT-4 removal; guard task-diffstat stdout redirect (1067) (b0371f8e1)
@@ -15,20 +15,22 @@
 
 ### Fixed
 
-- add more unit tests (7658915ff)
-- restore plugin lib bundles after determinism test runs (bb1369d16)
-- pin provenance recording to the task execution tree (cd7672d5f)
-- resolve nested bun.lock keys to nested install paths (18b5b6730)
+- add more unit tests (3262e863c)
+- restore plugin lib bundles after determinism test runs (948db697f)
+- pin provenance recording to the task execution tree (e4450db36)
+- resolve nested bun.lock keys to nested install paths (34b931f16)
 - report workflow run ids only after the run row commits (1064) (92248bb60)
 - add more unit tests (0330b46d9)
 - re-key 1061 residuals follow-up to 1063 — WBS 1062 collision with D62 sweep task (4a81ad603)
 
 ### Changed
 
-- apply biome fixes so the lint gate is green at HEAD (92a2b1ee2)
-- record E93 verifyall re-audit — 3 PASS force re-verifies (1028-1030) (9cc42510e)
-- file 1069 — dependency-drift-check scoped-key path bug (E93 follow-up) (b86c2a476)
-- merge sp/runall-e93-4ff4 (E93) — capability batch 1028-1030 done, E93 done, ts-* catalog ^0.5.12 (b1b853de7 — verified package.json:32)
+- add change log (7a85c6a8f)
+- apply biome fixes so the lint gate is green at HEAD (e7d654dfd)
+- record E93 verifyall re-audit — 3 PASS force re-verifies (1028-1030) (8a06ead3a)
+- file 1069 — dependency-drift-check scoped-key path bug (E93 follow-up) (1c7d83216)
+- merge sp/runall-e93-4ff4 (E93) — capability batch 1028-1030 done, E93 done, ts-* catalog ^0.5.12 (cac466566 — verified package.json:32)
+- revert docs(tasks) file 1068 — dependency-drift-check scoped-key path bug (E93 follow-up) (6181a2695)
 - file 1068 — dependency-drift-check scoped-key path bug (E93 follow-up) (98b33ca7a)
 - align ts-* catalog to ^0.5.12 (E93 wrap) (f99bf3b38 — verified package.json:32)
 - record 1030 verify-safe-historical-capability-replay sections (E93) (6e04e71ca)
@@ -70,12 +72,11 @@
 - re-verify D62 forced batch to 28 PASS and settle residual dispositions (9e8b97fe9)
 - annotate retired basic/docs-pipeline/feature-dev definitions (0866) (0cfc5d8cb)
 
-### Other
-
-- Revert "docs(tasks): file 1068 — dependency-drift-check scoped-key path bug (E93 follow-up)" (fba7c741b)
-
-> Verification: HIGH — coverage 60/60 hashes unique; mapping Added 8 / Fixed 7 / Changed 44 / Other 1;
+> Verification: HIGH — coverage 61/61 hashes unique; mapping Added 8 / Fixed 7 / Changed 46 / Other 0;
 > header [0.3.99] - 2026-10-03 vs `--version 0.3.99`; dependency claim cited (`package.json:32`).
+> Citations repinned after the `Revert "…"` commit was reworded to `revert: …` for the cog gate: 11 hashes
+> changed (that commit + descendants), trees and both merges preserved. This repin commit is uncited and
+> lands in the next range.
 
 ## [0.3.98] - 2026-10-02
 
