@@ -3,13 +3,16 @@ schema_version: 1
 name: Residuals from 1061
 status: backlog
 template: feature-impl
-created_at: 2026-10-03T01:30:01.825Z
-updated_at: "2026-10-03T01:30:02.145Z"
+created_at: 2026-10-03T01:53:33.466Z
+updated_at: "2026-10-03T01:56:22.269Z"
 feature_id: F96
 
+priority: P3
+ac_numbering: task-local
+ac_altitude: task-local
 ---
 
-## 1062. Residuals from 1061
+## 1063. Residuals from 1061
 
 ### Background
 
@@ -19,11 +22,27 @@ Source task: 1061 (feature F96) — deferred residuals filed by residual-scan se
 
 ### Requirements
 
-<!-- One R-item per line, exactly `- [ ] R1. <text>` (checkbox + `R<n>.`); `spur task check` flags any other form. Derive from the linked feature or refined task scope. -->
+- [ ] R1. A repo test (bun) detects drift of the AC-guidance comment across the 8 synchronized copies (6 config/templates/task/*.md templates, the condensed form in plugins/sp/skills/spur-dev/references/ac-style-guide.md, the sed-escaped copy in apps/cli/tests/commands/task.test.ts): a perturbed copy fails with the drifted file named; the committed tree passes.
+- [ ] R2. Templates stay self-contained — the check reads existing repo files only, adds no dependencies, and changes no template content beyond fixing actual drift found.
 
 ### Acceptance Criteria
 
-<!-- Number items AC1, AC2, … (never R<n> — that is the Requirements namespace). Preferred: `Scenario: AC1 — <concrete outcome> (req: R1)` blocks with Given/When/Then, declaring both `ac_altitude: task-local` and `ac_numbering: task-local` for task-local regression criteria (altitude skips only the feature-subset check; numbering makes `(req: R<n>)` count toward requirement coverage). Parsed checkbox rows `- [ ] AC1 — <title>` are supported but never bind requirements — only `Scenario:` titles read `(req: R<n>)`. Bare `- AC1` bullets are legacy unparsed records, not a traceability bypass. Requirements use `- [ ] R1. <text>`, checked at close. Do not leave placeholder AC here. -->
+```gherkin
+Scenario: AC1 — perturbed copy fails with drifted file named (req: R1)
+  Given the committed template copies in a temp fixture
+  When one copy's guidance comment gains a stray sentence
+  Then the consistency test fails and names that file
+
+Scenario: AC2 — committed tree passes (req: R1)
+  Given the current repository
+  When the consistency test runs via bun test
+  Then it passes with zero source edits
+
+Scenario: AC3 — self-contained, dependency-free check (req: R2)
+  Given the implementation
+  When manifests and template contents are reviewed
+  Then no dependencies were added and all 8 copies remain inline and self-contained
+```
 
 ### Q&A
 
@@ -37,7 +56,9 @@ Source task: 1061 (feature F96) — deferred residuals filed by residual-scan se
 
 ### Plan
 
-<!-- Ordered implementation checklist. Fill before moving to todo/wip. -->
+- [ ] P1. Extract the AC-guidance comment from each of the 8 copies (normalize the sed-escaped test copy) and compare.
+- [ ] P2. Add the consistency test under apps/cli/tests/ with the AC1 perturbation fixture.
+- [ ] P3. Run the focused test, then `bun run spur-check`; record results in Testing/Review.
 
 ### Solution
 
