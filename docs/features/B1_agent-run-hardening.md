@@ -6,7 +6,7 @@ status: verifying
 priority: P1
 tags: [rd3-migration, wave-3]
 created_at: 2026-06-12T23:45:00.000Z
-updated_at: "2026-08-24T17:41:00.145Z"
+updated_at: "2026-10-03T05:05:59.748Z"
 ---
 
 # B1: Agent run hardening
@@ -43,7 +43,7 @@ already-supported agents.
 | 0119 | Add --next auto-chain option to dev-refine, dev-run, dev-verify | done |
 | 0126 | Make agent auto resolution phase-aware with executor profiles | done |
 | 0128 | Harden implement-agent Solution prompt + re-measure pipeline cache hit rate | done |
-| 1066 | codify chunked implement dispatch contract for cap limited worker models | todo |
+| 1066 | codify chunked implement dispatch contract for cap limited worker models | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -56,3 +56,6 @@ interaction patterns worth keeping surface in cc-agents task 0405 (acpx-query ar
 - 2026-06-12 — created (rd3-migration feature finalizing)
 - 2026-08-24T17:40:59.818Z backlog → active (system)
 - 2026-08-24T17:41:00.145Z active → verifying (system)
+- 2026-10-03T05:03:04.668Z verifying → active (system)
+- 2026-10-03T05:05:59.748Z active → verifying (system)
+
