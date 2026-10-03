@@ -28,6 +28,7 @@ spur history import [--dry-run] [--source-timeout <ms|none>] [--json]
 | `--mode <mode>` | `full` \| `incremental` \| `force-file` |
 | `--dry-run` | Scan without persisting |
 | `--source-timeout <ms\|none>` | Per-source timeout (default 600000 = 10 min) |
+| `--capability-origin <spec>` | Classify imported skill calls (repeatable): `source:skillName:artifactDigest:capabilityKind:originIdentity` where capabilityKind is one of `command`, `subagent`, `skill` |
 
 `--source all` is the fan-out: every source imports under per-source failure isolation, so one
 broken log never blocks the rest. A single `--source` is the n=1 case of the same contract.

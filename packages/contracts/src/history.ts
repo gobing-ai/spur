@@ -123,11 +123,32 @@ export const historySkillItemSchema = z.object({
 /** Inferred type for HistorySkillItem. */
 export type HistorySkillItem = z.infer<typeof historySkillItemSchema>;
 
+/**
+ * One classified capability-usage row (E93 task 1029). The kind/evidence/status
+ * vocabularies are importer-owned (`CapabilityKind` / `CapabilityEvidenceKind` /
+ * class status), so the contract stays tolerant strings; null means unclassified
+ * (legacy rows or unresolved origins) and renders as unknown downstream.
+ */
+export const historyCapabilityUsageSchema = z.object({
+    skillName: z.string(),
+    capabilityKind: z.string().nullable(),
+    invocationKind: z.string(),
+    evidenceKind: z.string().nullable(),
+    status: z.string().nullable(),
+    calls: z.number(),
+});
+/** Inferred type for HistoryCapabilityUsage. */
+export type HistoryCapabilityUsage = z.infer<typeof historyCapabilityUsageSchema>;
+
 /** Skill-load breakdown (counts by skill, source, invocation kind, plus a bucketed trend). */
 export const historySkillBreakdownSchema = z.object({
+    // Confirmed loads only (evidence_kind='load' AND status='ok') since E93 task 1029.
     bySkill: z.array(z.object({ skillName: z.string(), calls: z.number() })),
     bySource: z.array(z.object({ source: z.string(), calls: z.number() })),
     byInvocationKind: z.array(z.object({ invocationKind: z.string(), calls: z.number() })),
+    // Classified usage including requests/errors/unknown-origin rows. Default keeps the
+    // contract tolerant of summaries produced before task 1029 shipped.
+    byCapability: z.array(historyCapabilityUsageSchema).default([]),
     trend: z.array(historyTimeSeriesPointSchema),
     // True when the breakdown is read from a fresh board rollup; false means the rollup was
     // not yet rebuilt (between import and analyze) so the UI must not render a silent-empty

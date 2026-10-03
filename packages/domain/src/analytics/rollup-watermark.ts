@@ -23,7 +23,12 @@ import type { DbAdapter } from '@gobing-ai/ts-db';
 // v6: bucketWindow() lower bound widened by one second so first-second-of-minute
 // rows with fractional-second ts values are not dropped from their own bucket's
 // incremental recompute (task 0805 R1). Marts materialized under v5 must rebuild.
-export const ROLLUP_DEFINITION_VERSION = 'v6';
+// v7: history_board_skill_5m materializes the classification grain (E93 task
+// 1029) — one row per (bucket, source, skill, invocation_kind, capability_kind,
+// evidence_kind, status) with representative-invocation counts, and the legacy
+// breakdown arrays narrow to confirmed loads (evidence_kind='load' AND
+// status='ok'). Marts materialized under v6 must rebuild.
+export const ROLLUP_DEFINITION_VERSION = 'v7';
 
 /** A table with no watermark row reports this sentinel state (empty watermark → stale). */
 export const EMPTY_ROLLUP_WATERMARK: RollupWatermarkState = {

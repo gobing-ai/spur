@@ -1304,6 +1304,7 @@ describe('historyBoardKpiTrendFromRollup', () => {
     });
 });
 
+/** A seeded history_skill_call row. Class fields default to the pre-1029 legacy shape. */
 interface SkillCall {
     recordHash: string;
     source: string;
@@ -1312,13 +1313,18 @@ interface SkillCall {
     skillName: string;
     invocationKind: 'user' | 'model';
     startedAt: string;
+    status?: string | null;
+    capabilityKind?: string | null;
+    evidenceKind?: string | null;
+    invocationId?: string | null;
 }
 
 async function insertSkillCall(db: DbAdapter, s: SkillCall): Promise<void> {
     await db.run(
         `INSERT INTO history_skill_call (record_hash, message_hash, source, source_file, source_line,
-             session_id, seq, skill_name, invocation_kind, status, started_at, imported_at)
-         VALUES (?, ?, ?, 'test.jsonl', 1, ?, ?, ?, ?, 'success', ?, '2026-06-01T00:00:00Z')`,
+             session_id, seq, skill_name, invocation_kind, status, started_at, imported_at,
+             capability_kind, evidence_kind, invocation_id)
+         VALUES (?, ?, ?, 'test.jsonl', 1, ?, ?, ?, ?, ?, ?, '2026-06-01T00:00:00Z', ?, ?, ?)`,
         s.recordHash,
         s.recordHash,
         s.source,
@@ -1326,7 +1332,11 @@ async function insertSkillCall(db: DbAdapter, s: SkillCall): Promise<void> {
         s.seq,
         s.skillName,
         s.invocationKind,
+        s.status ?? 'success',
         s.startedAt,
+        s.capabilityKind ?? null,
+        s.evidenceKind ?? null,
+        s.invocationId ?? null,
     );
 }
 
@@ -1361,12 +1371,17 @@ describe('history_board_skill_5m / skillCallRollup (task 0737)', () => {
             startedAt: '2026-06-01T10:05:00Z',
         });
         const rows = await skillCallRollup(db);
+        // Legacy rows (null class columns, non-'ok'/'error' status) materialize with the ''
+        // sentinels and class status 'unknown' — the E93 measure, not the pre-1029 raw count.
         expect(rows).toEqual([
             {
                 bucketStart: '2026-06-01T09:58:00Z',
                 source: 'claude',
                 skillName: 'sp-code-testing',
                 invocationKind: 'model',
+                capabilityKind: '',
+                evidenceKind: '',
+                status: 'unknown',
                 calls: 1,
             },
             {
@@ -1374,6 +1389,9 @@ describe('history_board_skill_5m / skillCallRollup (task 0737)', () => {
                 source: 'claude',
                 skillName: 'sp-code-testing',
                 invocationKind: 'user',
+                capabilityKind: '',
+                evidenceKind: '',
+                status: 'unknown',
                 calls: 1,
             },
             {
@@ -1381,6 +1399,9 @@ describe('history_board_skill_5m / skillCallRollup (task 0737)', () => {
                 source: 'codex',
                 skillName: 'sp-sys-debugging',
                 invocationKind: 'model',
+                capabilityKind: '',
+                evidenceKind: '',
+                status: 'unknown',
                 calls: 1,
             },
         ]);
@@ -1403,6 +1424,9 @@ describe('history_board_skill_5m / skillCallRollup (task 0737)', () => {
                     source: 'claude',
                     skillName: 'sp-code-testing',
                     invocationKind: 'model',
+                    capabilityKind: '',
+                    evidenceKind: '',
+                    status: '',
                     calls: 2,
                 },
                 {
@@ -1410,6 +1434,9 @@ describe('history_board_skill_5m / skillCallRollup (task 0737)', () => {
                     source: 'claude',
                     skillName: 'sp-code-testing',
                     invocationKind: 'user',
+                    capabilityKind: '',
+                    evidenceKind: '',
+                    status: '',
                     calls: 1,
                 },
                 {
@@ -1417,16 +1444,26 @@ describe('history_board_skill_5m / skillCallRollup (task 0737)', () => {
                     source: 'codex',
                     skillName: 'sp-sys-debugging',
                     invocationKind: 'model',
+                    capabilityKind: '',
+                    evidenceKind: '',
+                    status: '',
                     calls: 1,
                 },
             ],
         };
+        // Exact shape pins the v7 grain INCLUDING the '' sentinels: this seed is the
+        // passthrough path (verbatim replay), so pre-classification rows keep '' for
+        // capability/evidence/status (schema defaults; migration 0050 copies the same) —
+        // distinct from the compute path, whose CASE ELSE materializes 'unknown'.
         await replaceHistoryBoardRollups(db, seed);
         const first = await db.queryAll<{
             bucket_start: string;
             source: string;
             skill_name: string;
             invocation_kind: string;
+            capability_kind: string;
+            evidence_kind: string;
+            status: string;
             calls: number;
         }>('SELECT * FROM history_board_skill_5m ORDER BY bucket_start, source, skill_name, invocation_kind');
         expect(first).toEqual([
@@ -1435,6 +1472,9 @@ describe('history_board_skill_5m / skillCallRollup (task 0737)', () => {
                 source: 'claude',
                 skill_name: 'sp-code-testing',
                 invocation_kind: 'model',
+                capability_kind: '',
+                evidence_kind: '',
+                status: '',
                 calls: 2,
             },
             {
@@ -1442,6 +1482,9 @@ describe('history_board_skill_5m / skillCallRollup (task 0737)', () => {
                 source: 'claude',
                 skill_name: 'sp-code-testing',
                 invocation_kind: 'user',
+                capability_kind: '',
+                evidence_kind: '',
+                status: '',
                 calls: 1,
             },
             {
@@ -1449,6 +1492,9 @@ describe('history_board_skill_5m / skillCallRollup (task 0737)', () => {
                 source: 'codex',
                 skill_name: 'sp-sys-debugging',
                 invocation_kind: 'model',
+                capability_kind: '',
+                evidence_kind: '',
+                status: '',
                 calls: 1,
             },
         ]);
@@ -1471,12 +1517,17 @@ describe('history_board_skill_5m / skillCallRollup (task 0737)', () => {
             tokenSteps: [],
             durationSteps: [],
             cacheWasteSteps: [],
+            // All seeds are confirmed loads (E93 1029): the legacy arrays count only
+            // evidence_kind='load' AND status='ok' rows.
             skill5m: [
                 {
                     bucketStart: '2026-06-01T09:58:00Z',
                     source: 'claude',
                     skillName: 'sp-code-testing',
                     invocationKind: 'model',
+                    capabilityKind: '',
+                    evidenceKind: 'load',
+                    status: 'ok',
                     calls: 2,
                 },
                 {
@@ -1484,6 +1535,9 @@ describe('history_board_skill_5m / skillCallRollup (task 0737)', () => {
                     source: 'claude',
                     skillName: 'sp-code-testing',
                     invocationKind: 'user',
+                    capabilityKind: '',
+                    evidenceKind: 'load',
+                    status: 'ok',
                     calls: 1,
                 },
                 {
@@ -1491,6 +1545,9 @@ describe('history_board_skill_5m / skillCallRollup (task 0737)', () => {
                     source: 'codex',
                     skillName: 'sp-sys-debugging',
                     invocationKind: 'model',
+                    capabilityKind: '',
+                    evidenceKind: 'load',
+                    status: 'ok',
                     calls: 1,
                 },
                 {
@@ -1498,6 +1555,9 @@ describe('history_board_skill_5m / skillCallRollup (task 0737)', () => {
                     source: 'codex',
                     skillName: 'unknown',
                     invocationKind: 'model',
+                    capabilityKind: '',
+                    evidenceKind: 'load',
+                    status: 'ok',
                     calls: 4,
                 },
                 {
@@ -1505,6 +1565,9 @@ describe('history_board_skill_5m / skillCallRollup (task 0737)', () => {
                     source: 'codex',
                     skillName: '',
                     invocationKind: 'model',
+                    capabilityKind: '',
+                    evidenceKind: 'load',
+                    status: 'ok',
                     calls: 2,
                 },
             ],
@@ -1523,6 +1586,34 @@ describe('history_board_skill_5m / skillCallRollup (task 0737)', () => {
         expect(breakdown.byInvocationKind).toEqual([
             { invocationKind: 'model', calls: 9 },
             { invocationKind: 'user', calls: 1 },
+        ]);
+        // byCapability carries the classified dimension — the '' capability kind reads as
+        // null (unclassified); empty/'unknown' skill names stay excluded like bySkill.
+        expect(breakdown.byCapability).toEqual([
+            {
+                skillName: 'sp-code-testing',
+                capabilityKind: null,
+                invocationKind: 'model',
+                evidenceKind: 'load',
+                status: 'ok',
+                calls: 2,
+            },
+            {
+                skillName: 'sp-code-testing',
+                capabilityKind: null,
+                invocationKind: 'user',
+                evidenceKind: 'load',
+                status: 'ok',
+                calls: 1,
+            },
+            {
+                skillName: 'sp-sys-debugging',
+                capabilityKind: null,
+                invocationKind: 'model',
+                evidenceKind: 'load',
+                status: 'ok',
+                calls: 1,
+            },
         ]);
         // Trend is a 5m re-bucketed call-count series.
         expect(breakdown.trend).toEqual([
@@ -1562,6 +1653,9 @@ describe('history_board_skill_5m / skillCallRollup (task 0737)', () => {
                     source: 'claude',
                     skillName: 'sp-code-testing',
                     invocationKind: 'model',
+                    capabilityKind: '',
+                    evidenceKind: 'load',
+                    status: 'ok',
                     calls: 2,
                 },
             ],
@@ -1587,7 +1681,13 @@ describe('history_board_skill_5m / skillCallRollup (task 0737)', () => {
             cacheWasteSteps: [],
         });
         const zero = await historyBoardSkillBreakdownFromRollup(zeroDb, ALL, '5m');
-        expect(zero).toEqual({ bySkill: [], bySource: [], byInvocationKind: [], trend: [] });
+        expect(zero).toEqual({
+            bySkill: [],
+            bySource: [],
+            byInvocationKind: [],
+            byCapability: [],
+            trend: [],
+        });
     });
 });
 
@@ -2069,5 +2169,335 @@ describe('refreshHistoryBoardRollupsIncremental (task 0741)', () => {
                 "SELECT COUNT(*) AS n FROM history_board_message_5m WHERE bucket_start = '2026-06-01T10:05:00Z'",
             ),
         ).toEqual({ n: 1 });
+    });
+});
+
+describe('classified skill rollups (E93 task 1029)', () => {
+    test('counts one representative per invocation and applies class status precedence ok > error > unknown', async () => {
+        const db = await setup();
+        // Three raw rows for ONE logical invocation (same source/session/invocation_id/
+        // class, e.g. the retry journal replay): the rep query materializes a single call
+        // while the class status keeps 'ok' precedence over the 'error' retry row.
+        for (const [hash, status] of [
+            ['r1', 'ok'],
+            ['r2', 'error'],
+            ['r3', null],
+        ] as const) {
+            await insertSkillCall(db, {
+                recordHash: hash,
+                source: 'claude',
+                sessionId: 's1',
+                seq: 1,
+                skillName: 'sp-x',
+                invocationKind: 'user',
+                startedAt: '2026-06-01T09:58:30Z',
+                status,
+                capabilityKind: 'command',
+                evidenceKind: 'load',
+                invocationId: 'inv-1',
+            });
+        }
+        // Legacy rows have no invocation_id: each row is its own invocation (rep) in the
+        // unclassified '' class.
+        await insertSkillCall(db, {
+            recordHash: 'r4',
+            source: 'claude',
+            sessionId: 's1',
+            seq: 2,
+            skillName: 'sp-x',
+            invocationKind: 'user',
+            startedAt: '2026-06-01T09:59:10Z',
+        });
+        await insertSkillCall(db, {
+            recordHash: 'r5',
+            source: 'claude',
+            sessionId: 's1',
+            seq: 3,
+            skillName: 'sp-x',
+            invocationKind: 'user',
+            startedAt: '2026-06-01T09:59:20Z',
+        });
+        // A request row for the same skill is a separate class from the load.
+        await insertSkillCall(db, {
+            recordHash: 'r6',
+            source: 'claude',
+            sessionId: 's1',
+            seq: 4,
+            skillName: 'sp-x',
+            invocationKind: 'user',
+            startedAt: '2026-06-01T09:59:30Z',
+            status: 'ok',
+            capabilityKind: 'command',
+            evidenceKind: 'request',
+            invocationId: 'inv-2',
+        });
+        const rows = await skillCallRollup(db);
+        // Skill buckets are minute-floored (SKILL_BUCKET_5M_SQL); '' classes sort first.
+        expect(rows).toEqual([
+            {
+                bucketStart: '2026-06-01T09:58:00Z',
+                source: 'claude',
+                skillName: 'sp-x',
+                invocationKind: 'user',
+                capabilityKind: 'command',
+                evidenceKind: 'load',
+                status: 'ok',
+                calls: 1,
+            },
+            {
+                bucketStart: '2026-06-01T09:59:00Z',
+                source: 'claude',
+                skillName: 'sp-x',
+                invocationKind: 'user',
+                capabilityKind: '',
+                evidenceKind: '',
+                status: 'unknown',
+                calls: 2,
+            },
+            {
+                bucketStart: '2026-06-01T09:59:00Z',
+                source: 'claude',
+                skillName: 'sp-x',
+                invocationKind: 'user',
+                capabilityKind: 'command',
+                evidenceKind: 'request',
+                status: 'ok',
+                calls: 1,
+            },
+        ]);
+    });
+
+    test('breakdown legacy arrays count confirmed loads only; byCapability exposes the full class grain', async () => {
+        const db = await setup();
+        const seed = async (
+            recordHash: string,
+            skillName: string,
+            invocationKind: 'user' | 'model',
+            capabilityKind: string | null,
+            evidenceKind: string | null,
+            status: string | null,
+        ): Promise<void> => {
+            await insertSkillCall(db, {
+                recordHash,
+                source: 'claude',
+                sessionId: 's1',
+                seq: 1,
+                skillName,
+                invocationKind,
+                startedAt: '2026-06-01T09:58:30Z',
+                status,
+                capabilityKind,
+                evidenceKind,
+            });
+        };
+        // Two confirmed command loads (distinct invocations), one failed load, one
+        // unclassified legacy row, one confirmed delegation, one model request.
+        await seed('a1', 'sp-x', 'user', 'command', 'load', 'ok');
+        await seed('a2', 'sp-x', 'user', 'command', 'load', 'ok');
+        await seed('b1', 'sp-x', 'user', 'command', 'load', 'error');
+        await seed('c1', 'sp-z', 'model', null, null, null);
+        await seed('d1', 'sp-y', 'user', 'subagent', 'delegation', 'ok');
+        await seed('e1', 'sp-y', 'model', 'command', 'request', 'ok');
+        // Materialize the rollup grain from the raw rows (first run = full rebuild).
+        await refreshHistoryBoardRollupsIncremental(db);
+        const breakdown = await historyBoardSkillBreakdownFromRollup(db, ALL, '5m');
+        // Legacy arrays: confirmed LOADS only (2 loads; the error/request/unclassified
+        // rows and the delegation — evidence_kind 'delegation', not a load — fall out).
+        expect(breakdown.bySkill).toEqual([{ skillName: 'sp-x', calls: 2 }]);
+        expect(breakdown.bySource).toEqual([{ source: 'claude', calls: 2 }]);
+        expect(breakdown.byInvocationKind).toEqual([{ invocationKind: 'user', calls: 2 }]);
+        // byCapability keeps every classified-or-not class except nameless skills.
+        expect(breakdown.byCapability).toEqual([
+            {
+                skillName: 'sp-x',
+                capabilityKind: 'command',
+                invocationKind: 'user',
+                evidenceKind: 'load',
+                status: 'ok',
+                calls: 2,
+            },
+            {
+                skillName: 'sp-x',
+                capabilityKind: 'command',
+                invocationKind: 'user',
+                evidenceKind: 'load',
+                status: 'error',
+                calls: 1,
+            },
+            {
+                skillName: 'sp-y',
+                capabilityKind: 'command',
+                invocationKind: 'model',
+                evidenceKind: 'request',
+                status: 'ok',
+                calls: 1,
+            },
+            {
+                skillName: 'sp-y',
+                capabilityKind: 'subagent',
+                invocationKind: 'user',
+                evidenceKind: 'delegation',
+                status: 'ok',
+                calls: 1,
+            },
+            {
+                skillName: 'sp-z',
+                capabilityKind: null,
+                invocationKind: 'model',
+                evidenceKind: null,
+                status: 'unknown',
+                calls: 1,
+            },
+        ]);
+    });
+
+    test('a late outcome update lands in the original event bucket via the session-join repair pass', async () => {
+        const db = await setup();
+        // Journal v1: message + unclassified skill row (outcome pending).
+        await insertMessage(db, {
+            recordHash: 'm1',
+            sessionId: 's-late',
+            seq: 1,
+            ts: '2026-06-01T09:58:30Z',
+            importedAt: '2026-06-01T09:00:00Z',
+        });
+        await insertSkillCall(db, {
+            recordHash: 'sc1',
+            source: 'claude',
+            sessionId: 's-late',
+            seq: 1,
+            skillName: 'sp-x',
+            invocationKind: 'user',
+            startedAt: '2026-06-01T09:58:40Z',
+            status: null,
+            invocationId: 'inv-9',
+        });
+        await refreshHistoryBoardRollupsIncremental(db);
+        expect(
+            await db.queryFirst<Record<string, string | number>>(
+                "SELECT capability_kind, evidence_kind, status, calls FROM history_board_skill_5m WHERE bucket_start = '2026-06-01T09:58:00Z'",
+            ),
+        ).toEqual({ capability_kind: '', evidence_kind: '', status: 'unknown', calls: 1 });
+
+        // Journal v2 (re-import of the same session): the outcome update rewrites the skill
+        // row in place by record_hash WITHOUT bumping imported_at — invisible to the
+        // message watermark. The replayed message row (INSERT OR REPLACE, new imported_at)
+        // is the delta the repair pass joins.
+        await db.run(
+            `INSERT OR REPLACE INTO history_message (record_hash, source, source_file, source_line,
+                 session_id, seq, role, record_type, disposition, ts, provenance, imported_at)
+             VALUES ('m1', 'claude', 'test.jsonl', 1, 's-late', 1, 'assistant', 'message',
+                     'conversation', '2026-06-01T09:58:30Z', 'agent', '2026-06-01T10:00:00Z')`,
+        );
+        await db.run(
+            "UPDATE history_skill_call SET status = 'ok', evidence_kind = 'load', capability_kind = 'command' WHERE record_hash = 'sc1'",
+        );
+        await refreshHistoryBoardRollupsIncremental(db);
+        expect(
+            await db.queryFirst<Record<string, string | number>>(
+                "SELECT capability_kind, evidence_kind, status, calls FROM history_board_skill_5m WHERE bucket_start = '2026-06-01T09:58:00Z'",
+            ),
+        ).toEqual({ capability_kind: 'command', evidence_kind: 'load', status: 'ok', calls: 1 });
+
+        // Idempotent: refreshing again with no delta re-materializes the same bucket.
+        await refreshHistoryBoardRollupsIncremental(db);
+        expect(
+            await db.queryFirst<Record<string, string | number>>(
+                "SELECT capability_kind, evidence_kind, status, calls FROM history_board_skill_5m WHERE bucket_start = '2026-06-01T09:58:00Z'",
+            ),
+        ).toEqual({ capability_kind: 'command', evidence_kind: 'load', status: 'ok', calls: 1 });
+    });
+
+    test('design 8.3 oracle: 8 distinct classes sum to 8 in byCapability; correlated duplicates do not inflate; legacy confirmed loads sum to 3', async () => {
+        const db = await setup();
+        // The composite fixture: 2 requests, 3 successful loads (one with correlated
+        // duplicate evidence that must collapse to one rep), 1 delegation, 1 failed load,
+        // 1 unconfirmed load.
+        const oracle = [
+            {
+                hash: 'o-req-1',
+                skill: 'sp-a',
+                kind: 'model' as const,
+                cap: 'command',
+                ev: 'request',
+                st: 'ok',
+                inv: 'inv-r1',
+            },
+            {
+                hash: 'o-req-2',
+                skill: 'sp-b',
+                kind: 'user' as const,
+                cap: 'skill',
+                ev: 'request',
+                st: 'ok',
+                inv: 'inv-r2',
+            },
+            { hash: 'o-l1', skill: 'sp-a', kind: 'user' as const, cap: 'command', ev: 'load', st: 'ok', inv: 'inv-l1' },
+            // Correlated duplicate evidence for inv-l2: two raw rows, one rep.
+            { hash: 'o-l2a', skill: 'sp-b', kind: 'model' as const, cap: 'skill', ev: 'load', st: 'ok', inv: 'inv-l2' },
+            { hash: 'o-l2b', skill: 'sp-b', kind: 'model' as const, cap: 'skill', ev: 'load', st: 'ok', inv: 'inv-l2' },
+            { hash: 'o-l3', skill: 'sp-c', kind: 'user' as const, cap: 'command', ev: 'load', st: 'ok', inv: 'inv-l3' },
+            {
+                hash: 'o-del-1',
+                skill: 'sp-a',
+                kind: 'user' as const,
+                cap: 'subagent',
+                ev: 'delegation',
+                st: 'ok',
+                inv: 'inv-d1',
+            },
+            {
+                hash: 'o-fail-1',
+                skill: 'sp-c',
+                kind: 'user' as const,
+                cap: 'command',
+                ev: 'load',
+                st: 'error',
+                inv: 'inv-f1',
+            },
+            {
+                hash: 'o-unc-1',
+                skill: 'sp-c',
+                kind: 'user' as const,
+                cap: 'skill',
+                ev: 'load',
+                st: null,
+                inv: 'inv-u1',
+            },
+        ];
+        for (const [i, row] of oracle.entries()) {
+            await insertSkillCall(db, {
+                recordHash: row.hash,
+                source: 'claude',
+                sessionId: 's-oracle',
+                seq: i + 1,
+                skillName: row.skill,
+                invocationKind: row.kind,
+                startedAt: '2026-06-01T09:58:30Z',
+                status: row.st,
+                capabilityKind: row.cap,
+                evidenceKind: row.ev,
+                invocationId: row.inv,
+            });
+        }
+        await refreshHistoryBoardRollupsIncremental(db);
+        const breakdown = await historyBoardSkillBreakdownFromRollup(db, ALL, '5m');
+        // Oracle: byCapability sums to 8 (9 raw rows, one correlated duplicate collapses).
+        expect(breakdown.byCapability).toHaveLength(8);
+        expect(breakdown.byCapability.reduce((acc, r) => acc + r.calls, 0)).toBe(8);
+        // Legacy arrays count confirmed loads only: exactly the 3 successful loads.
+        expect(breakdown.bySkill.reduce((acc, r) => acc + r.calls, 0)).toBe(3);
+        expect(breakdown.bySource.reduce((acc, r) => acc + r.calls, 0)).toBe(3);
+        expect(breakdown.byInvocationKind).toEqual([
+            { invocationKind: 'user', calls: 2 },
+            { invocationKind: 'model', calls: 1 },
+        ]);
+        // Requests and outcome classes stay visible separately (design 8.3 freeze).
+        const classes = breakdown.byCapability.map((r) => `${r.evidenceKind}/${r.status}/${r.calls}`);
+        expect(classes).toContain('request/ok/1');
+        expect(classes).toContain('delegation/ok/1');
+        expect(classes).toContain('load/error/1');
+        expect(classes).toContain('load/unknown/1');
+        expect(classes.filter((c) => c === 'load/ok/1')).toHaveLength(3);
     });
 });

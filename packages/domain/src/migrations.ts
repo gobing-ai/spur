@@ -861,6 +861,43 @@ CREATE TABLE IF NOT EXISTS history_board_skill_5m (
 CREATE INDEX IF NOT EXISTS idx_history_board_skill_5m_skill_bucket
     ON history_board_skill_5m (skill_name, bucket_start);
 `;
+/**
+ * Migration 0050 (E93 task 1029): extend the materialized skill rollup to the
+ * classification grain. `capability_kind` / `evidence_kind` / `status` carry the class a
+ * bucketed count belongs to, so reads count confirmed loads (legacy arrays) separately
+ * from requests and surface unclassified/unknown-origin usage as its own dimension
+ * (design history-capability-detection §8.3).
+ *
+ * The classification columns join the PRIMARY KEY — one bucket can hold confirmed-load
+ * and request rows for the same (source, skill, invocation_kind) — so a column-add
+ * cannot express it: standard shadow-table rebuild (0035 precedent). Existing rows copy
+ * over with the '' unclassified sentinel; the rollup definition bump (v6 -> v7) then
+ * forces a full rebuild on the next analyze, regenerating every row at the new grain
+ * from `history_skill_call`. The INSERT names explicit '' literals (never the source
+ * table's classification columns), so the statements also apply cleanly over the
+ * fresh-DB shape where 0032 already created the extended grain.
+ */
+export const HISTORY_BOARD_SKILL_5M_CAPABILITY_GRAIN_SCHEMA_SQL = `
+CREATE TABLE history_board_skill_5m_capability_grain (
+    bucket_start    TEXT NOT NULL,
+    source          TEXT NOT NULL,
+    skill_name      TEXT NOT NULL,
+    invocation_kind TEXT NOT NULL,
+    capability_kind TEXT NOT NULL DEFAULT '',
+    evidence_kind   TEXT NOT NULL DEFAULT '',
+    status          TEXT NOT NULL DEFAULT '',
+    calls           INTEGER NOT NULL,
+    PRIMARY KEY (bucket_start, source, skill_name, invocation_kind, capability_kind, evidence_kind, status)
+);
+INSERT INTO history_board_skill_5m_capability_grain
+    (bucket_start, source, skill_name, invocation_kind, capability_kind, evidence_kind, status, calls)
+SELECT bucket_start, source, skill_name, invocation_kind, '', '', '', calls
+FROM history_board_skill_5m;
+DROP TABLE history_board_skill_5m;
+ALTER TABLE history_board_skill_5m_capability_grain RENAME TO history_board_skill_5m;
+CREATE INDEX IF NOT EXISTS idx_history_board_skill_5m_skill_bucket
+    ON history_board_skill_5m (skill_name, bucket_start);
+`;
 
 export const HISTORY_MESSAGE_TS_NULLABLE_SCHEMA_SQL = `
 CREATE TABLE history_message_rebuild (
@@ -1546,6 +1583,13 @@ export const CLI_MIGRATIONS: CliMigration[] = [
         sql: CLI_RUNS_TERMINAL_REASON_SCHEMA_SQL,
         addColumnIfMissing: { table: 'runs', column: 'terminal_reason' },
     },
+    {
+        // E93 1029: skill rollup classification grain (see the constant's doc for the
+        // shadow-rebuild rationale). Journals without executing when the table is absent
+        // (foundation-only journals); fresh DBs create the extended grain via 0032 + 0050.
+        id: '0050_spur_cli_history_board_skill_5m_capability_grain',
+        sql: HISTORY_BOARD_SKILL_5M_CAPABILITY_GRAIN_SCHEMA_SQL,
+    },
 ];
 
 /** Filename marker for regenerated CLI-owned migrations. */
@@ -1780,6 +1824,13 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
         const runsTerminalReasonSkip =
             migration.id === '0049_spur_cli_runs_terminal_reason' && !(await tableExists(adapter, 'runs'));
 
+        // 0050 rebuilds history_board_skill_5m — same table-absence shape as 0041/0049:
+        // a foundation-only journal has no skill rollup to rebuild; fresh DBs create the
+        // extended grain through 0032 and 0050 in order.
+        const skillCapabilityGrainSkip =
+            migration.id === '0050_spur_cli_history_board_skill_5m_capability_grain' &&
+            !(await tableExists(adapter, 'history_board_skill_5m'));
+
         // 0043 ALTERs inbox_messages — same table-absence shape as 0041/0027.
         const inboxRequestKeySkip =
             migration.id === '0043_spur_cli_inbox_messages_request_key' &&
@@ -1842,6 +1893,7 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
             !schedulerCustomActiveIndexSkip &&
             !queueJobsDeadlineLeaseSkip &&
             !runsTerminalReasonSkip &&
+            !skillCapabilityGrainSkip &&
             !inboxRequestKeySkip &&
             !coordinationReceiptColumnsSkip &&
             !historyToolIdentitySkip &&

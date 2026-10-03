@@ -80,20 +80,48 @@ END`;
 
 const HISTORY_BOARD_ROLLUP_VERSION = 2;
 
-/** Materialized skill-call rollup row keyed on (bucket_start, source, skill_name, invocation_kind). */
+/** Materialized skill-call rollup row keyed on the classification grain (E93 task 1029). */
 export interface HistoryBoardSkill5mRow {
     bucketStart: string;
     source: string;
     skillName: string;
     invocationKind: string;
+    /** Capability class (`command` | `subagent` | `skill`); '' is the unclassified sentinel. */
+    capabilityKind: string;
+    /** Evidence class (`request` | `load` | `delegation`); '' is the unclassified sentinel. */
+    evidenceKind: string;
+    /** Class status after ok > error > unknown precedence across the invocation's rows. */
+    status: string;
+    /** Distinct representative invocations bucketed here — never raw row counts. */
     calls: number;
 }
 
-/** Skill-load breakdown computed from the materialized skill rollup. */
+/** One classified capability-usage row (skill x kind x invoker x evidence x status). */
+export interface HistoryBoardCapabilityRow {
+    skillName: string;
+    /** `command` | `subagent` | `skill`; null = unclassified (legacy or unresolved origin). */
+    capabilityKind: string | null;
+    invocationKind: string;
+    /** `request` | `load` | `delegation`; null = unclassified. */
+    evidenceKind: string | null;
+    /** `ok` | `error` | `unknown`; null = unclassified. */
+    status: string | null;
+    calls: number;
+}
+
+/** Skill-load breakdown computed from the materialized skill rollup (E93 task 1029). */
 export interface HistoryBoardSkillBreakdown {
+    /**
+     * Confirmed loads only: `evidence_kind = 'load' AND status = 'ok'`. The legacy
+     * arrays narrow from all skill-call rows to verified loads — requests, errors,
+     * and unclassified rows are surfaced through {@link byCapability} instead
+     * (design history-capability-detection §8.3).
+     */
     bySkill: HistoryBoardSkillRow[];
     bySource: Array<{ source: string; calls: number }>;
     byInvocationKind: Array<{ invocationKind: string; calls: number }>;
+    /** Classified capability usage, including requests and unknown-origin rows. */
+    byCapability: HistoryBoardCapabilityRow[];
     trend: BucketedTokenRow[];
 }
 
@@ -266,18 +294,66 @@ export async function markHistoryBoardRollupsRefreshed(db: DbAdapter, historyVer
  * window/source filters, matching the other board rollups.
  */
 export async function skillCallRollup(db: DbAdapter): Promise<HistoryBoardSkill5mRow[]> {
-    return db.queryAll<HistoryBoardSkill5mRow>(
-        `SELECT strftime('%Y-%m-%dT%H:%M:00Z', CAST(strftime('%s', started_at) / 60 * 60 AS INTEGER), 'unixepoch') AS bucketStart,
-                source,
-                skill_name AS skillName,
-                invocation_kind AS invocationKind,
-                COUNT(*) AS calls
-         FROM history_skill_call
-         WHERE started_at IS NOT NULL
-         GROUP BY bucketStart, source, skillName, invocationKind
-         ORDER BY bucketStart ASC, source ASC`,
-    );
+    return db.queryAll<HistoryBoardSkill5mRow>(SKILL_ROLLUP_REP_SQL);
 }
+
+/**
+ * The skill-call measure (E93 task 1029): representatives before bucketing.
+ *
+ * One representative per (source, session, invocation_key, invocation_kind, evidence_kind)
+ * class — `invocation_key` is the importer's `invocation_id` with a record-hash fallback —
+ * so an invocation re-imported across sources or split rows counts once, while its CLASS
+ * status takes the ok > error > unknown precedence across ALL the invocation's rows (a
+ * command whose correlated load completed is 'ok' even when a stale 'error' row remains).
+ * Each class materializes on its representative's `started_at` bucket with COUNT(*) over
+ * representatives — distinct invocations, never raw rows (design §8.3).
+ */
+const SKILL_ROLLUP_REP_SQL = `
+WITH scoped AS (
+    SELECT record_hash, source, skill_name, session_id, invocation_kind, started_at, status,
+           COALESCE(NULLIF(invocation_id, ''), 'h:' || record_hash) AS invocation_key,
+           COALESCE(capability_kind, '') AS capability_kind,
+           COALESCE(evidence_kind, '') AS evidence_kind
+    FROM history_skill_call
+    WHERE started_at IS NOT NULL
+),
+repped AS (
+    SELECT scoped.*,
+           ROW_NUMBER() OVER (
+               PARTITION BY scoped.source, scoped.session_id, scoped.invocation_key,
+                            scoped.invocation_kind, scoped.capability_kind, scoped.evidence_kind
+               ORDER BY scoped.started_at ASC, scoped.record_hash ASC
+           ) AS rep_rank,
+           CASE
+               WHEN SUM(scoped.status = 'ok') OVER (
+                        PARTITION BY scoped.source, scoped.session_id, scoped.invocation_key,
+                                     scoped.invocation_kind, scoped.capability_kind, scoped.evidence_kind
+                    ) > 0 THEN 'ok'
+               WHEN SUM(scoped.status = 'error') OVER (
+                        PARTITION BY scoped.source, scoped.session_id, scoped.invocation_key,
+                                     scoped.invocation_kind, scoped.capability_kind, scoped.evidence_kind
+                    ) > 0 THEN 'error'
+               ELSE 'unknown'
+           END AS class_status
+    FROM scoped
+)
+SELECT strftime('%Y-%m-%dT%H:%M:00Z', CAST(strftime('%s', started_at) / 60 * 60 AS INTEGER), 'unixepoch') AS bucketStart,
+       source,
+       skill_name AS skillName,
+       invocation_kind AS invocationKind,
+       capability_kind AS capabilityKind,
+       evidence_kind AS evidenceKind,
+       class_status AS status,
+       COUNT(*) AS calls
+FROM repped
+WHERE rep_rank = 1
+GROUP BY bucketStart, source, skillName, invocationKind, capabilityKind, evidenceKind, status
+ORDER BY bucketStart ASC, source ASC`;
+
+/** INSERT for one materialized skill_5m row at the classification grain. */
+const SKILL_5M_INSERT_SQL = `INSERT INTO history_board_skill_5m (
+        bucket_start, source, skill_name, invocation_kind, capability_kind, evidence_kind, status, calls
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
 
 /**
  * True only when every rollup table's watermark covers the latest imported row
@@ -533,12 +609,23 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
     appendRankedSteps(operations, 'duration', seed.durationSteps);
     appendRankedSteps(operations, 'cache-waste', seed.cacheWasteSteps);
 
+    // Passthrough path (E93 1029): seed rows replay VERBATIM — pre-classification rows keep
+    // the schema's '' sentinels (migration 0050 copies identically). '' means "predates the
+    // status/class dimension"; only the derive-from-skill_call path computes vocabulary
+    // classes (rep-SQL CASE ELSE 'unknown'), and the reader's NULLIF maps '' to null.
     for (const row of seed.skill5m ?? []) {
         operations.push({
-            sql: `INSERT INTO history_board_skill_5m (
-                    bucket_start, source, skill_name, invocation_kind, calls
-                ) VALUES (?, ?, ?, ?, ?)`,
-            params: [row.bucketStart, row.source, row.skillName, row.invocationKind, row.calls],
+            sql: SKILL_5M_INSERT_SQL,
+            params: [
+                row.bucketStart,
+                row.source,
+                row.skillName,
+                row.invocationKind,
+                row.capabilityKind,
+                row.evidenceKind,
+                row.status,
+                row.calls,
+            ],
         });
     }
 
@@ -1129,8 +1216,15 @@ export async function historyBoardSourcesFromRollup(
 
 /**
  * Skill-load breakdown from the materialized skill rollup — never scans
- * `history_skill_call`. Counts by skill, source, invocation_kind, plus a bucketed
- * call-count trend over the selected window, all filtered through the shared selectors.
+ * `history_skill_call`. The legacy arrays count CONFIRMED LOADS only
+ * (`evidence_kind = 'load' AND status = 'ok'`): a request row and a load row for the
+ * same invocation are different materialized classes, and only the load certifies a
+ * completed execution (E93 task 1029; design §8.3 documents the intentional break
+ * from the pre-1029 all-rows count). Unclassified rows (legacy '' sentinels) fall out
+ * of the legacy arrays and surface through `byCapability` as null-class usage instead.
+ * `byCapability` adds the classified dimension — skill x capability_kind x invocation_kind
+ * x evidence_kind x status — bounded top-10 like `bySkill`, same selector filters,
+ * excluding empty/'unknown' skill names.
  */
 export async function historyBoardSkillBreakdownFromRollup(
     db: DbAdapter,
@@ -1156,12 +1250,18 @@ export async function historyBoardSkillBreakdownFromRollup(
         clauses.push(`r.skill_name IN (${validSkills.map(() => '?').join(', ')})`);
         params.push(...validSkills);
     }
-    // Selector-only predicate (shared by the four grouping queries).
-    const where = clauses.length > 0 ? ` WHERE ${clauses.join(' AND ')}` : '';
-    // bySkill additionally excludes empty / 'unknown' skill names (mirrors the parallel
-    // skill query), so a bogus 'unknown' top-skill is never surfaced (0737 R7).
-    const skillWhere = `${where}${where ? ' AND' : ' WHERE'} r.skill_name <> '' AND r.skill_name <> 'unknown'`;
-    const [bySkill, bySource, byInvocationKind, trend] = await Promise.all([
+    // Selector-only predicate (shared by every grouping query).
+    const selectorWhere = clauses.length > 0 ? ` WHERE ${clauses.join(' AND ')}` : '';
+    // Confirmed-load predicate (E93 task 1029): the legacy arrays narrow to verified
+    // loads; requests/errors stay visible only through byCapability.
+    const confirmedWhere = `${selectorWhere}${selectorWhere ? ' AND' : ' WHERE'} r.evidence_kind = 'load' AND r.status = 'ok'`;
+    // bySkill/trend additionally exclude empty / 'unknown' skill names (mirrors the
+    // parallel skill query), so a bogus 'unknown' top-skill is never surfaced (0737 R7).
+    const skillWhere = `${confirmedWhere} AND r.skill_name <> '' AND r.skill_name <> 'unknown'`;
+    // byCapability keeps the selector-only scope (plus the name exclusion): unclassified
+    // rows ('' sentinels) surface here as null-class usage instead of the legacy arrays.
+    const capabilityWhere = `${selectorWhere}${selectorWhere ? ' AND' : ' WHERE'} r.skill_name <> '' AND r.skill_name <> 'unknown'`;
+    const [bySkill, bySource, byInvocationKind, byCapability, trend] = await Promise.all([
         db.queryAll<HistoryBoardSkillRow>(
             `SELECT r.skill_name AS skillName, SUM(r.calls) AS calls
              FROM history_board_skill_5m r${skillWhere}
@@ -1170,14 +1270,27 @@ export async function historyBoardSkillBreakdownFromRollup(
         ),
         db.queryAll<{ source: string; calls: number }>(
             `SELECT r.source AS source, SUM(r.calls) AS calls
-             FROM history_board_skill_5m r${where}
+             FROM history_board_skill_5m r${confirmedWhere}
              GROUP BY r.source ORDER BY calls DESC, r.source ASC`,
             ...params,
         ),
         db.queryAll<{ invocationKind: string; calls: number }>(
             `SELECT r.invocation_kind AS invocationKind, SUM(r.calls) AS calls
-             FROM history_board_skill_5m r${where}
+             FROM history_board_skill_5m r${confirmedWhere}
              GROUP BY r.invocation_kind ORDER BY calls DESC, r.invocation_kind ASC`,
+            ...params,
+        ),
+        db.queryAll<HistoryBoardCapabilityRow>(
+            `SELECT r.skill_name AS skillName,
+                    NULLIF(r.capability_kind, '') AS capabilityKind,
+                    r.invocation_kind AS invocationKind,
+                    NULLIF(r.evidence_kind, '') AS evidenceKind,
+                    NULLIF(r.status, '') AS status,
+                    SUM(r.calls) AS calls
+             FROM history_board_skill_5m r${capabilityWhere}
+             GROUP BY r.skill_name, r.capability_kind, r.invocation_kind, r.evidence_kind, r.status
+             ORDER BY calls DESC, r.skill_name ASC, r.invocation_kind ASC, r.evidence_kind ASC, r.status ASC
+             LIMIT 10`,
             ...params,
         ),
         db.queryAll<BucketedTokenRow>(
@@ -1188,7 +1301,7 @@ export async function historyBoardSkillBreakdownFromRollup(
             ...params,
         ),
     ]);
-    return { bySkill, bySource, byInvocationKind, trend };
+    return { bySkill, bySource, byInvocationKind, byCapability, trend };
 }
 
 /** Exact SQLite database bytes used as the honest corpus-store size. */
@@ -1494,18 +1607,93 @@ function tool5mBucketOps(bucket: string): DbBatchOp[] {
     ];
 }
 
+/**
+ * Per-bucket skill_5m re-derivation at the classification grain (E93 task 1029).
+ *
+ * Incremental correctness needs CLASS-level scope, not row scope: an invocation's
+ * representative can move between buckets only when its rows move, but its class
+ * STATUS can flip from a row that lands in ANY bucket (e.g. an outcome update whose
+ * `started_at` sits elsewhere). So the touched set is the classes owning >= 1 row
+ * inside the bucket window; each touched class is then re-derived from ALL its rows
+ * (representative + class status), and only representatives whose own bucket is this
+ * bucket materialize here.
+ */
 function skill5mBucketOps(bucket: string): DbBatchOp[] {
+    const partition = `PARTITION BY scoped.source, scoped.session_id, scoped.invocation_key,
+                                scoped.invocation_kind, scoped.capability_kind, scoped.evidence_kind`;
     return [
         { sql: 'DELETE FROM history_board_skill_5m WHERE bucket_start = ?', params: [bucket] },
         {
-            sql: `INSERT INTO history_board_skill_5m (bucket_start, source, skill_name, invocation_kind, calls)
-                  SELECT ${SKILL_BUCKET_5M_SQL} AS bucket_start, source, skill_name, invocation_kind, COUNT(*) AS calls
-                  FROM history_skill_call
-                  WHERE started_at IS NOT NULL AND ${bucketWindow('started_at')} AND ${SKILL_BUCKET_5M_SQL} = ?
-                  GROUP BY bucket_start, source, skill_name, invocation_kind`,
-            params: [bucket, bucket, bucket],
+            sql: `INSERT INTO history_board_skill_5m (
+                      bucket_start, source, skill_name, invocation_kind, capability_kind, evidence_kind, status, calls
+                  )
+                  WITH scoped AS (
+                      SELECT record_hash, source, skill_name, session_id, invocation_kind, started_at, status,
+                             COALESCE(NULLIF(invocation_id, ''), 'h:' || record_hash) AS invocation_key,
+                             COALESCE(capability_kind, '') AS capability_kind,
+                             COALESCE(evidence_kind, '') AS evidence_kind
+                      FROM history_skill_call
+                      WHERE started_at IS NOT NULL
+                  ),
+                  touched AS (
+                      SELECT DISTINCT source, session_id, invocation_key, invocation_kind,
+                                     capability_kind, evidence_kind
+                      FROM scoped
+                      WHERE ${bucketWindow('started_at')} AND ${SKILL_BUCKET_5M_SQL} = ?
+                  ),
+                  repped AS (
+                      SELECT scoped.*,
+                             ROW_NUMBER() OVER (${partition}
+                                 ORDER BY scoped.started_at ASC, scoped.record_hash ASC) AS rep_rank,
+                             CASE
+                                 WHEN SUM(scoped.status = 'ok') OVER (${partition}) > 0 THEN 'ok'
+                                 WHEN SUM(scoped.status = 'error') OVER (${partition}) > 0 THEN 'error'
+                                 ELSE 'unknown'
+                             END AS class_status
+                      FROM scoped
+                      JOIN touched
+                        ON touched.source = scoped.source
+                       AND touched.session_id = scoped.session_id
+                       AND touched.invocation_key = scoped.invocation_key
+                       AND touched.invocation_kind = scoped.invocation_kind
+                       AND touched.capability_kind = scoped.capability_kind
+                       AND touched.evidence_kind = scoped.evidence_kind
+                  )
+                  SELECT ${SKILL_BUCKET_5M_SQL} AS bucket_start, source, skill_name, invocation_kind,
+                         capability_kind, evidence_kind, class_status AS status, COUNT(*) AS calls
+                  FROM repped
+                  WHERE rep_rank = 1 AND ${SKILL_BUCKET_5M_SQL} = ?
+                  GROUP BY bucket_start, source, skill_name, invocation_kind, capability_kind, evidence_kind, status`,
+            params: [bucket, bucket, bucket, bucket],
         },
     ];
+}
+
+/**
+ * Rematerialize every skill_5m row from the rep/class measure in one batch — the
+ * fallback when the delta scope is too wide to enumerate affected skill buckets
+ * (E93 task 1029). `history_skill_call` is small relative to `history_message`, so
+ * the full arm stays the cheap escape hatch.
+ */
+async function rebuildSkill5mAll(db: DbAdapter): Promise<void> {
+    const rows = await skillCallRollup(db);
+    const ops: DbBatchOp[] = [{ sql: 'DELETE FROM history_board_skill_5m', params: [] }];
+    for (const row of rows) {
+        ops.push({
+            sql: SKILL_5M_INSERT_SQL,
+            params: [
+                row.bucketStart,
+                row.source,
+                row.skillName,
+                row.invocationKind,
+                row.capabilityKind,
+                row.evidenceKind,
+                row.status,
+                row.calls,
+            ],
+        });
+    }
+    await db.batch(ops);
 }
 
 /** Re-derive daily and source-daily for the affected days from the updated bucketed tables. */
@@ -1964,6 +2152,44 @@ async function allMaterializedDays(db: DbAdapter): Promise<string[]> {
     return rows.map((row) => row.day);
 }
 
+/** Upper bound on distinct skill buckets rebuilt by one late-result pre-pass. */
+const SKILL_LATE_BUCKET_LIMIT = 500;
+
+/**
+ * Skill buckets whose classes can have changed with NO message-delta row landing in
+ * them (E93 task 1029): the importer's `skillCallOutcomeUpdateOp` rewrites
+ * `history_skill_call` in place by record_hash and never bumps `imported_at`, so the
+ * message watermark cannot see the delta directly. A late outcome lands when the
+ * invocation's session was (re-)imported in the delta, so the affected skill buckets
+ * are those owning skill rows in a delta-touch session (same session scope the keyed
+ * aggregates use). Buckets the message delta already covers are dropped — the main
+ * per-bucket loop rebuilds them. When the session scope is too wide to enumerate, or
+ * the buckets exceed {@link SKILL_LATE_BUCKET_LIMIT}, the caller falls back to a full
+ * skill_5m rematerialization.
+ */
+async function lateSkillResultBuckets(
+    db: DbAdapter,
+    watermark: string,
+    alreadyAffected: ReadonlySet<string>,
+): Promise<{ buckets: string[]; fullRebuild: boolean }> {
+    const sessions = await deltaSessionScope(db, watermark);
+    if (sessions === null) return { buckets: [], fullRebuild: true };
+    if (sessions.length === 0) return { buckets: [], fullRebuild: false };
+    const placeholders = sessions.map(() => '?').join(', ');
+    const rows = await db.queryAll<{ bucketStart: string }>(
+        `SELECT DISTINCT ${SKILL_BUCKET_5M_SQL} AS bucketStart
+         FROM history_skill_call sc
+         WHERE sc.started_at IS NOT NULL AND sc.session_id IN (${placeholders})
+         LIMIT ${SKILL_LATE_BUCKET_LIMIT + 1}`,
+        ...sessions,
+    );
+    if (rows.length > SKILL_LATE_BUCKET_LIMIT) return { buckets: [], fullRebuild: true };
+    const buckets = [...new Set(rows.map((row) => row.bucketStart))]
+        .filter((b) => b !== '' && !alreadyAffected.has(b))
+        .sort();
+    return { buckets, fullRebuild: false };
+}
+
 /** True when any post-pass table's watermark lags the bucket-level watermark (interrupted post-pass). */
 async function postPassLags(db: DbAdapter, bucketWatermark: string): Promise<boolean> {
     const watermarks = await readRollupWatermarks(db);
@@ -2000,6 +2226,22 @@ export async function refreshHistoryBoardRollupsIncremental(db: DbAdapter): Prom
         await applyToolAliases(db, { sources: deltaSources, since: messageWm.importedAtWatermark });
     }
     const affected = await affectedBucketsWithRange(db, messageWm.importedAtWatermark);
+    // E93 1029: outcome updates rewrite history_skill_call in place without bumping
+    // imported_at, so skill buckets can change with no message-delta row in them.
+    // Rebuild those buckets BEFORE the main loop; the pre-pass advances no watermark
+    // (pure idempotent repair — an interruption just repeats it next run).
+    const skillLate = await lateSkillResultBuckets(
+        db,
+        messageWm.importedAtWatermark,
+        new Set(affected.map((a) => a.bucket)),
+    );
+    if (skillLate.fullRebuild) {
+        await rebuildSkill5mAll(db);
+    } else {
+        for (const skillBucket of skillLate.buckets) {
+            await db.batch(skill5mBucketOps(skillBucket));
+        }
+    }
     let advanced = messageWm.importedAtWatermark;
 
     if (affected.length > 0) {

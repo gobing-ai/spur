@@ -66,6 +66,16 @@ const summary: HistorySummaryResponse['data'] = {
         bySkill: [{ skillName: 'sp-dev-verify', calls: 1 }],
         bySource: [{ source: 'codex', calls: 1 }],
         byInvocationKind: [{ invocationKind: 'model', calls: 1 }],
+        byCapability: [
+            {
+                skillName: 'sp-dev-verify',
+                capabilityKind: 'skill',
+                invocationKind: 'model',
+                evidenceKind: 'load',
+                status: 'ok',
+                calls: 1,
+            },
+        ],
         trend: [{ bucketStart: '2026-08-21', cacheHitRatio: 0, series: { 'sp-dev-verify': 1 } }],
         fresh: true,
     },
@@ -396,11 +406,58 @@ describe('History Board components', () => {
             <SummaryTab
                 data={{
                     ...summary,
-                    skillBreakdown: { bySkill: [], bySource: [], byInvocationKind: [], trend: [], fresh: true },
+                    skillBreakdown: {
+                        bySkill: [],
+                        bySource: [],
+                        byInvocationKind: [],
+                        byCapability: [],
+                        trend: [],
+                        fresh: true,
+                    },
                 }}
             />,
         );
         expect(view.getByText('No skill activity recorded for this window.')).toBeDefined();
+    });
+
+    test('Summary renders the by-capability usage rows with kind, evidence, and status (E93 1029)', () => {
+        const view = render(<SummaryTab data={summary} />);
+        const section = view.getByTestId('summary-skill-breakdown');
+        expect(section.textContent).toContain('By Capability');
+        expect(section.textContent).toContain('sp-dev-verify');
+        expect(section.textContent).toContain('skill');
+        expect(section.textContent).toContain('load');
+        // 1 call — the rep-count measure, not raw rows (the value renders as a bare number).
+        const spans1 = [...section.querySelectorAll('span')].map((x) => x.textContent);
+        expect(spans1).toContain('1');
+        // A non-ok class status renders in the warning tone (class marker present).
+        const { rerender } = view;
+        rerender(
+            <SummaryTab
+                data={{
+                    ...summary,
+                    skillBreakdown: {
+                        ...summary.skillBreakdown,
+                        byCapability: [
+                            {
+                                skillName: 'sp-dev-verify',
+                                capabilityKind: 'command',
+                                invocationKind: 'user',
+                                evidenceKind: 'load',
+                                status: 'error',
+                                calls: 2,
+                            },
+                        ],
+                    },
+                }}
+            />,
+        );
+        const errSection = view.getByTestId('summary-skill-breakdown');
+        expect(errSection.textContent).toContain('command');
+        // Non-ok class statuses render in the warning tone; ok stays chip-less.
+        expect(errSection.textContent).toContain('error');
+        const spans2 = [...errSection.querySelectorAll('span')].map((x) => x.textContent);
+        expect(spans2).toContain('2');
     });
 
     test('Sources renders vector agent icons, telemetry tooltip, and queued import state', async () => {

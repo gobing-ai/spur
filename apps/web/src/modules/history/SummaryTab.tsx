@@ -1,5 +1,6 @@
 import type {
     HistoryBucket,
+    HistoryCapabilityUsage,
     HistoryDimension,
     HistorySummaryResponse,
     HistoryTopItem,
@@ -387,9 +388,12 @@ export const SummaryTab: React.FC<SummaryTabProps> = memo(
             bySkill: [],
             bySource: [],
             byInvocationKind: [],
+            byCapability: [],
             trend: [],
             fresh: true,
         };
+        // Older APIs predate the classified dimension; absence renders as an empty block.
+        const capabilityRows: HistoryCapabilityUsage[] = skillBreakdown.byCapability ?? [];
         const modelTimeSeries = data?.modelTimeSeries ?? [];
         const sourceTimeSeries = data?.sourceTimeSeries ?? [];
         const toolTimeSeries = data?.toolTimeSeries ?? [];
@@ -1057,7 +1061,7 @@ export const SummaryTab: React.FC<SummaryTabProps> = memo(
                         <div className="flex flex-col items-center justify-center text-[11px] text-base-content/40 font-mono border border-dashed border-base-content/10 rounded-xl bg-base-100/30 py-6">
                             <span>Skill rollup not yet built — run history analyze to populate this section.</span>
                         </div>
-                    ) : skillBreakdown.bySkill.length > 0 ? (
+                    ) : skillBreakdown.bySkill.length > 0 || capabilityRows.length > 0 ? (
                         <>
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-mono">
                                 <div>
@@ -1106,6 +1110,45 @@ export const SummaryTab: React.FC<SummaryTabProps> = memo(
                                     </div>
                                 </div>
                             </div>
+                            {/* E93 1029: classified usage - requests, loads, delegations, and
+                                unknown-origin rows; separate from the confirmed-load arrays. */}
+                            {capabilityRows.length > 0 && (
+                                <div>
+                                    <h5 className="font-bold text-xs mb-2 text-base-content/60">By Capability</h5>
+                                    <div className="flex flex-col gap-1.5">
+                                        {capabilityRows.map((row, i) => (
+                                            <div
+                                                key={`${row.skillName}-${row.capabilityKind ?? 'unknown'}-${row.invocationKind}-${row.evidenceKind ?? 'unknown'}-${row.status ?? 'unknown'}`}
+                                                className="flex justify-between items-center gap-2 text-xs font-mono"
+                                            >
+                                                <span className="flex items-center gap-1.5 min-w-0">
+                                                    <span
+                                                        className="w-2 h-2 rounded-full shrink-0"
+                                                        style={{
+                                                            background:
+                                                                SERIES_COLORS[i % SERIES_COLORS.length] ?? '#3987e5',
+                                                        }}
+                                                    />
+                                                    <span className="truncate">{row.skillName}</span>
+                                                    <span className="text-base-content/50 shrink-0">
+                                                        {row.capabilityKind ?? 'unknown'}
+                                                    </span>
+                                                    <span
+                                                        className="shrink-0 px-1 rounded border border-base-content/10"
+                                                        title={`evidence: ${row.evidenceKind ?? 'unknown'}`}
+                                                    >
+                                                        {row.evidenceKind ?? 'unknown'}
+                                                    </span>
+                                                    {row.status !== null && row.status !== 'ok' && (
+                                                        <span className="shrink-0 text-warning">{row.status}</span>
+                                                    )}
+                                                </span>
+                                                <span className="font-bold tabular-nums">{fmtInt(row.calls)}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                             {skillBreakdownTrendBuckets.length > 0 && (
                                 <div>
                                     <h5 className="font-bold text-xs mb-2 text-base-content/60">Skill Call Trend</h5>

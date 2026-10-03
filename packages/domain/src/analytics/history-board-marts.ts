@@ -202,9 +202,11 @@ export function deriveDimensionMartsOps(days: readonly string[]): DbBatchOp[] {
                     WHERE ${TOOL_DAY_PRED}
                     GROUP BY t.source
                 ), skills AS (
+                    -- E93 1029: confirmed loads only — requests and unclassified rows are
+                    -- separate materialized classes and must not inflate the source mart.
                     SELECT s.source, SUM(s.calls) AS skill_calls
                     FROM history_board_skill_5m s
-                    WHERE ${SKILL_DAY_PRED}
+                    WHERE ${SKILL_DAY_PRED} AND s.evidence_kind = 'load' AND s.status = 'ok'
                     GROUP BY s.source
                 )
                 SELECT 'source', msg.source, ?, msg.messages, COALESCE(tools.tool_calls, 0),

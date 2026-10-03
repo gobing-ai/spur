@@ -328,6 +328,7 @@ async function computeSummaryExtrasFromMart(
             bySkill: skillBreakdownRaw.bySkill,
             bySource: skillBreakdownRaw.bySource,
             byInvocationKind: skillBreakdownRaw.byInvocationKind,
+            byCapability: skillBreakdownRaw.byCapability,
             trend: projectSkillTimeSeries(skillBreakdownRaw.trend),
             fresh: true,
         },
@@ -693,6 +694,7 @@ async function computeSummaryExtras(
             bySkill: skillBreakdownRaw.bySkill,
             bySource: skillBreakdownRaw.bySource,
             byInvocationKind: skillBreakdownRaw.byInvocationKind,
+            byCapability: skillBreakdownRaw.byCapability,
             trend: projectSkillTimeSeries(skillBreakdownRaw.trend),
             // AC5: the not-fresh (`exact`) path reads a rollup that may not yet be rebuilt
             // (between import and analyze); surface that explicitly instead of a silent-empty
@@ -923,6 +925,7 @@ export class LiveHistoryBoardService implements HistoryBoardService {
                     bySkill: [],
                     bySource: [],
                     byInvocationKind: [],
+                    byCapability: [],
                     trend: [],
                     fresh: true,
                 },
