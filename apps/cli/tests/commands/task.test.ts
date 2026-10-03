@@ -687,11 +687,11 @@ describe('spur task CLI', () => {
         const tableFile = join(cwd, 'review-table.md');
         await Bun.write(
             tableFile,
-            [
+            `${[
                 '| Priority | Dimension | Location | Finding |',
                 '|----------|-----------|----------|---------|',
                 '| P4 | — | — | No P1–P3 findings |',
-            ].join('\n') + '\n',
+            ].join('\n')}\n`,
         );
         expect(
             await main(['task', 'update', wbs, '--section', 'Review', '--from-file', tableFile], {
