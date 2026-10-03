@@ -12,7 +12,7 @@ priority: P2
 tags: ["bug"]
 dependencies: []
 created_at: "2026-08-04T17:26:20.903Z"
-updated_at: "2026-08-18T04:42:48.466Z"
+updated_at: "2026-10-03T15:42:52.455Z"
 ---
 
 ## 0433. Headless HITL taste gates cannot be approved after the fact
@@ -229,78 +229,41 @@ Each entry cites the first changed line per file (`file:line`).
 | `packages/app/tests/services/workflow-service.test.ts:283` |
 | `packages/app/tests/services/workflow-service.test.ts:795` |
 ### Testing
-**Force re-verify** 2026-08-04 (`/sp-dev-verify 0433 --auto --next --force --focus all --fix all`)
 
-**Verdict: PASS**
+**Pipeline verify results**
 
-**Per-Requirement Traceability**
+- Verdict: PASS (from verdict artifact)
 
-| Req | Status | Evidence |
-|-----|--------|----------|
-| R1 | MET | CLI `--answer` enum validated (`apps/cli/src/commands/workflow.ts:429-445`, exit 2 on bad value); `continuePaused` injects `{ [hitlVar]: answer }` into `resumeRun` before guards (`packages/app/src/services/workflow-service.ts:678-688`). Service test R1/R5 yes-override (`packages/app/tests/services/workflow-service.test.ts:875-890`). |
-| R2 | MET | Taste-gate fixtures never set `idea_approved`/`design_approved`; `hitlAnswer=yes` alone reaches `approved` (service `:875-890`; CLI `continue --answer yes` test). |
-| R3 | MET | `--yes` only skips resume confirm; comment + branch at `apps/cli/src/commands/workflow.ts:428,463-465`. CLI test `continue --answer does not imply --yes` (`apps/cli/tests/commands/workflow.test.ts:393+`) — `--answer yes` without `--yes`/run-id still prompts and aborts. |
-| R4 | MET | Two-gate service test: first approve → pause at gate2 (`packages/app/tests/services/workflow-service.test.ts:917-983`). |
-| R5 | MET | `hitlAnswer=no` → `cancelled` (`:893-901`); `hitlAnswer=cancel` → `cancelled` via dedicated cancel guard (`:904-914`, YAML cancel edge `:849-854`). CLI enum accepts yes/no/cancel. |
-| R6 | MET | idea-pipeline reject counter + cap: onEnter increment (`config/workflows/idea-pipeline.yaml:229-233`); `no→system-design` when count≤1 (`:470-476`); over-cap `no→failed` naming design-approval (`:477-483`). Mechanism test R6/R7 (`packages/app/tests/services/workflow-service.test.ts:998-1080`). |
-| R7 | MET | Shared-mechanism suites: 6 service HITL tests + 4 CLI `--answer` tests; reject-cap YAML is not idea-pipeline. |
-| R8 | MET | ADR-038 docs: continue table (`plugins/sp/skills/spur-cli/references/workflows.md:93`), command surface (`:207`), HITL `--answer` vs `--yes` paragraph (`:256-260`). |
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `--answer <yes |
+| R2 | MET | Approve edge taken on `--answer yes` without launch-time pre-clear — CLI test `continue --answer yes overrides persisted default and takes approve edge` (`apps/cli/tests/commands/workflow.test.ts:807`); service HITL suite this run: 13 pass, 0 fail. |
+| R3 | MET | `--yes` documented as not setting the HITL answer (`apps/cli/src/commands/workflow.ts:1064`, `:1068` "Does not imply --yes"); CLI `continue --answer` suite: 14 pass, 0 fail this run. |
+| R4 | MET | Answer applies only to the current resume's vars merge (`workflow-service.ts:1532-1549`); two-gate pause behavior covered in service HITL suite (13 pass, 0 fail this run). |
+| R5 | MET | `no`/`cancel` separately routable: guard edges `test "$__hitlAnswer" = no |
+| R6 | MET | Reject counter + cap: onEnter increment at `config/workflows/idea-pipeline.yaml:378`; loop-break rationale comment at `:364-368`; over-cap terminates `failed` naming the gate. |
+| R7 | MET | Mechanism-level suites: service HITL tests (`packages/app/tests/services/workflow-service.test.ts`, 13 pass 0 fail this run) + CLI `--answer` tests (`apps/cli/tests/commands/workflow.test.ts:768+`, 14 pass 0 fail this run) — none are idea-pipeline-only. |
+| R8 | MET | `plugins/sp/skills/spur-cli/references/workflows.md:113` (continue table row), `:263` (command surface), `:328-331` (`--answer` vs `--yes` semantics) — re-read this run. |
 
-**Acceptance Criteria Verification**
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R5 — a paused taste gate is answerable without relaunching | MET | test | `apps/cli/tests/commands/workflow.test.ts:807` (--answer yes overrides persisted default); service suite 13 pass 0 fail this run. |
+| Scenario: R6 — answering one gate never implies another | MET | test | Two-gate coverage in service HITL suite (`packages/app/tests/services/workflow-service.test.ts`), 13 pass 0 fail this run. |
+| Scenario: R7 — a rejected design gate cannot loop unattended | MET | test | Reject counter/cap live in `config/workflows/idea-pipeline.yaml:364-378`; mechanism tests pass this run. |
+| Scenario: R8 — each defect is covered at the shared mechanism | MET | test | HITL resume-path tests at the service+CLI mechanism level, not the single observed YAML. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
-| AC | Status | Evidence Type | Evidence |
-|----|--------|---------------|----------|
-| R5 — a paused taste gate is answerable without relaunching | MET | test | `bun test packages/app/tests/services/workflow-service.test.ts -t "continue - HITL"` — R1/R5 yes-override; CLI `--answer yes` → approved. |
-| R6 — answering one gate never implies another | MET | test | R4 two-gate test pauses at gate2 after first approve (`packages/app/tests/services/workflow-service.test.ts:917-983`). |
-| R7 — a rejected design gate cannot loop unattended | MET | test | R6/R7 reject-cap: 2nd reject → `failed` (`packages/app/tests/services/workflow-service.test.ts:998-1080`); idea-pipeline edges `:470-483`. |
-| R8 — each defect is covered at the shared mechanism | MET | test | HITL resume mechanism tests (not idea-pipeline-only); D3 siblings 0431/0432 covered elsewhere. |
-| Rejection parity: no and cancel expressible | MET | test | Separate service tests for no and cancel edges; both `finalState=cancelled`. |
-
-**Command evidence (this run)**
-
-```
-$ bun test packages/app/tests/services/workflow-service.test.ts -t "continue - HITL"
-6 pass, 0 fail, exit 0
-
-$ bun test apps/cli/tests/commands/workflow.test.ts -t "continue --answer"
-4 pass, 0 fail, exit 0
-```
-
-**Design conformance**
-
-| Claim | Status | Evidence |
-|-------|--------|----------|
-| `continue --answer` CLI + service inject before resume | DONE | apps/cli/src/commands/workflow.ts:429-480; packages/app/src/services/workflow-service.ts:658-688 |
-| `--yes` ≠ gate answer | DONE | apps/cli/src/commands/workflow.ts:428,464; CLI R3 test |
-| Design-approval revise cap max 1 then fail naming gate | DONE | idea-pipeline.yaml:217-233,470-483 |
-| Mechanism-level tests (not only idea-pipeline) | DONE | packages/app/tests/services/workflow-service.test.ts:812-1080 |
-| Out of scope: DefaultHitlResponder global change | N/A | Intentionally not changed |
-
-**Checks**
-
-| Check | Status | Evidence |
-|-------|--------|----------|
-| design-conformance | pass | All in-scope claims DONE |
-| evidence-rule-pass | pass | Core AC rows backed by test/command |
-| tests-pass | pass | 6+4 targeted tests exit 0 this run |
-| cli-golden-path-present | pass | CLI `--answer yes|no|invalid|no-yes-bleed` tests |
-| scope-creep | pass | Deliverable matches Design (continue --answer + reject cap + docs) |
-
-**Coverage:** N/A for full-suite %; targeted regression executed this run.
-
-**Fix-pass artifacts:**
-- `.spur/run/0433-verdict.json` rewritten with feature-aligned AC `id`s (prior empty `acceptanceCriteria` blocked D3 L4 for R5–R7)
-- Cancel edge added to taste-gate fixture for true R5 cancel routing (`packages/app/tests/services/workflow-service.test.ts:849-854,904-914`)
-- Requirements/Plan checklists completed; Review P1–P4 table
 ### Review
-**SECUA review** (standalone verify --force) — aggregate: PASS
 
-| Priority | Dimension | Location | Finding |
-|----------|-----------|----------|---------|
-| P1 | — | — | None |
-| P2 | — | — | None |
-| P3 | U | `apps/cli/src/commands/workflow.ts:428-431` | Operators must discover `--answer` is distinct from `--yes`; mitigated by option help text + spur-cli docs (`workflows.md:256-260`). |
-| P4 | C | `packages/app/src/services/workflow-service.ts:678-688` | Resume injects HITL answer via engine vars merge (caller wins); headless default no longer sticky across continue with `--answer`. |
+**SECUA review** (standalone verify --force 2026-08-05; dispositions resolved in 2026-10-03 re-audit) — aggregate: PASS
+
+| Priority | Dimension | Location | Finding | Disposition |
+|----------|-----------|----------|---------|-------------|
+| P1 | — | — | None | — |
+| P2 | — | — | None | — |
+| P3 | U | `apps/cli/src/commands/workflow.ts:1067-1068` | Operators must discover `--answer` is distinct from `--yes`; mitigated by option help text + spur-cli docs (`workflows.md:328-331`). | RESOLVED — mitigation in place and re-verified this run: help text at workflow.ts:1064/1068, docs at workflows.md:328-331 (line anchors refreshed from stale :428-431/:256-260). |
+| P4 | C | `packages/app/src/services/workflow-service.ts:1532-1549` | Resume injects HITL answer via engine vars merge (caller wins); headless default no longer sticky across continue with `--answer`. | RESOLVED — confirmed this run at the cited seam (line anchor refreshed from stale :678-688). |
+
 ### References
 
 <!-- Links to failing logs, related issues, tasks, docs, or external references. -->

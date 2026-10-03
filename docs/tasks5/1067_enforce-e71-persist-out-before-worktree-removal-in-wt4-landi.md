@@ -4,7 +4,7 @@ name: enforce e71 persist out before worktree removal in wt4 landings
 status: done
 template: issue
 created_at: 2026-10-03T04:25:11.012Z
-updated_at: "2026-10-03T06:38:24.780Z"
+updated_at: "2026-10-03T16:05:04.635Z"
 
 feature_id: D3
 priority: P3
@@ -73,16 +73,16 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `plugins/sp/scripts/persist-out-check.ts` (185 lines, ≤250 contract) lists `.spur/memory/evidence/**` + `.spur/run/<prefix>-*` for `--task-file` WBS and `--run-id` prefixes; byte-compare via `readFileSync().equals()`; BLOCKED output names MISSING/DIVERGENT files + remediation hint, exit 0/1/2 contract. Runbook WT-4 pre-removal assertion inserted between the empty-holder re-query and `git worktree remove` (`plugins/sp/skills/spur-dev/references/execution-batch.md`), failure path retains the write marker and exits 1 → WT-5. Registered in `config/plugin-scripts.json` + `package.json` build:scripts chain; `script-contract-check` PASS (18 scripts, 0 violations) |
-| R2 | MET | WT-5 "Persist-out skip recovery (task 1067 R2, E71)" paragraph: verdicts re-derivable via `spur task show <wbs> --json`; receipts re-runnable via `spur workflow run feature-verification.yaml --vars '{"featureId":"<id>"}'`; divergent files never auto-overwritten |
-| R3 | MET | `plugins/sp/scripts/task-diffstat.ts` (250 lines, at contract ceiling): artifact writes atomic (tmp+rename) in normal and failSafe paths; stdout redirect onto the artifact detected via `fstatSync(1)` vs `statSync(relResult)` inode compare → exit 1 with actionable stderr; header documents the redirect contract. Covered by describe "task-diffstat stdout-redirect guard (1067 R3)" (redirect → exit 1, artifact JSON intact `files:1`; normal run silent exit 0) |
-| R4 | MET | Live E2E from the worktree: `bun plugins/sp/scripts/persist-out-check.ts --from . --task-file docs/tasks5/1065_fold-freshness.md --run-id runall-d3-82ca7e3c` → **BLOCKED 21 missing, 0 divergent — exit 1**, naming `.spur/memory/evidence/1065-verdict.json`, `.spur/run/1065-verdict.json`, run env script, etc. (the exact D63-class gap, now detectable). Unit suites: persist-out-check 11 tests (wbs parse, blocked/ok/divergent, cap refusals 65-prefix & 40-missing, usage errors, flag plumbing, `+N more` cap at 32, vacuous-pass invoke-root guard via real `git worktree add`); task-diffstat guard 2 tests; `bun run spur-check` PASS (9849 tests / 572 files, 0 fail; coverage persist-out-check 100/93.75, task-diffstat 100/95.35) |
+| R1 | MET | plugins/sp/scripts/persist-out-check.ts (185 lines) exists; WT-4 pre-removal assertion wired at plugins/sp/skills/spur-dev/references/execution-batch.md:989-993 (re-read this run). |
+| R2 | MET | WT-5 skip-recovery paragraph at execution-batch.md:1149 (re-read this run). |
+| R3 | MET | task-diffstat stdout-redirect guard: atomic tmp+rename + fstat inode compare; redirect describe block green this run. |
+| R4 | MET | bun test plugins/sp/tests/persist-out-check.test.ts plugins/sp/tests/task-diffstat.test.ts this run: 28 pass, 0 fail, 104 expect(). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | command | worktree invocation `persist-out-check --from . --task-file docs/tasks5/1065_fold-freshness.md --run-id runall-d3-82ca7e3c` → exit 1, "BLOCKED 21 missing, 0 divergent", remediation hint naming `inline-run-setup --persist-out` |
-| AC2 | MET | test | `bun test plugins/sp/tests/persist-out-check.test.ts` (11 pass) + `plugins/sp/tests/task-diffstat.test.ts` stdout-redirect describe (2 pass); full gate `bun run spur-check` PASS |
-| AC3 | MET | command | pre-created artifact + stdout redirected onto it: exit 1, stderr "redirect stdout elsewhere", artifact JSON intact (`files:1, sensitive:false`) — atomic tmp+rename makes truncation impossible |
+| AC1 | MET | test | persist-out-check suite green this run (28 pass across both files) — blocked/ok/divergent cases covered. |
+| AC2 | MET | test | Same run: persist-out-check + task-diffstat suites 28 pass, 0 fail. |
+| AC3 | MET | test | Same run: stdout-redirect guard describe block green — artifact intact on redirect refusal. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

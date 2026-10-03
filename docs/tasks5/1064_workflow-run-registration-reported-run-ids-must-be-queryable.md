@@ -4,7 +4,7 @@ name: "Workflow run registration: reported run ids must be queryable"
 status: done
 template: feature-impl
 created_at: 2026-10-03T03:01:26.649Z
-updated_at: "2026-10-03T04:28:31.411Z"
+updated_at: "2026-10-03T16:01:46.745Z"
 feature_id: D3
 
 ac_altitude: task-local
@@ -157,17 +157,17 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | apps/cli/src/commands/workflow.ts:912-923 — latched `workflow.run.started` handler writes `Run: <id>` + plan preview before all report handlers; AC2 test asserts header precedes first progress line |
-| R2 | MET | packages/app/src/observability/workflow-run-log-sink.ts:141-157 `ensureOpen()` lazy mkdir+openSync with `openFailed` latch; constructor no longer opens (AC3 tests) |
-| R3 | MET | AC1 test: pre-row `--vars` blanked-var failure → nonzero exit, zero `Run: ` lines, zero `<run-id>.*` in recordsDir; no cleanup code added |
-| R4 | MET | Existing sink suite (R8 unwritable-dir, close-idempotent) and CLI suites pass unmodified — 22/22 + 177/177; no assertion weakened (git diff shows tests only added) |
+| R1 | MET | `Run: <id>` printed only after row commit — CLI registration suite `bun test tests/commands/workflow-run-registration.test.ts`: 2 pass, 0 fail this run. |
+| R2 | MET | Lazy log-sink file creation — sink suite `bun test tests/observability/workflow-run-log-sink.test.ts`: 22 pass, 0 fail this run. |
+| R3 | MET | Pre-row failure leaves no artifact — covered by registration suite (exit nonzero, no `Run:` line, no run file), green this run. |
+| R4 | MET | No behavior change on working paths — sink suite includes the R8 unwritable-dir test (22 pass, 0 fail this run). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `1064 AC1: a pre-row failure prints no run id and leaves no run-record artifact` — apps/cli/tests/commands/workflow-run-registration.test.ts (in-process main, temp project) |
-| AC2 | MET | test | same file `1064 AC2: a successful sync run prints the header first and the id resolves in the project DB`; plus `workflow trace <id>` returned 0 on the same file-backed dbUrl |
-| AC3 | MET | test | `1064 AC3 — construction creates no record file…` + `…the first event creates the record` — packages/app/tests/observability/workflow-run-log-sink.test.ts (22/22) |
-| AC4 | MET | command | `bun run spur-check` full PASS, receipt digest sha256:26adb5f8… (.spur/run/1064-test-gate.status), pre/post rules 2/2; focused suites (workflow, vars-merge, system-events, preflight) 177/177 |
+| AC1 | MET | test | `apps/cli/tests/commands/workflow-run-registration.test.ts` — pre-row failure exits nonzero, no `Run:` line, no `.spur/memory/runs/<id>.*`; 2 pass, 0 fail this run. |
+| AC2 | MET | test | Same suite — `Run: <id>` precedes plan preview and first progress line; trace resolves the row. |
+| AC3 | MET | test | `packages/app/tests/observability/workflow-run-log-sink.test.ts` — no file before first event, created on first event; 22 pass, 0 fail this run. |
+| AC4 | MET | test | Both suites green this run with no assertion changes by this audit. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

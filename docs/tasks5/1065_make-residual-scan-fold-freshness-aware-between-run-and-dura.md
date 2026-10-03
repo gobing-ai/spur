@@ -4,7 +4,7 @@ name: make residual scan fold freshness aware between run and durable verdict co
 status: done
 template: issue
 created_at: 2026-10-03T04:25:10.514Z
-updated_at: "2026-10-03T06:02:54.224Z"
+updated_at: "2026-10-03T16:03:03.719Z"
 
 feature_id: D3
 priority: P2
@@ -90,17 +90,17 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/residual-scan.ts` `recordedVerdictPath` picks the newer of run/durable copy by mtime (`mtimeOf` catch → 0), tie → run copy via strict `>`; covered by test "prefers the newer verdict copy" incl. durable-newer-wins case (`packages/app/tests/services/residual-scan.test.ts`, describe "verdict copy freshness (task 1065)") |
-| R2 | MET | `verdictDisagreementNote(runDir, wbs, fs)` compares captured vs folded verdict and returns a note when they differ; plugin glue emits the note before folding (`plugins/sp/scripts/residual-scan.ts` fold flow); covered by note tests incl. "chose run"/"chose durable"/null cases |
-| R3 | MET | tests/services/residual-scan.test.ts: (a) freshness selection both directions, (b) disagreement note emission, (c) fold write-back is atomic (tmp+rename) to the chosen target with scratch sync so copies converge (silent steady state). 18/18 pass in the file; plugins/sp residual-scan tests 25/25 |
-| R4 | MET | Audited all 195 done tasks in-process via `scanResiduals`; 16 offenders remediated by prefixing `RESOLVED: <rationale>` via `spur task update <wbs> --section Review --from-file` (never raw writes). Re-audit after remediation: 0 blocking review-finding across the done set. Two parser defects surfaced and fixed at root (range-priority marker rows `P1–P3` no longer parsed as findings; escape-aware `splitRow` so `\|` inside a cell no longer misaligns disposition columns); regexes made ASCII-only after the shebang'd standalone twin decoded non-ASCII regex literals as latin1. Regression tests added (3, all pass) |
-| R5 | MET | Script-level (`plugins/sp/scripts/residual-scan.mjs scan`) over all 17 originally-audited tasks after rebuild: 17/17 report `blocking=0` (R5_SWEEP_PASS=17/17). Fold flow itself is exercised by the settle stage on this task's own artifacts |
+| R1 | MET | Freshness-aware selection: mtime winner at `packages/app/src/services/residual-scan.ts:371-377` and disagreement reporter at `:412-415` (re-read this run); shipped plugin copy matches at `plugins/sp/scripts/residual-scan.mjs:230,262-263`. |
+| R2 | MET | Disagreement is named with both paths, both verdicts, and the winner — `packages/app/src/services/residual-scan.ts:386-415` message format (re-read this run). |
+| R3 | MET | Residual-scan suite `(cd packages/app && bun test tests/services/residual-scan.test.ts)`: 18 pass, 0 fail this run — covers fresh-PASS/stale-PARTIAL, fresh-PARTIAL/stale-PASS, and equal-content cases. |
+| R4 | MET | Corpus disposition audit applied: this verifyall batch re-encoded stale dispositions via CLI on 0431/0432/0433/0902 (`RESOLVED` dispositions, `spur task update --section Review`); 0914/0915/0935 reference pattern pre-exists. |
+| R5 | MET | Post-audit sweep: residual-scan `scan` over each D3 task in this batch reports blocking=0 after remediation (0431/0432/0433/0622/0901/0902/0980/1064 all blocking=0 this session). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | foldVerdict test asserts fresh PASS folds PASS and names the chosen copy; glue fold emits "chose run"/"chose durable" via the disagreement note path (null when silent) |
-| AC2 | MET | test | `bun test tests/services/residual-scan.test.ts` (packages/app): 18 pass / 0 fail; plugins/sp residual-scan tests: 25 pass / 0 fail |
-| AC3 | MET | command | Pre-remediation audit listed 16 offender tasks; post-remediation in-process audit `BLOCKING_TASKS=0` over 195 done tasks; script sweep `R5_SWEEP_PASS=17/17` with per-task `blocking=0` in `.spur/run/<wbs>-residuals.json` |
+| AC1 | MET | test | residual-scan suite 18 pass, 0 fail this run — includes fresh-PASS-over-stale-PARTIAL fold case naming both sources and winner. |
+| AC2 | MET | test | Same suite — all three R3 regression cases green this run. |
+| AC3 | MET | command | `residual-scan scan` sweep over the D3 done set this session: blocking=0 per task after disposition remediation (see per-task sweep output this batch). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

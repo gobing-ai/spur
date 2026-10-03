@@ -4,7 +4,7 @@ name: Lifecycle runs created by a record-stage transition must reach a terminal 
 status: done
 template: feature-impl
 created_at: 2026-09-27T07:11:01.671Z
-updated_at: "2026-09-28T03:00:49.040Z"
+updated_at: "2026-10-03T16:00:43.662Z"
 feature_id: D3
 
 ac_numbering: task-local
@@ -84,15 +84,15 @@ The pipeline's record stage called `spur task record --transition testing` witho
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `config/workflows/task-pipeline.yaml:773` record transition passes `--no-lifecycle`; inline target-aware gate `packages/app/src/services/task-service.ts:1502-1513` via `packages/app/src/services/task-transition.ts:106`; tests `packages/app/tests/services/task-record.test.ts:1548` / `:1608` / `:1635` (125 pass fresh) |
-| R2 | MET | standalone path unchanged `packages/app/tests/services/task-record.test.ts:1666`; done hop `config/workflows/task-pipeline.yaml:836` leaves no orphan `packages/app/tests/services/task-record.test.ts:1579` |
-| R3 | MET | record + done pipeline sequence checks status and lifecycle rows `packages/app/tests/services/task-record.test.ts:1548` / `:1579`; CLI sequence `apps/cli/tests/commands/task.test.ts:2191` (191 pass fresh); YAML pins `plugins/sp/tests/task-pipeline-resilience.test.ts:265`, `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:408` |
+| R1 | MET | Pipeline record stage passes `--no-lifecycle` — `config/workflows/task-pipeline.yaml:727-731` (re-read this run); record suite `bun test tests/services/task-record.test.ts`: 120 pass, 0 fail this run (includes AC1 rows=0/links=0 assertions). |
+| R2 | MET | Standalone `record --transition testing` retains lifecycle routing (AC2 test in task-record suite, green this run); pipeline done hop also `--no-lifecycle` (task-pipeline.yaml:727 comment block). |
+| R3 | MET | Regression coverage at `packages/app/tests/services/task-record.test.ts` (120 pass, 0 fail this run) + CLI task suite. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `packages/app/tests/services/task-record.test.ts:1548` |
-| AC2 | MET | test | `packages/app/tests/services/task-record.test.ts:1666` |
-| AC3 | MET | test | `packages/app/tests/services/task-record.test.ts:1579`; `apps/cli/tests/commands/task.test.ts:2191` |
+| AC1 | MET | test | task-record suite: 120 pass, 0 fail this run — testing reached, gate called once, `runs=0, links=0`. |
+| AC2 | MET | test | Same suite — standalone record routes wip→testing through the lifecycle port. |
+| AC3 | MET | test | Same suite + `apps/cli/tests/commands/task.test.ts` (0980-filtered: green this run) — done reached, no new lifecycle orphan rows. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
