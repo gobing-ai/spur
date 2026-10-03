@@ -189,6 +189,12 @@ the human/native presentation layer — labels are display addresses only, never
    This is required for the normal `testing → done` provenance guard. Planning pipelines have no
    task lifecycle link and skip this task-specific action.
 
+   **Run it from the task's execution tree.** Every tree has an isolated `.spur` DB, so a link
+   recorded from the invoking tree never satisfies a worktree's guard — the exact failure that
+   forced audited `--provenance-bypass` on tasks 1029/1030 (E93). Under `--worktree`, enter the
+   worktree first and run this command (and every lifecycle-touching command: `task record`,
+   `task update <wbs> testing|done`) from the worktree root.
+
 ### Idea-pipeline quick start (0887 R1/R2)
 
 Minimum files to read for `/sp:dev-idea` inline runs — then drive `idea-pipeline.yaml`:
