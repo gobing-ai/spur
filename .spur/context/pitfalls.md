@@ -273,3 +273,4 @@ Root bunfig `coverageThreshold = {lines: 0.9, functions: 0.9}` is a PER-FILE gat
 - [2026-10-02] residual-scan fold prefers the durable `.spur/memory/evidence/<wbs>-verdict.json` over a fresher `.spur/run/` copy; a stale durable downgrade blocks re-folds. Re-run `spur task verdict`, remove the stale durable, then fold — verdict and fold must run adjacent.
 - [2026-10-02] glm-5.3-flash-class workers die `stopReason=length` (16k cap) on monolithic implement briefs: 4/4 single-shot attempts produced zero output. Chunk dispatches and cap thinking blocks (<150 words, act between thoughts).
 - [2026-10-02] verify-answer lint: behavior ACs need `test`/`command` evidence (hollow MET → PARTIAL); gherkin tasks key AC rows by exact `Scenario:` title incl. `(req: Rn)`; feature-linked tasks need one row carrying `[Rn]` embedded ref (0958 R1).
+  Contract codified: plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md § Chunked implement dispatch contract (task 1066).
