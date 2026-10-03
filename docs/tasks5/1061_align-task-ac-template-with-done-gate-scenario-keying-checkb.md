@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: Align task AC template with done-gate scenario keying (checkbox ACs key L4.uncovered-task-scenario)
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-10-02T23:30:56.374Z
-updated_at: "2026-10-02T23:58:11.239Z"
+updated_at: "2026-10-03T01:30:02.829Z"
 feature_id: F96
 
 priority: P3
 ac_numbering: task-local
 ac_altitude: task-local
 estimate_hours: 3
+done_forced: "false"
+done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-dev-run-1061-d36a/.spur/memory/evidence/1061-verdict.json
 ---
 
 ## 1061. Align task AC template with done-gate scenario keying (checkbox ACs key L4.uncovered-task-scenario)
@@ -37,9 +39,9 @@ The corrected Requirements, Design and Plan below supersede the historical propo
 
 ### Requirements
 
-- [ ] R1. Align all six task template AC guidance comments and ac-style-guide.md around the existing distinction: ac_altitude controls feature subset; ac_numbering controls task requirement bindings. Recommend Scenario: ACn titles with explicit req bindings for task-local regression work; retain parsed checkbox ACs as a supported form without claiming equivalent requirement-binding enforcement.
-- [ ] R2. Correct contradictory authoring guidance in ac-style-guide.md, including plain/bold form and outdated Requirements formatting advice. Explain raw freeform AC bullets as legacy unparsed content, not a sanctioned way to avoid traceability; do not change checker behavior or migrate completed tasks.
-- [ ] R3. Provide repeatable isolated checks for graduating title mismatch, task-local Scenario binding, missing req coverage, checkbox completion and legacy raw bullets, plus unchanged checks for 1053–1056. Assert expected finding codes/severities rather than claiming whole checks pass despite unrelated unresolved findings.
+- [x] R1. Align all six task template AC guidance comments and ac-style-guide.md around the existing distinction: ac_altitude controls feature subset; ac_numbering controls task requirement bindings. Recommend Scenario: ACn titles with explicit req bindings for task-local regression work; retain parsed checkbox ACs as a supported form without claiming equivalent requirement-binding enforcement.
+- [x] R2. Correct contradictory authoring guidance in ac-style-guide.md, including plain/bold form and outdated Requirements formatting advice. Explain raw freeform AC bullets as legacy unparsed content, not a sanctioned way to avoid traceability; do not change checker behavior or migrate completed tasks.
+- [x] R3. Provide repeatable isolated checks for graduating title mismatch, task-local Scenario binding, missing req coverage, checkbox completion and legacy raw bullets, plus unchanged checks for 1053–1056. Assert expected finding codes/severities rather than claiming whole checks pass despite unrelated unresolved findings.
 
 Out of scope: runtime engine changes, new public APIs, unrelated fixes from 1053–1056, production operations or external publication.
 
@@ -85,15 +87,139 @@ No new API, checker policy, schema or default altitude. Owners: config/templates
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Guidance-only alignment of task AC authoring with done-gate scenario keying (R1–R3); no checker,
+schema, default-altitude, or completed-corpus changes.
+
+Change map:
+
+- plugins/sp/skills/spur-dev/references/ac-style-guide.md:30 — rewrote "Task-side numbering (`AC<n>`)"
+  around the two-control distinction: `ac_altitude` owns the feature subset (DD-09), `ac_numbering:
+  task-local` owns requirement bindings via the Scenario-only `(req: R<n>)` loop; preferred
+  task-local form `Scenario: AC1 — <concrete outcome> (req: R1)` with both fields declared; checkbox
+  rows documented as parsed-but-not-binding; raw `- AC1` bullets documented as legacy unparsed
+  records, not a traceability bypass (R1, R2).
+- plugins/sp/skills/spur-dev/references/ac-style-guide.md:300 — added the "Choosing an AC form"
+  decision table (graduating / task-local / checkbox / legacy rows) and the limit that task-local
+  altitude skips only the subset check — never unchecked-box, required sections, verdict, or anchor
+  checks (R1, AC1).
+- plugins/sp/skills/spur-dev/references/ac-style-guide.md:163-170 — corrected the verdict-bold-head
+  advice: requirement ids belong in the template form `- [ ] R1. <text>` (bold `**R1**` passes the
+  `L3.requirements-format` ratio but binds nothing in the coverage loop); bold AC heads scoped as a
+  verdict-table id form, not the authoring form (R2).
+- config/templates/task/{standard,feature-impl,issue,brainstorm,review,meta}.md:30 — synchronized AC
+  guidance comments to the same distinction, preferred task-local Scenario form, checkbox limit,
+  legacy-bullet caveat, and `- [ ] R1. <text>` Requirements form; per-template tails and all
+  frontmatter defaults unchanged (R1).
+- apps/cli/tests/commands/task.test.ts:3695 — updated the `AC_PLACEHOLDER` sed pattern of the 0788
+  ready-by-default contract test to the new standard.md comment (R1).
+- packages/app/tests/services/task-check.test.ts:2040 — added the "1061 canaries" describe: six
+  isolated checks asserting exact finding codes/severities per AC form (graduating drift →
+  L4.uncovered-task-scenario warning; task-local binding with unbound R2 → L3.ac-requirement-coverage
+  warning; complete binding silent; checkbox-only AC silent on the Scenario-only loop; done + open
+  boxes → L3.unchecked-checklist warning; legacy raw bullets silent) (R3).
+
+Rationale: refinement corrected the historical framing — altitude bypasses the feature subset only,
+numbering opts Scenario titles into requirement coverage, and the templates/style guide taught a
+conflated form. The checker semantics were already correct (packages/app/src/services/task-check.ts:800,
+:960, :1776, :1812); this pass fixes discoverability and contradictory guidance and pins the
+semantics with repeatable checks. Runtime proof: .spur/run/1061-ac-proof/ — fixture canaries
+(9001–9006) and 1053–1056 corpus outputs byte-identical before/after the guidance edits, including
+their pre-existing L3.requirements-format warnings.
 
 ### Testing
 
-Planning-stage validation only: 2026-10-02 source audit and existing regression suites. Implementation proof remains pending; execute the isolated artifacts and focused checks specified in Plan. Do not treat this readiness audit as runtime verification PASS.
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | All six template AC comments synchronized to the two-control distinction: `config/templates/task/standard.md:30` (altitude skips only feature-subset check; numbering makes `(req: R<n>)` count; checkbox rows supported but never bind; bare `- AC1` bullets legacy) — comment bodies byte-identical across standard/feature-impl/issue/brainstorm/review/meta this run (review.md comment at `config/templates/task/review.md:40`, per-template tails preserved). Style guide teaches the same split: `plugins/sp/skills/spur-dev/references/ac-style-guide.md:36-42` (`ac_altitude` owns feature subset (DD-09); `ac_numbering: task-local` owns requirement bindings, reads `Scenario:` titles only), preferred task-local form at `plugins/sp/skills/spur-dev/references/ac-style-guide.md:44-45`, decision table `Choosing an AC form` at `plugins/sp/skills/spur-dev/references/ac-style-guide.md:300-311`. Verified against source this run: subset skip `packages/app/src/services/task-check.ts:1790`, Scenario-only binding loop gated on ac_numbering `packages/app/src/services/task-check.ts:802-828`. |
+| R2 | MET | Contradictory bold/plain guidance corrected: `plugins/sp/skills/spur-dev/references/ac-style-guide.md:166-170` — requirement ids in template form `- [ ] R1. <text>`; bold `**R1**` "passes the `L3.requirements-format` ratio but binds nothing" — source-verified this run (`packages/app/src/services/task-check.ts:759` R_ITEM_RE allows `[*_]{0,2}` emphasis vs binding regex `packages/app/src/services/task-check.ts:815` with no emphasis wrapper). Raw freeform bullets explained as legacy unparsed, not a bypass: `plugins/sp/skills/spur-dev/references/ac-style-guide.md:51-54`. No checker behavior change: git diff contains no file under `packages/app/src`, `packages/domain/src`, or `apps/cli/src` (10-file diff = 6 templates + style guide + 2 tests + task doc). No corpus migration: 1053-1056 task files untouched in diff; their check outputs byte-identical before/after (`diff -r .spur/run/1061-ac-proof/baseline-corpus .spur/run/1061-ac-proof/after-corpus` → empty; each of 1053-1056 carries exactly its pre-existing `L3.requirements-format` warning). |
+| R3 | MET | Repeatable isolated canaries asserting exact codes/severities: `packages/app/tests/services/task-check.test.ts:2040` describe "1061 canaries" — graduating drift → `L4.uncovered-task-scenario` warning (`packages/app/tests/services/task-check.test.ts:2086`), task-local unbound R2 → `L3.ac-requirement-coverage` warning naming R2 (`packages/app/tests/services/task-check.test.ts:2099`), complete binding silent (:2115), checkbox-only AC silent on the Scenario-only loop (:2138), done + open boxes → `L3.unchecked-checklist` warning (:2155), legacy raw bullets silent (:2168); all use code+severity filters, none claim whole-check pass. Fresh run this turn: `bun test tests/services/task-check.test.ts` (packages/app) → 198 pass, 0 fail (canaries alone: 6 pass). Runtime equivalents re-verified from `.spur/run/1061-ac-proof/after/`: 9001 `L4.uncovered-task-scenario` warning; 9002 `L3.ac-requirement-coverage` warning naming R2; 9003 silent; 9004 `L3.unchecked-checklist` warning; 9005 silent; 9006-as-done `L3.unchecked-checklist` error (transition-target escalation, matches `packages/app/src/services/task-check.ts:976-980`); `diff -r` baseline vs after and baseline-corpus vs after-corpus both byte-identical; README re-run recipe at `.spur/run/1061-ac-proof/README.md`. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: AC1 — Guidance distinguishes altitude and numbering (req: R1) | MET | test | Decision table teaches all three required elements: `plugins/sp/skills/spur-dev/references/ac-style-guide.md:300-311` — Scenario req binding + subset skip (task-local row :305), graduating subset/DD-09 enforcement with `L4.uncovered-task-scenario` on drifted titles (:304), checkbox enforcement limits "no requirement binding (Scenario:-only)" (:306), closing limit "skips only the feature-subset check ... never makes a task done" (:309-311). Same distinction in all six templates (`config/templates/task/standard.md:30` et al., bodies identical this run). Semantics pinned by canaries: fixture 9001 `L4.uncovered-task-scenario` warning and `packages/app/tests/services/task-check.test.ts:2086` pass this turn. |
+| Scenario: AC2 — Legacy forms retain their actual semantics (req: R2) | MET | test | Raw bullets identified as legacy unparsed with real parsing semantics: `plugins/sp/skills/spur-dev/references/ac-style-guide.md:51-54` ("parse as nothing — no subset match, no requirement binding, no box counting ... legacy unparsed records"); proven by canary `packages/app/tests/services/task-check.test.ts:2168` (pass this turn) and fixture 9005 (silent on L3/L4). Requirements examples use canonical `- [ ] R1. <text>`: `plugins/sp/skills/spur-dev/references/ac-style-guide.md:166` and all six template comments. No checker changes: git diff touches no runtime source; fixture outputs unchanged (`diff -r` byte-identical). |
+| Scenario: AC3 — Isolated canaries preserve completion checks (req: R3) | MET | test | Fresh runs this turn: `(cd packages/app && bun test tests/services/task-check.test.ts)` → 198 pass, 0 fail, 330 expect() calls (192 baseline + 6 canaries; canary subset `-t '1061 canaries'` → 6 pass, 0 fail); `(cd apps/cli && bun test tests/commands/task.test.ts -t 'ready-by-default')` → 7 pass, 0 fail (updated AC_PLACEHOLDER pattern at `apps/cli/tests/commands/task.test.ts:3696` matches new standard.md comment). Corpus non-regression: `diff -r .spur/run/1061-ac-proof/baseline-corpus .spur/run/1061-ac-proof/after-corpus` → empty (byte-identical, 1053-1056 each keep exactly one pre-existing `L3.requirements-format` warning); `diff -r .spur/run/1061-ac-proof/baseline .spur/run/1061-ac-proof/after` → empty. Severities retained: warnings at 9001/9002/9004, error only for 9006 `--as done`. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review Report — 1061
+
+**Scope:** uncommitted working diff on sp/run-1061-d36a (10 files: 6 template AC comments `config/templates/task/{standard,feature-impl,issue,brainstorm,review,meta}.md:30`, `plugins/sp/skills/spur-dev/references/ac-style-guide.md`, `apps/cli/tests/commands/task.test.ts:3695`, `packages/app/tests/services/task-check.test.ts:2035-2183`, task file Solution/History); reviewed against docs/tasks5/1061_align-task-ac-template-with-done-gate-scenario-keying-checkb.md. Task file's own status/wip hunks excluded as pipeline bookkeeping.
+**Dimensions:** functional traceability (R1–R3 ↔ AC1–AC3), SECUA quality (security/efficiency/correctness/usability), architecture depth.
+**Verdict:** PASS
+
+##### Findings (ranked)
+
+| # | Priority | Dimension | Finding | Disposition | Location |
+|---|----------|-----------|---------|--------------|----------|
+| 1 | P3 (minor) | architecture | AC-guidance comment now exists in 7 near-identical copies (6 templates + condensed style-guide form) plus a sed-escaped 8th copy in the 0788 test; only standard.md's copy is contract-pinned, so the other five templates can drift silently — this task's own diff (8 coordinated lockstep edits for one wording change) demonstrates the coupling cost. Follow-up candidate: a cross-template AC-comment consistency check (or generator); full dedup is wrong since templates must stay self-contained for `spur task create` without the plugin. | DEFER — follow-up hardening candidate outside task 1061 scope: the 8-copy duplication predates this change and this task synchronized all copies in lockstep; the consistency check belongs in its own task, not an expansion of this diff. | `config/templates/task/standard.md:30`, `apps/cli/tests/commands/task.test.ts:3696` |
+| 2 | P4 (advisory) | usability | The new "task-local skips only the subset" limit paragraphs (style guide + templates) say the unchecked-box check still applies but omit that the severity escalates warning → error when `--as done` names the transition target (proof canary 9006 shows the error). One clause would preempt close-time surprises for task-local tasks. | DEFER — advisory wording addition; guidance already states the unchecked-box check applies, the escalation nuance is a follow-up doc polish. | `plugins/sp/skills/spur-dev/references/ac-style-guide.md:307-310` |
+| 3 | P4 (advisory) | correctness | Positive confirmation, not a defect: every factual claim in the new guidance was re-verified against checker source this run — altitude skips only the subset (`task-check.ts:1790`, `coverage.ts:126`); the coverage loop reads `Scenario:` titles only for `(req: R<n>)` (`task-check.ts:802-858`); checkbox rows join checklist parsing and the subset match but never bind (`checklist.ts:41`, `coverage.ts:130-136`); bold `**R1**` passes the format ratio (`task-check.ts:760` allows `[*_]{0,2}`) but binds nothing (`task-check.ts:815` binding regex has no emphasis wrapper). | None — positive confirmation, no action. | `packages/app/src/services/task-check.ts:1790` |
+
+##### Functional Traceability
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | Six templates synchronized to the two-control distinction (altitude=subset DD-09, numbering=requirement bindings): `config/templates/task/standard.md:30` and the five siblings verified identical via "Preferred: `Scenario: AC1" grep (6/6). Style guide rewritten: `plugins/sp/skills/spur-dev/references/ac-style-guide.md:30-52` ("**`ac_altitude`** owns the **feature subset** … **`ac_numbering: task-local`** owns **task requirement bindings** … reads **`Scenario:` titles only**"); preferred task-local form + both fields declared at :43-44; checkbox rows "supported but never bind" at :46-47. |
+| R2 | MET | Contradictory bold/plain advice corrected: `ac-style-guide.md:163-170` — requirement ids in template form `- [ ] R1. <text>`, bold `**R1**` "passes the `L3.requirements-format` ratio but binds nothing" (verified against source: R_ITEM_RE `task-check.ts:760` vs binding regex `task-check.ts:815`). Raw bullets as legacy unparsed, not a bypass: `ac-style-guide.md:48-51`. No checker behavior change: diff touches no file under `packages/app/src` or `packages/domain/src` (git diff --stat: 10 files, guidance+tests only). No corpus migration: 1053–1056 untouched; `diff -r baseline-corpus after-corpus` → byte-identical. |
+| R3 | MET | Repeatable isolated canaries: `packages/app/tests/services/task-check.test.ts:2040` describe "1061 canaries" — graduating drift `L4.uncovered-task-scenario` warning (:2086), task-local unbound-R2 `L3.ac-requirement-coverage` warning (:2099), complete binding silent (:2115), checkbox-rows-never-bind silent (:2138), done+open boxes `L3.unchecked-checklist` warning (:2155), legacy raw bullets silent (:2168); all assert code+severity filters, never whole-check pass. Unchanged 1053–1056 checks: `.spur/run/1061-ac-proof/{baseline,after}-corpus/` (1053–1056, each exactly its pre-existing `L3.requirements-format` warning) diffed byte-identical this run. Repeatable JSON evidence: `.spur/run/1061-ac-proof/README.md` re-run recipe; fixtures 9001–9006 `baseline` vs `after` diffed byte-identical this run. |
+
+##### Acceptance Criteria Verification
+
+| AC | Status | Evidence |
+|----|--------|----------|
+| Scenario: AC1 — Guidance distinguishes altitude and numbering (req: R1) | MET | Decision table teaches all three required elements: `ac-style-guide.md:300-310` — Scenario req binding + subset skip (task-local row), graduating subset/DD-09 enforcement (`L4.uncovered-task-scenario` on drifted titles), checkbox enforcement limits ("no requirement binding (`Scenario:`-only)"); the table closes with the "skips only the feature-subset check … never makes a task done" limit. All six templates carry the same distinction (standard.md:30 et al.). |
+| Scenario: AC2 — Legacy forms retain their actual semantics (req: R2) | MET | Raw bullets identified as legacy unparsed with real parsing semantics: `ac-style-guide.md:48-51` ("parse as nothing — no subset match, no requirement binding, no box counting"), canary :2168 + fixture 9005 prove silence. Requirements examples use canonical `- [ ] R1. <text>` (:166, all six templates). No checker changes in diff (verified via git diff --stat). |
+| Scenario: AC3 — Isolated canaries preserve completion checks (req: R3) | MET | Fresh test runs this turn: `bun test tests/services/task-check.test.ts` (packages/app) → 198 pass / 0 fail (192 baseline + 6 canaries); `bun test tests/commands/task.test.ts -t 'ready-by-default'` (apps/cli) → 7 pass / 0 fail. Corpus non-regression: `diff -r .spur/run/1061-ac-proof/baseline-corpus .spur/run/1061-ac-proof/after-corpus` → no output (byte-identical); `diff -r baseline after` → no output. |
+
+##### SECUA Quality (correctness / security / efficiency / usability)
+
+- **Security:** n/a — guidance comments and tests only; no runtime input handling, secrets, or injection surface touched.
+- **Correctness:** all eight distinct semantic claims embedded in the new guidance verified against checker source (see finding #3 anchors). Proof artifacts match source behavior including the `--as done` error escalation (`task-check.ts:976-979`, fixture 9006). No P1/P2.
+- **Efficiency:** canaries run in-process against the real `TaskCheckService` (198 tests in 228 ms) — no CLI subprocess per assertion; README's CLI re-run recipe is for human reproducibility only.
+- **Usability:** decision table resolves the three-convention confusion the task was filed for; finding #2 records the one omitted nuance (transition-target severity escalation).
+
+##### Architecture Depth (sp-code-improvement)
+
+- No new modules or seams introduced (docs + tests); nothing shallow added.
+- The canaries deepen the test surface: they pin checker semantics (code+severity) using the real service, so future guidance edits cannot drift semantics silently — the exact failure mode this task fixes.
+- Finding #1 (P3): weak locality/coupling across the six template comments + test-side copy; deepening proposal = cross-template consistency check. Challenge: generators would couple templates to build tooling and break standalone `spur task create`. Defense: a consistency assertion (not a generator) answers it — hence P3 follow-up candidate, not a defect of this diff (the diff correctly synchronized all copies).
+
+##### Verification evidence (pasted, run this turn)
+
+```
+$ cd packages/app && bun test tests/services/task-check.test.ts
+ 198 pass
+ 0 fail
+ 330 expect() calls
+Ran 198 tests across 1 file. [228.00ms]
+
+$ cd apps/cli && bun test tests/commands/task.test.ts -t 'ready-by-default'
+ 7 pass
+ 191 filtered out
+ 0 fail
+Ran 7 tests across 1 file. [814.00ms]
+
+$ diff -r .spur/run/1061-ac-proof/baseline-corpus .spur/run/1061-ac-proof/after-corpus
+(no output → byte-identical; CORPUS-IDENTICAL)
+
+$ diff -r .spur/run/1061-ac-proof/baseline .spur/run/1061-ac-proof/after
+(no output → byte-identical; FIXTURES-IDENTICAL)
+```
+
+Fixture canary findings re-inspected from `.spur/run/1061-ac-proof/after/*.json`: 9001 `L4.uncovered-task-scenario` warning; 9002 `L3.ac-requirement-coverage` warning naming R2 (no L4); 9003 silent on L3/L4; 9004 `L3.unchecked-checklist` warning; 9005 silent on L3/L4; 9006 `L3.unchecked-checklist` **error** on the `--as done` transition — all matching the README expectation table and source (`task-check.ts:976-979` `severity: isTransitionTarget ? 'error' : 'warning'`).
+
+**Residual risks:** P3 finding #1 (guidance-copy drift risk) left as a follow-up candidate per report-only review scope; task status remains `wip` with R-checkboxes open — expected at this pipeline stage, not a review defect.
+
+**Next:** proceed to testing/verify gate; disposition finding #1 (accept or file a follow-up consistency-check task) and optionally fold finding #2's one-clause addition into a later guidance pass.
+
+Functional Verdict: PASS
+Review Verdict: PASS (0 blocker/major; 1 minor, 2 advisory)
 
 ### References
 
@@ -104,4 +230,7 @@ Audit: HEAD 8467f6f6d; only the main worktree was registered; `task list --statu
 ### History
 
 - 2026-10-02T23:41:49.875Z backlog → todo (system)
+- 2026-10-03T00:58:14.478Z todo → wip (system)
+- 2026-10-03T01:24:58.733Z wip → testing (system)
+- 2026-10-03T01:30:02.823Z testing → done (system)
 

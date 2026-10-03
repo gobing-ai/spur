@@ -1,25 +1,21 @@
 ---
 schema_version: 1
-name: "{{ NAME }}"
-description: ""
+name: Residuals from 1061
 status: backlog
-type: task
-profile: standard
-feature_id: null
-parent_wbs: null
-priority: P2
-tags: []
-dependencies: []
-ac_numbering: task-local
-created_at: "{{ CREATED_AT }}"
-updated_at: "{{ CREATED_AT }}"
+template: feature-impl
+created_at: 2026-10-03T01:30:01.825Z
+updated_at: "2026-10-03T01:30:02.145Z"
+feature_id: F96
+
 ---
 
-## {{ WBS }}. {{ NAME }}
+## 1062. Residuals from 1061
 
 ### Background
 
-{{ BACKGROUND }}
+Source task: 1061 (feature F96) — deferred residuals filed by residual-scan settle.
+
+- review-finding:fc5ed7cf — config/templates/task/standard.md:30, apps/cli/tests/commands/task.test.ts:3696: AC-guidance comment now exists in 7 near-identical copies (6 templates + condensed style-guide form) plus a sed-escaped 8th copy in the 0788 test; only standard.md's copy is contract-pinned, so the other five templates can drift silently — this task's own diff (8 coordinated lockstep edits for one wording change) demonstrates the coupling cost. Follow-up candidate: a cross-template AC-comment consistency check (or generator); full dedup is wrong since templates must stay self-contained for `spur task create` without the plugin.
 
 ### Requirements
 
@@ -56,8 +52,6 @@ updated_at: "{{ CREATED_AT }}"
 <!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
 
 ### References
-
-{{ FEATURE_ID }}
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 

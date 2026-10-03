@@ -2032,6 +2032,153 @@ describe('TaskCheckService', () => {
         expect(cov).toHaveLength(1);
     });
 
+    // ── 1061 canaries: AC forms keep their exact finding codes/severities ──
+    // The task templates and ac-style-guide.md teach these AC forms; these checks
+    // pin what the checker emits per form so guidance edits cannot drift semantics
+    // (1061 R3: assert codes/severities, never whole-check pass/fail). Runtime
+    // equivalents: .spur/run/1061-ac-proof/ (fixture corpus + 1053–1056 baselines).
+    describe('1061 canaries: AC forms and their finding codes/severities', () => {
+        /** Canary task with the given altitude/numbering declaration, Requirements, and raw AC lines. */
+        const canaryTask = (opts: {
+            altitude?: 'graduating' | 'task-local';
+            numbering?: boolean;
+            status?: string;
+            requirements: readonly string[];
+            ac: readonly string[];
+        }): string =>
+            [
+                '---',
+                'schema_version: 1',
+                'name: "AC canary"',
+                `status: ${opts.status ?? 'backlog'}`,
+                'created_at: 2026-10-02T00:00:00.000Z',
+                'updated_at: 2026-10-02T00:00:00.000Z',
+                'feature_id: "F1"',
+                ...(opts.altitude === 'task-local' ? ['ac_altitude: task-local'] : []),
+                ...(opts.numbering ? ['ac_numbering: task-local'] : []),
+                '---',
+                '',
+                '## 0001. AC canary',
+                '',
+                '### Background',
+                '',
+                'text',
+                '',
+                '### Requirements',
+                '',
+                ...opts.requirements,
+                '',
+                '### Acceptance Criteria',
+                '',
+                ...opts.ac,
+            ].join('\n');
+
+        const check = async (content: string) => {
+            const { fs, path, cleanup } = seedEnv({
+                taskContent: content,
+                features: { F1: featureWithAc('F1', ['the real scenario']) },
+            });
+            const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+            cleanup();
+            return result.findings;
+        };
+
+        test('graduating drift reports L4.uncovered-task-scenario as a warning', async () => {
+            const findings = await check(
+                canaryTask({
+                    altitude: 'graduating',
+                    requirements: ['- [ ] R1. Does X.'],
+                    ac: ['```gherkin', 'Scenario: AC1 — Local outcome that matches nothing', '  Given x', '```'],
+                }),
+            );
+            const cov = findings.filter((f) => f.code === FINDING_CODES.L4_UNCOVERED_TASK_SCENARIO);
+            expect(cov).toHaveLength(1);
+            expect(cov[0]?.severity).toBe('warning');
+        });
+
+        test('task-local binding with an unbound requirement reports L3.ac-requirement-coverage as a warning', async () => {
+            const findings = await check(
+                canaryTask({
+                    altitude: 'task-local',
+                    numbering: true,
+                    requirements: ['- [ ] R1. Bind this one.', '- [ ] R2. Leave this unbound.'],
+                    ac: ['```gherkin', 'Scenario: AC1 — First outcome is bound (req: R1)', '  Given x', '```'],
+                }),
+            );
+            const cov = findings.filter((f) => f.code === FINDING_CODES.L3_AC_REQUIREMENT_COVERAGE);
+            expect(cov).toHaveLength(1);
+            expect(cov[0]?.severity).toBe('warning');
+            expect(cov[0]?.message).toContain('R2');
+            expect(findings.filter((f) => f.code === FINDING_CODES.L4_UNCOVERED_TASK_SCENARIO)).toHaveLength(0);
+        });
+
+        test('complete task-local binding stays silent on coverage and subset', async () => {
+            const findings = await check(
+                canaryTask({
+                    altitude: 'task-local',
+                    numbering: true,
+                    requirements: ['- [ ] R1. Bind this one.', '- [ ] R2. Bind this too.'],
+                    ac: [
+                        '```gherkin',
+                        'Scenario: AC1 — First outcome is bound (req: R1)',
+                        '  Given x',
+                        '```',
+                        '',
+                        '```gherkin',
+                        'Scenario: AC2 — Second outcome is bound (req: R2)',
+                        '  Given x',
+                        '```',
+                    ],
+                }),
+            );
+            expect(findings.filter((f) => f.code === FINDING_CODES.L3_AC_REQUIREMENT_COVERAGE)).toHaveLength(0);
+            expect(findings.filter((f) => f.code === FINDING_CODES.L4_UNCOVERED_TASK_SCENARIO)).toHaveLength(0);
+        });
+
+        test('checkbox rows never bind — without Scenario: lines the loop stays silent', async () => {
+            // Enforcement limit (1061 Design): the binding loop reads Scenario: titles only and
+            // needs scenarioCount > 0, so a checkbox-only AC is silent on L3 coverage — checkboxes
+            // neither bind requirements nor trigger the no-binding warning. Guidance documents
+            // this limit instead of inventing coverage.
+            const findings = await check(
+                canaryTask({
+                    altitude: 'task-local',
+                    numbering: true,
+                    requirements: ['- [ ] R1. Bind this one.'],
+                    ac: ['- [ ] AC1 — A checkbox outcome nobody bound'],
+                }),
+            );
+            expect(findings.filter((f) => f.code === FINDING_CODES.L3_AC_REQUIREMENT_COVERAGE)).toHaveLength(0);
+            expect(findings.filter((f) => f.code === FINDING_CODES.L4_UNCOVERED_TASK_SCENARIO)).toHaveLength(0);
+        });
+
+        test('a done task with unchecked boxes reports L3.unchecked-checklist as a warning', async () => {
+            const findings = await check(
+                canaryTask({
+                    status: 'done',
+                    requirements: ['- [ ] R1. Does X.'],
+                    ac: ['- [ ] AC1 — The outcome nobody ticked off'],
+                }),
+            );
+            const boxes = findings.filter((f) => f.code === FINDING_CODES.L3_UNCHECKED_CHECKLIST);
+            expect(boxes).toHaveLength(1);
+            expect(boxes[0]?.severity).toBe('warning');
+        });
+
+        test('legacy raw bullets parse as nothing — silent on coverage and subset', async () => {
+            const findings = await check(
+                canaryTask({
+                    altitude: 'graduating',
+                    numbering: true,
+                    requirements: ['- [ ] R1. A requirement no scenario binds.'],
+                    ac: ['- AC1 — A raw bullet record with no checkbox and no Scenario heading'],
+                }),
+            );
+            expect(findings.filter((f) => f.code === FINDING_CODES.L3_AC_REQUIREMENT_COVERAGE)).toHaveLength(0);
+            expect(findings.filter((f) => f.code === FINDING_CODES.L4_UNCOVERED_TASK_SCENARIO)).toHaveLength(0);
+        });
+    });
+
     // ── L4 roll-up (0121): parent↔child status drift + roster presence ──
 
     /** A parent task body with a Plan; `withRoster` controls whether the Plan table names a child WBS. */
