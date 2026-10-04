@@ -113,15 +113,14 @@ describe('AgentsView roster (0842 R1)', () => {
         view.unmount();
     });
 
-    test('cards open the member detail pane via the prototype selector', async () => {
+    test('cards render directly as static roster cards without popup detail window', async () => {
         setFetchForTesting(stubFetch(fleet(), { processes: [procRow('a1')] }));
         const view = harness(ctx());
         await act(async () => {});
-        const card = view.container.querySelector('[data-roster-entry="a1"]') as HTMLButtonElement;
-        await act(async () => {
-            card.click();
-        });
-        expect(view.container.querySelector('[data-member-detail]')).not.toBeNull();
+        const card = view.container.querySelector('[data-roster-entry="a1"]');
+        expect(card).not.toBeNull();
+        expect(card?.tagName.toLowerCase()).toBe('div');
+        expect(view.container.querySelector('[data-member-detail]')).toBeNull();
         view.unmount();
     });
 
@@ -260,23 +259,16 @@ describe('poll tick (0842 Design: one tick for both facts)', () => {
     });
 });
 
-// ── R4: focus contract ──
+// ── R4: card interaction contract ──
 
-describe('member detail focus restore (0842 R4)', () => {
-    test('open from a card, dismiss with Escape → focus returns to that card', async () => {
+describe('card display-only contract (0842 R4)', () => {
+    test('cards render as non-interactive divs without popup detail', async () => {
         setFetchForTesting(stubFetch(fleet(), { processes: [procRow('a1')] }));
         const view = harness(ctx());
         await act(async () => {});
-        const card = view.container.querySelector('[data-roster-entry="a1"]') as HTMLButtonElement;
-        await act(async () => {
-            card.click();
-        });
-        expect(view.container.querySelector('[data-member-detail]')).not.toBeNull();
-        await act(async () => {
-            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-        });
+        const card = view.container.querySelector('[data-roster-entry="a1"]');
+        expect(card).not.toBeNull();
         expect(view.container.querySelector('[data-member-detail]')).toBeNull();
-        expect(document.activeElement).toBe(card);
         view.unmount();
     });
 });

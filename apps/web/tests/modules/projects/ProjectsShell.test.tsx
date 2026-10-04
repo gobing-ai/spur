@@ -156,25 +156,25 @@ describe('ProjectsShell header (0840 R5)', () => {
 
 describe('ProjectsShell tabs (0840 R3/R5)', () => {
     test('two tabs render with the WorkspaceShell aria contract and deep-link selection', async () => {
-        const { container } = await renderShell(ctx(), ['/board/projects/processes']);
+        const { container } = await renderShell(ctx(), ['/board/projects/fleet']);
         const tabs = container.querySelectorAll('[data-projects-tab]');
         expect(tabs).toHaveLength(2);
-        const processes = container.querySelector('#projects-tab-processes');
-        expect(processes?.getAttribute('aria-selected')).toBe('true');
+        const fleetTab = container.querySelector('#projects-tab-fleet');
+        expect(fleetTab?.getAttribute('aria-selected')).toBe('true');
         expect(container.querySelector('[role="tablist"]')?.getAttribute('aria-label')).toBe('Projects tabs');
-        const panel = container.querySelector('#projects-tab-panel-processes');
+        const panel = container.querySelector('#projects-tab-panel-fleet');
         expect(panel?.getAttribute('role')).toBe('tabpanel');
-        expect(panel?.getAttribute('aria-labelledby')).toBe('projects-tab-processes');
+        expect(panel?.getAttribute('aria-labelledby')).toBe('projects-tab-fleet');
     });
 
     test('tab click swaps the active panel and aria-selected', async () => {
         const { container } = await renderShell(ctx());
         expect(container.querySelector('#projects-tab-panel-conversation')).not.toBeNull();
-        act(() => (container.querySelector('[data-projects-tab="processes"]') as HTMLButtonElement).click());
+        act(() => (container.querySelector('[data-projects-tab="fleet"]') as HTMLButtonElement).click());
         await settleInAct(); // ProcessesView fetches the process list on mount
-        expect(container.querySelector('#projects-tab-panel-processes')).not.toBeNull();
+        expect(container.querySelector('#projects-tab-panel-fleet')).not.toBeNull();
         expect(container.querySelector('#projects-tab-panel-conversation')).toBeNull();
-        expect(container.querySelector('#projects-tab-processes')?.getAttribute('aria-selected')).toBe('true');
+        expect(container.querySelector('#projects-tab-fleet')?.getAttribute('aria-selected')).toBe('true');
         expect(container.querySelector('#projects-tab-conversation')?.getAttribute('aria-selected')).toBe('false');
     });
 });

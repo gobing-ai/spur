@@ -166,17 +166,22 @@ describe('LB-1 structural invariants (0845 R4)', () => {
 
     test('the terminal pane owns its overflow-x container', async () => {
         installSilentApiFetch();
-        // Agents view: open a member — the terminal <pre> scrolls horizontally itself.
-        const agents = renderView('agents');
-        await act(async () => {});
-        const card = agents.container.querySelector('[data-roster-entry="a1"]') as HTMLButtonElement;
+        // Fleet view: open a member detail — the terminal <pre> scrolls horizontally itself.
+        const fleetView = renderView('processes');
         await act(async () => {
-            card.click();
+            for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 10));
         });
-        const terminal = agents.container.querySelector('[data-terminal-output]') as HTMLElement;
+        const inspectBtn = fleetView.container.querySelector(
+            '[data-g6="open-member"][data-roster-entry="a1"]',
+        ) as HTMLButtonElement;
+        expect(inspectBtn).not.toBeNull();
+        await act(async () => {
+            inspectBtn.click();
+        });
+        const terminal = fleetView.container.querySelector('[data-terminal-output]') as HTMLElement;
         expect(terminal, 'terminal pane').not.toBeNull();
         expect(terminal.className).toContain('overflow-x-auto');
-        agents.unmount();
+        fleetView.unmount();
     });
 
     test('roster rows wrap on breakpoint-qualified tracks; card facts wrap, never one fixed grid', async () => {

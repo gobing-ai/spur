@@ -17,7 +17,8 @@ export function useProjectTab(): { activeTab: ProjectTabId; selectTab: (id: Proj
     const activeTab = (() => {
         const parts = location.pathname.split('/');
         const idx = parts.indexOf('projects');
-        const segment = idx >= 0 ? parts[idx + 1] : undefined;
+        const rawSegment = idx >= 0 ? parts[idx + 1] : undefined;
+        const segment = rawSegment === 'processes' ? 'fleet' : rawSegment;
         return PROJECT_TABS.some((t) => t.id === segment) ? (segment as ProjectTabId) : DEFAULT_PROJECT_TAB;
     })();
 

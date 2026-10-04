@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Tooltip } from '@/ui';
 import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
-import MemberDetail from '../projects/MemberDetail';
 import { parseProcessList, STATUS_POLL_MS } from '../projects/MemberTerminal';
 import { buildRoster, formatUptime, type MemberIssue, type RosterEntry, sessionLabel } from '../projects/roster';
 import type {
@@ -236,7 +235,6 @@ export default function AgentsView({ pollMs = STATUS_POLL_MS }: { pollMs?: numbe
     const [executors, setExecutors] = useState<ConfiguredAgentExecutor[]>([]);
     const [fleetSnapshot, setFleetSnapshot] = useState<ProjectFleetSnapshot | null>(null);
     const [failed, setFailed] = useState(false);
-    const [selectedId, setSelectedId] = useState<string | null>(null);
     const [orchOffline, setOrchOffline] = useState(false);
     const [activeSection, setActiveSection] = useState<AgentsSection>('all');
     const [executorFilter, setExecutorFilter] = useState('');
@@ -245,7 +243,6 @@ export default function AgentsView({ pollMs = STATUS_POLL_MS }: { pollMs?: numbe
         executor: ConfiguredAgentExecutor;
         targetDisabled: boolean;
     } | null>(null);
-    const openerRef = useRef<HTMLButtonElement | null>(null);
     const tickRef = useRef<() => Promise<void>>(async () => {});
 
     useEffect(() => {
@@ -295,17 +292,6 @@ export default function AgentsView({ pollMs = STATUS_POLL_MS }: { pollMs?: numbe
         };
     }, [pollMs]);
 
-    // R4 focus contract: opening records the triggering card; Escape and the
-    // explicit close both restore focus to it BEFORE the pane unmounts.
-    const openDetail = useCallback((entry: RosterEntry, opener: HTMLButtonElement) => {
-        openerRef.current = opener;
-        setSelectedId(entry.instanceId);
-    }, []);
-    const closeDetail = useCallback(() => {
-        setSelectedId(null);
-        openerRef.current?.focus();
-    }, []);
-
     const filteredExecutors = useMemo(() => {
         if (!executorFilter.trim()) return executors;
         const q = executorFilter.toLowerCase();
@@ -332,7 +318,6 @@ export default function AgentsView({ pollMs = STATUS_POLL_MS }: { pollMs?: numbe
         );
     }, [stages, stageFilter]);
 
-    const selected = entries?.find((e) => e.instanceId === selectedId) ?? null;
     return (
         <div className="flex flex-col h-full overflow-hidden bg-spur-bg" data-agents-view>
             <div className="flex-1 overflow-y-auto p-3 space-y-6">
@@ -585,7 +570,6 @@ export default function AgentsView({ pollMs = STATUS_POLL_MS }: { pollMs?: numbe
                                                 key={entry.instanceId}
                                                 entry={entry}
                                                 orchestratorOffline={orchOffline}
-                                                onOpen={openDetail}
                                             />
                                         ))}
                                     </div>
@@ -595,7 +579,6 @@ export default function AgentsView({ pollMs = STATUS_POLL_MS }: { pollMs?: numbe
                     </>
                 )}
             </div>
-            {selected !== null && <MemberDetail entry={selected} onClose={closeDetail} />}
             {confirmingExecutor !== null && (
                 <ExecutorToggleModal
                     executor={confirmingExecutor.executor}
@@ -1064,26 +1047,14 @@ function ExecutorCard({
     );
 }
 
-function RosterCard({
-    entry,
-    orchestratorOffline,
-    onOpen,
-}: {
-    entry: RosterEntry;
-    orchestratorOffline: boolean;
-    onOpen: (entry: RosterEntry, opener: HTMLButtonElement) => void;
-}) {
+function RosterCard({ entry, orchestratorOffline }: { entry: RosterEntry; orchestratorOffline: boolean }) {
     const observed = observedFact(entry, orchestratorOffline);
     // AC1: running + derivable start time only; null for exited/not-started/null startedAt.
     const uptime = entry.observed.status === 'running' ? formatUptime(entry.observed.startedAt) : null;
     return (
-        <button
-            type="button"
-            className="text-left p-3.5 bg-spur-surface border border-spur-border rounded-xl hover:bg-spur-surface-2/60 focus:outline-none focus:ring-1 focus:ring-spur-accent shadow-sm transition-colors"
+        <div
+            className="text-left p-3.5 bg-spur-surface border border-spur-border rounded-xl shadow-sm transition-colors"
             data-roster-entry={entry.instanceId}
-            data-g6="open-member"
-            aria-haspopup="dialog"
-            onClick={(e) => onOpen(entry, e.currentTarget)}
         >
             <div className="flex items-center gap-2">
                 <span data-roster-role className="font-medium text-spur-text text-sm">
@@ -1149,7 +1120,7 @@ function RosterCard({
                     next: {observed.action}
                 </div>
             )}
-        </button>
+        </div>
     );
 }
 

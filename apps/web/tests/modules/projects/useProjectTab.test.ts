@@ -22,8 +22,10 @@ function wrapper(initialEntries: string[]) {
 
 describe('useProjectTab (0840 R3)', () => {
     test('parses the active tab from the path segment after projects', () => {
-        const { result } = renderHook(() => useProjectTab(), { wrapper: wrapper(['/board/projects/processes']) });
-        expect(result.current.activeTab).toBe('processes');
+        const { result } = renderHook(() => useProjectTab(), { wrapper: wrapper(['/board/projects/fleet']) });
+        expect(result.current.activeTab).toBe('fleet');
+        const legacy = renderHook(() => useProjectTab(), { wrapper: wrapper(['/board/projects/processes']) });
+        expect(legacy.result.current.activeTab).toBe('fleet');
     });
 
     test('missing or unknown segment falls back to the default tab', () => {
@@ -50,9 +52,9 @@ describe('useProjectTab (0840 R3)', () => {
             ),
         );
         expect(tabHook?.activeTab).toBe('conversation');
-        act(() => tabHook?.selectTab('processes'));
-        expect(tabHook?.activeTab).toBe('processes');
-        expect(loc?.pathname).toBe('/board/projects/processes');
+        act(() => tabHook?.selectTab('fleet'));
+        expect(tabHook?.activeTab).toBe('fleet');
+        expect(loc?.pathname).toBe('/board/projects/fleet');
         expect(loc?.search).toBe('?feature=G63');
     });
 });

@@ -12,6 +12,7 @@ import { MemoryRouter } from 'react-router';
 import GlobalAgentBar from '../../../src/components/GlobalAgentBar';
 import { resetFetchForTesting, setFetchForTesting } from '../../../src/lib/rpc-client';
 import { ConversationDraftProvider, saveDraft } from '../../../src/modules/projects/drafts';
+import ProcessesView from '../../../src/modules/projects/ProcessesView';
 import ProjectsShell from '../../../src/modules/projects/ProjectsShell';
 import { RECEIPT_LABELS } from '../../../src/modules/projects/receipt';
 import {
@@ -104,7 +105,9 @@ function stubFetch(): typeof fetch {
         }
         if (url.includes('/processes')) {
             return Promise.resolve(
-                new Response(JSON.stringify({ processes: [procRow('orch'), procRow('a1')] }), { status: 200 }),
+                new Response(JSON.stringify({ processes: [procRow('orch'), procRow('a1')], executions: [] }), {
+                    status: 200,
+                }),
             );
         }
         if (url.includes('/project/requests')) {
@@ -206,10 +209,10 @@ describe('R2: tabs are keyboard-navigable with aria-selected (0840 frozen tablis
 
         fireEvent.keyDown(tablist, { key: 'ArrowRight' });
         await settleInAct(); // panel switch mounts the processes panel, which fetches on mount
-        expect(tab('processes').getAttribute('aria-selected')).toBe('true');
+        expect(tab('fleet').getAttribute('aria-selected')).toBe('true');
         expect(tab('conversation').getAttribute('aria-selected')).toBe('false');
-        expect(container.querySelector('#projects-tab-panel-processes')).not.toBeNull();
-        expect(document.activeElement).toBe(tab('processes'));
+        expect(container.querySelector('#projects-tab-panel-fleet')).not.toBeNull();
+        expect(document.activeElement).toBe(tab('fleet'));
 
         fireEvent.keyDown(tablist, { key: 'ArrowLeft' });
         await settleInAct(); // panel switch mounts the conversation panel, which fetches on mount
@@ -222,9 +225,9 @@ describe('KB-4: Escape closes member detail and restores focus to its opener (08
     test('Escape closes the pane and document.activeElement is the opening card', async () => {
         setFetchForTesting(stubFetch());
         const view = render(
-            <MemoryRouter initialEntries={['/board/settings/agents']}>
+            <MemoryRouter initialEntries={['/board/projects/fleet']}>
                 <ProjectContext.Provider value={ctx() as never}>
-                    <AgentsView pollMs={10} />
+                    <ProcessesView pollMs={10} />
                 </ProjectContext.Provider>
             </MemoryRouter>,
         );

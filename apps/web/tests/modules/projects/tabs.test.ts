@@ -3,8 +3,8 @@ import ProcessesView from '../../../src/modules/projects/ProcessesView';
 import { DEFAULT_PROJECT_TAB, PROJECT_TABS } from '../../../src/modules/projects/tabs';
 
 describe('PROJECT_TABS (0840 R3)', () => {
-    test('contains the 2 tabs in frozen order: Conversation, Processes', () => {
-        expect(PROJECT_TABS.map((t) => t.id)).toEqual(['conversation', 'processes']);
+    test('contains the 2 tabs in frozen order: Conversation, Fleet', () => {
+        expect(PROJECT_TABS.map((t) => t.id)).toEqual(['conversation', 'fleet']);
     });
 
     test('tab ids are unique and labels are non-empty', () => {
@@ -21,7 +21,7 @@ describe('PROJECT_TABS (0840 R3)', () => {
     });
 
     // Tasks and Features stay their own modules; the old Work wrapper is gone.
-    test('processes is a top-level tab mounting ProcessesView', () => {
-        expect(PROJECT_TABS.find((t) => t.id === 'processes')?.component).toBe(ProcessesView);
+    test('fleet is a top-level tab mounting ProcessesView', () => {
+        expect(PROJECT_TABS.find((t) => t.id === 'fleet')?.component).toBe(ProcessesView);
     });
 });

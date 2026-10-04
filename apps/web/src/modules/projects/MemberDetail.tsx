@@ -20,7 +20,19 @@ const lifecycleUrl = (id: string, verb: 'start' | 'stop') =>
  * `onClose`, which restores focus to the opener card (AgentsView owns the
  * opener element).
  */
-export default function MemberDetail({ entry, onClose }: { entry: RosterEntry; onClose: () => void }) {
+export default function MemberDetail({
+    entry,
+    onClose,
+    execution,
+    fullCommand,
+    className,
+}: {
+    entry: RosterEntry;
+    onClose: () => void;
+    execution?: { command: string; args: string[]; exitCode?: number | null } | null;
+    fullCommand?: string;
+    className?: string;
+}) {
     // 0857: the retired teams feed is gone (its only reader was this pane). The work
     // dir is now the fleet snapshot's project `path` (0835/0840) and the model is the
     // declared member's resolved model from that same snapshot — a member whose
@@ -29,10 +41,18 @@ export default function MemberDetail({ entry, onClose }: { entry: RosterEntry; o
     const project = useProjectContext();
     const workDir = project.fleet?.path ?? project.path ?? 'Unavailable';
     const model = entry.declared === null ? 'Unavailable' : (entry.declared.model ?? 'Executor default');
+    const roleName = entry.declared?.role;
+    const roleConfig = project.fleet?.roles?.find((r) => r.name === roleName);
+    const stages =
+        roleConfig?.stages && roleConfig.stages.length > 0
+            ? roleConfig.stages
+            : (project.fleet?.stages?.filter((s) => s.role === roleName).map((s) => s.id) ?? []);
+    const executorName = entry.declared?.executor ?? roleConfig?.electedExecutor ?? 'Unavailable';
     const [messages, setMessages] = useState<InboxMessage[] | null>(null);
     const [activity, setActivity] = useState<ActivityRow[] | null>(null);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [showTerminal, setShowTerminal] = useState(true);
 
     // R4: Escape closes the pane (focus restore lives in onClose).
     useEffect(() => {
@@ -107,18 +127,44 @@ export default function MemberDetail({ entry, onClose }: { entry: RosterEntry; o
     const running = entry.observed.status === 'running';
 
     return (
-        <div className="shrink-0 h-[55%] flex flex-col border-t border-spur-border bg-spur-surface" data-member-detail>
+        <div
+            className={`flex flex-col bg-spur-surface overflow-hidden ${className ?? 'h-full shrink-0 border-t border-spur-border'}`}
+            data-member-detail
+        >
             <div className="flex items-center gap-2 px-3 py-2 border-b border-spur-border shrink-0">
                 <span className="text-sm font-semibold text-spur-text">{entry.declared?.role ?? 'member'}</span>
-                <button
-                    type="button"
-                    className="ml-auto px-2 py-0.5 rounded-lg text-xs text-spur-text-muted hover:text-spur-text"
-                    aria-label="Close member detail"
-                    onClick={onClose}
-                    data-member-detail-close
-                >
-                    close ✕
-                </button>
+                <span className="text-xs font-mono text-spur-text-muted">({entry.instanceId})</span>
+                {entry.isOrchestrator && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-spur-accent/20 text-spur-accent font-medium">
+                        orchestrator
+                    </span>
+                )}
+                <div className="ml-auto flex items-center gap-2">
+                    <button
+                        type="button"
+                        className={`px-2 py-0.5 rounded text-xs font-mono flex items-center gap-1 transition-colors border ${
+                            showTerminal
+                                ? 'bg-spur-accent/20 text-spur-accent border-spur-accent/40'
+                                : 'bg-spur-surface-2 text-spur-text-muted hover:text-spur-text border-spur-border'
+                        }`}
+                        aria-label="Toggle stdout/stderr terminal"
+                        data-detail-toggle-terminal
+                        onClick={() => setShowTerminal((v) => !v)}
+                        title="Toggle live stdout/stderr process stream"
+                    >
+                        <span>&gt;_</span>
+                        <span>Terminal</span>
+                    </button>
+                    <button
+                        type="button"
+                        className="px-2 py-0.5 rounded-lg text-xs text-spur-text-muted hover:text-spur-text"
+                        aria-label="Close member detail"
+                        onClick={onClose}
+                        data-member-detail-close
+                    >
+                        close ✕
+                    </button>
+                </div>
             </div>
             <div className="px-3 py-2 border-b border-spur-border shrink-0 flex flex-col gap-1 text-xs">
                 <span className="text-spur-text-muted">
@@ -144,15 +190,46 @@ export default function MemberDetail({ entry, onClose }: { entry: RosterEntry; o
                     </span>
                 </span>
                 <dl className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1">
-                    <dt className="text-spur-text-muted">Working directory</dt>
-                    <dd className="font-mono text-spur-text break-all" data-member-workdir>
-                        {workDir}
+                    <dt className="text-spur-text-muted">Role</dt>
+                    <dd className="font-mono text-spur-text break-all" data-member-role>
+                        {entry.declared?.role ?? 'member'}
+                    </dd>
+                    <dt className="text-spur-text-muted">Executor</dt>
+                    <dd className="font-mono text-spur-text break-all" data-member-executor>
+                        {executorName}
                     </dd>
                     <dt className="text-spur-text-muted">Model</dt>
                     <dd className="font-mono text-spur-text break-all" data-member-model>
                         {model}
                     </dd>
+                    {stages.length > 0 && (
+                        <>
+                            <dt className="text-spur-text-muted">Stages</dt>
+                            <dd className="flex items-center gap-1 flex-wrap" data-member-stages>
+                                {stages.map((st) => (
+                                    <span
+                                        key={st}
+                                        className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-base-200 text-spur-text-muted border border-spur-border/60"
+                                    >
+                                        {st}
+                                    </span>
+                                ))}
+                            </dd>
+                        </>
+                    )}
+                    <dt className="text-spur-text-muted">Working directory</dt>
+                    <dd className="font-mono text-spur-text break-all" data-member-workdir>
+                        {workDir}
+                    </dd>
                 </dl>
+                {(fullCommand || execution?.command) && (
+                    <div className="mt-1 pt-1 border-t border-spur-border/50 text-xs">
+                        <span className="text-spur-text-muted text-[11px]">Command: </span>
+                        <code className="font-mono text-[11px] text-spur-text break-all">
+                            {fullCommand ?? `${execution?.command} ${(execution?.args ?? []).join(' ')}`}
+                        </code>
+                    </div>
+                )}
             </div>
             <div className="px-3 py-2 border-b border-spur-border shrink-0 flex items-center gap-2 flex-wrap">
                 <button
@@ -184,9 +261,17 @@ export default function MemberDetail({ entry, onClose }: { entry: RosterEntry; o
                     </span>
                 )}
             </div>
-            <div className="flex-1 min-h-0 border-b border-spur-border">
-                <MemberTerminal agentId={entry.instanceId} />
-            </div>
+            {showTerminal && (
+                <div className="flex-1 min-h-[180px] border-b border-spur-border flex flex-col">
+                    <div className="px-3 py-1 bg-spur-surface-2 border-b border-spur-border text-[11px] font-mono text-spur-text-muted flex items-center justify-between shrink-0">
+                        <span>stdout / stderr live stream</span>
+                        <span className="text-[10px] text-spur-accent">SSE</span>
+                    </div>
+                    <div className="flex-1 min-h-0">
+                        <MemberTerminal agentId={entry.instanceId} />
+                    </div>
+                </div>
+            )}
             <div className="shrink-0 h-[35%] flex overflow-hidden">
                 <div className="flex-1 overflow-y-auto p-2 border-r border-spur-border" data-member-messages>
                     <div className="text-xs font-semibold text-spur-text uppercase tracking-wide mb-1">Messages</div>
