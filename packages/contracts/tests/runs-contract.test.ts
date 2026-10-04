@@ -37,6 +37,8 @@ const fullProjectionFixture = {
                             startedAt: '2026-08-19T00:00:01Z',
                             completedAt: '2026-08-19T00:00:02Z',
                             durationMs: 100,
+                            provenance: 'host-reported',
+                            estimated: false,
                         },
                     ],
                 },
@@ -55,6 +57,9 @@ describe('runs contract (1069 / E72 R5)', () => {
         const result = workflowProgressProjectionSchema.parse(fullProjectionFixture);
         expect(result.runId).toBe('r1');
         expect(result.states[0]?.actions[0]?.attempts[0]?.ok).toBe(true);
+        // 1070 R6: the attempt's provenance stamp rides the wire shape.
+        expect(result.states[0]?.actions[0]?.attempts[0]?.provenance).toBe('host-reported');
+        expect(result.states[0]?.actions[0]?.attempts[0]?.estimated).toBe(false);
     });
 
     test('schema accepts the unknown-run shape (states: [], orphan-row diagnostic, no version key)', () => {

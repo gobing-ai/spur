@@ -5,7 +5,7 @@ authority: derived
 version: 1.90.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
-updated_at: 2026-10-03
+updated_at: 2026-10-04
 read_before: changing a command, flag, env var, or schema
 edit_rules: 99 §6.5
 sync: [T3, T9]
@@ -79,7 +79,7 @@ Root [DESIGN.md](../DESIGN.md) owns visual and interaction design;
 | Inter-agent control plane | [inter-agent-control-plane.md](design/inter-agent-control-plane.md) |
 | Historical spine cost/drift measurement — analysis only | [dev-spine-cost-and-drift.md](design/dev-spine-cost-and-drift.md) |
 | Event tracking — System Event 5W1H SSOT | [event-tracking.md](design/event-tracking.md) |
-| E7 run-record contract — implemented (two-file pair, terminal state projection, inline driver setup); Feature E72 Trace tab + run progress route — proposed | [run-record-contract.md](design/run-record-contract.md) |
+| E7 run-record contract — implemented (two-file pair, terminal state projection, inline driver setup); Feature E72 Trace tab + run progress route — implemented (2026-10-04) | [run-record-contract.md](design/run-record-contract.md) |
 | E71 disposable run storage and durable evidence (ADR-131; implemented) | [disposable-run-storage.md](design/disposable-run-storage.md) |
 | Board module-boundary recommendations — **superseded by ADR-116** (the Workspace/Inbox/Teams split is retired; current boundary in [project-switcher.md](design/project-switcher.md)) | [board-module-boundaries.md](design/board-module-boundaries.md) |
 | History Board module — Conversation Analytics & Agent Forensic Plane | [history-board-module.md](design/history-board-module.md) |

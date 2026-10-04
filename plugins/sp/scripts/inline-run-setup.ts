@@ -18,7 +18,7 @@ function usage(): never {
     const text = [
         'Usage: bun plugins/sp/scripts/inline-run-setup.ts --run-id <id> --file <definition> [--spur-bin <path>]',
         '       bun plugins/sp/scripts/inline-run-setup.ts --fingerprint --task-file <path> [--feature-file <path>] [--spur-bin <path>]',
-        '       bun plugins/sp/scripts/inline-run-setup.ts --action --run-id <id> --node <state> --kind <kind> --status <done|failed> --ok <true|false> --duration-ms <n> [--spur-bin <path>]',
+        '       bun plugins/sp/scripts/inline-run-setup.ts --action --run-id <id> --node <state> --kind <kind> --status <done|failed> --ok <true|false> --duration-ms <n> [--estimated] [--spur-bin <path>]',
         '       bun plugins/sp/scripts/inline-run-setup.ts --actions-file <json-file> --run-id <id> [--spur-bin <path>]  (1007 R5 batch trace emission)',
         '       bun plugins/sp/scripts/inline-run-setup.ts --close --run-id <id> --status <done|failed|paused> [--reason <terminal-reason>] [--spur-bin <path>]',
         '       bun plugins/sp/scripts/inline-run-setup.ts --persist-out --from <worktree-path> [--task-file <path>]... [--spur-bin <path>]',
@@ -61,33 +61,6 @@ function resolveAppEntry(spurBin: string): { entry: string; portable: boolean } 
     return { entry, portable: true };
 }
 
-/** Let the selected CLI own config and layer resolution, then revalidate its snapshot in the app. */
-async function readInstalledInventory(file: string, spurBin: string): Promise<unknown> {
-    const localCli = fileURLToPath(new URL('../../../apps/cli/src/index.ts', import.meta.url));
-    const bundle = fileURLToPath(new URL('../lib/inline-run.generated.mjs', import.meta.url));
-    const { splitLaunchCommand } = (await import(bundle)) as typeof import('../lib/inline-run.generated.mjs');
-    const launch = spurBin
-        ? splitLaunchCommand(spurBin, 'inline-run-setup "spurBin"')
-        : existsSync(localCli)
-          ? { command: 'bun', leadingArgs: [localCli] }
-          : { command: 'spur', leadingArgs: [] };
-    if ('error' in launch) throw new Error(launch.error);
-    const result = spawnSync(
-        launch.command,
-        [...launch.leadingArgs, 'workflow', 'show', file, '--format', 'todo', '--json'],
-        { cwd: process.cwd(), encoding: 'utf8', timeout: 30_000, maxBuffer: 4 * 1024 * 1024 },
-    );
-    if (result.status !== 0) {
-        throw new Error(
-            `could not resolve the workflow definition with the installed CLI: ${result.error?.message ?? result.stderr}`,
-        );
-    }
-    const value: unknown = JSON.parse(result.stdout);
-    // Honor the existing optional JSON envelope without inventing another projection format.
-    if (value && typeof value === 'object' && 'ok' in value && 'data' in value && value.ok === true) return value.data;
-    return value;
-}
-
 // 0937 R2 closed terminal-reason vocabulary for `--close`. COPIED from
 // packages/app/src/workflow/terminal-reason.ts (no value import); parity test asserts equality.
 const TERMINAL_REASONS = new Set([
@@ -116,7 +89,8 @@ async function main(): Promise<void> {
         action = false,
         close = false,
         decide = false,
-        persistOut = false;
+        persistOut = false,
+        estimated = false;
     const taskFiles: string[] = [];
     let spurBin = getEnvVar('SPUR_BIN') ?? '';
     const argv = process.argv.slice(2);
@@ -127,6 +101,7 @@ async function main(): Promise<void> {
         else if (flag === '--close') close = true;
         else if (flag === '--decide') decide = true;
         else if (flag === '--persist-out') persistOut = true;
+        else if (flag === '--estimated') estimated = true;
         else if (flag === '--task-file') taskFiles.push(argv[++i] ?? '');
         else if (flag === '--spur-bin') spurBin = argv[++i] ?? spurBin;
         else if (flag !== undefined) flags.set(flag, argv[++i] ?? '');
@@ -144,6 +119,10 @@ async function main(): Promise<void> {
     const okRaw = flags.get('--ok') ?? '';
     const durationRaw = flags.get('--duration-ms') ?? '';
     const actionsFile = flags.get('--actions-file') ?? '';
+
+    // `--estimated` labels a host-reported duration the driver did NOT time around the action
+    // (1070 R2). Only `--action` carries one: every other mode is refused here, before any write.
+    if (estimated && !action) usage();
 
     if (fingerprint) {
         if (runId !== '' || file !== '' || taskFiles.length !== 1 || (taskFiles[0] ?? '').trim() === '') usage();
@@ -218,7 +197,16 @@ async function main(): Promise<void> {
         const durationMs = Number(durationRaw);
         if (durationRaw.trim() === '' || !Number.isFinite(durationMs) || durationMs < 0) usage();
         process.exit(
-            await app.runInlineRunTrace({ runId, close: false, node, kind, status, ok: okRaw === 'true', durationMs }),
+            await app.runInlineRunTrace({
+                runId,
+                close: false,
+                node,
+                kind,
+                status,
+                ok: okRaw === 'true',
+                durationMs,
+                ...(estimated ? { estimated: true } : {}),
+            }),
         );
     }
 
@@ -228,7 +216,13 @@ async function main(): Promise<void> {
     const app = (await import(entry)) as InlineApp;
     let inventory: unknown;
     try {
-        inventory = await readInstalledInventory(file, spurBin);
+        // The CLI walk lives in the app service (ADR-130 glue budget): the script passes only the
+        // paths it derives from its own module URL.
+        inventory = await app.readInstalledInventory({
+            file,
+            spurBin,
+            localCli: fileURLToPath(new URL('../../../apps/cli/src/index.ts', import.meta.url)),
+        });
     } catch (error) {
         const message = `could not resolve the workflow definition: ${error instanceof Error ? error.message : String(error)}`;
         app.writeInlineRunOutcome(runId, { ok: false, runId, error: message });

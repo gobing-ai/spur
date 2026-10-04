@@ -770,7 +770,7 @@ export function CopyValueButton({ value, label }: { value: string; label: string
  * ledger will fit in memory. Filter changes are debounced (≥250ms) so the
  * input does not fire a request per keystroke.
  */
-export default function SystemEventsTab({ onLivenessChange, timeRange }: ObservabilityTabProps) {
+export default function SystemEventsTab({ onLivenessChange, timeRange, navIntent }: ObservabilityTabProps) {
     const [visibleColumns, setVisibleColumns] = useState<EventColumnKey[]>(() => loadVisibleColumns());
     const [sortState, setSortState] = useState<EventSortState>(DEFAULT_SORT_STATE);
 
@@ -827,6 +827,16 @@ export default function SystemEventsTab({ onLivenessChange, timeRange }: Observa
         }, 250);
         return () => window.clearTimeout(handle);
     }, [filter]);
+
+    // Cross-tab intent (E72 R6): a run link in another tab sets our run-id
+    // filter. Applied to both filter states so the server query is filtered on
+    // the first fetch, not only after the debounce settles.
+    useEffect(() => {
+        if (navIntent?.tab !== 'system-events' || navIntent.runId === undefined) return;
+        const runId = navIntent.runId;
+        setFilter((prev) => (prev.runId === runId ? prev : { ...prev, runId }));
+        setDebouncedFilter((prev) => (prev.runId === runId ? prev : { ...prev, runId }));
+    }, [navIntent]);
 
     const activeFilter = useMemo(() => serializeFilter(debouncedFilter, timeRange), [debouncedFilter, timeRange]);
 

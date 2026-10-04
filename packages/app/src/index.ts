@@ -359,6 +359,8 @@ export {
     type PersistWorktreeRunsInput,
     type PersistWorktreeRunsSuccess,
     persistWorktreeRuns,
+    type ReadInstalledInventoryInput,
+    readInstalledInventory,
     runDecideForInlineRun,
     runInlineRunDecide,
     runInlineRunFingerprint,

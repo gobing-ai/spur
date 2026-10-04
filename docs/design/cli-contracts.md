@@ -3,7 +3,7 @@ kind: design
 title: "CLI grammar, initialization, agents, teams and rules"
 status: implemented
 created_at: 2026-09-09
-updated_at: 2026-10-02
+updated_at: 2026-10-04
 related: ["0822", "0850", "0856", "0857", "0860", "0861", "1064"]
 tags: [contract, cli, agent]
 ---
@@ -674,9 +674,13 @@ clean` reclaims retained logs older than `workflow.logRetentionDays` (default 30
   (`packages/app/src/workflow/progress-projection.ts`): `{schemaVersion, runId, workflow, status,
   definitionDigest, version?, currentState, states[], transitions[], artifacts[],
   nextTransitions[], diagnostics[], projectedAt}` — current state, each action's attempts
-  (`actionRunId`, status, `ok`, started/completed, `durationMs`), and the candidate next
+  (`actionRunId`, status, `ok`, started/completed, `durationMs`, `provenance`,
+  `estimated`), and the candidate next
   transitions with their eligibility. `apps/cli` renders only; it adds no projection logic and no
-  query shape. A running or incomplete run exits `0` and leaves unanswered values as `unknown`
+  query shape. `provenance` is `host-reported` for an inline-driver row (whose duration came from
+  the host session, `estimated` when it was not timed around the action) and `unknown` for an
+  engine-written or pre-stamp row. A running or incomplete run exits `0` and leaves
+  unanswered values as `unknown`
   (`null` digest/state, absent attempts, `diagnostics` naming what is missing). An unknown run id
   exits `1` with `Run <run-id> not found.` (`NOT_FOUND` under `--json-envelope`).
 - `validate <file>` — load + Zod-validate a workflow definition.

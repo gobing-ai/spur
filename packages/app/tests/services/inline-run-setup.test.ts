@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getEnvVar, setEnvVar } from '@gobing-ai/spur-config';
-import { ArtifactDao } from '@gobing-ai/spur-domain';
+import { ActionRunDao, ArtifactDao } from '@gobing-ai/spur-domain';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import {
     computeProofInputFingerprint,
@@ -13,6 +13,9 @@ import {
     openInlineRunProjectDb,
     resolveWorkflowDefinition,
     runDecideForInlineRun,
+    runInlineRunSetup,
+    runInlineRunTrace,
+    runInlineRunTraceBatch,
 } from '../../src';
 import { RunArtifactActionRunner } from '../../src/workflow/actions/run-artifact';
 
@@ -951,6 +954,223 @@ describe('runDecideForInlineRun (0941 R5)', () => {
             if (res.ok) return;
             expect(res.error).toContain('decide: invalid options');
             expect(() => readResultRow(p)).toThrow();
+        } finally {
+            p.cleanup();
+        }
+    });
+});
+
+/**
+ * Task 1070 R1/R3 — the inline driver's action rows carry a host-reported provenance
+ * stamp in `action_runs.result_json`, written through the existing writer `result`
+ * boundary (no migration, no new column). A batch row's optional `estimated` is
+ * validated before the first write, so validation stays all-or-nothing (1007 R5).
+ */
+describe('inline action provenance stamp (1070 R1/R3)', () => {
+    const TRACE_WORKFLOW = `name: inline-smoke
+initialState: start
+terminalStates:
+    - end
+states:
+    - id: start
+      onEnter:
+          - kind: shell
+            options:
+                command: echo smoke
+    - id: end
+transitions:
+    - from: start
+      to: end
+      guard:
+          kind: always
+`;
+
+    /** Real fixture project (git workdir + project-layer definition), mirroring the driver layout. */
+    function makeTraceProject(): { workdir: string; cleanup: () => void } {
+        const root = mkdtempSync(join(tmpdir(), 'spur-1070-trace-'));
+        const workdir = join(root, 'wt');
+        mkdirSync(join(workdir, '.spur', 'workflows'), { recursive: true });
+        mkdirSync(join(workdir, '.spur', 'run'), { recursive: true });
+        writeFileSync(join(workdir, '.gitignore'), '.spur/\n');
+        writeFileSync(join(workdir, 'README.md'), 'tracked\n');
+        writeFileSync(
+            join(workdir, '.spur', 'workflows', 'inline-smoke.yaml'),
+            `kind: state-machine\n${TRACE_WORKFLOW}`,
+        );
+        execSync('git init -q && git config user.email t@example.com && git config user.name t', { cwd: workdir });
+        execSync('git add -A && git commit -qm init', { cwd: workdir });
+        return { workdir, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+    }
+
+    /** Run `fn` with the process cwd in `dir` — the trace runners read `process.cwd()`. */
+    async function inDir<T>(dir: string, fn: () => Promise<T>): Promise<T> {
+        const back = process.cwd();
+        process.chdir(dir);
+        try {
+            return await fn();
+        } finally {
+            process.chdir(back);
+        }
+    }
+
+    /** Capture stdout across an awaited runner (it reports on stdout). */
+    async function captureStdout<T>(fn: () => Promise<T>): Promise<{ value: T; out: string }> {
+        const original = process.stdout.write;
+        const chunks: string[] = [];
+        process.stdout.write = (chunk: unknown): boolean => {
+            chunks.push(String(chunk));
+            return true;
+        };
+        try {
+            return { value: await fn(), out: chunks.join('') };
+        } finally {
+            process.stdout.write = original;
+        }
+    }
+
+    /** Seed the authoritative run row through the real setup path (no hand-inserted row). */
+    async function setupRun(workdir: string, runId: string): Promise<void> {
+        const selected = await resolveWorkflowDefinition(workdir, join(workdir, '.spur/workflows/inline-smoke.yaml'));
+        const inventory = {
+            name: selected.workflow.name,
+            kind: 'state-machine',
+            format: 'todo',
+            version: null,
+            definitionDigest: selected.digest,
+            source: { path: join(workdir, '.spur/workflows/inline-smoke.yaml'), layer: 'registered' },
+            steps: [
+                { id: 'start', initial: true },
+                { id: 'end', terminal: true },
+            ],
+        };
+        expect(await runInlineRunSetup({ runId, file: 'inline-smoke', inventory })).toBe(0);
+    }
+
+    /** Read the stored `result_json` values for a run, keyed by node. */
+    async function storedResultJson(workdir: string, runId: string): Promise<Map<string, string | null>> {
+        const projectDb = await openInlineRunProjectDb(workdir);
+        try {
+            const rows = await new ActionRunDao(projectDb.adapter).actionRowsByRunId(runId);
+            return new Map(rows.map((row) => [row.node, row.result_json]));
+        } finally {
+            projectDb.close();
+        }
+    }
+
+    function actionsFile(entries: readonly unknown[]): string {
+        const path = join(tmpdir(), `spur-1070-actions-${Math.random().toString(36).slice(2)}.json`);
+        writeFileSync(path, `${JSON.stringify(entries)}\n`);
+        return path;
+    }
+
+    test('runInlineRunTrace stamps host-reported provenance and the estimated flag (1070 R1/AC1)', async () => {
+        const p = makeTraceProject();
+        try {
+            await inDir(p.workdir, async () => {
+                await setupRun(p.workdir, 'run-1070-estimated');
+                const estimated = await captureStdout(() =>
+                    runInlineRunTrace({
+                        runId: 'run-1070-estimated',
+                        close: false,
+                        node: 'implement',
+                        kind: 'agent.run',
+                        status: 'done',
+                        ok: true,
+                        durationMs: 1234,
+                        estimated: true,
+                    }),
+                );
+                expect(estimated.value).toBe(0);
+                expect(JSON.parse(estimated.out)).toMatchObject({ ok: true, runId: 'run-1070-estimated' });
+
+                await setupRun(p.workdir, 'run-1070-measured');
+                const measured = await captureStdout(() =>
+                    runInlineRunTrace({
+                        runId: 'run-1070-measured',
+                        close: false,
+                        node: 'implement',
+                        kind: 'agent.run',
+                        status: 'done',
+                        ok: true,
+                        durationMs: 12,
+                    }),
+                );
+                expect(measured.value).toBe(0);
+            });
+
+            expect(
+                JSON.parse((await storedResultJson(p.workdir, 'run-1070-estimated')).get('implement') ?? ''),
+            ).toEqual({
+                provenance: 'host-reported',
+                estimated: true,
+            });
+            expect(JSON.parse((await storedResultJson(p.workdir, 'run-1070-measured')).get('implement') ?? '')).toEqual(
+                {
+                    provenance: 'host-reported',
+                    estimated: false,
+                },
+            );
+        } finally {
+            p.cleanup();
+        }
+    });
+
+    test('batch rows carry the stamp and an omitted estimated defaults to false (1070 R1)', async () => {
+        const p = makeTraceProject();
+        try {
+            await inDir(p.workdir, async () => {
+                await setupRun(p.workdir, 'run-1070-batch');
+                const file = actionsFile([
+                    {
+                        node: 'estimated-node',
+                        kind: 'agent.run',
+                        status: 'done',
+                        ok: true,
+                        durationMs: 7,
+                        estimated: true,
+                    },
+                    { node: 'measured-node', kind: 'shell', status: 'done', ok: true, durationMs: 3 },
+                ]);
+                const batch = await captureStdout(() =>
+                    runInlineRunTraceBatch({ runId: 'run-1070-batch', actionsFile: file }),
+                );
+                expect(batch.value).toBe(0);
+                expect(JSON.parse(batch.out)).toMatchObject({ ok: true, runId: 'run-1070-batch', recorded: 2 });
+            });
+
+            const rows = await storedResultJson(p.workdir, 'run-1070-batch');
+            expect(JSON.parse(rows.get('estimated-node') ?? '')).toEqual({
+                provenance: 'host-reported',
+                estimated: true,
+            });
+            expect(JSON.parse(rows.get('measured-node') ?? '')).toEqual({
+                provenance: 'host-reported',
+                estimated: false,
+            });
+        } finally {
+            p.cleanup();
+        }
+    });
+
+    test('a batch row with a non-boolean estimated fails before the first write (1070 R3)', async () => {
+        const p = makeTraceProject();
+        try {
+            await inDir(p.workdir, async () => {
+                await setupRun(p.workdir, 'run-1070-bad-estimated');
+                const file = actionsFile([
+                    { node: 'first', kind: 'shell', status: 'done', ok: true, durationMs: 1 },
+                    { node: 'second', kind: 'shell', status: 'done', ok: true, durationMs: 1, estimated: 'yes' },
+                ]);
+                const batch = await captureStdout(() =>
+                    runInlineRunTraceBatch({ runId: 'run-1070-bad-estimated', actionsFile: file }),
+                );
+                expect(batch.value).toBe(1);
+                expect(JSON.parse(batch.out)).toMatchObject({ ok: false, runId: 'run-1070-bad-estimated' });
+                expect(batch.out).toContain('actions[1]: estimated must be a boolean');
+            });
+
+            // All-or-nothing: the valid first row is not written either.
+            expect((await storedResultJson(p.workdir, 'run-1070-bad-estimated')).size).toBe(0);
         } finally {
             p.cleanup();
         }

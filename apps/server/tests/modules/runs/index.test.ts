@@ -310,6 +310,31 @@ describe('runs module progress route (1069 / E72 R5)', () => {
         db.close();
     });
 
+    test('a non-orphan diagnostic still serves the projection with 200 (R2)', async () => {
+        const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(db);
+        const now = Date.now();
+        // The row exists but its workflow definition cannot resolve, so the projection carries a
+        // `definition-unavailable` diagnostic. Only `orphan-row` maps to 404 — a regression to
+        // `diagnostics.length > 0` would otherwise keep the suite green while 404ing real runs.
+        await db.run(
+            "INSERT INTO runs (id, workflow_name, status, started_at, metadata_json, created_at, updated_at) VALUES ('r2', 'no-such-workflow', 'running', '2026-08-19T00:00:00Z', '{}', ?, ?)",
+            now,
+            now,
+        );
+        const app = new Hono();
+        runsModule.mount(app, ctxWithDb(db));
+
+        const res = await app.fetch(new Request('http://localhost/api/runs/r2/progress'));
+        expect(res.status).toBe(200);
+        const body = (await res.json()) as WorkflowProgressProjectionDto;
+        const codes = body.diagnostics.map((d) => d.code);
+        expect(codes).toContain('definition-unavailable');
+        expect(codes).not.toContain('orphan-row');
+
+        db.close();
+    });
+
     test('WorkflowProgressProjection and WorkflowProgressProjectionDto stay assignable in both directions (R5)', () => {
         // Type-drift guard: `bun run typecheck` fails if either side gains or
         // changes a field, in either direction.
