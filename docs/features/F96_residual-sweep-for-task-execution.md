@@ -2,11 +2,11 @@
 schema_version: 1
 id: "F96"
 name: "Residual sweep for task execution"
-status: active
+status: done
 priority: P2
 tags: []
 created_at: "2026-09-24T18:48:46.363Z"
-updated_at: "2026-09-27T07:11:56.529Z"
+updated_at: "2026-10-03T02:52:25.187Z"
 ---
 
 # F96: Residual sweep for task execution
@@ -103,6 +103,8 @@ Feature: Residual sweep for task execution
 | 0952 | dev-runall batch wrap covers only done tasks and reports the rest | done |
 | 0983 | Order the residual-sweep box check against the record-stage box flip | done |
 | 0987 | Order the standalone verify surfaces' residual-scan fold after record flips | done |
+| 1061 | Align task AC template with done-gate scenario keying (checkbox ACs key L4.uncovered-task-scenario) | done |
+| 1063 | Residuals from 1061 | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -114,4 +116,6 @@ Feature: Residual sweep for task execution
 - 2026-09-24T22:39:05.729Z active → verifying (system)
 - 2026-09-24T22:49:19.910Z verifying → done (system)
 - 2026-09-27T07:11:56.529Z done → active (system)
+- 2026-10-03T02:52:24.080Z active → verifying (system)
+- 2026-10-03T02:52:25.187Z verifying → done (system)
 

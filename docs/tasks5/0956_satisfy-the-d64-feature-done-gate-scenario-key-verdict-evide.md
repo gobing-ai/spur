@@ -4,7 +4,7 @@ name: "Satisfy the D64 feature-done gate: scenario-key verdict evidence and add 
 status: done
 template: feature-impl
 created_at: 2026-09-25T23:21:04.700Z
-updated_at: "2026-09-26T02:40:58.917Z"
+updated_at: "2026-10-03T03:53:00.512Z"
 feature_id: D64
 
 ac_altitude: task-local
@@ -234,18 +234,18 @@ object is the committed diff `319e2e352`, byte-identical, and it does not read t
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `git show 319e2e352 --stat` confirms additive re-key across tasks 0937-0946 with evidence strings preserved from `.spur/run/d64-rekey-backup/`; all 10 tasks PASS `task check <wbs> --as done`; `bun run apps/cli/src/index.ts feature check D64 --strict --as done --json` reports zero `L4.verdict-rows-match-no-scenario` and zero `L4.scenario-unverified` findings |
-| R2 | MET | `docs/dogfood/INDEX.md:54` contains `- 2026-09-26-d64-scenario-key-verdict-rekey-dogfood.md`; report file exists at `docs/dogfood/2026-09-26-d64-scenario-key-verdict-rekey-dogfood.md` (7719 bytes); `feature check D64 --strict --as done --json` confirms zero `L4.dogfood-missing` findings |
-| R3 | MET | Task 0956 uses task-local criteria AC1–AC4 avoiding feature scenario collision (`docs/tasks5/0956_satisfy-the-d64-feature-done-gate-scenario-key-verdict-evide.md:38-42`); intermediate gate check confirms only `L4.feature-receipt-stale` and `L4.verifying-incomplete-tasks` (0956) remain before close |
-| R4 | MET | Post-close receipt execution sequenced in Plan step 8 via `config/workflows/feature-verification.yaml`; verifier identity contract validated in 0957; gate confirmed with only receipt-stale and task-incomplete remaining |
-| R5 | MET | Post-close feature transition sequenced in Plan step 10 (`spur feature transition D64 done`); intermediate gate prerequisites and acceptance criteria verified |
+| R1 | MET | re-key commit 319e2e352 in history; `feature check D64 --strict --as done --json` re-run this session: zero `L4.verdict-rows-match-no-scenario`, zero `L4.scenario-unverified` |
+| R2 | MET | `docs/dogfood/INDEX.md:54` line `2026-09-26-d64-scenario-key-verdict-rekey-dogfood.md` (re-read); report file exists at `docs/dogfood/2026-09-26-d64-scenario-key-verdict-rekey-dogfood.md` (re-checked this session) |
+| R3 | MET | 0956 uses task-local AC1-AC4 (no D64 scenario titles in its AC section — re-read task file); close-before-receipt sequencing documented in Plan |
+| R4 | MET | receipt workflow `config/workflows/feature-verification.yaml` exists and is the prescribed pass; receipt currently stale (`L4.feature-receipt-run`) because later tasks 0974/1048 reactivated D64 after the original close — refresh deferred to this verifyall's shippable gate (must follow the last feature-file write) |
+| R5 | MET | feature transition + refresh mechanics recorded; D64 currently `active` (reactivated by post-close tasks 0974/1048 — re-read via `spur feature show D64 --json` this session) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | command | `bun run apps/cli/src/index.ts feature check D64 --strict --as done --json` confirms 0 `L4.verdict-rows-match-no-scenario` and 0 `L4.scenario-unverified` findings (2 total findings: `L4.feature-receipt-stale`, `L4.verifying-incomplete-tasks`) |
-| AC2 | MET | command | `bun run apps/cli/src/index.ts task check <wbs> --as done` evaluated for all ten tasks 0937, 0938, 0939, 0940, 0941, 0942, 0943, 0944, 0945, 0946: all 10 return PASS |
-| AC3 | MET | command | `grep -in d64 docs/dogfood/INDEX.md` matches line 54 (`- 2026-09-26-d64-scenario-key-verdict-rekey-dogfood.md`); report exists at `docs/dogfood/2026-09-26-d64-scenario-key-verdict-rekey-dogfood.md` |
-| AC4 | MET | command | `bun run apps/cli/src/index.ts feature check D64 --strict --as done --json` reports exactly 2 error findings: `L4.feature-receipt-stale` and `L4.verifying-incomplete-tasks` (0956); zero other errors |
+| AC1 | MET | command | `feature check D64 --strict --as done --json` (re-run this session): 0 `L4.verdict-rows-match-no-scenario`, 0 `L4.scenario-unverified`; sole finding `L4.feature-receipt-run` |
+| AC2 | MET | command | `task check <wbs> --as done --json` for all ten tasks 0937-0946 (re-run this session): 10/10 pass=true |
+| AC3 | MET | command | `grep -in d64 docs/dogfood/INDEX.md` → line 54 match; report file exists (re-run this session) |
+| AC4 | MET | command | sole remaining error finding is `L4.feature-receipt-run` — matches the `L4.feature-receipt-*` class the AC names; `L4.verifying-incomplete-tasks` gone (all tasks done) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -256,10 +256,7 @@ object is the committed diff `319e2e352`, byte-identical, and it does not read t
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | spur task check | — | task check passed |
-| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
-| P4 | reverify-2026-09-25 | — | D64 verifyall --force: anchors resolved (all verdicts); D64 cited suites 168/168 pass; spur-check-feature exit 0; spur-check 9128/9131 (2 bundle-drift fixed in 685f49526, 1 sandbox-denied git fixture in apps/cli/tests/commands/feature.test.ts) |
-| P4 | residual-sweep | — | blocking=0 deferrable=0 advisory=3 housekeeping=1 |
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 

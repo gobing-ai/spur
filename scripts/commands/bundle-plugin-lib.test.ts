@@ -1,7 +1,28 @@
-import { describe, expect, test } from 'bun:test';
-import { existsSync, readFileSync } from 'node:fs';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { bundleQualityGateLib, bundleResidualScanLib } from './bundle-plugin-lib';
+
+// Regeneration tests bundle into the real committed `plugins/sp/lib/` paths. Snapshot the
+// bundles before the first regeneration and restore them after the last, so a stale or
+// nondeterministic bundle fails its assertion WITHOUT leaving working-tree churn that the
+// next gate digests as a reviewed change (E93: inline-run.generated.mjs drift).
+const LIB_DIR = join(import.meta.dir, '../../plugins/sp/lib');
+const bundleSnapshots = new Map<string, string>();
+
+beforeAll(() => {
+    for (const file of readdirSync(LIB_DIR)) {
+        if (file.endsWith('.generated.mjs') || file.endsWith('.generated.d.mts')) {
+            bundleSnapshots.set(file, readFileSync(join(LIB_DIR, file), 'utf8'));
+        }
+    }
+});
+
+afterAll(() => {
+    for (const [file, bytes] of bundleSnapshots) {
+        writeFileSync(join(LIB_DIR, file), bytes);
+    }
+});
 
 describe('bundleStepProfileLib (task 1005 R1)', () => {
     test('generated artifacts exist and are committed', () => {

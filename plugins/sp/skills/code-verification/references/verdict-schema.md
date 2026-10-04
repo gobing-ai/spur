@@ -115,7 +115,9 @@ AC ids that do not resolve to one accepted identity — a task AC checklist labe
 (exact/bare title, `Scenario:` prefix, bracket tags, `AC-N`); paraphrases and ambiguous aliases
 fail — invalid status (`MET | PARTIAL | UNMET` for requirements;
 `N/A` additionally allowed for AC), invalid evidence type (`test | command | static-ref |
-manual-review | llm-judge | n/a`, or a `+` compound), and empty evidence. Interrupted runs keep the
+manual-review | llm-judge | n/a`, or a `+` compound), and empty evidence. Evidence cells that assert an
+external API/library claim without a same-cell citation are rejected with `evidence-citation` (see
+"Source citations for external claims" below). Interrupted runs keep the
 rows that pass the lint and complete only the missing IDs on retry.
 
 **Feature-credited AC ids are narrower than the lint's accepted set (task 0966 finding).** A row keyed
@@ -135,6 +137,20 @@ classifiers in task-pipeline.yaml`) is not an anchor: expand it into the specifi
 the run actually verified. Since 0804 R9 the checker ignores complete parsed citation spans before
 scanning for subjects, so a citation's filename (including snake_case paths) can never become a
 false subject — a real absent symbol, nonexistent file, or invalid range still reports.
+
+## Source citations for external claims (task 1070)
+
+A Requirement/AC evidence cell that asserts an external API/library claim must carry a verifiable
+citation in the SAME cell, or lint rejects the row with `evidence-citation` (blocking derivation).
+
+- Claim markers (closed set): a scoped-package mention (`@scope/name`), a `node_modules/` reference,
+  a semver version claim (`x.y.z`), or a backticked function-call-shaped token (`` `name(args)` ``).
+- Accepted citation forms (any one clears the cell): a repo `path:line(-end)` (backticked or bare),
+  the external named-origin form (@origin `path` line N — line number outside the backticks), or an
+  http(s) URL.
+- The rule is cell-local: a citation in another row or a "receipt above" cross-reference does not
+  satisfy it. Marker-free receipts (test counts, reviewed-log notes) need no citation. The check is
+  presence-only — which citation proves which claim is not deterministically decidable.
 
 ## Checks evidence
 

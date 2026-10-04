@@ -19,13 +19,17 @@
  * other probe problem writes `sensitive: true` (and exits 0) so the lane degrades to
  * safety, never to fast.
  *
+ * The artifact is written atomically (tmp + rename), so redirecting stdout onto the artifact path
+ * cannot corrupt it — the rename swaps in the real JSON after the shell's redirect truncates the
+ * old inode (1067 R3); that redirect is still refused with a nonzero exit. Normal output is silent.
+ *
  * Node-builtin imports only; the git lookup is a spawnable `GitRunner` so tests can fake
  * it; `main(argv, env, options)` is the same injection point the workflow wrapper and its
  * node twin exercise. Only an empty `wbs` (mis-invocation) exits nonzero.
  */
 
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { fstatSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { getEnvVars } from '../lib/env';
 
@@ -166,9 +170,17 @@ export function runDiffstat(
     const failSafe = (reason: string): DiffstatResult => {
         process.stderr.write(`task-diffstat: ${reason} — failing safe (sensitive)\n`);
         const row: Diffstat = { files: 0, insertions: 0, deletions: 0, paths: [], sensitive: true };
-        writeFileSync(abs(relResult), `${JSON.stringify(row)}\n`);
+        writeArtifact(abs(relResult), row);
         return { ...row, resultFile: relResult, exitCode: 0 };
     };
+
+    let stdoutIsArtifact = false; // 1067 R3: stdout redirected onto the artifact itself clobbered it once
+    try {
+        const [out, art] = [fstatSync(1), statSync(abs(relResult))];
+        stdoutIsArtifact = out.dev === art.dev && out.ino === art.ino;
+    } catch {
+        /* artifact absent or stdout not a regular file — nothing to compare */
+    }
 
     let base = '';
     try {
@@ -203,8 +215,17 @@ export function runDiffstat(
     const all = [...paths].filter((p) => p.length > 0).sort();
     const sensitive = all.some((p) => sensitiveReasonForPath(p) !== null);
     const row: Diffstat = { files: all.length, insertions, deletions, paths: all, sensitive };
-    writeFileSync(abs(relResult), `${JSON.stringify(row)}\n`);
-    return { ...row, resultFile: relResult, exitCode: 0 };
+    writeArtifact(abs(relResult), row);
+    if (stdoutIsArtifact)
+        process.stderr.write('task-diffstat: stdout redirected onto the artifact — kept; redirect stdout elsewhere\n');
+    return { ...row, resultFile: relResult, exitCode: stdoutIsArtifact ? 1 : 0 };
+}
+
+/** Atomic artifact write (tmp + rename): a stdout redirect onto the path cannot interleave (1067 R3). */
+function writeArtifact(absPath: string, row: Diffstat): void {
+    const tmp = `${absPath}.tmp`;
+    writeFileSync(tmp, `${JSON.stringify(row)}\n`);
+    renameSync(tmp, absPath);
 }
 
 export const TASK_DIFFSTAT_USAGE = 'usage: task-diffstat  (env: wbs)';

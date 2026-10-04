@@ -4,7 +4,7 @@ name: Add the two-tier spur-check primitive with fingerprint-bound receipts
 status: done
 template: feature-impl
 created_at: 2026-09-24T00:13:17.004Z
-updated_at: "2026-09-26T02:49:59.395Z"
+updated_at: "2026-10-03T03:39:01.457Z"
 feature_id: D64
 priority: P1
 tags:
@@ -213,16 +213,16 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | plugins/sp/scripts/quality-gate.ts:387-399 changed scope (git diff HEAD + ls-files --others); plugins/sp/scripts/quality-gate.ts:318-341 src-to-test mapping; plugins/sp/scripts/quality-gate.ts:361-385 biome check files + cd ws typecheck/test; plugins/sp/scripts/quality-gate.ts:453-462 {id,inputDigest} PASS skip; fixture light PASS 3 checks, rerun skipped:3; tests plugins/sp/tests/quality-gate-receipt.test.ts:193,219,315,348 |
-| R2 | MET | plugins/sp/scripts/quality-gate.ts:625-650 receipt written only in run with proofDigest; check-receipt/v1 schema plugins/sp/scripts/quality-gate.ts:187; absent digest -> no receipt + logged reason plugins/sp/scripts/quality-gate.ts:648; fixture full receipt + reuse ok; no-digest run wrote none; tests quality-gate.test.ts:326,358,375 |
-| R3 | MET | plugins/sp/scripts/quality-gate.ts:670-684 status exit 0 prints {reuse,reason}; plugins/sp/scripts/quality-gate.ts:191-192,276-286 reasons missing |
-| R4 | MET | plugins/sp/scripts/quality-gate.ts:620-622 findings+status files; plugins/sp/scripts/quality-gate.ts:69,115-122 bounded findings MAX 20; plugins/sp/scripts/quality-gate.ts:68,74,578-586 SQLite-busy retry MAX 5; plugins/sp/scripts/quality-gate.ts:567-575 recheck probe; plugins/sp/scripts/quality-gate.ts:684 soft-fail exit 0; 36 pass / 0 fail incl. pre-existing suites |
-| R5 | MET | plugins/sp/skills/spur-check/SKILL.md:1-13 superskill frontmatter; documents tiers/receipt/reuse//sp:dev-fixall composition; plugins/sp/README.md:345 index row; plugin-smoke PASS |
+| R1 | MET | mode `light` wired `plugins/sp/scripts/quality-gate.ts:33,43` (re-read), logic in generated bundle `plugins/sp/lib/quality-gate.generated.mjs` (`runLightGate` import `:20`); changed-scope + src→test mapping + {id,inputDigest} skip covered by tests: 28 pass across `plugins/sp/tests/quality-gate-receipt.test.ts` + `quality-gate.test.ts` (re-run this session) |
+| R2 | MET | run tier writes check-receipt/v1 receipt only with proofDigest (`plugins/sp/scripts/quality-gate.ts:10,20` contract re-read); absent digest → no receipt (test-covered, re-run) |
+| R3 | MET | mode `status` exit 0 prints {reuse,reason}: `plugins/sp/scripts/quality-gate.ts:47` readReceiptStatus against current digest (re-read); reasons missing/failed/stale/light-only (tests re-run) |
+| R4 | MET | existing outputs/findings/SQLite-busy retry/recheck unchanged — full pre-existing quality-gate suites green this session (28 pass / 0 fail) |
+| R5 | MET | `plugins/sp/skills/spur-check/SKILL.md` exists with superskill frontmatter (re-checked); indexed in plugins/sp/README.md |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Lightweight checks accumulate during development | MET | test | fixture light rerun at same digest skipped:3 with 3 skip log lines; plugins/sp/tests/quality-gate-receipt.test.ts:348 accumulation test; skip guard plugins/sp/scripts/quality-gate.ts:453-462 |
-| AC2 — The comprehensive check runs once at the quality boundary | MET | test | run writes the only reusable receipt plugins/sp/scripts/quality-gate.ts:625-646; readReceiptStatus plugins/sp/scripts/quality-gate.ts:276-286 returns light-only (fixture confirmed); light never demotes full; digest captured at config/workflows/task-pipeline.yaml:419; test plugins/sp/tests/quality-gate-receipt.test.ts:315 never reports reuse |
+| Scenario: R6 — Lightweight checks accumulate during development | MET | test | receipt accumulation + same-digest skip tests in `plugins/sp/tests/quality-gate-receipt.test.ts` (28 pass across both suites, re-run this session) |
+| Scenario: R7 — The comprehensive check runs once at the quality boundary | MET | test | only `run` tier writes reusable receipt; `status` reports light-only/stale otherwise (`plugins/sp/scripts/quality-gate.ts:47`, tests re-run) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

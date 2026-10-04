@@ -4,7 +4,7 @@ name: Route task-pipeline work by triage lane and failure class
 status: done
 template: feature-impl
 created_at: 2026-09-24T00:13:17.006Z
-updated_at: "2026-09-26T02:40:05.355Z"
+updated_at: "2026-10-03T03:45:47.044Z"
 feature_id: D64
 priority: P2
 tags:
@@ -301,17 +301,17 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | State `triage` at config/workflows/task-pipeline.yaml:513; test PASS → triage (:931-933) and test-recheck PASS → triage (:964-966) replace the four former gate-PASS edges (frozen-contract test asserts they are gone); triage → verify guarded `mode = fast` (:992-997), triage → review `mode != fast` (:999-1005), fork exhaustive (triage-routing suite, 14 pass fresh) |
-| R2 | MET | (a) shell producer writes `.spur/run/$wbs-diffstat.json` via task-diffstat.ts (numstat + untracked scan, yaml:531-533; untracked newline-count at task-diffstat.ts:115-125); (b) caller-set mode projected verbatim, pre-guard exits before decide (yaml:537-539; test :243); (c) pre-guard jq pins safety on sensitive \|\| insertions+deletions > 400 and the projection shell never consults the decide row when mode.txt is non-empty (yaml:538-539, :559-561; test :256 — sensitive beats decide-low; >400 test); (d) decide task-triage choice [low,standard,high] default standard, evidence diffstat+taskSpec, resultFile `<wbs>-triage.decision`, low → fast only (yaml:543-555, :559-561; frozen contract test :199) |
-| R3 | MET | test-fail-triage state (yaml:572) reached from both red gates (:941, :974); decide failure-class choices [retryable,fix,stop] default fix, evidence `<wbs>-test-gate.findings`, resultFile `<wbs>-failure-class.decision` (yaml:584-595); stop → failed(failed-check) declared first (:1009-1017), cap → failed(retry-exhausted), retryable → test-recheck with attempt counter incremented on entry (:601, cap still bounds), fix → test-fix (:1044); missing/corrupt decision fails closed (:1046); dead `test → test-fix` FAIL edge deleted per delta review (yaml:948-955) |
-| R4 | MET | runDecide disabled branch (packages/app/src/workflow/decide.ts:98) returns degraded default row (value=options.default → `standard`/`fix`); runner threads the flag (actions/decide.ts:93); harness stub pre-writes the exact runner row shape (task-pipeline-triage-routing.test.ts:118) and the R4 test (:278-287) asserts mode stays empty → standard review lane; with flag off triage is pure shell (no model call) |
-| R5 | MET | Precheck writer and triage writer share the `<runId> <wbs> <reason>` line format into .spur/memory/task-pipeline-routes.log with the same `pipeline-$wbs` fallback (task-pipeline.yaml ~:227 vs :565) |
-| R6 | MET | Candidate `task-pipeline-triage-lanes` in config/workflow-candidates.json:6-20 — canonical task-pipeline, deadline 2026-11-24, baselineAgentRunCount 0 (= 0938 agentRunCountMedian, cited in rationale), verdict null (spec'd pre-promotion state), ADR-076 revert clause; promotion check PASS; retry-exhausted/agent.run citation is post-merge via promotion evaluate as instructed |
+| R1 | MET | state `triage` `config/workflows/task-pipeline.yaml:498` (re-read); test/test-recheck PASS → triage; triage → verify guarded mode=fast, triage → review mode!=fast — live-YAML routing suite `packages/app/tests/workflow/task-pipeline-triage-routing.test.ts` 15 pass (re-run this session) |
+| R2 | MET | (a) diffstat producer writes `.spur/run/<wbs>-diffstat.json` (numstat + untracked); (b) caller-set mode never overridden; (c) sensitive/>400-line pre-guard pins safety, no decide call; (d) decide task-triage choice [low,standard,high] default standard, low→fast only — all asserted in routing suite (15 pass, re-run) |
+| R3 | MET | `test-fail-triage` state `config/workflows/task-pipeline.yaml:557` (re-read); decide failure-class [retryable,fix,stop] default fix; stop→failed(failed-check), retryable→test-recheck counting an attempt, fix→test-fix; missing decision fails closed — routing suite (re-run) |
+| R4 | MET | decideDecisionMaker off → degraded defaults (standard/fix); graph behaves as today apart from triage hop + diffstat — R4 test in routing suite asserts mode stays empty (re-run) |
+| R5 | MET | triage route reason appended to `.spur/memory/task-pipeline-routes.log` in the shared `<runId> <wbs> <reason>` format (routing suite, re-run) |
+| R6 | MET | candidate `task-pipeline-triage-lanes` in `config/workflow-candidates.json`: canonical task-pipeline, deadline 2026-11-24, 0938 baseline, verdict null pending measured evaluate (re-read via jq this session) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Task pipeline routes work by triage lane and failure class | MET | test | Live-YAML routing suite packages/app/tests/workflow/task-pipeline-triage-routing.test.ts — 14 pass / 0 fail (fresh re-run): lanes, caller-mode, sensitive, degraded-default, failure-class fix/retryable/stop/cap/missing-decision, frozen contracts; inline-pipeline-parity-check ok (12 actions / 4 guards / 10 workflows, worker report + review); YAML validates |
-| AC2 — Workflow shape changes are accepted only on measured benefit | MET | command | config/workflow-candidates.json:6-20 — candidate with 0938 measured baseline (agentRunCountMedian 0), honest 'projected from 0938, NOT shadow-run-confirmed' status, deadline 2026-11-24, ADR-076 revert clause; promotion check PASS (4 candidates, all verdicts null — spec'd pre-promotion state; verdict citation post-merge via promotion evaluate) |
+| Scenario: R9 — Task pipeline routes work by triage lane and failure class | MET | test | `packages/app/tests/workflow/task-pipeline-triage-routing.test.ts` 15 pass / 0 fail (re-run this session): lanes, caller-mode, sensitive guard, degraded default, failure-class fix/retryable/stop/cap |
+| [non-behavior] AC2 — Workflow shape changes are accepted only on measured benefit | MET | static-ref | candidate bound to 0938 measured baseline, deadline 2026-11-24, ADR-076 revert clause; verdict honestly null pending shadow-run measurement |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

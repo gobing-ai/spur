@@ -4,7 +4,7 @@ name: Preserve terminal reasons and cancel paused or interrupted workflow runs
 status: done
 template: issue
 created_at: 2026-10-02T05:46:39.101Z
-updated_at: "2026-10-02T10:13:52.778Z"
+updated_at: "2026-10-03T03:55:57.740Z"
 feature_id: D64
 
 priority: P2
@@ -90,16 +90,16 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | RunDao.cancelRun (packages/domain/src/dao/run-dao.ts:275) writes status=failed, completed_at, terminal_reason='cancelled', staleReason metadata for exactly running/pending/paused/interrupted. Domain test.each x4 states + metadata preservation pass (packages/domain/tests/dao/run-dao.test.ts). |
-| R2 | MET | Conditional UPDATE ... WHERE status IN (4 resumable) is the race fence; trace/artifacts/checkpoints/task-links untouched (single runs-row write). Terminal no-clobber x3 domain tests; service never reads pid for terminal rows (packages/app/src/services/workflow-service.ts:1181-1197). |
-| R3 | MET | finalizeStale (run-dao.ts:236) and listStaleRuns unchanged (still running/pending, no terminal_reason); clean-path tests pass untouched; bounded ESRCH-tolerant signalling preserved via signalSubprocess. |
+| R1 | MET | `RunDao.cancelRun` `packages/domain/src/dao/run-dao.ts:274-286` (re-read): status=failed, completed_at, terminal_reason='cancelled', staleReason metadata, WHERE status IN (running,pending,paused,interrupted); domain suite 28 pass (`packages/domain/tests/dao/run-dao.test.ts`, re-run this session) |
+| R2 | MET | conditional UPDATE … WHERE status IN (4 resumable) is the race fence (`run-dao.ts:277-284` re-read); single runs-row write — trace/artifacts/checkpoints/task-links untouched; service never signals terminal rows |
+| R3 | MET | `finalizeStale` `run-dao.ts:250` + listStaleRuns unchanged (stale sweep stays running/pending — comment at `:270-273` re-read); clean-path tests untouched and green; bounded ESRCH-tolerant signalling preserved |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | Service tests pause/interrupt a real worker then cancel: each becomes failed/cancelled with completion timestamp; records retained. Domain x4-status tests pass. |
-| AC2 | MET | test | Terminal rows (done/failed/cancelled) never clobbered nor signalled — service test holds a live pid on a done row and asserts killed=false and process survival; race covered by WHERE guard + finalized=after&&isNonTerminal derivation. |
-| AC3 | MET | test | Existing finalizeStale/listStaleRuns suites pass unchanged; paused/interrupted rows are not newly cancelled by clean. |
-| AC4 | MET | test | Cancel writes terminal_reason='cancelled' (0937 enum; TERMINAL_REASONS includes it); traceRowById reads the column (service test asserts); D64 consumers read runs.terminal_reason directly so cancellations report cancelled, never unknown; no action/artifact/link/checkpoint writes in the cancel path. |
+| AC1 | MET | test | 11 cancel-focused tests `packages/app/tests/services/workflow-service.test.ts -t cancel` pass (re-run this session): running/pending/paused/interrupted → failed/cancelled with completion timestamp, records retained; domain x4-status tests green |
+| AC2 | MET | test | terminal rows never clobbered nor signalled (live-pid-on-done-row test in cancel suite, re-run); race fenced by WHERE guard |
+| AC3 | MET | test | finalizeStale/listStaleRuns behavior unchanged — domain suite 28 pass (re-run); paused/interrupted not newly cancelled by clean |
+| AC4 | MET | test | cancel writes terminal_reason='cancelled' (0937 enum member); traceRowById selects the column (`packages/domain/src/dao/run-dao.ts:127` re-read); D64 consumers read runs.terminal_reason directly — cancelled, never unknown |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

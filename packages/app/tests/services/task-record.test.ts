@@ -249,6 +249,16 @@ describe('renderTesting', () => {
         expect(out).toContain('Coverage: N/A');
     });
 
+    test('renders the confidence line when the artifact carries it (1068 R3)', () => {
+        const out = renderTesting(makeVerdict({ confidence: 'HIGH' }));
+        expect(out).toContain('- Confidence: HIGH');
+    });
+
+    test('renders no confidence line for a pre-1068 artifact without the field (1068 R3)', () => {
+        const out = renderTesting(makeVerdict());
+        expect(out).not.toContain('Confidence:');
+    });
+
     test('renders no-requirements row when empty', () => {
         const v = makeVerdict({ requirements: [] });
         const out = renderTesting(v);

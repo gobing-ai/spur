@@ -1,6 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { createHash } from 'node:crypto';
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { getEnvVars } from '@gobing-ai/ts-utils';
 
 const SPEC = readFileSync(join(import.meta.dir, '../../skills/spur-dev/references/execution-batch.md'), 'utf8');
 
@@ -267,5 +270,740 @@ describe('execution-batch spec contract (task 0477 — worktree isolation lifecy
     test('R10.1 — portable git only; no Claude-Code-only worktree tools', () => {
         expect(SPEC).toContain('Use portable `git worktree` commands only');
         expect(RUNALL).not.toContain('EnterWorktree');
+    });
+});
+
+const DRIVER = readFileSync(
+    join(import.meta.dir, '../../skills/spur-dev/references/inline-pipeline-driver.md'),
+    'utf8',
+);
+
+describe('execution-batch + inline-driver spec contract (task 1058 — per-call tree pin)', () => {
+    test('inline driver — the canonical per-call pin protocol is defined (R1)', () => {
+        expect(DRIVER).toContain('## Per-call execution-tree pin (task 1058)');
+        // The template: cd first, then verify physical path and repository identity.
+        expect(DRIVER).toContain('cd -- "$SPUR_TREE"');
+        expect(DRIVER).toContain('pwd -P');
+        expect(DRIVER).toContain('git rev-parse --show-toplevel');
+        expect(DRIVER).toContain('git branch --show-current');
+        expect(DRIVER).toContain('tree mismatch: expected');
+        expect(DRIVER).toContain('branch mismatch: expected');
+        expect(DRIVER).toContain('Pin reads as well as writes');
+        expect(DRIVER).toContain('heading-only grep is not proof');
+        // Fail closed BEFORE the CLI runs, with named expected/actual — no magic exit-91
+        // contract (task 1058 Q&A, 2026-10-02).
+        expect(DRIVER).toContain('before the CLI runs');
+        expect(DRIVER).not.toContain('exit 91');
+        // Engine shell actions already bind context.workdir — the protocol is host-only.
+        expect(DRIVER).toContain('packages/app/src/workflow/actions/shell.ts:98');
+    });
+
+    test('execution batch — host boundaries pin their tree; WT-4 selects the invoking tree (R2)', () => {
+        // Collapse markdown reflow so multi-word pins match across wrapped lines.
+        const spec = SPEC.replace(/\s+/g, ' ');
+        expect(spec).toContain('Per-call tree pinning (task 1058)');
+        expect(spec).toContain('canonical per-call pin protocol');
+        expect(spec).toContain('select the **invoking** tree');
+        expect(spec).toContain('FF ancestry, marker and cleanup sequencing remain owned by 1059');
+        // WT-3b runs as a pinned subshell, not a persistent cd + `cd -` reliance.
+        expect(spec).toContain('cd -- "../<worktree-dir>"');
+    });
+});
+
+describe('execution-batch spec contract (task 1059 — WT-4 fail-stop pins)', () => {
+    test('execution batch — WT-4 fail-stop merge sequence', () => {
+        // Collapse markdown reflow so multi-word pins match across wrapped lines.
+        const spec = SPEC.replace(/\s+/g, ' ');
+        // Tips are captured, never re-derived: BATCH_TIP pinned before any cleanup, fresh BASE_TIP.
+        expect(spec).toContain('BATCH_TIP="$(git rev-parse "$BRANCH")"');
+        expect(spec).toContain('BASE_TIP="$(git rev-parse "$BASE_REF")"');
+        // Fresh-base ancestry immediately before the sole mutation; errors fail closed.
+        expect(spec).toContain('immediately before the sole mutation');
+        expect(spec).toContain('git merge-base --is-ancestor "$BASE_TIP" "$BATCH_TIP" || ANCESTRY_RC=$?');
+        expect(spec).toContain('ancestry check could not run (git exit $ANCESTRY_RC) - failing closed');
+        expect(spec).toContain('git merge --ff-only "$BRANCH"');
+        expect(spec).toContain('the concurrent-writer race survives every precheck');
+        // Landed verification of the captured tip after the merge.
+        expect(spec).toContain('git merge-base --is-ancestor "$BATCH_TIP" "$LANDED_BASE_TIP"');
+        // Frozen marker vocabulary: failed FF stays active; merged only after landed
+        // verification + persistence; landed-but-incomplete records retained + mergeCommit.
+        expect(spec).toContain('failed FF leaves the marker at `status: active`');
+        expect(spec).toContain('only after landed verification and required persistence');
+        expect(spec).toContain('records `status: retained` + `mergeCommit` BATCH_TIP');
+        expect(spec).toContain('a removed branch is never queried');
+        // F3: the delete is fail-stop — a refusal halts via the retained marker, never silently.
+        expect(spec).toContain(
+            'git branch -D "$BRANCH" || { echo "WT-4 halt: cannot delete branch $BRANCH after landed merge $BATCH_TIP" >&2; write_marker retained; exit 1; }',
+        );
+        expect(spec).toContain('an unmerged-refusal would only block proven-merged cleanup');
+        // Partial worktree-removal recovery is inspection-only; recursive deletion needs
+        // explicit operator authorization; no automatic recovery mutations.
+        expect(spec).toContain('Partial worktree-removal recovery is inspection-only');
+        expect(spec).toContain('Recursive deletion of leftover directories');
+        expect(spec).toContain('requires explicit operator authorization');
+        expect(spec).toContain('No automatic rebase, recovery merge');
+        // Local refs only — fetch appears only as its prohibition.
+        expect(spec).toContain('no fetch');
+        expect(spec).not.toContain('git fetch');
+    });
+
+    test('execution batch — marker read-modify-write, fail-stop branch delete, class-conditional WT-5 report (F1/F2/F3)', () => {
+        // Collapse markdown reflow so multi-word pins match across wrapped lines.
+        const spec = SPEC.replace(/\s+/g, ' ');
+        // F1: marker rewrite preserves WT-3 fields — read-modify-write, not a 6-field overwrite.
+        expect(spec).toContain(
+            'read-modify-write: preserve WT-3 fields (id, command, selector, createdAt, adopted, adoptedAt)',
+        );
+        // Both create and reuse blocks rewrite in place via jq; the absent-fallback stays 6-field.
+        expect(
+            spec
+                .split('write_marker ()')
+                .filter((part) =>
+                    part.includes('jq --arg s "$1" --arg m "$BATCH_TIP" \'.status = $s | .mergeCommit = $m\''),
+                ).length,
+        ).toBe(2);
+        expect(spec).toContain('cannot rewrite marker $MARKER');
+        // F2: the retained-report sentence is conditional on the failure class — the
+        // unconditional "Nothing was merged" claim is gone; landed-but-incomplete states the landing.
+        expect(spec).not.toContain('The worktree and its branch are intact. Nothing was merged onto the base ref.');
+        expect(spec).toContain('pre-merge failure: nothing was merged onto the base ref.');
+        expect(spec).toContain(
+            'landed-but-incomplete: the batch merge LANDED as <batch-tip-sha> on <base-ref>; retention covers post-merge persistence/cleanup only.',
+        );
+    });
+});
+
+// --- task 1058 R3: two-tree subprocess canary against the real source CLI -------------------
+
+const CANARY_ROOT = join(import.meta.dir, '..', '..', '..', '..');
+const CANARY_CLI = join(CANARY_ROOT, 'apps', 'cli', 'src', 'index.ts');
+const CANARY_PROOF_DIR = join(CANARY_ROOT, '.spur', 'run', '1058-cwd-proof');
+const CANARY_WBS = '1100';
+const CANARY_SEED = [
+    '---',
+    'schema_version: 1',
+    'name: pin canary task',
+    'status: todo',
+    'template: issue',
+    'created_at: 2026-10-02T22:50:39.301Z',
+    'updated_at: "2026-10-02T22:50:39.301Z"',
+    'feature_id: D63',
+    'priority: P2',
+    'estimate_hours: 1',
+    '---',
+    '',
+    `## ${CANARY_WBS}. pin canary task`,
+    '',
+    '### Background',
+    '',
+    'Seed background body.',
+    '',
+    '### Requirements',
+    '',
+    '- [ ] R1. Canary requirement.',
+    '',
+    '### Solution',
+    '',
+    '<!-- Filled during implementation. -->',
+    '',
+    '### History',
+    '',
+].join('\n');
+
+/** The exact per-call pin subshell the driver spec documents — the test subject, not a mock. */
+function pinnedCall(cliCommand: string): string {
+    return `(
+  cd -- "$SPUR_TREE" || { echo "tree missing: expected $SPUR_TREE" >&2; exit 1; }
+  ACTUAL_TREE="$(pwd -P)"
+  [ "$ACTUAL_TREE" = "$SPUR_TREE" ] || { echo "tree mismatch: expected $SPUR_TREE, got $ACTUAL_TREE" >&2; exit 1; }
+  GIT_TOP="$(git rev-parse --show-toplevel)" || exit 1
+  [ "$GIT_TOP" = "$SPUR_TREE" ] || { echo "toplevel mismatch: expected $SPUR_TREE, got $GIT_TOP" >&2; exit 1; }
+  ACTUAL_BRANCH="$(git branch --show-current)"
+  [ "$ACTUAL_BRANCH" = "$SPUR_BRANCH" ] || { echo "branch mismatch: expected $SPUR_BRANCH, got $ACTUAL_BRANCH" >&2; exit 1; }
+  exec $SPUR_INVOCATION ${cliCommand}
+)`;
+}
+
+describe('task 1058 — two-tree subprocess canary (R3, real source CLI)', () => {
+    const canaryTaskFile = (tree: string): string => join(tree, 'docs', 'tasks', `${CANARY_WBS}_pin_canary_task.md`);
+    const hashFile = (path: string): string => createHash('sha256').update(readFileSync(path)).digest('hex');
+
+    function seedTree(baseDir: string, name: string, branch: string): string {
+        const tree = join(baseDir, name);
+        mkdirSync(join(tree, 'docs', 'tasks'), { recursive: true });
+        writeFileSync(canaryTaskFile(tree), CANARY_SEED);
+        const git = (args: string[]): void => {
+            const result = Bun.spawnSync(['git', ...args], { cwd: tree, stdout: 'pipe', stderr: 'pipe' });
+            if (result.exitCode !== 0) throw new Error(`git ${args.join(' ')} failed: ${result.stderr.toString()}`);
+        };
+        git(['init', '-q', '-b', branch]);
+        git(['config', 'user.email', 'canary@example.invalid']);
+        git(['config', 'user.name', 'pin canary']);
+        git(['add', '.']);
+        git(['commit', '-q', '-m', 'seed corpus']);
+        // The recorded identity is the PHYSICAL tree — what `pwd -P` reports.
+        return realpathSync(tree);
+    }
+
+    function runPinned(script: string, staleCwd: string, vars: Record<string, string>) {
+        const result = Bun.spawnSync(['sh', '-c', script], {
+            cwd: staleCwd, // intentionally stale host cwd — each call may start anywhere
+            env: { ...getEnvVars(), ...vars },
+            stdout: 'pipe',
+            stderr: 'pipe',
+        });
+        return { exitCode: result.exitCode, stdout: result.stdout.toString(), stderr: result.stderr.toString() };
+    }
+
+    test('a pinned call from a stale cwd updates only the selected tree; wrong identities abort before writing', () => {
+        const base = mkdtempSync(join(tmpdir(), 'spur-1058-cwd-'));
+        try {
+            // Distinct execution and invoking trees; the selected tree path contains spaces.
+            const treeA = seedTree(base, 'spur exec tree a', 'sp/canary-alpha');
+            const treeB = seedTree(base, 'tree-b', 'sp/canary-beta');
+            const before = { treeA: hashFile(canaryTaskFile(treeA)), treeB: hashFile(canaryTaskFile(treeB)) };
+            const newBody = 'Pinned canary body — written from an intentionally stale cwd.';
+            const bodyFile = join(base, 'background-body.md');
+            writeFileSync(bodyFile, `${newBody}\n`);
+            // Source invocation form: the existing resolved command (bun + CLI entry).
+            const vars = {
+                SPUR_TREE: treeA,
+                SPUR_BRANCH: 'sp/canary-alpha',
+                SPUR_INVOCATION: `${process.execPath} ${CANARY_CLI}`,
+                BODY_FILE: bodyFile,
+            };
+
+            // AC1 — host write from a stale cwd (tree B) lands only in the selected tree (tree A).
+            const write = runPinned(
+                pinnedCall(`task update ${CANARY_WBS} --section Background --from-file "$BODY_FILE" --json`),
+                treeB,
+                vars,
+            );
+            expect(write.exitCode).toBe(0);
+
+            // Fresh pinned read proves the section — never a heading-only grep.
+            const read = runPinned(pinnedCall(`task show ${CANARY_WBS} --json`), treeB, vars);
+            expect(read.exitCode).toBe(0);
+            const shown = JSON.parse(read.stdout) as { filePath: string; content: string };
+            expect(shown.filePath.startsWith(treeA)).toBe(true); // returned filePath belongs to the selected tree
+            expect(shown.content).toContain(newBody);
+            expect(shown.content).not.toContain('Seed background body.');
+
+            const after = { treeA: hashFile(canaryTaskFile(treeA)), treeB: hashFile(canaryTaskFile(treeB)) };
+            expect(after.treeA).not.toBe(before.treeA); // selected task changed
+            expect(after.treeB).toBe(before.treeB); // the other corpus is untouched
+
+            // AC3 — missing tree: cd fails before the CLI runs; neither corpus changes.
+            const missing = runPinned(pinnedCall(`task show ${CANARY_WBS} --json`), treeA, {
+                ...vars,
+                SPUR_TREE: join(base, 'missing tree'),
+            });
+            expect(missing.exitCode).not.toBe(0);
+            expect(missing.stderr).toContain('tree missing: expected');
+
+            // AC3 — wrong branch: cd succeeds, the identity check aborts before the CLI runs.
+            const wrongBranch = runPinned(pinnedCall(`task show ${CANARY_WBS} --json`), treeA, {
+                ...vars,
+                SPUR_TREE: treeB,
+                SPUR_BRANCH: 'sp/canary-alpha',
+            });
+            expect(wrongBranch.exitCode).not.toBe(0);
+            expect(wrongBranch.stderr).toContain('branch mismatch: expected sp/canary-alpha, got sp/canary-beta');
+
+            const afterNegative = { treeA: hashFile(canaryTaskFile(treeA)), treeB: hashFile(canaryTaskFile(treeB)) };
+            expect(afterNegative.treeA).toBe(after.treeA);
+            expect(afterNegative.treeB).toBe(before.treeB);
+
+            // Repeatable proof artifacts (AC1/AC3) under .spur/run/1058-cwd-proof/.
+            mkdirSync(CANARY_PROOF_DIR, { recursive: true });
+            writeFileSync(
+                join(CANARY_PROOF_DIR, 'canary-ac1-pinned-write.json'),
+                `${JSON.stringify(
+                    {
+                        task: '1058',
+                        ac: 'AC1 — Host writes select the execution tree (req: R1)',
+                        cli: 'source',
+                        invocation: vars.SPUR_INVOCATION,
+                        staleCwd: treeB,
+                        selectedTree: treeA,
+                        branch: vars.SPUR_BRANCH,
+                        updateEnvelope: JSON.parse(write.stdout) as unknown,
+                        pinnedShow: shown,
+                        hashes: { before, after },
+                    },
+                    null,
+                    4,
+                )}\n`,
+            );
+            writeFileSync(
+                join(CANARY_PROOF_DIR, 'canary-ac3-negative.json'),
+                `${JSON.stringify(
+                    {
+                        task: '1058',
+                        ac: 'AC3 — Wrong identities fail before writing (req: R3)',
+                        cases: [
+                            { name: 'missing-tree', exitCode: missing.exitCode, stderr: missing.stderr.trim() },
+                            {
+                                name: 'wrong-branch',
+                                exitCode: wrongBranch.exitCode,
+                                stderr: wrongBranch.stderr.trim(),
+                            },
+                        ],
+                        hashes: { before, afterNegative },
+                        bothCorporaUnchanged:
+                            afterNegative.treeA === after.treeA && afterNegative.treeB === before.treeB,
+                    },
+                    null,
+                    4,
+                )}\n`,
+            );
+        } finally {
+            rmSync(base, { recursive: true, force: true });
+        }
+    });
+});
+
+// --- task 1059: executable WT-4 bash-shape cases against scratch git trees -------------------
+
+const WT4_PROOF_DIR = join(CANARY_ROOT, '.spur', 'run', '1059-wt4-proof');
+
+describe('task 1059 — WT-4 executable bash-shape cases (scratch git trees)', () => {
+    const BATCH_BRANCH = 'sp/wt4-1059';
+    const BASE_REF = 'main';
+
+    function gitRun(cwd: string, args: string[]): void {
+        const r = Bun.spawnSync(['git', ...args], { cwd, stdout: 'pipe', stderr: 'pipe' });
+        if (r.exitCode !== 0) throw new Error(`git ${args.join(' ')} failed: ${r.stderr.toString()}`);
+    }
+
+    function gitOut(cwd: string, args: string[]): string {
+        const r = Bun.spawnSync(['git', ...args], { cwd, stdout: 'pipe', stderr: 'pipe' });
+        if (r.exitCode !== 0) throw new Error(`git ${args.join(' ')} failed: ${r.stderr.toString()}`);
+        return r.stdout.toString().trim();
+    }
+
+    function gitOk(cwd: string, args: string[]): boolean {
+        return Bun.spawnSync(['git', ...args], { cwd, stdout: 'pipe', stderr: 'pipe' }).exitCode === 0;
+    }
+
+    /** Scratch git tree standing in for the invoking tree: main branch, one seed commit. */
+    function seedTree(baseDir: string, name: string): string {
+        const tree = join(baseDir, name);
+        mkdirSync(join(tree, 'docs', 'tasks'), { recursive: true });
+        mkdirSync(join(tree, '.spur', 'run'), { recursive: true }); // invoking trees carry the marker/report dir
+        writeFileSync(join(tree, 'seed.md'), 'WT-4 scratch seed body.\n');
+        gitRun(tree, ['init', '-q', '-b', BASE_REF]);
+        gitRun(tree, ['config', 'user.email', 'wt4-canary@example.invalid']);
+        gitRun(tree, ['config', 'user.name', 'wt4 canary']);
+        gitRun(tree, ['add', '.']);
+        gitRun(tree, ['commit', '-q', '-m', 'seed base corpus']);
+        return realpathSync(tree);
+    }
+
+    /** One commit on the currently checked-out branch; returns the new tip. */
+    function commitHere(tree: string, file: string, body: string): string {
+        writeFileSync(join(tree, file), body);
+        gitRun(tree, ['add', '.']);
+        gitRun(tree, ['commit', '-q', '-m', `commit ${file}`]);
+        return gitOut(tree, ['rev-parse', 'HEAD']);
+    }
+
+    /** Branch `branch` at `from`, one commit, then return HEAD to base — the invoking-tree state. */
+    function commitOnBranch(tree: string, branch: string, from: string, file: string, body: string): string {
+        gitRun(tree, ['checkout', '-q', '-b', branch, from]);
+        const tip = commitHere(tree, file, body);
+        gitRun(tree, ['checkout', '-q', BASE_REF]);
+        return tip;
+    }
+
+    interface Wt4Shape {
+        tree: string;
+        branch: string;
+        baseRef: string;
+        baseSha: string;
+        marker: string;
+        report: string;
+        /** Optional line injected between the ancestry check and the merge (concurrent-writer race). */
+        race?: string;
+    }
+
+    /**
+     * The canonical fail-stop WT-4 block shape: zero-commit guard, captured BATCH_TIP/BASE_TIP,
+     * ancestry check naming both tips, `git merge --ff-only` as the sole mutation, landed-tip
+     * verify, existence-guarded branch delete, marker write LAST (status retained keeps the
+     * captured BATCH_TIP and never re-queries the removed branch). The write is read-modify-write
+     * (F1): an existing marker's WT-3 fields survive; only status/mergeCommit change.
+     */
+    function wt4Block(o: Wt4Shape): string {
+        return `set -e
+cd -- "${o.tree}"
+BRANCH="${o.branch}"
+BASE_REF="${o.baseRef}"
+BASE_SHA="${o.baseSha}"
+[ "$(git rev-list --count "$BASE_REF".."$BRANCH")" -gt 0 ] || { echo 'WT-4 halt: branch carries no commits' >&2; exit 1; }
+BATCH_TIP="$(git rev-parse "$BRANCH")"
+BASE_TIP="$(git rev-parse "$BASE_REF")"
+git merge-base --is-ancestor "$BASE_TIP" "$BATCH_TIP" || {
+  echo "WT-4 halt: divergent — batch tip $BATCH_TIP vs base tip $BASE_TIP" >&2
+  git log --oneline "$BASE_TIP..$BATCH_TIP" >&2
+  git log --oneline "$BATCH_TIP..$BASE_TIP" >&2
+  exit 1
+}
+${o.race ?? ''}
+git merge --ff-only "$BRANCH"
+LANDED_BASE_TIP="$(git rev-parse "$BASE_REF")"
+git merge-base --is-ancestor "$BATCH_TIP" "$LANDED_BASE_TIP" || { echo 'WT-4 halt: landed verify failed' >&2; exit 1; }
+if git rev-parse --verify --quiet "$BRANCH" >/dev/null; then git branch -D "$BRANCH"; fi
+STATUS='merged'
+if printf 'wt4 report %s\\n' "$BATCH_TIP" > "${o.report}" 2>/dev/null; then :; else
+  STATUS='retained'
+  echo "WT-5 halt: persistence failed after landed merge $BATCH_TIP; recovery reads captured tips only" >&2
+fi
+write_marker () {   # read-modify-write (F1): preserve WT-3 fields already on the marker
+  mkdir -p "$(dirname "${o.marker}")"
+  if [ -f "${o.marker}" ]; then
+    TMP_MARKER="$(mktemp)"
+    jq --arg s "$STATUS" --arg m "$BATCH_TIP" '.status = $s | .mergeCommit = $m' "${o.marker}" > "$TMP_MARKER" || { echo "WT-4 halt: cannot rewrite marker ${o.marker}" >&2; rm -f "$TMP_MARKER"; exit 1; }
+    mv "$TMP_MARKER" "${o.marker}"
+  else
+    printf '{ "baseRef": "${o.baseRef}", "baseSha": "%s", "branch": "${o.branch}", "path": "${o.tree}", "status": "%s", "mergeCommit": "%s" }\\n' "$BASE_SHA" "$STATUS" "$BATCH_TIP" > "${o.marker}"
+  fi
+}
+write_marker
+[ "$STATUS" = 'merged' ] || exit 1
+`;
+    }
+
+    function runSh(script: string, cwd: string): { exitCode: number; stdout: string; stderr: string } {
+        const r = Bun.spawnSync(['sh', '-c', script], {
+            cwd,
+            env: { ...getEnvVars() },
+            stdout: 'pipe',
+            stderr: 'pipe',
+        });
+        return { exitCode: r.exitCode, stdout: r.stdout.toString(), stderr: r.stderr.toString() };
+    }
+
+    function markerFor(tree: string, run: string): string {
+        return join(tree, '.spur', 'run', `worktree-${run}.json`);
+    }
+
+    function reportFor(tree: string, run: string): string {
+        return join(tree, '.spur', 'run', `worktree-${run}-batch-report.md`);
+    }
+
+    /** WT-3-like fields seeded onto the active marker to prove write_marker read-modify-write (F1). */
+    const MARKER_SEED = {
+        id: 'wt4-proof',
+        command: 'dev-runall',
+        selector: 'feature:WT4',
+        createdAt: '2026-01-01T00:00:00Z',
+        adopted: true,
+        adoptedAt: '2026-01-01T00:00:05Z',
+    } as const;
+
+    function writeActiveMarker(path: string, baseSha: string, branch: string, tree: string): void {
+        mkdirSync(dirname(path), { recursive: true });
+        writeFileSync(
+            path,
+            `${JSON.stringify({
+                ...MARKER_SEED,
+                path: tree,
+                branch,
+                baseRef: BASE_REF,
+                baseSha,
+                status: 'active',
+            })}\n`,
+        );
+    }
+
+    function writeProof(name: string, payload: Record<string, unknown>): void {
+        mkdirSync(WT4_PROOF_DIR, { recursive: true });
+        writeFileSync(join(WT4_PROOF_DIR, `${name}.json`), `${JSON.stringify(payload, null, 4)}\n`);
+    }
+
+    test('case 1 — clean FF: ancestry ok, merge lands, marker merged with mergeCommit BATCH_TIP', () => {
+        const base = mkdtempSync(join(tmpdir(), 'spur-1059-wt4-'));
+        try {
+            const tree = seedTree(base, 'case1');
+            const run = '1059-case1';
+            const baseSha = gitOut(tree, ['rev-parse', BASE_REF]);
+            const batchTip = commitOnBranch(tree, BATCH_BRANCH, baseSha, 'batch-task.md', 'WT-4 batch body.\n');
+            const marker = markerFor(tree, run);
+            // Seed WT-3 fields first — the merged write must preserve them (read-modify-write, F1).
+            writeActiveMarker(marker, baseSha, BATCH_BRANCH, tree);
+            const script = wt4Block({
+                tree,
+                branch: BATCH_BRANCH,
+                baseRef: BASE_REF,
+                baseSha,
+                marker,
+                report: reportFor(tree, run),
+            });
+            const r = runSh(script, tree);
+            expect(r.exitCode).toBe(0);
+            const newBaseTip = gitOut(tree, ['rev-parse', BASE_REF]);
+            expect(gitOk(tree, ['merge-base', '--is-ancestor', batchTip, newBaseTip])).toBe(true);
+            const recorded = JSON.parse(readFileSync(marker, 'utf8')) as Record<string, unknown>;
+            expect(recorded.status).toBe('merged');
+            expect(recorded.mergeCommit).toBe(batchTip);
+            expect(recorded.baseSha).toBe(baseSha);
+            expect(recorded.branch).toBe(BATCH_BRANCH);
+            expect(recorded.path).toBe(tree);
+            // F1 read-modify-write proof: seeded WT-3 fields survive the merged rewrite untouched.
+            expect(recorded.id).toBe(MARKER_SEED.id);
+            expect(recorded.command).toBe(MARKER_SEED.command);
+            expect(recorded.selector).toBe(MARKER_SEED.selector);
+            expect(recorded.createdAt).toBe(MARKER_SEED.createdAt);
+            expect(recorded.adopted).toBe(true);
+            expect(recorded.adoptedAt).toBe(MARKER_SEED.adoptedAt);
+            expect(gitOk(tree, ['rev-parse', '--verify', '--quiet', BATCH_BRANCH])).toBe(false);
+            writeProof('case1-clean-ff', {
+                task: '1059',
+                case: 'clean-ff',
+                baseSha,
+                batchTip,
+                baseTipAfter: newBaseTip,
+                exitCode: r.exitCode,
+                marker: recorded,
+                batchBranchDeleted: true,
+                wt3MarkerFieldsPreserved: true,
+            });
+        } finally {
+            rmSync(base, { recursive: true, force: true });
+        }
+    });
+
+    test('case 2 — advanced-but-ancestor base: fresh BASE_TIP descendant of baseSha still FF-merges', () => {
+        const base = mkdtempSync(join(tmpdir(), 'spur-1059-wt4-'));
+        try {
+            const tree = seedTree(base, 'case2');
+            const run = '1059-case2';
+            const baseSha = gitOut(tree, ['rev-parse', BASE_REF]);
+            const advancedTip = commitHere(tree, 'base-advance.md', 'Base advanced after marker creation.\n');
+            const batchTip = commitOnBranch(tree, BATCH_BRANCH, advancedTip, 'batch-task.md', 'WT-4 batch body.\n');
+            expect(gitOk(tree, ['merge-base', '--is-ancestor', baseSha, advancedTip])).toBe(true);
+            expect(gitOk(tree, ['merge-base', '--is-ancestor', advancedTip, batchTip])).toBe(true);
+            const marker = markerFor(tree, run);
+            const r = runSh(
+                wt4Block({
+                    tree,
+                    branch: BATCH_BRANCH,
+                    baseRef: BASE_REF,
+                    baseSha,
+                    marker,
+                    report: reportFor(tree, run),
+                }),
+                tree,
+            );
+            expect(r.exitCode).toBe(0);
+            const newBaseTip = gitOut(tree, ['rev-parse', BASE_REF]);
+            expect(gitOk(tree, ['merge-base', '--is-ancestor', batchTip, newBaseTip])).toBe(true);
+            const recorded = JSON.parse(readFileSync(marker, 'utf8')) as Record<string, string>;
+            expect(recorded.status).toBe('merged');
+            expect(recorded.mergeCommit).toBe(batchTip);
+            expect(recorded.baseSha).toBe(baseSha); // stale baseSha preserved; fresh BASE_TIP governed the check
+            writeProof('case2-advanced-ancestor-base', {
+                task: '1059',
+                case: 'advanced-but-ancestor-base',
+                baseSha,
+                advancedTip,
+                batchTip,
+                baseTipAfter: newBaseTip,
+                exitCode: r.exitCode,
+                marker: recorded,
+            });
+        } finally {
+            rmSync(base, { recursive: true, force: true });
+        }
+    });
+
+    test('case 3 — divergent base: ancestry halt names both tips, tree/branch retained, marker active', () => {
+        const base = mkdtempSync(join(tmpdir(), 'spur-1059-wt4-'));
+        try {
+            const tree = seedTree(base, 'case3');
+            const run = '1059-case3';
+            const baseSha = gitOut(tree, ['rev-parse', BASE_REF]);
+            const batchTip = commitOnBranch(tree, BATCH_BRANCH, baseSha, 'batch-task.md', 'WT-4 batch body.\n');
+            const foreignTip = commitHere(tree, 'foreign.md', 'Foreign base commit — divergent.\n');
+            const marker = markerFor(tree, run);
+            writeActiveMarker(marker, baseSha, BATCH_BRANCH, tree);
+            const r = runSh(
+                wt4Block({
+                    tree,
+                    branch: BATCH_BRANCH,
+                    baseRef: BASE_REF,
+                    baseSha,
+                    marker,
+                    report: reportFor(tree, run),
+                }),
+                tree,
+            );
+            expect(r.exitCode).not.toBe(0);
+            expect(r.stderr).toContain('divergent');
+            expect(r.stderr).toContain(batchTip);
+            expect(r.stderr).toContain(foreignTip);
+            expect(r.stderr).toContain('commit batch-task.md'); // batch-side divergent log (BASE_TIP..BATCH_TIP)
+            expect(r.stderr).toContain('commit foreign.md'); // base-side divergent log (BATCH_TIP..BASE_TIP)
+            const recorded = JSON.parse(readFileSync(marker, 'utf8')) as Record<string, string>;
+            expect(recorded.status).toBe('active');
+            expect(recorded.mergeCommit).toBeUndefined();
+            expect(gitOk(tree, ['rev-parse', '--verify', '--quiet', BATCH_BRANCH])).toBe(true); // branch retained
+            expect(gitOut(tree, ['rev-parse', '--verify', BATCH_BRANCH])).toBe(batchTip);
+            expect(readFileSync(join(tree, 'seed.md'), 'utf8')).toContain('WT-4 scratch seed body.'); // tree retained
+            writeProof('case3-divergent-base', {
+                task: '1059',
+                case: 'divergent-base',
+                baseSha,
+                batchTip,
+                foreignTip,
+                exitCode: r.exitCode,
+                stderr: r.stderr.trim(),
+                marker: recorded,
+                branchRetained: true,
+            });
+        } finally {
+            rmSync(base, { recursive: true, force: true });
+        }
+    });
+
+    test('case 4 — failed FF: race after ancestry passes, merge --ff-only halts, marker stays active', () => {
+        const base = mkdtempSync(join(tmpdir(), 'spur-1059-wt4-'));
+        try {
+            const tree = seedTree(base, 'case4');
+            const run = '1059-case4';
+            const baseSha = gitOut(tree, ['rev-parse', BASE_REF]);
+            const batchTip = commitOnBranch(tree, BATCH_BRANCH, baseSha, 'batch-task.md', 'WT-4 batch body.\n');
+            const marker = markerFor(tree, run);
+            writeActiveMarker(marker, baseSha, BATCH_BRANCH, tree);
+            // Concurrent-writer race: base moves between the ancestry check and the sole mutation.
+            const script = wt4Block({
+                tree,
+                branch: BATCH_BRANCH,
+                baseRef: BASE_REF,
+                baseSha,
+                marker,
+                report: reportFor(tree, run),
+                race: 'git commit -q --allow-empty -m "concurrent base advance"',
+            });
+            const r = runSh(script, tree);
+            expect(r.exitCode).not.toBe(0);
+            expect(r.stderr).toContain('fast-forward');
+            const recorded = JSON.parse(readFileSync(marker, 'utf8')) as Record<string, string>;
+            expect(recorded.status).toBe('active');
+            expect(recorded.mergeCommit).toBeUndefined(); // no success write
+            expect(gitOk(tree, ['rev-parse', '--verify', '--quiet', BATCH_BRANCH])).toBe(true);
+            writeProof('case4-failed-ff', {
+                task: '1059',
+                case: 'failed-ff',
+                baseSha,
+                batchTip,
+                baseTipAfter: gitOut(tree, ['rev-parse', BASE_REF]),
+                exitCode: r.exitCode,
+                stderr: r.stderr.trim(),
+                marker: recorded,
+            });
+        } finally {
+            rmSync(base, { recursive: true, force: true });
+        }
+    });
+
+    test('case 5 — post-FF base advance: BATCH_TIP remains an ancestor of later base descendants', () => {
+        const base = mkdtempSync(join(tmpdir(), 'spur-1059-wt4-'));
+        try {
+            const tree = seedTree(base, 'case5');
+            const run = '1059-case5';
+            const baseSha = gitOut(tree, ['rev-parse', BASE_REF]);
+            const batchTip = commitOnBranch(tree, BATCH_BRANCH, baseSha, 'batch-task.md', 'WT-4 batch body.\n');
+            const marker = markerFor(tree, run);
+            const r = runSh(
+                wt4Block({
+                    tree,
+                    branch: BATCH_BRANCH,
+                    baseRef: BASE_REF,
+                    baseSha,
+                    marker,
+                    report: reportFor(tree, run),
+                }),
+                tree,
+            );
+            expect(r.exitCode).toBe(0);
+            const landedBaseTip = gitOut(tree, ['rev-parse', BASE_REF]);
+            const laterTip = commitHere(tree, 'later.md', 'Base advances again after the batch landed.\n');
+            expect(gitOk(tree, ['merge-base', '--is-ancestor', batchTip, laterTip])).toBe(true);
+            expect(gitOk(tree, ['merge-base', '--is-ancestor', landedBaseTip, laterTip])).toBe(true);
+            writeProof('case5-post-ff-base-advance', {
+                task: '1059',
+                case: 'post-ff-base-advance',
+                baseSha,
+                batchTip,
+                landedBaseTip,
+                laterTip,
+                batchStillAncestorOfLaterBase: true,
+                exitCode: r.exitCode,
+            });
+        } finally {
+            rmSync(base, { recursive: true, force: true });
+        }
+    });
+
+    test('case 6 — persist+cleanup failure after landed merge: retained marker, deleted branch never queried', () => {
+        const base = mkdtempSync(join(tmpdir(), 'spur-1059-wt4-'));
+        try {
+            const tree = seedTree(base, 'case6');
+            const run = '1059-case6';
+            const baseSha = gitOut(tree, ['rev-parse', BASE_REF]);
+            const batchTip = commitOnBranch(tree, BATCH_BRANCH, baseSha, 'batch-task.md', 'WT-4 batch body.\n');
+            const blocker = join(tree, 'report-blocker');
+            writeFileSync(blocker, 'a file occupying the report path so the persistence write fails\n');
+            const marker = markerFor(tree, run);
+            // Seed WT-3 fields first — the retained write must preserve them too (read-modify-write, F1).
+            writeActiveMarker(marker, baseSha, BATCH_BRANCH, tree);
+            const script = wt4Block({
+                tree,
+                branch: BATCH_BRANCH,
+                baseRef: BASE_REF,
+                baseSha,
+                marker,
+                report: join(blocker, 'out.md'),
+            });
+            // The recovery path must never query the removed branch: the existence check precedes any delete…
+            const deleteAt = script.indexOf('git branch -D "$BRANCH"');
+            expect(script.indexOf('git rev-parse --verify --quiet "$BRANCH"')).toBeGreaterThan(-1);
+            expect(script.indexOf('git rev-parse --verify --quiet "$BRANCH"')).toBeLessThan(deleteAt);
+            // …and after the delete the script reads captured BATCH_TIP only — no branch query remains.
+            const afterDelete = script.slice(deleteAt);
+            expect(afterDelete).not.toContain('git rev-parse');
+            expect(afterDelete).toContain('"$BATCH_TIP"');
+            const r = runSh(script, tree);
+            expect(r.exitCode).toBe(1); // fail-stop halt, after the retained marker write
+            expect(r.stderr).toContain('WT-5 halt');
+            expect(r.stderr).toContain(batchTip);
+            const recorded = JSON.parse(readFileSync(marker, 'utf8')) as Record<string, unknown>;
+            expect(recorded.status).toBe('retained');
+            expect(recorded.mergeCommit).toBe(batchTip); // reads the captured variable, not the deleted branch
+            // F1 read-modify-write proof: seeded WT-3 fields survive the retained rewrite too.
+            expect(recorded.id).toBe(MARKER_SEED.id);
+            expect(recorded.command).toBe(MARKER_SEED.command);
+            expect(recorded.selector).toBe(MARKER_SEED.selector);
+            expect(recorded.createdAt).toBe(MARKER_SEED.createdAt);
+            expect(recorded.adopted).toBe(true);
+            expect(recorded.adoptedAt).toBe(MARKER_SEED.adoptedAt);
+            expect(gitOk(tree, ['rev-parse', '--verify', '--quiet', BATCH_BRANCH])).toBe(false);
+            writeProof('case6-persist-cleanup-failure', {
+                task: '1059',
+                case: 'persist-cleanup-failure-after-landed-merge',
+                baseSha,
+                batchTip,
+                exitCode: r.exitCode,
+                stderr: r.stderr.trim(),
+                marker: recorded,
+                batchBranchDeleted: true,
+                recoveryQueriedDeletedBranch: false,
+                wt3MarkerFieldsPreserved: true,
+            });
+        } finally {
+            rmSync(base, { recursive: true, force: true });
+        }
     });
 });

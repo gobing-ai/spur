@@ -4,7 +4,7 @@ name: Block automatic worktree teardown when provenance is skipped for an extern
 status: done
 template: issue
 created_at: 2026-10-02T05:46:44.406Z
-updated_at: "2026-10-02T11:01:56.479Z"
+updated_at: "2026-10-03T01:58:22.042Z"
 feature_id: E71
 
 priority: P2
@@ -91,16 +91,16 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/inline-run-setup.ts:1359-1366` — delegate filters `external-key-conflict` skips, emits `{"ok":false,"error":"persist-out: external-key conflict for source runs <ids>; retain the source worktree and reconcile provenance before teardown"}` and `return 1` (nonzero). Regression `packages/app/tests/services/inline-run-driver.test.ts:503-505` asserts the error names the skipped source run (`run_1049s`), contains "retain the source worktree", and reports `{id:'run_1049s', reason:'external-key-conflict'}` in `skipped`. |
-| R2 | MET | `packages/domain/src/dao/run-transfer.ts` untouched by the diff — external-key exclusion intact (`run-transfer.ts:16,33,123`); preserved domain tests `packages/domain/tests/dao/run-transfer.test.ts:115` and `:138` pass 4/0. Driver test `packages/app/tests/services/inline-run-driver.test.ts:509-517` asserts the receiving run count stays `1` and no source record files land in the target — no overwrite, merge, backfill, or misattributed copy. |
-| R3 | MET | `plugins/sp/skills/spur-dev/references/execution-batch.md:533` — external-key-conflict "fails the pass (1049)": delegate exits 1, names skipped source run ids, source worktree stays provenance owner of record; nonzero persist-out routes to WT-5 (worktree + branch retained) per `plugins/sp/skills/spur-dev/references/execution-batch.md:538-539` and WT-4a guard `:879-883`. Bounded manual reconciliation named in the same sentence: archived DB snapshot, source run identities, file-hash verification, merged-commit ancestry check, residual deletion only as operator-authorized cleanup under strict canonical evidence rules. Design doc aligned at `docs/design/disposable-run-storage.md:55`. |
+| R1 | MET | inline-run-setup.ts:1359-1366 delegate filters external-key-conflict, emits ok:false with retain-source message, returns 1; regression inline-run-driver.test.ts:503-505 |
+| R2 | MET | run-transfer.ts external-key exclusion intact (:16,:33,:123); domain tests 4/0; driver asserts receiving count stays 1 and no source record files in target (:509-517) |
+| R3 | MET | execution-batch.md:533 names the pass failure + bounded manual reconciliation (archived DB snapshot, source run identities, file-hash verification, merged-commit ancestry); WT-4a nonzero routes to WT-5 (:879-883); design doc docs/design/disposable-run-storage.md:55 |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | Fresh run `bun test packages/app/tests/services/inline-run-driver.test.ts` → 14 pass / 0 fail: `packages/app/tests/services/inline-run-driver.test.ts:468-523` asserts exit 1 (:501), `ok:false` (:502), source ID reported (:503,505) with receiving tree seeded as a different run owning the same external key (:477-491); teardown refusal enforced by WT-4a nonzero→WT-5 contract (`plugins/sp/skills/spur-dev/references/execution-batch.md:879-883`, static-ref). |
-| AC2 | MET | test | `packages/app/tests/services/inline-run-driver.test.ts:509-517` — receiving rows unchanged (`COUNT(*)` = 1), source records absent from target; `bun test packages/domain/tests/dao/run-transfer.test.ts` → 4 pass / 0 fail including `packages/domain/tests/dao/run-transfer.test.ts:115-126`. |
-| AC3 | MET | test | Driver 14/0 retains record-conflict refusal (`packages/app/tests/services/inline-run-driver.test.ts:434`) and fail-closed unusable-source (`:525`); domain 4/0 retains `id-exists` replay (`packages/domain/tests/dao/run-transfer.test.ts:93`) and idempotent re-persist (`:138`) — success path exit 0 / `ok:true` unchanged (`packages/app/src/services/inline-run-setup.ts:1368-1369`). |
-| AC4 | MET | test | `plugins/sp/skills/spur-dev/references/execution-batch.md:533` names all four required elements: original archived DB snapshot, skipped source run identities, file-hash verification, merged-commit ancestry of the source branch, plus explicit operator-authorized cleanup "under the strict canonical evidence rules above". Executable evidence: contract pin `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:251-265` asserts all six AC4-element phrases against the shipped spec (each unique, count=1 — element drops fail); fresh run 35 pass / 0 fail. Corroborated by `docs/design/disposable-run-storage.md:55`. |
+| AC1 | MET | test | inline-run-driver.test.ts:468-523 asserts exit 1, ok:false, source ID reported with seeded conflicting receiver |
+| AC2 | MET | test | inline-run-driver.test.ts:509-517 receiving rows unchanged, source records absent; run-transfer.test.ts:115-126 in fresh 4/0 |
+| AC3 | MET | test | record-conflict refusal (:434) and fail-closed unusable-source (:525) retained; success path exit 0 / ok:true unchanged (inline-run-setup.ts:1368-1369) |
+| AC4 | MET | test | execution-batch-contract.test.ts:251-265 pins all AC4 reconciliation-element phrases against shipped spec; fresh 35 pass / 0 fail |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

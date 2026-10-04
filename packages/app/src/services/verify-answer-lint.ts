@@ -60,6 +60,18 @@ export function lintVerifyAnswer(
         );
     }
 
+    // 1068 R2: the confidence line is verified like the verdict line — one line,
+    // closed vocabulary.
+    if (tables.confidence === null) {
+        add(0, 'confidence-missing', 'no `Confidence:` line (expected exactly one `Confidence: HIGH|MEDIUM|LOW` line)');
+    } else if (!/^(HIGH|MEDIUM|LOW)$/i.test(tables.confidence.value)) {
+        add(
+            tables.confidence.line,
+            'confidence-value',
+            `invalid Confidence value "${tables.confidence.value}" (HIGH | MEDIUM | LOW)`,
+        );
+    }
+
     const reqIds = extractRequirementIds(taskContent);
     const acIndex = buildAcIdentityIndex(taskContent, featureContent ?? null);
 
@@ -77,6 +89,14 @@ export function lintVerifyAnswer(
         if (normalizeReqStatus(row.status) === null)
             add(row.line, 'req-status', `"${row.id}" invalid status "${row.status}" (MET | PARTIAL | UNMET)`);
         if (!row.evidence.trim()) add(row.line, 'req-evidence', `"${row.id}" has empty evidence`);
+        else if (hasClaimMarker(row.evidence) && !hasCitationForm(row.evidence)) {
+            add(
+                row.line,
+                'evidence-citation',
+                `"${row.id}" evidence asserts an external API/library/version claim without a citation ` +
+                    '(add a repo `path:line`, an external `@origin `path` line N`, or a URL in the same cell)',
+            );
+        }
     }
     for (const id of reqIds) {
         if (!seenReq.has(id)) add(0, 'req-missing', `missing requirement row for "${id}"`);
@@ -121,6 +141,14 @@ export function lintVerifyAnswer(
                 `invalid evidence type "${row.evidenceType}" (test | command | static-ref | manual-review | llm-judge | n/a, or a + compound)`,
             );
         if (!row.evidence.trim()) add(row.line, 'ac-evidence', `AC "${row.id.slice(0, 40)}" has empty evidence`);
+        else if (hasClaimMarker(row.evidence) && !hasCitationForm(row.evidence)) {
+            add(
+                row.line,
+                'evidence-citation',
+                `AC "${row.id.slice(0, 40)}" evidence asserts an external API/library/version claim without a citation ` +
+                    '(add a repo `path:line`, an external `@origin `path` line N`, or a URL in the same cell)',
+            );
+        }
     }
 
     return findings;
@@ -140,6 +168,42 @@ interface AcRow {
     evidenceType: string;
     evidence: string;
     line: number;
+}
+
+// ─── Claim/citation detection (task 1070 R1/R2) ─────────────────────────────
+
+/**
+ * External API/library claim markers (1070 R1). A hit means the evidence cell
+ * asserts something about an external package, installed artifact, version, or
+ * API behavior — a claim that must carry a verifiable citation in the same cell.
+ * The set is deliberately closed: widening it is a contract change.
+ */
+const CLAIM_MARKERS: readonly RegExp[] = [
+    /@[a-z0-9._-]+\/[a-z0-9._-]+/i, // scoped package mention (@scope/name)
+    /\bnode_modules\//, // installed-package path reference
+    /\b\d+\.\d+\.\d+\b/, // semver version claim (dates use dashes; times lack a third segment)
+    /`[A-Za-z_$][\w.$]*\s*\([^`]*\)`/, // backticked function-call-shaped API token
+];
+
+/**
+ * Accepted citation forms (1070 R2); any one clears a claim-bearing cell.
+ * Presence-only by design: which citation proves which claim is not
+ * deterministically decidable, and bare vs backticked anchors are both legal
+ * (verifiability over formatting).
+ */
+const CITATION_FORMS: readonly RegExp[] = [
+    /`[^`\s]+:\d+(?:-\d+)?`/, // backticked path:line(-end)
+    /`[^`]+`\s+lines?\s+\d+/i, // external named-origin form: `path` line N (line outside backticks)
+    /\b[\w./-]+\.[A-Za-z0-9]+:\d+(?:-\d+)?\b/, // bare path.ext:line(-end) — the extension avoids 00:04-style times
+    /https?:\/\/\S+/i, // URL
+];
+
+function hasClaimMarker(evidence: string): boolean {
+    return CLAIM_MARKERS.some((re) => re.test(evidence));
+}
+
+function hasCitationForm(evidence: string): boolean {
+    return CITATION_FORMS.some((re) => re.test(evidence));
 }
 
 function splitTableCells(line: string): string[] {
@@ -194,14 +258,19 @@ function normalizeEvidenceType(raw: string): string | null {
     return EVIDENCE_TYPE_PRECEDENCE.find((candidate) => tokens.includes(candidate)) ?? null;
 }
 
+const CONFIDENCE_LEVELS = ['HIGH', 'MEDIUM', 'LOW'] as const;
+/** Verifier's stated confidence in the verdict (task 1068 R1). */
+export type VerdictConfidence = (typeof CONFIDENCE_LEVELS)[number];
+
 interface AnswerTables {
     verdict: { value: string; line: number } | null;
+    confidence: { value: string; line: number } | null;
     reqs: ReqRow[];
     acs: AcRow[];
 }
 
 function parseAnswer(text: string): AnswerTables {
-    const out: AnswerTables = { verdict: null, reqs: [], acs: [] };
+    const out: AnswerTables = { verdict: null, confidence: null, reqs: [], acs: [] };
     const lines = text.split('\n');
     let reqTable = false;
     let acTable = false;
@@ -273,7 +342,29 @@ function parseAnswer(text: string): AnswerTables {
             line: text.slice(0, verdictMatches[0]?.index ?? 0).split('\n').length,
         };
     }
+    // 1068 R1: same exactly-one-line contract as `Verdict:` — zero or duplicate
+    // Confidence lines both surface as `confidence-missing`.
+    const confidenceMatches = [...text.matchAll(/^\s*Confidence:\s*(\S+)\s*$/gim)];
+    if (confidenceMatches.length === 1) {
+        out.confidence = {
+            value: confidenceMatches[0]?.[1] ?? '',
+            line: text.slice(0, confidenceMatches[0]?.index ?? 0).split('\n').length,
+        };
+    }
     return out;
+}
+
+/**
+ * Extract a normalized confidence level from an answer text (task 1068 R3).
+ * Returns `undefined` when the line is missing, duplicated, or carries an
+ * invalid value — the lint rejects those answers before derivation runs, so
+ * this helper stays total for `deriveVerdict` and never throws.
+ */
+export function extractAnswerConfidence(text: string): VerdictConfidence | undefined {
+    const matches = [...text.matchAll(/^\s*Confidence:\s*(\S+)\s*$/gim)];
+    if (matches.length !== 1) return undefined;
+    const value = (matches[0]?.[1] ?? '').toUpperCase();
+    return (CONFIDENCE_LEVELS as readonly string[]).includes(value) ? (value as VerdictConfidence) : undefined;
 }
 
 // ─── Task-side identity extraction ───────────────────────────────────────────

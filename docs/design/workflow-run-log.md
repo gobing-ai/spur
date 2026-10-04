@@ -3,8 +3,8 @@ kind: design
 title: "Workflow run log (all-in-one per-run log)"
 status: implemented
 created_at: 2026-08-04
-updated_at: 2026-08-04
-related: [D2, "0430", "0709", "0901"]
+updated_at: 2026-10-02
+related: [D2, D3, "0430", "0709", "0901", "1064"]
 tags: [contract, D2, workflow, observability]
 doc: design/workflow-run-log
 area: spur workflow run log — consolidated per-run log, retention, trace follow source
@@ -23,7 +23,7 @@ sync: [T3, T9]
 
 ## Current E71 contract (2026-10-02)
 
-New logging-enabled runs write the append-only `.spur/memory/runs/<RUNID>.md` and atomic `.state.json` pair, with `--no-log` preserved. Trace output follows this durable record, with legacy `.log` and scratch fallback. Trace-emission failures append a retained `.log` diagnostic. Partial salvage is retained under `.spur/memory/runs/<RUNID>/artifacts/` with a compatibility scratch mirror.
+New logging-enabled runs write the append-only `.spur/memory/runs/<RUNID>.md` and atomic `.state.json` pair, with `--no-log` preserved. Trace output follows this durable record, with legacy `.log` and scratch fallback. Trace-emission failures append a retained `.log` diagnostic. Partial salvage is retained under `.spur/memory/runs/<RUNID>/artifacts/` with a compatibility scratch mirror. Per task 1064 (feature D3), `WorkflowRunLogSink` opens `<RUNID>.md` lazily on the first emitted event rather than in its constructor (with an `openFailed` latch for R8 inert degradation), ensuring pre-row initialization failures leave no 0-byte orphan files.
 
 The legacy-log age policy applies in both storage roots and protects every non-terminal run, including paused/interrupted runs. Ownership lookup failures preserve logs. Checkpoint cleanup uses the same run protection. Pair files remain outside reclamation. The D2 sections below preserve the original implementation history; [run-record contract](run-record-contract.md) and [disposable run storage](disposable-run-storage.md) govern current storage.
 

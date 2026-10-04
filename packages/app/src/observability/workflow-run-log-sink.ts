@@ -8,7 +8,7 @@ import {
     writeFileSync,
     writeSync,
 } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import type {
     WorkflowAgentBudgetEvent,
     WorkflowAgentContractViolationEvent,
@@ -47,6 +47,12 @@ const TRUNCATION_MARKER =
  * `.spur/memory/runs/<RUNID>.md` and atomically replaces the machine state at
  * `.spur/memory/runs/<RUNID>.state.json`, from run creation to terminal status.
  *
+ * The record pair is created LAZILY at the first event (1064 R2), never at
+ * construction: the sink subscribes before the run row exists, so an eager open
+ * would leave an orphaned empty `<RUNID>.md` behind any pre-row failure or kill.
+ * Events only flow after `workflow.run.started`, which the adapter emits after
+ * the row insert commits.
+ *
  * Privacy is enforced at this persistence boundary (0925 R3): upstream event
  * redaction is best-effort, so every appended line and the state projection are
  * scrubbed against the configured secrets again before either file is written.
@@ -71,6 +77,7 @@ export class WorkflowRunLogSink {
     private workflowName: string | undefined;
     private startedAt: string | undefined;
     private fd: number | undefined;
+    private openFailed = false;
     private bytes = 0;
     private lines = 0;
     private truncated = false;
@@ -96,13 +103,8 @@ export class WorkflowRunLogSink {
         this.planPreview = options.planPreview;
         this.secrets = options.secrets ?? [];
         this.runId = options.runId;
-        try {
-            mkdirSync(options.dir, { recursive: true });
-            this.fd = openSync(this.filePath, 'a');
-        } catch {
-            // Unwritable run dir → inert sink; the run must not be affected (R8).
-            this.fd = undefined;
-        }
+        // No eager open here (1064 R2): the file pair is created by `ensureOpen()`
+        // on the first event, which is always post-row.
         this.bus = options.bus;
         this.handlers = {
             'workflow.run.started': (event) => this.onRunStarted(event),
@@ -121,11 +123,6 @@ export class WorkflowRunLogSink {
         this.register(true);
     }
 
-    /** True once the volume bound has been hit and the truncation marker written. */
-    get isTruncated(): boolean {
-        return this.truncated;
-    }
-
     /** Unsubscribe from the bus and release the file handle. Idempotent. */
     close(): void {
         if (this.closed) return;
@@ -139,6 +136,29 @@ export class WorkflowRunLogSink {
             }
             this.fd = undefined;
         }
+    }
+
+    /** True once the volume bound has been hit and the truncation marker written. */
+    get isTruncated(): boolean {
+        return this.truncated;
+    }
+
+    /**
+     * Open the append-only log on first use (1064 R2). Latches `openFailed` on an
+     * unwritable dir so the sink stays inert (R8) and never retries per line.
+     */
+    private ensureOpen(): boolean {
+        if (this.fd !== undefined) return true;
+        if (this.closed || this.openFailed) return false;
+        try {
+            mkdirSync(dirname(this.filePath), { recursive: true });
+            this.fd = openSync(this.filePath, 'a');
+        } catch {
+            // Unwritable run dir → inert sink; the run must not be affected (R8).
+            this.openFailed = true;
+            return false;
+        }
+        return true;
     }
 
     private register(attach: boolean): void {
@@ -239,7 +259,7 @@ export class WorkflowRunLogSink {
 
     /** Child-agent lifecycle events — the current `RunOutputSink` chunk contract (R3). */
     private onAgent(event: AgentExecutionEvent): void {
-        if (this.fd === undefined || this.closed) return;
+        if (this.closed || !this.ensureOpen()) return;
         switch (event.kind) {
             case 'output':
                 this.append(`[${event.at}] ${event.stream}: ${event.chunk}\n`);
@@ -269,7 +289,7 @@ export class WorkflowRunLogSink {
 
     /** One bounded line per hard-budget verdict (0707 R6). */
     private onBudget(event: WorkflowAgentBudgetEvent): void {
-        if (this.fd === undefined || this.closed) return;
+        if (this.closed || !this.ensureOpen()) return;
         const caps = [
             event.budget.maxTokens !== undefined ? `maxTokens=${event.budget.maxTokens}` : undefined,
             event.budget.maxCostUsd !== undefined ? `maxCostUsd=${event.budget.maxCostUsd}` : undefined,
@@ -282,7 +302,7 @@ export class WorkflowRunLogSink {
     }
 
     private onTripwire(event: WorkflowTripwireFiredEvent): void {
-        if (this.fd === undefined || this.closed) return;
+        if (this.closed || !this.ensureOpen()) return;
         this.append(
             `[${event.at}] tripwire ${event.policy.id} (v${event.policy.version}) ${event.response} node=${event.node}: ${event.observed} — next: ${event.nextDecision}\n`,
         );
@@ -290,7 +310,7 @@ export class WorkflowRunLogSink {
 
     /** One line naming the violated contract and observed value (ADR-118). */
     private onContractViolation(event: WorkflowAgentContractViolationEvent): void {
-        if (this.fd === undefined || this.closed) return;
+        if (this.closed || !this.ensureOpen()) return;
         const task = event.task !== undefined ? ` task=${event.task}` : '';
         this.append(
             `[${event.at}] contract-violation ${event.contract} observed=${event.observed} node=${event.node} agent=${event.agent}${task}\n`,
@@ -298,7 +318,9 @@ export class WorkflowRunLogSink {
     }
 
     private append(text: string): void {
-        if (this.fd === undefined || this.closed || this.truncated) return;
+        if (this.closed || this.truncated || !this.ensureOpen()) return;
+        const fd = this.fd;
+        if (fd === undefined) return; // Latched inert above; narrows for the writes below.
         // Persistence-boundary redaction (0925 R3): upstream `bounded()` is
         // best-effort, so every line is scrubbed against the configured secrets
         // again before it can reach disk. MAX_SAFE_INTEGER → no extra bound; the
@@ -313,14 +335,14 @@ export class WorkflowRunLogSink {
             // Truncation must be visible — a silent cut reads as a complete log (R7/R11).
             this.truncated = true;
             try {
-                writeSync(this.fd, TRUNCATION_MARKER);
+                writeSync(fd, TRUNCATION_MARKER);
             } catch {
                 // Best-effort (R8).
             }
             return;
         }
         try {
-            writeSync(this.fd, redacted);
+            writeSync(fd, redacted);
             this.bytes += textBytes;
             this.lines += textLines;
         } catch {

@@ -4,7 +4,7 @@ name: Expose spur workflow progress over the existing projectWorkflowProgress pr
 status: done
 template: feature-impl
 created_at: 2026-09-16T10:45:25.223Z
-updated_at: "2026-09-17T18:31:20.839Z"
+updated_at: "2026-10-03T01:29:28.112Z"
 feature_id: D62
 priority: P1
 tags:
@@ -119,12 +119,12 @@ Wiring only: `spur workflow progress <run-id>` exposes the projection that alrea
 
 ##### Findings (ranked)
 
-| # | Priority | Dimension | Finding | Location |
-| --- | --- | --- | --- | --- |
-| 1 | P3 (minor) | correctness | The Solution change map describes 8 files; the reviewed diff is 10. `apps/cli/tests/json-envelope-inventory.test.ts` — the 0699 R1 census pin `66 → 67` plus its count-history comment, the one production-adjacent file the **test-fix** stage changed — is absent from the map, and the task file itself is not counted either. The map therefore understates the task's own change exactly as 0866 finding #3 did for its remediation file. Not a gate failure (no checker compares the map to the diff); fix in the `record` stage backfill or by hand. | `apps/cli/tests/json-envelope-inventory.test.ts:278-284` vs `docs/tasks5/0867_…md` §Solution / §Change map |
-| 2 | P4 (advisory) | usability | The D62 design SSOT still carries the present-tense claim that `projectWorkflowProgress` has "no CLI consumer today" — this task falsifies it. The doc is marked `Status: proposed (feature D62)`, so re-scoping is legitimately deferred to the feature-completion doc pass; flagged here so that pass does not miss it. | `docs/design/workflow-execution-economy.md:87` |
-| 3 | P4 (advisory) | architecture | The CLI derives "unknown run" by string-matching the projection's own `orphan-row` diagnostic code. The choice is deliberate and documented (task §Design: no extra query, no re-derivation), is covered by a test, and cannot misfire — `orphan-row` is pushed only on the `traceRowById` miss, and `traceRowById` (`run-dao.ts:112`) is an unfiltered `WHERE id = ?`, so a real row never produces it. The residual is coupling: `apps/cli` now depends on one member of the projection's diagnostic union as a control-flow signal. An explicit existence field would decouple it; not worth doing at this size. | `apps/cli/src/commands/workflow.ts:1398-1402`; `packages/app/src/workflow/progress-projection.ts:166-171` |
-| 4 | P4 (advisory) | correctness | The census doc-comment above the pin still reads "the static census over **all 69**" while the pin is 67 (and was 66 before this change — so the number was already stale, and this diff narrowed the gap from 3 to 2). The diff edits the same describe block, so it is a one-word fix in a touched file. | `apps/cli/tests/json-envelope-inventory.test.ts:128` |
+| # | Priority | Dimension | Finding | Location | Disposition |
+| --- | --- | --- | --- | --- | --- |
+| 1 | P3 (minor) | correctness | The Solution change map describes 8 files; the reviewed diff is 10. `apps/cli/tests/json-envelope-inventory.test.ts` — the 0699 R1 census pin `66 → 67` plus its count-history comment, the one production-adjacent file the **test-fix** stage changed — is absent from the map, and the task file itself is not counted either. The map therefore understates the task's own change exactly as 0866 finding #3 did for its remediation file. Not a gate failure (no checker compares the map to the diff); fix in the `record` stage backfill or by hand. | `apps/cli/tests/json-envelope-inventory.test.ts:278-284` vs `docs/tasks5/0867_…md` §Solution / §Change map | FIXED — verified in the current tree 2026-10-02: the change map carries the json-envelope-inventory.test.ts:278-284 row (finding #1 backfill, present in the current Solution) |
+| 2 | P4 (advisory) | usability | The D62 design SSOT still carries the present-tense claim that `projectWorkflowProgress` has "no CLI consumer today" — this task falsifies it. The doc is marked `Status: proposed (feature D62)`, so re-scoping is legitimately deferred to the feature-completion doc pass; flagged here so that pass does not miss it. | `docs/design/workflow-execution-economy.md:87` | FIXED — verified in the current tree 2026-10-02: workflow-execution-economy.md:116 now names the progress CLI consumer |
+| 3 | P4 (advisory) | architecture | The CLI derives "unknown run" by string-matching the projection's own `orphan-row` diagnostic code. The choice is deliberate and documented (task §Design: no extra query, no re-derivation), is covered by a test, and cannot misfire — `orphan-row` is pushed only on the `traceRowById` miss, and `traceRowById` (`run-dao.ts:112`) is an unfiltered `WHERE id = ?`, so a real row never produces it. The residual is coupling: `apps/cli` now depends on one member of the projection's diagnostic union as a control-flow signal. An explicit existence field would decouple it; not worth doing at this size. | `apps/cli/src/commands/workflow.ts:1398-1402`; `packages/app/src/workflow/progress-projection.ts:166-171` | RESOLVED 2026-10-02 — deliberate documented coupling, test-covered; not worth decoupling at this size |
+| 4 | P4 (advisory) | correctness | The census doc-comment above the pin still reads "the static census over **all 69**" while the pin is 67 (and was 66 before this change — so the number was already stale, and this diff narrowed the gap from 3 to 2). The diff edits the same describe block, so it is a one-word fix in a touched file. | `apps/cli/tests/json-envelope-inventory.test.ts:128` | FIXED — verified in the current tree 2026-10-02: census comment now reads all 67, matching the pin |
 
 ##### Functional Traceability
 

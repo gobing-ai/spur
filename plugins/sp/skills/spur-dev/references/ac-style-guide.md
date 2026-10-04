@@ -30,10 +30,28 @@ Rules:
 ## Task-side numbering (`AC<n>`)
 
 `R<n>` is the **feature** scenario key and the **task Requirements** key. Task `### Acceptance
-Criteria` items therefore use their own namespace: `- [ ] AC1 — <title>` or `Scenario: AC1 — <title>`,
-numbered task-locally. Carry a feature scenario by copying its title after the prefix (`normalizeTitle`
-strips both `AC<n>` and `R<n>`, so DD-09 matching is unaffected); bind a task requirement with
-`(req: R<n>)`. Legacy tasks that wrote `- [ ] R<n> —` / `Scenario: R<n> —` keep working unchanged.
+Criteria` items therefore use their own namespace: `AC1, AC2, …`. Two frontmatter fields split the
+gate work, and neither implies the other:
+
+- **`ac_altitude`** owns the **feature subset** (DD-09). `graduating` (or absent) keeps
+  normalized-title matching against the linked feature (`normalizeTitle` strips both `AC<n>` and
+  `R<n>` prefixes, so copied titles match); `task-local` skips that check — and nothing else.
+- **`ac_numbering: task-local`** owns **task requirement bindings**. It opts the AC section into the
+  `L3.ac-requirement-coverage` loop, which reads **`Scenario:` titles only**: bind requirements with
+  `(req: R1; R2)` in the title, or ship a legacy `Scenario: R1 — …` title, which still binds by its
+  own prefix.
+
+**Preferred task-local form** (regression/fix tasks): `Scenario: AC1 — <concrete outcome> (req: R1)`
+with Given/When/Then, declaring **both** `ac_altitude: task-local` and `ac_numbering: task-local`.
+
+Parsed checkbox rows (`- [ ] AC1 — <title>`) are a supported form: they join checklist parsing, the
+feature-subset match, and the terminal-status unchecked-box count — but they do **not** enter the
+Scenario-only requirement-binding loop, so a checkbox row never substitutes for a `(req: …)` binding.
+
+Raw freeform bullets (`- AC1 — …`: no checkbox, no `Scenario:`) parse as nothing — no subset match,
+no requirement binding, no box counting. They survive in the corpus as **legacy unparsed records**:
+read them, don't author them, and don't reach for them to dodge traceability. Completed tasks keep
+their records; new work uses one of the two parsed forms above.
 
 ## Two AC tiers (authoring convention)
 
@@ -145,9 +163,11 @@ The `spur task verdict` answer lint declares the bold span of a single-line crit
 (`- **AC2 — The roster runtime is gone (R3).** Given …, when …, then …`) and its head before the
 first ` — ` or `:` — so answer rows may key `AC2` or `AC2 — The roster runtime is gone (R3).`. Keep
 at least one answer row keyed to the verbatim feature scenario title the task graduates, and keep
-requirement ids in the corpus form they are checked against (`- **R1** — …`): `L3.requirements-format`
-matches `R\d+` followed by a space, so a colon after the bold span silently drops the whole section
-to a warning.
+requirement ids in the template-taught corpus form, `- [ ] R1. <text>`: that (or an unbolded `R1.`
+variant) is what the task-local binding loop parses — bold wrapping (`**R1**`) passes the
+`L3.requirements-format` ratio but binds nothing — and a colon after the bold span still silently
+drops the whole section to a warning. Bold AC heads are likewise a verdict-table id form, not the AC
+authoring form: author new AC rows in the plain `- [ ] AC1 —` / `Scenario: AC1 —` shapes.
 
 ### The id is exactly the scenario title — no Gherkin body appended
 
@@ -276,3 +296,16 @@ Use `task-local` for a fix/refactor task whose regression criteria are not the f
 contract. Keep a `graduating` task's scenario titles identical to the feature's so DD-09 stays
 satisfied. Absent-altitude is `graduating` — set `task-local` explicitly only where the subset rule
 truly does not apply (do not silently default new tasks to it).
+
+### Choosing an AC form (decision table)
+
+| Task situation | Author AC as | Frontmatter | Gate effect |
+| --- | --- | --- | --- |
+| Criteria that graduate the feature's ship contract | `Scenario: AC1 — <feature scenario title>` | `ac_altitude: graduating` (or absent) | DD-09 subset enforced — drifted titles report `L4.uncovered-task-scenario`; `(req: …)` binding only when `ac_numbering: task-local` is also declared |
+| Task-local regression/fix criteria | `Scenario: AC1 — <concrete outcome> (req: R1)` + Given/When/Then | `ac_altitude: task-local` + `ac_numbering: task-local` | subset skipped; every `- [ ] R<n>.` requirement must be bound by some scenario's `(req: …)` |
+| Simple verifiable checklist rows | `- [ ] AC1 — <title>` | either altitude, per the rows above | joins checklist parsing and the subset match; **no** requirement binding (`Scenario:`-only) |
+| Legacy raw bullets | `- AC1 …` (no checkbox, no `Scenario:`) | n/a | unparsed: invisible to subset, binding, and box checks — preserve in place, never author new |
+
+`task-local` altitude skips only the feature-subset check. It does not waive the unchecked-box check,
+required sections, the proof-bound verdict, line anchors, or any other done check — AC syntax alone,
+at any altitude, never makes a task done.

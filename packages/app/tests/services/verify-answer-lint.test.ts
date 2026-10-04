@@ -36,9 +36,10 @@ When the guard runs
 Then the input is rejected
 `;
 
-function answer(reqs: string[], acs: string[], verdict = 'Verdict: PASS'): string {
+function answer(reqs: string[], acs: string[], verdict = 'Verdict: PASS', confidence = 'Confidence: HIGH'): string {
     return [
         verdict,
+        confidence,
         '',
         '### Per-Requirement Traceability',
         '| Req | Status | Evidence |',
@@ -75,6 +76,34 @@ describe('lintVerifyAnswer (task 1003 R1)', () => {
         expect(findings.length).toBe(1);
         expect(findings[0]?.line).toBe(1);
         expect(findings[0]?.message).toContain('invalid Verdict value "DONE"');
+    });
+
+    test('missing `Confidence:` line is rejected (1068 R2)', () => {
+        const findings = lintVerifyAnswer(answer(CLEAN_REQS, CLEAN_ACS, 'Verdict: PASS', ''), TASK, null);
+        expect(findings.length).toBe(1);
+        expect(findings[0]?.rule).toBe('confidence-missing');
+        expect(findings[0]?.message).toContain('`Confidence:`');
+    });
+
+    test('invalid Confidence value is rejected with the line number (1068 R2)', () => {
+        const findings = lintVerifyAnswer(
+            answer(CLEAN_REQS, CLEAN_ACS, 'Verdict: PASS', 'Confidence: SURE'),
+            TASK,
+            null,
+        );
+        expect(findings.length).toBe(1);
+        expect(findings[0]?.rule).toBe('confidence-value');
+        expect(findings[0]?.line).toBe(2);
+        expect(findings[0]?.message).toContain('invalid Confidence value "SURE"');
+    });
+
+    test.each(['HIGH', 'MEDIUM', 'LOW'])('Confidence: %s is accepted (1068 R2)', (level) => {
+        const findings = lintVerifyAnswer(
+            answer(CLEAN_REQS, CLEAN_ACS, 'Verdict: PASS', `Confidence: ${level}`),
+            TASK,
+            null,
+        );
+        expect(findings).toEqual([]);
     });
 
     test('unknown requirement ID is rejected', () => {
@@ -181,6 +210,7 @@ describe('lintVerifyAnswer (task 1003 R1)', () => {
     test('AC header row closes a requirement table without a heading between', () => {
         const body = [
             'Verdict: PASS',
+            'Confidence: HIGH',
             '',
             '### Per-Requirement Traceability',
             '| Req | Status | Evidence |',
@@ -538,5 +568,91 @@ R3 is mentioned in prose without a terminator and is not a declaration.
     test('the refusal hint names the bold-head form', () => {
         const findings = lintVerifyAnswer(answerWith(['R1', 'R2'], ['AC1', 'AC9']), TASK_0862, null);
         expect(findings.some((f) => f.message.includes("a criterion bullet's bold head or full bold span"))).toBe(true);
+    });
+});
+
+describe('evidence-citation (task 1070 R1-R4): API/library claims need a same-cell citation', () => {
+    const cited = (evidence: string, reqs = ['R1', 'R2']) =>
+        answer(
+            [`| R1 | MET | ${evidence} |`, '| R2 | MET | `src/log.ts:7` |'].filter((_, i) => i < reqs.length),
+            CLEAN_ACS,
+        );
+
+    test('scoped-package claim without a citation is rejected, row-addressed', () => {
+        const findings = lintVerifyAnswer(
+            cited('installed @gobing-ai/ts-llm-jsonl-importer exports the classifier'),
+            TASK,
+            null,
+        );
+        expect(findings.some((f) => f.rule === 'evidence-citation' && f.line === 7)).toBe(true);
+    });
+
+    test('node_modules claim without a citation is rejected', () => {
+        const findings = lintVerifyAnswer(cited('node_modules/@scope/pkg ships the new API'), TASK, null);
+        expect(findings.some((f) => f.rule === 'evidence-citation')).toBe(true);
+    });
+
+    test('semver version claim without a citation is rejected', () => {
+        const findings = lintVerifyAnswer(cited('upstream 0.5.12 narrows name-to-path-to-digest'), TASK, null);
+        expect(findings.some((f) => f.rule === 'evidence-citation')).toBe(true);
+    });
+
+    test('backticked function-call token without a citation is rejected', () => {
+        const findings = lintVerifyAnswer(cited('`matchCapabilityOrigin(name)` never guesses a kind'), TASK, null);
+        expect(findings.some((f) => f.rule === 'evidence-citation')).toBe(true);
+    });
+
+    test.each([
+        ['backticked path:line', 'upstream 0.5.12 classifier at `src/capability.ts:83`'],
+        ['backticked path:line-end', 'upstream 0.5.12 classifier at `src/capability.ts:83-115`'],
+        ['external named-origin form', '@gobing-ai/ts-llm-jsonl-importer `src/capability.ts` line 83'],
+        ['external form plural lines', '@gobing-ai/ts-llm-jsonl-importer `src/capability.ts` lines 83-115'],
+        ['bare path.ext:line', 'installed 0.5.12 per packages/app/src/services/foo.ts:42'],
+        ['URL', 'resolver semantics per https://example.com/spec#resolver for @scope/pkg'],
+    ])('claim with a %s citation lints clean', (_label, evidence) => {
+        expect(lintVerifyAnswer(cited(evidence), TASK, null)).toEqual([]);
+    });
+
+    test('marker-free receipts lint clean without a citation', () => {
+        expect(lintVerifyAnswer(cited('bun test 398 pass / 0 fail this run'), TASK, null)).toEqual([]);
+        expect(lintVerifyAnswer(cited('log file reviewed'), TASK, null)).toEqual([]);
+    });
+
+    test('time-like tokens are neither markers nor citations', () => {
+        // `00:04` must not satisfy the citation requirement for a real claim…
+        const findings = lintVerifyAnswer(cited('@scope/pkg bucket 00:04 materializes ok'), TASK, null);
+        expect(findings.some((f) => f.rule === 'evidence-citation')).toBe(true);
+        // …and a marker-free cell carrying times stays clean.
+        expect(lintVerifyAnswer(cited('bucket 00:04 materializes ok; 8/3 oracle holds'), TASK, null)).toEqual([]);
+    });
+
+    test('citations do not leak across rows', () => {
+        const findings = lintVerifyAnswer(
+            answer(
+                [
+                    '| R1 | MET | upstream 0.5.12 at `src/capability.ts:83` |',
+                    '| R2 | MET | upstream 0.5.12 also changed |',
+                ],
+                CLEAN_ACS,
+            ),
+            TASK,
+            null,
+        );
+        expect(findings.length).toBe(1);
+        expect(findings[0]?.rule).toBe('evidence-citation');
+        expect(findings[0]?.line).toBe(8);
+        expect(findings[0]?.message).toContain('"R2"');
+    });
+
+    test('AC evidence cells are checked too', () => {
+        const findings = lintVerifyAnswer(
+            answer(CLEAN_REQS, [
+                '| AC1 | MET | test | `matchCapabilityOrigin(name)` narrows without guessing |',
+                '| AC2 | PARTIAL | manual-review | log file reviewed |',
+            ]),
+            TASK,
+            null,
+        );
+        expect(findings.some((f) => f.rule === 'evidence-citation' && f.message.includes('AC1'))).toBe(true);
     });
 });

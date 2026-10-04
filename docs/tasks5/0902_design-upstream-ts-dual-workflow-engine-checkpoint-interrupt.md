@@ -4,7 +4,7 @@ name: Design upstream ts-dual-workflow-engine checkpoint/interruption contract (
 status: done
 template: issue
 created_at: 2026-09-19T20:04:11.204Z
-updated_at: "2026-09-19T20:40:36.229Z"
+updated_at: "2026-10-03T15:59:58.372Z"
 feature_id: D3
 
 ---
@@ -73,22 +73,41 @@ Full mapping in ts-libs ADR-025 and the README section "Interruption & resume ow
 
 ### Testing
 
-- `cd packages/dual-workflow-engine && bun test` — 403 tests pass, including new `tests/interruption.test.ts` (9 tests) and corrected `persistence`/`pause-resume`/`run-lifecycle` suites.
-- `bun x tsc --noEmit` — clean.
-- `bun run spur-check` (ts-libs root) — all gates green (Biome format/lint incl. organizeImports, pre/post rules).
-- Release: `bun run bump-ver` produced `@gobing-ai/ts-libs-v0.5.0` + per-package tags; `git push origin main --tags` accepted `9b804fa..a50bc7b` (pre-push lint+typecheck passed); npm publish via CI trusted publishing.
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Evidence: @gobing-ai/ts-dual-workflow-engine `src/` — interruption contract shipped; spur consumes `interruptRun`/`claimRunOwnership` at `packages/app/src/services/workflow-service.ts` (`withSelfPidRecording` claimRunOwnership stamp, `clean()` interruptRun path — re-read this run). Engine suites this run: `bun test -t interrupt` 10 pass 0 fail, `-t resume` 21 pass 0 fail (ts-libs packages/dual-workflow-engine). |
+| R2 | MET | At-least-once recovery contract frozen (0902/ADR-025): rerun-enter re-executes interrupted current-state actions; spur test fixture `resumeRerun: true` at `packages/app/tests/services/workflow-service.test.ts:52`; interrupt suites green this run. |
+| R3 | MET | Concurrent-ownership: CAS claim loses with `WorkflowResumeError`; spur-side `claimRunOwnership` proxy at `packages/app/src/services/workflow-service.ts` (withSelfPidRecording, re-read this run); engine ownership suites green this run. |
+| R4 | MET | Released: installed `@gobing-ai/ts-dual-workflow-engine` 0.5.12, catalog `^0.5.11` (`package.json:34`); spur-new bumped; 0901 frozen and done (verified separately in this batch — PASS). |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
 **Upstream delivery review** (self-review during implementation + contract tests — disposition: shipped, P2/P3 fixed inline)
-| Priority | Dimension | Location | Finding |
+| Priority | Dimension | Location | Finding | Disposition |
 |----------|-----------|----------|----------|
-| P2 | API shape | ts-libs `types.ts:25`; `persistence.ts:112` | Initial `expectedStatuses` was a strict `[paused, interrupted]` tuple — broke callers resuming from a single status. Loosened to `readonly ('paused' \| 'interrupted')[]` in both adapter impls before release. |
-| P3 | Conventions | ts-libs `persistence.ts` → `schema-sql.ts:77` | Migration ALTERs first drafted inline in `persistence.ts`; moved to exported `WORKFLOW_ENGINE_MIGRATIONS_SQL` so DDL text lives in schema-sql (single seam for the no-inline-DDL rule both repos follow). |
-| P3 | Release ops | npm registry | CI trusted publishing lag: npm still showed 0.4.69 minutes after push, blocking spur-new's `bun install` against `^0.5.0`. Open, owned by task 0901 adoption step. |
+| P2 | API shape | ts-libs `types.ts:25`; `persistence.ts:112` | RESOLVED: Initial `expectedStatuses` was a strict `[paused, interrupted]` tuple — broke callers resuming from a single status. Loosened to a readonly paused-or-interrupted array in both adapter impls before release.| RESOLVED: confirmed during task 1065 R4 corpus audit |
+| P3 | Conventions | ts-libs `persistence.ts` → `schema-sql.ts:77` | RESOLVED: Migration ALTERs first drafted inline in `persistence.ts`; moved to exported `WORKFLOW_ENGINE_MIGRATIONS_SQL` so DDL text lives in schema-sql (single seam for the no-inline-DDL rule both repos follow).| RESOLVED: confirmed during task 1065 R4 corpus audit |
+| P3 | Release ops | npm registry | RESOLVED: CI trusted publishing lag: npm still showed 0.4.69 minutes after push, blocking spur-new's `bun install` against `^0.5.0`. Open, owned by task 0901 adoption step.| RESOLVED: confirmed during task 1065 R4 corpus audit |
 | P4 | Repo hygiene | ts-libs tags | Stale `ts-utils-v0.4.43` tag rejected on push (already existed remotely); harmless, other tags landed. |
 
 Residual risk: rerun-enter is at-least-once — hosts must persist durable state before side effects (documented in ADR-025/README, enforced by contract tests, not by the type system).
+
+#### References
+
+- ADR-025: ts-libs `docs/00_ADR.md` (decision, alternatives rejected: lease/heartbeat, resume-without-claim, silent rerun).
+- ts-libs `packages/dual-workflow-engine/README.md` — "Interruption & resume ownership (ADR-025)" + `workflow.run.interrupted` event row.
+- npm: `@gobing-ai/ts-dual-workflow-engine@0.5.0`; spur-new consumer task 0901 (this contract's downstream user).
+
+#### History
+
+- 2026-09-19T20:38:30.773Z todo → wip (system)
+- 2026-09-19T20:40:35.566Z wip → testing (system)
+- 2026-09-19T20:40:36.229Z testing → done (system)
 
 ### References
 

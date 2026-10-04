@@ -100,6 +100,8 @@ Owner/removal-criteria columns: per R3, the owner of each traced field is the so
 | 2 | **S1** | Nested feature-dev review structurally dead | feature-dev.yaml:156–169 `integration-review` command.gate runs `spur workflow run .spur/workflows/pr-review.yaml`; sync path sets `SPUR_WORKFLOW_RUN_ACTIVE=1` (workflow.ts:656); nested-run guard (workflow.ts:402–414, 0610 R4) refuses the child | gate always FAILs (refusal) and `softFail: true` lets the parent reach `done` anyway — **the feature integration review has never been able to run via feature-dev** |
 | 3 | **S1** | CLI never passes `spurConfig` to WorkflowAppService | makeSvc (apps/cli/src/commands/workflow.ts:253–286) omits it; context doc says spurConfig is "the only app-config source" (workflow-service.ts:433) | `resolveDefaultAgentVar` (:668) always sees null on CLI paths → **`agent.default` config silently ignored** for `workflow run`/`continue` |
 | 4 | **S2** | Continue ignores definition drift | continuePaused (workflow-service.ts:1007, 1076) — see §E | Edited/reschema'd YAML resumes mid-run; no digest comparison anywhere on resume |
+
+> **0866 retirement annotation (2026-10-02):** `feature-dev.yaml` was deleted 2026-09-16 by task 0866 (feature D62). §F row 2's subject no longer exists — the nested-review defect died with the definition and needs no fix. §F row 1 (`command.gate` timeout key) is **unaffected** by the retirement and remains a live S1 defect; the dead-config example in its Effect cell (`feature-dev.yaml`'s 1800000ms) is historical.
 | 5 | **S2** | Fail-open proof fingerprints | `createGitAlternateTree` returns `''` on any git failure (proof-input-fingerprint.ts:99,105,110,118) | digest over an empty tree compares equal to other empty-tree digests → proof bracket silently degrades to spec-only, still "verifies" |
 | 6 | **S2** | Run-id path confinement | `--run-id` unvalidated (`options.runId \|\| crypto.randomUUID()`, apps/cli/src/commands/workflow.ts:512, same fallback on the async path :424); used in log path (packages/app/src/observability/workflow-run-log-sink.ts:70 `join(dir, runId + '.log')`) and trace dirs | `--run-id ../../x` writes outside `.spur/run/`; asymmetric with command.gate/run.artifact which enforce the prefix |
 | 7 | **S2** | Suppressed task lookup weakens proof | test onEnter[0]: `task path … 2>/dev/null \|\| true … exit 0` (task-pipeline.yaml) writes empty taskpath file on failure | `taskSpecPath=""` → readOptional skips spec → **digest = tree-only, silently** (no error, no mark) |
@@ -132,7 +134,7 @@ Ownership conflicts: none found — each surface has a single writer and a named
 ## I. Prioritized decisions (from §F/§A)
 
 1. Fix `command-gate.ts:157` key (`timeoutMs` → `timeout`) — one-line, restores every gate timeout.
-2. Decide nested-review policy: either allow one level of nested `workflow run` (guarded) or replace feature-dev's integration-review gate with a non-spawning check; today it is dead weight that always FAILs.
+2. ~~Decide nested-review policy~~ — **moot since 2026-09-16 (task 0866)**: `feature-dev.yaml` was retired; the dead integration-review gate was deleted with it.
 3. Thread `spurConfig` through makeSvc so `agent.default` works from the CLI.
 4. Enforce digest comparison at `continuePaused` (block or loudly confirm on drift) — closes the resume hole and subsumes the version question (§H).
 5. Fail closed in `createGitAlternateTree` (no empty-tree digest).

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { closeSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getEnvVars } from '@gobing-ai/ts-utils';
@@ -348,6 +348,47 @@ describe('task-diffstat → verify dispatch floor (1039)', () => {
                 expect(belowFloorFromArtifact(cwd)).toBe(false);
             }
         }
+        rmSync(cwd, { recursive: true, force: true });
+    });
+});
+
+describe('task-diffstat stdout-redirect guard (1067 R3)', () => {
+    test('redirecting stdout onto the artifact keeps the artifact correct and exits nonzero (AC3)', () => {
+        const cwd = makeRepo();
+        anchorBase(cwd, '1067');
+        writeFileSync(join(cwd, 'apps/cli/src/index.ts'), 'export const start = 1;\nexport const end = 2;\n');
+        const artifact = join(cwd, '.spur/run', '1067-diffstat.json');
+        writeFileSync(artifact, 'stale-from-an-earlier-attempt');
+        // The shell-equivalent: open the artifact for write (truncating) and hand the fd as stdout.
+        const fd = openSync(artifact, 'w');
+        try {
+            const run = spawnSync(process.execPath, [join(import.meta.dir, '../scripts/task-diffstat.ts')], {
+                cwd,
+                encoding: 'utf8',
+                env: { ...getEnvVars(), wbs: '1067' },
+                stdio: ['ignore', fd, 'pipe'],
+            });
+            expect(run.status).toBe(1);
+            expect(run.stderr).toContain('redirect stdout elsewhere');
+        } finally {
+            closeSync(fd);
+        }
+        const row = JSON.parse(readFileSync(artifact, 'utf8')) as Record<string, unknown>;
+        expect(row.files).toBe(1);
+        expect(row.sensitive).toBe(false);
+        rmSync(cwd, { recursive: true, force: true });
+    });
+
+    test('normal invocation stays silent and exits zero', () => {
+        const cwd = makeRepo();
+        anchorBase(cwd, '1067');
+        const run = spawnSync(process.execPath, [join(import.meta.dir, '../scripts/task-diffstat.ts')], {
+            cwd,
+            encoding: 'utf8',
+            env: { ...getEnvVars(), wbs: '1067' },
+        });
+        expect(run.status).toBe(0);
+        expect(run.stdout).toBe('');
         rmSync(cwd, { recursive: true, force: true });
     });
 });

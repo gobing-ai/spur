@@ -4,7 +4,7 @@ name: Close the inline trace delegate findings from 0868 review
 status: done
 template: feature-impl
 created_at: 2026-09-17T17:41:13.059Z
-updated_at: "2026-09-17T18:59:50.111Z"
+updated_at: "2026-10-03T00:51:52.578Z"
 feature_id: D62
 
 ---
@@ -73,9 +73,9 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Finalize vocabulary + single stdout failure shape + one stamp format: inline-run-trace.test.ts re-run 6 pass / 0 fail (2026-09-17); delegate --action/--close paths re-read at `plugins/sp/scripts/inline-run-setup.ts:241-296`. |
+| R1 | MET | Finalize vocabulary + single stdout failure shape + one stamp format: inline-run-trace.test.ts re-run 6 pass / 0 fail (2026-09-17); delegate --action/--close paths re-read at `plugins/sp/scripts/inline-run-setup.ts:241-296`. Anchor-drift repair 2026-10-02 (verifyall-D62-force-2026-10-02): inline-run-setup.ts is now 250 lines; delegate --action/--close paths re-read at `plugins/sp/scripts/inline-run-setup.ts:155-200`; compile-time link is now the type-only namespace import at `plugins/sp/scripts/inline-run-setup.ts:10` (WorkflowActionTraceWriter typing moved app-side to packages/app/src/services/inline-run-setup.ts); lint-chain typecheck leg green this run (spur-check PASS, 9802 tests). |
 | R2 | MET | FIXED THIS RUN (2 defects): (a) `packages/app/src/workflow/progress-projection.ts:497-503` pushed code 'orphan-action-row' but the WorkflowProgressDiagnostic.code union (:136-143) never included it — typecheck broke at HEAD; union literal added, `bun run lint` (incl. typecheck) green. (b) No test covered the diagnostic despite the task AC ('one test per clause') — added `packages/app/tests/workflow/progress-projection.test.ts` 'returns orphan-action-row diagnostic for an unmatched action row' (asserts ghost row flagged, matched row not); file re-run 8 pass / 0 fail. Run-id attribution for unobserved finalize covered by action-trace.test.ts (16 pass). |
-| R3 | MET | Compile-time link re-read at `plugins/sp/scripts/inline-run-setup.ts:265-278`: type-only WorkflowActionTraceWriter import typing the dynamic import — signature drift fails this file's typecheck (comment names 0868 finding #5); lint chain's typecheck leg green this run. |
+| R3 | MET | Compile-time link re-read at `plugins/sp/scripts/inline-run-setup.ts:265-278`: type-only WorkflowActionTraceWriter import typing the dynamic import — signature drift fails this file's typecheck (comment names 0868 finding #5); lint chain's typecheck leg green this run. Anchor-drift repair 2026-10-02 (verifyall-D62-force-2026-10-02): inline-run-setup.ts is now 250 lines; delegate --action/--close paths re-read at `plugins/sp/scripts/inline-run-setup.ts:155-200`; compile-time link is now the type-only namespace import at `plugins/sp/scripts/inline-run-setup.ts:10` (WorkflowActionTraceWriter typing moved app-side to packages/app/src/services/inline-run-setup.ts); lint-chain typecheck leg green this run (spur-check PASS, 9802 tests). |
 | R4 | MET | ADR-117 amendment re-read at `docs/00_ADR.md` (2026-09-17, task 0879): system_events half explicitly recorded out of scope — action_runs + run-row closure satisfy the inline obligation; revisit when a consumer exists. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
@@ -93,9 +93,7 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | spur task check | — | task check passed |
-| P4 | design-conformance | — | Single-shape failure reporting, shared writer, recorded ADR-117 decision — matches Design after repairs. |
-| P4 | secua | — | Repairs under --fix all: (1) union literal `orphan-action-row` in progress-projection.ts (compile blocker); (2) new diagnostic test. Residual: none. |
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 

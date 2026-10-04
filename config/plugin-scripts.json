@@ -67,6 +67,11 @@
             "twin": "quality-gate.mjs"
         },
         {
+            "rel": "persist-out-check.ts",
+            "contract": "standard",
+            "twin": "persist-out-check.mjs"
+        },
+        {
             "rel": "residual-scan.ts",
             "contract": "standard",
             "twin": "residual-scan.mjs"

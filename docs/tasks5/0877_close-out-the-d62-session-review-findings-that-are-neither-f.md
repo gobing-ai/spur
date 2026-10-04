@@ -4,7 +4,7 @@ name: Close out the D62 session-review findings that are neither fixed nor owned
 status: done
 template: feature-impl
 created_at: 2026-09-17T05:46:06.389Z
-updated_at: "2026-09-17T19:04:55.213Z"
+updated_at: "2026-10-03T01:29:28.322Z"
 feature_id: D62
 
 priority: P2
@@ -122,7 +122,7 @@ Delivered as five child tasks (0878–0882, each with its own commit + PASS verd
 
 | Priority | Finding | Resolution |
 |----------|---------|------------|
-| P3 | 0882's diff landed inside parallel-session commit `4fdd1f71d` (one-writer violation, wrong commit message for this scope) | Content verified intact at HEAD (25 tests pass, retirements[] present); traceability note recorded in 0882 Testing; no history rewrite. |
+| P3 | 0882's diff landed inside parallel-session commit `4fdd1f71d` (one-writer violation, wrong commit message for this scope) | RESOLVED 2026-10-02 — content verified intact at HEAD (25 tests pass, retirements[] present); traceability note recorded in 0882 Testing; no history rewrite (accepted one-writer violation, disposition recorded). |
 | P4 | R4 (ADR-117 system_events) delivered as explicit out-of-scope rather than implemented | Recorded in `docs/00_ADR.md` with rationale per R4's alternative clause; revisit if inline surface telemetry demand appears. |
 | P4 | Retired-definition history contains ad-hoc run names never tracked as definitions | Guard scoped to git-tracked definition names (`everTrackedDefinitionNames`), keeping the check precise. |
 

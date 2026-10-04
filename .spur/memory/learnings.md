@@ -4631,3 +4631,85 @@ Executed [`sp:doc-evolve`](file:///Users/robin/.gemini/config/skills/sp-doc-evol
   - **Classify-not-resolve:** When handling complex or out-of-scope targets (nested subpaths) in flat artifact copy sets, classify and skip them rather than inventing recursive copy, hashing, and conflict resolution mechanisms.
 - **Gotchas:**
   - **Teardown blocking on evidence paths:** Citing evidence files in subdirectories under `.spur/run/` in task files will fail worktree teardown unless the persist-out extractor specifically recognises subpaths and classifies them as directory skips.
+### Drift Audit and Repair Summary
+
+Executed [`sp:doc-evolve`](file:///Users/robin/.gemini/config/skills/sp-doc-evolve/SKILL.md) (wrapup) across [`docs/00_ADR.md`](file:///Users/robin/xprojects/spur-new/docs/00_ADR.md), [`docs/03_ARCHITECTURE.md`](file:///Users/robin/xprojects/spur-new/docs/03_ARCHITECTURE.md), [`docs/04_DESIGN.md`](file:///Users/robin/xprojects/spur-new/docs/04_DESIGN.md), and [`docs/design/*`](file:///Users/robin/xprojects/spur-new/docs/design/) for task `1061` read from [`.spur/run/3f3e8ffc-21bd-46ed-81ff-56fab9d6bbaf-wrapup-tasks.json`](file:///Users/robin/xprojects/spur-new/.spur/run/3f3e8ffc-21bd-46ed-81ff-56fab9d6bbaf-wrapup-tasks.json):
+
+1. **[`docs/00_ADR.md`](file:///Users/robin/xprojects/spur-new/docs/00_ADR.md) & [`docs/03_ARCHITECTURE.md`](file:///Users/robin/xprojects/spur-new/docs/03_ARCHITECTURE.md):**
+   - **Audit:** Task 1061 aligns authoring guidance and template comments with established checker semantics in `packages/app/src/services/task-check.ts` and adds isolated canaries. It introduces no new cross-module architectural decisions, schema breaking changes, or reversals ([Constitution §6.1](file:///Users/robin/xprojects/spur-new/docs/99_PROJECT_CONSTITUTION.md#L150-L177)). [ADR-062](file:///Users/robin/xprojects/spur-new/docs/00_ADR.md#L685) ("Scenario coverage respects declared task-versus-feature altitude") and [`docs/03_ARCHITECTURE.md:438`](file:///Users/robin/xprojects/spur-new/docs/03_ARCHITECTURE.md#L438) §12.3 remain authoritative without requiring amendment.
+
+2. **[`docs/04_DESIGN.md`](file:///Users/robin/xprojects/spur-new/docs/04_DESIGN.md) & [`docs/design/*`](file:///Users/robin/xprojects/spur-new/docs/design/):**
+   - [`docs/04_DESIGN.md:35`](file:///Users/robin/xprojects/spur-new/docs/04_DESIGN.md#L35): Pointer to [`design/planning-record-contracts.md`](file:///Users/robin/xprojects/spur-new/docs/design/planning-record-contracts.md) remains unchanged; no ceremonial index edit required ([Constitution §4.5](file:///Users/robin/xprojects/spur-new/docs/99_PROJECT_CONSTITUTION.md#L108-L118)).
+   - [`docs/design/planning-record-contracts.md:7`](file:///Users/robin/xprojects/spur-new/docs/design/planning-record-contracts.md#L7): Added `1061` to `related` frontmatter.
+   - [`docs/design/planning-record-contracts.md:163`](file:///Users/robin/xprojects/spur-new/docs/design/planning-record-contracts.md#L163) (§7.3.1): Documented `ac_numbering: z.literal('task-local').optional()` as the task-local requirement-binding opt-in for `L3.ac-requirement-coverage`, clarified the `ac_altitude` distinction (skipping feature subset checks under DD-09 vs requirement bindings), and added `done_forced`, `done_reason`, and `feature_link_declined` to match `taskFrontmatterSchema`.
+
+3. **Artifact and Corpus Invariants:**
+   - Artifact written to [`.spur/run/3f3e8ffc-21bd-46ed-81ff-56fab9d6bbaf-wrapup-learnings.md`](file:///Users/robin/xprojects/spur-new/.spur/run/3f3e8ffc-21bd-46ed-81ff-56fab9d6bbaf-wrapup-learnings.md).
+   - Validated against structural gate awk shape (`d+w+b == 3`: date, WBS, bullet).
+   - Task and feature corpus files were not modified.
+
+# Working learnings
+
+## 2026-10-02
+
+### Task 1061: Align task AC template with done-gate scenario keying (checkbox ACs key L4.uncovered-task-scenario)
+
+- **Conventions:**
+  - **Two-control distinction for task ACs:** `ac_altitude: task-local` controls feature-level traceability (DD-09) by skipping the feature scenario title-subset check. It never waives terminal checklist completion (`L3.unchecked-checklist`), required sections, verdict artifacts, line anchors, or other done gates. `ac_numbering: task-local` controls task-local requirement bindings by opting into the `L3.ac-requirement-coverage` loop.
+  - **Preferred task-local AC authoring form:** For regression and task-local work, author `Scenario: AC1 — <concrete outcome> (req: R1)` blocks with Given/When/Then, declaring both `ac_altitude: task-local` and `ac_numbering: task-local` in frontmatter.
+  - **Enforcement limits of parsed checkbox ACs:** Checkbox rows (`- [ ] AC1 — <title>`) join checklist parsing and feature subset matching, but do not enter the `Scenario:`-only requirement binding loop. They are supported for graduating criteria, but cannot bind task-local requirements.
+  - **Legacy freeform bullets:** Raw `- AC1` / `- ACn:` bullets parse as nothing (no subset match, no requirement binding, no box counting). They are legacy unparsed records, not an approved authoring convention to bypass traceability.
+  - **Canonical requirements format:** Requirements must use the template checklist format `- [ ] R1. <text>`. Emphasized forms like bold `**R1**` pass format ratio checks but fail requirement-binding extraction.
+
+- **Errors fixed:**
+  - Contradictory authoring guidance across the 6 task templates (`config/templates/task/*.md`) and `ac-style-guide.md` where altitude and numbering were conflated, prompting agents to author unparsed freeform AC rows to pass the done gate.
+  - Outdated guidance in `ac-style-guide.md` recommending bold requirement heads (`**R1**`), which passed `L3.requirements-format` but failed requirement binding in `task-check.ts`.
+  - Stale `AC_PLACEHOLDER` sed pattern in `apps/cli/tests/commands/task.test.ts` (0788 ready-by-default contract test) that expected the old template comment.
+
+- **Patterns:**
+  - **Semantic pinning via isolated canaries:** Pin individual checker codes and severities with isolated unit tests (`packages/app/tests/services/task-check.test.ts:2040` "1061 canaries") evaluating exact codes (`L4.uncovered-task-scenario`, `L3.ac-requirement-coverage`, `L3.unchecked-checklist`), avoiding reliance on full-check passes that mask specific rules.
+  - **Byte-identical corpus verification:** When updating authoring rules and style guides, run baseline and post-edit checks against real corpus tasks (1053–1056) to ensure no regressions or unexpected finding shifts occur in existing records.
+  - **Lockstep template synchronization:** When updating task template instructions across multiple templates (`standard`, `feature-impl`, `issue`, `brainstorm`, `review`, `meta`), ensure all template comment bodies remain byte-identical.
+
+- **Gotchas:**
+  - **Transition-target severity escalation:** `L3.unchecked-checklist` emits a warning during intermediate checks, but escalates to an error when checked with `--as done` (`isTransitionTarget ? 'error' : 'warning'`). Declaring `ac_altitude: task-local` does not waive this check.
+  - **Regex emphasis mismatches:** `R_ITEM_RE` allowed `[*_]{0,2}` emphasis for format validation, but the requirement-binding extraction regex lacked the emphasis wrapper, causing bolded requirements to silently fail coverage binding.
+  - **Multi-copy template drift risk:** AC guidance comments exist in 7 locations (6 templates + style guide) plus test fixtures. Without an automated consistency check (filed as task 1062), any guidance change requires manual lockstep coordination.
+### Conclusion & Verification
+
+`sp:doc-evolve` wrap-up audit complete for task batch `["1064"]` (feature `D3`). Drift was detected in owning design satellites reflecting CLI observability output timing and `WorkflowRunLogSink` lifecycle, and repaired per [Constitution §6.5 and §7](file:///Users/robin/xprojects/spur-new/docs/99_PROJECT_CONSTITUTION.md#L198-L205).
+
+### Findings & Synchronization (T3 / T9)
+
+1. [docs/00_ADR.md](file:///Users/robin/xprojects/spur-new/docs/00_ADR.md): **No change**. Task 1064 restores existing invariants and fixes an uncommitted-id defect; it establishes no new architectural boundary and reverses no ADR ([Constitution §6.1](file:///Users/robin/xprojects/spur-new/docs/99_PROJECT_CONSTITUTION.md#L150-L177)).
+2. [docs/03_ARCHITECTURE.md](file:///Users/robin/xprojects/spur-new/docs/03_ARCHITECTURE.md): **No change**. System topology, storage roots, and event bus mechanisms remain as documented in §6.1 and §32 ([Constitution §6.4](file:///Users/robin/xprojects/spur-new/docs/99_PROJECT_CONSTITUTION.md#L191-L196)).
+3. [docs/04_DESIGN.md](file:///Users/robin/xprojects/spur-new/docs/04_DESIGN.md): **No change**. Satellites own the detailed contracts; index pointers and summaries remain unchanged ([Constitution §4.5](file:///Users/robin/xprojects/spur-new/docs/99_PROJECT_CONSTITUTION.md#L108-L118)).
+4. [docs/design/run-record-contract.md](file:///Users/robin/xprojects/spur-new/docs/design/run-record-contract.md#L48-L54): **Updated**. Recorded the 1064 baseline: `WorkflowRunLogSink` lazy file opening (`ensureOpen`) and CLI event-driven header preventing orphan files and uncommitted run IDs.
+5. [docs/design/workflow-run-log.md](file:///Users/robin/xprojects/spur-new/docs/design/workflow-run-log.md#L24-L29): **Updated**. Added task 1064 lazy open contract note and updated `related` frontmatter.
+6. [docs/design/cli-contracts.md](file:///Users/robin/xprojects/spur-new/docs/design/cli-contracts.md#L710-L718): **Updated**. Clarified that synchronous human `spur workflow run` withholds `Run: <id>` and plan preview until `workflow.run.started` fires.
+7. [docs/design/workflow-observability.md](file:///Users/robin/xprojects/spur-new/docs/design/workflow-observability.md#L85-L91): **Updated**. Documented `workflow.run.started` emission gate for foreground run header and plan preview.
+
+Task/feature corpus files were preserved without modification.
+
+Target artifact written to [.spur/run/d9511f50-a9f7-47b7-b74d-a0d7cb7c490b-wrapup-learnings.md](file:///Users/robin/xprojects/spur-new/.spur/run/d9511f50-a9f7-47b7-b74d-a0d7cb7c490b-wrapup-learnings.md).
+
+---
+
+## 2026-10-02 — 1064 (feature D3)
+
+### Errors fixed
+- **Pre-row workflow run ID leakage:** `spur workflow run` printed `Run: <id>` and plan preview synchronously before invoking the engine service. Any failure during pre-engine setup (such as `--vars` leaving declared variables unset) threw an error after the ID was displayed, causing subsequent `spur workflow trace <id>` calls to fail with `Run not found`.
+- **Eager empty log sink creation:** `WorkflowRunLogSink` constructor eagerly executed `mkdirSync` and `openSync(<id>.md, 'a')`, leaving orphan 0-byte `.md` files in `.spur/memory/runs/` whenever pre-row validation or initialization aborted before persistence.
+
+### Conventions
+- **Committed-row ordering invariant:** Every run-id-bearing side effect on the synchronous CLI execution path (`Run: <id>` stdout header, plan preview, `<id>.md`, `<id>.state.json`) must be downstream of `workflow.run.started`, which is only emitted after `createRun` commits the run row to SQLite.
+- **Prevent rather than clean up:** Prefer deferring side-effect creation until after commit boundaries rather than attempting rollback/cleanup branches on catch, which fail to cover external process kills (SIGINT/SIGTERM/OOM).
+- **Lazy record sink initialization:** Observability file sinks should defer directory creation and file descriptor acquisition to the first emitted event via an `ensureOpen()` helper with an `openFailed` latch for failure isolation.
+
+### Patterns
+- **Latched event subscription:** When subscribing to bus events that may emit duplicate projections or lack single-fire primitives, guard handler actions with a local boolean latch (e.g. `headerPrinted`) to preserve single-invocation execution.
+- **In-process CLI testing across invocations:** Multi-command lifecycle tests (`run` followed by `trace`) using in-process `main()` must configure a file-backed SQLite database in a temp project rather than `:memory:`, because separate `main()` invocations instantiate distinct database connections.
+
+### Gotchas
+- **ADR scope confusion:** ADR-091 governs `--json` contract envelopes, not human-mode error hint strings or line counts.
+- **`createRun` vs `workflow.run.started`:** In `ts-dual-workflow-engine`, `RunLifecycle.run` delegates row creation to `persistence.createRun` as its first step; `ObservableWorkflowAdapter` emits `workflow.run.started` only after `createRun` resolves, making that event the authoritative signal of row commitment.

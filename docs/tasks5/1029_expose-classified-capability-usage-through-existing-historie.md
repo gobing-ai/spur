@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Expose classified capability usage through existing Histories breakdowns
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-30T20:26:19.398Z
-updated_at: "2026-09-30T20:52:15.187Z"
+updated_at: "2026-10-03T22:17:46.510Z"
 feature_id: E93
 priority: P1
 tags:
@@ -13,6 +13,8 @@ tags:
 estimate_hours: 8
 
 dependencies: ["1028"]
+done_forced: "false"
+done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-dev-runall-e93-4ff4/.spur/memory/evidence/1029-verdict.json
 ---
 
 ## 1029. Expose classified capability usage through existing Histories breakdowns
@@ -30,13 +32,13 @@ E93 R8 makes the corrected extraction usable through the existing Histories modu
 
 ### Requirements
 
-- [ ] R1. Adopt the verified released upstream importer contract through Spur's migration ledger and expose independent kind, invoker and evidence dimensions.
-- [ ] R2. Make materialized counts and any existing supported bounded fallback use the same correlated invocation population, with requests separate from confirmed loads/delegation and unknown origins visible.
-- [ ] R3. Preserve token accounting and existing query bounds while updating the existing Histories DTOs, consumers and presentation with integration checks.
+- [x] R1. Adopt the verified released upstream importer contract through Spur's migration ledger and expose independent kind, invoker and evidence dimensions.
+- [x] R2. Make materialized counts and any existing supported bounded fallback use the same correlated invocation population, with requests separate from confirmed loads/delegation and unknown origins visible.
+- [x] R3. Preserve token accounting and existing query bounds while updating the existing Histories DTOs, consumers and presentation with integration checks.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Histories breakdowns preserve capability semantics across read paths (req: R1; R2; R3)
+- [x] AC1 — Histories breakdowns preserve capability semantics across read paths (req: R1; R2; R3)
 
 Verification lens: Use the real migration/domain/service/DTO/UI test homes named in Design. The composite fixture yields byCapability total 8 and confirmed legacy load total 3, matches the direct SQL reference before/after filters and bucket partitioning, handles late-result invalidation, and preserves token totals.
 
@@ -91,16 +93,106 @@ Dependencies: 1028 owns extraction/schema/types, not this task. Step 0 verifies 
 
 <!-- Filled during implementation: file:line change map and concise rationale. -->
 
+Upstream adoption (R1): importer 0.5.12 (released on npm 2026-10-03, verified `npm view` latest
++ installed dist export receipts) adopted via root `package.json` catalog pin `^0.5.12` (E93
+batch-wide), `bun install` updated the lockfile; `importer-schema-check` needed no change (it
+delegates to `checkImporterSchemaVersion` reading the installed `HISTORY_IMPORT_SCHEMA_VERSION`).
+
+- `packages/domain/src/migrations.ts` — migration `0050_spur_cli_history_board_skill_5m_capability_grain` (constant `packages/domain/src/migrations.ts:880`, ledger entry `packages/domain/src/migrations.ts:1590`, skip guard `packages/domain/src/migrations.ts:1831`)
+  (constant `HISTORY_BOARD_SKILL_5M_CAPABILITY_GRAIN_SCHEMA_SQL`, CLI_MIGRATIONS entry, table-absence
+  skip guard like 0035): shadow-table rebuild of `history_board_skill_5m` extending the PK to the
+  classification grain `(bucket_start, source, skill_name, invocation_kind, capability_kind,
+  evidence_kind, status)`; legacy rows copy with `''` sentinels; read index recreated. The base
+  template `HISTORY_BOARD_ROLLUPS_SCHEMA_SQL` was extended to the same grain so fresh imports agree
+  (0032 kept byte-identical — never edit old migrations).
+- `packages/app/src/services/history-service.ts` — `HistoryServiceContext.capabilityOrigins?` (`packages/app/src/services/history-service.ts:354`, forwarded at `packages/app/src/services/history-service.ts:597`)
+  (readonly `CapabilityOrigin[]` from the installed importer) forwarded into `runJsonlImport`.
+- `apps/cli/src/commands/history.ts` — repeatable `--capability-origin (`parseCapabilityOriginSpec` at `apps/cli/src/commands/history.ts:84`)
+  source:skillName:artifactDigest:capabilityKind:originIdentity` (structural split: source = first
+  segment, digest/kind/identity = last three, colon-bearing middle = skill name — canonical
+  harness names like `sp:demo` contain colons). The skill name is canonicalized through the
+  importer's `canonicalizeSkillName` (`sp-demo`/`$sp-demo`/`/skill:sp-demo` -> `sp:demo`) because
+  `matchCapabilityOrigin` compares the origin's skillName to the observed canonical name verbatim
+  (external evidence: installed `@gobing-ai/ts-llm-jsonl-importer` 0.5.12, `capability.ts`
+  `matchCapabilityOrigin` — file outside this repo) — a non-canonical value would silently never
+  classify (found by the task's live-replay verification; 64-hex digest, kind ∈
+  command|subagent|skill; usage errors as envelopes), parsed before service construction.
+
+Materialization (R2):
+
+- `packages/domain/src/analytics/history-board-rollup.ts` — `HistoryBoardSkill5mRow` + class fields
+  ('' = unclassified sentinel); `SKILL_ROLLUP_REP_SQL` selects one representative per
+  source×session×invocation_key×invocation_kind×capability_kind×evidence_kind
+  (`invocation_key = COALESCE(NULLIF(invocation_id,''),'h:'||record_hash)`, earliest started_at →
+  record_hash) with window-SUM class status precedence ok > error > unknown (`packages/domain/src/analytics/history-board-rollup.ts:311`); 8-column inserts (`packages/domain/src/analytics/history-board-rollup.ts:354`);
+  class-level `skill5mBucketOps`; `lateSkillResultBuckets` pre-pass in
+  `refreshHistoryBoardRollupsIncremental` repairs outcome-update buckets joined via re-imported
+  sessions (500-bucket cap → bounded full skill_5m rematerialization; advances no watermark) (`packages/domain/src/analytics/history-board-rollup.ts:2170`, wired at `packages/domain/src/analytics/history-board-rollup.ts:2233`).
+- `packages/domain/src/analytics/rollup-watermark.ts` — `ROLLUP_DEFINITION_VERSION` v6 → `'v7'` (`packages/domain/src/analytics/rollup-watermark.ts:31`)
+  (forces one full rebuild; digest pinned in the 0741 R6 test).
+- `packages/domain/src/analytics/history-board-marts.ts` — source-grain skills CTE narrowed to (skills CTE at `packages/domain/src/analytics/history-board-marts.ts:204`, predicate at `packages/domain/src/analytics/history-board-marts.ts:209`)
+  confirmed loads (`evidence_kind = 'load' AND status = 'ok'`).
+- Read path: `historyBoardSkillBreakdownFromRollup` (`packages/domain/src/analytics/history-board-rollup.ts:1229`) legacy arrays (bySkill/bySource/
+  byInvocationKind/trend) = confirmed loads only; new `byCapability` keeps the selector scope and
+  surfaces requests, delegation, failed, and unclassified (''→null via NULLIF) rows; LIMIT 10,
+  same filters, empty/'unknown' names excluded.
+
+DTO + presentation (R3):
+
+- `packages/contracts/src/history.ts` — `historySkillBreakdownSchema.byCapability` (`packages/contracts/src/history.ts:151`; tolerant
+  strings, `.default([])` for legacy payloads); `historyCapabilityUsageSchema`.
+- `packages/app/src/services/history-board-service.ts` — byCapability threaded through both read (`packages/app/src/services/history-board-service.ts:331`, `packages/app/src/services/history-board-service.ts:697`)
+  paths (rollup + stale/exact) and the empty-db default; `packages/app/src/testing/
+  history-board-mock.ts` shape updated.
+- `apps/web/src/modules/history/SummaryTab.tsx` — "By Capability" block (`apps/web/src/modules/history/SummaryTab.tsx:1117`, guarded read at `apps/web/src/modules/history/SummaryTab.tsx:396`) in the existing Skill Load
+  Breakdown region (kind/evidence chips, warning tone for non-ok status, rep-count number),
+  graceful absence via `?? []`; no new navigation/filters/charts.
+- `docs/help/cmd_history.md` — `--capability-origin` flag row (0800 R3 parity test).
+
+Token accounting, existing query bounds, and the materialized-only policy are untouched.
+
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Re-verified this run (force re-audit). Installed importer `node_modules/@gobing-ai/ts-llm-jsonl-importer/package.json` version 0.5.12 = catalog pin `package.json:36` `^0.5.12`; ledger migration `0050_spur_cli_history_board_skill_5m_capability_grain` at `packages/domain/src/migrations.ts:1590` with skip guard `:1831`; independent dimensions wired: `HistoryServiceContext.capabilityOrigins?` `packages/app/src/services/history-service.ts:354` forwarded `:597`; CLI `parseCapabilityOriginSpec` `apps/cli/src/commands/history.ts:84`. migrations tests green this run (131 pass / 0 fail domain suite incl. migrations.test.ts). |
+| R2 | MET | Same correlated invocation population: `SKILL_ROLLUP_REP_SQL` `packages/domain/src/analytics/history-board-rollup.ts:311` with `invocation_key = COALESCE(NULLIF(invocation_id,''),'h:' |
+| R3 | MET | Token accounting untouched; DTO `byCapability` with `.default([])` `packages/contracts/src/history.ts:151`; threaded on both read paths `packages/app/src/services/history-board-service.ts:331` and `:697`; presentation "By Capability" block in the existing Skill Load Breakdown region `apps/web/src/modules/history/SummaryTab.tsx:1117`. Integration checks green this run: app history-board-service + history-response-shape 31/0, cli history-capability-origin 5/0, web history components 27/0. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R1 — Explicit user commands retain command identity | MET | test | Producer-side contract re-certified at 1028 this batch (upstream suite 398 pass / 0 fail); installed 0.5.12 receipt above. Not exercised by the 1029 diff (no extraction code in spur). |
+| R2 — Model delegation identifies subagents separately from user requests | MET | test | 1028 evidence base stands (re-certified this batch); delegation remains an independent evidence class in the 1029 grain (rollup PK + oracle fixture, domain suite green this run). |
+| R3 — Ordinary skill loads include explicit and implicit use | MET | test | 1028 evidence base stands; load/ok vs load/error vs load/unknown materialize as separate classes (status in rollup PK; `packages/domain/src/analytics/history-board-rollup.ts:311` re-read this run). |
+| R4 — Converted capabilities preserve verifiable origin kinds | MET | test | Origin forwarding path green: cli history-capability-origin tests 5/0 this run; `history-service.ts:597` forwarding + `apps/cli/src/commands/history.ts:84` parser re-read; unresolved origins surface as null-kind rows via reader NULLIF. |
+| R5 — Duplicate representations collapse without losing repeated invocations | MET | test | Representative-selection oracle (8.3) green in this run's domain suite; invocation-key fallback re-read at `packages/domain/src/analytics/history-board-rollup.ts:314`. |
+| R6 — Quoted examples and unrelated tool reads produce no invocation | MET | test | 1028 exclusion evidence stands (re-certified this batch); 1029 adds no extraction logic (importer consumed as node_modules dependency). |
+| R7 — Source coverage distinguishes verified extraction from unavailable evidence | MET | test | 1028 coverage evidence stands; honest-unknown preserved consumer-side ('' sentinel → null via NULLIF in `historyBoardSkillBreakdownFromRollup`, `packages/domain/src/analytics/history-board-rollup.ts:1229`). |
+| R8 — Histories breakdowns preserve capability semantics across read paths | MET | test | Kind + invoker independently identifiable in byCapability (`packages/contracts/src/history.ts:151` re-read); requests not counted as loads (`packages/domain/src/analytics/history-board-marts.ts:209`); both read paths thread byCapability (`history-board-service.ts:331`/`:697`); fresh materialized = SQL reference parity (8.3 oracle green this run); token totals unchanged (no token lines in the 1029 diff surface). Focused run this batch: 194 pass / 0 fail across domain/app/cli/web history homes. |
+| R9 — Historical reprocessing upgrades safely and remains repeatable | N/A | n/a | 1030 scope. Groundwork re-verified here: additive ledger migration 0050 (`migrations.ts:1590`), v7 invalidates old-definition rollups (`rollup-watermark.ts:31`), legacy '' sentinels (migrations tests green this run). |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-10-03T20:26:17.582Z todo → testing (system)
+- 2026-10-03T20:28:10.686Z testing → done (system)
+

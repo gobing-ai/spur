@@ -64,6 +64,15 @@ entry carries the importer's optional `reconciliation` summary (`{ staleTargetRo
 staleLedgerRows, staleCheckpointRows }`) — additive, absent on incremental runs — so a dry-run
 preview and its write can be compared count-for-count without manual SQL.
 
+**Capability replay (E93 task 1030):** capability-extraction and rollup upgrades (E93 1028/1029)
+reprocess history through this command, never through manual SQL: dry-run the full replay first
+(`--mode full --dry-run` previews the reconciliation stale set and mutates nothing), then write
+it over the source complete population (full mode is source-scoped — a partial one-file full run
+would retire rows for files outside the input set), then run `spur history analyze` so the rollup
+definition bump rebuilds derived tables once. The full procedure, its invariants, and the
+verification oracle live in `history-data-processing.md` §7; the pinned exercise is
+`packages/app/tests/services/history-capability-replay.test.ts`.
+
 **Single-file full-write guard (task 0506 R2):** `--file <path> --mode full` **without** `--dry-run`
 is rejected at the CLI boundary (exit 1) before any database access — full mode treats the file as
 the authoritative input for a reconciliation of the real repository DB, which is only safe for an

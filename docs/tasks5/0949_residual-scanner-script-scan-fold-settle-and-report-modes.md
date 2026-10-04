@@ -4,7 +4,7 @@ name: "Residual scanner script: scan, fold, settle and report modes"
 status: done
 template: feature-impl
 created_at: 2026-09-24T18:59:37.116Z
-updated_at: "2026-09-28T19:37:36.733Z"
+updated_at: "2026-10-03T03:03:38.964Z"
 feature_id: F96
 priority: P2
 tags:
@@ -92,18 +92,18 @@ Rationale: scan is observe-only (ADR-071) — writes only under `.spur/run/`; se
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `plugins/sp/scripts/residual-scan.ts:494` CLI entry points and pure exports pass unit tests |
-| R2 | MET | `plugins/sp/scripts/residual-scan.ts:463` scanMode writes .spur/run/<wbs>-residuals.json with categories and missing base flag |
-| R3 | MET | `plugins/sp/scripts/residual-scan.ts:274` classify maps P1/P2/unchecked to blocking, P3/diff-marker deferrable with reason, P4 advisory |
-| R4 | MET | `plugins/sp/scripts/residual-scan.ts:310` foldVerdict replaces residual-sweep check, merges findings and downgrades PASS to PARTIAL when blocking > 0 |
-| R5 | MET | `plugins/sp/scripts/residual-scan.ts:494` settleMode creates follow-up task, writes Background, cleans staging files |
-| R6 | MET | `plugins/sp/scripts/residual-scan.ts:575` reportMode writes .spur/run/<wbs>-residual-report.md on failing residual check |
-| R7 | MET | `config/plugin-scripts.json:76` and `plugins/sp/skills/code-verification/references/verdict-schema.md:133` register script and document residual-sweep |
+| R1 | MET | `plugins/sp/scripts/residual-scan.ts:233` `main(argv)` dispatches scan\|fold\|settle\|report; pure surface re-exported at `:11` from `plugins/sp/lib/residual-scan.generated.mjs` (classify:83, foldVerdict:162, renderReport:182). Post-record refactor moved core into the generated lib; exports preserved. Re-read this run. |
+| R2 | MET | `plugins/sp/scripts/residual-scan.ts:121` scanMode writes `.spur/run/<wbs>-residuals.json` with review-finding/diff-marker/unchecked-box/staging-residue categories; missing base sets `scanned.diff-marker=false` (covered by residual-scan.test.ts). Re-read this run. |
+| R3 | MET | `plugins/sp/lib/residual-scan.generated.mjs:83` classify: P1–P3/markers/boxes blocking, P4 advisory, residue housekeeping, deferrals reclassify P3/markers only. Tests prove the mapping. Re-read this run. |
+| R4 | MET | `plugins/sp/lib/residual-scan.generated.mjs:162` foldVerdict replaces residual-sweep check, downgrades PASS→PARTIAL when blocking>0, merges sorted unique anchors capped at 20, idempotent. Re-read this run. |
+| R5 | MET | `plugins/sp/scripts/residual-scan.ts:162` settleMode: idempotent, creates follow-up via task create --skip-ready, writes Background from file, cleans only `<tmp>/<wbs>-*` regular files. Re-read this run. |
+| R6 | MET | `plugins/sp/scripts/residual-scan.ts:215` reportMode: no-op on clean verdict; on failing residual-sweep check writes `<wbs>-residual-report.md` and prints the Recovery line. Re-read this run. |
+| R7 | MET | `config/plugin-scripts.json:70-72` registers residual-scan.ts contract standard with twin residual-scan.mjs (twin present, 19403 bytes, generated bundle); `plugins/sp/skills/code-verification/references/verdict-schema.md:150` documents the residual-sweep check row. Re-read this run. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `plugins/sp/tests/residual-scan.test.ts:1` (19 passing tests) |
-| Scenario: R1 — Deterministic residual scan classifies task leftovers | MET | test | `plugins/sp/tests/residual-scan.test.ts:1` (19 passing tests) |
+| AC1 | MET | test | Fresh run this verify: `(cd plugins/sp && bun test tests/residual-scan.test.ts)` → 21 pass, 0 fail, 68 expect() calls (suite grew 19→21 since record; still green). Covers scan classification, fold downgrade/idempotency, settle follow-up, report output, CLI dispatch. |
+| Scenario: R1 — Deterministic residual scan classifies task leftovers | MET | test | Same fresh suite: plugins/sp/tests/residual-scan.test.ts 21 pass / 0 fail — categories, deferral reclassification, missing-base not-scanned, no model query, writes only under .spur/run/. Feature R1. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -114,9 +114,7 @@ Rationale: scan is observe-only (ADR-071) — writes only under `.spur/run/`; se
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | spur task check | — | task check passed |
-| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
-| P4 | residual-sweep | — | blocking=0 deferrable=0 advisory=3 housekeeping=0 |
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 

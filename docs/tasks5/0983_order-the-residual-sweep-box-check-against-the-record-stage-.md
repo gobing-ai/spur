@@ -4,7 +4,7 @@ name: Order the residual-sweep box check against the record-stage box flip
 status: done
 template: feature-impl
 created_at: 2026-09-27T07:11:28.202Z
-updated_at: "2026-09-28T02:55:46.130Z"
+updated_at: "2026-10-03T03:20:33.743Z"
 feature_id: F96
 
 ac_altitude: task-local
@@ -95,17 +95,17 @@ Moved the residual sweep from verify to record so it reads the post-record task 
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `config/workflows/task-pipeline.yaml:804` scan+fold in record after `task record` flips (`packages/app/src/services/task-record.ts:209` flipVerifiedCheckboxes) and feature sync; verify binds verdict→proof directly `config/workflows/task-pipeline.yaml:727`; tests `plugins/sp/tests/task-pipeline-resilience.test.ts:341` / `:350` (25 pass fresh) |
-| R2 | MET | classification unchanged `plugins/sp/scripts/residual-scan.ts:221` findUncheckedBoxes / `:279` classify; behavioral open-box downgrade `plugins/sp/tests/task-pipeline-resilience.test.ts:368` |
-| R3 | MET | fold precedes the done guard `config/workflows/task-pipeline.yaml:1164-1175` (PASS + proof digest + task check); order pinned `plugins/sp/tests/task-pipeline-resilience.test.ts:350` |
-| R4 | MET | pass and fail paths through the real scanner `plugins/sp/tests/task-pipeline-resilience.test.ts:368` |
-| R5 | MET | soft re-record on non-PASS `config/workflows/task-pipeline.yaml:820`; both branches `plugins/sp/tests/task-pipeline-resilience.test.ts:417` |
+| R1 | MET | `config/workflows/task-pipeline.yaml:17` ('record scans and folds residuals AFTER task record flips the verdict-proven') and `:751` ('scan moved here from verify: it must read the task file AFTER task record'); verdict-proven flips via `packages/app/src/services/task-record.ts:375` flipVerifiedCheckboxes (anchor shifted from record-time :209, function present). Re-read this run. |
+| R2 | MET | Classification unchanged by the reorder: unchecked boxes remain blocking (plugins/sp/lib/residual-scan.generated.mjs classify, core of former residual-scan.ts:279); no section-based deferral. Behavioral proof: resilience test open-box downgrade path (test :411 expects residual-sweep fail) — 33 pass / 0 fail this turn. |
+| R3 | MET | Fold runs in the record state before the record→done guard (PASS + proof digest + task check), pinned by plugins/sp/tests/task-pipeline-resilience.test.ts:373 (fold located in record shell) — 33/0 fresh this turn. |
+| R4 | MET | Both paths through the real scanner covered: proven-box pass (test :395 residual-sweep pass) and unproven-box fail (test :411 residual-sweep fail); task-pipeline-resilience.test.ts 33 pass / 0 fail fresh this turn. |
+| R5 | MET | `config/workflows/task-pipeline.yaml:761-772` '(e) F96 R5 (0983): a sweep downgrade must reach the task record — re-record' shell: non-PASS verdict → `task record <wbs> --solution-from-diff --transition testing --no-lifecycle`, failure prints re-run command. Re-read this run. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `plugins/sp/tests/task-pipeline-resilience.test.ts:368` (flipped task passes post-record sweep) |
-| AC2 | MET | test | `plugins/sp/tests/task-pipeline-resilience.test.ts:368` (open box downgrades) + `:350` (fold before PASS guard) |
-| AC3 | MET | test | `plugins/sp/tests/task-pipeline-resilience.test.ts:341`, `:350`, `:368`, `:417` (25/25 pass fresh); `packages/domain/tests/planning/lifecycle-drift.test.ts` 25/25 pass fresh |
+| AC1 | MET | test | task-pipeline-resilience.test.ts proven-box pass path (33 pass / 0 fail fresh this turn; suite grew 25→33 since record, all green). |
+| AC2 | MET | test | Same fresh run: open-box fail path (:411) + fold-before-guard pin (:373). |
+| AC3 | MET | test | Order + both-outcome regression coverage: task-pipeline-resilience.test.ts 33/0 fresh; packages/domain lifecycle-drift.test.ts 25 pass / 0 fail (179 expects) fresh this turn. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -120,11 +120,11 @@ Re-review (disposition pass). Functional traceability remains PASS (R1–R5 all 
 
 ##### Findings (ranked)
 
-| # | Priority | Dimension | Finding | Location |
-|---|----------|-----------|---------|----------|
-| 1 | P4 (advisory, dispositioned) | correctness | Standalone verify/verifyall: standalone verify/verifyall still run `residual-scan scan`+`fold` BEFORE `spur task record`, so a clean task with unticked-but-verdict-proven R/AC boxes folds PASS→PARTIAL pre-flip (the 0967 root cause surviving on the standalone surface) and `foldVerdict` never restores PARTIAL→PASS. Disposition: follow-up 0987 filed with rationale (R1–R4 cover both surfaces, the rule-owner doc, and the ordering pin); `docs/design/task-residual-sweep.md:66` explicitly unblesses the order. Non-blocking for 0983; fixed by 0987. | `plugins/sp/commands/dev-verify.md:43-46` |
-| 2 | P4 (advisory) | correctness | R5 step reads `jq -r .verdict`; a valid-JSON artifact missing the field yields literal `null`, which passes `-n` and `!= PASS`, triggering a spurious re-record. Harmless (record is idempotent, soft exit 0); every real artifact carries `.verdict` (verify-answer-lint enforces). | `config/workflows/task-pipeline.yaml:809` |
-| 3 | P4 (advisory) | architecture | The fold-after-flip invariant is asserted only for the pipeline surface (`plugins/sp/tests/task-pipeline-resilience.test.ts:348-364`, `packages/domain/tests/planning/lifecycle-drift.test.ts:169-181`); the standalone ordering tripwire is owned by 0987 R4 ("a regression test or scripted check pins the standalone ordering for both surfaces") and lands with it. | `plugins/sp/tests/task-pipeline-resilience.test.ts:339-347` |
+| # | Priority | Dimension | Finding | Disposition | Location |
+|---|----------|-----------|---------|-------------|----------|
+| 1 | P4 (advisory, dispositioned) | correctness | Standalone verify/verifyall: standalone verify/verifyall still run `residual-scan scan`+`fold` BEFORE `spur task record`, so a clean task with unticked-but-verdict-proven R/AC boxes folds PASS→PARTIAL pre-flip (the 0967 root cause surviving on the standalone surface) and `foldVerdict` never restores PARTIAL→PASS. Disposition: follow-up 0987 filed with rationale (R1–R4 cover both surfaces, the rule-owner doc, and the ordering pin); `docs/design/task-residual-sweep.md:66` explicitly unblesses the order. Non-blocking for 0983; fixed by 0987. | Resolved (F96 0987) — post-record sweep shipped on both standalone surfaces (`plugins/sp/commands/dev-verify.md:43-52`, `dev-verifyall.md:75-79`) with ordering pins `plugins/sp/tests/task-pipeline-resilience.test.ts:688-700` (33/0 re-run during the F96 verifyall audit, 2026-10-02). | `plugins/sp/commands/dev-verify.md:43-46` |
+| 2 | P4 (advisory) | correctness | R5 step reads `jq -r .verdict`; a valid-JSON artifact missing the field yields literal `null`, which passes `-n` and `!= PASS`, triggering a spurious re-record. Harmless (record is idempotent, soft exit 0); every real artifact carries `.verdict` (verify-answer-lint enforces). | Open (accepted P4 — harmless by construction; every real artifact carries `.verdict`). | `config/workflows/task-pipeline.yaml:809` |
+| 3 | P4 (advisory) | architecture | The fold-after-flip invariant is asserted only for the pipeline surface (`plugins/sp/tests/task-pipeline-resilience.test.ts:348-364`, `packages/domain/tests/planning/lifecycle-drift.test.ts:169-181`); the standalone ordering tripwire is owned by 0987 R4 ("a regression test or scripted check pins the standalone ordering for both surfaces") and lands with it. | Resolved (F96 0987) — the standalone ordering tripwire landed as the 0987 R4 pins (`plugins/sp/tests/task-pipeline-resilience.test.ts:688-700`, incl. the record < scan < fold < re-record order), green in the audit re-run. | `plugins/sp/tests/task-pipeline-resilience.test.ts:339-347` |
 
 ##### Functional Traceability
 

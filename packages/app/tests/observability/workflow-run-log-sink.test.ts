@@ -562,3 +562,34 @@ describe('WorkflowRunLogSink two-file run record (E7 / task 0925)', () => {
         rmSync(dir, { recursive: true, force: true });
     });
 });
+
+// 1064 AC3 — the record pair is created lazily at the first event, never at construction:
+// a pre-row failure (sink built but no event emitted) must leave no `.spur/memory/runs/<id>.*`
+// artifact behind, because nothing was ever opened.
+test('1064 AC3 — construction creates no record file; close with no events leaves none', () => {
+    const dir = tempDir();
+    const sink = new WorkflowRunLogSink({ bus: makeBus(), dir, runId: 'lazy-1' });
+    try {
+        expect(existsSync(sink.filePath)).toBe(false);
+        expect(existsSync(sink.statePath)).toBe(false);
+    } finally {
+        sink.close();
+    }
+    expect(existsSync(sink.filePath)).toBe(false);
+    expect(existsSync(sink.statePath)).toBe(false);
+});
+
+test('1064 AC3 — the first event creates the record and receives the header', async () => {
+    const dir = tempDir();
+    const bus = makeBus();
+    const sink = new WorkflowRunLogSink({ bus, dir, runId: 'lazy-2' });
+    try {
+        expect(existsSync(sink.filePath)).toBe(false);
+        await bus.emit('workflow.run.started', { ...base('lazy-2'), workflowName: 'probe-flow' });
+        expect(existsSync(sink.filePath)).toBe(true);
+        expect(readFileSync(sink.filePath, 'utf8')).toContain('# spur workflow run lazy-2 — probe-flow');
+    } finally {
+        sink.close();
+    }
+    expect(existsSync(sink.statePath)).toBe(true);
+});

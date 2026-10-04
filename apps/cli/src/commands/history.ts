@@ -22,6 +22,7 @@ import {
 import { getEnvVar, getEnvVars } from '@gobing-ai/spur-config';
 import { formatSummary, stalenessBanner } from '@gobing-ai/spur-domain';
 import { EventBus } from '@gobing-ai/ts-infra';
+import { type CapabilityKind, type CapabilityOrigin, canonicalizeSkillName } from '@gobing-ai/ts-llm-jsonl-importer';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { CLI_CONFIG } from '../config';
 import type { CliContext } from '../context';
@@ -71,6 +72,46 @@ function formatProvenance(provenance: { binary: string; importer: string }): str
     return `binary: ${provenance.binary}\nimporter: @gobing-ai/ts-llm-jsonl-importer@${provenance.importer}`;
 }
 
+const CAPABILITY_KINDS: ReadonlySet<string> = new Set(['command', 'subagent', 'skill']);
+
+/**
+ * Parse one `--capability-origin` spec (E93 task 1029):
+ * `source:skillName:artifactDigest:capabilityKind:originIdentity` — the five fields the
+ * importer's `CapabilityOrigin` requires (`skillPath` stays a flag-less omission; the
+ * importer derives it when the index knows the artifact). Malformed input is a usage
+ * error, never a silent skip: a mis-typed origin would silently downgrade classification.
+ */
+export function parseCapabilityOriginSpec(spec: string): CapabilityOrigin {
+    // Structural split, not fixed 5-way: canonical harness names contain colons
+    // (`sp:demo`), so `source` is the first segment and digest:kind:originIdentity are
+    // the last three — the colon-bearing remainder in between is the skill name.
+    const parts = spec.split(':').map((part) => part.trim());
+    const source = parts[0];
+    const [artifactDigest, kind, originIdentity] = parts.slice(-3);
+    const skillName = parts.slice(1, -3).join(':');
+    if (parts.length < 5 || !source || !skillName || !artifactDigest || !kind || !originIdentity) {
+        throw new Error(
+            `--capability-origin expects source:skillName:artifactDigest:capabilityKind:originIdentity (got ${parts.length} parts)`,
+        );
+    }
+    if (!/^[0-9a-f]{64}$/.test(artifactDigest)) {
+        throw new Error('--capability-origin: artifactDigest must be a 64-char lowercase sha-256 hex digest');
+    }
+    if (!CAPABILITY_KINDS.has(kind)) {
+        throw new Error(`--capability-origin: capabilityKind must be one of command|subagent|skill (got '${kind}')`);
+    }
+    // Canonicalize like the importer does (harness names `sp-demo` -> `sp:demo`):
+    // matchCapabilityOrigin compares the origin's skillName to the observed canonical
+    // name verbatim, so a non-canonical flag value would silently never classify.
+    return {
+        source,
+        skillName: canonicalizeSkillName(skillName),
+        artifactDigest,
+        capabilityKind: kind as CapabilityKind,
+        originIdentity,
+    };
+}
+
 /** Register `spur history` commands. */
 export function registerHistoryCommand(program: Command, context: CliContext): void {
     const noun = program.command('history').summary('import and analyze coding-agent history');
@@ -78,7 +119,7 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
     // analyze artifact's executor ladderSnapshot; the import path never reads it.
     // `taskLocator` feeds the verified-outcome fold (0712) — absent when folder
     // resolution fails, so analyze degrades to omitting the additive block.
-    const makeService = async () => {
+    const makeService = async (capabilityOrigins?: readonly CapabilityOrigin[]) => {
         let taskLocator: { findByWbs(wbs: string): Promise<{ filePath: string } | null> } | undefined;
         try {
             const { foldersConfig } = await resolvePlanningFolders(context.fs);
@@ -97,6 +138,7 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
             agentConfig: context.agentConfig,
             ...(taskLocator ? { taskLocator } : {}),
             importerVersion: provenance.importer,
+            ...(capabilityOrigins ? { capabilityOrigins } : {}),
             fs: context.fs,
             cwd: context.cwd,
         });
@@ -118,6 +160,13 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
         )
         .option(...SHARED_OPTIONS.jsonSupported)
         .option(...SHARED_OPTIONS.jsonEnvelope)
+        .option(
+            '--capability-origin <spec>',
+            'Classify skill calls against a released artifact: ' +
+                'source:skillName:artifactDigest:capabilityKind:originIdentity (repeatable).',
+            (value: string, previous: string[]): string[] => [...previous, value],
+            [],
+        )
         .action(async (options) => {
             const source = options.source ?? 'all';
 
@@ -211,7 +260,30 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
                 return;
             }
 
-            const svc = await makeService();
+            // E93 1029: parse before any service work — malformed origins are usage errors.
+            let capabilityOrigins: CapabilityOrigin[] | undefined;
+            if (options.capabilityOrigin.length > 0) {
+                try {
+                    capabilityOrigins = options.capabilityOrigin.map(parseCapabilityOriginSpec);
+                } catch (err) {
+                    const message = err instanceof Error ? err.message : String(err);
+                    context.output.write(
+                        options.json
+                            ? toEnvelopeJson(
+                                  { status: 'error', message },
+                                  {
+                                      enveloped: options.jsonEnvelope,
+                                      error: { code: 'INTERNAL_ERROR', message, details: { cliCode: 'usage' } },
+                                  },
+                              )
+                            : `spur history import: ${message}`,
+                    );
+                    context.setExitCode(1);
+                    return;
+                }
+            }
+
+            const svc = await makeService(capabilityOrigins);
 
             let fanOut: FanOutResult;
             try {

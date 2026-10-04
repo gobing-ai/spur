@@ -198,7 +198,10 @@ export class LifecycleAdapter implements LifecyclePort {
                         report:
                             `No pipeline run recorded for ${ref.id}. Run the pipeline first (` +
                             `spur workflow run task-pipeline.yaml --vars '{"wbs":"${ref.id}"}'), ` +
-                            'or pass --provenance-bypass on `spur task update` to bypass (recorded).',
+                            'or pass --provenance-bypass on `spur task update` to bypass (recorded). ' +
+                            `Provenance DB checked: ${this.opts.cwd} (per-tree isolation — if the pipeline ` +
+                            `ran in another tree, e.g. a --worktree invoked from elsewhere, re-record ` +
+                            `\`spur task run-link ${ref.id}\` from this tree).`,
                     };
                 }
             }

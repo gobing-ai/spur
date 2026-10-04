@@ -626,6 +626,20 @@ resolution runs, the loop executes with the worktree as process cwd, and a termi
 retains after the batch report is emitted. Steps 1–5 themselves are not modified — only their cwd
 differs.
 
+**Per-call tree pinning (task 1058).** A host shell call starts in an arbitrary directory and
+inherits no cwd from the previous call, so "the loop runs with the worktree as process cwd" is a
+bootstrap convenience, never a carried guarantee. Every host command boundary in this lifecycle —
+corpus reads/writes, the WT-3b commit, WT-4's merge and evidence persistence, the WT-4a
+persist-out — re-selects its intended tree within the same call via the canonical per-call pin
+protocol ([inline-pipeline-driver.md](inline-pipeline-driver.md) § "Per-call execution-tree
+pin"): `cd --` to the quoted absolute tree, verify `pwd -P` against the recorded physical tree,
+verify Git top-level and expected branch, then execute the already-resolved Spur invocation. The
+identity is consumed, not re-derived: it is the WT-3 marker's confirmed `path` + `branch` (or the
+resolved worktree's physical path + checked-out branch in reuse mode). The one deliberate tree
+change is WT-4: the terminal merge actions select the **invoking** tree, not the execution tree —
+and pin it explicitly the same way. FF ancestry, marker and cleanup sequencing remain owned by
+1059.
+
 **Portability (R10).** Use portable `git worktree` commands only. Do **not** depend on the Claude
 Code `EnterWorktree`/`ExitWorktree` tools — the `sp` plugin ships to Codex, Gemini CLI, pi, omp, and
 OpenCode. The underlying git mechanics (create / list / remove / prune, sibling-directory naming,
@@ -765,6 +779,10 @@ the tree's own source:
 
     cd "<worktree>" && bun apps/cli/src/index.ts task check <wbs> --json
 
+Run that as a per-call pin subshell (task 1058) — `cd --` plus the `pwd -P` / git-top-level /
+branch identity checks of the canonical protocol (inline-pipeline-driver.md § "Per-call
+execution-tree pin") — rather than relying on a persistent `cd` between host tool calls.
+
 Confirm isolation by making a distinctive change in the worktree and checking that
 the command reflects it.
 
@@ -832,13 +850,19 @@ Reuse mode resolves the marker by the resolved worktree's `path` (not by `comman
 ### WT-3b — Commit the batch's writes on `$BRANCH` (task 0701 R1)
 
 Before any terminal action, commit the batch's corpus writes **on `$BRANCH`, inside the
-worktree** — including the generated task files under `docs/tasks*/` and the kanban index:
+worktree** — including the generated task files under `docs/tasks*/` and the kanban index. The
+commit runs as a per-call pinned subshell (task 1058): it selects the execution tree inside the
+same call, verifies the WT-3 identity, and never relies on a persistent `cd` or a trailing
+`cd -` to restore the caller's directory:
 
 ```bash
-cd "../<worktree-dir>"
-git add <files-the-batch-wrote>
-git commit -m "<type>(<scope>): <command> <selector> batch writes"
-cd - >/dev/null
+(
+  cd -- "../<worktree-dir>" || { echo "tree missing: expected ../<worktree-dir>" >&2; exit 1; }
+  [ "$(git branch --show-current)" = "$BRANCH" ] \
+    || { echo "branch mismatch: expected $BRANCH, got $(git branch --show-current)" >&2; exit 1; }
+  git add <files-the-batch-wrote>
+  git commit -m "<type>(<scope>): <command> <selector> batch writes"
+)
 ```
 
 The FF-only git merge carries only commits — uncommitted writes in the worktree would be left
@@ -855,18 +879,66 @@ only what it created*):
 
 ```bash
 # Run these from the main tree (not inside the worktree) - you merge the worktree branch
-# back onto the base ref there:
-git checkout "$BASE_REF"
+# back onto the base ref there. Per-call tree pinning (task 1058, § above): every command
+# below selects the INVOKING tree (where the WT-3 marker lives), re-pinned with the canonical
+# per-call pin protocol in its own subshell — never the execution tree. The whole sequence is
+# fail-stop: checkout, guard, ancestry check, merge, landed verify, persistence, and cleanup
+# each stop explicitly. Every tip/ancestry read uses local refs — no fetch runs anywhere:
+MARKER=".spur/run/worktree-<marker-id>.json"
+git checkout "$BASE_REF" \
+  || { echo "WT-4 halt: checkout $BASE_REF failed - nothing merged, marker stays \"active\"" >&2; exit 1; }   # -> WT-5
 # Guard (task 0701 R1): a zero-commit branch makes the FF-only git merge exit 0
-# ("Already up to date") while merging nothing — the two lines below would then delete
+# ("Already up to date") while merging nothing — the lines below would then delete
 # the worktree holding the only copy of the batch's writes. Refuse instead:
-[ "$(git rev-list --count "$BASE_SHA..$BRANCH")" -gt 0 ] \
-  || { echo "halt: branch carries no commits - nothing to merge" >&2; false; }   # -> WT-5
+[ "$(git rev-list --count "$BASE_REF..$BRANCH")" -gt 0 ] \
+  || { echo "WT-4 halt: branch carries no commits - nothing to merge" >&2; exit 1; }   # -> WT-5, marker stays "active"
+# Capture the batch tip BEFORE any cleanup or branch work: every later step (landed verify,
+# mergeCommit, retained report) reads this captured value — a removed branch is never queried.
+BATCH_TIP="$(git rev-parse "$BRANCH")" \
+  || { echo "WT-4 halt: cannot read $BRANCH" >&2; exit 1; }
+# Fresh LOCAL base tip, re-read now; the marker's baseSha may be stale and never governs this
+# decision (an advanced-but-ancestor base still FF-merges, a divergent base halts):
+BASE_TIP="$(git rev-parse "$BASE_REF")" \
+  || { echo "WT-4 halt: cannot read $BASE_REF" >&2; exit 1; }
+# Ancestry check immediately before the sole mutation (the FF merge below). Command/read
+# errors are distinguished from ordinary non-ancestry; both fail closed:
+ANCESTRY_RC=0
+git merge-base --is-ancestor "$BASE_TIP" "$BATCH_TIP" || ANCESTRY_RC=$?
+[ "$ANCESTRY_RC" -gt 1 ] \
+  && { echo "WT-4 halt: ancestry check could not run (git exit $ANCESTRY_RC) - failing closed" >&2; exit 1; }
+[ "$ANCESTRY_RC" -eq 1 ] && {
+  echo "WT-4 halt: divergent - batch tip $BATCH_TIP vs base tip $BASE_TIP" >&2
+  git log --oneline "$BASE_TIP..$BATCH_TIP" >&2   # batch-side divergent commits
+  git log --oneline "$BATCH_TIP..$BASE_TIP" >&2   # base-side divergent commits
+  exit 1; }   # -> WT-5: tree + branch retained, marker stays "active"
 git merge --ff-only "$BRANCH"          # FF-only: never rebase, merge-commit, or resolve conflicts
-# if FF succeeded — WT-4a evidence persistence runs FIRST (Step 5, task 0720 R3):
+[ $? -eq 0 ] \
+  || { echo "WT-4 halt: FF-merge failed - the concurrent-writer race survives every precheck; marker stays \"active\"" >&2; exit 1; }   # -> WT-5
+# Landed verification before anything else runs: the captured BATCH_TIP must be an ancestor of
+# the base ref as it now stands (base tips advancing again later stay valid — this binds the
+# merge result, not the end state):
+LANDED_BASE_TIP="$(git rev-parse "$BASE_REF")" \
+  || { echo "WT-4 halt: cannot read landed base tip" >&2; exit 1; }
+git merge-base --is-ancestor "$BATCH_TIP" "$LANDED_BASE_TIP" \
+  || { echo "WT-4 halt: landed verify failed - $BATCH_TIP is not an ancestor of $LANDED_BASE_TIP" >&2; exit 1; }
+# --- Landed from here on. Any halt below is landed-but-incomplete: it records status
+# --- "retained" + mergeCommit "$BATCH_TIP" via write_marker and stops — never a branch query.
+write_marker () {   # $1 = merged | retained; read-modify-write: preserve WT-3 fields (id, command, selector, createdAt, adopted, adoptedAt); jq already assumed by WT-3/task-resolution flows
+  mkdir -p "$(dirname "$MARKER")"
+  if [ -f "$MARKER" ]; then
+    TMP_MARKER="$(mktemp)"
+    jq --arg s "$1" --arg m "$BATCH_TIP" '.status = $s | .mergeCommit = $m' "$MARKER" > "$TMP_MARKER" \
+      || { echo "WT-4 halt: cannot rewrite marker $MARKER" >&2; rm -f "$TMP_MARKER"; exit 1; }
+    mv "$TMP_MARKER" "$MARKER"
+  else
+    printf '{ "baseRef": "%s", "baseSha": "%s", "branch": "%s", "path": "%s", "status": "%s", "mergeCommit": "%s" }\n' \
+      "$BASE_REF" "$BASE_SHA" "$BRANCH" "$WT_PATH" "$1" "$BATCH_TIP" > "$MARKER"
+  fi
+}
+# WT-4a evidence persistence runs FIRST after the landed verify (Step 5, task 0720 R3):
 # persist the batch report + verdict artifacts AND the per-run provenance (task
 # 0975 R1) into the invoking tree before anything below touches the worktree.
-# Any persistence failure routes to WT-5 — the worktree and branch are retained.
+# Any persistence failure routes to WT-5 — landed-but-incomplete: retained marker + mergeCommit.
 WT_PATH="$(cd "../<worktree-dir>" && pwd)"   # hoisted: needed by WT-4a AND WT-4b below
 # WT-4a provenance persist-out (task 0975 R1): copy the worktree DB's run rows plus
 # the .spur/memory/runs/<runId>.md + .state.json records into THIS tree. Run from the main
@@ -880,7 +952,7 @@ WT_PATH="$(cd "../<worktree-dir>" && pwd)"   # hoisted: needed by WT-4a AND WT-4
 # NOT proceed to WT-4b removal:
 SETUP_SCRIPT=plugins/sp/scripts/inline-run-setup.ts; [ -f config/plugin-scripts.json -a -f "$SETUP_SCRIPT" ] || SETUP_SCRIPT="$(superskill script path sp inline-run-setup.mjs 2>/dev/null)"
 bun "$SETUP_SCRIPT" --persist-out --from "$WT_PATH" "${TASK_FILE_ARGS[@]}" \
-  || { echo "halt: worktree run-record persist-out failed - worktree retained (WT-5)" >&2; exit 1; }
+  || { echo "halt: worktree run-record persist-out failed - worktree retained (WT-5)" >&2; write_marker retained; exit 1; }
 #
 # WT-4b — bounded CWD-holder cleanup (task 0720 R1). $WT_PATH above is the EXACT
 # absolute worktree path; a relative path or a stale entry matches the wrong processes.
@@ -911,39 +983,112 @@ if [ -n "$FINAL" ]; then
   PORTS="$(lsof -nP -a -p "$(echo "$FINAL" | paste -sd, -)" -iTCP -sTCP:LISTEN 2>/dev/null \
     | awk 'NR>1 {print $9}' | sort -u | paste -sd' ' -)"
   echo "halt: worktree still held by PID(s): $FINAL ${PORTS:+listening: $PORTS}" >&2
+  write_marker retained                      # landed-but-incomplete: retained + mergeCommit
   exit 1                                     # -> WT-5: retain worktree + branch,
 fi                                           #   NO prune/remove/branch delete
-git worktree remove "../<worktree-dir>"
-git branch -d "$BRANCH"
+# Pre-removal evidence assertion (task 1067 R1, E71 enforcement): refuse to remove the
+# worktree while it still owns evidence absent from (or divergent from) the invoking tree —
+# the D63 landing skipped persist-out and silently lost verdicts + receipts. Task-file
+# WBSes / run ids ride the same TASK_FILE_ARGS resolved for WT-4a (run ids: --run-id <id>).
+CHECK_SCRIPT=plugins/sp/scripts/persist-out-check.ts; [ -f config/plugin-scripts.json -a -f "$CHECK_SCRIPT" ] || CHECK_SCRIPT="$(superskill script path sp persist-out-check.mjs 2>/dev/null)"
+bun "$CHECK_SCRIPT" --from "$WT_PATH" "${TASK_FILE_ARGS[@]}" \
+  || { echo "WT-4 halt: worktree evidence would be abandoned - persist-out missing or stale (WT-5)" >&2; write_marker retained; exit 1; }
+git worktree remove "../<worktree-dir>" \
+  || { echo "WT-4 halt: worktree remove failed after landed merge $BATCH_TIP" >&2; write_marker retained; exit 1; }
+# Branch deletion runs only after the merge landed, persisted, and the worktree is gone —
+# and it is existence-guarded, so a removed branch is never queried. -D over -d: the landed
+# verify already proved the merge landed, so an unmerged-refusal would only block proven-merged cleanup.
+if git rev-parse --verify --quiet "$BRANCH" >/dev/null; then
+  git branch -D "$BRANCH" || { echo "WT-4 halt: cannot delete branch $BRANCH after landed merge $BATCH_TIP" >&2; write_marker retained; exit 1; }
+fi
 # WT-4c — clean up registry entry in ~/.config/spur/projects.json (task 0924)
 spur projects remove "$WT_PATH" 2>/dev/null || spur projects clean --json 2>/dev/null || true
-# update marker: status = "merged"
+# Success marker, written once and only here: status "merged" + mergeCommit "$BATCH_TIP" —
+# after landed verification, required persistence, and cleanup:
+write_marker merged
 ```
 
-On either guard firing — zero-commit branch (task 0701 R1), or surviving CWD holders (task 0720 R1)
-— fall through to **WT-5**: the worktree and branch are retained, never removed. While any holder
-remains, do **not** run `git worktree prune`, `git worktree remove`, or branch deletion. The holder
+Every halt above stops explicitly and falls through to **WT-5** — zero-commit branch (task 0701
+R1), failed checkout, divergent base, failed FF, persist-out failure (task 0975), or surviving CWD
+holders (task 0720 R1). Pre-merge failures leave the marker at `status: active` and the worktree +
+branch untouched. Landed-but-incomplete failures record `status: retained` + `mergeCommit`
+BATCH_TIP: the merge landed, and the retained report reads the captured tip only. While any holder
+remains, do **not** run `git worktree prune`, `git worktree remove`, or branch deletion — only an
+EMPTY holder set may proceed to those steps. The holder
 halt report names every surviving PID; the listening port is best-effort — a CWD holder may own no
 socket, and `lsof` port discovery failing must not hide the PIDs.
 
 #### Reuse mode — merge, retain
 
-The FF-merge runs identically (same `git checkout "$BASE_REF" && git merge --ff-only "$BRANCH"`),
-but then the worktree and branch are **retained**, not removed:
+The fail-stop merge sequence runs identically — same guard, captured `BATCH_TIP`/`BASE_TIP`,
+ancestry check immediately before FF, `git merge --ff-only`, landed verification (per-call pinned
+to the invoking tree, task 1058) — but no WT-4a/4b/4c and no removal: the worktree and branch are
+**retained**. Pre-merge halts leave the marker `active`; a persistence failure after the landed
+merge records `retained` + `mergeCommit`:
 
 ```bash
-git checkout "$BASE_REF"
-git merge --ff-only "$BRANCH"
-# update marker: status = "merged"  (worktree and branch are intentionally NOT removed)
+# Same fail-stop sequence as create mode (zero-commit guard -> BATCH_TIP/BASE_TIP -> ancestry
+# rc check -> git merge --ff-only -> landed verify); local refs only — no fetch.
+MARKER=".spur/run/worktree-<marker-id>.json"
+git checkout "$BASE_REF" \
+  || { echo "WT-4 halt: checkout $BASE_REF failed - nothing merged, marker stays \"active\"" >&2; exit 1; }   # -> WT-5
+[ "$(git rev-list --count "$BASE_REF..$BRANCH")" -gt 0 ] \
+  || { echo "WT-4 halt: branch carries no commits - nothing to merge" >&2; exit 1; }
+BATCH_TIP="$(git rev-parse "$BRANCH")" || { echo "WT-4 halt: cannot read $BRANCH" >&2; exit 1; }
+BASE_TIP="$(git rev-parse "$BASE_REF")" || { echo "WT-4 halt: cannot read $BASE_REF" >&2; exit 1; }
+ANCESTRY_RC=0
+git merge-base --is-ancestor "$BASE_TIP" "$BATCH_TIP" || ANCESTRY_RC=$?
+[ "$ANCESTRY_RC" -gt 1 ] \
+  && { echo "WT-4 halt: ancestry check could not run (git exit $ANCESTRY_RC) - failing closed" >&2; exit 1; }
+[ "$ANCESTRY_RC" -eq 1 ] && {
+  echo "WT-4 halt: divergent - batch tip $BATCH_TIP vs base tip $BASE_TIP" >&2
+  git log --oneline "$BASE_TIP..$BATCH_TIP" >&2
+  git log --oneline "$BATCH_TIP..$BASE_TIP" >&2
+  exit 1; }   # -> WT-5: tree + branch retained, marker stays "active"
+git merge --ff-only "$BRANCH"          # FF-only: never rebase, merge-commit, or resolve conflicts
+[ $? -eq 0 ] \
+  || { echo "WT-4 halt: FF-merge failed - the concurrent-writer race survives every precheck; marker stays \"active\"" >&2; exit 1; }
+LANDED_BASE_TIP="$(git rev-parse "$BASE_REF")" \
+  || { echo "WT-4 halt: cannot read landed base tip" >&2; exit 1; }
+git merge-base --is-ancestor "$BATCH_TIP" "$LANDED_BASE_TIP" \
+  || { echo "WT-4 halt: landed verify failed - $BATCH_TIP is not an ancestor of $LANDED_BASE_TIP" >&2; exit 1; }
+WT_PATH="<resolved-worktree-path>"   # reuse mode: the adopted tree's physical path
+write_marker () {   # $1 = merged | retained; read-modify-write: preserve WT-3 fields (id, command, selector, createdAt, adopted, adoptedAt); jq already assumed by WT-3/task-resolution flows
+  mkdir -p "$(dirname "$MARKER")"
+  if [ -f "$MARKER" ]; then
+    TMP_MARKER="$(mktemp)"
+    jq --arg s "$1" --arg m "$BATCH_TIP" '.status = $s | .mergeCommit = $m' "$MARKER" > "$TMP_MARKER" \
+      || { echo "WT-4 halt: cannot rewrite marker $MARKER" >&2; rm -f "$TMP_MARKER"; exit 1; }
+    mv "$TMP_MARKER" "$MARKER"
+  else
+    printf '{ "baseRef": "%s", "baseSha": "%s", "branch": "%s", "path": "%s", "status": "%s", "mergeCommit": "%s" }\n' \
+      "$BASE_REF" "$BASE_SHA" "$BRANCH" "$WT_PATH" "$1" "$BATCH_TIP" > "$MARKER"
+  fi
+}
+# Step 5 evidence persistence (task 0720 R3) — required BEFORE the success marker:
+if printf 'batch report %s\n' "$BATCH_TIP" > ".spur/run/worktree-<marker-id>-batch-report.md"; then :; else
+  echo "WT-5 halt: persistence failed after landed merge $BATCH_TIP; recovery reads captured tips only" >&2
+  write_marker retained
+  exit 1
+fi
+# Success marker: status "merged" + mergeCommit "$BATCH_TIP" — written once, only after landed verification and required persistence.
+# The worktree and branch are intentionally NOT removed.
+write_marker merged
 ```
 
 The operator supplied the tree, so the operator owns its lifetime. After a green reuse batch
 `baseRef == $BRANCH`, so the same worktree keeps fast-forwarding on the next invocation instead of
 having to be rebuilt — the continue-the-work loop is stable.
 
-**Fast-forward only.** If the base ref has moved since the worktree was created and FF is
-impossible, do **not** rebase, merge-commit, or resolve conflicts — fall through to the retention
-path (WT-5) and report the divergence. The corpus files (`docs/tasks*/`, kanban/index) are
+**Fast-forward only.** `git merge --ff-only` is the sole mutation of the terminal sequence; every
+other step is a read, a check, a persistence write, or a cleanup, and every tip/ancestry read uses
+local refs — no fetch runs anywhere in this lifecycle. If the fresh `BASE_TIP` is not an ancestor of
+`BATCH_TIP`, the ancestry check halts before the merge: the report names both tips and both
+divergent commit ranges (`$BASE_TIP..$BATCH_TIP` and `$BATCH_TIP..$BASE_TIP`) and falls to the
+retention path (WT-5) with the tree and branch retained. A concurrent writer that lands between the
+ancestry check and the merge still trips `--ff-only` — the race survives every precheck, and a
+failed FF leaves the marker at `status: active`. Do **not** rebase, merge-commit, or resolve
+conflicts. The corpus files (`docs/tasks*/`, kanban/index) are
 auto-generated and conflict-prone; automated conflict resolution over generated files is exactly the
 wrong thing to attempt unattended. FF-only means the merge either is trivially correct or does not
 happen.
@@ -952,8 +1097,10 @@ happen.
 `--worktree --auto` batch — it does **not** pause even though it performs a merge and a branch
 deletion. That is the explicit single exception to Auto-Decision Principle #6 (`cross-cutting.md`),
 which otherwise pauses any `--merge` / branch-deletion action regardless of `--auto`. The exception
-is safe because `git merge --ff-only` and `git branch -d` both fail closed (they refuse rather than
-risk losing work); WT-5 retains the worktree and branch whenever FF is impossible or any task fails.
+is safe because `git merge --ff-only` fails closed (it refuses rather than risk losing work), the
+branch deletion runs only after the merge has landed, persisted, and cleaned up — and is
+existence-guarded (`git rev-parse --verify --quiet`), so a removed branch is never queried;
+WT-5 retains the worktree and branch whenever FF is impossible or any task fails.
 Reuse mode is **narrower** than the carve-out (it merges but does not delete the branch), so the
 carve-out text needs no widening.
 
@@ -982,22 +1129,44 @@ record and the persisted run artifacts are the evidence record.
 
 ### WT-5 — Failure path: retain and report (R5)
 
-On any per-task failure, batch halt, HITL pause that ends the run, or non-FF merge from WT-4, the
-worktree directory and branch are left **intact**. No destructive automation on this path under any
-flag combination (`--auto`, `--force`, `--keep-going` — all leave the worktree in place). Update the
-marker: `status = "retained"`. The worktree's own `.spur` lifecycle DB is retained with the tree,
-so nothing is lost on this path (see the WT-4 lifecycle-DB disposition for the merged case —
+On any per-task failure, batch halt, HITL pause that ends the run, or a WT-4 halt, the
+worktree directory and branch are left **intact**. No destructive automation on this path under
+any flag combination (`--auto`, `--force`, `--keep-going` — all leave the worktree in place). The
+marker records which class of halt occurred (frozen vocabulary):
+
+- **Pre-merge failure** (failed checkout, zero-commit guard, divergent base, failed FF): the merge
+  never landed, so the marker **stays at `status: active`** — the WT-3 marker stands and WT-5 is
+  its disposition. Nothing was merged onto the base ref.
+- **Landed-but-incomplete failure** (persist-out, holder cleanup, or worktree removal failed after
+  a landed merge): the marker records `status: retained` + `mergeCommit` BATCH_TIP — a truthful
+  report that the merge landed. The retained path reads the captured `BATCH_TIP` only; a removed
+  branch is never queried.
+
+The worktree's own `.spur` lifecycle DB is retained with the tree,
+so nothing is lost on either path (see the WT-4 lifecycle-DB disposition for the merged case —
 task 0701 R2d). Emit a retention report in the existing halt-report shape:
+
+**Persist-out skip recovery (task 1067 R2, E71).** When evidence was lost to a landing that
+skipped persist-out (or the pre-removal assertion fired too late), verdicts remain derivable
+from the task records — `spur task show <wbs> --json` carries the recorded verdict and its
+proof block, so a lost `<wbs>-verdict.json` is regenerated by re-recording or copying from
+the task store. Feature run/latest receipts are re-runnable, not recovered: rerun the
+feature-verification workflow in the invoking tree —
+`spur workflow run feature-verification.yaml --vars '{"featureId":"<id>"}'` — which rewrites
+the receipt files it owns. Divergent files are never auto-overwritten; reconcile by hand.
 
 ```
 ## Worktree retained — <command> <selector>
 
-**Halt cause:** <one-line cause — batch halted at task <wbs> / non-FF base ref / HITL pause>
+**Halt cause:** <one-line cause — batch halted at task <wbs> / non-FF base ref / HITL pause / landed-but-incomplete cleanup failure>
 **Worktree path:** ../<worktree-dir>
 **Branch:** sp/<command>-<selector-slug>-<short-id>
 **Base ref:** <base-ref> (<base-sha>)
+**Merge state:** pre-merge failure — nothing landed | landed-but-incomplete — mergeCommit <batch-tip-sha>
 
-The worktree and its branch are intact. Nothing was merged onto the base ref.
+The worktree and its branch are intact.
+pre-merge failure: nothing was merged onto the base ref.
+landed-but-incomplete: the batch merge LANDED as <batch-tip-sha> on <base-ref>; retention covers post-merge persistence/cleanup only.
 Resume, merge, or discard:
 
   resume:  cd <worktree-path> && <command> --continue --worktree <worktree-path>
@@ -1029,6 +1198,16 @@ shape (halt cause + where + why), not new vocabulary. Retention is the right def
 are long and already resumable via `--continue`; auto-deleting is data loss, auto-merging is a
 partial result presented as a whole. The answer to "what happens if it fails" is "nothing happens,
 and we tell you where the work is."
+
+**Partial worktree-removal recovery is inspection-only.** If a create-mode run halted partway
+through removal (leftover directory, stale registration), the recovery pass gathers facts and
+nothing else: `git worktree list` (is the tree still registered?), `ls` of the path (what remains
+on disk?), and the marker / `~/.config/spur/projects.json` registration state. Before removing
+anything, verify the leftover path is the batch's **owned** path — match it against the marker's
+`path`/`branch` (or the resolved `--worktree <name>` identity), never a guessed sibling directory.
+Recursive deletion of leftover directories that survived `git worktree remove` is **never
+automatic** — it requires explicit operator authorization. No automatic rebase, recovery merge,
+`git worktree prune`, or holder kill runs on this path.
 
 ### WT-6 — `--continue` re-entry (R7)
 
@@ -1172,7 +1351,7 @@ integrate(t):
   ├─ rebase fails → git -C "$WT" rebase --abort → conflict path (R4) below
   └─ rebase clean → git checkout "$BASE_REF" → zero-commit guard → git merge --ff-only "$BRANCH"
                     → WT-4a verdict persist → WT-4b holders → WT-4c registry
-                    → git worktree remove → git branch -d → marker merged
+                    → git worktree remove → existence-guarded git branch -D → marker merged
 ```
 
 The merge is always `--ff-only`: a base that will not fast-forward after a clean rebase is a

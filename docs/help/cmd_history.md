@@ -28,6 +28,7 @@ spur history import [options] --source <source>
 | `--mode <mode>` | `incremental` (root) / `force-file` (single file) | `full`, `incremental`, or `force-file` |
 | `--dry-run` | — | Scan without persisting imported records |
 | `--source-timeout <ms>` | — | Per-source timeout when fanning out across sources |
+| `--capability-origin <spec>` | — | Classify imported skill calls (repeatable): `source:skillName:artifactDigest:capabilityKind:originIdentity` where capabilityKind is one of `command`, `subagent`, `skill` |
 | `--json` | — | Output machine-readable JSON |
 
 Reports scanned files, processed lines, imported/duplicate records, parse/validation errors.

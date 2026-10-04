@@ -65,6 +65,8 @@ export interface VerifyVerdict {
     checks: VerdictCheck[];
     /** Producer of the artifact (e.g. `spur-task-verdict`). */
     source?: string;
+    /** Verifier's stated confidence in the verdict (task 1068 R3); absent on pre-1068 artifacts. */
+    confidence?: 'HIGH' | 'MEDIUM' | 'LOW';
     /** Provenance — the recorded pipeline run id that produced this verdict. */
     pipelineRunId?: string;
     recordedAt?: string;
@@ -161,6 +163,7 @@ export const verifyVerdictSchema = z.object({
     acceptanceCriteria: z.array(coverageRowSchema).optional().default([]),
     checks: z.array(checkSchema).optional().default([]),
     source: z.string().optional(),
+    confidence: z.enum(['HIGH', 'MEDIUM', 'LOW']).optional(),
     pipelineRunId: z.string().optional(),
     recordedAt: z.string().optional(),
 });

@@ -2,11 +2,11 @@
 schema_version: 1
 id: "D64"
 name: "Measured, decision-explicit, check-deduplicated workflow catalogue"
-status: active
+status: done
 priority: P2
 tags: []
 created_at: "2026-09-24T00:07:59.728Z"
-updated_at: "2026-10-02T05:49:26.046Z"
+updated_at: "2026-10-03T04:04:05.977Z"
 ---
 
 # D64: Measured, decision-explicit, check-deduplicated workflow catalogue
@@ -142,7 +142,7 @@ Feature: Measured, decision-explicit, check-deduplicated workflow catalogue
 | 0947 | Make idea-pipeline ready-prepare audit premise correctness and re-stamp evidence after re-parenting | done |
 | 0956 | Satisfy the D64 feature-done gate: scenario-key verdict evidence and add dogfood artifact | done |
 | 0974 | Dedup inert-var cells in idea-pipeline routing parity truth table | done |
-| 1048 | Preserve terminal reasons and cancel paused or interrupted workflow runs | todo |
+| 1048 | Preserve terminal reasons and cancel paused or interrupted workflow runs | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -153,4 +153,6 @@ Feature: Measured, decision-explicit, check-deduplicated workflow catalogue
 - 2026-09-24T17:32:09.158Z backlog → active (system)
 - 2026-09-25T23:10:02.291Z active → verifying (system)
 - 2026-10-02T05:49:26.046Z verifying → active (system)
+- 2026-10-03T04:04:05.132Z active → verifying (system)
+- 2026-10-03T04:04:05.977Z verifying → done (system)
 

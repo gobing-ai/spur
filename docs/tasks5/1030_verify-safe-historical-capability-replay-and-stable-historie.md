@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Verify safe historical capability replay and stable Histories results
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-30T20:26:19.399Z
-updated_at: "2026-09-30T20:52:16.193Z"
+updated_at: "2026-10-03T22:18:46.069Z"
 feature_id: E93
 priority: P1
 tags:
@@ -13,6 +13,8 @@ tags:
 estimate_hours: 5
 
 dependencies: ["1028", "1029"]
+done_forced: "false"
+done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-dev-runall-e93-4ff4/.spur/memory/evidence/1030-verdict.json
 ---
 
 ## 1030. Verify safe historical capability replay and stable Histories results
@@ -30,13 +32,13 @@ E93 R9 validates the upgrade behavior once the source extractor and Histories co
 
 ### Requirements
 
-- [ ] R1. Document and exercise the existing backup/dry-run/schema-adoption procedure on isolated database copies with importer and binary provenance.
-- [ ] R2. Invalidate affected checkpoints and derived versions deliberately so unchanged historical files are reprocessed under new extraction semantics without losing unaffected facts.
-- [ ] R3. Prove repeated full/incremental replay preserves distinct capability counts, legacy unknowns, original source histories and original database contents.
+- [x] R1. Document and exercise the existing backup/dry-run/schema-adoption procedure on isolated database copies with importer and binary provenance.
+- [x] R2. Invalidate affected checkpoints and derived versions deliberately so unchanged historical files are reprocessed under new extraction semantics without losing unaffected facts.
+- [x] R3. Prove repeated full/incremental replay preserves distinct capability counts, legacy unknowns, original source histories and original database contents.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Historical reprocessing upgrades safely and remains repeatable (req: R1; R2; R3)
+- [x] AC1 — Historical reprocessing upgrades safely and remains repeatable (req: R1; R2; R3)
 
 Verification lens: Use the real hermetic replay test named in Design. Dry-run writes nothing; two full replays keep stable identities and 8/3 counts; later incremental results change the existing event's original bucket; distinct repeat calls and unchanged-file skips work; sentinels and raw bytes are preserved.
 
@@ -87,16 +89,89 @@ Dependencies/handoff: 1028 supplies correct immutable extraction/result/replay s
 
 <!-- Filled during implementation: file:line change map and concise rationale. -->
 
+New files:
+- `packages/app/tests/services/history-capability-replay.test.ts` (817 lines) — the pinned
+  end-to-end replay exercise, six phases over one hermetic scenario
+  (`beforeAll` harness :300 builds fixture roots, seeds the old-state FILE database via
+  `createMigratedDb` + a REAL `svc.import('pi')` sentinel, legacy extraction-hash rows, the
+  checkpoint identity bait, the pre-1029 `''` rollup sentinel and v6 watermarks; WAL
+  checkpoint + byte snapshot + consistent copy → `replay.db`; original never reopened):
+  - :409 phase 1 (R1) — full replay with importerVersion 0.4.48 rejected as
+    `UnsafeHistoryImporterError` **before the first getDb** (0 opens); dry-run exempt + dump equality.
+  - :458 phase 2 (R1) — dry-run full replay previews reconciliation
+    `{staleTargetRows: 3, staleLedgerRows: 3, staleCheckpointRows: 0}` and mutates nothing
+    (full table-dump equality; fixture bytes unchanged).
+  - :496 phase 3 (R2/AC1) — incremental import identity-skips the unchanged file
+    (`skippedUnchangedFiles: 1`); full replay retires the 3 legacy hashes via reconciliation,
+    writes 10 new-semantics claude rows (dup pair sharing ONE invocation_id, delegation/error/
+    unknown/conflicting-origin/null-timestamp coverage), leaves the pi sentinel untouched;
+    `refreshHistoryRollups` rebuilds v6 → v7, retires the `''` sentinel row; **the frozen
+    8/3 oracle holds** (claude byCapability 8 rows/8 calls, bySkill/bySource 3, byInvocationKind
+    model 3; full corpus 9 rows/9 calls incl. sentinel; since-filtered window 3/3, bySkill empty).
+  - :601 phase 4 (R3) — second full replay is a no-op: reconciliation stale 0,
+    `skippedDuplicates > 0`, skill/ledger/message dumps byte-equal, oracle still 8/3,
+    freshness `unchanged` before the run.
+  - :632 phase 5 (R2+R3 cross-run late arrival) — appended tool_result flips the existing
+    `tu-unc` event unknown → ok **in place** (same record_hash + invocation_id) and its
+    ORIGINAL bucket (00:04) materializes ok while the result's own bucket (00:44) stays empty;
+    a distinct same-name repeat call keeps its own invocation_id and the class counts 2 calls
+    in one row; claude totals become 8 rows / 9 calls, bySkill 2+1+1+1.
+  - :727 phase 6 (R3) — unchanged incremental re-import changes nothing (line-count resume,
+    0 processed) and every materialized claude row equals the direct representative-selection
+    SQL reference over `history_skill_call`; null-timestamp conflicting-origin row stays
+    source-visible and unbucketed; pi sentinel, append-only fixture prefix and original DB
+    bytes all preserved.
+
+Updated docs (procedure per design §8.4):
+- `docs/design/history-data-processing.md:349-373` — new §7 "Safe Historical Replay & Upgrade
+  Procedure" (provenance gate → backup/isolate → dry-run → complete-population full replay →
+  derived-state adoption → frozen-oracle verification; prohibited actions list) with primary-source
+  file:line citations.
+- `docs/design/history-cli-contracts.md:67` — "Capability replay (E93 task 1030)" contract note
+  on the import command (dry-run-first, complete-population scoping, analyze adoption).
+- `docs/design/history-incremental-materialization.md:518` — §13.2 records definition `v7`
+  (E93 1029 representative grain) and links the replay procedure + late-arrival repair.
+
+Rationale: composition uses only the frozen seams — `HistoryServiceContext.getDb/importerVersion/
+capabilityOrigins/historyHome/cwd` and `HistoryService.import({root, mode, dryRun})`; upgrade
+mechanics are importer full mode (checkpoint short-circuit bypass + source-scoped `record_hash`
+reconciliation + checkpoint reset) and the rollup definition bump; no checkpoint/ledger surgery,
+no `history reset`, no production code changes (no replay defect surfaced), live data untouched.
+
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Re-verified this run (force re-audit). Procedure documented: `docs/design/history-data-processing.md:349-352` (§7 Safe Historical Replay & Upgrade Procedure, re-read) + `docs/design/history-cli-contracts.md:67-70` (dry-run-first, complete-population scoping). Exercised: replay test phases 1-2 green this run (`packages/app/tests/services/history-capability-replay.test.ts` 6 pass / 0 fail / 106 expect) — invalid importer provenance rejected before any write (`assertPiImporterSafe` `packages/app/src/services/history-service.ts:315`, MIN_SAFE '0.4.49' `:256`, call site `:565`); dry-run mutates nothing (dump equality). Provenance: installed importer 0.5.12 (fresh read this batch). |
+| R2 | MET | Deliberate invalidation only: unchanged-file identity skip + full-replay reconciliation retirement of legacy hashes + rollup definition adoption `v7` (`packages/domain/src/analytics/rollup-watermark.ts:31`, re-read this batch); v7 semantics documented `docs/design/history-incremental-materialization.md:518-521` (re-read). Phases 3 green in this run's 6/0 replay test. |
+| R3 | MET | Repeatability + preservation: second full replay no-op, late-result in-place upgrade with original-bucket refresh, distinct same-name repeats separate, unchanged incremental skip, materialized rows = direct SQL reference, sentinel/raw-byte preservation — phases 4-6 green this run (6/0/106); 8/3 oracle assertions re-read at `packages/app/tests/services/history-capability-replay.test.ts:560-562` (byCapability 8 rows/8 calls, bySkill 3). Seeded regression suites green this run: history-service + history-analysis-service 59 pass / 0 fail / 275 expect. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Historical reprocessing upgrades safely and remains repeatable | MET | test | All verification-lens items pinned by this run's receipts: dry-run writes nothing; two full replays keep stable identities + 8/3 oracle; later incremental result changes the existing event's original bucket; distinct repeat calls separate; unchanged-file skips; sentinels and raw bytes preserved. FRESH this run: focused replay test 6 pass / 0 fail / 106 expect; seeded suites 59 pass / 0 fail / 275 expect (packages/app). Hermetic isolation (injected historyHome/cwd temp dirs) unchanged — live data untouched. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-10-03T21:41:01.485Z todo → testing (system)
+- 2026-10-03T21:41:31.066Z testing → done (system)
+

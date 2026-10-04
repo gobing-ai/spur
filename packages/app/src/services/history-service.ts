@@ -72,6 +72,7 @@ import {
     topStepsByTokens,
 } from '@gobing-ai/spur-domain';
 import {
+    type CapabilityOrigin,
     getSourceDefinition,
     type ImportIssue,
     type ImportMode,
@@ -344,6 +345,13 @@ export interface HistoryServiceContext {
      * full-pi-import guard closed.
      */
     importerVersion?: string;
+    /**
+     * Operator-declared capability origins (E93 task 1029). Forwarded to
+     * `runJsonlImport`, which validates them before any write and threads them into
+     * skill-call classification; omitting them keeps classification source-native
+     * only (design history-capability-detection §8.4: Spur never synthesizes origins).
+     */
+    capabilityOrigins?: readonly CapabilityOrigin[];
     getDb(): Promise<DbAdapter>;
     /** Override OpenCode's SQLite path for hermetic composition/tests. */
     openCodeSourceDatabase?: string;
@@ -584,6 +592,9 @@ export class HistoryService {
                           : opts.root !== undefined && opts.root.length > 0
                             ? { roots: [opts.root] }
                             : { roots: discovery?.roots ?? [] }),
+                      // E93 1029: operator-declared capability origins feed skill-call
+                      // classification; absent means source-native classification only.
+                      ...(this.ctx.capabilityOrigins ? { capabilityOrigins: this.ctx.capabilityOrigins } : {}),
                       dryRun,
                   });
 

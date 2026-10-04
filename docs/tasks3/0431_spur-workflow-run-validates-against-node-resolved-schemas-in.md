@@ -12,7 +12,7 @@ priority: P2
 tags: ["bug"]
 dependencies: []
 created_at: "2026-08-04T17:26:20.433Z"
-updated_at: "2026-08-05T06:42:27.227Z"
+updated_at: "2026-10-03T15:33:48.521Z"
 ---
 
 ## 0431. spur workflow run validates against node-resolved schemas instead of the embedded map
@@ -193,56 +193,39 @@ Each entry cites the first changed line per file (`file:line`).
 | `packages/app/src/services/workflow-service.ts:500` |
 | `packages/app/tests/services/workflow-service.test.ts:283` |
 ### Testing
-**Force re-verify** 2026-08-04 (`/sp-dev-verify 0431 --auto --next --force --focus all --fix all`) — residual polish closed before commit.
 
-**Verdict: PASS**
+**Pipeline verify results**
 
-**Per-Requirement Traceability**
+- Verdict: PASS (from verdict artifact)
 
-| Req | Status | Evidence |
-|-----|--------|----------|
-| R1 | MET | `run()` pre-loads via `loadWorkflowDef(absolute, { validateSchema: true, ...embeddedSchemaOptions() })` then `svc.run(workflow, opts)`; `svc.runFile` removed. `packages/app/src/services/workflow-service.ts:452-466` (re-read this run). |
-| R2 | MET | Embedded resolver maps `SPUR_SCHEMA_MANIFEST` → sentinel; reject-path test asserts no `node_modules` and uses `embedded-spur`. `packages/app/src/services/workflow-service.ts:370-388`; `packages/app/tests/services/workflow-service.test.ts:328-342`. |
-| R3 | MET | Regression test uses `mkdtemp(tmpdir())` outside package tree. Embedded map supplies schema; run completes `status: done`. `packages/app/tests/services/workflow-service.test.ts:288-318`. |
-| R4 | MET | Both `validate()` and `run()` call `loadWorkflowDef` with `validateSchema: true` + same `embeddedSchemaOptions()`. `packages/app/src/services/workflow-service.ts:400-404` + `:456-462`. |
-| R5 | MET | Explicit `validateSchema: true` on primary run load; rejecting schema fails with field `name` named and `embedded-spur` path. `packages/app/tests/services/workflow-service.test.ts:328-342`. |
-| R6 | MET | `maybeLinkPipelineRun` uses `{ validateSchema: false }` after primary load already validated. `packages/app/src/services/workflow-service.ts:490-501`. |
-| R7 | MET | Mechanism-level accept+reject test on `run`, not a single production YAML. `packages/app/tests/services/workflow-service.test.ts:283-343`. |
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `run()` pre-loads via `resolveWorkflowDefinition(cwd, file, { validateSchema: true, embeddedSchemas: ctx.embeddedSchemas?.() })` then `svc.run(workflow, opts)` — `packages/app/src/services/workflow-service.ts:700-708` (re-read this run); resolver forwards the embedded map at `packages/app/src/workflow/workflow-resolver.ts:300-304`. |
+| R2 | MET | Reject-path test asserts error uses `embedded-spur` sentinel and never cites `node_modules` — `packages/app/tests/services/workflow-service.test.ts:805-818` (re-read this run). |
+| R3 | MET | Run resolves `$schema` from the in-memory embedded map with no package-tree resolution — `packages/app/tests/services/workflow-service.test.ts:765-803`; `createEmbeddedSchemaOptions` seam at `packages/app/src/workflow/workflow-resolver.ts:143`. |
+| R4 | MET | Both verbs route through `resolveWorkflowDefinition` with the same embedded map and `validateSchema: true` — validate `packages/app/src/services/workflow-service.ts:558`, run `:702`. |
+| R5 | MET | Rejecting embedded schema fails `run` with the offending field named — `packages/app/tests/services/workflow-service.test.ts:805-818` (also covers the non-regression note: unknown field still fails `run`). |
+| R6 | MET | `maybeLinkPipelineRun` re-loads with `{ validateSchema: false }` on the already-validated def — `packages/app/src/services/workflow-service.ts:828-846` (re-read this run). |
+| R7 | MET | Mechanism-level accept+reject tests on `run` itself — `packages/app/tests/services/workflow-service.test.ts:760-818`; fresh run: `bun test tests/services/workflow-service.test.ts -t embeddedSchemas` → 2 pass, 0 fail, exit 0. |
 
-**Acceptance Criteria Verification**
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R1 — workflow schema validation is verb-independent | MET | test | `bun test tests/services/workflow-service.test.ts -t embeddedSchemas` (packages/app, this run): 2 pass 0 fail — validate+run embedded-resolution pair. |
+| Scenario: R2 — schema resolution survives the absence of node_modules | MET | test | Same run; embedded map supplies schema, run reaches done — `packages/app/tests/services/workflow-service.test.ts:765-803`. |
+| Scenario: R8 — each defect is covered at the shared mechanism | MET | test | Tests target the shared `resolveWorkflowDefinition`/embedded-map load mechanism, not one production YAML — `packages/app/tests/services/workflow-service.test.ts:760-818`. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
-| AC | Status | Evidence Type | Evidence |
-|----|--------|---------------|----------|
-| R1 — workflow schema validation is verb-independent | MET | test | Shared embedded options + `validateSchema: true` on both verbs; reject path no `node_modules`. |
-| R2 — schema resolution survives the absence of node_modules | MET | test | `mkdtemp(tmpdir())` + embedded map → `result.status === 'done'`. |
-| R8 — each defect is covered at the shared mechanism | MET | test | Shared load mechanism test on `run`. |
-| Non-regression: unknown field still fails run | MET | test | Rejecting schema → throw; message matches `/\bname\b/` and `/embedded-spur/`. |
-
-**Command evidence (this run)**
-
-```
-$ bun test packages/app/tests/services/workflow-service.test.ts -t "run resolves a package-specifier"
-1 pass, 0 fail, exit 0 (6 expect calls)
-```
-
-**Design conformance:** 4/4 in-scope claims DONE (pre-load, reuse helper, maybeLink align, regression tests).
-
-**Coverage:** N/A for full-suite %; targeted regression executed this run.
-
-**Fix-pass / residual close-out:**
-- `.spur/run/0431-verdict.json` — feature-aligned AC ids
-- Reject asserts: field name + no `node_modules` + `embedded-spur`
-- Explicit `validateSchema: true` on `run` load (parity with `validate`)
-- Requirements/Plan checklists completed; Review P1–P4 table; D3 feature `## Tasks` refreshed (0431 → done)
 ### Review
-**SECUA review** (standalone verify --force) — aggregate: PASS
 
-| Priority | Dimension | Location | Finding |
-|----------|-----------|----------|---------|
-| P1 | — | — | None |
-| P2 | — | — | None |
-| P3 | E | `packages/app/src/services/workflow-service.ts:490-501` | `maybeLinkPipelineRun` re-parses YAML for name-only with `validateSchema: false` after the primary load already validated. Acceptable; not a correctness gap. |
-| P4 | C | `packages/app/src/services/workflow-service.ts:456-462` | `run` pre-loads with `embeddedSchemaOptions()` + explicit `validateSchema: true` (parity with `validate`). Reject path names the field and uses `embedded-spur`, not `node_modules`. |
+**SECUA review** (standalone verify --force 2026-08-04; dispositions resolved in 2026-10-03 re-audit) — aggregate: PASS
+
+| Priority | Dimension | Location | Finding | Disposition |
+|----------|-----------|----------|---------|-------------|
+| P1 | — | — | None | — |
+| P2 | — | — | None | — |
+| P3 | E | `packages/app/src/services/workflow-service.ts:828-846` | `maybeLinkPipelineRun` re-parses YAML for name-only with `validateSchema: false` after the primary load already validated. Acceptable; not a correctness gap. | RESOLVED — accepted as designed: name-only re-parse of the already-validated def; re-confirmed this run (line anchor refreshed from stale :490-501). |
+| P4 | C | `packages/app/src/services/workflow-service.ts:700-708` | `run` pre-loads via `resolveWorkflowDefinition` with the same embedded schema options as `validate` + explicit `validateSchema: true`. Reject path names the field and uses `embedded-spur`, not `node_modules`. | RESOLVED — parity confirmed this run (line anchor refreshed from stale :456-462). |
+
 ### References
 
 <!-- Links to failing logs, related issues, tasks, docs, or external references. -->

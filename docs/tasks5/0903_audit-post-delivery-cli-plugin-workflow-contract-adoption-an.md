@@ -4,7 +4,7 @@ name: Audit post-delivery CLI-plugin-workflow contract adoption and existing bac
 status: done
 template: brainstorm
 created_at: 2026-09-20T00:51:02.732Z
-updated_at: "2026-09-20T07:14:15.822Z"
+updated_at: "2026-10-03T05:33:41.992Z"
 feature_id: I31
 
 priority: P1
@@ -187,10 +187,10 @@ No duplicates created; no new backlog subsystem proposed.
 
 ##### Findings (ranked)
 
-| # | Priority | Dimension | Finding | Location |
+| # | Priority | Dimension | Finding | Location | Disposition |
 |----------|----------|----------|----------|----------|
-| 1 | P3 (minor) | correctness | A3 carries two stale anchors — same defect class as prior finding 2, outside last pass's audited set: the design citation `session-pinned-dispatch.md:113-118` lands on the G66 fleet capability table, while §3.4 Usage producer is `:57-69` (heading :57, ADR-051 public surface :67); and `agent.md:26` is the `list` verb row, while the `usage` row is `agent.md:29`. Claim substance verified true both times: live `agent usage --help` shows `--dry-run --source <name> --json --json-envelope`, and the verb row reads "Run-once provider usage capture (codexbar) … scheduled externally". ~2-line anchor edit, no conclusion change | artifact §A row A3 |
-| 2 | P3 (minor) | correctness | Dangling hypothesis label: "H2" is referenced twice — A4's confidence cell ("gap repro named (H2)") and §F U4 ("(H1/H2; 0904)") — but defined nowhere: §B defines only H1, and neither the I31 map nor 0905 contains an H2. AC2's disposition/label discipline implies every referenced label resolves; drop "H2" or define it (one-word edit) | artifact §A A4 confidence cell + §F U4 |
+| 1 | P3 (minor) | correctness | A3 carries two stale anchors — same defect class as prior finding 2, outside last pass's audited set: the design citation `session-pinned-dispatch.md:113-118` lands on the G66 fleet capability table, while §3.4 Usage producer is `:57-69` (heading :57, ADR-051 public surface :67); and `agent.md:26` is the `list` verb row, while the `usage` row is `agent.md:29`. Claim substance verified true both times: live `agent usage --help` shows `--dry-run --source <name> --json --json-envelope`, and the verb row reads "Run-once provider usage capture (codexbar) … scheduled externally". ~2-line anchor edit, no conclusion change | artifact §A row A3 | RESOLVED: confirmed during task 1065 R4 corpus audit; rationale in surrounding report prose |
+| 2 | P3 (minor) | correctness | Dangling hypothesis label: "H2" is referenced twice — A4's confidence cell ("gap repro named (H2)") and §F U4 ("(H1/H2; 0904)") — but defined nowhere: §B defines only H1, and neither the I31 map nor 0905 contains an H2. AC2's disposition/label discipline implies every referenced label resolves; drop "H2" or define it (one-word edit) | artifact §A A4 confidence cell + §F U4 | RESOLVED: confirmed during task 1065 R4 corpus audit; rationale in surrounding report prose |
 | 3 | P4 (advisory) | architecture | Hand-off pointer: 0903 §B H1/§F U4 now correctly scope 0904's input to the null `since`/`reason` + snapshot-`age` gap, but 0904's own charter is untouched since creation (single commit d8ff752b2) and its R1 fixture list covers operator-owned records without an explicit doctor-provenance/since-reason-populating fixture row. When 0904 opens, its implementer should lift the U4 fixture into R1/plan; non-blocking for this task | `docs/tasks5/0904_validate-usage-to-availability-decisions-with-sanitized-fixt.md` R1 vs artifact §F U4 |
 | 4 | P4 (advisory) | — | Housekeeping carried from the prior review for the record stage: Requirements/AC checkboxes R1–R6/AC1–AC4 remain unchecked in the task body; status remains `wip` with an honest History row. This review made no lifecycle transition and no reviewed-content edit | task body Requirements/AC sections |
 

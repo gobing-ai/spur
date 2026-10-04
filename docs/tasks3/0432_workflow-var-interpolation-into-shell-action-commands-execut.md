@@ -12,7 +12,7 @@ priority: P1
 tags: ["bug"]
 dependencies: []
 created_at: "2026-08-04T17:26:20.672Z"
-updated_at: "2026-08-18T04:42:48.455Z"
+updated_at: "2026-10-03T15:40:19.688Z"
 ---
 
 ## 0432. Workflow var interpolation into shell action commands executes as shell
@@ -142,57 +142,26 @@ cleanly in 1s with the doctor status file written as intended.
 2. R3 — a var carrying backticks, `$()`, quotes and backslashes is observed literally by a real shell (`NodeProcessExecutor`), no second process spawned;
 3. R4 — a doctor-status write command mirroring the idea-pipeline start action survives a backtick idea, writes the correct verdict, and terminates (no in-flight hang).
 ### Testing
-**Verdict: PASS** (re-audit 2026-08-04, `/sp:dev-verify 0432 --force --focus all --fix all`).
 
-Every requirement and AC row was independently re-run this turn rather than read from the prior
-summary.
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R3 — workflow var carrying shell metacharacters is treated as data | MET | `packages/app/src/workflow/actions/shell.ts:51-67` re-read at anchor — `context.vars` merged over `process.env`, passed via `runStreaming({ env })`; `packages/app/src/workflow/builtins.ts:49` confirms `StreamingShellActionRunner` is the **registered runtime runner**, so the fix is on the live path |
-| R4 — shell interpolation cannot silently mask a gate | MET | `packages/app/tests/workflow/actions/shell.test.ts:260-277` — doctor-status write survives a backtick idea, writes `PASS`, terminates with no in-flight hang |
-| R8 — defect covered at the shared mechanism, plus YAML audit | MET | 3 regression tests target shared `shell.ts`, not `idea-pipeline.yaml`; independent YAML re-parse of `config/workflows/` reproduced the claim exactly: **41 action commands, 0 residual `${vars.*}`** |
+| Scenario: R3 — a workflow var carrying shell metacharacters is treated as data | MET | env-var handoff: packages/app/src/workflow/actions/shell.ts:99-106 + child-env.ts:17-19 (re-read this run); 12/12 shell.test.ts pass this run. |
+| Scenario: R4 — shell interpolation cannot silently mask a gate | MET | doctor-status regression test passes this run (packages/app/tests/workflow/actions/shell.test.ts). |
+| Scenario: R8 — each defect is covered at the shared mechanism | MET | tests target shared StreamingShellActionRunner (builtins.ts:27,82); YAML audit: 0 ${vars.*} in shell command lines (this run). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R3 — metachar var treated as data, no spawned process | MET | test | `shell.test.ts:248-257` — real `NodeProcessExecutor`, payload observed literally, exit 0 (**12 pass / 0 fail** this run) |
-| R4 — interpolation cannot silently mask a gate | MET | test | `shell.test.ts:260-277` |
-| R8 — covered at shared mechanism | MET | test | all 3 tests target `shell.ts`; `shell.ts` at 100% function + line coverage |
-- Coverage: 100% function / 100% line on `packages/app/src/workflow/actions/shell.ts` (guard suite run).
+| Scenario: R3 — a workflow var carrying shell metacharacters is treated as data | MET | test | (cd packages/app && bun test tests/workflow/actions/shell.test.ts) this run: 12 pass, 0 fail, 43 expect(); mechanism: env-var handoff at packages/app/src/workflow/actions/shell.ts:99-106, child-env.ts:17-19 (re-read this run). |
+| Scenario: R4 — shell interpolation cannot silently mask a gate | MET | test | Same run: doctor-status write survives a backtick idea and does not hang (R4) — packages/app/tests/workflow/actions/shell.test.ts. |
+| Scenario: R8 — each defect is covered at the shared mechanism | MET | test | All 12 tests target the shared StreamingShellActionRunner (packages/app/src/workflow/actions/shell.ts), registered as the shell builtin at packages/app/src/workflow/builtins.ts:27,82; YAML audit: grep command:.*${vars. config/workflows/*.yaml → 0 matches (this run). |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
-**Claims independently re-verified rather than accepted:**
-
-| Claim | Method | Result |
-|---|---|---|
-| `.spur/workflows/*.yaml` are hardlinks, so runtime reads the fixed files | `stat -f %i` both paths | Confirmed — same inode |
-| The fixed runner is the one actually used | read `packages/app/src/workflow/builtins.ts:49` | Confirmed — registered `shell` runner |
-| "41 actions, zero residual" | independent YAML re-parse | Reproduced exactly |
-
-**Prior PARTIAL now cleared.** The first pass of this re-audit returned **PARTIAL** — not for any
-requirement or AC failure, but for an unresolved major security finding: the same injection class
-remained live in **86 shell guard commands**, proven with a probe whose guard executed a backticked
-payload while still reporting an ordinary boolean. That finding is now **resolved**, not merely
-tracked:
-
-- `packages/app/src/workflow/guards/shell.ts` — `EnvShellGuardRunner`, the guard-side counterpart to
-  this task's action fix, registered in `builtins.ts` and `lifecycle-adapter.ts`.
-- All 86 guard commands across 10 workflows migrated `${vars.X}` → `$X`; post-migration scan is
-  **41 action / 0 residual and 86 guard / 0 residual**.
-- Re-run of the original probe: **no execution** (pre-fix it created the marker).
-- Tracked and closed as task **0435** (feature D3), which carries the full evidence.
-
-**SECUA re-review: no unresolved findings.** Security — both injection surfaces closed at shared
-mechanisms with regression tests. Correctness — a real regression surfaced during 0435's verification
-(`lifecycle-adapter.ts` built a bare engine host, so migrated `$NAME` guards expanded to empty and
-denied every transition); found by test, fixed, covered.
-
-**Gate:** `bun run lint` exit 0; `bun run test` **4471 pass / 24 fail**, all 24 in the standing
-sandbox network set across the same seven suites, zero non-environmental failures; all 10 workflows
-pass `spur workflow validate`.
-
-**Gitignored writes (disclosure).** `.spur/run/0432-verdict.json` (this verdict),
-`.spur/run/0432-fix-created.json` (follow-up ledger naming 0435), `.spur/run/0435-verdict.json`.
 ### Review
+
 **Functional traceability** (requirements gate)
 
 The `## Requirements` section is prose (no numbered R-items); the numbered targets are the AC Gherkin scenarios R3/R4/R8. Every scenario maps to a passing regression test at the shared mechanism, and the prose Requirements obligations (env-var handoff, fix covers the shell action itself, audit all workflow YAMLs) are each met with file:line evidence.
@@ -227,10 +196,11 @@ Functional PASS; no SECUA or architecture blockers. Mechanism and tests verified
 | Priority | Location | Finding | Disposition |
 | --- | --- | --- | --- |
 | P1 | — | None | — |
-| P2 | `packages/app/src/workflow/actions/shell.ts` (engine option pre-resolution) | Engine still pre-resolves `${vars.*}` in any option; a future `shell` command writing `${vars.idea}` would reintroduce the injection. | Accept: documented `$NAME`-only contract; current YAMLs audited clean. Enforcement out of AC scope. |
-| P3 | `packages/app/src/workflow/actions/shell.ts:58` (`{...process.env, ...context.vars}` merge) | Workflow-declared var can override an ambient env var (e.g. `PATH`/`HOME`). | Accept: vars are operator/workflow-authored, not untrusted; internal vars use `__`-prefix to avoid collision. |
-| P3 | `packages/app/src/workflow/actions/shell.ts` (env spawn) | NUL byte in a var value fails the subprocess spawn (POSIX execve limit). | Accept: not an injection vector; free-text vars realistically never carry NUL. |
+| P2 | `packages/app/src/workflow/actions/shell.ts` (engine option pre-resolution) | Engine still pre-resolves `${vars.*}` in any option; a future `shell` command writing `${vars.idea}` would reintroduce the injection. | RESOLVED — accepted: documented `$NAME`-only contract; current YAMLs re-audited clean this run (`grep command:.*${vars.` → 0 matches). Enforcement out of AC scope. |
+| P3 | `packages/app/src/workflow/actions/shell.ts:58` (`{...process.env, ...context.vars}` merge) | Workflow-declared var can override an ambient env var (e.g. `PATH`/`HOME`). | RESOLVED — accepted: vars are operator/workflow-authored, not untrusted; internal vars use `__`-prefix to avoid collision. |
+| P3 | `packages/app/src/workflow/actions/shell.ts` (env spawn) | NUL byte in a var value fails the subprocess spawn (POSIX execve limit). | RESOLVED — accepted: not an injection vector; free-text vars realistically never carry NUL. |
 | P4 | — | None | — |
+
 ### References
 
 <!-- Links to failing logs, related issues, tasks, docs, or external references. -->

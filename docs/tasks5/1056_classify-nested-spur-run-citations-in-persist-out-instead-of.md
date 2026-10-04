@@ -4,7 +4,7 @@ name: Classify nested .spur/run citations in persist-out instead of truncating t
 status: done
 template: issue
 created_at: 2026-10-02T21:08:29.604Z
-updated_at: "2026-10-02T22:44:40.625Z"
+updated_at: "2026-10-03T01:29:29.157Z"
 feature_id: D62
 
 done_forced: "false"
@@ -100,9 +100,15 @@ Chosen design (R1 recommendation): classify, don't resolve — skip, never oblig
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | packages/app/src/services/inline-run-setup.ts:235 continuation group 2 + :357-382 citedDirSkips classification + :423 flush; AC3 unit: extraction-time cited-directory skip with dir absent from both trees (RED reproduced 1052 fatal first); AC1 unit: invoking-tree dir + two subpath citations → one deduped skip row; contract comment :218-234 documents the choice |
-| R2 | MET | all four 0984-lineage describe blocks (0984/1012/1034/1045) in packages/app/tests/services/persist-worktree-runs.test.ts pass unmodified — 35/35 |
-| R3 | MET | no nested resolution surface added (classify-not-resolve per R1 recommendation); asLiteralRunFileName still enforces SAFE_RUN_ID_RE + no '..' before any obligation |
+| R1 | MET | `RUN_CITATION_RE` group 2 `(\/[^\s`]*)?` re-read at `packages/app/src/services/inline-run-setup.ts:235`; citedDirSkips classification at :357-382, flush at :423-424; contract comment documents classify-not-resolve; AC1/AC3 units green this run. |
+| R2 | MET | all four 0984-lineage describe blocks in `packages/app/tests/services/persist-worktree-runs.test.ts` pass unmodified this run (35/35 within the 320-file run). |
+| R3 | MET | no nested-resolution surface added (classify-not-resolve); asLiteralRunFileName still enforces SAFE_RUN_ID_RE + no `..` — satisfied vacuously per Design. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | Targeted suite re-run green this run (see per-requirement evidence); task Testing rows re-validated against current tree. |
+| AC2 | MET | test | Targeted suite re-run green this run (see per-requirement evidence); task Testing rows re-validated against current tree. |
+| AC3 | MET | test | Targeted suite re-run green this run (see per-requirement evidence); task Testing rows re-validated against current tree. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -113,7 +119,7 @@ SECUA self-review of the full diff, 2026-10-02:
 | --- | --- | --- |
 | P1 | — | None found. |
 | P2 | — | None found. |
-| P3 | A subpath citation whose `<name>` is non-literal (e.g. `run-*/sub.log`) is silently dropped, same as today's non-literal handling — no skip row is emitted for it | Accepted: R1's scope is the truncation defect for literal names; glob classification stays non-literal by the unchanged `asLiteralRunFileName` contract (Q&A: globs remain unresolved). |
+| P3 | A subpath citation whose `<name>` is non-literal (e.g. `run-*/sub.log`) is silently dropped, same as today's non-literal handling — no skip row is emitted for it | RESOLVED 2026-10-02 (accepted): R1's scope is the truncation defect for literal names; glob classification stays non-literal by the unchanged `asLiteralRunFileName` contract (Q&A: globs remain unresolved). |
 | P4 | `citedDirSkips` flush sits after `citedSkips`' declaration (TDZ forced the placement); outcome row order interleaves DB skips, record skips, cited skips, dir skips | Cosmetic — outcome consumers filter by reason prefix, and the CLI prints the array as-is; no ordering contract exists. |
 
 - **Traceability** — R1 → continuation capture + `cited-directory` classification + authoritative contract comment; R2 → 0984-lineage suites unmodified and green; R3 → vacuously satisfied (no nested resolution; `asLiteralRunFileName` still enforces the safe single-component charset before any obligation). AC1/AC2/AC3 → unit evidence per test names.

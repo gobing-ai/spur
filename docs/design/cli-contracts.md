@@ -3,8 +3,8 @@ kind: design
 title: "CLI grammar, initialization, agents, teams and rules"
 status: implemented
 created_at: 2026-09-09
-updated_at: 2026-10-01
-related: ["0822", "0850", "0856", "0857", "0860", "0861"]
+updated_at: 2026-10-02
+related: ["0822", "0850", "0856", "0857", "0860", "0861", "1064"]
 tags: [contract, cli, agent]
 ---
 
@@ -709,8 +709,10 @@ clean` reclaims retained logs older than `workflow.logRetentionDays` (default 30
   (e.g. `--vars '{"taskId":"0042"}'`), merged over the workflow's `vars` for `${vars.*}` resolution.
   `--dry-run` validates the definition and walks the transition graph without executing actions
   — useful for verifying workflow structure before committing side effects.
-  **Observability (0114/0310/0365, synchronous human runs):** default output prints the run id,
-  plan, correlated phase/action lines, resolved agent/model, redacted invocation summary, bounded live
+  **Observability (0114/0310/0365/1064, synchronous human runs):** default output prints the run id and
+  plan preview only after the run row commits (latched `workflow.run.started` event, task 1064 / D3),
+  ensuring pre-row failures print no run id and leave no orphan records. Output then prints correlated phase/action lines,
+  resolved agent/model, redacted invocation summary, bounded live
   stdout/stderr, timeout budget, 30-second liveness, duration/outcome, and explicit `usage unavailable`.
   `--detail minimal` retains compact lines; `--detail invocation` is the default; `--verbose`
   implies full correlation and FSM transitions. `--quiet` keeps only the final summary;

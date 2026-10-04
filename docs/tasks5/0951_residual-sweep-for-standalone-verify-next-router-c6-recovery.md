@@ -4,7 +4,7 @@ name: Residual sweep for standalone verify, next-router C6 recovery row, and own
 status: done
 template: feature-impl
 created_at: 2026-09-24T18:59:37.120Z
-updated_at: "2026-09-25T00:21:15.124Z"
+updated_at: "2026-10-03T03:06:18.812Z"
 feature_id: F96
 priority: P2
 tags:
@@ -92,17 +92,17 @@ Rationale: shipped surfaces reference the script only via `superskill script pat
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `plugins/sp/skills/code-verification/SKILL.md:255` Step 10 scan+fold, dev-verify.md:39 and dev-verifyall.md:69 residual sweep wiring |
-| R2 | MET | `plugins/sp/skills/next-router/references/routing-table.md:116` row C6 HITL STOP for failing residual-sweep check with recovery |
-| R3 | MET | `docs/00_ADR.md:812` ADR-071 note, `docs/help/how_to_use_dev_slash_commands_for_daily_software_development.md:240` Leftovers subsection, `docs/design/task-residual-sweep.md:2` shipped-design |
+| R1 | MET | `plugins/sp/skills/code-verification/SKILL.md:286-301` standalone Step 10: scan+fold AFTER record under every --fix mode (position refined by sibling 0987), settle on done via --next; `plugins/sp/commands/dev-verify.md:45-52` and `plugins/sp/commands/dev-verifyall.md:77-79` same wiring; script resolved via `superskill script path sp residual-scan.mjs`, `plugins/sp/scripts/` forbidden in shipped surfaces. Exercised live this batch (0949/0950 used exactly this resolution). Re-read this run. |
+| R2 | MET | `plugins/sp/skills/next-router/references/routing-table.md` row C6 (A4/A5, failing residual-sweep check): HITL STOP printing the residual report + `/sp:dev-run <wbs>` recovery, never auto-dispatches a fix; C-row precedence note present (C6 outranks C2/C3/C5). Re-read this run. |
+| R3 | MET | `docs/00_ADR.md:825-828` ADR-071 note (observe-only, no model query, consistent with ADR-076); `docs/help/how_to_use_dev_slash_commands_for_daily_software_development.md:245-250` Leftovers subsection; `docs/design/task-residual-sweep.md:2-6` shipped with updated_at — frontmatter now reads `status: implemented` under the fleet-wide satellite-metadata upgrade (commit 06f8d075d, post-0951), the upgraded vocabulary of the required shipped state. Re-read this run. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `plugins/sp/tests/routing-table-parity.test.ts:119` fold downgrade path exercised at unit level |
-| AC2 | MET | test | `plugins/sp/tests/routing-table-parity.test.ts:119` C6 residual failure row test passes |
-| AC3 | MET | test | `plugins/sp/tests/skill-structure.test.ts:853` owning document checks pass |
-| Scenario: R6 — Next-router routes residual-failed tasks to recovery | MET | test | `plugins/sp/tests/routing-table-parity.test.ts:119` |
-| Scenario: R8 — Owning documents describe the residual contract | MET | test | `plugins/sp/tests/skill-structure.test.ts:853` |
+| AC1 | MET | test | Fold downgrade path exercised at unit level in routing-table-parity.test.ts; fresh run this turn: 91 pass, 0 fail (routing-table-parity + skill-structure). Standalone fold semantics additionally proven live on 0949/0950 this batch. |
+| AC2 | MET | test | C6 residual-failure routing row tested in routing-table-parity.test.ts (91/0 fresh this turn); row re-read in routing-table.md with precedence note. |
+| AC3 | MET | test | Owning-document checks pass in skill-structure.test.ts (91/0 fresh this turn); ADR note, help Leftovers, satellite metadata re-read this run. |
+| Scenario: R6 — Next-router routes residual-failed tasks to recovery | MET | test | routing-table-parity.test.ts fresh 91 pass / 0 fail; C6 row + precedence note re-read. |
+| Scenario: R8 — Owning documents describe the residual contract | MET | test | skill-structure.test.ts fresh 91 pass / 0 fail; docs re-read this run (00_ADR.md:825, help:245, satellite). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -113,9 +113,7 @@ Rationale: shipped surfaces reference the script only via `superskill script pat
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | spur task check | — | task check passed |
-| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
-| P4 | residual-sweep | — | blocking=0 deferrable=0 advisory=2 housekeeping=0 |
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 

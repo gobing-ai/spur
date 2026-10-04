@@ -4,7 +4,7 @@ name: Add the opt-in fleet executor surface for agent.run
 status: done
 template: feature-impl
 created_at: 2026-09-24T00:13:17.005Z
-updated_at: "2026-09-26T02:50:02.156Z"
+updated_at: "2026-10-03T03:44:48.576Z"
 feature_id: D64
 priority: P2
 tags:
@@ -262,15 +262,15 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | agent-run.ts:651 branch on vars.executor==='fleet'; workflow-service.ts:2754-2757 mapFleetExecutorVar applied :802/:805; fleet-dispatch.ts:104-118 enabled gate + role-matched enabled members, :133-139 rest/gtd stable tie-break; tests fleet-dispatch.test.ts:100,145,155,165,239 + agent-run-fleet.test.ts:326; docs flag-glossary.md:73-78, dev-run.md:18,43, dev-runall.md:21,52, execution-batch.md:273 |
-| R2 | MET | fleet-dispatch.ts:168-183 body names run id/state/role/prompt artifact/expectFile; :181-187 keyed send requestKey=<runId>/<state>; :200-210 identity-pinned expectFile wait, memberId+messageId recorded; no spawn/terminal/keystroke code (rg clean, subprocess spy agent-run-fleet.test.ts:162); F2 accepted artifact-pinning trust model documented docs/design/fleet-config-declaration.md:87-98 |
-| R3 | MET | fleet-dispatch.ts:73-81 fallback only when executorFallback:'traditional' declared, else explicit fail failed-agent; agent-run.ts:390-405 fallbackReason vs explicit failed-agent row; :651-655 capture + :1292-1293 stamp + :242-252 contractViolation spread across all 7 sites (F1 remediation); tests agent-run-fleet.test.ts:177,197,215 + fleet-dispatch.test.ts:297,304 |
-| R4 | MET | agent-run.ts:361-366 success row surface:'fleet'/memberId/messageId/expectFile/durationMs/reason done; :376-388 timeout failed-timeout + identity ids; :395-402 unavailable failed-agent; key-set parity test agent-run-fleet.test.ts:108 vs baseline subprocess row :116-131 |
-| R5 | MET | fleet-dispatch.ts:46-49 FRESH_SESSION_ROLES=['reviewer'] (verify stages declare role reviewer); :122-131 rejection before send :181; tests fleet-dispatch.test.ts:213 reused-session rejected, :229 one-shot fresh, agent-run-fleet.test.ts:239 default path never consults fleet deps; git diff 34d3dd0de empty on tests/workflow/actions/agent-run.test.ts (161 pre-existing unedited) |
+| R1 | MET | `--agent fleet` / `executor: fleet` var mapping `packages/app/src/services/workflow-service.ts:743,746` mapFleetExecutorVar (re-read); enabled+role-match+strategy resolution `packages/app/src/workflow/fleet-dispatch.ts` (exists); tests `packages/app/tests/workflow/fleet-dispatch.test.ts` 14 pass (re-run this session) |
+| R2 | MET | dispatch via AgentCoordinationService.sendMessage, body names run/state/prompt artifact/expectFile; identity-pinned wait (memberId+messageId); no terminal scraping — fleet-dispatch suite + subprocess-spy test `packages/app/tests/workflow/agent-run-fleet.test.ts` 11 pass (re-run) |
+| R3 | MET | fleet unavailable → explicit failed-agent; `executorFallback: traditional` records fallbackReason and runs subprocess path — asserted `packages/app/tests/workflow/agent-run-fleet.test.ts` (re-run) |
+| R4 | MET | fleet action row surface:'fleet'/memberId/messageId/expectFile/durationMs/reason; key-set parity vs subprocess row asserted in agent-run-fleet suite (11 pass, re-run) |
+| R5 | MET | FRESH_SESSION_ROLES fresh member session for reviewer; reused session rejected before send (`packages/app/tests/workflow/fleet-dispatch.test.ts`, re-run); default non-fleet path never consults fleet deps |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — The agent fleet is an optional executor surface | MET | test | Synthesis of R1-R5 all MET (fleet-dispatch.ts new 217 ln; agent-run.ts:258-405,645-655,1292-1293; packages/app/src/workflow/builtins.ts:61-62,74; workflow-service.ts:1913-1954,:2754-2757); gate PASS attempt-4 9118 pass/0 fail across 522 files (.spur/run/0942-test-gate.status); review PASS full 482b9d9d + delta adc7d39f (.spur/run/0942-review-section.md); verify PASS daff7c38; fingerprint sha256:f1ecc630feed0b7a06f6d9a1157116b885d3abe630b08745015eb5dc139480c8 reproduced |
+| Scenario: R8 — The agent fleet is an optional executor surface | MET | test | synthesis of R1-R5: fleet-dispatch.test.ts 14 pass + agent-run-fleet.test.ts 11 pass (both re-run this session, 0 fail) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

@@ -201,7 +201,8 @@ contracts. Their Design sections freeze code dispositions, file ownership, test 
   legacy unknown run and null for a known unversioned definition. Async startup records
   `.spur/run/<runId>-workflow-plan.json` in `planArtifactPath` before actions; worker digest drift fails.
 - `basic` keeps its existing valid `bun run check` default and fixes trusted compound-command
-  execution. `### Testing` is a valid task heading; wayfinder removes length/scraping proxies.
+  execution (historical: `basic.yaml` was retired 2026-09-16 by task 0866 — zero real completions,
+  no caller). `### Testing` is a valid task heading; wayfinder removes length/scraping proxies.
 - Docs and wayfinder derive current measured verdicts before final `task record`, compare proof
   before recording, and retain canonical fingerprint normalization of derived evidence sections.
 - Strict integration review requires one collected current-HEAD `CLEAN`; requested/pending/findings

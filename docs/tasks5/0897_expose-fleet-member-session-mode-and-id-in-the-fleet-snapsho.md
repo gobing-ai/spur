@@ -4,7 +4,7 @@ name: Expose fleet member session mode and id in the fleet snapshot, process ent
 status: done
 template: feature-impl
 created_at: 2026-09-17T23:19:46.557Z
-updated_at: "2026-09-19T06:33:06.954Z"
+updated_at: "2026-10-03T05:32:21.324Z"
 feature_id: G66
 priority: P2
 tags:
@@ -155,7 +155,7 @@ Attempt-1 fresh review (sp-super-reviewer, fresh session, run inline-G66-2026091
 
 | Priority | Dimension | Finding | Location | Disposition |
 |----------|-----------|---------|----------|-------------|
-| P3 | efficiency | `readMemberSessions` unbounded: both 3s-polled endpoints scan full session-event history per poll (no `(event_name, actor)` composite index); correct today, O(history) ceiling with `MAX(sequence)` fix path | `packages/domain/src/dao/member-session.ts:77-110` | Accepted named ceiling; add index + window query if poll cost ever shows |
+| P3 | efficiency | `readMemberSessions` unbounded: both 3s-polled endpoints scan full session-event history per poll (no `(event_name, actor)` composite index); correct today, O(history) ceiling with `MAX(sequence)` fix path | `packages/domain/src/dao/member-session.ts:77-110` | RESOLVED: Accepted named ceiling; add index + window query if poll cost ever shows|
 | P4 | correctness | `memberSessionSchema` accepts `{mode:'one-shot', id}` — producers enforce id-absence, schema not self-defending | `packages/contracts/src/fleet.ts:14-18` | Advisory; `superRefine` when contracts harden |
 | P4 | architecture | Web redeclares `MemberSession` locally despite contracts dep (follows file's local-interface convention) | `apps/web/src/modules/projects/useProjectContext.tsx:41-47` | Advisory |
 | P4 | security | CLI trusts server `session` shape via type assertion without runtime narrowing (trusted internal boundary; web path narrows) | `apps/cli/src/commands/agent.ts:613-632` | Advisory |

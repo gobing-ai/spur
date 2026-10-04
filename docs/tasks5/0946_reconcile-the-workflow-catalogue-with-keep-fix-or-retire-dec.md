@@ -4,7 +4,7 @@ name: Reconcile the workflow catalogue with keep, fix or retire decisions
 status: done
 template: feature-impl
 created_at: 2026-09-24T00:13:17.007Z
-updated_at: "2026-09-26T02:50:04.806Z"
+updated_at: "2026-10-03T03:49:00.622Z"
 feature_id: D64
 priority: P3
 tags:
@@ -310,14 +310,14 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | §10 'Catalogue reconciliation' at docs/design/workflow-catalogue-refactor.md:178-202: exactly 10 rows, one per pre-existing workflow; each with decision keep\|fix\|retire, evidence (0938-window run count, agent.run median, wall p50/p90, terminal-reason mix), live caller count, reason. Bookkeeping (task-lifecycle docs/design/workflow-catalogue-refactor.md:194, feature-lifecycle docs/design/workflow-catalogue-refactor.md:195) correctness-judged 'cost-exempt'; history-anatomy (docs/design/workflow-catalogue-refactor.md:199) cites 0944 receipt/finding F3. |
-| R2 | MET | config/workflows/decision-routing-example.yaml deleted (sole 'D' in tree). Zero live callers (grep: only retirements[] record, README note plugins/sp/README.md:635-637, fixture+test, design/help docs, code comment). retirements[] frozen shape exact at config/workflow-candidates.json:84-88. apps/cli/config/workflows/ = 9 YAMLs, none decision-routing-example. Fresh 'promotion check' PASS (4 candidates, no parallel defs). |
-| R3 | MET | No new docs/tasks5/ files attributable to 0946 (0947-0953 pre-exist, committed 2b8e5601a; worker made no commits). Zero fix decisions in §10 (:194-196); fix-shaped gaps owned by 0940/0943/0944/0945 candidates. |
-| R4 | MET | Independently recomputed from .spur/run/0946-real-run-cost.json + fresh sqlite ro probe: decision-routing-example only retire (0 real runs ever, example-only, no live caller). All 9 keeps rule-consistent (task-pipeline 9 runs/~30 callers; six 0-run workflows each have live callers 3-46; bookkeeping exempt). Live drift: task-pipeline 10 vs snapshot 9 — declared point-in-time; retire rests on 0-ever. |
+| R1 | MET | §10 "Catalogue reconciliation" `docs/design/workflow-catalogue-refactor.md:185` (re-read): mechanical rule + per-workflow decision rows with 0938-window evidence (run count, agent.run median, wall p50/p90, terminal-reason mix), caller counts, reasons; bookkeeping correctness-judged; history-anatomy cites 0944 measurement |
+| R2 | MET | `config/workflows/` holds 9 YAMLs, `decision-routing-example` absent (re-checked this session); `retirements[]` record present in `config/workflow-candidates.json` (decision-routing-example entry re-read); catalog parity `packages/app/tests/workflow/workflow-catalog-parity.test.ts` 1 pass (re-run this session) |
+| R3 | MET | zero `fix` decisions in §10 → no follow-up tasks owed; fix-shaped gaps owned by 0940/0943/0944/0945 candidate records |
+| R4 | MET | rule applied mechanically: sole retire = decision-routing-example (0 real runs ever, example-only, no live caller); 9 keeps rule-consistent (re-read §10 preamble) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Catalogue workflows are kept, fixed or retired on evidence | MET | test | workflow validate valid ×9; workflow-catalog-parity.test.ts 1 pass/0 fail; inline-pipeline-parity-check ok (11 actions, 4 guards agree across 9 workflows); spur-check PASS 9176/0 and spur-check-feature PASS recorded in implement-0946-worker.md gates table (review re-ran both fresh). |
+| Scenario: R10 — Catalogue workflows are kept, fixed or retired on evidence | MET | test | `workflow-catalog-parity.test.ts` 1 pass / 0 fail (re-run this session); 9 YAMLs validate; retirement record + §10 evidence table re-read |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

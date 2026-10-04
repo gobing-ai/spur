@@ -4,7 +4,7 @@ name: Emit a reproducible per-workflow cost baseline report
 status: done
 template: feature-impl
 created_at: 2026-09-24T00:13:17.003Z
-updated_at: "2026-09-26T02:49:58.647Z"
+updated_at: "2026-10-03T03:37:56.696Z"
 feature_id: D64
 priority: P1
 tags:
@@ -192,15 +192,15 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | scripts/commands/real-run-cost.ts:353 readStateMetrics; scripts/commands/real-run-cost.ts:374-381 visits via transition_runs.to_state; scripts/commands/real-run-cost.ts:414-415 retries = max(0, visitsInRun-1); scripts/commands/real-run-cost.ts:363-367 agent.run count; scripts/commands/real-run-cost.ts:423-424 + scripts/commands/real-run-cost.ts:245-248 nearest-rank p50/p90; scripts/commands/real-run-cost.ts:541-543 CLI --by-state; tests scripts/commands/real-run-cost.test.ts:269,323 (21/21 pass); live: task-pipeline/record visits=0 agent.run=0 wall=p50=900ms p90=900ms retries=0 |
-| R2 | MET | scripts/commands/real-run-cost.ts:90-102 WorkflowMetrics agentRunCountMedian/wallMsP50/wallMsP90/terminalReasonMix; scripts/commands/real-run-cost.ts:319-325 computed; scripts/commands/real-run-cost.ts:295-303 mix keyed via isTerminalReason else unclassified; 0937 vocabulary packages/app/src/workflow/terminal-reason.ts:8-18; tests scripts/commands/real-run-cost.test.ts:368,440; live JSON agentRunCountMedian=0 terminalReasonMix={"done":1} |
-| R3 | MET | BOOKKEEPING_WORKFLOWS/isBookkeepingWorkflow packages/app/src/workflow/terminal-reason.ts:31-38; consumer scripts/commands/real-run-cost.ts:44-46 import, scripts/commands/real-run-cost.ts:464-471 scopedWorkflows default-on filter, scripts/commands/real-run-cost.ts:518-519 --include-bookkeeping; test scripts/commands/real-run-cost.test.ts:541; live default cohort 8 (bookkeeping excluded), flag = 10 |
-| R4 | MET | --since: scripts/commands/real-run-cost.ts:179 AND r.created_at >= ? on INTEGER epoch ms, scripts/commands/real-run-cost.ts:183 bound param, scripts/commands/real-run-cost.ts:520-528 Date.parse+Number.isFinite; determinism: scripts/commands/real-run-cost.ts:450-458 stableJson recursive sort, scripts/commands/real-run-cost.ts:475-477 buildReportJson, scripts/commands/real-run-cost.ts:429-440 workflow-then-state order; tests scripts/commands/real-run-cost.test.ts:455 numeric trap, scripts/commands/real-run-cost.test.ts:495,503,509 byte-equality; live two --json runs cmp-identical; --since 2026-10-01 excludes / 2026-09-01 includes; no timestamp in body |
-| R5 | MET | docs/reports/2026-09-workflow-cost-baseline.json exists, biome clean, payload deep-equals live rebuild (DEEP-EQUAL true); md twin with ## Per-state baseline byte-identical to live --by-state; cited by 0940:42, 0943:46, 0944:48 |
+| R1 | MET | `scripts/commands/real-run-cost.ts:354` readStateMetrics (re-read); per-state visits/agent.run/wall p50-p90/retries; `--by-state` CLI (usage header `:5-10` re-read); tests 21 pass (`scripts/commands/real-run-cost.test.ts`, re-run this session) |
+| R2 | MET | WorkflowMetrics agentRunCountMedian/wallMsP50/wallMsP90/terminalReasonMix keyed via isTerminalReason else unclassified (`scripts/commands/real-run-cost.ts`); 0937 vocabulary `packages/app/src/workflow/terminal-reason.ts:6-17` (re-read) |
+| R3 | MET | BOOKKEEPING_WORKFLOWS/isBookkeepingWorkflow `packages/app/src/workflow/terminal-reason.ts:31-35` (re-read); scopedWorkflows default-on filter + `--include-bookkeeping` flag (`scripts/commands/real-run-cost.ts:6` usage re-read) |
+| R4 | MET | `--since` epoch-ms filter; determinism: `stableJson` recursive sort `scripts/commands/real-run-cost.ts:451-457` (re-read); live: two `--json` runs this session cmp BYTE-IDENTICAL; no timestamp in body |
+| R5 | MET | `docs/reports/2026-09-workflow-cost-baseline.json` + `.md` twin exist (re-checked this session); cited by 0940/0943/0944 candidate records |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — A per-workflow cost baseline is reproducible from recorded runs | MET | test | Byte-equality test real-run-cost.test.ts:509; two live --json runs byte-identical and deep-equal to committed baseline; gate .spur/run/0938-test-gate.status=PASS (43651 B, 9029 pass/0 fail); fingerprint sha256:b8f7b48a2f3e554ded368c939fca0db5ae6d982773b2b2fe59364df1570e6f98 reproduced |
+| Scenario: R3 — A per-workflow cost baseline is reproducible from recorded runs | MET | command | live `bun scripts/spur-dev.ts real-run-cost --json` twice this session → `cmp` BYTE-IDENTICAL; byte-equality test in `scripts/commands/real-run-cost.test.ts` (21 pass, re-run) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

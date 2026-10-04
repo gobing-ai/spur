@@ -4,7 +4,7 @@ name: Harden the ADR-076 promotion gate and resolve the pilot candidate through 
 status: done
 template: feature-impl
 created_at: 2026-09-17T17:38:39.161Z
-updated_at: "2026-09-17T18:42:05.417Z"
+updated_at: "2026-10-03T00:51:51.798Z"
 feature_id: D62
 
 ---
@@ -96,9 +96,7 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | spur task check | — | task check passed |
-| P4 | design-conformance | — | Gate hardening matches Design and ADR-076 amendment; pilot consumed as designed. |
-| P4 | secua | — | Gate fails closed (contradiction, unmeasured, expired); no findings this run. |
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 

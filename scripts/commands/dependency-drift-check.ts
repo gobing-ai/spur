@@ -39,6 +39,40 @@ export function readLockedTsDependencies(lockfilePath: string): Map<string, stri
 }
 
 /**
+ * Resolves the package name a bun.lock packages-key refers to. Keys are either
+ * "<name>" or "<parentKey>/<name>" (a dependency resolved inside <parent>),
+ * where name segments are "@scope/pkg" or "pkg". Nested key example:
+ * "@gobing-ai/ts-llm-jsonl-importer/@gobing-ai/ts-db" -> "@gobing-ai/ts-db".
+ */
+export function lockKeyPackageName(lockKey: string): string {
+    const segs = lockKey.split('/');
+    const last = segs[segs.length - 1] ?? lockKey;
+    const scope = segs[segs.length - 2];
+    if (scope?.startsWith('@')) {
+        return `${scope}/${last}`;
+    }
+    return last;
+}
+
+/**
+ * Locates the installed package.json for a bun.lock packages-key. A nested key
+ * ("<parentKey>/<name>") pins <name>'s version inside <parent>, which bun
+ * installs at node_modules/<parentKey>/node_modules/<name> when the resolution
+ * diverges from the hoisted one — so the nested path is checked first, then the
+ * hoisted node_modules/<name>.
+ */
+function findInstalledPkgJsonPath(nodeModulesDir: string, lockKey: string): string | null {
+    const name = lockKeyPackageName(lockKey);
+    const parentKey = lockKey === name ? null : lockKey.slice(0, lockKey.length - name.length - 1);
+    if (parentKey) {
+        const nested = join(nodeModulesDir, parentKey, 'node_modules', name, 'package.json');
+        if (existsSync(nested)) return nested;
+    }
+    const hoisted = join(nodeModulesDir, name, 'package.json');
+    return existsSync(hoisted) ? hoisted : null;
+}
+
+/**
  * Compares every installed `@gobing-ai/ts-*` package against its resolution in `bun.lock`.
  * Returns a list of mismatches.
  */
@@ -53,11 +87,12 @@ export function checkDependencyDrift(options?: { lockfilePath?: string; nodeModu
     const locked = readLockedTsDependencies(lockfilePath);
     const drifts: DependencyDrift[] = [];
 
-    for (const [name, lockedVersion] of locked.entries()) {
-        const pkgJsonPath = join(nodeModulesDir, name, 'package.json');
+    for (const [lockKey, lockedVersion] of locked.entries()) {
+        const name = lockKeyPackageName(lockKey);
+        const pkgJsonPath = findInstalledPkgJsonPath(nodeModulesDir, lockKey);
         let installedVersion: string | null = null;
 
-        if (existsSync(pkgJsonPath)) {
+        if (pkgJsonPath !== null) {
             try {
                 const pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf8')) as { version?: string };
                 installedVersion = pkg.version ?? null;

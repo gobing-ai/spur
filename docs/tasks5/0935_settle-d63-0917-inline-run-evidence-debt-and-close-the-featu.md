@@ -4,7 +4,7 @@ name: Settle D63 0917 inline-run evidence debt and close the feature
 status: done
 template: feature-impl
 created_at: 2026-09-23T22:33:55.639Z
-updated_at: "2026-09-24T01:11:34.464Z"
+updated_at: "2026-10-03T04:14:25.078Z"
 feature_id: D63
 
 ac_altitude: task-local
@@ -109,15 +109,15 @@ Note: untracked `docs/tasks5/0936_preserve-feature-scenario-key-rows-when-re-ver
 
 ##### Findings (ranked)
 
-| # | Priority | Dimension | Finding | Location |
-|---|----------|-----------|---------|----------|
-| 1 | P3 (minor) | correctness | AC5/R5 not executed: origin/main sync is prepared (main @ 08be6cf2, 84 ahead / 0 behind — fresh `git rev-list --left-right --count origin/main...main` = `0 84`) but the push awaits explicit operator confirmation, and the working tree (incl. this task's deliverables) is uncommitted. The wrap hop must disposition the foreign riders, commit, obtain confirmation, and push. External action by design, not a work-product defect. | `docs/tasks5/0935_settle-d63-0917-inline-run-evidence-debt-and-close-the-featu.md` (Solution R5) |
-| 2 | P4 (advisory) | scope | Foreign riders in the working tree: `AGENTS.md` and `cross-cutting.md` add coherent subshell-`cd` test guidance (cwd-persistence caveat). Benign content, but not 0935 deliverables and unreviewed by this task's gates — operator must disposition (commit separately or revert) before the R5 push. | `AGENTS.md:169`, `plugins/sp/skills/spur-dev/references/cross-cutting.md:515` |
-| 3 | P4 (advisory) | correctness | "Inline" provenance nuance: the 0914 bridge writes `runs.mode='state-machine'` for bridge-created runs, so the DB mode column cannot certify inline origin; attribution rests on `.spur/run/<run-id>-inline-setup.json` artifacts + run-id citations — all three verified present and matching this review. | `packages/app/src/services/inline-run-setup.ts:284` |
-| 4 | P4 (advisory) | functional | The three cohort runs carry no `task_run_links` rows binding them to wbs 0935; attribution is via Solution/0917 run-id citations + setup artifacts (verified). Acceptable, but a links row would make the attribution chain self-contained in the DB. | `.spur/spur.db` `task_run_links` (0 rows for the 3 run ids) |
-| 5 | P4 (advisory) | correctness | R6's zero-missing-commits check is vacuous as performed post-removal (dirs no longer contain git repos, so "no missing commits" holds trivially); the Solution discloses exactly this ("holds trivially") and the substantive pre-checks (`git worktree list`, not-a-git-repo) are recorded. Honest, but the record should not be cited as a positive unmerged-work proof. | `docs/tasks5/0935_*.md` (Solution R6) |
-| 6 | P4 (advisory) | architecture | Starting changes ride the same tree: 0914–0921 diffs are corpus re-verification rewrites from an earlier pass; only 0917's `spur:0935-r2-reevaluation` block is 0935-attributable; untracked `docs/tasks5/0936_*.md` is foreign D63 triage output (pre-dispatch, 23:05Z), correctly preserved untouched. | `docs/tasks5/0917_*.md:65` |
-| 7 | P4 (advisory) | architecture | Exact-phrasing pins intentionally duplicate fixture-derived strings (11 runs / 3 actions / 400000 ms) inline — brittle by design (wording lock, per 0921 P4 intent). The marker-anchored re-evaluation append in 0917 (preserve-don't-rewrite) is a good archival pattern. | `scripts/commands/workflow-promotion.test.ts:252,267` |
+| # | Priority | Dimension | Finding | Location | Disposition |
+|---|----------|-----------|---------|----------|---|
+| 1 | P3 (minor) | correctness | AC5/R5 not executed: origin/main sync is prepared (main @ 08be6cf2, 84 ahead / 0 behind — fresh `git rev-list --left-right --count origin/main...main` = `0 84`) but the push awaits explicit operator confirmation, and the working tree (incl. this task's deliverables) is uncommitted. The wrap hop must disposition the foreign riders, commit, obtain confirmation, and push. External action by design, not a work-product defect. | `docs/tasks5/0935_settle-d63-0917-inline-run-evidence-debt-and-close-the-featu.md` (Solution R5) | RESOLVED |
+| 2 | P4 (advisory) | scope | Foreign riders in the working tree: `AGENTS.md` and `cross-cutting.md` add coherent subshell-`cd` test guidance (cwd-persistence caveat). Benign content, but not 0935 deliverables and unreviewed by this task's gates — operator must disposition (commit separately or revert) before the R5 push. | `AGENTS.md:169`, `plugins/sp/skills/spur-dev/references/cross-cutting.md:515` | — |
+| 3 | P4 (advisory) | correctness | "Inline" provenance nuance: the 0914 bridge writes `runs.mode='state-machine'` for bridge-created runs, so the DB mode column cannot certify inline origin; attribution rests on `.spur/run/<run-id>-inline-setup.json` artifacts + run-id citations — all three verified present and matching this review. | `packages/app/src/services/inline-run-setup.ts:284` | — |
+| 4 | P4 (advisory) | functional | The three cohort runs carry no `task_run_links` rows binding them to wbs 0935; attribution is via Solution/0917 run-id citations + setup artifacts (verified). Acceptable, but a links row would make the attribution chain self-contained in the DB. | `.spur/spur.db` `task_run_links` (0 rows for the 3 run ids) | — |
+| 5 | P4 (advisory) | correctness | R6's zero-missing-commits check is vacuous as performed post-removal (dirs no longer contain git repos, so "no missing commits" holds trivially); the Solution discloses exactly this ("holds trivially") and the substantive pre-checks (`git worktree list`, not-a-git-repo) are recorded. Honest, but the record should not be cited as a positive unmerged-work proof. | `docs/tasks5/0935_*.md` (Solution R6) | — |
+| 6 | P4 (advisory) | architecture | Starting changes ride the same tree: 0914–0921 diffs are corpus re-verification rewrites from an earlier pass; only 0917's `spur:0935-r2-reevaluation` block is 0935-attributable; untracked `docs/tasks5/0936_*.md` is foreign D63 triage output (pre-dispatch, 23:05Z), correctly preserved untouched. | `docs/tasks5/0917_*.md:65` | — |
+| 7 | P4 (advisory) | architecture | Exact-phrasing pins intentionally duplicate fixture-derived strings (11 runs / 3 actions / 400000 ms) inline — brittle by design (wording lock, per 0921 P4 intent). The marker-anchored re-evaluation append in 0917 (preserve-don't-rewrite) is a good archival pattern. | `scripts/commands/workflow-promotion.test.ts:252,267` | — |
 
 ##### Functional Traceability
 

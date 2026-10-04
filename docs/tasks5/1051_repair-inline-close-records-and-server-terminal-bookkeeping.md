@@ -4,7 +4,7 @@ name: Repair inline close records and server terminal bookkeeping
 status: done
 template: issue
 created_at: 2026-10-02T17:00:22.383Z
-updated_at: "2026-10-02T19:57:06.189Z"
+updated_at: "2026-10-03T00:57:40.450Z"
 feature_id: D62
 
 ac_numbering: task-local
@@ -103,17 +103,17 @@ Test map (written before implementation):
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Guard + defaults at the shared boundary before any write: `packages/app/src/services/inline-run-setup.ts:1124-1150` (INVALID_CLOSE_REASON refusals `:1131`, `done`→`done` / `paused`→`paused-operator` `:1149-1150`), forwarded to the writer at `:1175`. Tests: `packages/app/tests/services/inline-run-driver.test.ts:604,639,661,686,709` (defaults; failed-without-reason and non-enum refusals prove row stays `running`/`terminal_reason: null` and the sidecar is byte-identical; explicit `failed-agent` preserved), spawn-level DB assertions `plugins/sp/tests/inline-run-close-reason.test.ts:100-167`, installed twin `plugins/sp/tests/inline-run-installed.test.ts:191-196`. Suites green this run (186 + 18 pass). |
-| R2 | MET | `projectInlineRunClose` `packages/app/src/services/inline-run-setup.ts:1012-1046` merge-preserves prior identity/provenance/`startedAt` and publishes atomically (same-directory temp + rename), returning a replay-guided failure detail instead of swallowing it; ordered post-commit before reporting at `:1194`, zero-action done still finalizes-then-reports with the projection failure appended `:1198-1207`, other projection failures exit 1 `RUN_RECORD_STATE_FAILED` `:1209-1217`. Tests: `packages/app/tests/services/inline-run-driver.test.ts:604` (identity + startedAt + stale `error` dropped on the tested fixture), `:728` (zero-action done projects done, commit stands), `:751` (repeat close repairs stale sidecar), `:776` (injected publication failure visible and retryable); installed twin `plugins/sp/tests/inline-run-installed.test.ts:199-215`. |
-| R3 | MET | Real seam resolved: `apps/server/src/context.ts:144-150,425-427` (`ServerContext.logger` wired from the boot ApplicationRuntime, no schema change) and `apps/server/src/modules/task/handlers.ts:101-115` (guarded result captured; `ctx.logger.error` carries task wbs, target status, underlying error, and `spur task record <wbs> --transition <status>` replay guidance; committed write stands; response DTO unchanged `{ ok: true, data: { wbs, status } }`). Tests: `apps/server/tests/modules/task/handlers.test.ts:217-251` (failure reported with identity + guidance, DTO unchanged) and `:253-272` (silent on clean transition). Server suite green this run (27 pass). |
-| R4 | MET | Failed-publication regression at the shared PlanningWriteService boundary: `packages/app/tests/services/planning-write-service.test.ts:825-858` (injected `fs.writeFile` failure rejects the transition, previous task file byte-identical, post-commit hook never called — the hook is the only lifecycle-row writer post-commit, and the rejection precedes any commit). Existing 1047 successful-file/failed-bookkeeping replay checks retained and green: `packages/app/tests/services/task-record.test.ts:2347-2646` (incl. `:2599` injected-reconciliation replay), included in the 186-pass app suite run. |
+| R1 | MET | `packages/app/src/services/inline-run-setup.ts:1124-1150` boundary guard re-read (1051 AC1 comment verbatim); tests `packages/app/tests/services/inline-run-driver.test.ts:604,639,661,686,709` + spawn `plugins/sp/tests/inline-run-close-reason.test.ts:100-167` + twin `plugins/sp/tests/inline-run-installed.test.ts:191-196` — green this run. |
+| R2 | MET | `projectInlineRunClose` re-read at `packages/app/src/services/inline-run-setup.ts:1037` (export confirmed, merge-preserving `{...prior}` + atomic publish, replay-guided failure return); driver tests :604/:728/:751/:776 + twin :199-215 — green this run. |
+| R3 | MET | `apps/server/src/modules/task/handlers.ts:101-115` re-read: bookkeepingError block verbatim with 1051 R3 comment, wbs/status/error + `spur task record` replay guidance, DTO unchanged; `apps/server/tests/modules/task/handlers.test.ts:217-272` green this run (22/22). |
+| R4 | MET | `packages/app/tests/services/planning-write-service.test.ts:825-858` — "failed atomic publication (1051 R4)" test passed this run (reject + previous file intact + hook never called). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `packages/app/tests/services/inline-run-driver.test.ts:604,639,661,686,709` (app-level: done/paused defaults in DB + sidecar, refusals before any write, explicit reason retained) plus spawn-level `plugins/sp/tests/inline-run-close-reason.test.ts:100-167` (DB `terminal_reason` = `done` / `paused-operator` without `--reason`) and installed twin `plugins/sp/tests/inline-run-installed.test.ts:191-196`. |
-| AC2 | MET | test | `packages/app/tests/services/inline-run-driver.test.ts:604` (done close exposes actual status, identity/provenance/startedAt preserved), `:728` (zero-action done: commit stands, sidecar agrees), `:751` (repeat close repairs stale sidecar), `:776` (injected state-publication failure `RUN_RECORD_STATE_FAILED`, DB commit stands, retry repairs); failed/paused projection via `:709,639`; installed twin `plugins/sp/tests/inline-run-installed.test.ts:199-215`. |
-| AC3 | MET | test | `apps/server/tests/modules/task/handlers.test.ts:217-251` (injected reconciliation failure: logger receives wbs `0001`, target status, error text, replay guidance; response stays `{ok:true}` with the unchanged DTO) and `:253-272` (no logger.error on clean transitions). Implementation `apps/server/src/modules/task/handlers.ts:101-115`. |
-| AC4 | MET | test | `packages/app/tests/services/planning-write-service.test.ts:829-858` (failing temp write → transition rejects, previous file unchanged, hookCalls `[]`); existing post-commit failure/replay tests remain green in the same run (`packages/app/tests/services/task-record.test.ts:2599-2646`, 186 pass / 0 fail). |
+| AC1 | MET | test | Targeted suite re-run green this run (see per-requirement evidence); task Testing rows re-validated against current tree. |
+| AC2 | MET | test | Targeted suite re-run green this run (see per-requirement evidence); task Testing rows re-validated against current tree. |
+| AC3 | MET | test | Targeted suite re-run green this run (see per-requirement evidence); task Testing rows re-validated against current tree. |
+| AC4 | MET | test | Targeted suite re-run green this run (see per-requirement evidence); task Testing rows re-validated against current tree. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

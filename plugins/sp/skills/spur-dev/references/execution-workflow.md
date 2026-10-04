@@ -203,7 +203,9 @@ When `--next` is set and implementation succeeds:
 2. **Record provenance** — `spur task run-link <wbs> --source next-auto --json`. Writes a
    `kind: pipeline` entry into `task_run_links` so the `testing → done` provenance guard
    (lifecycle-adapter.ts L106-131) accepts the in-session implementation path. Idempotent:
-   safe to call even when a pipeline link already exists.
+   safe to call even when a pipeline link already exists. Run it from the same cwd as the
+   `task update` calls in step 1 — per-tree DB isolation makes a link from another tree
+   invisible to this tree's guard.
 3. **On a clean transition:** invoke `/sp:dev-verify <wbs> --auto --next` (`--auto` propagates
    down the whole chain). The verify step's `--next` transition to `done` now passes the
    provenance guard because step 2 recorded the link.

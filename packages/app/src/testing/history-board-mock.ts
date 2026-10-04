@@ -654,6 +654,7 @@ export class MockHistoryBoardService implements HistoryBoardService {
                 bySkill: skillsUsed.map((s) => ({ skillName: s.id, calls: s.count })),
                 bySource: [],
                 byInvocationKind: [],
+                byCapability: [],
                 trend: [],
                 fresh: true,
             },

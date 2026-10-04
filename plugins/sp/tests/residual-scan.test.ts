@@ -1,5 +1,15 @@
 import { describe, expect, test } from 'bun:test';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import * as fsp from 'node:fs';
+import {
+    chmodSync,
+    existsSync,
+    mkdirSync,
+    mkdtempSync,
+    readFileSync,
+    rmSync,
+    utimesSync,
+    writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -15,6 +25,7 @@ import {
     parseReviewFindings,
     RESIDUAL_SCAN_USAGE,
     type ResidualArtifact,
+    recordedVerdictPath,
     renderReport,
     scanResiduals,
 } from '../scripts/residual-scan';
@@ -313,6 +324,93 @@ describe('foldVerdict', () => {
     });
 });
 
+/** Task 1065 R3: fold freshness between run and durable verdict copies. */
+describe('verdict copy freshness', () => {
+    const artifact: ResidualArtifact = {
+        wbs: '1065',
+        base: 'b',
+        scanned: { 'review-finding': false, 'diff-marker': false, 'unchecked-box': false, 'staging-residue': false },
+        items: [],
+        counts: { blocking: 0, deferrable: 0, advisory: 0, housekeeping: 0 },
+    };
+    const writeVerdict = (dir: string, where: 'run' | 'durable', verdict: string, ageSeconds: number): string => {
+        const path =
+            where === 'run'
+                ? join(dir, '.spur', 'run', '1065-verdict.json')
+                : join(dir, '.spur', 'memory', 'evidence', '1065-verdict.json');
+        mkdirSync(join(path, '..'), { recursive: true });
+        writeFileSync(path, `${JSON.stringify({ verdict, checks: [] }, null, 2)}\n`);
+        const t = new Date(Date.now() - ageSeconds * 1000);
+        utimesSync(path, t, t);
+        return path;
+    };
+    const capture = () => {
+        const lines: string[] = [];
+        return { lines, io: { out: (line: string) => lines.push(line), err: () => {} } };
+    };
+    const seeded = (prefix: string) => {
+        const { dir, cleanup } = scratch(prefix);
+        writeFileSync(join(dir, '.spur', 'run', '1065-residuals.json'), `${JSON.stringify(artifact)}\n`);
+        return { dir, cleanup };
+    };
+
+    test('newer mtime wins — fresh run copy over stale durable (R1)', () => {
+        const { dir, cleanup } = scratch('rs-fresh-');
+        try {
+            writeVerdict(dir, 'durable', 'PARTIAL', 60);
+            const run = writeVerdict(dir, 'run', 'PASS', 0);
+            expect(recordedVerdictPath(join(dir, '.spur', 'run'), '1065', fsp)).toBe(run);
+        } finally {
+            cleanup();
+        }
+    });
+
+    test('fresh run PASS + stale durable PARTIAL → fold resolves PASS and says why (R3a)', () => {
+        const { dir, cleanup } = seeded('rs-pass-');
+        try {
+            writeVerdict(dir, 'durable', 'PARTIAL', 60);
+            const run = writeVerdict(dir, 'run', 'PASS', 0);
+            const cap = capture();
+            expect(main(['fold', '1065', '--root', dir], {}, cap)).toBe(0);
+            const reported = cap.lines.join('');
+            expect(reported).toContain('verdict copies disagree');
+            expect(reported).toContain('chose run');
+            expect(JSON.parse(readFileSync(run, 'utf8')).verdict).toBe('PASS');
+        } finally {
+            cleanup();
+        }
+    });
+
+    test('fresh run PARTIAL + stale durable PASS → fold resolves PARTIAL (R3b)', () => {
+        const { dir, cleanup } = seeded('rs-part-');
+        try {
+            writeVerdict(dir, 'durable', 'PASS', 60);
+            const run = writeVerdict(dir, 'run', 'PARTIAL', 0);
+            const cap = capture();
+            expect(main(['fold', '1065', '--root', dir], {}, cap)).toBe(0);
+            const reported = cap.lines.join('');
+            expect(reported).toContain('durable');
+            expect(reported).toContain('chose run');
+            expect(JSON.parse(readFileSync(run, 'utf8')).verdict).toBe('PARTIAL');
+        } finally {
+            cleanup();
+        }
+    });
+
+    test('equal copies fold silently (R3c)', () => {
+        const { dir, cleanup } = seeded('rs-equal-');
+        try {
+            writeVerdict(dir, 'durable', 'PASS', 60);
+            writeVerdict(dir, 'run', 'PASS', 0);
+            const cap = capture();
+            expect(main(['fold', '1065', '--root', dir], {}, cap)).toBe(0);
+            expect(cap.lines.join('')).not.toContain('disagree');
+        } finally {
+            cleanup();
+        }
+    });
+});
+
 const SILENT = { io: { out: () => {}, err: () => {} } } as const;
 
 describe('CLI modes', () => {
@@ -389,6 +487,11 @@ describe('CLI modes', () => {
             const durable = join(dir, '.spur/memory/evidence/0949-verdict.json');
             mkdirSync(join(dir, '.spur/memory/evidence'), { recursive: true });
             writeFileSync(durable, readFileSync(join(runDir, '0949-verdict.json')));
+            // Pin the freshness relation (1065): two back-to-back writes can land on equal mtimes,
+            // which resolves to the run copy and skips the durable sync — the fold's durable-newer path.
+            const stale = new Date(Date.now() - 60_000);
+            utimesSync(join(runDir, '0949-verdict.json'), stale, stale);
+            utimesSync(durable, new Date(), new Date());
             expect(main(['fold', '0949', '--root', dir], {}, SILENT)).toBe(0);
             const verdict = JSON.parse(readFileSync(join(runDir, '0949-verdict.json'), 'utf8')) as {
                 verdict: string;

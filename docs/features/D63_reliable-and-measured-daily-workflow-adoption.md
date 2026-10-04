@@ -2,11 +2,11 @@
 schema_version: 1
 id: "D63"
 name: "Reliable and measured daily-workflow adoption"
-status: active
+status: done
 priority: P2
 tags: []
 created_at: "2026-09-22T02:55:20.144Z"
-updated_at: "2026-09-24T19:59:44.152Z"
+updated_at: "2026-10-03T03:36:12.297Z"
 ---
 
 # D63: Reliable and measured daily-workflow adoption
@@ -118,7 +118,9 @@ Feature: Reliable and measured daily-workflow adoption
 | 0981 | Make the feature-lifecycle R4 (0872) guard test load-deterministic | done |
 | 1052 | Harden proof options and job handoff contract assertions | done |
 | 1057 | Guard task section writes against silent wholesale overwrite of populated sections | done |
-| 1058 | Make agent-driven corpus writes cwd-deterministic across pipeline surfaces | todo |
+| 1058 | Make agent-driven corpus writes cwd-deterministic across pipeline surfaces | done |
+| 1059 | Harden runall batch WT-4: recheck main tip before FF, write merged marker only after ref move | done |
+| 1060 | Wrapup drift probe: classify doc-owned surfaces against the feature span, not per-task diffs | cancelled |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -136,4 +138,6 @@ Feature scenarios R1–R8 map in order to proposal labels W01–W08; task-local 
 - 2026-09-24T00:35:33.685Z blocked → active (system)
 - 2026-09-24T19:57:52.583Z active → verifying (system)
 - 2026-09-24T19:59:44.152Z verifying → active (system)
+- 2026-10-03T03:30:17.529Z active → verifying (system)
+- 2026-10-03T03:36:12.297Z verifying → done (system)
 

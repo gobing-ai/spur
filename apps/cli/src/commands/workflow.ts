@@ -909,8 +909,20 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             // aborts the run, and projection failure cannot erase the failure.
             const escalationSink = await makeEscalationPacketSink(bus, context);
             if (humanProgress) {
-                context.output.write(`Run: ${runId}`);
-                if (planPreview !== undefined) context.output.write(planPreview);
+                // 1064 R1: the run id prints only once the row is committed, signalled
+                // by `workflow.run.started` (the adapter emits it after `createRun`
+                // inserts). A pre-row failure now exits without printing an id or
+                // creating a record. One-shot via a local latch: the bus can carry two
+                // `workflow.run.started` projections (adapter verb-form + engine-native
+                // bridge), and EventBus may lack `once`. Subscribed before the report
+                // handlers below so the header precedes the first progress line.
+                let headerPrinted = false;
+                bus.on('workflow.run.started', (event) => {
+                    if (headerPrinted) return;
+                    headerPrinted = true;
+                    context.output.write(`Run: ${event.runId}`);
+                    if (planPreview !== undefined) context.output.write(planPreview);
+                });
                 // Single-run CLI (one `workflow run` = one runId): the run id is
                 // already printed in the header, so progress lines omit the
                 // `[run <id>]` prefix (R1). showRunId can be re-enabled for

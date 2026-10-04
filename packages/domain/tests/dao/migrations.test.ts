@@ -12,6 +12,7 @@ import {
     CLI_RUNS_TERMINAL_REASON_SCHEMA_SQL,
     CLI_SCHEMA_SQL,
     COORDINATION_RUNS_RECEIPT_COLUMNS_SCHEMA_SQL,
+    HISTORY_BOARD_SKILL_5M_CAPABILITY_GRAIN_SCHEMA_SQL,
     HISTORY_PERFORMANCE_INDEXES_SCHEMA_SQL,
     loadSqlMigrations,
     PROJECT_CLAIMS_SCHEMA_SQL,
@@ -126,7 +127,7 @@ describe('db migrations', () => {
         });
 
         test('has foundation through History Board indexes, rollups, checkpoint identity, the history-refresh single-flight index, the 0722 task↔session attribution table, the 0817 queue-jobs deadline/lease columns, the 0832 inbox request key, the 0833 coordination-runs receipt columns, the 0836 project_claims table, the 0838 project_strategy table, the 0863 scheduler-custom single-flight index, and the 0890 executor-update owner columns', () => {
-            expect(CLI_MIGRATIONS).toHaveLength(50);
+            expect(CLI_MIGRATIONS).toHaveLength(51);
             expect(CLI_MIGRATIONS[0]?.id).toBe('0000_spur_cli_foundation');
             expect(CLI_MIGRATIONS[1]?.id).toBe('0001_spur_cli_team_inbox');
             expect(CLI_MIGRATIONS[2]?.id).toBe('0002_spur_cli_rule_history');
@@ -328,7 +329,7 @@ describe('db migrations', () => {
             // 0048 journals but skips (the stub journal has no agent_executor_updates —
             // 0041 precedent).
             const applied = await applyCliMigrations(adapter);
-            expect(applied).toBe(46);
+            expect(applied).toBe(47);
             // 0005 and 0007 backfilled columns on the legacy runs table.
             const cols = await adapter.queryAll<{ name: string }>('PRAGMA table_info(runs)');
             expect(cols.some((c) => c.name === 'pid')).toBe(true);
@@ -382,7 +383,7 @@ describe('db migrations', () => {
             // 0044 likewise: CLI_SCHEMA_SQL already ships the receipt columns.
             // 0046 likewise: CLI_SCHEMA_SQL already ships project_strategy (journal counts).
             // 0048 likewise: CLI_SCHEMA_SQL already ships the owner columns (journal counts).
-            expect(applied).toBe(49);
+            expect(applied).toBe(50);
             await adapter.run(
                 'INSERT INTO inbox_messages (id, to_id, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
                 'm1',
@@ -393,6 +394,50 @@ describe('db migrations', () => {
             );
             const rows = await adapter.queryAll('SELECT id FROM inbox_messages');
             expect(rows).toHaveLength(1);
+            adapter.close();
+        });
+
+        test('0050 rebuilds history_board_skill_5m to the classification grain and preserves rows', async () => {
+            const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+            // Pre-0050 journal: 0032 creates the legacy four-column grain with one
+            // materialized row; the E93 columns do not exist yet.
+            await applyCliMigrations(adapter, [
+                {
+                    id: '0000_spur_cli_foundation',
+                    sql: 'CREATE TABLE IF NOT EXISTS history_board_skill_5m (bucket_start TEXT NOT NULL, source TEXT NOT NULL, skill_name TEXT NOT NULL, invocation_kind TEXT NOT NULL, calls INTEGER NOT NULL, PRIMARY KEY (bucket_start, source, skill_name, invocation_kind));',
+                },
+                {
+                    id: '0032_spur_cli_history_board_skill_5m',
+                    sql: 'SELECT 1;',
+                },
+            ]);
+            await adapter.run(
+                "INSERT INTO history_board_skill_5m (bucket_start, source, skill_name, invocation_kind, calls) VALUES ('2026-06-01T09:58:00Z', 'claude', 'sp-code-testing', 'user', 3)",
+            );
+            await applyCliMigrations(adapter, [
+                {
+                    id: '0050_spur_cli_history_board_skill_5m_capability_grain',
+                    sql: HISTORY_BOARD_SKILL_5M_CAPABILITY_GRAIN_SCHEMA_SQL,
+                },
+            ]);
+            const cols = await adapter.queryAll<{ name: string }>('PRAGMA table_info(history_board_skill_5m)');
+            for (const col of ['capability_kind', 'evidence_kind', 'status']) {
+                expect(cols.some((c) => c.name === col)).toBe(true);
+            }
+            // The legacy row survives with the '' unclassified sentinel on all three columns.
+            const rows = await adapter.queryAll<Record<string, string | number>>(
+                'SELECT * FROM history_board_skill_5m',
+            );
+            expect(rows).toHaveLength(1);
+            expect(rows[0]?.capability_kind).toBe('');
+            expect(rows[0]?.evidence_kind).toBe('');
+            expect(rows[0]?.status).toBe('');
+            expect(rows[0]?.calls).toBe(3);
+            // The read index is restored after the drop-and-rename.
+            const indexes = await adapter.queryAll<{ name: string }>(
+                "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'history_board_skill_5m'",
+            );
+            expect(indexes.some((i) => i.name === 'idx_history_board_skill_5m_skill_bucket')).toBe(true);
             adapter.close();
         });
 
@@ -597,7 +642,7 @@ describe('db migrations', () => {
             // the 0041 precedent).
             // + 0049 runs terminal_reason (journaled but skipped: no runs table here —
             // the 0041 table-absence precedent).
-            expect(await applyCliMigrations(adapter)).toBe(41);
+            expect(await applyCliMigrations(adapter)).toBe(42);
             const columns = await adapter.queryAll<{ name: string }>(
                 'PRAGMA index_info(idx_history_message_provenance_run)',
             );
@@ -657,7 +702,7 @@ describe('db migrations', () => {
         test('upgraded DB journaled through 0021 receives 0022-0049 and converges with a fresh DB', async () => {
             const upgraded = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
             await applyCliMigrations(upgraded, CLI_MIGRATIONS.slice(0, 22));
-            expect(await applyCliMigrations(upgraded)).toBe(28);
+            expect(await applyCliMigrations(upgraded)).toBe(29);
 
             const fresh = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
             await applyCliMigrations(fresh);

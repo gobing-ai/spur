@@ -741,18 +741,22 @@ describe('LiveHistoryBoardService', () => {
                      '2026-06-01T09:58:10Z', 'claude-opus-4.6', 100, 50, 300, 'agent', 100, '2026-06-01T00:00:00Z')`,
         );
         const skillTs = '2026-06-01T09:58:10Z';
+        // Confirmed loads (E93 1029): the legacy arrays count evidence_kind='load' AND
+        // status='ok' rows, so the fixture seeds classified rows.
         await db.run(
             `INSERT INTO history_skill_call (record_hash, message_hash, source, source_file, source_line,
-                 session_id, seq, skill_name, invocation_kind, status, started_at, imported_at)
+                 session_id, seq, skill_name, invocation_kind, status, started_at, imported_at,
+                 capability_kind, evidence_kind)
              VALUES ('sb-sk-1', 'sb-msg-1', 'claude', 'test.jsonl', 1, 'sb-sess', 1, 'sp-code-testing', 'model',
-                     'success', ?, '2026-06-01T00:00:00Z')`,
+                     'ok', ?, '2026-06-01T00:00:00Z', '', 'load')`,
             skillTs,
         );
         await db.run(
             `INSERT INTO history_skill_call (record_hash, message_hash, source, source_file, source_line,
-                 session_id, seq, skill_name, invocation_kind, status, started_at, imported_at)
+                 session_id, seq, skill_name, invocation_kind, status, started_at, imported_at,
+                 capability_kind, evidence_kind)
              VALUES ('sb-sk-2', 'sb-msg-1', 'claude', 'test.jsonl', 1, 'sb-sess', 2, 'sp-code-testing', 'user',
-                     'success', '2026-06-01T10:05:00Z', '2026-06-01T00:00:00Z')`,
+                     'ok', '2026-06-01T10:05:00Z', '2026-06-01T00:00:00Z', '', 'load')`,
         );
         await refreshHistoryRollups(db);
 
@@ -798,6 +802,7 @@ describe('LiveHistoryBoardService', () => {
             bySkill: [],
             bySource: [],
             byInvocationKind: [],
+            byCapability: [],
             trend: [],
             fresh: true,
         });

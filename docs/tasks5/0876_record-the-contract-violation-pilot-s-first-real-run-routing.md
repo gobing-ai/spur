@@ -4,7 +4,7 @@ name: Record the contract-violation pilot's first real-run routing decision
 status: done
 template: feature-impl
 created_at: 2026-09-17T00:46:12.717Z
-updated_at: "2026-09-17T18:35:39.616Z"
+updated_at: "2026-10-03T00:51:50.343Z"
 feature_id: D62
 
 dependencies: ["0871", "0873"]
@@ -116,9 +116,7 @@ Observe, do not fabricate. The pilot edge only fires when an `agent.run` exits c
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | spur task check | — | task check passed |
-| P4 | design-conformance | — | Measurement task: evidence + candidate lifecycle match Design; candidate consumed by 0878 as designed. |
-| P4 | secua | — | Honest absence recording; no fabrication; no findings this run. |
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 

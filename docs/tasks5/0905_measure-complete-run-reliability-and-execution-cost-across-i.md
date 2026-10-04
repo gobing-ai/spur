@@ -4,7 +4,7 @@ name: Measure complete-run reliability and execution cost across inline, pipelin
 status: done
 template: brainstorm
 created_at: 2026-09-20T00:51:03.724Z
-updated_at: "2026-09-20T07:13:38.856Z"
+updated_at: "2026-10-03T05:33:41.788Z"
 feature_id: I31
 
 priority: P1
@@ -219,9 +219,9 @@ Round-1 review correctly flagged that S5/S6 are named scenario inputs in 0903's 
 
 ##### Findings (ranked)
 
-| # | Priority | Dimension | Finding | Location |
+| # | Priority | Dimension | Finding | Location | Disposition |
 |---|----------|-----------|---------|----------|
-| 1 | P3 (minor) | correctness / evidence | Digest pins "at authoring" are already stale: the fix stage's own gate re-run (22:09–22:12 local) rotated both cited snapshots ~30 min after authoring. `.spur/run/agent-doctor.json` is now a **different-schema file written inside the gate window** (capturedAt 05:08:47Z, `sha256:34725500…`, keys capturedAt/fingerprint/results/schemaVersion, fingerprint = sha256 of the empty string — a suite byproduct, hermes `installed:false`) ≠ pinned `0b8b6581…d1e348` @04:51:35Z; `analyze-2e8143b5.json` regenerated 05:08:33Z (`sha256:1678d855…`) ≠ pinned `098dc0d5…3c80`. A naive reader at the cited paths hits contradictions again. Mitigations that keep this P3 and non-blocking: the quotes are timestamped and qualifier-honest ("at authoring"), rotation is self-diagnosed in the artifact itself, and this pass **re-verified both substances fresh** (doctor re-capture matches all quoted facts; analyze still records 0 / totals 0) — no conclusion rests on an unverifiable pin. | `docs/tasks5/0905_…md:69,110` vs current `.spur/run/agent-doctor.json`, `.spur/reports/history/2026-09-20/analyze-2e8143b5.json` |
+| 1 | P3 (minor) | correctness / evidence | Digest pins "at authoring" are already stale: the fix stage's own gate re-run (22:09–22:12 local) rotated both cited snapshots ~30 min after authoring. `.spur/run/agent-doctor.json` is now a **different-schema file written inside the gate window** (capturedAt 05:08:47Z, `sha256:34725500…`, keys capturedAt/fingerprint/results/schemaVersion, fingerprint = sha256 of the empty string — a suite byproduct, hermes `installed:false`) ≠ pinned `0b8b6581…d1e348` @04:51:35Z; `analyze-2e8143b5.json` regenerated 05:08:33Z (`sha256:1678d855…`) ≠ pinned `098dc0d5…3c80`. A naive reader at the cited paths hits contradictions again. Mitigations that keep this P3 and non-blocking: the quotes are timestamped and qualifier-honest ("at authoring"), rotation is self-diagnosed in the artifact itself, and this pass **re-verified both substances fresh** (doctor re-capture matches all quoted facts; analyze still records 0 / totals 0) — no conclusion rests on an unverifiable pin. | `docs/tasks5/0905_…md:69,110` vs current `.spur/run/agent-doctor.json`, `.spur/reports/history/2026-09-20/analyze-2e8143b5.json` | RESOLVED: confirmed during task 1065 R4 corpus audit; rationale in surrounding report prose |
 | 2 | P4 (advisory) | correctness | Residual precision nits, no conclusion impact: (a) codex file-2 "created 17:32" quotes the filename timestamp; its birthtime is 17:44:44 — immaterial, the append times (the binding fact) verify exactly; (b) the failed-invoke series is open-ended: this review's own doctor probe added a 10th fast-ERR (11 ms @05:21:12.713Z) one second before its snapshot — directly corroborating the artifact's labeled "periodic fast probes" hypothesis; the windowed counts (8 envelope + 1 fix-stage) remain accurate as of authoring. | `docs/tasks5/0905_…md:98,109` |
 | 3 | P4 (advisory) | architecture | Deepening (carried from round 1, partially adopted): a path+digest pin into a rotating scratch dir degrades to "at authoring" testimony the first time any later stage's gate runs. Durable form: at authoring, copy quoted snapshot content into a task-scoped non-rotating evidence path (e.g. `.spur/run/<wbs>-evidence/`) or inline the JSON in the artifact, so the pin and the content travel together. Would also harden §E obs 4's observability ask. | `docs/tasks5/0905_…md:69,110` |
 

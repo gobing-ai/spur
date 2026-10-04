@@ -2,11 +2,11 @@
 schema_version: 1
 id: "D3"
 name: "Workflow run reliability defects: schema resolution, shell interpolation, headless HITL"
-status: active
+status: done
 priority: P2
 tags: []
 created_at: "2026-08-04T17:26:12.441Z"
-updated_at: "2026-09-19T17:31:42.269Z"
+updated_at: "2026-10-03T15:00:59.611Z"
 ---
 
 # D3: Workflow run reliability defects: schema resolution, shell interpolation, headless HITL
@@ -110,6 +110,9 @@ Feature: Workflow run reliability defects
 | 0901 | Harden workflow engine: shell-output persistence, async continue, terminal-id guard (kk dogfood 091825) | done |
 | 0902 | Design upstream ts-dual-workflow-engine checkpoint/interruption contract (ts-libs packages/dual-workflow-engine) — prerequisite for 0901 R2 safe-resume | done |
 | 0980 | Lifecycle runs created by a record-stage transition must reach a terminal status | done |
+| 1064 | Workflow run registration: reported run ids must be queryable | done |
+| 1065 | make residual scan fold freshness aware between run and durable verdict copies | done |
+| 1067 | enforce e71 persist out before worktree removal in wt4 landings | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -120,4 +123,8 @@ Feature: Workflow run reliability defects
 - 2026-08-21T11:00:26.820Z active → verifying (system)
 - 2026-08-24T02:58:50.846Z verifying → done (system)
 - 2026-09-19T17:31:42.269Z done → active (system)
+- 2026-10-03T04:28:35.761Z active → verifying (system)
+- 2026-10-03T06:02:35.736Z verifying → active (system)
+- 2026-10-03T06:38:31.380Z active → verifying (system)
+- 2026-10-03T15:00:59.611Z verifying → done (system)
 

@@ -4,7 +4,7 @@ name: Fix the feature-verification gate caller and close out E7 review findings
 status: done
 template: standard
 created_at: 2026-09-24T07:19:45.903Z
-updated_at: "2026-09-24T21:14:16.294Z"
+updated_at: "2026-10-03T05:36:00.652Z"
 
 priority: P1
 ---
@@ -191,9 +191,9 @@ Caller proof: the verifying onEnter command, with `featureId=E7` and this checko
 
 ### Review
 
-| Priority | Dimension | Location | Finding |
+| Priority | Dimension | Location | Finding | Disposition |
 |----------|-----------|----------|----------|
-| P1 | functional-traceability | `config/workflows/feature-lifecycle.yaml:49` | R1/AC1 closed on `main` by `775e4e90` (`feat(app): run target onEnter shells during feature-lifecycle hops`) — `requestTransition` now runs the entered state's `onEnter`, the nested feature-verification shell exits 0 with `featureId=E7`, and run `b02126bb-52a2-49f3-92c3-f6aaf9c1f96e` records PASS at `.spur/run/b02126bb-52a2-49f3-92c3-f6aaf9c1f96e-feature-verification.json`. Prior d261f880 state: caller repaired but unreachable because `dist/service.js:228-288` `evaluateAndCommit` evaluated the guard and committed the hop without running `onEnter`; only the driver (`dist/state-machine.js:65`) ran it. The upstream follow-up (task 0953) remains owned by the engine repo. |
+| P1 | functional-traceability | `config/workflows/feature-lifecycle.yaml:49` | RESOLVED: R1/AC1 closed on `main` by `775e4e90` (`feat(app): run target onEnter shells during feature-lifecycle hops`) — `requestTransition` now runs the entered state's `onEnter`, the nested feature-verification shell exits 0 with `featureId=E7`, and run `b02126bb-52a2-49f3-92c3-f6aaf9c1f96e` records PASS at `.spur/run/b02126bb-52a2-49f3-92c3-f6aaf9c1f96e-feature-verification.json`. Prior d261f880 state: caller repaired but unreachable because `dist/service.js:228-288` `evaluateAndCommit` evaluated the guard and committed the hop without running `onEnter`; only the driver (`dist/state-machine.js:65`) ran it. The upstream follow-up (task 0953) remains owned by the engine repo.| RESOLVED: confirmed during task 1065 R4 corpus audit |
 | P4 | functional-traceability | `packages/app/src/services/workflow-service.ts:2412` | R2 — engine merges declared vars under the override. Pinned at the CLI boundary with a regression test so a future flip back to replace-semantics fails in the CLI suite. |
 | P4 | secu-review | `packages/app/src/services/workflow-service.ts:2651` | R5 TOCTOU closed with one `open(O_NOFOLLOW)` + `fstat` + dev/ino identity against the confined realpath, replacing the `realpath → stat → read` triple-resolve. Confinement no longer depends on a symlink follow, and the served bytes are provably the checked inode. |
 | P4 | secu-review | `packages/app/src/services/workflow-service.ts:2743` | R5: the served state JSON was parse-trusted while the markdown was scrubbed; `redactJsonValue` re-redacts nested values and keys on read. |

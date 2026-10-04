@@ -2,14 +2,14 @@
 kind: design
 title: "History Data Processing Architecture — Ingestion, Materialization, and Query Plane"
 created_at: 2026-08-22
-updated_at: 2026-09-02
-related: [E9, "0631", "0632", "0633", "0712", "0722"]
+updated_at: 2026-10-03
+related: [E9, E93, "0631", "0632", "0633", "0712", "0722", "1028", "1029", "1030"]
 tags: [system, E9, history]
 ---
 
 # History Data Processing Architecture — Ingestion, Materialization, and Query Plane
 
-**Document Version:** 1.0.1
+**Document Version:** 1.1.0 (adds section 7 safe historical replay, E93 task 1030)
 **Status:** Design (current-tree corrected; task 0632 R4)  
 **Date:** 2026-08-22  
 **Owner:** Spur Architecture (Feature E9)  
@@ -343,3 +343,31 @@ There is no `history_tool_call (message_hash)` or `(tool_name)` index in the cur
   - Forensic Query & Materialization: `packages/domain/src/analytics/history-board-rollup.ts` & `forensic-query.ts`
   - Live Serving Service: `packages/app/src/services/history-board-service.ts`
   - Web UI View Controllers: `apps/web/src/modules/history/`
+
+---
+
+## 7. Safe Historical Replay & Upgrade Procedure (E93 task 1030)
+
+When capability extraction or rollup semantics change — E93 task 1028 (invocation identity + origin classification) and task 1029 (representative-based skill rollup grain) both did — already-imported history must be brought to the new semantics **without ad hoc surgery**. The upgrade path is composed entirely from existing seams: importer full mode (checkpoint short-circuit bypass + source-scoped reconciliation) and the rollup definition bump (watermark definition version). Deleting checkpoint/ledger rows, hand-editing `history_skill_call`, or running `history reset` are all prohibited moves; they are unnecessary because full mode already does the work.
+
+### 7.1 Procedure
+
+1. **Provenance gate (R1).** Confirm the installed importer version before any write. `HistoryService.import` calls `assertPiImporterSafe` (`packages/app/src/services/history-service.ts:315`, enforced at `:565`) before the first `getDb`, rejecting non-dry-run full imports of provenance-bearing sources when the resolved importer version is older than `MIN_SAFE_PI_BASH_IMPORTER_VERSION` (`history-service.ts:256`, currently `0.4.49`) with `UnsafeHistoryImporterError`; a `dryRun: true` run is exempt (preview-only). Resolve the CLI importer from the installed package, not ambient state, and record the resolved version in the receipt.
+2. **Backup, then isolate (R3).** Stop writers, take a file-level backup of the project database (SQLite online backup / `VACUUM INTO`), and run the replay against an explicit isolated target (`DATABASE_URL` pointing at a copy). The original database file must remain byte-identical for the whole procedure — the replay test asserts this directly.
+3. **Dry-run the full replay (R1).** `spur history import <source> --mode full --dry-run` re-extracts every line and reports the reconciliation preview (`reconciliation.staleTargetRows` / `staleLedgerRows` — the exact set of rows the current extraction no longer reproduces) while writing nothing; table dumps before/after are equal.
+4. **Replay full mode over COMPLETE per-source populations (R2).** `spur history import <source> --mode full`. Full mode never consults the incremental `(source_size, source_mtime_ms)` checkpoint identity, re-extracts every line under the current mapper, and `reconcileFullImport` (`@gobing-ai/ts-llm-jsonl-importer/dist/jsonl-importer-dao.js:592`, dispatched from `importer.js:491`) deletes exactly the stale target + ledger rows keyed by `record_hash` before inserting the new-semantics rows; `resetCheckpoints` (`jsonl-importer-dao.js:238`, dispatched at `importer.js:138`) rewrites checkpoints for the replayed files. **Full mode is source-scoped: the input must be the source COMPLETE population (every session file). A partial one-file full run would retire rows for files outside the input set.**
+5. **Adopt derived state (R3).** Run `spur history analyze` (`refreshHistoryRollups`). A rollup definition bump — `ROLLUP_DEFINITION_VERSION` (`packages/domain/src/analytics/rollup-watermark.ts:31`), currently `v7` after task 1029 representative grain — makes `historyBoardRollupsFresh` stale and the next refresh full-rebuilds every `history_board_*` table once; pre-bump rows (including legacy sentinel shapes) are replaced, not merged. Late-arriving producer outcomes are handled by the session-scoped late-arrival repair (`lateSkillResultBuckets`, `history-board-rollup.ts:2170`) which re-materializes every bucket of an affected session without advancing the watermark.
+6. **Verify with the frozen oracle, then keep the receipts (R3).** Assert, over the replayed database:
+   - **Counts:** `historyBoardSkillBreakdownFromRollup` (`history-board-rollup.ts:1229`) — classified rows total N with N calls, the legacy confirmed-load arrays (evidence `load` + status `ok`) total the frozen oracle figure, and the correlated duplicate pair collapses to one call **only** via shared invocation identity.
+   - **Identities:** a second full replay is a no-op — every prepared record hash already exists (`skippedDuplicates`), record hashes / invocation ids / statuses / provenance columns and materialized rows are unchanged, and the refresh reports `unchanged`.
+   - **Reference equality:** every materialized `history_board_skill_5m` row equals the representative-selection SQL (`SKILL_ROLLUP_REP_SQL`, `history-board-rollup.ts:311`) evaluated directly over `history_skill_call`.
+   - **Preservation:** other-source sentinel rows are untouched (reconciliation is per-source), unbucketable rows (missing timestamp, conflicting origins) stay visible in the source table with honest null capability facts, and the pre-replay backup bytes never changed.
+
+The pinned end-to-end exercise is `packages/app/tests/services/history-capability-replay.test.ts` (frozen by `docs/design/history-capability-detection.md` section 8.4): a legacy-shaped fixture database (stale extraction hashes, checkpoint bait, pre-1029 empty rollup sentinel, v6 watermarks) replayed in phases — provenance gate, dry-run, full replay (8/3 claude oracle), repeat replay, cross-run late arrival, unchanged re-run with SQL reference.
+
+### 7.2 Prohibited actions
+
+- **No manual deletes/updates** against `history_skill_call`, `history_import_ledger`, or `history_import_checkpoint` as an upgrade step — reconciliation owns stale-row retirement by record hash.
+- **No `history reset`** as part of an upgrade; it destroys checkpoint/derived state that the procedure above deliberately reuses.
+- **No ambient-history reads during the replay test** — contexts inject `historyHome`/`cwd`; a replay run that discovers the operator own session history is a test bug.
+- **No partial-source full replay** — see 7.1 step 4; scope is the whole source population or nothing.

@@ -4,7 +4,7 @@ name: Verify disposable scratch and reconcile cleanup safeguards
 status: done
 template: feature-impl
 created_at: 2026-09-30T20:13:58.359Z
-updated_at: "2026-10-02T04:08:36.430Z"
+updated_at: "2026-10-03T01:58:21.219Z"
 feature_id: E71
 priority: P2
 tags:
@@ -131,16 +131,10 @@ Decisive disposal-equivalence test `packages/app/tests/services/run-storage.test
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `docs/reports/2026-09-30-E71-run-storage-ownership.md:143`; classified cleanup retained, no terminal deletion added |
-| R2 | MET | `packages/app/tests/services/run-storage.test.ts:429`; ownership/confinement/recovery checks with existing action suites |
-| R3 | MET | `packages/app/tests/services/task-record.test.ts:697`; real acceptance; `packages/app/tests/services/history-service.test.ts:978` real imported history; repeated disposal and recreated scratch |
-| R4 | MET | `docs/reports/2026-10-01-E71-run-storage-census.json:4`; owner build parity, installed sync and plugin-smoke PASS |
-
-| Acceptance Criteria | Status | Evidence Type | Evidence |
-|---------------------|--------|---------------|----------|
-| Scenario: R5 — Temporary handoffs retain freshness and confinement safeguards | MET | command | Real agent-run/run-path/command-gate/quality-gate tests retain stale-output, escaping-link, active-owner and paused recovery safeguards |
-| Scenario: R2 — Task and feature evidence remains valid without completed scratch | MET | command | `packages/app/tests/services/task-record.test.ts:697` actual task/feature acceptance; `packages/app/tests/services/run-storage.test.ts:429` verified analytics |
-| Scenario: R7 — Completed scratch is disposable without per-workflow cleanup machinery | MET | command | `packages/app/tests/services/run-storage.test.ts:429` repeated disposal/recreation; real acceptance, importer and resumed producer suites; plugin-smoke and bundle parity |
+| R1 | MET | docs/reports/2026-09-30-E71-run-storage-ownership.md:143 classified cleanup retained, no terminal deletion added |
+| R2 | MET | packages/app/tests/services/run-storage.test.ts:429 ownership/confinement/recovery (fresh 18 pass) |
+| R3 | MET | task-record.test.ts:697 real acceptance; history-service.test.ts:978 real imported history; repeated disposal and recreated scratch |
+| R4 | MET | docs/reports/2026-10-01-E71-run-storage-census.json (corrected citation; 2026-09-30 path in task body is stale) + owner build parity, installed sync, plugin-smoke PASS |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

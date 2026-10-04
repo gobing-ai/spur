@@ -4,7 +4,7 @@ name: Make session review and dogfood produce trustworthy workflow-improvement e
 status: done
 template: standard
 created_at: 2026-09-22T00:57:58.668Z
-updated_at: "2026-09-22T06:48:51.774Z"
+updated_at: "2026-10-03T05:32:21.084Z"
 feature_id: I
 
 ac_altitude: task-local
@@ -188,8 +188,8 @@ adding fields now would duplicate adopted work without a new consumer.
 
 | Priority | Location | Finding | Disposition |
 | --- | --- | --- | --- |
-| P3 | `plugins/sp/scripts/dogfood-testing/validate-report.ts:149` | Silent `return` on present-but-unparseable cost line/footer disabled all downstream cost checks | **Closed** in remediation hop 1: `malformed_cost_line`/`malformed_footer` emitted, validation continues (`:152,157`); red-proven regression tests added |
-| P3 | `plugins/sp/references/environment-lens.md:27` | Shipped mapping row drifted from its updated satellite wording | **Closed**: row now "existing evidence-based reuse-observation P3 (task 0913)" ≡ satellite `:50` |
+| P3 | `plugins/sp/scripts/dogfood-testing/validate-report.ts:149` | Silent `return` on present-but-unparseable cost line/footer disabled all downstream cost checks | RESOLVED: **Closed** in remediation hop 1: `malformed_cost_line`/`malformed_footer` emitted, validation continues (`:152,157`); red-proven regression tests added|
+| P3 | `plugins/sp/references/environment-lens.md:27` | Shipped mapping row drifted from its updated satellite wording | RESOLVED: **Closed**: row now "existing evidence-based reuse-observation P3 (task 0913)" ≡ satellite `:50`|
 | P4 | `validate-report.ts:124-125` | Contradictory duplicate column comments | **Closed**: stale line deleted; single comment matches `cells[5]/[6]/[7]` |
 | P4 | `plugins/sp/skills/session-review/SKILL.md:88-90` | F3/F4 called "supported findings"; baseline marks them measured overhead candidates | **Closed**: precise epistemic labels ("supported observations (F1/F2) and measured overhead candidates (F3/F4)") |
 
