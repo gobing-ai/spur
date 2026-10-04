@@ -2,7 +2,11 @@ import { BrowserWindow, ipcMain } from 'electron';
 import { DESKTOP_WINDOW_CHANNEL, isSameOrigin, isWindowAction } from './ipc';
 
 /** Frameless window that loads the Board. IPC is registered separately and stays on the preload bridge. */
-export function createMainWindow(options: { url: string; preloadPath: string }): BrowserWindow {
+export function createMainWindow(options: {
+    url: string;
+    preloadPath: string;
+    platform?: NodeJS.Platform;
+}): BrowserWindow {
     const win = new BrowserWindow({
         width: 1280,
         height: 840,
@@ -13,7 +17,7 @@ export function createMainWindow(options: { url: string; preloadPath: string }):
         frame: false,
         titleBarStyle: 'hidden',
         trafficLightPosition: { x: 12, y: 12 },
-        ...(process.platform === 'darwin'
+        ...((options.platform ?? process.platform) === 'darwin'
             ? {}
             : {
                   titleBarOverlay: {

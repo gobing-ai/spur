@@ -62,12 +62,12 @@ export const ipcMessages: unknown[][] = [];
 export const exposed: Record<string, unknown> = {};
 export const app = Object.assign(new EventEmitter(), {
     isPackaged: false,
-    requestSingleInstanceLock: () => false,
+    requestSingleInstanceLock: (): boolean => false,
     quit: () => {},
     whenReady: () => Promise.resolve(),
 });
 export const dialog = {
-    showErrorBox: () => {},
+    showErrorBox: (_title: string, _message: string) => {},
     showOpenDialog: async () => ({ canceled: true, filePaths: [] as string[] }),
 };
 mock.module('electron', () => ({
