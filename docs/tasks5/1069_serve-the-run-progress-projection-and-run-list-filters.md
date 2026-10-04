@@ -4,7 +4,7 @@ name: Serve the run progress projection and run list filters
 status: wip
 template: feature-impl
 created_at: 2026-10-04T02:46:12.527Z
-updated_at: "2026-10-04T04:48:36.257Z"
+updated_at: "2026-10-04T07:11:29.198Z"
 feature_id: E72
 priority: P2
 tags: ["observability", "server", "contracts", "fleet:auto"]
