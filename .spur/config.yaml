@@ -119,3 +119,20 @@ tasks:
 
 features:
   dir: docs/features
+
+# ── Agent fleet (G65 / docs/design/fleet-config-declaration.md) ──
+# Project-layer only. `enabled: true` makes `spur serve` materialize and
+# autostart every enabled member; preview with `spur projects list --fleet`.
+# Role-only members resolve their executor through the global tier ladder
+# (~/.config/spur/config.yaml agent.roles/executors); pin `executor:` to override.
+agent:
+  fleet:
+    enabled: true
+    # rest = no autonomous dispatch (drive work with `--agent fleet`);
+    # gtd = auto-dispatch todo tasks tagged `fleet:auto`, by priority.
+    strategy: gtd
+    orchestrator: planner-1
+    members:
+      - { role: planner, purpose: orchestrator }  # planner-1
+      - { role: coder }                           # coder-1
+      - { role: reviewer }                        # reviewer-1

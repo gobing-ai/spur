@@ -4,10 +4,10 @@ name: Serve the run progress projection and run list filters
 status: todo
 template: feature-impl
 created_at: 2026-10-04T02:46:12.527Z
-updated_at: "2026-10-04T03:05:40.242Z"
+updated_at: "2026-10-04T04:10:42.170Z"
 feature_id: E72
 priority: P2
-tags:
+tags: ["observability", "server", "contracts", "fleet:auto"]
   - observability
   - server
   - contracts
