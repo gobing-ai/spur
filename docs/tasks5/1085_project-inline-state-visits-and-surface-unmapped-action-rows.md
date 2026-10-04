@@ -4,8 +4,9 @@ name: Project inline state visits and surface unmapped action rows in the progre
 status: backlog
 template: standard
 created_at: 2026-10-04T22:48:26.495Z
-updated_at: "2026-10-04T22:49:34.886Z"
+updated_at: "2026-10-04T22:56:47.823Z"
 
+feature_id: E72
 ---
 
 ## 1085. Project inline state visits and surface unmapped action rows in the progress projection
@@ -66,26 +67,21 @@ agent-bar overlay occlusion) — they belong to a separate small task.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — An inline run's detail shows every state it visited
+- [ ] AC1 — An inline run's detail shows every state it visited and hides no recorded action
 
 Task-local verification: a projection fixture seeded with `action_runs` rows across several states and
 zero transition rows reports each of those states as visited (in row order) with its attempts, and a
-terminal run has no visited state left `pending`. The live check is
-`spur workflow progress inline-1071-2be5d0be --json` on this repo's DB: `implement`, `test`, `review`,
-`verify`, `record` and `done` must appear visited with their attempts, not `pending`.
+terminal run has no visited state left `pending`; a row whose state the run did not visit, and a row
+whose node matches no declared state, each produce their own diagnostic. Live check on this repo's DB:
+`spur workflow progress inline-1071-2be5d0be --json` shows `implement`, `test`, `review`, `verify`,
+`record` and `done` visited with their attempts instead of `pending`.
 
-- [ ] AC2 — Recorded action rows are never silently hidden
-
-Task-local verification: a row whose node matches no declared state, and a row for a state the run did
-not visit, each produce their own diagnostic; no row disappears without one. Pinned by a fixture
-asserting `diagnostics` counts and codes for both cases.
-
-- [ ] AC3 — Engine-run projections are unchanged
+- [ ] AC2 — A run detail shows states, actions with durations and transitions
 
 Task-local verification: an engine-style fixture (transition rows plus state visits) produces the same
-visits, attempts, statuses and empty diagnostics as before the change — for example the seeded
-projection in `packages/app/tests/workflow/progress-projection.test.ts:63-77` extended with
-transitions; `apps/web/tests/modules/observability/trace-tab.test.tsx` keeps passing unchanged.
+visits, attempts, statuses and empty diagnostics as before the change — the seeded projection in
+`packages/app/tests/workflow/progress-projection.test.ts:63-77` extended with transitions — and
+`apps/web/tests/modules/observability/trace-tab.test.tsx` keeps passing unchanged.
 
 ### Q&A
 
