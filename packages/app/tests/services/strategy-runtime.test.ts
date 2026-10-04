@@ -634,6 +634,42 @@ describe('managed GTD dispatch and reconciliation (G62)', () => {
         }
     });
 
+    test('an errored dispatch of a still-todo task is retried, up to the attempt cap', async () => {
+        const rig = await makeRig({ strategy: 'gtd' });
+        try {
+            await rig.claims.claim(rig.project, 'orchestrator', 'proj-orch', 30_000);
+            const runs = new CoordinationRunDao(rig.db);
+            const errored = async (runId: string) => {
+                await runs.insertStart({
+                    specId: 'proj-coder',
+                    agentKind: 'pi',
+                    processId: null,
+                    runId,
+                    generation: 1,
+                    startedAt: new Date().toISOString(),
+                    taskId: '0841',
+                });
+                // e.g. the provider rejected the prompt (429 quota) before any work began.
+                await runs.updateExit(runId, 'errored', new Date().toISOString(), '[]', {
+                    messageIds: [],
+                    taskId: '0841',
+                    outcome: 'errored',
+                });
+            };
+            await errored('attempt-1');
+            const retry = await rig.runtime.selectNext(rig.project);
+            expect(retry.holds).not.toContainEqual({ wbs: '0841', reason: 'not-ready' });
+            expect(retry.decisions.some((d) => d.taskId === '0841')).toBe(true);
+
+            await errored('attempt-2');
+            await errored('attempt-3');
+            const capped = await rig.runtime.selectNext(rig.project);
+            expect(capped.holds).toContainEqual({ wbs: '0841', reason: 'not-ready' });
+        } finally {
+            await rig.cleanup();
+        }
+    });
+
     test('running readers consume instance capacity and prior task receipts prevent duplicate dispatch after restart', async () => {
         const rig = await makeRig({ strategy: 'gtd' });
         try {

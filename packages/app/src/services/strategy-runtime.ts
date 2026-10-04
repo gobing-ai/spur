@@ -29,6 +29,8 @@ export const DEFAULT_STRATEGY: StrategyName = 'rest';
 
 /** The "authorized" carrier (Q&A — CLOSED): the task tag `fleet:auto`. Default is never-dispatch. */
 export const FLEET_AUTO_TAG = 'fleet:auto';
+/** Errored dispatches of a still-todo task before GTD stops retrying it. */
+const MAX_DISPATCH_ATTEMPTS = 3;
 
 /**
  * Why a candidate was not dispatched (R4). Deliberately DISTINCT from G61
@@ -451,10 +453,15 @@ export class StrategyRuntime {
         const blocked = new Map<string, string | null>();
         for (const candidate of candidates) {
             const previous = await runs.listByTaskId(candidate.wbs);
-            // A prior invocation is not a fresh todo, even after a restart.
+            // A prior invocation is not a fresh todo, even after a restart — unless every
+            // prior run errored while the task stayed todo (e.g. a provider 429 before any
+            // work), which is retried up to a cap so a dead provider cannot hot-loop.
             // Malformed candidate documents hold that task without starving others.
+            const fresh =
+                previous.length === 0 ||
+                (previous.length < MAX_DISPATCH_ATTEMPTS && previous.every((run) => run.status === 'errored'));
             try {
-                const eligible = previous.length === 0 && (await this.ctx.ready?.(candidate)) === true;
+                const eligible = fresh && (await this.ctx.ready?.(candidate)) === true;
                 ready.set(candidate.wbs, eligible);
                 if (eligible) blocked.set(candidate.wbs, await this.ctx.dependencyBlocked(normalized, candidate.wbs));
             } catch {
