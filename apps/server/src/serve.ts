@@ -653,6 +653,8 @@ export async function startServer(options: StartServerOptions, deps: StartServer
     let cancellation: string | undefined;
     let bootComplete = false;
     let closeContextDb: (() => Promise<void>) | undefined;
+    let cleanupStartedServices: (() => Promise<void>) | undefined;
+    let killRemainingJobChildren: (() => void) | undefined;
     let detachSignals = (): void => {};
     let shutdownReady: ((reason: string) => Promise<void>) | undefined;
     const parentIpc = typeof process.send === 'function';
@@ -796,7 +798,8 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                 const projectRegistry = new ProjectRegistry();
                 const projectCwd = projectRoot;
                 let registered = false;
-                const cleanupServices = async (): Promise<void> => {
+                let servicesCleanup: Promise<void> | undefined;
+                const drainServices = async (): Promise<void> => {
                     if (jobWorkerStartTimer) {
                         clearTimeout(jobWorkerStartTimer);
                         jobWorkerStartTimer = undefined;
@@ -827,6 +830,14 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                         appRt.logger.warn('Supervisor shutdown error', { error: String(error) });
                     }
                     server?.stop(true);
+                };
+                // The scheduler plugin starts after this callback resolves. Its
+                // failure still owns every service created here; outer startup
+                // cleanup must drain them exactly once before releasing ownership.
+                const cleanupServices = (): Promise<void> => (servicesCleanup ??= drainServices());
+                cleanupStartedServices = cleanupServices;
+                killRemainingJobChildren = (): void => {
+                    if (jobProcessRegistry) terminateJobChildren(jobProcessRegistry, 'SIGKILL');
                 };
                 const checkBootCancellation = async (): Promise<void> => {
                     if (cancellation) throw cancelled;
@@ -1205,13 +1216,11 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                         await cleanupServices();
                         await appRt.stop('shutdown' as ApplicationStopReason);
                         await closeContextDb?.();
+                        // Escalate only after handlers and both DB owners drain,
+                        // while the project ownership claim is still retained.
+                        killRemainingJobChildren?.();
                         owner?.release();
                         owner = undefined;
-                        // Escalation for children that ignored SIGTERM; nothing after this
-                        // point drains handlers, so SIGKILL cannot corrupt an in-flight write.
-                        if (jobProcessRegistry) {
-                            terminateJobChildren(jobProcessRegistry, 'SIGKILL');
-                        }
                         process.exit(0);
                     };
 
@@ -1261,11 +1270,16 @@ export async function startServer(options: StartServerOptions, deps: StartServer
     } catch (error) {
         detachParent();
         detachSignals();
-        // runNodeApplication tears down its plugins before rejecting. The lazy
-        // server context adapter is separately owned and must also close.
+        // runNodeApplication tears down its plugins before rejecting, including
+        // failures after the user callback (for example scheduler startup). Drain
+        // callback-owned services before closing the separately owned context DB.
+        await cleanupStartedServices?.();
         await closeContextDb?.();
         // A graceful runtime-stop failure cannot prove the DB/plugin ring closed.
-        if (!bootComplete) owner?.release();
+        if (!bootComplete) {
+            killRemainingJobChildren?.();
+            owner?.release();
+        }
         if (error !== cancelled) throw error;
         if (parentIpc && process.connected) process.disconnect?.();
     }

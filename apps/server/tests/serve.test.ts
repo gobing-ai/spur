@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
@@ -1277,6 +1277,75 @@ describe('startServer', () => {
             });
         }
     }
+
+    test('a later runtime plugin failure drains callback services before releasing ownership', async () => {
+        const { sigHandlers } = installProcessMocks();
+        const order: string[] = [];
+        const failure = new Error('scheduler startup failed');
+        Bun.serve = (() => ({ stop: () => order.push('listener-stop') })) as unknown as typeof Bun.serve;
+        const lookup = spyOn(ProjectRegistry.prototype, 'getByPath').mockResolvedValue(undefined);
+        const register = spyOn(ProjectRegistry.prototype, 'upsert').mockImplementation(async (entry) => {
+            order.push('registry-upsert');
+            return { ...entry, port: entry.port ?? 0 };
+        });
+        const clear = spyOn(ProjectRegistry.prototype, 'setPort').mockImplementation(async (_cwd, port) => {
+            expect(port).toBe(0);
+            order.push('registry-clear');
+            return true;
+        });
+        try {
+            await expect(
+                startServer(
+                    { port: 5002, host: '127.0.0.1', openBrowser: false, keepAlive: false },
+                    makeDeps({
+                        acquireProjectServerOwner: () => ({ release: () => order.push('owner-release') }),
+                        runNodeApplication: (async (opts: { start: (rt: ApplicationRuntime) => Promise<void> }) => {
+                            const rt = fakeRuntime();
+                            rt.stop = async () => {
+                                order.push('runtime-stop');
+                            };
+                            await opts.start(rt);
+                            // The upstream scheduler starts after the user callback and
+                            // tears down its plugins before a fail-fast rejection.
+                            order.push('scheduler-failure');
+                            await rt.stop('error');
+                            throw failure;
+                        }) as unknown as StartServerDeps['runNodeApplication'],
+                        createServerContext: (() => ({
+                            cwd: '/tmp/project',
+                            eventBus: () => {
+                                throw new Error('events disabled in fixture');
+                            },
+                            closeDb: async () => {
+                                order.push('context-close');
+                            },
+                            supervisor: () => ({
+                                stopAll: async () => {
+                                    order.push('supervisor-stop');
+                                },
+                            }),
+                        })) as unknown as StartServerDeps['createServerContext'],
+                    }),
+                ),
+            ).rejects.toBe(failure);
+            expect(order).toEqual([
+                'registry-upsert',
+                'scheduler-failure',
+                'runtime-stop',
+                'registry-clear',
+                'supervisor-stop',
+                'listener-stop',
+                'context-close',
+                'owner-release',
+            ]);
+            expect(sigHandlers.SIGINT).toBeUndefined();
+            expect(sigHandlers.SIGTERM).toBeUndefined();
+        } finally {
+            lookup.mockRestore();
+            register.mockRestore();
+            clear.mockRestore();
+        }
+    });
 
     test('an already disconnected IPC parent cancels before claiming or booting', async () => {
         const connected = Object.getOwnPropertyDescriptor(process, 'connected');
