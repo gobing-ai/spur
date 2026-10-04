@@ -120,6 +120,12 @@ limitations.
 — the board is a module hub: add a self-contained React view with one directory and zero
 wiring. Covers the `WebModule` contract, the RPC/UI seams, and what not to wire by hand.
 
+**Customizing your project's Board modules (downstream users):**
+➡️ **[How to Customize Project Modules on the Spur Board](./how_to_customize_project_modules.md)**
+— add your own native React tool or an embedded URL app to an installed Spur's Board through
+`bootstrap.modules` in `.spur/config.yaml`, with no edits to the Spur package. Covers the Vite build,
+the declaration fields, the serve preflight, trust limits and troubleshooting.
+
 **Environment variables (the complete wired-in inventory):**
 ➡️ **[Environment Variables](./environment_variables.md)**
 — every env var the product reads, grouped by contract type (deployment plane, config overrides,

@@ -177,6 +177,9 @@ describe('cross-declaration rules (R2)', () => {
 /** Repo-relative path to the published authoring guide. */
 const AUTHORING_GUIDE = new URL('../../../docs/design/downstream-board-modules.md', import.meta.url);
 
+/** Repo-relative path to the downstream end-user walkthrough. */
+const USER_HELP_GUIDE = new URL('../../../docs/help/how_to_customize_project_modules.md', import.meta.url);
+
 /** Every fenced YAML block in the guide, with its 1-based opening-fence line. */
 function yamlFences(markdown: string): { line: number; body: string }[] {
     return [...markdown.matchAll(/^```ya?ml[^\n]*\n([\s\S]*?)^```/gm)].map((match) => ({
@@ -214,8 +217,13 @@ describe('published authoring examples (R5)', () => {
         expect(validateBoardModuleDeclarations(modules, reserved)).toBe(modules);
     });
 
-    test('every YAML fence in the guide is a valid declaration example (R1)', async () => {
-        const guide = await readFile(AUTHORING_GUIDE, 'utf8');
+    // The downstream help walkthrough publishes the same declarations to end users, so it is held to
+    // the same rule.
+    test.each([
+        ['downstream-board-modules.md', AUTHORING_GUIDE],
+        ['how_to_customize_project_modules.md', USER_HELP_GUIDE],
+    ])('every YAML fence in %s is a valid declaration example (R1)', async (name, path) => {
+        const guide = await readFile(path, 'utf8');
         const fences = yamlFences(guide);
         expect(fences.length).toBeGreaterThan(0);
 
@@ -225,7 +233,7 @@ describe('published authoring examples (R5)', () => {
                 const config = spurConfigSchema.parse(parse(fence.body));
                 validateBoardModuleDeclarations(config.bootstrap?.modules ?? [], reserved);
             } catch (thrown) {
-                failures.push(`downstream-board-modules.md:${fence.line}: ${(thrown as Error).message}`);
+                failures.push(`${name}:${fence.line}: ${(thrown as Error).message}`);
             }
         }
         expect(failures).toEqual([]);
