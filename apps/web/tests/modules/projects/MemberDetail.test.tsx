@@ -294,11 +294,17 @@ describe('member session line (0897 R3)', () => {
         });
         await act(async () => {});
         expect(view.container.querySelector('[data-member-session]')?.textContent).toContain('resume · sess-3f9');
+        expect(view.container.querySelector('[data-copy-session-id]')).not.toBeNull();
+        expect(view.container.querySelector('[data-member-stream-url]')?.textContent).toContain(
+            '/api/processes/a1/stream',
+        );
+        expect(view.container.querySelector('[data-stream-session-id]')?.textContent).toContain('sess-3f9c2a1d-beef');
         view.unmount();
 
         const plain = renderDetail(entry());
         await act(async () => {});
         expect(plain.container.querySelector('[data-member-session]')?.textContent).toContain('—');
+        expect(plain.container.querySelector('[data-copy-session-id]')).toBeNull();
         plain.unmount();
         cleanup();
     });

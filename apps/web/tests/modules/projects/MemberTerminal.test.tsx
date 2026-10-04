@@ -199,6 +199,27 @@ describe('MemberTerminal (component)', () => {
         resetMockSources();
     });
 
+    test('renders session badge in header when sessionId is provided', async () => {
+        installMockEventSource();
+        resetMockSources();
+        setFetchForTesting(mockFetch(async () => new Response(JSON.stringify({ processes: [] }), { status: 200 })));
+
+        const { container } = render(
+            React.createElement(MemberTerminal, { agentId: 'alpha-claude', sessionId: 'sess-abc12345-xyz' }),
+        );
+
+        await waitFor(() => {
+            const sessionBadge = container.querySelector('[data-terminal-session]');
+            expect(sessionBadge).not.toBeNull();
+            expect(sessionBadge?.textContent).toContain('sess:sess-abc');
+            expect(sessionBadge?.getAttribute('title')).toBe('Session ID: sess-abc12345-xyz');
+        });
+
+        resetFetchForTesting();
+        restoreEventSource();
+        resetMockSources();
+    });
+
     test('AC6: stderr frames are styled distinctly from stdout', async () => {
         installMockEventSource();
         resetMockSources();

@@ -150,7 +150,7 @@ const processesUrl = () => `${resolveApiUrl()}/processes`;
  * splices from the front). The terminal reconnects the SSE across a respawn
  * and resumes from the last `seq` (R4).
  */
-export default function MemberTerminal({ agentId }: { agentId: string }) {
+export default function MemberTerminal({ agentId, sessionId }: { agentId: string; sessionId?: string }) {
     const [frames, setFrames] = useState<Frame[]>([]);
     const [status, setStatus] = useState<string>('unknown');
     const [input, setInput] = useState('');
@@ -316,6 +316,15 @@ export default function MemberTerminal({ agentId }: { agentId: string }) {
             <div className="px-4 py-2 border-b border-spur-border bg-base-200 shrink-0 flex items-center gap-2">
                 <span className="text-xs font-semibold text-spur-text uppercase tracking-wide">Terminal</span>
                 <span className="font-mono text-xs text-spur-text-muted">{agentId}</span>
+                {sessionId && (
+                    <span
+                        className="font-mono text-[10px] text-spur-text-muted hidden sm:inline"
+                        data-terminal-session
+                        title={`Session ID: ${sessionId}`}
+                    >
+                        sess:{sessionId.slice(0, 8)}…
+                    </span>
+                )}
                 <Badge variant={isRunning ? 'success' : 'ghost'} size="xs" data-terminal-status>
                     {status}
                 </Badge>

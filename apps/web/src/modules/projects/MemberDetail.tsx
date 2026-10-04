@@ -48,12 +48,14 @@ export default function MemberDetail({
             ? roleConfig.stages
             : (project.fleet?.stages?.filter((s) => s.role === roleName).map((s) => s.id) ?? []);
     const executorName = entry.declared?.executor ?? roleConfig?.electedExecutor ?? 'Unavailable';
+    const activeSession = entry.observed.session ?? entry.declared?.session;
     const [messages, setMessages] = useState<InboxMessage[] | null>(null);
     const [activity, setActivity] = useState<ActivityRow[] | null>(null);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [showTerminal, setShowTerminal] = useState(true);
     const [showInfoPopup, setShowInfoPopup] = useState(false);
+    const [copied, setCopied] = useState(false);
     const popupRef = useRef<HTMLDivElement>(null);
 
     // Close details popup on click outside.
@@ -231,13 +233,32 @@ export default function MemberDetail({
                                 {entry.observed.exitCode !== null ? ` — exit ${entry.observed.exitCode}` : ''}
                             </span>
                         </span>
-                        <span className="text-spur-text-muted" data-member-session>
-                            session:{' '}
-                            <span className="font-mono text-spur-text">
-                                {sessionLabel(entry.observed.session ?? entry.declared?.session) ?? '—'}
+                        <span className="text-spur-text-muted flex items-center justify-between" data-member-session>
+                            <span>
+                                session:{' '}
+                                <span className="font-mono text-spur-text">{sessionLabel(activeSession) ?? '—'}</span>
                             </span>
+                            {activeSession?.id && (
+                                <button
+                                    type="button"
+                                    className="px-1.5 py-0.5 rounded text-[10px] bg-spur-surface-2 hover:bg-spur-surface-3 border border-spur-border text-spur-text cursor-pointer transition-colors"
+                                    onClick={() => {
+                                        void navigator.clipboard?.writeText(activeSession.id!);
+                                        setCopied(true);
+                                        setTimeout(() => setCopied(false), 1500);
+                                    }}
+                                    title={`Copy session id: ${activeSession.id}`}
+                                    data-copy-session-id
+                                >
+                                    {copied ? 'copied!' : 'copy id'}
+                                </button>
+                            )}
                         </span>
                         <dl className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 pt-1 border-t border-spur-border">
+                            <dt className="text-spur-text-muted">Process Stream</dt>
+                            <dd className="font-mono text-spur-text break-all" data-member-stream-url>
+                                /api/processes/{entry.instanceId}/stream
+                            </dd>
                             <dt className="text-spur-text-muted">Role</dt>
                             <dd className="font-mono text-spur-text break-all" data-member-role>
                                 {entry.declared?.role ?? 'member'}
@@ -340,11 +361,26 @@ export default function MemberDetail({
             {showTerminal && (
                 <div className="flex-1 min-h-[180px] border-b border-spur-border flex flex-col">
                     <div className="px-3 py-1 bg-spur-surface-2 border-b border-spur-border text-[11px] font-mono text-spur-text-muted flex items-center justify-between shrink-0">
-                        <span>stdout / stderr live stream</span>
-                        <span className="text-[10px] text-spur-accent">SSE</span>
+                        <div className="flex items-center gap-2">
+                            <span>stdout / stderr live stream</span>
+                            <span className="text-[10px] px-1.5 py-0.2 rounded bg-spur-surface-3 text-spur-text-muted border border-spur-border/70 hidden sm:inline">
+                                /api/processes/{entry.instanceId}/stream
+                            </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            {activeSession?.id && (
+                                <span
+                                    className="text-[10px] text-spur-text-muted hidden md:inline"
+                                    data-stream-session-id
+                                >
+                                    session: <code className="text-spur-accent font-mono">{activeSession.id}</code>
+                                </span>
+                            )}
+                            <span className="text-[10px] text-spur-accent font-semibold">SSE</span>
+                        </div>
                     </div>
                     <div className="flex-1 min-h-0">
-                        <MemberTerminal agentId={entry.instanceId} />
+                        <MemberTerminal agentId={entry.instanceId} sessionId={activeSession?.id} />
                     </div>
                 </div>
             )}
