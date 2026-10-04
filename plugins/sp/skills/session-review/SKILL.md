@@ -46,9 +46,10 @@ cross-agent windows, recurrence, trends, or quantitative performance forensics.
   name the confirmation needed.
 - State `not available` when compaction or missing output removed evidence. Never reconstruct it from
   memory or claim a verification that did not run.
-- Derive timing only from timestamps and tool-call records visible in the active session. Use
-  non-overlapping stages whose durations sum to elapsed time; render unavailable duration or call
-  counts as `n/a` instead of estimating them.
+- Derive timing and tokens only from the host transcript measurement (Protocol step 1): the visible
+  conversation carries no timestamps or usage, so never estimate them from it. Use non-overlapping
+  stages whose durations sum to elapsed time; render a value as `n/a` only when the measurement
+  reports `available: false` or omits it.
 
 ## Triage mode (`--triage`)
 
@@ -77,7 +78,12 @@ three buckets — never skip triage and start fixing from the raw findings list.
 ## Protocol
 
 1. **Resolve scope.** Review the active session from the operator's initiating request through the
-   latest result. Use `[focus]` only to rank relevant material.
+   latest result. Use `[focus]` only to rank relevant material. Measure it with
+   `node "$(superskill script path sp session-timeline.mjs)" --group "<ranges>"`: one segment per
+   operator prompt, read-only from the host transcript. Run it once without `--group` to list the
+   segments, then map them to stages (`"1-3,4,5-6"`). It splits each segment into `work` and
+   operator `wait` (idle before the next prompt plus AskUserQuestion answer time) and counts tokens
+   once per message id.
 2. **Inventory outcomes.** List requested outcomes and classify each as completed, partial, blocked,
    or not attempted. Collapse repeated attempts into one outcome.
 3. **Classify issues.** For every material issue, distinguish resolved, open, or attempted. Record
@@ -108,13 +114,15 @@ State the overall result in one to three sentences, including partial or blocked
 Summarize elapsed time and, when supported by evidence, productive work, avoidable setup/recovery,
 and operator wait time. Then render non-overlapping stages:
 
-| Stage | Time | Tool calls | Assessment |
-| --- | ---: | ---: | --- |
+| Stage | Time | Wait | Tool calls | Token | Assessment |
+| --- | ---: | ---: | ---: | ---: | --- |
 
 Format durations as `M:SS` below one hour and `H:MM:SS` at one hour or above (`1:44`, not `1m44s`;
 `0:33`, not `33s`). Include a `Total` row when elapsed time is available. Keep operator approval
-waits separate from execution bottlenecks. Use `n/a` for any value not supported by the active
-session evidence.
+waits separate from execution bottlenecks. Time is the stage `work` and Wait its operator `wait`.
+Token renders `<in> / <out>` in compact units (`3.2M / 41k`): in = input + cache creation + cache
+read, out = output. These are measured session counts, not the 0912 baseline token/USD claims that
+step 4 excludes. Use `n/a` for any value not supported by the measurement.
 
 ### Resolved issues
 

@@ -82,6 +82,11 @@
             "twin": "script-root.mjs"
         },
         {
+            "rel": "session-timeline.ts",
+            "contract": "standard",
+            "twin": "session-timeline.mjs"
+        },
+        {
             "rel": "task-diffstat.ts",
             "contract": "standard",
             "twin": "task-diffstat.mjs"

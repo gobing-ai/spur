@@ -1,0 +1,164 @@
+import { describe, expect, test } from 'bun:test';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { buildTimeline, formatDuration, main, parseGroups, resolveTranscript } from '../scripts/session-timeline';
+
+/**
+ * session-timeline feeds the /sp:dev-review-session Time breakdown. Failure modes, written before
+ * the code:
+ *  F1 one assistant response is split over several records that repeat the same usage → tokens
+ *     counted N times unless deduplicated by message.id;
+ *  F2 tool_result records are `type: user` → each one would open a fake prompt segment;
+ *  F3 isMeta (skill bodies) and isCompactSummary records would open fake segments;
+ *  F4 the idle gap between the last activity and the next prompt counted as work instead of wait;
+ *  F5 the final segment has no next prompt → it must not invent a wait;
+ *  F6 malformed lines or records without a timestamp crash the parse or skew timing;
+ *  F7 no session id / missing file → must report unavailable (exit 0) rather than guess another
+ *     session's transcript; an id with path characters must be refused;
+ *  F8 stage grouping out of range or overlapping silently mis-sums the table.
+ *  F9 an AskUserQuestion gate blocks inside a segment → the operator's answer time counted as work.
+ */
+
+const T0 = Date.parse('2026-10-04T03:00:00.000Z');
+const at = (s: number): string => new Date(T0 + s * 1000).toISOString();
+const usage = (out: number) => ({
+    input_tokens: 2,
+    cache_creation_input_tokens: 100,
+    cache_read_input_tokens: 1000,
+    output_tokens: out,
+});
+
+function fixture(): string[] {
+    const rows: unknown[] = [
+        { type: 'user', timestamp: at(0), message: { role: 'user', content: 'first request' } },
+        // F1: one response (m1) split into two records with identical usage
+        {
+            type: 'assistant',
+            timestamp: at(5),
+            message: { id: 'm1', content: [{ type: 'thinking' }], usage: usage(50) },
+        },
+        {
+            type: 'assistant',
+            timestamp: at(6),
+            message: { id: 'm1', content: [{ type: 'tool_use', id: 't1' }], usage: usage(50) },
+        },
+        // F2: tool result is not a prompt
+        { type: 'user', timestamp: at(10), message: { role: 'user', content: [{ type: 'tool_result' }] } },
+        // F3: meta + compaction summary are not prompts
+        { type: 'user', isMeta: true, timestamp: at(11), message: { role: 'user', content: 'skill body' } },
+        { type: 'user', isCompactSummary: true, timestamp: at(12), message: { role: 'user', content: 'summary' } },
+        { type: 'assistant', timestamp: at(20), message: { id: 'm2', content: [{ type: 'text' }], usage: usage(10) } },
+        'not json', // F6
+        { type: 'attachment' }, // F6: no timestamp
+        // F4: operator idles 0:40 before the second prompt
+        { type: 'user', timestamp: at(60), message: { role: 'user', content: [{ type: 'text', text: 'second' }] } },
+        {
+            type: 'assistant',
+            timestamp: at(90),
+            message: {
+                id: 'm3',
+                content: [
+                    { type: 'tool_use', id: 't2' },
+                    { type: 'tool_use', id: 't3' },
+                ],
+                usage: usage(5),
+            },
+        },
+    ];
+    return rows.map((r) => (typeof r === 'string' ? r : JSON.stringify(r)));
+}
+
+describe('buildTimeline', () => {
+    const tl = buildTimeline(fixture());
+
+    test('segments open only on real operator prompts (F2, F3)', () => {
+        expect(tl.segments.map((s) => s.prompt)).toEqual(['first request', 'second']);
+    });
+
+    test('work ends at the last activity; the idle gap is wait (F4, F5)', () => {
+        expect(tl.segments[0]).toMatchObject({ workMs: 20_000, waitMs: 40_000, toolCalls: 1 });
+        expect(tl.segments[1]).toMatchObject({ workMs: 30_000, waitMs: 0, toolCalls: 2 });
+        expect(tl.totals).toMatchObject({ elapsedMs: 90_000, workMs: 50_000, waitMs: 40_000, toolCalls: 3 });
+    });
+
+    test('tokens are counted once per message id (F1)', () => {
+        expect(tl.segments[0]?.tokens).toEqual({ input: 4, cacheCreate: 200, cacheRead: 2000, output: 60 });
+        expect(tl.totals.tokens.output).toBe(65);
+    });
+
+    test('malformed lines are counted, not fatal (F6)', () => {
+        expect(tl.skippedLines).toBe(1);
+    });
+});
+
+describe('stage grouping (F8)', () => {
+    test('parses ranges and singles', () => {
+        expect(parseGroups('1-2,3', 3)).toEqual([
+            [1, 2],
+            [3, 3],
+        ]);
+    });
+
+    test('rejects out-of-range, reversed and overlapping groups', () => {
+        expect(() => parseGroups('1-4', 3)).toThrow();
+        expect(() => parseGroups('2-1', 3)).toThrow();
+        expect(() => parseGroups('1-2,2-3', 3)).toThrow();
+    });
+
+    test('stage sums equal segment sums', () => {
+        const tl = buildTimeline(fixture(), '1-2');
+        expect(tl.stages?.[0]).toMatchObject({ segments: '1-2', workMs: 50_000, waitMs: 40_000, toolCalls: 3 });
+    });
+});
+
+describe('resolveTranscript (F7)', () => {
+    test('no session id and no override is unavailable', () => {
+        expect(resolveTranscript({}, '/nope')).toEqual({ ok: false, reason: expect.stringContaining('session id') });
+    });
+
+    test('an id with path characters is refused', () => {
+        expect(resolveTranscript({ CLAUDE_CODE_SESSION_ID: '../x' }, '/nope').ok).toBe(false);
+    });
+
+    test('finds <projects>/<any>/<id>.jsonl', () => {
+        const root = mkdtempSync(join(tmpdir(), 'session-timeline-'));
+        const dir = join(root, '-some-project');
+        mkdirSync(dir);
+        writeFileSync(join(dir, 'abc-123.jsonl'), '');
+        expect(resolveTranscript({ CLAUDE_CODE_SESSION_ID: 'abc-123' }, root)).toEqual({
+            ok: true,
+            path: join(dir, 'abc-123.jsonl'),
+        });
+    });
+
+    test('main reports unavailable with exit 0', () => {
+        const out: string[] = [];
+        expect(main([], {}, (s) => out.push(s), '/nope')).toBe(0);
+        expect(JSON.parse(out.join(''))).toMatchObject({ available: false });
+    });
+});
+
+test('formatDuration uses M:SS below an hour and H:MM:SS above', () => {
+    expect(formatDuration(33_000)).toBe('0:33');
+    expect(formatDuration(104_000)).toBe('1:44');
+    expect(formatDuration(3_725_000)).toBe('1:02:05');
+});
+
+test('time answering an AskUserQuestion inside a segment is wait, not work (F9)', () => {
+    const rows = [
+        { type: 'user', timestamp: at(0), message: { role: 'user', content: 'plan it' } },
+        {
+            type: 'assistant',
+            timestamp: at(10),
+            message: { id: 'a1', content: [{ type: 'tool_use', id: 'q1', name: 'AskUserQuestion' }] },
+        },
+        {
+            type: 'user',
+            timestamp: at(130),
+            message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'q1' }] },
+        },
+        { type: 'assistant', timestamp: at(150), message: { id: 'a2', content: [{ type: 'text' }] } },
+    ].map((r) => JSON.stringify(r));
+    expect(buildTimeline(rows).segments[0]).toMatchObject({ workMs: 30_000, waitMs: 120_000, toolCalls: 1 });
+});
