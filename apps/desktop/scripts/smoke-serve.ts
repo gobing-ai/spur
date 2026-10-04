@@ -14,6 +14,7 @@ const repo = findRepoRoot(import.meta.dir);
 if (!repo) throw new Error('Could not find the spur repo root (apps/cli/src/index.ts).');
 
 const project = await mkdtemp(join(tmpdir(), 'spur-desktop-smoke-'));
+let server: Awaited<ReturnType<typeof startDesktopServer>> | undefined;
 try {
     const layout = resolveLayout({
         isPackaged: false,
@@ -22,7 +23,7 @@ try {
         env: { ...getEnvVars(), SPUR_PROJECT_ROOT: project, SPUR_DESKTOP_MODE: 'dev' },
         argv: [],
     });
-    const server = await startDesktopServer({
+    server = await startDesktopServer({
         layout,
         healthTimeoutMs: 90_000,
         stdio: 'inherit',
@@ -39,7 +40,7 @@ try {
         }),
     );
     if (body.status !== 'ok') throw new Error(`health status was ${String(body.status)}`);
-    await server.stop();
 } finally {
+    await server?.stop();
     await rm(project, { recursive: true, force: true });
 }

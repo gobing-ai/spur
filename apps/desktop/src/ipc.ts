@@ -20,3 +20,6 @@ export function isSameOrigin(target: string, origin: string): boolean {
         return false;
     }
 }
+
+/** Private trusted-click channel; never exposed on the renderer bridge. */
+export const DESKTOP_EXTERNAL_CHANNEL = 'desktop:external-link';

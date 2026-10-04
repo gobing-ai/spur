@@ -1,5 +1,5 @@
 import { BrowserWindow, dialog, ipcMain, shell } from 'electron';
-import { DESKTOP_WINDOW_CHANNEL, isSameOrigin, isWindowAction } from './ipc';
+import { DESKTOP_EXTERNAL_CHANNEL, DESKTOP_WINDOW_CHANNEL, isSameOrigin, isWindowAction } from './ipc';
 
 /** Native window with a hidden title bar that loads the Board. IPC is registered separately and stays on the preload bridge. */
 export function createMainWindow(options: {
@@ -38,7 +38,17 @@ export function createMainWindow(options: {
     const origin = new URL(options.url).origin;
     win.webContents.session.setPermissionCheckHandler(() => false);
     win.webContents.session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
-    win.webContents.setWindowOpenHandler(({ url }) => {
+    // Window-open requests include subframes and scripted popups; they never
+    // authorize an OS action. Only the preload's trusted main-frame click does.
+    win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    const onExternalLink = (event: Electron.IpcMainEvent, url: unknown): void => {
+        if (
+            event.sender !== win.webContents ||
+            event.senderFrame !== win.webContents.mainFrame ||
+            !isSameOrigin(event.senderFrame.url, origin) ||
+            typeof url !== 'string'
+        )
+            return;
         try {
             const target = new URL(url);
             if (['http:', 'https:'].includes(target.protocol) && !target.username && !target.password) {
@@ -49,8 +59,9 @@ export function createMainWindow(options: {
         } catch {
             // Invalid targets never leave the Electron process.
         }
-        return { action: 'deny' };
-    });
+    };
+    ipcMain.on(DESKTOP_EXTERNAL_CHANNEL, onExternalLink);
+    win.once('closed', () => ipcMain.off(DESKTOP_EXTERNAL_CHANNEL, onExternalLink));
     win.webContents.on('will-navigate', (event, url) => {
         if (!isSameOrigin(url, origin)) event.preventDefault();
     });

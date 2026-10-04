@@ -1,7 +1,7 @@
 /**
  * Comprehensive tests for apps/cli/src/commands/agent.ts.
  */
-import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -12,7 +12,7 @@ import {
     type AgentRunDeps,
 } from '@gobing-ai/spur-app';
 import { createMigratedDb, type DbAdapter, InboxMessageDao } from '@gobing-ai/spur-domain';
-import { saveAgentSpec } from '@gobing-ai/ts-ai-runner';
+import { AgentDetector, saveAgentSpec } from '@gobing-ai/ts-ai-runner';
 import {
     resetAgentServerFetchForTesting,
     runAgentLoop,
@@ -52,15 +52,21 @@ describe('agent command (main)', () => {
         expect(exitCode).toBe(1);
     });
 
-    test(
-        'list subcommand returns a number',
-        async () => {
-            const output = captureOutput();
-            const exitCode = await main(['agent', 'list'], { output });
-            expect(typeof exitCode).toBe('number');
-        },
-        { timeout: 15000 },
-    );
+    test('list renders detected agent state through the CLI JSON action', async () => {
+        // Installation probes have separate detector coverage. This command
+        // fixture must not depend on every coding agent installed on the host.
+        const agents = [{ name: 'claude' as const, installed: true, version: '1.0.0', channels: [], error: null }];
+        const detect = spyOn(AgentDetector.prototype, 'detectAll').mockResolvedValue(agents);
+        const output = captureOutput();
+        try {
+            const exitCode = await main(['agent', 'list', '--json'], { output });
+            expect(exitCode).toBe(0);
+            expect(JSON.parse(output.stdout.join(''))).toEqual({ agents });
+            expect(detect).toHaveBeenCalledTimes(1);
+        } finally {
+            detect.mockRestore();
+        }
+    });
 
     test('run subcommand with no prompt → exit 1', async () => {
         const output = captureOutput();

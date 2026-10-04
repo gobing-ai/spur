@@ -21,15 +21,21 @@ export interface ServeLaunch {
 export function childEnv(
     parent: Record<string, string | undefined>,
     extras: Record<string, string | undefined>,
+    platform: NodeJS.Platform = process.platform,
 ): Record<string, string> {
     const env: Record<string, string> = {};
     for (const [key, value] of Object.entries(parent)) {
         if (typeof value === 'string') env[key] = value;
     }
-    delete env.DATABASE_URL;
+    const remove = (name: string): void => {
+        for (const key of Object.keys(env)) {
+            if (platform === 'win32' ? key.toUpperCase() === name.toUpperCase() : key === name) delete env[key];
+        }
+    };
+    remove('DATABASE_URL');
     for (const [key, value] of Object.entries(extras)) {
-        if (value === undefined) delete env[key];
-        else env[key] = value;
+        remove(key);
+        if (value !== undefined) env[key] = value;
     }
     return env;
 }
@@ -66,7 +72,7 @@ export function buildDevCliLaunch(input: {
             input.projectRoot,
         ],
         cwd: input.repoRoot,
-        env: childEnv(input.parentEnv, { HOST: DESKTOP_HOST }),
+        env: childEnv(input.parentEnv, { HOST: DESKTOP_HOST }, input.platform),
     };
 }
 
@@ -76,6 +82,7 @@ export function buildProdLaunch(input: {
     projectRoot: string;
     port: number;
     parentEnv: Record<string, string | undefined>;
+    platform?: NodeJS.Platform;
 }): ServeLaunch {
     if (binaryKind(input.binary) === 'server') {
         return {
@@ -83,7 +90,7 @@ export function buildProdLaunch(input: {
             command: input.binary,
             args: [],
             cwd: input.projectRoot,
-            env: childEnv(input.parentEnv, { HOST: DESKTOP_HOST, PORT: String(input.port) }),
+            env: childEnv(input.parentEnv, { HOST: DESKTOP_HOST, PORT: String(input.port) }, input.platform),
         };
     }
     return {
@@ -91,7 +98,7 @@ export function buildProdLaunch(input: {
         command: input.binary,
         args: ['serve', '--host', DESKTOP_HOST, '--port', String(input.port), '--no-open', '--cwd', input.projectRoot],
         cwd: input.projectRoot,
-        env: childEnv(input.parentEnv, { HOST: DESKTOP_HOST }),
+        env: childEnv(input.parentEnv, { HOST: DESKTOP_HOST }, input.platform),
     };
 }
 
@@ -177,6 +184,7 @@ export function resolveServeLaunch(input: {
         if (!input.exists(binary)) throw new Error(`SPUR_DESKTOP_BIN does not exist: ${binary}`);
         return buildProdLaunch({
             binary,
+            platform: input.platform,
             projectRoot: input.layout.projectRoot,
             port: input.port,
             parentEnv: input.parentEnv,
@@ -198,6 +206,7 @@ export function resolveServeLaunch(input: {
     }
     return buildProdLaunch({
         binary: found,
+        platform: input.platform,
         projectRoot: input.layout.projectRoot,
         port: input.port,
         parentEnv: input.parentEnv,

@@ -15,7 +15,7 @@ export class FakeWindow extends EventEmitter {
     shown = false;
     focused = false;
     url = '';
-    readonly mainFrame = {};
+    readonly mainFrame = { url: '' };
     webContents = Object.assign(new EventEmitter(), {
         mainFrame: this.mainFrame,
         session: {
@@ -43,6 +43,7 @@ export class FakeWindow extends EventEmitter {
     }
     loadURL(url: string): Promise<void> {
         this.url = url;
+        this.mainFrame.url = url;
         return Promise.resolve();
     }
     show(): void {
