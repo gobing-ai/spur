@@ -49,6 +49,9 @@ export default function MemberDetail({
             : (project.fleet?.stages?.filter((s) => s.role === roleName).map((s) => s.id) ?? []);
     const executorName = entry.declared?.executor ?? roleConfig?.electedExecutor ?? 'Unavailable';
     const activeSession = entry.observed.session ?? entry.declared?.session;
+    // Hoisted so the copy handler closes over a narrowed binding: TS resets property
+    // narrowing (`activeSession?.id`) across a closure boundary.
+    const activeSessionId = activeSession?.id;
     const [messages, setMessages] = useState<InboxMessage[] | null>(null);
     const [activity, setActivity] = useState<ActivityRow[] | null>(null);
     const [busy, setBusy] = useState(false);
@@ -238,16 +241,16 @@ export default function MemberDetail({
                                 session:{' '}
                                 <span className="font-mono text-spur-text">{sessionLabel(activeSession) ?? '—'}</span>
                             </span>
-                            {activeSession?.id && (
+                            {activeSessionId && (
                                 <button
                                     type="button"
                                     className="px-1.5 py-0.5 rounded text-[10px] bg-spur-surface-2 hover:bg-spur-surface-3 border border-spur-border text-spur-text cursor-pointer transition-colors"
                                     onClick={() => {
-                                        void navigator.clipboard?.writeText(activeSession.id!);
+                                        void navigator.clipboard?.writeText(activeSessionId);
                                         setCopied(true);
                                         setTimeout(() => setCopied(false), 1500);
                                     }}
-                                    title={`Copy session id: ${activeSession.id}`}
+                                    title={`Copy session id: ${activeSessionId}`}
                                     data-copy-session-id
                                 >
                                     {copied ? 'copied!' : 'copy id'}
