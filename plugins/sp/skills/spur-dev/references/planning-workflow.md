@@ -43,6 +43,12 @@ creation.
 spur feature create "<name>" [--parent <id>]
 ```
 
+Without `--parent`, choose one before creating: list the tree (`spur feature list --json`) and nest the
+feature under the existing feature that owns the surface or its design satellite. A new root feature
+is a last resort that needs an explicit operator decision. When a parent is full (the 9-child limit),
+nest under the closest owning child, and use `spur feature move <id> --parent <id> --dry-run` to
+relocate an existing feature.
+
 The feature file lands in `docs/features/<ID>_<slug>.md`. Immediately author the `## Goal`
 (single sentence) and `## Scope` (in/out bullets).
 
