@@ -3,7 +3,7 @@ import ConversationView from './ConversationView';
 import ProcessesView from './ProcessesView';
 
 /** Tab contract for the Projects module (0840 R3). */
-export type ProjectTabId = 'conversation' | 'fleet' | 'processes';
+export type ProjectTabId = 'fleet' | 'inbox' | 'conversation' | 'processes';
 
 export interface ProjectTab {
     id: ProjectTabId;
@@ -11,10 +11,10 @@ export interface ProjectTab {
     component: ComponentType;
 }
 
-export const DEFAULT_PROJECT_TAB: ProjectTabId = 'conversation';
+export const DEFAULT_PROJECT_TAB: ProjectTabId = 'fleet';
 
-/** Projects tabs: Conversation, Fleet. Tasks and Features are their own modules. */
+/** Projects tabs: Fleet, Inbox. Tasks and Features are their own modules. */
 export const PROJECT_TABS: readonly ProjectTab[] = [
-    { id: 'conversation', label: 'Conversation', component: ConversationView },
     { id: 'fleet', label: 'Fleet', component: ProcessesView },
+    { id: 'inbox', label: 'Inbox', component: ConversationView },
 ];

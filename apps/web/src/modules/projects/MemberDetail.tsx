@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
 import { type ActivityRow, historyUrl, parseHistory } from './activity-history';
 import { type InboxMessage, parseInboxMessages } from './conversation';
@@ -53,15 +53,35 @@ export default function MemberDetail({
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [showTerminal, setShowTerminal] = useState(true);
+    const [showInfoPopup, setShowInfoPopup] = useState(false);
+    const popupRef = useRef<HTMLDivElement>(null);
 
-    // R4: Escape closes the pane (focus restore lives in onClose).
+    // Close details popup on click outside.
+    useEffect(() => {
+        if (!showInfoPopup) return;
+        const onDocClick = (e: MouseEvent) => {
+            if (popupRef.current && !popupRef.current.contains(e.target as Node)) {
+                setShowInfoPopup(false);
+            }
+        };
+        document.addEventListener('mousedown', onDocClick);
+        return () => document.removeEventListener('mousedown', onDocClick);
+    }, [showInfoPopup]);
+
+    // R4: Escape closes popup if open, otherwise closes the pane (focus restore lives in onClose).
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') onClose();
+            if (e.key === 'Escape') {
+                if (showInfoPopup) {
+                    setShowInfoPopup(false);
+                } else {
+                    onClose();
+                }
+            }
         };
         document.addEventListener('keydown', onKey);
         return () => document.removeEventListener('keydown', onKey);
-    }, [onClose]);
+    }, [onClose, showInfoPopup]);
 
     // Messages: one non-consuming read of the member's inbox on open.
     useEffect(() => {
@@ -126,23 +146,174 @@ export default function MemberDetail({
 
     const running = entry.observed.status === 'running';
 
+    const titleTooltip = [
+        `Role: ${entry.declared?.role ?? 'member'}`,
+        `Executor: ${executorName}`,
+        `Model: ${model}`,
+        `Status: ${entry.observed.status}${entry.observed.pid !== null ? ` — pid ${entry.observed.pid}` : ''}`,
+        'Click to toggle agent details',
+    ].join('\n');
+
     return (
         <div
             className={`flex flex-col bg-spur-surface overflow-hidden ${className ?? 'h-full shrink-0 border-t border-spur-border'}`}
             data-member-detail
         >
-            <div className="flex items-center gap-2 px-3 py-2 border-b border-spur-border shrink-0">
-                <span className="text-sm font-semibold text-spur-text">{entry.declared?.role ?? 'member'}</span>
-                <span className="text-xs font-mono text-spur-text-muted">({entry.instanceId})</span>
-                {entry.isOrchestrator && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-spur-accent/20 text-spur-accent font-medium">
-                        orchestrator
-                    </span>
-                )}
-                <div className="ml-auto flex items-center gap-2">
+            <div className="flex items-center gap-2 px-3 py-2 border-b border-spur-border shrink-0 relative">
+                {/* Title area with interactive popup window trigger */}
+                <div className="relative">
                     <button
                         type="button"
-                        className={`px-2 py-0.5 rounded text-xs font-mono flex items-center gap-1 transition-colors border ${
+                        className="flex items-center gap-1.5 text-left group cursor-pointer focus:outline-none"
+                        onClick={() => setShowInfoPopup((v) => !v)}
+                        title={titleTooltip}
+                        aria-expanded={showInfoPopup}
+                        aria-haspopup="dialog"
+                    >
+                        <span className="text-sm font-semibold text-spur-text group-hover:text-spur-accent transition-colors">
+                            {entry.declared?.role ?? 'member'}
+                        </span>
+                        <span className="text-xs font-mono text-spur-text-muted">({entry.instanceId})</span>
+                        {entry.isOrchestrator && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-spur-accent/20 text-spur-accent font-medium uppercase tracking-wide">
+                                orchestrator
+                            </span>
+                        )}
+                        <span
+                            className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors flex items-center gap-1 ${
+                                showInfoPopup
+                                    ? 'bg-spur-accent/20 text-spur-accent border-spur-accent/40 font-medium'
+                                    : 'bg-spur-surface-2 text-spur-text-muted group-hover:text-spur-text border-spur-border/70'
+                            }`}
+                        >
+                            <span aria-hidden="true">ℹ️</span>
+                            <span>info</span>
+                        </span>
+                    </button>
+
+                    {/* Folded metadata popup window */}
+                    <div
+                        ref={popupRef}
+                        role="dialog"
+                        aria-label="Agent member details"
+                        className={`absolute top-full left-0 mt-2 z-50 w-[420px] max-w-[90vw] p-3 rounded-xl bg-spur-surface border border-spur-border shadow-2xl text-xs flex flex-col gap-2 transition-all ${
+                            showInfoPopup
+                                ? 'opacity-100 visible pointer-events-auto translate-y-0'
+                                : 'opacity-0 invisible pointer-events-none -translate-y-1'
+                        }`}
+                    >
+                        <div className="flex items-center justify-between pb-1.5 border-b border-spur-border">
+                            <span className="font-semibold text-spur-text">
+                                {entry.declared?.role ?? 'member'} ({entry.instanceId})
+                            </span>
+                            <button
+                                type="button"
+                                className="text-spur-text-muted hover:text-spur-text p-0.5 rounded cursor-pointer"
+                                onClick={() => setShowInfoPopup(false)}
+                                aria-label="Close details popup"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        <span className="text-spur-text-muted">
+                            declared:{' '}
+                            <span className="text-spur-text">
+                                {entry.declared === null
+                                    ? 'none'
+                                    : `${entry.declared.enabled ? 'enabled' : 'disabled'} · capability ${entry.declared.capabilityState}`}
+                            </span>
+                        </span>
+                        <span className="text-spur-text-muted">
+                            observed:{' '}
+                            <span className="text-spur-text">
+                                {entry.observed.status}
+                                {entry.observed.pid !== null ? ` — pid ${entry.observed.pid}` : ''}
+                                {entry.observed.exitCode !== null ? ` — exit ${entry.observed.exitCode}` : ''}
+                            </span>
+                        </span>
+                        <span className="text-spur-text-muted" data-member-session>
+                            session:{' '}
+                            <span className="font-mono text-spur-text">
+                                {sessionLabel(entry.observed.session ?? entry.declared?.session) ?? '—'}
+                            </span>
+                        </span>
+                        <dl className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 pt-1 border-t border-spur-border">
+                            <dt className="text-spur-text-muted">Role</dt>
+                            <dd className="font-mono text-spur-text break-all" data-member-role>
+                                {entry.declared?.role ?? 'member'}
+                            </dd>
+                            <dt className="text-spur-text-muted">Executor</dt>
+                            <dd className="font-mono text-spur-text break-all" data-member-executor>
+                                {executorName}
+                            </dd>
+                            <dt className="text-spur-text-muted">Model</dt>
+                            <dd className="font-mono text-spur-text break-all" data-member-model>
+                                {model}
+                            </dd>
+                            {stages.length > 0 && (
+                                <>
+                                    <dt className="text-spur-text-muted">Stages</dt>
+                                    <dd className="flex items-center gap-1 flex-wrap" data-member-stages>
+                                        {stages.map((st) => (
+                                            <span
+                                                key={st}
+                                                className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-base-200 text-spur-text-muted border border-spur-border/60"
+                                            >
+                                                {st}
+                                            </span>
+                                        ))}
+                                    </dd>
+                                </>
+                            )}
+                            <dt className="text-spur-text-muted">Working directory</dt>
+                            <dd className="font-mono text-spur-text break-all" data-member-workdir>
+                                {workDir}
+                            </dd>
+                        </dl>
+                        {(fullCommand || execution?.command) && (
+                            <div className="mt-1 pt-1 border-t border-spur-border/50 text-xs">
+                                <span className="text-spur-text-muted text-[11px]">Command: </span>
+                                <code className="font-mono text-[11px] text-spur-text break-all bg-spur-surface-2 p-1 rounded border border-spur-border block">
+                                    {fullCommand ?? `${execution?.command} ${(execution?.args ?? []).join(' ')}`}
+                                </code>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Toolbar on right: start, stop, >_ Terminal, close ✕ */}
+                <div className="ml-auto flex items-center gap-2">
+                    {blockReason !== null && (
+                        <span className="text-xs text-spur-text-muted hidden sm:inline" data-lifecycle-reason>
+                            {blockReason}
+                        </span>
+                    )}
+                    {error !== null && (
+                        <span className="text-xs text-error" role="alert" data-lifecycle-error>
+                            {error}
+                        </span>
+                    )}
+                    <button
+                        type="button"
+                        className="px-2 py-0.5 rounded-lg text-xs bg-spur-accent text-white disabled:opacity-40 hover:opacity-90 transition-opacity cursor-pointer disabled:cursor-not-allowed font-medium"
+                        disabled={busy || blocked || running}
+                        onClick={() => void runLifecycle('start')}
+                        data-member-start
+                    >
+                        start
+                    </button>
+                    <button
+                        type="button"
+                        className="px-2 py-0.5 rounded-lg text-xs bg-spur-surface-3 text-spur-text disabled:opacity-40 hover:bg-spur-surface-2 transition-colors border border-spur-border cursor-pointer disabled:cursor-not-allowed font-medium"
+                        disabled={busy || blocked || !running}
+                        onClick={() => void runLifecycle('stop')}
+                        data-member-stop
+                    >
+                        stop
+                    </button>
+                    <button
+                        type="button"
+                        className={`px-2 py-0.5 rounded text-xs font-mono flex items-center gap-1 transition-colors border cursor-pointer ${
                             showTerminal
                                 ? 'bg-spur-accent/20 text-spur-accent border-spur-accent/40'
                                 : 'bg-spur-surface-2 text-spur-text-muted hover:text-spur-text border-spur-border'
@@ -157,7 +328,7 @@ export default function MemberDetail({
                     </button>
                     <button
                         type="button"
-                        className="px-2 py-0.5 rounded-lg text-xs text-spur-text-muted hover:text-spur-text"
+                        className="px-2 py-0.5 rounded-lg text-xs text-spur-text-muted hover:text-spur-text cursor-pointer"
                         aria-label="Close member detail"
                         onClick={onClose}
                         data-member-detail-close
@@ -165,101 +336,6 @@ export default function MemberDetail({
                         close ✕
                     </button>
                 </div>
-            </div>
-            <div className="px-3 py-2 border-b border-spur-border shrink-0 flex flex-col gap-1 text-xs">
-                <span className="text-spur-text-muted">
-                    declared:{' '}
-                    <span className="text-spur-text">
-                        {entry.declared === null
-                            ? 'none'
-                            : `${entry.declared.enabled ? 'enabled' : 'disabled'} · capability ${entry.declared.capabilityState}`}
-                    </span>
-                </span>
-                <span className="text-spur-text-muted">
-                    observed:{' '}
-                    <span className="text-spur-text">
-                        {entry.observed.status}
-                        {entry.observed.pid !== null ? ` — pid ${entry.observed.pid}` : ''}
-                        {entry.observed.exitCode !== null ? ` — exit ${entry.observed.exitCode}` : ''}
-                    </span>
-                </span>
-                <span className="text-spur-text-muted" data-member-session>
-                    session:{' '}
-                    <span className="font-mono text-spur-text">
-                        {sessionLabel(entry.observed.session ?? entry.declared?.session) ?? '—'}
-                    </span>
-                </span>
-                <dl className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1">
-                    <dt className="text-spur-text-muted">Role</dt>
-                    <dd className="font-mono text-spur-text break-all" data-member-role>
-                        {entry.declared?.role ?? 'member'}
-                    </dd>
-                    <dt className="text-spur-text-muted">Executor</dt>
-                    <dd className="font-mono text-spur-text break-all" data-member-executor>
-                        {executorName}
-                    </dd>
-                    <dt className="text-spur-text-muted">Model</dt>
-                    <dd className="font-mono text-spur-text break-all" data-member-model>
-                        {model}
-                    </dd>
-                    {stages.length > 0 && (
-                        <>
-                            <dt className="text-spur-text-muted">Stages</dt>
-                            <dd className="flex items-center gap-1 flex-wrap" data-member-stages>
-                                {stages.map((st) => (
-                                    <span
-                                        key={st}
-                                        className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-base-200 text-spur-text-muted border border-spur-border/60"
-                                    >
-                                        {st}
-                                    </span>
-                                ))}
-                            </dd>
-                        </>
-                    )}
-                    <dt className="text-spur-text-muted">Working directory</dt>
-                    <dd className="font-mono text-spur-text break-all" data-member-workdir>
-                        {workDir}
-                    </dd>
-                </dl>
-                {(fullCommand || execution?.command) && (
-                    <div className="mt-1 pt-1 border-t border-spur-border/50 text-xs">
-                        <span className="text-spur-text-muted text-[11px]">Command: </span>
-                        <code className="font-mono text-[11px] text-spur-text break-all">
-                            {fullCommand ?? `${execution?.command} ${(execution?.args ?? []).join(' ')}`}
-                        </code>
-                    </div>
-                )}
-            </div>
-            <div className="px-3 py-2 border-b border-spur-border shrink-0 flex items-center gap-2 flex-wrap">
-                <button
-                    type="button"
-                    className="px-2 py-0.5 rounded-lg text-xs bg-spur-accent text-white disabled:opacity-40"
-                    disabled={busy || blocked || running}
-                    onClick={() => void runLifecycle('start')}
-                    data-member-start
-                >
-                    start
-                </button>
-                <button
-                    type="button"
-                    className="px-2 py-0.5 rounded-lg text-xs bg-spur-surface-3 text-spur-text disabled:opacity-40"
-                    disabled={busy || blocked || !running}
-                    onClick={() => void runLifecycle('stop')}
-                    data-member-stop
-                >
-                    stop
-                </button>
-                {blockReason !== null && (
-                    <span className="text-xs text-spur-text-muted" data-lifecycle-reason>
-                        {blockReason}
-                    </span>
-                )}
-                {error !== null && (
-                    <span className="text-xs text-error" role="alert" data-lifecycle-error>
-                        {error}
-                    </span>
-                )}
             </div>
             {showTerminal && (
                 <div className="flex-1 min-h-[180px] border-b border-spur-border flex flex-col">

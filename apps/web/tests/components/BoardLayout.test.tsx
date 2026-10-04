@@ -468,8 +468,8 @@ describe('router + module wiring', () => {
         // Expected tabs are stated as data — deriving them from `RETIRED_ROUTES.to` would re-run the
         // same fallback the app uses and could never fail on a stale tab id.
         const EXPECTED_TAB: Record<string, string> = {
-            workspace: 'conversation', // /board/projects → the default tab
-            inbox: 'conversation',
+            workspace: 'fleet', // /board/projects → the default tab
+            inbox: 'inbox',
             teams: 'agents',
         };
         for (const retired of RETIRED_ROUTES) {

@@ -303,3 +303,47 @@ describe('member session line (0897 R3)', () => {
         cleanup();
     });
 });
+
+describe('title popup and toolbar layout', () => {
+    test('start and stop are placed in the header toolbar alongside terminal and close buttons', async () => {
+        setFetchForTesting(stubFetch());
+        const view = render(<MemberDetail entry={entry()} onClose={() => {}} />);
+        await act(async () => {});
+        const header = view.container.querySelector('.border-b');
+        expect(header).not.toBeNull();
+        const start = header?.querySelector('[data-member-start]');
+        const stop = header?.querySelector('[data-member-stop]');
+        const term = header?.querySelector('[data-detail-toggle-terminal]');
+        const close = header?.querySelector('[data-member-detail-close]');
+        expect(start).not.toBeNull();
+        expect(stop).not.toBeNull();
+        expect(term).not.toBeNull();
+        expect(close).not.toBeNull();
+        view.unmount();
+    });
+
+    test('metadata is folded into title popup and toggles open/close on click', async () => {
+        setFetchForTesting(stubFetch());
+        const view = render(<MemberDetail entry={entry()} onClose={() => {}} />);
+        await act(async () => {});
+        const trigger = view.container.querySelector('button[aria-haspopup="dialog"]') as HTMLButtonElement;
+        expect(trigger).not.toBeNull();
+        expect(trigger.getAttribute('aria-expanded')).toBe('false');
+
+        // Click to open popup
+        await act(async () => {
+            trigger.click();
+        });
+        expect(trigger.getAttribute('aria-expanded')).toBe('true');
+        const popup = view.container.querySelector('div[role="dialog"]');
+        expect(popup?.className).toContain('opacity-100');
+
+        // Click to close popup
+        await act(async () => {
+            trigger.click();
+        });
+        expect(trigger.getAttribute('aria-expanded')).toBe('false');
+        expect(popup?.className).toContain('opacity-0');
+        view.unmount();
+    });
+});

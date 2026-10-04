@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Badge, Loading } from '@/ui';
+import { Badge, Loading, Tooltip } from '@/ui';
 import ResizeHandle from '../../components/ResizeHandle';
 import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
 import MemberDetail from './MemberDetail';
@@ -416,8 +416,6 @@ export default function ProcessesView({ pollMs = STATUS_POLL_MS }: { pollMs?: nu
                         <th>Role</th>
                         <th>Stages</th>
                         <th>Executor</th>
-                        <th>Coding Agent</th>
-                        <th>Model</th>
                         <th>Session</th>
                         <th>Command</th>
                         <th>PID</th>
@@ -436,7 +434,6 @@ export default function ProcessesView({ pollMs = STATUS_POLL_MS }: { pollMs?: nu
 
                         const roleName = member?.role ?? (p.agentId ? 'agent' : 'process');
                         const roleConfig = project.fleet?.roles?.find((r) => r.name === roleName);
-                        const tier = roleConfig?.tier;
 
                         const stages: string[] =
                             roleConfig?.stages && roleConfig.stages.length > 0
@@ -455,6 +452,15 @@ export default function ProcessesView({ pollMs = STATUS_POLL_MS }: { pollMs?: nu
                             member?.executor ??
                             (p.source === 'supervisor' ? 'spur' : (p.command ?? 'cli'));
                         const model = member?.model ?? executor?.model ?? '—';
+                        const tier = (executor as { tier?: string } | undefined)?.tier ?? roleConfig?.tier;
+
+                        const executorTooltip = [
+                            `Agent: ${codingAgent || '—'}`,
+                            `Model: ${model || '—'}`,
+                            tier ? `Tier: ${tier}` : '',
+                        ]
+                            .filter(Boolean)
+                            .join('\n');
 
                         const session = p.session ?? member?.session;
                         const sessionStr = sessionLabel(session);
@@ -493,16 +499,9 @@ export default function ProcessesView({ pollMs = STATUS_POLL_MS }: { pollMs?: nu
                                     </div>
                                 </td>
                                 <td>
-                                    <div className="flex items-center gap-1">
-                                        <span className="px-1.5 py-0.5 rounded text-[11px] font-mono font-medium bg-spur-accent/15 text-spur-accent">
-                                            {roleName}
-                                        </span>
-                                        {tier && tier !== 'orchestrator' && (
-                                            <span className="px-1 py-0.2 rounded text-[10px] font-mono text-spur-text-muted border border-spur-border">
-                                                {tier}
-                                            </span>
-                                        )}
-                                    </div>
+                                    <span className="px-1.5 py-0.5 rounded text-[11px] font-mono font-medium bg-spur-accent/15 text-spur-accent">
+                                        {roleName}
+                                    </span>
                                 </td>
                                 <td>
                                     {stages.length > 0 ? (
@@ -521,15 +520,19 @@ export default function ProcessesView({ pollMs = STATUS_POLL_MS }: { pollMs?: nu
                                     )}
                                 </td>
                                 <td>
-                                    <span className="font-mono text-xs font-semibold text-spur-text">
-                                        {executorName ?? '—'}
-                                    </span>
-                                </td>
-                                <td>
-                                    <span className="font-mono text-xs text-spur-text font-medium">{codingAgent}</span>
-                                </td>
-                                <td>
-                                    <span className="font-mono text-xs text-spur-text-muted">{model}</span>
+                                    <Tooltip
+                                        position="top"
+                                        tip={executorTooltip}
+                                        className="inline-flex! z-30 [&:before]:whitespace-pre-line! [&:before]:text-left! [&:before]:font-mono [&:before]:text-[11px] [&:before]:p-2 [&:before]:rounded-lg [&:before]:shadow-xl after:whitespace-pre-line after:text-left after:font-mono after:text-[11px]"
+                                    >
+                                        <span
+                                            className="font-mono text-xs font-semibold text-spur-text cursor-help hover:text-spur-accent transition-colors"
+                                            title={executorTooltip}
+                                            data-process-executor={executorName ?? 'none'}
+                                        >
+                                            {executorName ?? '—'}
+                                        </span>
+                                    </Tooltip>
                                 </td>
                                 <td>
                                     <span className="font-mono text-xs text-spur-text-muted">{sessionStr ?? '—'}</span>

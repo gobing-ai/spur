@@ -26,13 +26,19 @@ describe('useProjectTab (0840 R3)', () => {
         expect(result.current.activeTab).toBe('fleet');
         const legacy = renderHook(() => useProjectTab(), { wrapper: wrapper(['/board/projects/processes']) });
         expect(legacy.result.current.activeTab).toBe('fleet');
+        const inbox = renderHook(() => useProjectTab(), { wrapper: wrapper(['/board/projects/inbox']) });
+        expect(inbox.result.current.activeTab).toBe('inbox');
+        const legacyConv = renderHook(() => useProjectTab(), {
+            wrapper: wrapper(['/board/projects/conversation']),
+        });
+        expect(legacyConv.result.current.activeTab).toBe('inbox');
     });
 
     test('missing or unknown segment falls back to the default tab', () => {
         const none = renderHook(() => useProjectTab(), { wrapper: wrapper(['/board/projects']) });
-        expect(none.result.current.activeTab).toBe('conversation');
+        expect(none.result.current.activeTab).toBe('fleet');
         const unknown = renderHook(() => useProjectTab(), { wrapper: wrapper(['/board/projects/bogus']) });
-        expect(unknown.result.current.activeTab).toBe('conversation');
+        expect(unknown.result.current.activeTab).toBe('fleet');
     });
 
     test('selectTab navigates to the tab route preserving the query string', () => {
@@ -47,11 +53,11 @@ describe('useProjectTab (0840 R3)', () => {
         render(
             createElement(
                 MemoryRouter,
-                { initialEntries: ['/board/projects/conversation?feature=G63'] },
+                { initialEntries: ['/board/projects/inbox?feature=G63'] },
                 createElement(Routes, null, createElement(Route, { path: '*', element: createElement(TabProbe) })),
             ),
         );
-        expect(tabHook?.activeTab).toBe('conversation');
+        expect(tabHook?.activeTab).toBe('inbox');
         act(() => tabHook?.selectTab('fleet'));
         expect(tabHook?.activeTab).toBe('fleet');
         expect(loc?.pathname).toBe('/board/projects/fleet');

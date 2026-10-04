@@ -20,7 +20,6 @@ import {
     type ProjectFleetSnapshot,
     type ResolvedFleetMember,
 } from '../../../src/modules/projects/useProjectContext';
-import AgentsView from '../../../src/modules/settings/AgentsView';
 import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
 
 afterAll(teardownHappyDom);
@@ -192,7 +191,7 @@ describe('R2: tabs are keyboard-navigable with aria-selected (0840 frozen tablis
         }
         // Only the active panel is mounted; it must name its controlling tab.
         const active = tabs.find((t) => t.getAttribute('aria-selected') === 'true');
-        expect(active?.getAttribute('data-projects-tab')).toBe('conversation');
+        expect(active?.getAttribute('data-projects-tab')).toBe('fleet');
         const panel = container.querySelector(`#${active?.getAttribute('aria-controls')}`);
         expect(panel).not.toBeNull();
         expect(panel?.getAttribute('role')).toBe('tabpanel');
@@ -204,20 +203,20 @@ describe('R2: tabs are keyboard-navigable with aria-selected (0840 frozen tablis
         const { container } = await renderShell();
         const tablist = container.querySelector('[role="tablist"]') as HTMLElement;
         const tab = (id: string) => container.querySelector(`[data-projects-tab="${id}"]`) as HTMLButtonElement;
-        tab('conversation').focus();
-        expect(document.activeElement).toBe(tab('conversation'));
-
-        fireEvent.keyDown(tablist, { key: 'ArrowRight' });
-        await settleInAct(); // panel switch mounts the processes panel, which fetches on mount
-        expect(tab('fleet').getAttribute('aria-selected')).toBe('true');
-        expect(tab('conversation').getAttribute('aria-selected')).toBe('false');
-        expect(container.querySelector('#projects-tab-panel-fleet')).not.toBeNull();
+        tab('fleet').focus();
         expect(document.activeElement).toBe(tab('fleet'));
 
+        fireEvent.keyDown(tablist, { key: 'ArrowRight' });
+        await settleInAct(); // panel switch mounts the inbox panel, which fetches on mount
+        expect(tab('inbox').getAttribute('aria-selected')).toBe('true');
+        expect(tab('fleet').getAttribute('aria-selected')).toBe('false');
+        expect(container.querySelector('#projects-tab-panel-inbox')).not.toBeNull();
+        expect(document.activeElement).toBe(tab('inbox'));
+
         fireEvent.keyDown(tablist, { key: 'ArrowLeft' });
-        await settleInAct(); // panel switch mounts the conversation panel, which fetches on mount
-        expect(tab('conversation').getAttribute('aria-selected')).toBe('true');
-        expect(document.activeElement).toBe(tab('conversation'));
+        await settleInAct(); // panel switch mounts the fleet panel, which fetches on mount
+        expect(tab('fleet').getAttribute('aria-selected')).toBe('true');
+        expect(document.activeElement).toBe(tab('fleet'));
     });
 });
 

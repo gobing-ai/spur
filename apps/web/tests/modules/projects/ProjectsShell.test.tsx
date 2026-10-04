@@ -169,12 +169,14 @@ describe('ProjectsShell tabs (0840 R3/R5)', () => {
 
     test('tab click swaps the active panel and aria-selected', async () => {
         const { container } = await renderShell(ctx());
-        expect(container.querySelector('#projects-tab-panel-conversation')).not.toBeNull();
-        act(() => (container.querySelector('[data-projects-tab="fleet"]') as HTMLButtonElement).click());
-        await settleInAct(); // ProcessesView fetches the process list on mount
         expect(container.querySelector('#projects-tab-panel-fleet')).not.toBeNull();
-        expect(container.querySelector('#projects-tab-panel-conversation')).toBeNull();
         expect(container.querySelector('#projects-tab-fleet')?.getAttribute('aria-selected')).toBe('true');
-        expect(container.querySelector('#projects-tab-conversation')?.getAttribute('aria-selected')).toBe('false');
+        expect(container.querySelector('#projects-tab-inbox')?.getAttribute('aria-selected')).toBe('false');
+        act(() => (container.querySelector('[data-projects-tab="inbox"]') as HTMLButtonElement).click());
+        await settleInAct(); // ConversationView fetches on mount
+        expect(container.querySelector('#projects-tab-panel-inbox')).not.toBeNull();
+        expect(container.querySelector('#projects-tab-panel-fleet')).toBeNull();
+        expect(container.querySelector('#projects-tab-inbox')?.getAttribute('aria-selected')).toBe('true');
+        expect(container.querySelector('#projects-tab-fleet')?.getAttribute('aria-selected')).toBe('false');
     });
 });

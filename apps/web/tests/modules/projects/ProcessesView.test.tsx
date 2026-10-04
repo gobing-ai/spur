@@ -201,6 +201,46 @@ describe('ProcessesView supervised rows (0852 R5)', () => {
         );
         expect(keys).toEqual(['reg:pe_9']);
     });
+
+    test('hides coding agent and model columns, consolidating them into executor tooltip', async () => {
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
+            if (url.includes('/processes')) {
+                return jsonResponse({
+                    processes: [
+                        {
+                            agentId: 'planner',
+                            pid: 4242,
+                            status: 'running',
+                            startedAt: '2026-07-15T12:00:00.000Z',
+                            exitCode: null,
+                            teamId: null,
+                        },
+                    ],
+                    count: 1,
+                    executions: [],
+                    executionsCount: 0,
+                });
+            }
+            return jsonResponse({ ok: true });
+        }) as unknown as typeof fetch);
+
+        const { container, getByText } = render(<ProcessesView />);
+        await waitFor(() => expect(getByText('planner')).toBeDefined());
+
+        // Header check: separate Coding Agent and Model columns are removed
+        const ths = [...container.querySelectorAll('th')].map((th) => th.textContent?.trim());
+        expect(ths).toContain('Executor');
+        expect(ths).not.toContain('Coding Agent');
+        expect(ths).not.toContain('Model');
+
+        // Executor element carries consolidated tooltip with Agent and Model
+        const executorEl = container.querySelector('[data-process-executor]');
+        expect(executorEl).not.toBeNull();
+        const tooltipText = executorEl?.getAttribute('title');
+        expect(tooltipText).toContain('Agent:');
+        expect(tooltipText).toContain('Model:');
+    });
 });
 
 // ── R3: pure filter semantics (0267 suite, ported verbatim) ──
