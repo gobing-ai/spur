@@ -2,11 +2,11 @@
 schema_version: 1
 id: "E72"
 name: "Observability Trace tab for workflow run inspection"
-status: done
+status: active
 priority: P2
 tags: []
 created_at: "2026-10-04T02:33:42.928Z"
-updated_at: "2026-10-04T21:13:10.554Z"
+updated_at: "2026-10-04T22:56:32.288Z"
 ---
 
 # E72: Observability Trace tab for workflow run inspection
@@ -111,6 +111,14 @@ Feature: Observability Trace tab for workflow run inspection
     Given action rows persisted before the provenance stamp existed
     When their run is projected
     Then the projection reports their provenance as unknown and the tab shows no label for them
+
+  @core
+  Scenario: R10 — An inline run's detail shows every state it visited and hides no recorded action
+    # covers: I4
+    Given an inline run whose action rows cover several states and whose transition history is empty
+    When its progress is projected
+    Then each state with a recorded row is visited, in row order, with its attempts
+    And no recorded action row is dropped without a diagnostic naming it
 ```
 
 ## Tasks
@@ -121,6 +129,7 @@ Feature: Observability Trace tab for workflow run inspection
 | 1069 | Serve the run progress projection and run list filters | done |
 | 1070 | Stamp inline action provenance and project it | done |
 | 1071 | Build the Observability Trace tab | done |
+| 1085 | Project inline state visits and surface unmapped action rows in the progress projection | backlog |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -131,4 +140,5 @@ Feature: Observability Trace tab for workflow run inspection
 - 2026-10-04T07:10:00.249Z backlog → active (system)
 - 2026-10-04T21:13:09.771Z active → verifying (system)
 - 2026-10-04T21:13:10.554Z verifying → done (system)
+- 2026-10-04T22:55:58.480Z done → active (system)
 
