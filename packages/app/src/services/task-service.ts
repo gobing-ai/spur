@@ -869,6 +869,25 @@ export class TaskService {
         return result;
     }
 
+    /**
+     * Add/remove entries of the `tags[]` frontmatter array. Tags carry operator
+     * authorization (GTD dispatches only `fleet:auto` tasks), so they need a
+     * CLI-gated writer like every other corpus field. Adds dedupe, removes
+     * no-op on absent tags, other tags keep their order.
+     */
+    async updateTags(wbs: string, add: string[], remove: string[]): Promise<WriteResult & { tags: string[] }> {
+        const blank = [...add, ...remove].find((tag) => tag.trim() === '');
+        if (blank !== undefined) throw new Error('tags must be non-empty strings');
+        const filePath = await this.resolveTaskFile(wbs);
+        const raw = MarkdownDocument.parse(await this.ctx.fs.readFile(filePath), 'task').frontmatterData?.tags;
+        const current = Array.isArray(raw) ? raw.filter((tag): tag is string => typeof tag === 'string') : [];
+        const next = current.filter((tag) => !remove.includes(tag));
+        for (const tag of add) if (!next.includes(tag)) next.push(tag);
+        const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder: this.ctx.tasksDir };
+        const result = await this.writeService.updateFrontmatterArray(ref, 'tags', next);
+        return { ...result, tags: next };
+    }
+
     // ── mutateDependencies (task 0303 — CLI-safe dependencies[] write) ──
 
     /**

@@ -461,6 +461,16 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         )
         .option('--assignee <spec-id>', 'Set the assignee frontmatter field to an agent spec id')
         .option(
+            '--add-tag <tag>',
+            'Add a tag to the tags list (repeatable; idempotent). `fleet:auto` authorizes GTD fleet dispatch',
+            (value: string, previous: string[] = []) => [...previous, value],
+        )
+        .option(
+            '--remove-tag <tag>',
+            'Remove a tag from the tags list (repeatable; absent tags are a no-op)',
+            (value: string, previous: string[] = []) => [...previous, value],
+        )
+        .option(
             '--force-done',
             'Allow transitioning to `done` even when the verify verdict is not PASS; records an override (task 0292). Waives the verdict only — the FSM path still applies, so from an earlier status walk the hops first: `todo` → `wip` → `testing` → `done` (each hop runs the structural `spur task check`)',
         )
@@ -553,6 +563,13 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                             context.output.error(warning);
                         }
                         context.output.write(`Updated section '${options.section}' in task ${result.ref.id}`);
+                    }
+                } else if (options.addTag !== undefined || options.removeTag !== undefined) {
+                    const result = await svc.updateTags(wbs, options.addTag ?? [], options.removeTag ?? []);
+                    if (options.json) {
+                        context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
+                    } else {
+                        context.output.write(`Set tags=[${result.tags.join(', ')}] on task ${result.ref.id}`);
                     }
                 } else if (
                     options.feature !== undefined ||
@@ -739,7 +756,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     }
                 } else {
                     context.output.error(
-                        'Either <status>, --section/--from-file, or a field flag (--feature/--priority/--ac-numbering/--ac-altitude/--estimate-hours) is required',
+                        'Either <status>, --section/--from-file, or a field flag (--feature/--priority/--ac-numbering/--ac-altitude/--estimate-hours/--add-tag/--remove-tag) is required',
                     );
                     context.setExitCode(2);
                 }

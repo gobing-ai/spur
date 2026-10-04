@@ -1561,6 +1561,38 @@ describe('spur task CLI', () => {
         expect(output.messages[0] ?? '').toContain('Set priority=P0');
     });
 
+    test('update --add-tag/--remove-tag edit the tags list in place (GTD fleet:auto carrier)', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', '--skip-ready', 'Tag update'], { cwd, output: cOut });
+        const wbs = createdWbs(cOut);
+        const file = join(cwd, 'docs', 'tasks', `${wbs}_tag-update.md`);
+        const tagsOf = async (): Promise<unknown> => {
+            const out = createCapturedOutput();
+            await main(['task', 'show', wbs, '--json'], { cwd, output: out });
+            return JSON.parse(lastMessage(out)).frontmatter.tags;
+        };
+
+        let exitCode = await main(['task', 'update', wbs, '--add-tag', 'fleet:auto', '--add-tag', 'server'], {
+            cwd,
+            output: createCapturedOutput(),
+        });
+        expect(exitCode).toBe(0);
+        expect(await tagsOf()).toEqual(['fleet:auto', 'server']);
+
+        // Re-adding is idempotent; removing one keeps the rest.
+        exitCode = await main(['task', 'update', wbs, '--add-tag', 'fleet:auto', '--remove-tag', 'server'], {
+            cwd,
+            output: createCapturedOutput(),
+        });
+        expect(exitCode).toBe(0);
+        expect(await tagsOf()).toEqual(['fleet:auto']);
+
+        const blank = createCapturedOutput();
+        exitCode = await main(['task', 'update', wbs, '--add-tag', '  '], { cwd, output: blank });
+        expect(exitCode).not.toBe(0);
+        expect(await Bun.file(file).text()).toContain('fleet:auto');
+    });
+
     test('update applies every field flag in one call and writes estimate_hours as a number', async () => {
         const cOut = createCapturedOutput();
         await main(['task', 'create', '--skip-ready', 'Multi field update'], { cwd, output: cOut });
