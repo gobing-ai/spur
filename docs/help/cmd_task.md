@@ -135,6 +135,8 @@ resolve to a spec under `.spur/agents/` — otherwise exit `2` naming the unknow
 | `--estimate-hours <n>` | Set the `estimate_hours` frontmatter field (positive number) — decomposition size estimate; the inline pipeline driver dispatches no subagent at/below its 1-hour floor |
 | `--no-lifecycle` | Suppress lifecycle workflow run creation (used by `task-pipeline.yaml` to avoid orphaned lifecycle runs) |
 | `--assignee <spec-id>` | Set the `assignee` frontmatter field to an agent spec id (validated against the id format and `.spur/agents/`) |
+| `--add-tag <tag>` | Add a tag to the `tags` list (repeatable; idempotent). `fleet:auto` authorizes GTD fleet dispatch |
+| `--remove-tag <tag>` | Remove a tag from the `tags` list (repeatable; absent tags are a no-op) |
 | `--force-done` | Allow transitioning to `done` even when the verify verdict is not PASS; records an override (task 0292) |
 | `--provenance-bypass` | Record an audited provenance-bypass link when no pipeline run exists (replaces the `SPUR_PROVENANCE_OVERRIDE` env var; pair with `--force-done`) |
 | `--reason <text>` | Rationale for a forced-done override (paired with `--force-done`; persisted as `done_reason`) |

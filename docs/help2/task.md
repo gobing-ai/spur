@@ -84,6 +84,8 @@ spur task update 0010 --feature F7 --priority P0                # (c) scalar fie
 | `--ac-altitude <mode>` | `graduating` (default) or `task-local` (skip the feature-AC subset rule) |
 | `--estimate-hours <n>` | Set the `estimate_hours` frontmatter field (positive number; decomposition size estimate) |
 | `--assignee <spec-id>` | Set the `assignee` frontmatter field to an agent spec id |
+| `--add-tag <tag>` | Add a tag to the `tags` list (repeatable; idempotent). `fleet:auto` authorizes GTD fleet dispatch |
+| `--remove-tag <tag>` | Remove a tag from the `tags` list (repeatable; absent tags are a no-op) |
 | `--no-lifecycle` | Suppress the lifecycle workflow run (pipeline use) |
 | `--force-done` | Allow `done` with a non-PASS verdict; records an override |
 | `--provenance-bypass` | Record an audited provenance-bypass link when no pipeline run exists (pair with `--force-done --reason`) |
