@@ -1,4 +1,9 @@
-import { RunStoreBadCursorError, RunStoreNotFoundError, type RunStoreService } from '@gobing-ai/spur-app';
+import {
+    projectWorkflowProgress,
+    RunStoreBadCursorError,
+    RunStoreNotFoundError,
+    type RunStoreService,
+} from '@gobing-ai/spur-app';
 import type { Hono } from 'hono';
 import type { ServerContext } from '../../context';
 import type { ServerModule } from '../types';
@@ -12,8 +17,9 @@ import type { ServerModule } from '../types';
  *
  * | Method | Path | Notes |
  * | --- | --- | --- |
- * | GET | `/api/runs` | List + status filter + keyset paging |
+ * | GET | `/api/runs` | List + status/workflow/since filters + keyset paging; bad `since` → 400 `MALFORMED_SINCE` |
  * | GET | `/api/runs/by-wbs/:wbs` | WBS → linked runs (empty list, not error) |
+ * | GET | `/api/runs/:runId/progress` | `projectWorkflowProgress` projection; unknown run → 404 `RUN_NOT_FOUND` |
  * | GET | `/api/runs/:runId` | Detail: phases, transitions, actions |
  */
 export const runsModule: ServerModule = {
@@ -33,9 +39,22 @@ export const runsModule: ServerModule = {
                 if (!Number.isNaN(parsed)) limit = parsed;
             }
 
+            const workflow = c.req.query('workflow') || undefined;
+            const sinceRaw = c.req.query('since') || undefined;
+            let since: string | undefined;
+            if (sinceRaw !== undefined) {
+                // 1069 R4: normalize to canonical ISO before the lexicographic
+                // `started_at` comparison; reject unparseable values before the
+                // service runs.
+                if (Number.isNaN(Date.parse(sinceRaw))) {
+                    return c.json({ error: `malformed since: ${sinceRaw}`, code: 'MALFORMED_SINCE' }, 400);
+                }
+                since = new Date(sinceRaw).toISOString();
+            }
+
             try {
                 const service = ctx.runStoreService();
-                const result = await service.list({ status, limit, cursor });
+                const result = await service.list({ status, limit, cursor, workflow, since });
                 return c.json(result);
             } catch (err) {
                 if (err instanceof RunStoreBadCursorError) {
@@ -57,6 +76,21 @@ export const runsModule: ServerModule = {
             const service = ctx.runStoreService();
             const result = await service.listByWbs(wbs, limit);
             return c.json(result);
+        });
+
+        // GET /api/runs/:runId/progress — the single progress projection shared
+        // with `spur workflow progress` (1069 R1/R2). An `orphan-row` diagnostic
+        // means the run id is unknown → 404, same shape as the detail route.
+        app.get('/api/runs/:runId/progress', async (c) => {
+            const runId = c.req.param('runId');
+            const projection = await projectWorkflowProgress(runId, {
+                db: await ctx.getDb(),
+                projectRoot: ctx.cwd,
+            });
+            if (projection.diagnostics.some((d) => d.code === 'orphan-row')) {
+                return c.json({ error: `run not found: ${runId}`, code: 'RUN_NOT_FOUND', runId }, 404);
+            }
+            return c.json(projection);
         });
 
         // GET /api/runs/:runId — full detail or clean 404 (R2/R4).

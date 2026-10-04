@@ -91,6 +91,13 @@ export interface RunStoreListQuery {
      * starts strictly after the cursor under `started_at DESC, id DESC`.
      */
     cursor?: string;
+    /** Exact `workflow_name` filter (task 1069 R4). */
+    workflow?: string;
+    /**
+     * ISO lower bound on `started_at`, inclusive (task 1069 R4). Callers normalize
+     * with `new Date(since).toISOString()`; the comparison is lexicographic.
+     */
+    since?: string;
 }
 
 /** Successful list envelope with keyset paging metadata. */
@@ -265,7 +272,9 @@ export class RunStoreService {
         const db = await this.ctx.getDb();
         // Fetch one extra row so hasMore needs no COUNT(*) (same pattern as events history).
         const rows = await new RunDao(db).traceRows({
+            workflow: query.workflow,
             status: query.status,
+            since: query.since,
             before,
             limit: limit + 1,
         });

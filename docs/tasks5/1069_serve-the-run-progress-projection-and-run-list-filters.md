@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Serve the run progress projection and run list filters
-status: todo
+status: wip
 template: feature-impl
 created_at: 2026-10-04T02:46:12.527Z
-updated_at: "2026-10-04T04:17:26.845Z"
+updated_at: "2026-10-04T04:48:36.257Z"
 feature_id: E72
 priority: P2
 tags: ["observability", "server", "contracts", "fleet:auto"]
@@ -164,7 +164,20 @@ Task-local verification:
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change map (file:line, paths from repo root):
+
+- `packages/contracts/src/runs.ts:74` — new `workflowProgressProjectionSchema` zod mirror of `WorkflowProgressProjection` (schemaVersion literal 1, status/effect/eligibility/diagnostic enums, `version` nullable-optional); DTO type at `packages/contracts/src/runs.ts:91`; contract-only `runsContract.progress` (`GET /runs/{runId}/progress`, "CONTRACT ONLY, served by the Hono runs module") at `packages/contracts/src/runs.ts:94-104`.
+- `packages/contracts/src/index.ts:38` — `runs: { ...runsContract }` composed into `contract`; re-export at `packages/contracts/src/index.ts:53`.
+- `packages/contracts/tests/runs-contract.test.ts:53` — schema accepts full fixture + unknown-run shape, rejects `schemaVersion: 2` / bad status / bad diagnostic code, asserts `contract.runs.progress` route.
+- `packages/app/src/services/run-store-service.ts:95,100` — `RunStoreListQuery` gains `workflow?`/`since?`; `list()` passes both into the existing `traceRows` binds at `packages/app/src/services/run-store-service.ts:275-276`. No DAO/SQL change.
+- `packages/app/tests/services/run-store-service.test.ts:338` — filter results across two workflows/dates; `:374` — filtered two-page cursor walk returns all matches exactly once.
+- `apps/server/src/modules/runs/index.ts:42-52` — list handler parses `workflow`/`since`; unparseable `since` returns 400 `MALFORMED_SINCE` before the service is called, otherwise normalized via `new Date(since).toISOString()`; forwarded at `:57`. Progress route `GET /api/runs/:runId/progress` at `:84-95` calls `projectWorkflowProgress(runId, { db: await ctx.getDb(), projectRoot: ctx.cwd })` — the exact CLI call shape; `orphan-row` diagnostic → 404 `{error, code: 'RUN_NOT_FOUND', runId}` (`:90-92`). Comment table updated at `:20-23`.
+- `apps/server/tests/modules/runs/index.test.ts:215` — filters forwarded (mock asserts `q.workflow` + normalized `q.since`); `:234` — `since=garbage` → 400, service unreachable; `:252-311` — seeded in-memory progress route: 200, body parses with `workflowProgressProjectionSchema`, deep-equals direct `projectWorkflowProgress` modulo `projectedAt`; unknown id → 404 `RUN_NOT_FOUND`; R5 bidirectional assignability guard at `:313`.
+- `apps/server/tests/openapi.test.ts:46` — generated OpenAPI documents `GET /runs/{runId}/progress`.
+
+Rationale: one projection implementation shared by CLI and Board (no second path); contract-only `oc.route` mirrors `fleetContract.snapshot` so the Hono route lands in the generated OpenAPI without an oRPC router; list filters reuse the existing `traceRows` binds (empty/absent params keep byte-identical behaviour); the R5 guard makes `bun run typecheck` fail on any field drift between the app interface and the wire schema.
+
+Docs (R6): `docs/design/run-record-contract.md:62` (Feature E72 section) already names contract-only `runsContract.progress` and `MALFORMED_SINCE`; `docs/04_DESIGN.md:81` wording intact; `docs/design/cli-contracts.md` untouched (no CLI change).
 
 ### Testing
 
@@ -188,3 +201,6 @@ Task-local verification:
 - Downstream: 1070 adds provenance fields to this schema; 1071 consumes the route and schema.
 
 ### History
+
+- 2026-10-04T04:48:36.257Z todo → wip (system)
+

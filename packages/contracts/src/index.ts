@@ -5,6 +5,7 @@ import { featureContract } from './feature';
 import { fleetContract, processesContract } from './fleet';
 import { historyContract } from './history';
 import { planningEventContract } from './planning-event';
+import { runsContract } from './runs';
 import { taskContract } from './task';
 
 /** Application health payload returned by the public health procedure. */
@@ -34,6 +35,7 @@ export const contract = {
     history: { ...historyContract },
     fleet: { ...fleetContract },
     processes: { ...processesContract },
+    runs: { ...runsContract },
     ...planningEventContract,
 };
 
@@ -46,6 +48,9 @@ export { featureCreateInputSchema, featureListResponseSchema, featureShowRespons
 export * from './fleet';
 export * from './history';
 export * from './observability';
+// Run progress projection wire schema (1069 / E72 R5) — the route is Hono-served;
+// the contract documents it for the generated OpenAPI.
+export * from './runs';
 // Shared transport envelope schemas (apiSuccessSchema / apiErrorSchema / pagination) —
 // public so the CLI can adopt them as its `--json-envelope` standard (ADR-091, task 0693).
 export * from './shared';

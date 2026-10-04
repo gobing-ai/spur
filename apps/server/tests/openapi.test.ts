@@ -42,4 +42,13 @@ describe('openapi', () => {
         expect(procSchema).toContain('"session"');
         expect(procSchema).toContain('"executions"');
     });
+
+    test('documents the Hono-served run progress projection route (1069 / E72 R5)', async () => {
+        const spec = await generateOpenApiSpec();
+        const paths = spec.paths ?? {};
+        const progress = paths['/runs/{runId}/progress'] as
+            | { get?: { responses?: Record<string, unknown> } }
+            | undefined;
+        expect(progress?.get).toBeDefined();
+    });
 });

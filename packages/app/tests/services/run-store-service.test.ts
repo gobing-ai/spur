@@ -334,4 +334,71 @@ describe('RunStoreService', () => {
         expect(service.list({ cursor: 'not-valid' })).rejects.toThrow(RunStoreBadCursorError);
         db.close();
     });
+
+    test('list forwards workflow + since filters and returns only matching rows (1069 R4)', async () => {
+        const db = await setupDb();
+        await insertRun(db, {
+            id: 'run_a1',
+            workflow: 'task-pipeline',
+            startedAt: '2026-09-02T10:00:00.000Z',
+        });
+        await insertRun(db, {
+            id: 'run_a2',
+            workflow: 'task-pipeline',
+            startedAt: '2026-08-15T10:00:00.000Z',
+        });
+        await insertRun(db, {
+            id: 'run_b1',
+            workflow: 'research-pipeline',
+            startedAt: '2026-09-03T10:00:00.000Z',
+        });
+
+        const service = new RunStoreService({ getDb: async () => db });
+
+        const byWorkflow = await service.list({ workflow: 'task-pipeline' });
+        expect(byWorkflow.runs.map((r) => r.id)).toEqual(['run_a1', 'run_a2']);
+
+        const bySince = await service.list({ since: '2026-09-01T00:00:00.000Z' });
+        expect(bySince.runs.map((r) => r.id)).toEqual(['run_b1', 'run_a1']);
+
+        const combined = await service.list({ workflow: 'task-pipeline', since: '2026-09-01T00:00:00.000Z' });
+        expect(combined.runs.map((r) => r.id)).toEqual(['run_a1']);
+
+        // Absent filters keep today's behaviour: every row, newest first.
+        const unfiltered = await service.list({});
+        expect(unfiltered.runs.map((r) => r.id)).toEqual(['run_b1', 'run_a1', 'run_a2']);
+
+        db.close();
+    });
+
+    test('list cursor paging under a filter returns every match exactly once (1069 R4)', async () => {
+        const db = await setupDb();
+        await insertRun(db, { id: 'run_f1', workflow: 'task-pipeline', startedAt: '2026-09-01T10:00:00.000Z' });
+        await insertRun(db, { id: 'run_f2', workflow: 'task-pipeline', startedAt: '2026-09-02T10:00:00.000Z' });
+        await insertRun(db, { id: 'run_f3', workflow: 'task-pipeline', startedAt: '2026-09-03T10:00:00.000Z' });
+        await insertRun(db, { id: 'run_other', workflow: 'research-pipeline', startedAt: '2026-09-04T10:00:00.000Z' });
+
+        const service = new RunStoreService({ getDb: async () => db });
+
+        const page1 = await service.list({ workflow: 'task-pipeline', limit: 2 });
+        expect(page1.runs.map((r) => r.id)).toEqual(['run_f3', 'run_f2']);
+        expect(page1.hasMore).toBe(true);
+        expect(page1.nextCursor).toBeTruthy();
+
+        // The client resends the same filters with the cursor.
+        const page2 = await service.list({
+            workflow: 'task-pipeline',
+            limit: 2,
+            cursor: page1.nextCursor ?? undefined,
+        });
+        expect(page2.runs.map((r) => r.id)).toEqual(['run_f1']);
+        expect(page2.hasMore).toBe(false);
+        expect(page2.nextCursor).toBeNull();
+
+        const seen = [...page1.runs, ...page2.runs].map((r) => r.id);
+        expect(new Set(seen).size).toBe(3);
+        expect(seen).not.toContain('run_other');
+
+        db.close();
+    });
 });

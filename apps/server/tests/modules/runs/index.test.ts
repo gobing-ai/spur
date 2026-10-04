@@ -1,15 +1,23 @@
 import { describe, expect, test } from 'bun:test';
+import { resolve } from 'node:path';
 import {
+    projectWorkflowProgress,
     RunStoreBadCursorError,
     type RunStoreDetail,
     type RunStoreListResult,
     RunStoreNotFoundError,
     type RunStoreService,
     type RunStoreWbsLink,
+    type WorkflowProgressProjection,
 } from '@gobing-ai/spur-app';
+import { type WorkflowProgressProjectionDto, workflowProgressProjectionSchema } from '@gobing-ai/spur-contracts';
+import { applyCliMigrations } from '@gobing-ai/spur-domain';
+import { createDbAdapter } from '@gobing-ai/ts-db';
 import { Hono } from 'hono';
 import type { ServerContext } from '../../../src/context';
 import { runsModule } from '../../../src/modules/runs';
+
+const PROJECT_ROOT = resolve(__dirname, '../../../../..');
 
 function ctxWithService(service: Partial<RunStoreService>): ServerContext {
     return {
@@ -202,5 +210,112 @@ describe('runs module', () => {
     test('mount is a no-op without ServerContext', () => {
         const app = new Hono();
         expect(() => runsModule.mount(app, undefined)).not.toThrow();
+    });
+
+    test('GET /api/runs forwards workflow + normalized since filters (1069 R4)', async () => {
+        const listResult: RunStoreListResult = { runs: [], count: 0, nextCursor: null, hasMore: false };
+        const app = new Hono();
+        runsModule.mount(
+            app,
+            ctxWithService({
+                list: async (q = {}) => {
+                    expect(q.workflow).toBe('task-pipeline');
+                    expect(q.since).toBe('2026-09-01T00:00:00.000Z');
+                    return listResult;
+                },
+            }),
+        );
+        const res = await app.fetch(
+            new Request('http://localhost/api/runs?workflow=task-pipeline&since=2026-09-01T00:00:00Z'),
+        );
+        expect(res.status).toBe(200);
+    });
+
+    test('GET /api/runs?since=garbage returns 400 MALFORMED_SINCE without calling the service (1069 R4)', async () => {
+        const app = new Hono();
+        runsModule.mount(
+            app,
+            ctxWithService({
+                list: async () => {
+                    expect.unreachable('service must not be called for a malformed since');
+                },
+            }),
+        );
+        const res = await app.fetch(new Request('http://localhost/api/runs?since=garbage'));
+        expect(res.status).toBe(400);
+        const body = (await res.json()) as { error: string; code: string };
+        expect(body.code).toBe('MALFORMED_SINCE');
+        expect(body.error).toContain('garbage');
+    });
+});
+
+describe('runs module progress route (1069 / E72 R5)', () => {
+    async function setupProgressDb() {
+        const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(db);
+        // Seed mirrors packages/app/tests/workflow/progress-projection.test.ts:63-77.
+        const now = Date.now();
+        await db.run(
+            "INSERT INTO runs (id, workflow_name, status, started_at, metadata_json, created_at, updated_at) VALUES ('r1', 'test-pipeline', 'done', '2026-08-19T00:00:00Z', ?, ?, ?)",
+            JSON.stringify({ definitionDigest: 'sha256:testdigest' }),
+            now,
+            now,
+        );
+        await db.run(
+            "INSERT INTO action_runs (id, run_id, node, kind, status, ok, duration_ms, started_at, completed_at, created_at) VALUES ('a1', 'r1', 'precheck', 'shell', 'success', 1, 100, '2026-08-19T00:00:01Z', '2026-08-19T00:00:02Z', ?)",
+            now + 10,
+        );
+        return db;
+    }
+
+    function ctxWithDb(db: Awaited<ReturnType<typeof createDbAdapter>>): ServerContext {
+        return { getDb: async () => db, cwd: PROJECT_ROOT } as unknown as ServerContext;
+    }
+
+    test('GET /api/runs/:runId/progress returns 200 with the shared projection (R1)', async () => {
+        const db = await setupProgressDb();
+        const app = new Hono();
+        runsModule.mount(app, ctxWithDb(db));
+
+        const res = await app.fetch(new Request('http://localhost/api/runs/r1/progress'));
+        expect(res.status).toBe(200);
+        const body = (await res.json()) as WorkflowProgressProjectionDto;
+
+        // Wire shape parses against the shared contract schema.
+        const parsed = workflowProgressProjectionSchema.parse(body);
+
+        // One projection implementation: the route body equals the direct app-layer
+        // call, apart from the per-call projectedAt timestamp.
+        const direct = await projectWorkflowProgress('r1', { db, projectRoot: PROJECT_ROOT });
+        const { projectedAt: _bodyAt, ...bodyRest } = parsed;
+        const { projectedAt: _directAt, ...directRest } = direct;
+        expect(bodyRest).toEqual(directRest);
+
+        db.close();
+    });
+
+    test('GET /api/runs/:runId/progress returns 404 RUN_NOT_FOUND for an unknown id (R2)', async () => {
+        const db = await setupProgressDb();
+        const app = new Hono();
+        runsModule.mount(app, ctxWithDb(db));
+
+        const res = await app.fetch(new Request('http://localhost/api/runs/nope/progress'));
+        expect(res.status).toBe(404);
+        const body = (await res.json()) as { error: string; code: string; runId: string };
+        expect(body).toEqual({
+            error: 'run not found: nope',
+            code: 'RUN_NOT_FOUND',
+            runId: 'nope',
+        });
+        db.close();
+    });
+
+    test('WorkflowProgressProjection and WorkflowProgressProjectionDto stay assignable in both directions (R5)', () => {
+        // Type-drift guard: `bun run typecheck` fails if either side gains or
+        // changes a field, in either direction.
+        const toDto = (p: WorkflowProgressProjection): WorkflowProgressProjectionDto => p;
+        const fromDto = (d: WorkflowProgressProjectionDto): WorkflowProgressProjection => d;
+        expect(typeof toDto).toBe('function');
+        expect(typeof fromDto).toBe('function');
     });
 });
