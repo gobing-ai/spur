@@ -72,7 +72,10 @@
     },
     "apps/desktop": {
       "name": "@gobing-ai/spur-desktop",
-      "version": "0.3.98",
+      "version": "0.3.99",
+      "dependencies": {
+        "@gobing-ai/spur-config": "workspace:*",
+      },
       "devDependencies": {
         "@types/bun": "catalog:",
         "electron": "44.5.1",

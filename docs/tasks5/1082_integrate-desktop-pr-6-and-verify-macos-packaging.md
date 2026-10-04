@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Integrate desktop PR 6 and verify macOS packaging
-status: wip
+status: testing
 template: issue
 created_at: 2026-10-04T20:54:18.738Z
-updated_at: "2026-10-04T21:13:19.490Z"
+updated_at: "2026-10-04T21:25:11.302Z"
 
 ac_numbering: task-local
 ac_altitude: task-local
@@ -54,9 +54,9 @@ Packaging fixes also cover `packages/config/src/bundled-config.ts`, its tests, `
 
 ### Plan
 
-- [ ] Validate Codex findings and fix confirmed defects with regression tests.
-- [ ] Run required gates and build/stage/package for macOS.
-- [ ] Exercise Electron renderer and lifecycle against a temporary project.
+- [x] Validate Codex findings and fix confirmed defects with regression tests.
+- [x] Run build/stage/package and native smoke for macOS; final full gate in progress.
+- [x] Exercise Electron renderer and lifecycle against a temporary project.
 - [ ] Collect fresh Codex review and integrate the verified commits.
 
 ### Root Cause
@@ -67,7 +67,7 @@ The existing shell assumed Finder cwd was a project, left per-probe abort listen
 
 - `apps/desktop/src/main.ts:46` awaits pending startup cleanup and prompts packaged users for a directory before spawn; unexpected exits show an error and quit.
 - `apps/desktop/src/server-process.ts:102` disposes probe listeners and reports post-health exits; `apps/desktop/src/launch.ts:161` resolves relative Bun overrides from launch cwd.
-- `apps/desktop/src/preload.ts:27` tolerates a missing document root before DOMContentLoaded.
+- `apps/desktop/src/preload.ts:28` tolerates a missing document root before DOMContentLoaded.
 - `apps/desktop/scripts/stage-resources.ts:90` ships generated config, CLI manifest and schemas beside server and companion binaries.
 - `packages/config/src/bundled-config.ts:36` discovers executable-relative config; `packages/config/src/loader.ts:140` resolves the shipped schema manifest when package resolution is unavailable.
 - `apps/desktop/tests/main.test.ts:4`, `apps/desktop/tests/preload.test.ts:5`, `apps/desktop/tests/window.test.ts:7` add renderer isolation, navigation and IPC regression coverage.
@@ -76,7 +76,7 @@ The existing shell assumed Finder cwd was a project, left per-probe abort listen
 
 ### Testing
 
-- `bun run desktop:smoke`: 40 pass, 0 fail.
+- `bun run desktop:smoke`: 47 pass, 0 fail.
 - Config resolver and loader targeted tests: 93 pass, 0 fail.
 - Combined desktop/config/workflow regression run: 225 pass, 0 fail.
 - `bun run spur-check-feature`: PASS; 7 repo-wide tests pass.
@@ -88,6 +88,8 @@ The existing shell assumed Finder cwd was a project, left per-probe abort listen
 - `spur rule run --preset recommended-pre-check --fail-on warning --json`: PASS, no findings.
 - Full task gate first test run: 9938 pass, 1 fail due to the newly added resolver regression calling a spied re-export. Test now targets the uncached owning resolver; focused regression is green. Final full gate pending.
 - Coverage: desktop launch/layout/server modules remain covered by runtime tests; repository per-file coverage is measured by the final full gate.
+
+The added main-process lifecycle and window platform tests measure 100% functions/lines for both modules; final packaged smoke remains PASS after these changes. The full suite reached 9939 pass / 0 fail before the new lifecycle tests, but coverage prevented exit 0; the complete gate is being rerun with the new tests.
 
 ### Review
 
@@ -122,4 +124,5 @@ https://github.com/gobing-ai/spur/pull/6
 ### History
 
 - 2026-10-04T20:54:52.453Z todo → wip (system)
+- 2026-10-04T21:25:11.302Z wip → testing (system)
 
