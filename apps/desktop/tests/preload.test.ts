@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { DESKTOP_WINDOW_CHANNEL } from '../src/ipc';
-import { exposed, ipcMessages } from './electron-fixture';
+import { exposed, ipcMessages } from './fixtures/electron';
 
 test('preload handles an unavailable document root and exposes only window actions', async () => {
     const original = Object.getOwnPropertyDescriptor(globalThis, 'document');

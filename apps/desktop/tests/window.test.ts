@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { DESKTOP_WINDOW_CHANNEL } from '../src/ipc';
-import { FakeWindow, ipcMain } from './electron-fixture';
+import { FakeWindow, ipcMain } from './fixtures/electron';
 
 const { createMainWindow, registerWindowIpc } = await import('../src/window');
 
@@ -50,4 +50,13 @@ describe('desktop window', () => {
         send('close');
         expect(win.closed).toBe(true);
     });
+});
+
+test('non-macOS windows reserve native title bar controls', () => {
+    const win = createMainWindow({
+        url: 'http://127.0.0.1:1234/board',
+        preloadPath: '/preload.cjs',
+        platform: 'win32',
+    }) as unknown as FakeWindow;
+    expect(win.options.titleBarOverlay).toEqual({ color: '#1a1d27', symbolColor: '#e2e8f0', height: 36 });
 });
