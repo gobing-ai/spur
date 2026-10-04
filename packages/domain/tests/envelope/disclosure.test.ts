@@ -1,5 +1,5 @@
 /**
- * Required vs optional-disclosure layer selection (feature O, spec 0284 R4/R7).
+ * Required vs optional-disclosure layer selection (feature H5, spec 0284 R4/R7).
  *
  * R7 asks assemblies to select "required vs optional-disclosure layers per stage
  * mutation class and gate set". Before these, that split existed only as a

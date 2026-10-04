@@ -1,5 +1,5 @@
 /**
- * Stage-registry graph validator (feature O, spec ticket 0282, task 0302).
+ * Stage-registry graph validator (feature H5, spec ticket 0282, task 0302).
  *
  * {@link validateStageRegistryGraph} is the load-time gate (0282 R3 + AC2):
  * it validates the whole registry graph - per-record semantics, cross-record

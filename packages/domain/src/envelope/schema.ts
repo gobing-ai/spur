@@ -1,5 +1,5 @@
 /**
- * Envelope-layer schemas and types (feature O, spec 0284 R1, R3).
+ * Envelope-layer schemas and types (feature H5, spec 0284 R1, R3).
  *
  * Each layer is a typed record with canonical serialization/order (stable-first
  * then volatile), size budget, content hash, provenance, and cacheability

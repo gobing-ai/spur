@@ -1,6 +1,6 @@
 /**
  * Canonical serialization for envelope layers, envelopes, and snapshots
- * (feature O, spec 0284 R1, R2, R3).
+ * (feature H5, spec 0284 R1, R2, R3).
  *
  * "Canonical" means byte-identical output for semantically equal input,
  * independent of key insertion order. This is what makes the content-hash

@@ -1,5 +1,5 @@
 /**
- * Context-envelope layers and canonical serialization (feature O, spec 0284).
+ * Context-envelope layers and canonical serialization (feature H5, spec 0284).
  *
  * The canonical envelope is an ordered stack of typed layers, serialized
  * stable-first then volatile: (1) harness policy, (2) project authority,

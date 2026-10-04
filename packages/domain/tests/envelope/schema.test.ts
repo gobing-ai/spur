@@ -1,5 +1,5 @@
 /**
- * Tests for envelope-layer schemas and types (feature O, spec 0284 R1, R3).
+ * Tests for envelope-layer schemas and types (feature H5, spec 0284 R1, R3).
  */
 
 import { describe, expect, test } from 'bun:test';

@@ -1,5 +1,5 @@
 /**
- * Canonical-serialization tests (feature O, spec 0284 R1/R2/R3).
+ * Canonical-serialization tests (feature H5, spec 0284 R1/R2/R3).
  *
  * These assert the property the fingerprint contract depends on: semantically
  * equal input must produce byte-identical output regardless of key order.

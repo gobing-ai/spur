@@ -1,5 +1,5 @@
 /**
- * Tests for envelope assembly functions (feature O, spec 0284 R7, R3).
+ * Tests for envelope assembly functions (feature H5, spec 0284 R7, R3).
  */
 
 import { describe, expect, test } from 'bun:test';

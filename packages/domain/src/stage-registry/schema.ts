@@ -1,5 +1,5 @@
 /**
- * Stage-registry schema and types (feature O, spec ticket 0282).
+ * Stage-registry schema and types (feature H5, spec ticket 0282).
  *
  * A stage record is a typed, versioned, declarative contract describing one
  * lifecycle stage. The registry is the canonical unit of reuse: commands,
