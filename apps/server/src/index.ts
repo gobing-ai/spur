@@ -17,14 +17,14 @@ export interface MainDeps {
 }
 
 /** Resolve the companion CLI shipped beside the standalone server binary. */
-export function resolveStandaloneSpurInvocation(execPath: string, sourceDir = import.meta.dir): string {
+export function resolveStandaloneSpurInvocation(execPath: string, sourceDir = import.meta.dir): string[] {
     const runtime = basename(execPath)
         .toLowerCase()
         .replace(/\.exe$/, '');
     if (runtime === 'bun' || runtime === 'node') {
-        return `${execPath} ${join(sourceDir, '../../cli/src/index.ts')}`;
+        return [execPath, join(sourceDir, '../../cli/src/index.ts')];
     }
-    return join(dirname(execPath), '../cli', process.platform === 'win32' ? 'spur.exe' : 'spur');
+    return [join(dirname(execPath), '../cli', process.platform === 'win32' ? 'spur.exe' : 'spur')];
 }
 
 /** Entry-point logic extracted for testability. Called by the import.meta.main block. */

@@ -6,7 +6,7 @@ import { startServer } from '@gobing-ai/spur-server';
 import type { CliContext } from '../context';
 import { CommandError, errorMessage } from '../errors';
 import { toEnvelopeJson, writeJsonError } from '../output';
-import { resolveSpurBin } from '../workflow/resolve-spur-bin';
+import { resolveSpurArgv } from '../workflow/resolve-spur-bin';
 import { SHARED_OPTIONS } from './shared-options';
 
 /** Resolve the database URL used by `spur serve`, matching normal CLI DB defaults. */
@@ -48,7 +48,11 @@ export interface RegisterServeOptions {
 }
 
 /** Register `spur serve` command (optionally hidden from the top-level help listing). */
-export function registerServeCommand(program: Command, context: CliContext, options: RegisterServeOptions = {}): void {
+export function registerServeCommand(
+    program: Command,
+    context: Pick<CliContext, 'cwd' | 'output' | 'env' | 'setExitCode'>,
+    options: RegisterServeOptions = {},
+): void {
     const launch = options.startServer ?? startServer;
     program
         .command('serve', { hidden: options.hidden === true })
@@ -103,7 +107,7 @@ export function registerServeCommand(program: Command, context: CliContext, opti
                     openBrowser: options.open ?? true,
                     webDistPath: config.server.webDistPath,
                     // PATH-independent child invocation for queued history refreshes (task 0717).
-                    spurInvocation: resolveSpurBin(),
+                    spurInvocation: resolveSpurArgv(),
                     ...(projectRoot !== undefined ? { cwd: projectRoot } : {}),
                 });
             } catch (err) {

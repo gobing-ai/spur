@@ -1,4 +1,8 @@
 import { describe, expect, test } from 'bun:test';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { resolveBundledConfigRoot } from '../src/bundled-config';
 import {
     bundledConfigRoot,
     listBundledConfigFiles,
@@ -108,4 +112,19 @@ describe('bundled-config', () => {
         for (const f of nestedJson) expect(f.includes('/')).toBe(true);
         expect(files.length).toBeLessThan(listBundledConfigFiles().length + files.length);
     });
+});
+
+test('compiled binaries find external config beside the executable', () => {
+    const root = mkdtempSync(join(tmpdir(), 'spur-compiled-config-'));
+    try {
+        mkdirSync(join(root, 'config', 'rules'), { recursive: true });
+        mkdirSync(join(root, 'config', 'workflows'), { recursive: true });
+        resetBundledConfigCache();
+        expect(resolveBundledConfigRoot('/$bunfs/root', join(root, 'spur'))).toBe(join(root, 'config'));
+        resetBundledConfigCache();
+        expect(resolveBundledConfigRoot('/$bunfs/root', join(root, 'absent', 'spur'))).toBeNull();
+    } finally {
+        resetBundledConfigCache();
+        rmSync(root, { recursive: true, force: true });
+    }
 });

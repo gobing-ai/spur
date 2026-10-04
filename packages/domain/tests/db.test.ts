@@ -1,5 +1,5 @@
 import { Database } from 'bun:sqlite';
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -1207,3 +1207,29 @@ setTimeout(() => {
         }
     }, 40_000); // the 6s lock hold plus child spawn needs more than the 5s default
 });
+
+for (const failure of ['pragma', 'migration'] as const) {
+    test(`via-runtime ${failure} failure closes its unreturned adapter and preserves the original error`, async () => {
+        const { loadRuntimeFactory } = await import('@gobing-ai/ts-runtime');
+        const factory = await loadRuntimeFactory();
+        const adapter = mockDb(false);
+        const original = new Error(`${failure} failed`);
+        let statements = 0;
+        adapter.exec = async () => {
+            statements++;
+            if (failure === 'pragma' || statements > 1) throw original;
+        };
+        let closes = 0;
+        adapter.close = async () => {
+            closes++;
+            if (failure === 'migration') throw new Error('secondary close failure');
+        };
+        const created = spyOn(factory, 'createDbAdapter').mockResolvedValue(adapter);
+        try {
+            await expect(createMigratedDbViaRuntime({ url: ':memory:' })).rejects.toBe(original);
+            expect(closes).toBe(1);
+        } finally {
+            created.mockRestore();
+        }
+    });
+}

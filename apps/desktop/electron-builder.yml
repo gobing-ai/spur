@@ -1,0 +1,26 @@
+appId: ai.gobing.spur.desktop
+productName: Spur
+copyright: Copyright © Gobing AI
+directories:
+  output: ../../dist/desktop
+files:
+  - dist/**
+  - package.json
+extraResources:
+  - from: resources/spur
+    to: spur
+  # Companion CLI for standalone spur-server history refresh: dirname(execPath)/../cli/spur
+  - from: resources/cli
+    to: cli
+asar: true
+linux:
+  target:
+    - AppImage
+  category: Development
+mac:
+  target:
+    - dmg
+  category: public.app-category.developer-tools
+win:
+  target:
+    - nsis

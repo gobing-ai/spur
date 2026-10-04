@@ -3,6 +3,8 @@ import type { TimeoutPolicyMs } from '@gobing-ai/spur-app';
 import {
     type AgentQuotaUpdateConsumer,
     AgentService,
+    acquireProjectServerOwner,
+    assertProjectServerAvailable,
     configuredSecretValues,
     createSystemEventCatchAllSink,
     declaredBoardModules,
@@ -40,7 +42,7 @@ import {
     validateBoardModuleDeclarations,
 } from '@gobing-ai/spur-config';
 import { loadSpurConfig, resolveConfigFile } from '@gobing-ai/spur-config/loader';
-import type { BoardHostRuntime } from '@gobing-ai/spur-contracts';
+import type { BoardHostRuntime, DesktopServerStartupErrorMessage } from '@gobing-ai/spur-contracts';
 import {
     failOrphanedProcessingJobs,
     failStaleSchedulerCustomJob,
@@ -152,7 +154,7 @@ export interface StartServerOptions {
     webDistPath?: string | null;
     keepAlive?: boolean;
     /** PATH-independent Spur invocation for the isolated history-refresh child (task 0717). */
-    spurInvocation?: string;
+    spurInvocation?: string | readonly string[];
     /**
      * Resolved project root that scopes server config, filesystem/context, planning
      * folders, DB defaults, quota updates and project-scoped scheduled/child work
@@ -181,10 +183,14 @@ export interface StartServerDeps {
     createServerContext: typeof createServerContext;
     openUrl: typeof openUrl;
     resolveConfigFile: typeof resolveConfigFile;
+    assertProjectServerAvailable: typeof assertProjectServerAvailable;
+    acquireProjectServerOwner: typeof acquireProjectServerOwner;
 }
 
 /** Default collaborators wiring the real implementations. */
 export const defaultDeps: StartServerDeps = {
+    assertProjectServerAvailable,
+    acquireProjectServerOwner,
     serverBootstrapConfig,
     runNodeApplication,
     createApp,
@@ -644,517 +650,637 @@ export async function resolveWebDistPath(
  * `deps` is injectable for testing; production callers pass only `options`.
  */
 export async function startServer(options: StartServerOptions, deps: StartServerDeps = defaultDeps): Promise<void> {
-    const env = getEnvVars();
-    // One coherent project root for every project-scoped surface (task 0805 R2):
-    // config/bootstrap loading, filesystem/context creation, planning folders,
-    // project asset lookup, DB defaults and scheduled/child work. The CLI resolves
-    // `serve --cwd` against the invocation directory; embedding callers omit it and
-    // keep the previous process.cwd() behavior.
-    const projectRoot = options.cwd ?? process.cwd();
-    // Load the merged global+project config BEFORE boot so `bootstrap.options` (task 0902)
-    // reaches serverBootstrapConfig. A load failure degrades to null (env-only), same
-    // tolerance as the CLI root; the same value is reused for the server context below.
-    //
-    // Task 0989 R6 narrows that tolerance for one case: a project that EXPLICITLY declared
-    // `bootstrap.modules` must not be silently degraded to "no modules" — that turns a config
-    // typo into a board that quietly renders nothing. Every other load failure keeps the
-    // env-only fallback.
-    const spurConfig = await loadSpurConfig(projectRoot).catch((error: unknown) => {
-        if (isBoardModuleConfigError(error)) throw error;
-        return null;
-    });
-    const bootConfig = deps.serverBootstrapConfig(env, spurConfig);
-    const configFile = deps.resolveConfigFile(projectRoot);
-
-    await deps.runNodeApplication({
-        config: bootConfig,
-        configLoader: configFile ? { configFile, bootstrapSection: 'bootstrap' } : undefined,
-        async start(appRt: ApplicationRuntime) {
-            const fs = deps.createNodeFileSystem(projectRoot);
-            if (options.dbUrl && options.dbUrl !== IN_MEMORY_DATABASE_URL) {
-                await fs.ensureDir(dirname(options.dbUrl));
+    let cancellation: string | undefined;
+    let bootComplete = false;
+    let closeContextDb: (() => Promise<void>) | undefined;
+    let cleanupStartedServices: (() => Promise<void>) | undefined;
+    let killRemainingJobChildren: (() => void) | undefined;
+    let detachSignals = (): void => {};
+    let shutdownReady: ((reason: string) => Promise<void>) | undefined;
+    const parentIpc = typeof process.send === 'function';
+    const requestShutdown = (reason: string): void => {
+        cancellation ??= reason;
+        if (bootComplete && shutdownReady) void shutdownReady(cancellation);
+    };
+    const onDesktopShutdown = (message: unknown): void => {
+        if (
+            typeof message === 'object' &&
+            message !== null &&
+            'type' in message &&
+            message.type === 'spur.desktop.shutdown'
+        )
+            requestShutdown('desktop-ipc');
+    };
+    const onDesktopDisconnect = (): void => requestShutdown('desktop-disconnect');
+    const detachParent = (): void => {
+        process.off('message', onDesktopShutdown);
+        process.off('disconnect', onDesktopDisconnect);
+    };
+    if (parentIpc) {
+        process.on('message', onDesktopShutdown);
+        process.on('disconnect', onDesktopDisconnect);
+        if (process.connected === false) requestShutdown('desktop-disconnect');
+    }
+    const cancelled = new Error('Desktop server startup cancelled');
+    const checkCancellation = (): void => {
+        if (cancellation) throw cancelled;
+    };
+    let owner: ReturnType<typeof acquireProjectServerOwner> | undefined;
+    try {
+        checkCancellation();
+        const env = getEnvVars();
+        // One coherent project root for every project-scoped surface (task 0805 R2):
+        // config/bootstrap loading, filesystem/context creation, planning folders,
+        // project asset lookup, DB defaults and scheduled/child work. The CLI resolves
+        // `serve --cwd` against the invocation directory; embedding callers omit it and
+        // keep the previous process.cwd() behavior.
+        const projectRoot = options.cwd ?? process.cwd();
+        try {
+            owner = deps.acquireProjectServerOwner(projectRoot);
+            await deps.assertProjectServerAvailable(projectRoot);
+            checkCancellation();
+        } catch (error) {
+            if (process.connected) {
+                const message: DesktopServerStartupErrorMessage = {
+                    type: 'spur.desktop.startup-error',
+                    message: error instanceof Error ? error.message : String(error),
+                };
+                process.send?.(message, () => {});
             }
+            throw error;
+        }
+        // Load the merged global+project config BEFORE boot so `bootstrap.options` (task 0902)
+        // reaches serverBootstrapConfig. A load failure degrades to null (env-only), same
+        // tolerance as the CLI root; the same value is reused for the server context below.
+        //
+        // Task 0989 R6 narrows that tolerance for one case: a project that EXPLICITLY declared
+        // `bootstrap.modules` must not be silently degraded to "no modules" — that turns a config
+        // typo into a board that quietly renders nothing. Every other load failure keeps the
+        // env-only fallback.
+        const spurConfig = await loadSpurConfig(projectRoot).catch((error: unknown) => {
+            if (isBoardModuleConfigError(error)) throw error;
+            return null;
+        });
+        checkCancellation();
+        const bootConfig = deps.serverBootstrapConfig(env, spurConfig);
+        const configFile = deps.resolveConfigFile(projectRoot);
 
-            // The upstream runtime owns the sole scheduler lifecycle (task 0734 R4):
-            // it constructs the adapter before this callback and its scheduler
-            // plugin starts it after, so we only register entries against it. When
-            // the scheduler is disabled, `appRt.scheduler` is undefined and there is
-            // nothing to register.
-            const scheduler = appRt.config.scheduler.enabled ? appRt.scheduler : undefined;
+        await deps.runNodeApplication({
+            config: bootConfig,
+            configLoader: configFile ? { configFile, bootstrapSection: 'bootstrap' } : undefined,
+            async start(appRt: ApplicationRuntime) {
+                checkCancellation();
+                const fs = deps.createNodeFileSystem(projectRoot);
+                if (options.dbUrl && options.dbUrl !== IN_MEMORY_DATABASE_URL) {
+                    await fs.ensureDir(dirname(options.dbUrl));
+                }
 
-            const webDistPath = await resolveWebDistPath(options.webDistPath, projectRoot);
-            if (!webDistPath) {
-                appRt.logger.warn(
-                    'Board UI static assets not found — /board will return 404. ' +
-                        'Reinstall a package that includes the web board, or set server.webDistPath ' +
-                        'to a built dist/web directory (index.html).',
+                // The upstream runtime owns the sole scheduler lifecycle (task 0734 R4):
+                // it constructs the adapter before this callback and its scheduler
+                // plugin starts it after, so we only register entries against it. When
+                // the scheduler is disabled, `appRt.scheduler` is undefined and there is
+                // nothing to register.
+                const scheduler = appRt.config.scheduler.enabled ? appRt.scheduler : undefined;
+
+                const webDistPath = await resolveWebDistPath(options.webDistPath, projectRoot);
+                if (!webDistPath) {
+                    appRt.logger.warn(
+                        'Board UI static assets not found — /board will return 404. ' +
+                            'Reinstall a package that includes the web board, or set server.webDistPath ' +
+                            'to a built dist/web directory (index.html).',
+                    );
+                }
+
+                // ── Project Board modules (0989 R3/R4/R6) ──
+                // Resolved ONCE, before the Hono app is composed and before Bun.serve: malformed
+                // explicit declarations, a missing enabled asset, or a selected distribution that
+                // cannot render them all fail startup instead of serving a half-broken board (AC1).
+                // The snapshot is frozen for the process lifetime, so a declaration edit needs a
+                // restart and never mutates a live route table (AC5).
+                const boardDeclarations = declaredBoardModules(spurConfig);
+                const boardHost = await readBoardHostRuntime(
+                    webDistPath,
+                    boardDeclarations.some((declaration) => declaration.enabled),
                 );
-            }
-
-            // ── Project Board modules (0989 R3/R4/R6) ──
-            // Resolved ONCE, before the Hono app is composed and before Bun.serve: malformed
-            // explicit declarations, a missing enabled asset, or a selected distribution that
-            // cannot render them all fail startup instead of serving a half-broken board (AC1).
-            // The snapshot is frozen for the process lifetime, so a declaration edit needs a
-            // restart and never mutates a live route table (AC5).
-            const boardDeclarations = declaredBoardModules(spurConfig);
-            const boardHost = await readBoardHostRuntime(
-                webDistPath,
-                boardDeclarations.some((declaration) => declaration.enabled),
-            );
-            validateBoardModuleDeclarations(boardDeclarations, boardHost?.reservedModules ?? []);
-            const boardModules = await prepareBoardModules({
-                projectRoot,
-                declarations: boardDeclarations,
-                host: boardHost,
-                probe: boardModuleProbe(fs),
-            });
-
-            // Load the merged global+project config ONCE (A5/ADR-082) and thread
-            // it into the server context so Team/Workflow services + the history-
-            // refresh job (J8 R2) never re-read the config per slice. Loaded above
-            // so bootstrap.options reaches the boot config (task 0902).
-
-            const ctx: ServerContext = deps.createServerContext(appRt, {
-                cwd: projectRoot,
-                fs,
-                dbUrl: options.dbUrl,
-                folders: await resolvePlanningFolders(fs),
-                sectionMatrix: await loadSectionMatrix(projectRoot),
-                webDistPath,
-                boardModules,
-                jobQueueEnabled: bootConfig.jobqueue.enabled,
-                scheduler,
-                bootConfig,
-                ...(spurConfig ? { spurConfig } : {}),
-            });
-            let jobWorker: JobWorkerService<unknown> | undefined;
-            let jobProcessRegistry: ProcessRegistry | undefined;
-            let jobWorkerStartTimer: ReturnType<typeof setTimeout> | undefined;
-
-            // 0799 R5: the ONE project-scoped quota-update consumer starts BEFORE
-            // autostart or any dispatch acceptance, so exhaustion/recovery
-            // events (including CLI work emitted while the server was offline)
-            // are subscribed before supervised agents can select executors.
-            // 0805 R3: startup awaits ONE bounded drain pass of the existing
-            // serialized drain BEFORE the server admits workflow/executor
-            // dispatch — a persisted disable (written by CLI work while the
-            // server was offline) is applied synchronously, so the first
-            // workflow launch reloading the config observes it without waiting
-            // for a poll tick. The consumer owns the exhaustion/recovery
-            // subscriptions and drains them serially; startup failure is logged
-            // and non-fatal so the server still serves (rows stay pending and
-            // retry on the next start).
-            let quotaConsumer: AgentQuotaUpdateConsumer | undefined;
-            try {
-                quotaConsumer = startAgentQuotaUpdateConsumer(ctx.eventBus(), {
-                    getDb: () => ctx.getDb(),
-                    projectRoot: ctx.cwd,
-                    // Composition-root-owned loader call (ADR-082): serve.ts is
-                    // an allowed root; the consumer gets the closed-over accessor.
-                    loadAgentConfig: async () => {
-                        try {
-                            return await loadSpurConfig(ctx.cwd);
-                        } catch {
-                            return null;
-                        }
-                    },
-                    warn: (message) => appRt.logger.warn(message),
+                validateBoardModuleDeclarations(boardDeclarations, boardHost?.reservedModules ?? []);
+                const boardModules = await prepareBoardModules({
+                    projectRoot,
+                    declarations: boardDeclarations,
+                    host: boardHost,
+                    probe: boardModuleProbe(fs),
                 });
-                // 0805 R3: one bounded startup drain pass. The consumer's bounded
-                // attempts own retry limits; failed/deferred rows stay visible and
-                // pending under the nonfatal startup policy — the server never
-                // claims disabled-executor exclusion when the disable apply failed.
-                // An empty queue resolves immediately (one pass, no startup retry).
-                try {
-                    const summary = await quotaConsumer.drain();
-                    if (summary.applied > 0 || summary.failed > 0 || summary.deferred > 0) {
-                        appRt.logger.info('Agent quota update startup drain complete', { ...summary });
-                    } else {
-                        appRt.logger.debug('Agent quota update startup drain complete', { ...summary });
+
+                // Load the merged global+project config ONCE (A5/ADR-082) and thread
+                // it into the server context so Team/Workflow services + the history-
+                // refresh job (J8 R2) never re-read the config per slice. Loaded above
+                // so bootstrap.options reaches the boot config (task 0902).
+
+                checkCancellation();
+                const ctx: ServerContext = deps.createServerContext(appRt, {
+                    cwd: projectRoot,
+                    fs,
+                    dbUrl: options.dbUrl,
+                    folders: await resolvePlanningFolders(fs),
+                    sectionMatrix: await loadSectionMatrix(projectRoot),
+                    webDistPath,
+                    boardModules,
+                    jobQueueEnabled: bootConfig.jobqueue.enabled,
+                    scheduler,
+                    bootConfig,
+                    ...(spurConfig ? { spurConfig } : {}),
+                });
+                closeContextDb = ctx.closeDb?.bind(ctx);
+                let jobWorker: JobWorkerService<unknown> | undefined;
+                let jobProcessRegistry: ProcessRegistry | undefined;
+                let jobWorkerStartTimer: ReturnType<typeof setTimeout> | undefined;
+                let quotaConsumer: AgentQuotaUpdateConsumer | undefined;
+                let server: ReturnType<typeof Bun.serve> | undefined;
+                const projectRegistry = new ProjectRegistry();
+                const projectCwd = projectRoot;
+                let registered = false;
+                let servicesCleanup: Promise<void> | undefined;
+                const drainServices = async (): Promise<void> => {
+                    if (jobWorkerStartTimer) {
+                        clearTimeout(jobWorkerStartTimer);
+                        jobWorkerStartTimer = undefined;
                     }
-                } catch (error) {
-                    appRt.logger.warn('Agent quota update startup drain failed', { error: String(error) });
-                }
-                appRt.logger.debug('agent quota update consumer started');
-            } catch (error) {
-                appRt.logger.warn('agent quota update consumer failed to start', { error: String(error) });
-            }
-
-            // `agent.fleet` replaces `team up` and the retired `.spur/fleet.json`
-            // declaration: project specs must exist before autostart reads them.
-            // Resolve after the quota drain so disabled executors are honored on the
-            // first launch; retain the fleet's ground-truth guard.
-            //
-            // 0858 R4: `agent.fleet.enabled` is the single fleet switch — absent or
-            // disabled means neither materialization nor autostart. This load is
-            // deliberately NOT the tolerant one above: a retired source (`agent.team`,
-            // a global-layer `agent.fleet`, a leftover `.spur/fleet.json`) or an invalid
-            // `agent.fleet` must fail the START (design §3 step 1), not silently serve an
-            // empty fleet.
-            const fleetConfig = await loadSpurConfig(projectRoot);
-            const fleetSection = fleetConfig.agent?.fleet;
-            const fleetService = new FleetService({
-                fs,
-                spurConfig: fleetConfig,
-                roles: resolveAgentRoles(fleetConfig?.agent),
-                openDb: () => ctx.getDb(),
-            });
-            if (fleetSection?.enabled === true) {
-                try {
-                    const materialized = await fleetService.materialize(projectRoot);
-                    // Operator decision (2026-09-14): every materialized member starts;
-                    // `materialize` already skipped disabled members, so the upserted ids
-                    // are exactly the autostart set — no second resolution.
-                    await ctx.supervisor().startAutostart(materialized.upserted);
-                } catch (error) {
-                    await quotaConsumer?.stop();
-                    throw error;
-                }
-            } else {
-                appRt.logger.info(
-                    fleetSection === undefined
-                        ? 'agent.fleet is not declared — the project fleet is neither materialized nor autostarted'
-                        : 'agent.fleet.enabled is false — the project fleet is neither materialized nor autostarted',
-                );
-            }
-
-            // 0859 R2: the declared strategy reaches the runtime AFTER config load and fleet
-            // materialization, and only when the section exists — a project without
-            // `agent.fleet` must not have `project_strategy` written (R3). The reconcile is
-            // idempotent, so a restart with the same declaration neither bumps
-            // `strategy_version` nor emits `strategy.changed`. A failure fails the start
-            // rather than serving under a strategy the config did not declare.
-            if (fleetSection !== undefined) {
-                const strategyRuntime = new StrategyRuntime({
-                    openDb: () => ctx.getDb(),
-                    tasks: ctx.taskService(),
-                    fleet: fleetService,
-                    dependencyBlocked: async () => null,
-                });
-                try {
-                    const changed = await strategyRuntime.reconcileStrategy(
-                        normalizeProjectPath(projectRoot),
-                        fleetSection.strategy,
-                    );
-                    appRt.logger.info(
-                        changed
-                            ? `agent.fleet.strategy reconciled to ${fleetSection.strategy}`
-                            : `agent.fleet.strategy ${fleetSection.strategy} already active — nothing to reconcile`,
-                    );
-                } catch (error) {
-                    await quotaConsumer?.stop();
-                    throw error;
-                }
-            }
-
-            // System-event persistence tap (task 0189 wave A / 0198). Best-effort:
-            // tap failures are isolated by registerSystemEventTap and never break
-            // other EventBus subscribers. Bun-only — the Workers path has no long-lived bus.
-            if (bootConfig.events.enabled) {
-                try {
-                    const dao = new SystemEventDao(await ctx.getDb());
-                    registerSystemEventTap(ctx.eventBus(), dao, appRt.logger, {
-                        diagnosticEnabled: bootConfig.events.diagnostic === true,
-                        retention: bootConfig.events.retention,
-                        secretValues: configuredSecretValues(env),
-                        projectContext: ctx.systemEventProjectContext(),
-                    });
-                    // Catalog-open ingestion (task 0794 R5): uncataloged names
-                    // persist through the same DAO/quotas/secrets/project
-                    // context; cataloged names stay tap-owned, so no duplicate
-                    // row. Installed once per process (idempotent wrapper, Q4).
-                    // Best-effort, lossy-on-shutdown (task 0802 R2 / D1): like
-                    // the cataloged tap above, in-flight uncataloged persists are
-                    // discarded when the server exits — there is no shutdown
-                    // drain for either sink. Documented, not drained: a
-                    // catch-all-only drain would not close the loss window and
-                    // would add the asymmetry 0794 deliberately avoided. The CLI
-                    // ledger path is the durable seam (it drains both).
-                    installSystemEventCatchAll(
-                        ctx.eventBus(),
-                        createSystemEventCatchAllSink({
-                            dao,
-                            logger: appRt.logger,
-                            retention: bootConfig.events.retention,
-                            secretValues: configuredSecretValues(env),
-                            projectContext: ctx.systemEventProjectContext(),
-                        }),
-                    );
-                    appRt.logger.debug('system_events tap registered', {
-                        diagnostic: bootConfig.events.diagnostic === true,
-                    });
-                } catch (error) {
-                    appRt.logger.warn('system_events tap registration failed', { error: String(error) });
-                }
-            }
-
-            const app = deps.createApp(appRt, { fs, ctx });
-
-            // Task 0803 R1 / 0813 R1: the child execution deadline is resolved once at
-            // daemon boot and threads into both child-spawning queue handlers and the
-            // tick's stale-row sweep threshold, so env, kill deadline, and sweep agree
-            // on one policy.
-            const schedulerCustomTimeoutMs = resolveSchedulerCustomTimeoutMs(spurConfig);
-
-            // Sep 2026 slowness fix: job work is never on the boot path — this
-            // whole setup (orphan sweep + worker start, and every SQLite write
-            // they perform) only runs on the post-listen timer below.
-            const startJobQueueWorker = async (): Promise<void> => {
-                if (jobWorker !== undefined) return;
-                // One shared registry records every child this executor spawns;
-                // graceful shutdown SIGTERMs their process groups so no importer
-                // outlives the server (root cause of the recurring orphans).
-                jobProcessRegistry = createInMemoryProcessRegistry();
-                const registry = new JobHandlerRegistry();
-                // Scheduled per-prefix retention prune (task 0368 R2): every
-                // catalog prefix is pruned to its resolved quota on the cron.
-                // Quotas resolved once here; the job body is a thin DAO call.
-                const retentionQuotas = resolveRetentionQuotas(bootConfig.events.retention);
-                registry.register(SYSTEM_EVENTS_PRUNE_JOB, async () => {
-                    const dao = await ctx.systemEventDao();
-                    await dao.pruneQuotas(retentionQuotas);
-                });
-                registry.register(SMOKE_JOB, async () => {});
-                registry.register(TASK_ACTION_JOB, (payload) => handleTaskActionJob(ctx, env, payload));
-                registry.register(FEATURE_ACTION_JOB, (payload) => handleFeatureActionJob(ctx, env, payload));
-                // Completion-triggered history refresh (task 0549): enqueued (coalesced)
-                // by CLI trigger points; consumed here. Since 0717 the job body runs
-                // `history daily` in an isolated child process, so the server only
-                // awaits its exit — the child owns every `history.*` event.
-                const childExecutor = new NodeProcessExecutor({ registry: jobProcessRegistry });
-                registry.register(HISTORY_REFRESH_JOB, async (job) => {
-                    await emitQueueJobStarted(ctx, job);
-                    return handleHistoryRefreshJob(
-                        {
-                            cwd: ctx.cwd,
-                            ...(options.dbUrl !== undefined ? { databaseUrl: options.dbUrl } : {}),
-                            // Omitted invocation fails loudly in splitLaunchCommand at run time.
-                            invocation: options.spurInvocation ?? '',
-                            executor: childExecutor,
-                            // Task 0806 R3: the refresh watchdog is decoupled from the
-                            // scheduler.custom default so its budget is tuned on its own
-                            // `bootstrap.options` key.
-                            timeoutMs: resolveHistoryRefreshTimeoutMs(spurConfig),
-                        },
-                        job,
-                    );
-                });
-                // Configured `bootstrap.scheduler.jobs` ticks (task 0734): the
-                // scheduler only enqueues; the command runs here, in a child, under
-                // the queue's existing attempt/retry policy.
-                registry.register(SCHEDULER_CUSTOM_JOB, async (job) => {
-                    await emitQueueJobStarted(ctx, job);
-                    // Declared per-job policy (`bootstrap.scheduler.jobs[].timeoutMs`).
-                    // The map is read once per attempt; a job name absent from this
-                    // daemon's config falls through to env, then the global default.
-                    const declaredTimeouts = new Map(
-                        appRt.config.scheduler.jobs.map((entry) => [entry.name, entry.timeoutMs] as const),
-                    );
-                    return handleSchedulerCustomJob(
-                        {
-                            cwd: ctx.cwd,
-                            executor: childExecutor,
-                            // Task 0806 R3: per-job budget override via
-                            // `SPUR_SCHEDULER_TIMEOUT_<NAME>_MS`, falling back to the job's
-                            // declared `timeoutMs`, then the global daemon-boot default.
-                            resolveTimeoutMs: (name) =>
-                                resolveSchedulerJobTimeoutMs(
-                                    name,
-                                    env,
-                                    schedulerCustomTimeoutMs,
-                                    declaredTimeouts.get(name),
-                                ),
-                            // Task 0863: a claimed duplicate of an already-running job name is
-                            // completed, not failed — audit it so the suppression is visible in
-                            // the ledger instead of only as a zero-duration completion.
-                            onDuplicate: (name) => {
-                                ctx.eventBus().emit('scheduler.job.executed', {
-                                    name: `${SCHEDULER_CUSTOM_JOB}:${name}`,
-                                    durationMs: 0,
-                                    severity: 'info',
-                                    skipped: true,
-                                    reason: `duplicate execution suppressed; ${name} is already running in this process`,
-                                });
-                            },
-                            // Shutdown abandonment is likewise audited: the row completes,
-                            // so this is the only record that the command did not finish.
-                            onShutdownAbandon: (name) => {
-                                ctx.eventBus().emit('scheduler.job.executed', {
-                                    name: `${SCHEDULER_CUSTOM_JOB}:${name}`,
-                                    durationMs: 0,
-                                    severity: 'info',
-                                    skipped: true,
-                                    reason: `abandoned by server shutdown; the next tick resumes ${name}`,
-                                });
-                            },
-                            // A child killed by this server's own shutdown teardown is not a
-                            // command verdict. `shuttingDown` flips at the top of `shutdown`
-                            // and is read here at settlement time.
-                            isShuttingDown: () => shuttingDown,
-                        },
-                        job,
-                    );
-                });
-                // Startup sweep: fail orphaned `processing` jobs left by a prior server
-                // crash/restart. Without this, rows stuck in `processing` are never retried
-                // and hold conceptual locks on resources like the SQLite database.
-                // Task 0813 R2: explicit-unlimited scheduler jobs are exempt — their rows
-                // are legitimately in flight (no deadline), and failing a live unlimited
-                // row while its detached child keeps running would re-enqueue on the next
-                // tick and execute the job twice. Symmetric with the periodic sweep's
-                // `null`-policy exemption above.
-                const unlimitedJobNames = appRt.config.scheduler.jobs
-                    .filter(
-                        (job) =>
-                            resolveSchedulerJobTimeoutMs(job.name, env, schedulerCustomTimeoutMs, job.timeoutMs) ===
-                            null,
-                    )
-                    .map((job) => job.name);
-                const orphanCount = await failOrphanedProcessingJobs(await ctx.getDb(), Date.now(), unlimitedJobNames);
-                if (orphanCount > 0) {
-                    appRt.logger.warn('Swept orphaned processing jobs at startup', {
-                        count: orphanCount,
-                    });
-                }
-                jobWorker = new JobWorkerService({
-                    consumer: await ctx.queueConsumer(),
-                    registry,
-                });
-                await jobWorker.start();
-                appRt.logger.info('Job worker started');
-            };
-
-            if (scheduler) {
-                // Register built-in + configured entries before the upstream
-                // scheduler plugin auto-starts (registration order: user callback
-                // runs before scheduler start — verified in ts-infra application
-                // tests). Configured jobs come only from the resolved runtime config.
-                registerSchedulerEntries(scheduler, ctx, appRt.config.scheduler.jobs, {
-                    timeoutMs: schedulerCustomTimeoutMs,
-                    env,
-                });
-                appRt.logger.info('Scheduler entries registered', { jobs: appRt.config.scheduler.jobs.length });
-            }
-
-            // DNS-rebinding guard runs before any Hono middleware (csrf trusts the Host-derived origin).
-            const hostAllowlist = allowedHostnames(options.host, trimOrigins(env.SPUR_CORS_ORIGINS ?? ''));
-            const server = Bun.serve({
-                fetch: (req, srv) => (isAllowedHost(req, hostAllowlist) ? app.fetch(req, srv) : rejectHost()),
-                port: options.port,
-                hostname: options.host,
-            });
-
-            const projectRegistry = new ProjectRegistry();
-            const projectCwd = projectRoot;
-            const projectName = basename(projectCwd);
-            try {
-                const existingProject = await projectRegistry.getByPath(projectCwd);
-                await projectRegistry.upsert({
-                    path: projectCwd,
-                    name: existingProject?.name ?? projectName,
-                    port: server.port,
-                });
-            } catch (err) {
-                appRt.logger.warn('Failed to register project in ProjectRegistry', { error: String(err) });
-            }
-
-            // The listener is open: only now arm the job worker (and its startup
-            // orphan sweep). A long importer's write lock can delay the worker by
-            // the busy-timeout, but never the listen. unref: the timer must not
-            // hold the process alive on its own.
-            if (bootConfig.jobqueue.enabled) {
-                jobWorkerStartTimer = setTimeout(() => {
-                    jobWorkerStartTimer = undefined;
-                    void startJobQueueWorker().catch((error: unknown) => {
-                        appRt.logger.error('Job worker startup failed', { error: String(error) });
-                    });
-                }, options.jobWorkerStartDelayMs ?? JOB_WORKER_START_DELAY_MS);
-                jobWorkerStartTimer.unref?.();
-            }
-
-            // Named handlers so shutdown can detach them before process.exit —
-            // otherwise tests (and double-signals) keep firing into a dying process.
-            let shuttingDown = false;
-            const onSigInt = () => {
-                void shutdown('SIGINT');
-            };
-            const onSigTerm = () => {
-                void shutdown('SIGTERM');
-            };
-
-            const shutdown = async (signal: string) => {
-                if (shuttingDown) return;
-                shuttingDown = true;
-                process.off('SIGINT', onSigInt);
-                process.off('SIGTERM', onSigTerm);
-                appRt.logger.info('Shutting down server', { signal });
-                // Die-with-server for job children: a restarted server must never
-                // inherit an orphaned importer holding the SQLite write lock. Kill
-                // BEFORE the drains below so in-flight handlers resolve immediately.
-                if (jobWorkerStartTimer) {
-                    clearTimeout(jobWorkerStartTimer);
-                    jobWorkerStartTimer = undefined;
-                }
-                if (jobProcessRegistry) {
-                    terminateJobChildren(jobProcessRegistry, 'SIGTERM');
-                }
-                // 0799 R5: detach quota subscriptions and drain active persistence
-                // writes (plus one final drain) before supervisor teardown and DB
-                // close — a shutdown must never race or drop a recorded update.
-                if (quotaConsumer) {
+                    if (jobProcessRegistry) terminateJobChildren(jobProcessRegistry, 'SIGTERM');
                     try {
-                        await quotaConsumer.stop();
+                        await quotaConsumer?.stop();
                     } catch (error) {
                         appRt.logger.warn('Agent quota update consumer shutdown error', { error: String(error) });
                     }
-                }
+                    if (registered) {
+                        try {
+                            await projectRegistry.setPort(projectCwd, 0);
+                        } catch (error) {
+                            appRt.logger.warn('Failed to deregister project port in ProjectRegistry', {
+                                error: String(error),
+                            });
+                        }
+                    }
+                    try {
+                        await jobWorker?.stop();
+                    } catch (error) {
+                        appRt.logger.warn('Job worker shutdown error', { error: String(error) });
+                    }
+                    try {
+                        await ctx.supervisor().stopAll();
+                    } catch (error) {
+                        appRt.logger.warn('Supervisor shutdown error', { error: String(error) });
+                    }
+                    server?.stop(true);
+                };
+                // The scheduler plugin starts after this callback resolves. Its
+                // failure still owns every service created here; outer startup
+                // cleanup must drain them exactly once before releasing ownership.
+                const cleanupServices = (): Promise<void> => (servicesCleanup ??= drainServices());
+                cleanupStartedServices = cleanupServices;
+                killRemainingJobChildren = (): void => {
+                    if (jobProcessRegistry) terminateJobChildren(jobProcessRegistry, 'SIGKILL');
+                };
+                const checkBootCancellation = async (): Promise<void> => {
+                    if (cancellation) throw cancelled;
+                };
                 try {
-                    await projectRegistry.setPort(projectCwd, 0);
-                } catch (err) {
-                    appRt.logger.warn('Failed to deregister project port in ProjectRegistry', { error: String(err) });
-                }
-                if (jobWorker) await jobWorker.stop();
-                try {
-                    await ctx.supervisor().stopAll();
+                    await checkBootCancellation();
+
+                    // 0799 R5: the ONE project-scoped quota-update consumer starts BEFORE
+                    // autostart or any dispatch acceptance, so exhaustion/recovery
+                    // events (including CLI work emitted while the server was offline)
+                    // are subscribed before supervised agents can select executors.
+                    // 0805 R3: startup awaits ONE bounded drain pass of the existing
+                    // serialized drain BEFORE the server admits workflow/executor
+                    // dispatch — a persisted disable (written by CLI work while the
+                    // server was offline) is applied synchronously, so the first
+                    // workflow launch reloading the config observes it without waiting
+                    // for a poll tick. The consumer owns the exhaustion/recovery
+                    // subscriptions and drains them serially; startup failure is logged
+                    // and non-fatal so the server still serves (rows stay pending and
+                    // retry on the next start).
+                    try {
+                        quotaConsumer = startAgentQuotaUpdateConsumer(ctx.eventBus(), {
+                            getDb: () => ctx.getDb(),
+                            projectRoot: ctx.cwd,
+                            // Composition-root-owned loader call (ADR-082): serve.ts is
+                            // an allowed root; the consumer gets the closed-over accessor.
+                            loadAgentConfig: async () => {
+                                try {
+                                    return await loadSpurConfig(ctx.cwd);
+                                } catch {
+                                    return null;
+                                }
+                            },
+                            warn: (message) => appRt.logger.warn(message),
+                        });
+                        // 0805 R3: one bounded startup drain pass. The consumer's bounded
+                        // attempts own retry limits; failed/deferred rows stay visible and
+                        // pending under the nonfatal startup policy — the server never
+                        // claims disabled-executor exclusion when the disable apply failed.
+                        // An empty queue resolves immediately (one pass, no startup retry).
+                        try {
+                            const summary = await quotaConsumer.drain();
+                            if (summary.applied > 0 || summary.failed > 0 || summary.deferred > 0) {
+                                appRt.logger.info('Agent quota update startup drain complete', { ...summary });
+                            } else {
+                                appRt.logger.debug('Agent quota update startup drain complete', { ...summary });
+                            }
+                        } catch (error) {
+                            appRt.logger.warn('Agent quota update startup drain failed', { error: String(error) });
+                        }
+                        appRt.logger.debug('agent quota update consumer started');
+                    } catch (error) {
+                        appRt.logger.warn('agent quota update consumer failed to start', { error: String(error) });
+                    }
+
+                    // `agent.fleet` replaces `team up` and the retired `.spur/fleet.json`
+                    // declaration: project specs must exist before autostart reads them.
+                    // Resolve after the quota drain so disabled executors are honored on the
+                    // first launch; retain the fleet's ground-truth guard.
+                    //
+                    // 0858 R4: `agent.fleet.enabled` is the single fleet switch — absent or
+                    // disabled means neither materialization nor autostart. This load is
+                    // deliberately NOT the tolerant one above: a retired source (`agent.team`,
+                    // a global-layer `agent.fleet`, a leftover `.spur/fleet.json`) or an invalid
+                    // `agent.fleet` must fail the START (design §3 step 1), not silently serve an
+                    // empty fleet.
+                    await checkBootCancellation();
+                    const fleetConfig = await loadSpurConfig(projectRoot);
+                    await checkBootCancellation();
+                    const fleetSection = fleetConfig.agent?.fleet;
+                    const fleetService = new FleetService({
+                        fs,
+                        spurConfig: fleetConfig,
+                        roles: resolveAgentRoles(fleetConfig?.agent),
+                        openDb: () => ctx.getDb(),
+                    });
+                    if (fleetSection?.enabled === true) {
+                        try {
+                            const materialized = await fleetService.materialize(projectRoot);
+                            await checkBootCancellation();
+                            // Operator decision (2026-09-14): every materialized member starts;
+                            // `materialize` already skipped disabled members, so the upserted ids
+                            // are exactly the autostart set — no second resolution.
+                            await ctx.supervisor().startAutostart(materialized.upserted);
+                            await checkBootCancellation();
+                        } catch (error) {
+                            await quotaConsumer?.stop();
+                            throw error;
+                        }
+                    } else {
+                        appRt.logger.info(
+                            fleetSection === undefined
+                                ? 'agent.fleet is not declared — the project fleet is neither materialized nor autostarted'
+                                : 'agent.fleet.enabled is false — the project fleet is neither materialized nor autostarted',
+                        );
+                    }
+
+                    // 0859 R2: the declared strategy reaches the runtime AFTER config load and fleet
+                    // materialization, and only when the section exists — a project without
+                    // `agent.fleet` must not have `project_strategy` written (R3). The reconcile is
+                    // idempotent, so a restart with the same declaration neither bumps
+                    // `strategy_version` nor emits `strategy.changed`. A failure fails the start
+                    // rather than serving under a strategy the config did not declare.
+                    if (fleetSection !== undefined) {
+                        const strategyRuntime = new StrategyRuntime({
+                            openDb: () => ctx.getDb(),
+                            tasks: ctx.taskService(),
+                            fleet: fleetService,
+                            dependencyBlocked: async () => null,
+                        });
+                        try {
+                            const changed = await strategyRuntime.reconcileStrategy(
+                                normalizeProjectPath(projectRoot),
+                                fleetSection.strategy,
+                            );
+                            appRt.logger.info(
+                                changed
+                                    ? `agent.fleet.strategy reconciled to ${fleetSection.strategy}`
+                                    : `agent.fleet.strategy ${fleetSection.strategy} already active — nothing to reconcile`,
+                            );
+                        } catch (error) {
+                            await quotaConsumer?.stop();
+                            throw error;
+                        }
+                    }
+
+                    // System-event persistence tap (task 0189 wave A / 0198). Best-effort:
+                    // tap failures are isolated by registerSystemEventTap and never break
+                    // other EventBus subscribers. Bun-only — the Workers path has no long-lived bus.
+                    if (bootConfig.events.enabled) {
+                        try {
+                            const dao = new SystemEventDao(await ctx.getDb());
+                            registerSystemEventTap(ctx.eventBus(), dao, appRt.logger, {
+                                diagnosticEnabled: bootConfig.events.diagnostic === true,
+                                retention: bootConfig.events.retention,
+                                secretValues: configuredSecretValues(env),
+                                projectContext: ctx.systemEventProjectContext(),
+                            });
+                            // Catalog-open ingestion (task 0794 R5): uncataloged names
+                            // persist through the same DAO/quotas/secrets/project
+                            // context; cataloged names stay tap-owned, so no duplicate
+                            // row. Installed once per process (idempotent wrapper, Q4).
+                            // Best-effort, lossy-on-shutdown (task 0802 R2 / D1): like
+                            // the cataloged tap above, in-flight uncataloged persists are
+                            // discarded when the server exits — there is no shutdown
+                            // drain for either sink. Documented, not drained: a
+                            // catch-all-only drain would not close the loss window and
+                            // would add the asymmetry 0794 deliberately avoided. The CLI
+                            // ledger path is the durable seam (it drains both).
+                            installSystemEventCatchAll(
+                                ctx.eventBus(),
+                                createSystemEventCatchAllSink({
+                                    dao,
+                                    logger: appRt.logger,
+                                    retention: bootConfig.events.retention,
+                                    secretValues: configuredSecretValues(env),
+                                    projectContext: ctx.systemEventProjectContext(),
+                                }),
+                            );
+                            appRt.logger.debug('system_events tap registered', {
+                                diagnostic: bootConfig.events.diagnostic === true,
+                            });
+                        } catch (error) {
+                            appRt.logger.warn('system_events tap registration failed', { error: String(error) });
+                        }
+                    }
+
+                    const app = deps.createApp(appRt, { fs, ctx });
+
+                    // Task 0803 R1 / 0813 R1: the child execution deadline is resolved once at
+                    // daemon boot and threads into both child-spawning queue handlers and the
+                    // tick's stale-row sweep threshold, so env, kill deadline, and sweep agree
+                    // on one policy.
+                    const schedulerCustomTimeoutMs = resolveSchedulerCustomTimeoutMs(spurConfig);
+
+                    // Sep 2026 slowness fix: job work is never on the boot path — this
+                    // whole setup (orphan sweep + worker start, and every SQLite write
+                    // they perform) only runs on the post-listen timer below.
+                    const startJobQueueWorker = async (): Promise<void> => {
+                        if (jobWorker !== undefined) return;
+                        // One shared registry records every child this executor spawns;
+                        // graceful shutdown SIGTERMs their process groups so no importer
+                        // outlives the server (root cause of the recurring orphans).
+                        jobProcessRegistry = createInMemoryProcessRegistry();
+                        const registry = new JobHandlerRegistry();
+                        // Scheduled per-prefix retention prune (task 0368 R2): every
+                        // catalog prefix is pruned to its resolved quota on the cron.
+                        // Quotas resolved once here; the job body is a thin DAO call.
+                        const retentionQuotas = resolveRetentionQuotas(bootConfig.events.retention);
+                        registry.register(SYSTEM_EVENTS_PRUNE_JOB, async () => {
+                            const dao = await ctx.systemEventDao();
+                            await dao.pruneQuotas(retentionQuotas);
+                        });
+                        registry.register(SMOKE_JOB, async () => {});
+                        registry.register(TASK_ACTION_JOB, (payload) => handleTaskActionJob(ctx, env, payload));
+                        registry.register(FEATURE_ACTION_JOB, (payload) => handleFeatureActionJob(ctx, env, payload));
+                        // Completion-triggered history refresh (task 0549): enqueued (coalesced)
+                        // by CLI trigger points; consumed here. Since 0717 the job body runs
+                        // `history daily` in an isolated child process, so the server only
+                        // awaits its exit — the child owns every `history.*` event.
+                        const childExecutor = new NodeProcessExecutor({ registry: jobProcessRegistry });
+                        registry.register(HISTORY_REFRESH_JOB, async (job) => {
+                            await emitQueueJobStarted(ctx, job);
+                            return handleHistoryRefreshJob(
+                                {
+                                    cwd: ctx.cwd,
+                                    ...(options.dbUrl !== undefined ? { databaseUrl: options.dbUrl } : {}),
+                                    // Omitted invocation fails loudly in splitLaunchCommand at run time.
+                                    invocation: options.spurInvocation ?? '',
+                                    executor: childExecutor,
+                                    // Task 0806 R3: the refresh watchdog is decoupled from the
+                                    // scheduler.custom default so its budget is tuned on its own
+                                    // `bootstrap.options` key.
+                                    timeoutMs: resolveHistoryRefreshTimeoutMs(spurConfig),
+                                },
+                                job,
+                            );
+                        });
+                        // Configured `bootstrap.scheduler.jobs` ticks (task 0734): the
+                        // scheduler only enqueues; the command runs here, in a child, under
+                        // the queue's existing attempt/retry policy.
+                        registry.register(SCHEDULER_CUSTOM_JOB, async (job) => {
+                            await emitQueueJobStarted(ctx, job);
+                            // Declared per-job policy (`bootstrap.scheduler.jobs[].timeoutMs`).
+                            // The map is read once per attempt; a job name absent from this
+                            // daemon's config falls through to env, then the global default.
+                            const declaredTimeouts = new Map(
+                                appRt.config.scheduler.jobs.map((entry) => [entry.name, entry.timeoutMs] as const),
+                            );
+                            return handleSchedulerCustomJob(
+                                {
+                                    cwd: ctx.cwd,
+                                    executor: childExecutor,
+                                    // Task 0806 R3: per-job budget override via
+                                    // `SPUR_SCHEDULER_TIMEOUT_<NAME>_MS`, falling back to the job's
+                                    // declared `timeoutMs`, then the global daemon-boot default.
+                                    resolveTimeoutMs: (name) =>
+                                        resolveSchedulerJobTimeoutMs(
+                                            name,
+                                            env,
+                                            schedulerCustomTimeoutMs,
+                                            declaredTimeouts.get(name),
+                                        ),
+                                    // Task 0863: a claimed duplicate of an already-running job name is
+                                    // completed, not failed — audit it so the suppression is visible in
+                                    // the ledger instead of only as a zero-duration completion.
+                                    onDuplicate: (name) => {
+                                        ctx.eventBus().emit('scheduler.job.executed', {
+                                            name: `${SCHEDULER_CUSTOM_JOB}:${name}`,
+                                            durationMs: 0,
+                                            severity: 'info',
+                                            skipped: true,
+                                            reason: `duplicate execution suppressed; ${name} is already running in this process`,
+                                        });
+                                    },
+                                    // Shutdown abandonment is likewise audited: the row completes,
+                                    // so this is the only record that the command did not finish.
+                                    onShutdownAbandon: (name) => {
+                                        ctx.eventBus().emit('scheduler.job.executed', {
+                                            name: `${SCHEDULER_CUSTOM_JOB}:${name}`,
+                                            durationMs: 0,
+                                            severity: 'info',
+                                            skipped: true,
+                                            reason: `abandoned by server shutdown; the next tick resumes ${name}`,
+                                        });
+                                    },
+                                    // A child killed by this server's own shutdown teardown is not a
+                                    // command verdict. `shuttingDown` flips at the top of `shutdown`
+                                    // and is read here at settlement time.
+                                    isShuttingDown: () => shuttingDown,
+                                },
+                                job,
+                            );
+                        });
+                        // Startup sweep: fail orphaned `processing` jobs left by a prior server
+                        // crash/restart. Without this, rows stuck in `processing` are never retried
+                        // and hold conceptual locks on resources like the SQLite database.
+                        // Task 0813 R2: explicit-unlimited scheduler jobs are exempt — their rows
+                        // are legitimately in flight (no deadline), and failing a live unlimited
+                        // row while its detached child keeps running would re-enqueue on the next
+                        // tick and execute the job twice. Symmetric with the periodic sweep's
+                        // `null`-policy exemption above.
+                        const unlimitedJobNames = appRt.config.scheduler.jobs
+                            .filter(
+                                (job) =>
+                                    resolveSchedulerJobTimeoutMs(
+                                        job.name,
+                                        env,
+                                        schedulerCustomTimeoutMs,
+                                        job.timeoutMs,
+                                    ) === null,
+                            )
+                            .map((job) => job.name);
+                        const orphanCount = await failOrphanedProcessingJobs(
+                            await ctx.getDb(),
+                            Date.now(),
+                            unlimitedJobNames,
+                        );
+                        if (orphanCount > 0) {
+                            appRt.logger.warn('Swept orphaned processing jobs at startup', {
+                                count: orphanCount,
+                            });
+                        }
+                        jobWorker = new JobWorkerService({
+                            consumer: await ctx.queueConsumer(),
+                            registry,
+                        });
+                        await jobWorker.start();
+                        appRt.logger.info('Job worker started');
+                    };
+
+                    if (scheduler) {
+                        // Register built-in + configured entries before the upstream
+                        // scheduler plugin auto-starts (registration order: user callback
+                        // runs before scheduler start — verified in ts-infra application
+                        // tests). Configured jobs come only from the resolved runtime config.
+                        registerSchedulerEntries(scheduler, ctx, appRt.config.scheduler.jobs, {
+                            timeoutMs: schedulerCustomTimeoutMs,
+                            env,
+                        });
+                        appRt.logger.info('Scheduler entries registered', { jobs: appRt.config.scheduler.jobs.length });
+                    }
+
+                    // DNS-rebinding guard runs before any Hono middleware (csrf trusts the Host-derived origin).
+                    const hostAllowlist = allowedHostnames(options.host, trimOrigins(env.SPUR_CORS_ORIGINS ?? ''));
+                    await checkBootCancellation();
+                    server = Bun.serve({
+                        fetch: (req, srv) => (isAllowedHost(req, hostAllowlist) ? app.fetch(req, srv) : rejectHost()),
+                        port: options.port,
+                        hostname: options.host,
+                    });
+
+                    const projectName = basename(projectCwd);
+                    try {
+                        const existingProject = await projectRegistry.getByPath(projectCwd);
+                        await projectRegistry.upsert({
+                            path: projectCwd,
+                            name: existingProject?.name ?? projectName,
+                            port: server.port,
+                        });
+                        registered = true;
+                    } catch (err) {
+                        appRt.logger.warn('Failed to register project in ProjectRegistry', { error: String(err) });
+                    }
+
+                    // The listener is open: only now arm the job worker (and its startup
+                    // orphan sweep). A long importer's write lock can delay the worker by
+                    // the busy-timeout, but never the listen. unref: the timer must not
+                    // hold the process alive on its own.
+                    if (bootConfig.jobqueue.enabled) {
+                        jobWorkerStartTimer = setTimeout(() => {
+                            jobWorkerStartTimer = undefined;
+                            void startJobQueueWorker().catch((error: unknown) => {
+                                appRt.logger.error('Job worker startup failed', { error: String(error) });
+                            });
+                        }, options.jobWorkerStartDelayMs ?? JOB_WORKER_START_DELAY_MS);
+                        jobWorkerStartTimer.unref?.();
+                    }
+
+                    // Named handlers so shutdown can detach them before process.exit —
+                    // otherwise tests (and double-signals) keep firing into a dying process.
+                    let shuttingDown = false;
+                    const onSigInt = () => {
+                        requestShutdown('SIGINT');
+                    };
+                    const onSigTerm = () => {
+                        requestShutdown('SIGTERM');
+                    };
+
+                    const shutdown = async (signal: string) => {
+                        if (shuttingDown) return;
+                        shuttingDown = true;
+                        detachSignals();
+                        detachParent();
+                        appRt.logger.info('Shutting down server', { signal });
+                        await cleanupServices();
+                        await appRt.stop('shutdown' as ApplicationStopReason);
+                        await closeContextDb?.();
+                        // Escalate only after handlers and both DB owners drain,
+                        // while the project ownership claim is still retained.
+                        killRemainingJobChildren?.();
+                        owner?.release();
+                        owner = undefined;
+                        process.exit(0);
+                    };
+
+                    detachSignals = (): void => {
+                        process.off('SIGINT', onSigInt);
+                        process.off('SIGTERM', onSigTerm);
+                    };
+                    process.on('SIGINT', onSigInt);
+                    process.on('SIGTERM', onSigTerm);
+                    shutdownReady = shutdown;
+
+                    const url = `http://${options.host}:${options.port}`;
+
+                    appRt.logger.info('Server started', {
+                        port: options.port,
+                        host: options.host,
+                        board: webDistPath ? `${url}/board` : null,
+                    });
+
+                    if (options.openBrowser) {
+                        // Only open the board when static assets resolved; otherwise the
+                        // browser lands on a JSON 404 that looks like a broken install.
+                        if (!cancellation) await deps.openUrl(webDistPath ? `${url}/board` : `${url}/api/health`);
+                    }
                 } catch (error) {
-                    appRt.logger.warn('Supervisor shutdown error', { error: String(error) });
+                    // Partial callback startup owns these services; runtime plugin
+                    // cleanup owns the DB and runs after this callback rejects.
+                    await cleanupServices();
+                    throw error;
                 }
-                server.stop(true);
-                await appRt.stop('shutdown' as ApplicationStopReason);
-                // Escalation for children that ignored SIGTERM; nothing after this
-                // point drains handlers, so SIGKILL cannot corrupt an in-flight write.
-                if (jobProcessRegistry) {
-                    terminateJobChildren(jobProcessRegistry, 'SIGKILL');
-                }
-                process.exit(0);
-            };
+            },
+        });
 
-            process.on('SIGINT', onSigInt);
-            process.on('SIGTERM', onSigTerm);
-
-            const url = `http://${options.host}:${options.port}`;
-
-            appRt.logger.info('Server started', {
-                port: options.port,
-                host: options.host,
-                board: webDistPath ? `${url}/board` : null,
-            });
-
-            if (options.openBrowser) {
-                // Only open the board when static assets resolved; otherwise the
-                // browser lands on a JSON 404 that looks like a broken install.
-                await deps.openUrl(webDistPath ? `${url}/board` : `${url}/api/health`);
-            }
-        },
-    });
-
-    // Keep the process alive AFTER the user callback resolves. The callback must
-    // return so the runtime's plugin chain can finish — the scheduler plugin
-    // starts the adapter there (task 0734), and a never-resolving callback
-    // starved it, leaving every registered cron entry dead (Sep 2 – Sep 6 2026).
-    // Bun.serve alone does not hold the loop for the CLI `serve` command path.
-    if (options.keepAlive !== false) {
-        await new Promise<void>(() => {});
+        bootComplete = true;
+        if (cancellation && shutdownReady) {
+            await shutdownReady(cancellation);
+            return;
+        }
+        // Keep the process alive AFTER the user callback resolves. The callback must
+        // return so the runtime's plugin chain can finish — the scheduler plugin
+        // starts the adapter there (task 0734), and a never-resolving callback
+        // starved it, leaving every registered cron entry dead (Sep 2 – Sep 6 2026).
+        // Bun.serve alone does not hold the loop for the CLI `serve` command path.
+        if (options.keepAlive !== false) {
+            await new Promise<void>(() => {});
+        }
+    } catch (error) {
+        detachParent();
+        detachSignals();
+        // runNodeApplication tears down its plugins before rejecting, including
+        // failures after the user callback (for example scheduler startup). Drain
+        // callback-owned services before closing the separately owned context DB.
+        await cleanupStartedServices?.();
+        await closeContextDb?.();
+        // A graceful runtime-stop failure cannot prove the DB/plugin ring closed.
+        if (!bootComplete) {
+            killRemainingJobChildren?.();
+            owner?.release();
+        }
+        if (error !== cancelled) throw error;
+        if (parentIpc && process.connected) process.disconnect?.();
     }
 }

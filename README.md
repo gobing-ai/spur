@@ -39,6 +39,7 @@ idea → agent detection + health → constraint checking → workflow orchestra
 - **CLI** — Single `spur` binary for every operation.
 - **Server / Web** — Hono on Bun (or Cloudflare Workers) exposing an oRPC OpenAPI handler, plus an
   Astro dashboard consuming the typed oRPC client.
+- **Desktop** — optional Electron shell (`bun run desktop:dev`) that spawns that local server and opens `/board`. See [`apps/desktop/README.md`](apps/desktop/README.md).
 
 ---
 

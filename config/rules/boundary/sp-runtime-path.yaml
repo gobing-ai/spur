@@ -23,6 +23,8 @@ exclude:
     # legitimately contains `config/...` documentation / self-references — not
     # runtime paths.
     - "apps/cli/config/**"
+    # Desktop stage copies the same generated build-time asset payload beside each binary.
+    - "apps/desktop/resources/**"
 rules:
     - id: sp-runtime-path
       description: >

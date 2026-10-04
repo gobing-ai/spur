@@ -36,6 +36,9 @@ rules:
             # this rule's include scope — scanning generated copies only adds noise
             # (e.g. `id: task-implement-transition` trips the sk- token shape).
             - "apps/cli/config/"
+            # Desktop ships the same generated config payload beside each compiled binary.
+            # Its source remains outside this source-code rule, just like the CLI bundle.
+            - "apps/desktop/resources/"
             # `apps/cli/plugins/` is the same kind of gitignored build:bundle output — a staged
             # npm copy of `plugins/`, itself outside the include scope. Minified generated libs
             # there trip the api-key shape (0976: HEAD's inline-run.generated.mjs fires too).

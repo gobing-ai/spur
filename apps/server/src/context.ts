@@ -165,6 +165,9 @@ export interface ServerContext {
     /** Lazy, cached migrated DbAdapter. May throw D1NotConfiguredError on CF. */
     getDb(): Promise<DbAdapter>;
 
+    /** Freeze new DB opens and close the context-owned lazy adapter, if opened. */
+    closeDb(): Promise<void>;
+
     /** Readiness probe: resolve the DB then run a trivial liveness query. */
     checkDbHealth(): Promise<boolean>;
 
@@ -400,6 +403,8 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
     };
     // ── Lazy caches ──
     let dbPromise: Promise<DbAdapter> | undefined;
+    let dbClosing = false;
+    let closeDbPromise: Promise<void> | undefined;
     let taskSvc: TaskService | undefined;
     let checkSvc: TaskCheckService | undefined;
     let featureSvc: FeatureService | undefined;
@@ -427,6 +432,7 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
         logger: appRt.logger,
 
         async getDb(): Promise<DbAdapter> {
+            if (dbClosing) throw new Error('Server database is closing');
             if (!dbPromise) {
                 const created = (async () => {
                     if (dbUrl !== IN_MEMORY_DATABASE_URL) {
@@ -443,6 +449,17 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
                 dbPromise = created;
             }
             return dbPromise;
+        },
+
+        closeDb(): Promise<void> {
+            dbClosing = true;
+            closeDbPromise ??= (async () => {
+                // Do not open a previously unused DB just to close it. A pending
+                // first-touch open must settle before ownership can be released.
+                const db = await dbPromise?.catch(() => undefined);
+                await db?.close();
+            })();
+            return closeDbPromise;
         },
 
         async checkDbHealth(): Promise<boolean> {

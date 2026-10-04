@@ -4,7 +4,7 @@ owns: WHAT — product vision, users, scope (in / out / deferred)
 authority: authoritative-on-scope
 version: 1.13.0
 owner: Robin Min
-updated_at: 2026-09-30
+updated_at: 2026-10-04
 read_before: adding a command or feature
 edit_rules: 99 §6.2
 sync: [T1, T4, T6]
@@ -134,9 +134,16 @@ Legacy top-level `init`, `serve`, `status`, `maintain`, and `migrate` remain hid
 
 Full rd3-migration dispositions: `docs/plans/2026-06-10-rd3-migration-feature-list.md`.
 
-### 5.4 Out of scope
+### 5.4 Desktop Board shell
 
-- BYOK, key storage, sandboxing, multi-tenant cloud, desktop/mobile apps.
+The desktop application is an approved thin Electron transport for the existing Board. It runs
+one local Spur child server, which owns the selected project's database, and requires an explicit
+project selection when packaged. It does not introduce an agent runtime, key storage, or a second
+database owner. The runtime and packaging contract lives in [desktop shell](design/desktop-shell.md).
+
+### 5.5 Out of scope
+
+- BYOK, key storage, sandboxing, multi-tenant cloud, mobile apps.
 - Peer-to-peer sockets between coding agents.
 - Reading another agent's terminal (PTY snapshot, screen manifests, OSC/spinner matching) as IPC.
 - Injecting keystrokes or synthetic Enter into another agent's UI as a command.

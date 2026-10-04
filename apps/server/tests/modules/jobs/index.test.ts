@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { handleSchedulerCustomJob, SCHEDULER_CUSTOM_JOB } from '@gobing-ai/spur-app';
 import { EventBus } from '@gobing-ai/ts-infra';
-import { createNodeFileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
+import { createNodeFileSystem, type ProcessExecutor } from '@gobing-ai/ts-runtime';
 import { Hono } from 'hono';
 import { createServerContext, type ServerContext, type ServerJobQueue } from '../../../src/context';
 import { jobsModule } from '../../../src/modules/jobs';
@@ -56,7 +56,32 @@ describe('jobs stats count scheduler.custom rows without an API change (task 073
             await queue.enqueue(SCHEDULER_CUSTOM_JOB, { name: 'bad-job', command: 'exit 7' });
 
             const consumer = await ctx.queueConsumer();
-            const executor = new NodeProcessExecutor();
+            // This fixture owns queue retries and API counts. Real child execution
+            // is covered by scheduler-custom-job-service.test.ts in the app workspace.
+            const commands: string[] = [];
+            const executor: ProcessExecutor = {
+                run: async (options) => {
+                    expect(options.command).toBe('/bin/sh');
+                    const args = options.args ?? [];
+                    expect(args[0]).toBe('-c');
+                    const command = args[1];
+                    if (command !== 'exit 0' && command !== 'exit 7') {
+                        throw new Error(`Unexpected fixture command: ${command}`);
+                    }
+                    commands.push(command);
+                    return {
+                        command: options.command,
+                        args,
+                        exitCode: command === 'exit 0' ? 0 : 7,
+                        stdout: '',
+                        stderr: '',
+                        durationMs: 1,
+                    };
+                },
+                runStreaming: () => {
+                    throw new Error('Unexpected streaming execution in queue stats fixture');
+                },
+            };
             consumer.register(SCHEDULER_CUSTOM_JOB, (job) => handleSchedulerCustomJob({ cwd, executor }, job));
 
             // Drive bad-job through the real three-attempt policy. Each retry parks the
@@ -66,6 +91,9 @@ describe('jobs stats count scheduler.custom rows without an API change (task 073
                 await consumer.processOnce();
                 await db.run('UPDATE queue_jobs SET next_retry_at = 0 WHERE status = ?', ['pending']);
             }
+
+            expect(commands.filter((command) => command === 'exit 0')).toHaveLength(1);
+            expect(commands.filter((command) => command === 'exit 7')).toHaveLength(3);
 
             const app = new Hono();
             jobsModule.mount(app, ctx);

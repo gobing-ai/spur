@@ -35,16 +35,20 @@ describe('index main entry', () => {
         expect(captured()?.openBrowser).toBe(false);
         expect(captured()?.dbUrl).toBe(':memory:');
         expect(captured()?.webDistPath).toBeNull();
-        expect(captured()?.spurInvocation).toContain('apps/cli/src/index.ts');
+        expect(captured()?.spurInvocation).toEqual([
+            process.execPath,
+            expect.stringContaining('apps/cli/src/index.ts'),
+        ]);
     });
 
     test('standalone invocation resolves source and sibling compiled CLI paths', () => {
-        expect(resolveStandaloneSpurInvocation('/opt/bun', '/repo/apps/server/src')).toBe(
-            '/opt/bun /repo/apps/cli/src/index.ts',
-        );
-        expect(resolveStandaloneSpurInvocation('/repo/dist/server/spur-server')).toBe(
+        expect(resolveStandaloneSpurInvocation('/opt/bun', '/repo/apps/server/src')).toEqual([
+            '/opt/bun',
+            '/repo/apps/cli/src/index.ts',
+        ]);
+        expect(resolveStandaloneSpurInvocation('/repo/dist/server/spur-server')).toEqual([
             process.platform === 'win32' ? '/repo/dist/cli/spur.exe' : '/repo/dist/cli/spur',
-        );
+        ]);
     });
 
     test('main() uses schema defaults when env is empty', async () => {
@@ -67,4 +71,14 @@ describe('index main entry', () => {
         expect(captured()).not.toBeNull();
         expect(captured()?.port).toBe(3000);
     });
+});
+
+test('standalone companion argv preserves installation paths with spaces', () => {
+    expect(
+        resolveStandaloneSpurInvocation('/Applications/Spur Desktop.app/Contents/Resources/spur/spur-server'),
+    ).toEqual([
+        process.platform === 'win32'
+            ? '/Applications/Spur Desktop.app/Contents/Resources/cli/spur.exe'
+            : '/Applications/Spur Desktop.app/Contents/Resources/cli/spur',
+    ]);
 });

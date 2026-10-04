@@ -1,8 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { chmod, mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { getEnvVar } from '@gobing-ai/spur-config';
+import { delimiter, dirname, join } from 'node:path';
 import { runCli } from './helpers';
 
 // A5/ADR-082: composition-root merged-config wiring regression tests (R6).
@@ -61,7 +60,9 @@ async function makeLayerDirs(globalYaml?: string, projectYaml?: string): Promise
             HOME: fakeHome,
             USERPROFILE: fakeHome,
             SPUR_SKIP_GLOBAL_CONFIG: '',
-            PATH: `${binDir}:${getEnvVar('PATH') ?? ''}`,
+            // Doctor probes every bundled agent, even with one configured
+            // executor. Keep host installations out of this layering fixture.
+            PATH: [binDir, dirname(process.execPath), '/usr/bin', '/bin'].join(delimiter),
         },
     };
 }

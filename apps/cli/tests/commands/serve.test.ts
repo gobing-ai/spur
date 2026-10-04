@@ -303,3 +303,57 @@ describe('serve --cwd project root (task 0805 R2)', () => {
         expect(visible.launched[0]?.dbUrl).toBe(hidden.launched[0]?.dbUrl);
     });
 });
+
+test('main dispatches both serve forms without booting or closing a CLI database', async () => {
+    const { main } = await import('../../src/index');
+    const root = mkdtempSync(join(tmpdir(), 'spur-db-free-serve-'));
+    const invalidConfig = join(root, '.spur.yaml');
+    writeFileSync(invalidConfig, 'invalid: [');
+    let closed = false;
+    const captured: StartServerOptions[] = [];
+    for (const prefix of [['serve'], ['--no-logo', 'self', 'serve']]) {
+        const code = await main([...prefix, '--cwd', root, '--no-open'], {
+            cwd: root,
+            db: {
+                close: async () => {
+                    closed = true;
+                },
+            } as never,
+            output: {
+                write() {},
+                error(message) {
+                    throw new Error(message);
+                },
+            },
+            startServer: async (options) => {
+                captured.push(options);
+            },
+        });
+        expect(code).toBe(0);
+    }
+    expect(closed).toBe(false);
+    expect(captured).toHaveLength(2);
+    expect(
+        captured.every((options) => options.cwd === root && options.dbUrl === join(root, DEFAULT_DATABASE_URL)),
+    ).toBe(true);
+});
+
+test('database-free serve dispatch preserves help, parse errors and startup exit status', async () => {
+    const { main } = await import('../../src/index');
+    const writes: string[] = [];
+    const errors: string[] = [];
+    const output = { write: (value: string) => writes.push(value), error: (value: string) => errors.push(value) };
+    expect(await main(['serve', '--help'], { output })).toBe(0);
+    expect(writes.join('')).toContain('--cwd');
+    expect(await main(['serve', '--unknown'], { output })).toBe(1);
+    expect(errors.join('')).toContain('unknown option');
+    expect(
+        await main(['serve', '--no-open'], {
+            output,
+            startServer: async () => {
+                throw new Error('server startup failed');
+            },
+        }),
+    ).toBe(1);
+    expect(errors.join('')).toContain('server startup failed');
+});
