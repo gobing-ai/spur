@@ -2,9 +2,9 @@
 doc: 00_ADR
 owns: WHY — lasting architectural choices, context and tradeoffs
 authority: authoritative
-version: 1.63.0
+version: 1.64.0
 owner: Robin Min
-updated_at: 2026-10-01
+updated_at: 2026-10-04
 read_before: any structural change; before diverging from a decision
 edit_rules: 99 §6.1
 sync: [T1, T2]
@@ -609,6 +609,17 @@ unaffected and is explicitly **retained** by ADR-116: agents still coordinate on
 message plane and the supervised process pipe, and the Board is still a client rather than a wait or
 command authority. The two planes it names survive as the Projects Conversation tab and the member
 terminal (0841/0842); only their composition unit changed. Decision text above is unchanged.
+
+**Amendment (2026-10-04 · fleet inbox redesign, A1):** Two clarifications, no new channel.
+(1) Work is **dispatched** only on the message plane; the supervised pipe carries persistent-stdin
+turns and output observation and is never an independent dispatch authority — in-process dispatch
+that writes neither channel (the pre-redesign strategy/planner path) violates this decision.
+(2) A cooperatively joined guest (ADR-121 amendment) may report lifecycle through `spur agent report`
+and receive work through its own host's continuation hook (e.g. Claude Stop-block returning the next
+inbox item): the agent *pulls* from the message plane; Spur still never writes its terminal.
+Why: the 1069 dogfood failure came from a third, implicit path; guest delivery must not be misread as
+injection. Alternatives rejected: herdr-style PTY transport (keystroke injection, unproven paste
+boundaries); PID-attach (TIOCSTI disabled/restricted). Detail: [agent fleet inbox redesign](plans/2026-10-04-agent-fleet-inbox-redesign.md) §2.4.
 
 ## ADR-058: Tracked Transition Shims — Two-Sided Manifest Gate
 
@@ -1218,6 +1229,14 @@ hand-authored specs remain opt-in trackable with `git add -f`; only `spur:genera
 runtime state by contract. Detail: `docs/03_ARCHITECTURE.md` §17 and `docs/04_DESIGN.md` §2.1/§3.1.
 
 **Current reading:** ADR-116 as amended makes project `agent.fleet` the current roster carrier. The `.spur/fleet.json` and `agent.team` descriptions above record earlier stages, not supported configuration.
+
+**Amendment (2026-10-04 · fleet inbox redesign, A3) — layer 3 carriers superseded:** Layers 1–2 are
+unchanged. Layer 3 is resolved at runtime from `agent.fleet` plus occupancy rows; the reserved
+`AgentInstance`/`AgentInstanceStore` read shape and the `agent_instances` table are deleted and
+`.spur/agents/*` spec files are no longer generated. Why: the writer never arrived (zero callers), and a
+second carrier duplicated `agent.fleet` and produced the member-local-id mismatch; deriving instances
+keeps the "never a source of truth" premise above without any carrier. Alternative rejected: shipping
+the instance-row writer (persists data fully derivable from config + occupancy). Detail: [agent fleet inbox redesign](plans/2026-10-04-agent-fleet-inbox-redesign.md) §2.3 D3.
 
 ## ADR-087: `--agent inline` Is One Honest Selector — Default Inline, Substitution Over Rejection
 
@@ -1914,6 +1933,16 @@ posture); [workflow composition](design/workflow-composition-contract.md#composi
   drain); ADR-116 (`agent.fleet` declaration); ADR-118/119 (stage outcomes, gate scope).
 - **Detail:** `docs/design/session-pinned-dispatch.md`; features B6, B7, B8, G66.
 
+- **Amendment (2026-10-04 · fleet inbox redesign, A2):** Declared fleet members stay headless.
+  An interactive session may additionally join as a **guest occupant** (`spur agent join`) that pulls
+  inbox work itself; Spur never drives its TTY. Guests are addressed by concrete spec id only — role
+  resolution (ADR-075) counts declared members only, so a guest never makes a role ambiguous — and a
+  stage declaring `requiresCapabilities` never routes to a guest without attestation (ADR-102 fails
+  closed on unknown). Why: operators want an already-running session to take reviews/questions without
+  restarting it headless; pull-based participation keeps structured dispatch and exit semantics for
+  members. Alternatives rejected: TTY dispatch (needs injection, ADR-057), forbidding guests (loses the
+  cooperative case at no safety gain). Detail: [agent fleet inbox redesign](plans/2026-10-04-agent-fleet-inbox-redesign.md) §3.2.
+
 ## ADR-122: Interrupted-Run Recovery Is an Upstream Engine Contract; Spur Claims Resume at Its Own Boundary
 
 - **Status:** Accepted · **Date:** 2026-09-19
@@ -1982,6 +2011,16 @@ posture); [workflow composition](design/workflow-composition-contract.md#composi
 - **Retains:** ADR-057 (durable artifacts, no terminal transport), ADR-087, ADR-116, ADR-121.
 - **Detail:** [workflow catalogue refactor](design/workflow-catalogue-refactor.md) §5.
 
+- **Amendment (2026-10-04 · fleet inbox redesign, A4):** One fleet dispatch primitive serves both
+  workflow `agent.run` and the strategy (GTD) tick: enqueue a keyed inbox message, the member executes,
+  completion is the `coordination_runs` receipt linked to that message, and the wait is
+  occupant-pinned. A wait timeout is **outcome-unknown**, never failure — re-dispatch only on a definite
+  failed/not-started receipt; a `wip` task re-dispatches with `--continue`. The orchestrator never
+  executes member work in-process. Why: two dispatch paths for one fleet caused the 1069 failure, and
+  treating a timeout as failure duplicates work because a timeout does not prove no input was consumed.
+  Alternative rejected: keep the strategy's blocking in-process path (blocks the orchestrator's own
+  inbox and bypasses receipts). Detail: [agent fleet inbox redesign](plans/2026-10-04-agent-fleet-inbox-redesign.md) §3.
+
 ## ADR-127: Parallel Batch Tasks Are Isolated in Per-Task Worktrees and Integrated by Rebase-Then-Fast-Forward
 
 - **Status:** Accepted · **Date:** 2026-09-24 · **Feature:** H1
@@ -2048,3 +2087,24 @@ posture); [workflow composition](design/workflow-composition-contract.md#composi
 - **Consequence:** Coordinate producers/readers and migrate valid existing local evidence without weakening proof, freshness, recovery or confinement. Reuse `workflow clean` and its existing dry-run/log scopes for bounded migration; the operator accepted this behavior extension with the E71 design context. Implemented across tasks 1024–1027: durable evidence migration, direct writes of run records, registered artifacts and sessions to `.spur/memory/runs/`, durable-first verify analytics, and completed-scratch disposal equivalence. Retention durations and pair-retention policy are unchanged.
 - **Retains:** ADR-021/130 (application-service ownership), ADR-051 (public-surface consent), current E7 run identity/inspection and F93 tracked evidence behavior.
 - **Detail:** [disposable run storage](design/disposable-run-storage.md); topology in `03 §32`.
+
+## ADR-132: Every Execution Is a Run; the Run Id Is Spur's Session Id
+
+- **Status:** Accepted (design) · **Date:** 2026-10-04 · **Amends:** ADR-045 · **Extends:** ADR-117
+- **Decision:** Spur's session unit is the **run**, independent of any coding agent's session. Every
+  execution Spur spawns — workflow run, `spur agent run`, fleet member turn — owns one `run_id` that
+  binds (1) its retained stdout/stderr stream at `.spur/memory/runs/<runId>.log` (same sink as
+  ADR-045), (2) its lineage via `parent_run_id` (workflow → dispatch → member turn; the root run is the
+  operator-visible session), and (3) the agent session ids it produced through `history_run_session`
+  (ADR-059). The supervisor's ring buffer is a live view tagged with the current `run_id`, not the
+  record. `spur agent trace <runId>` reads the lineage and stream.
+- **Why:** Workflow runs retain narration, but agent runs and fleet turns exist only in an in-memory
+  ring buffer lost on restart, and nothing links a dispatch to the turn and agent session that served
+  it — diagnosis of 1069 required reading processes, not records.
+- **Alternatives:** A new `spur_sessions` entity (duplicates the run id that already threads every
+  table); keying on agent session ids (one persistent member session spans many runs and guests may
+  have none).
+- **Consequence:** One migration adds `coordination_runs.parent_run_id`; logs follow ADR-131 retention
+  and secret redaction. Inline host-session output stays out of scope — ADR-129's hook ledger owns it.
+- **Retains:** ADR-059, ADR-117, ADR-129, ADR-131.
+- **Detail:** [agent fleet inbox redesign](plans/2026-10-04-agent-fleet-inbox-redesign.md).
