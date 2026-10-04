@@ -1,6 +1,7 @@
 import { type ChildProcess, spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { createServer } from 'node:net';
+import { getEnvVars } from '@gobing-ai/spur-config';
 import { DESKTOP_HOST, resolveServeLaunch, type ServeLaunch, type ServeLaunchKind } from './launch';
 import type { DesktopLayout } from './layout';
 
@@ -102,18 +103,19 @@ export class DesktopStartupAborted extends Error {
     }
 }
 
-function healthSignal(timeoutMs: number, cancel?: AbortSignal): AbortSignal {
-    const timeout = AbortSignal.timeout(timeoutMs);
-    if (!cancel) return timeout;
+function healthSignal(timeoutMs: number, cancel?: AbortSignal): { signal: AbortSignal; dispose: () => void } {
     const controller = new AbortController();
     const abort = (): void => controller.abort();
-    if (cancel.aborted || timeout.aborted) {
-        controller.abort();
-        return controller.signal;
-    }
-    cancel.addEventListener('abort', abort, { once: true });
-    timeout.addEventListener('abort', abort, { once: true });
-    return controller.signal;
+    const timer = setTimeout(abort, timeoutMs);
+    if (cancel?.aborted) abort();
+    else cancel?.addEventListener('abort', abort, { once: true });
+    return {
+        signal: controller.signal,
+        dispose: () => {
+            clearTimeout(timer);
+            cancel?.removeEventListener('abort', abort);
+        },
+    };
 }
 
 /** Poll `GET /api/health` until the payload is `{ status: 'ok' }` or the deadline passes. */
@@ -150,10 +152,9 @@ export async function waitForHealth(
         if (options.signal?.aborted) throw new DesktopStartupAborted();
         const early = options.failure?.();
         if (early) throw new Error(early);
+        const probe = healthSignal(Math.min(2_000, Math.max(1, deadline - Date.now())), options.signal);
         try {
-            const response = await fetchImpl(url, {
-                signal: healthSignal(Math.min(2_000, Math.max(1, options.timeoutMs)), options.signal),
-            });
+            const response = await fetchImpl(url, { signal: probe.signal });
             if (response.ok) {
                 const body: unknown = await response.json();
                 if (isHealthOk(body)) return;
@@ -163,6 +164,8 @@ export async function waitForHealth(
             }
         } catch (error) {
             last = error instanceof Error ? error.message : String(error);
+        } finally {
+            probe.dispose();
         }
         if (Date.now() >= deadline) break;
         await sleep(interval);
@@ -216,6 +219,8 @@ export interface StartDesktopServerOptions {
     signal?: AbortSignal;
     /** Directory Electron was launched from. Forwarded to {@link resolveServeLaunch}. */
     launchCwd?: string;
+    /** Report unexpected exits after the health handshake. Normal stop does not notify. */
+    onUnexpectedExit?: (error: Error) => void;
 }
 
 function formatSpawnFailure(error: Error, launch: ServeLaunch): string {
@@ -237,7 +242,7 @@ export async function startDesktopServer(options: StartDesktopServerOptions): Pr
     if (!Number.isInteger(port) || port < 1 || port > 65_535) {
         throw new Error(`Invalid port: ${String(port)}`);
     }
-    const parentEnv = options.parentEnv ?? process.env;
+    const parentEnv = options.parentEnv ?? getEnvVars();
     const launch = resolveServeLaunch({
         layout: options.layout,
         port,
@@ -255,10 +260,19 @@ export async function startDesktopServer(options: StartDesktopServerOptions): Pr
         stdio: options.stdio ?? 'inherit',
     });
 
+    let ready = false;
+    let stopping: Promise<void> | undefined;
     let exit: { code: number | null; signal: NodeJS.Signals | null } | undefined;
     let spawnError: Error | undefined;
     child.onExit((code, signal) => {
         exit = { code, signal };
+        if (ready && !stopping) {
+            options.onUnexpectedExit?.(
+                new Error(
+                    `Spur server exited (code ${String(code)}, signal ${String(signal)}). Reopen Spur to restart it.`,
+                ),
+            );
+        }
     });
     child.onError((error) => {
         spawnError = error;
@@ -274,9 +288,11 @@ export async function startDesktopServer(options: StartDesktopServerOptions): Pr
     };
 
     const startupGrace = options.killGraceMs ?? 2_000;
-    let stopping: Promise<void> | undefined;
     const stopSpawned = (graceMs: number): Promise<void> => {
-        if (!stopping) stopping = stopChild(child, graceMs);
+        if (!stopping) {
+            ready = false;
+            stopping = stopChild(child, graceMs);
+        }
         return stopping;
     };
     const onAbort = (): void => {
@@ -304,6 +320,12 @@ export async function startDesktopServer(options: StartDesktopServerOptions): Pr
         throw error;
     }
     options.signal?.removeEventListener('abort', onAbort);
+    const lateFailure = failure();
+    if (lateFailure) {
+        await stopSpawned(startupGrace);
+        throw new Error(lateFailure);
+    }
+    ready = true;
 
     return {
         port,

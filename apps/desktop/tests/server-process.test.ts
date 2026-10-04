@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'bun:test';
+import { getEventListeners } from 'node:events';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
+import { getEnvVars } from '@gobing-ai/spur-config';
 import type { DesktopLayout } from '../src/layout';
 import {
     DesktopStartupAborted,
@@ -173,7 +175,7 @@ describe('server process', () => {
 
         const child = nodeSpawner().spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
             cwd: tmpdir(),
-            env: { PATH: process.env.PATH ?? '' },
+            env: { PATH: getEnvVars().PATH ?? '' },
             stdio: 'ignore',
         });
         expect(child.pid).toBeGreaterThan(0);
@@ -319,4 +321,40 @@ describe('server process', () => {
         await expect(pending).rejects.toBeInstanceOf(DesktopStartupAborted);
         expect(child.signals[0]).toBe('SIGTERM');
     });
+});
+
+test('health probes dispose cancellation listeners on retries and success', async () => {
+    const controller = new AbortController();
+    let probes = 0;
+    await waitForHealth('http://unused/api/health', {
+        timeoutMs: 1000,
+        signal: controller.signal,
+        sleep: async () => {},
+        fetchImpl: async () => {
+            expect(getEventListeners(controller.signal, 'abort').length).toBe(1);
+            probes += 1;
+            if (probes < 30) throw new Error('not yet');
+            return new Response('{"status":"ok"}');
+        },
+    });
+    expect(probes).toBe(30);
+    expect(getEventListeners(controller.signal, 'abort').length).toBe(0);
+});
+
+test('unexpected server exit after health is reported while normal stop is silent', async () => {
+    for (const unexpected of [true, false]) {
+        const child = fakeChild();
+        const failures: Error[] = [];
+        const server = await startDesktopServer({
+            layout: devLayout,
+            port: 1234,
+            spawn: { spawn: () => child },
+            fetchImpl: async () => new Response('{"status":"ok"}'),
+            onUnexpectedExit: (error) => failures.push(error),
+        });
+        if (unexpected) child.emitExit(1, null);
+        else await server.stop();
+        expect(failures.length).toBe(unexpected ? 1 : 0);
+        if (unexpected) expect(failures[0]?.message).toContain('Reopen Spur');
+    }
 });

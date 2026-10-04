@@ -101,6 +101,9 @@ export function resolveLayout(input: LayoutInput, fs: LayoutFs = nodeLayoutFs())
         nonempty(input.env.SPUR_PROJECT_ROOT) ??
         (mode === 'dev' ? repoRoot : undefined) ??
         input.cwd;
+    if (input.isPackaged && !parseProjectArg(input.argv) && !nonempty(input.env.SPUR_PROJECT_ROOT)) {
+        throw new Error('Choose a project directory before starting the packaged desktop.');
+    }
     const projectRoot = resolve(input.cwd, requested);
     if (!fs.isDirectory(projectRoot)) {
         throw new Error(`Project root does not exist or is not a directory: ${projectRoot}`);

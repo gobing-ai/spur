@@ -3,7 +3,7 @@ kind: design
 title: "Desktop shell"
 status: implemented
 created_at: 2026-10-03
-updated_at: 2026-10-03
+updated_at: 2026-10-04
 tags: [contract, desktop, electron]
 ---
 
@@ -19,9 +19,9 @@ The child process is the only database owner, at `<projectRoot>/.spur/spur.db`.
 | Input | Meaning |
 | --- | --- |
 | `SPUR_DESKTOP_MODE` | `dev` or `prod`. Empty defaults to `dev` when Electron is unpackaged and `prod` when packaged. Any other value throws. |
-| `SPUR_PROJECT_ROOT` | Project directory whose `.spur/spur.db` the child owns. Overridden by `--project <path>` / `--project=<path>`. Dev with neither set uses the checkout root. Otherwise the Electron process cwd. The path must be an existing directory. |
+| `SPUR_PROJECT_ROOT` | Project directory whose `.spur/spur.db` the child owns. Overridden by `--project <path>` / `--project=<path>`. Dev with neither set uses the checkout root. Packaged launches with neither set prompt for a directory; cancelling quits without starting a server. Unpackaged prod uses the Electron process cwd. The path must be an existing directory. |
 | `SPUR_DESKTOP_BIN` | Prod only. Forces the child binary. Resolved to an absolute path against the directory Electron was launched from **before** the existence check. A relative value is not resolved again from `projectRoot` (the child cwd). Missing path throws and does not fall through. |
-| `BUN_PATH` | Dev only. `bun` executable. Defaults to `bun` on `PATH`. |
+| `BUN_PATH` | Dev only. `bun` executable. Defaults to `bun` on `PATH`. Relative paths containing a path separator resolve against the Electron launch cwd. |
 
 Dev command, cwd = checkout root:
 
@@ -68,3 +68,17 @@ Windows and Linux set `titleBarOverlay` (`height: 36`, overlay color `#1a1d27`).
 - keeps the mobile sidebar drawer below the same height
 
 The browser and Cloudflare boards do not set the platform attribute, so their layout is unchanged.
+
+Unexpected child exits after startup show an error and quit the shell. Quit awaits pending startup cleanup before Electron exits. Health probes remove their cancellation listeners after each request.
+
+Electron reads the parent environment through the config gateway. Its Node process and filesystem
+adapters are limited to `src/server-process.ts` and `src/layout.ts`: the streaming runtime handle requires Bun, which is absent
+in Electron. The runtime rules allow those specific adapters while retaining the boundary
+for the rest of the desktop sources.
+
+Stage includes a generated `config/` beside both compiled binaries. The config resolver falls
+back to `dirname(process.execPath)/config` when virtual Bun module paths contain no assets; this
+ships the task section matrix, rules, workflows and templates without seeding the selected project.
+
+The same binary directories carry the CLI package manifest and `schemas/` so package schema
+references validate without a node_modules tree. Existing embedded-schema resolution keeps precedence.

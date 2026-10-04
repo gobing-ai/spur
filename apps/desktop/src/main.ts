@@ -1,7 +1,8 @@
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { getEnvVars } from '@gobing-ai/spur-config';
 import { app, BrowserWindow, dialog } from 'electron';
-import { resolveLayout } from './layout';
+import { parseProjectArg, resolveLayout } from './layout';
 import { DesktopStartupAborted, type RunningDesktopServer, startDesktopServer } from './server-process';
 import { createMainWindow, registerWindowIpc } from './window';
 
@@ -21,6 +22,7 @@ if (!app.requestSingleInstanceLock()) {
     let quitting = false;
     let startupStarted = false;
     const startupAbort = new AbortController();
+    let startup: Promise<void> | undefined;
 
     const stopServer = async (): Promise<void> => {
         const current = server;
@@ -43,30 +45,49 @@ if (!app.requestSingleInstanceLock()) {
         event.preventDefault();
         quitting = true;
         startupAbort.abort();
-        void stopServer().finally(() => app.quit());
+        void startup?.finally(() => stopServer().finally(() => app.quit()));
     });
 
     app.on('window-all-closed', () => {
         app.quit();
     });
 
-    app.whenReady()
+    startup = app
+        .whenReady()
         .then(async () => {
-            startupStarted = true;
             if (startupAbort.signal.aborted) return;
             const here = dirname(fileURLToPath(import.meta.url));
+            const env = { ...getEnvVars() };
+            if (app.isPackaged && !parseProjectArg(process.argv) && !env.SPUR_PROJECT_ROOT?.trim()) {
+                const selection = await dialog.showOpenDialog({
+                    title: 'Choose a Spur project',
+                    properties: ['openDirectory'],
+                });
+                if (selection.canceled || !selection.filePaths[0]) {
+                    app.quit();
+                    return;
+                }
+                env.SPUR_PROJECT_ROOT = selection.filePaths[0];
+            }
+            if (startupAbort.signal.aborted) return;
             const layout = resolveLayout({
                 isPackaged: app.isPackaged,
                 cwd: process.cwd(),
                 execDir: here,
                 resourcesPath: process.resourcesPath,
-                env: process.env,
+                env,
                 argv: process.argv,
             });
+            startupStarted = true;
             server = await startDesktopServer({
                 layout,
                 signal: startupAbort.signal,
                 launchCwd: process.cwd(),
+                onUnexpectedExit: (error) => {
+                    if (quitting) return;
+                    dialog.showErrorBox('Spur server stopped', errorText(error));
+                    app.quit();
+                },
             });
             if (startupAbort.signal.aborted) {
                 await stopServer();
@@ -77,8 +98,6 @@ if (!app.requestSingleInstanceLock()) {
         })
         .catch((error: unknown) => {
             if (quitting || error instanceof DesktopStartupAborted) {
-                quitting = true;
-                void stopServer().finally(() => app.quit());
                 return;
             }
             dialog.showErrorBox('Spur desktop', errorText(error));

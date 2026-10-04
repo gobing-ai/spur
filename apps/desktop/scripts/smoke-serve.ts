@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { getEnvVars } from '@gobing-ai/spur-config';
 import { findRepoRoot, resolveLayout } from '../src/layout';
 import { startDesktopServer } from '../src/server-process';
 
@@ -18,7 +19,7 @@ try {
         isPackaged: false,
         cwd: repo,
         execDir: join(repo, 'apps', 'desktop'),
-        env: { ...process.env, SPUR_PROJECT_ROOT: project, SPUR_DESKTOP_MODE: 'dev' },
+        env: { ...getEnvVars(), SPUR_PROJECT_ROOT: project, SPUR_DESKTOP_MODE: 'dev' },
         argv: [],
     });
     const server = await startDesktopServer({

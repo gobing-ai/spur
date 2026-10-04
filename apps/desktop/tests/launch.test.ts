@@ -223,3 +223,10 @@ describe('launch', () => {
         );
     });
 });
+
+test('relative BUN_PATH resolves from launch cwd while bare commands use PATH', () => {
+    const layout = { mode: 'dev' as const, repoRoot: '/repo', projectRoot: '/work', resourcesDir: undefined };
+    const input = { layout, port: 1234, parentEnv: {}, exists: () => true, launchCwd: '/launcher' };
+    expect(resolveServeLaunch({ ...input, bunPath: './bin/bun' }).command).toBe('/launcher/bin/bun');
+    expect(resolveServeLaunch({ ...input, bunPath: 'bun' }).command).toBe('bun');
+});

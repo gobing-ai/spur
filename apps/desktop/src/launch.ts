@@ -159,7 +159,10 @@ export function resolveServeLaunch(input: {
             );
         }
         return buildDevCliLaunch({
-            bun: input.bunPath,
+            bun:
+                input.bunPath.includes('/') || input.bunPath.includes('\\')
+                    ? resolveDesktopBin(input.bunPath, input.launchCwd ?? process.cwd())
+                    : input.bunPath,
             repoRoot: input.layout.repoRoot,
             projectRoot: input.layout.projectRoot,
             port: input.port,

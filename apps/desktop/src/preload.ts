@@ -24,5 +24,5 @@ function markDesktop(): void {
     document.documentElement.dataset.spurDesktopPlatform = process.platform;
 }
 
-markDesktop();
+if (document.documentElement) markDesktop();
 document.addEventListener('DOMContentLoaded', markDesktop);

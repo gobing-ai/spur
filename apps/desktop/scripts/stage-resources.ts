@@ -85,6 +85,21 @@ mkdirSync(dirname(companionDest), { recursive: true });
 copyFileSync(companionSrc, companionDest);
 chmodSync(companionDest, 0o755);
 
+// Both compiled processes resolve config beside their executable (virtual Bun module paths).
+for (const binaryDir of [outDir, dirname(companionDest)]) {
+    cpSync(join(repo, 'apps', 'cli', 'schemas'), join(binaryDir, 'schemas'), { recursive: true });
+    copyFileSync(join(repo, 'apps', 'cli', 'package.json'), join(binaryDir, 'package.json'));
+    const result = spawnSync(
+        'bun',
+        [join(repo, 'scripts', 'spur-dev.ts'), 'bundle-config', join(binaryDir, 'config')],
+        {
+            cwd: repo,
+            stdio: 'inherit',
+        },
+    );
+    if (result.status !== 0) throw new Error(`Failed to stage config assets for ${binaryDir}`);
+}
+
 const webIndex = join(repo, 'dist', 'web', 'index.html');
 if (!existsSync(webIndex)) {
     throw new Error(

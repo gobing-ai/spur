@@ -1,6 +1,6 @@
 {
     "name": "@gobing-ai/spur-desktop",
-    "version": "0.3.98",
+    "version": "0.3.99",
     "description": "Spur desktop shell. Electron loads the Board from a child Bun server and does not open SQLite.",
     "license": "Apache-2.0",
     "author": "Robin Min <minlongbing@gmail.com>",
@@ -22,5 +22,8 @@
         "@types/bun": "catalog:",
         "electron": "44.5.1",
         "typescript": "catalog:"
+    },
+    "dependencies": {
+        "@gobing-ai/spur-config": "workspace:*"
     }
 }

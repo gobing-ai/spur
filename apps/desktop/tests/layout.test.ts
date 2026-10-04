@@ -79,7 +79,7 @@ describe('layout', () => {
                 cwd: work,
                 execDir: '/app/resources/app.asar/dist',
                 resourcesPath: '/app/resources',
-                env: {},
+                env: { SPUR_PROJECT_ROOT: work },
                 argv: [],
             },
             fs,
@@ -136,4 +136,19 @@ describe('layout', () => {
         expect(nodeLayoutFs().exists(join(import.meta.dir, 'layout.test.ts'))).toBe(true);
         expect(nodeLayoutFs().isDirectory(join(tmpdir(), 'spur-desktop-missing-dir'))).toBe(false);
     });
+});
+
+test('packaged launches cannot silently use Finder cwd as a project', () => {
+    expect(() =>
+        resolveLayout(
+            {
+                isPackaged: true,
+                cwd: '/',
+                execDir: '/app/dist',
+                env: {},
+                argv: [],
+            },
+            fsFrom(['/']),
+        ),
+    ).toThrow(/Choose a project/);
 });
