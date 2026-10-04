@@ -4,10 +4,10 @@ name: Let a live session join the fleet as a guest occupant after a Codex parity
 status: todo
 template: feature-impl
 created_at: 2026-10-04T20:30:39.562Z
-updated_at: "2026-10-04T20:57:53.548Z"
+updated_at: "2026-10-04T21:07:08.497Z"
 feature_id: G73
 
-dependencies: ["1074", "1080"]
+dependencies: ["1074", "1080", "1079"]
 priority: P3
 estimate_hours: 8
 ---

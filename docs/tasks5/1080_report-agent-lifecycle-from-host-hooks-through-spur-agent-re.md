@@ -4,10 +4,10 @@ name: Report agent lifecycle from host hooks through spur agent report
 status: todo
 template: feature-impl
 created_at: 2026-10-04T20:30:39.110Z
-updated_at: "2026-10-04T20:57:50.309Z"
+updated_at: "2026-10-04T21:07:08.956Z"
 feature_id: G73
 
-dependencies: ["1074"]
+dependencies: ["1074", "1078"]
 priority: P2
 estimate_hours: 5
 ---
