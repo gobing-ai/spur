@@ -6,7 +6,7 @@ status: active
 priority: P2
 tags: []
 created_at: "2026-10-04T21:10:38.682Z"
-updated_at: "2026-10-04T21:11:00.310Z"
+updated_at: "2026-10-04T21:25:09.514Z"
 ---
 
 # A71: Desktop Board shell and native macOS integration
@@ -24,14 +24,20 @@ Provide a native desktop host for the existing Spur Board, preserving the child 
 
 ```gherkin
 Feature: Desktop Board shell
-  Scenario: Safe desktop lifecycle
-    Given a packaged launch with a selected project
-    When the server starts, exits unexpectedly, or the user closes Spur
-    Then the Board renders with an isolated preload and the server is stopped on quit
-  Scenario: macOS packaged assets
-    Given a compiled macOS desktop application
-    When it starts outside the checkout
-    Then config and schema assets resolve and health reports ok
+  Scenario: AC1 — Safe desktop lifecycle (req: R1)
+  Given a packaged launch or slow server startup
+  When a project is omitted, startup is cancelled, or the child exits
+  Then an explicit project is required and the shell reports failure or cleans up the child
+  
+  Scenario: AC2 — macOS package loads Board (req: R2)
+  Given built server and Board assets
+  When the native macOS desktop package starts with a temporary project
+  Then health and Board render successfully and quit releases the child process
+  
+  Scenario: AC3 — Reviewed desktop contract (req: R3)
+  Given the corrected desktop PR
+  When gates and GitHub review complete
+  Then product authorities match the desktop scope and actionable findings are resolved
 ```
 
 ## Tasks

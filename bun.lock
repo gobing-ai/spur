@@ -39,7 +39,7 @@
     },
     "apps/cli": {
       "name": "@gobing-ai/spur",
-      "version": "0.3.98",
+      "version": "0.3.99",
       "bin": {
         "spur": "spur.js",
       },
@@ -72,7 +72,10 @@
     },
     "apps/desktop": {
       "name": "@gobing-ai/spur-desktop",
-      "version": "0.3.98",
+      "version": "0.3.99",
+      "dependencies": {
+        "@gobing-ai/spur-config": "workspace:*",
+      },
       "devDependencies": {
         "@types/bun": "catalog:",
         "electron": "44.5.1",
@@ -81,7 +84,7 @@
     },
     "apps/server": {
       "name": "@gobing-ai/spur-server",
-      "version": "0.3.98",
+      "version": "0.3.99",
       "dependencies": {
         "@gobing-ai/spur-app": "workspace:*",
         "@gobing-ai/spur-config": "workspace:*",
@@ -147,7 +150,7 @@
     },
     "packages/app": {
       "name": "@gobing-ai/spur-app",
-      "version": "0.3.98",
+      "version": "0.3.99",
       "dependencies": {
         "@gobing-ai/spur-config": "workspace:0.3.99",
         "@gobing-ai/spur-contracts": "workspace:*",
@@ -169,7 +172,7 @@
     },
     "packages/config": {
       "name": "@gobing-ai/spur-config",
-      "version": "0.3.98",
+      "version": "0.3.99",
       "dependencies": {
         "@gobing-ai/ts-runtime": "catalog:",
         "yaml": "catalog:",
@@ -182,7 +185,7 @@
     },
     "packages/contracts": {
       "name": "@gobing-ai/spur-contracts",
-      "version": "0.3.98",
+      "version": "0.3.99",
       "dependencies": {
         "@gobing-ai/spur-domain": "workspace:0.3.99",
         "@orpc/contract": "catalog:",
@@ -195,7 +198,7 @@
     },
     "packages/domain": {
       "name": "@gobing-ai/spur-domain",
-      "version": "0.3.98",
+      "version": "0.3.99",
       "dependencies": {
         "@gobing-ai/ts-db": "catalog:",
         "@gobing-ai/ts-dual-workflow-engine": "catalog:",
