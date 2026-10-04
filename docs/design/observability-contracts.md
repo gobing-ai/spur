@@ -324,6 +324,8 @@ not import `ts-db` (ADR-021).
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `GET /api/runs`             | Newest-first list over `runs`                                                                                                                                |
 | Query                       | `status`, `limit` (default **50**, max **200**), `cursor` (opaque keyset)                                                                                    |
+| Query filters               | `workflow` (exact `workflow_name`), `since` (ISO lower bound on `started_at`, inclusive, normalized with `toISOString()`)                                    |
+| Malformed `since`           | **400** `{ error, code: "MALFORMED_SINCE" }` — rejected before the service is called                                                                         |
 | Success body                | `{ runs, count, nextCursor, hasMore }`                                                                                                                       |
 | List entry                  | `{ id, workflowName, status, mode, agent, startedAt, completedAt }`                                                                                          |
 | `cursor`                    | Malformed → **400** `{ error, code: "MALFORMED_CURSOR" }`                                                                                                    |
@@ -335,6 +337,8 @@ not import `ts-db` (ADR-021).
 | `GET /api/runs/by-wbs/:wbs` | Every `task_run_links` row for the WBS with link `kind` + run digest                                                                                         |
 | Empty WBS                   | **200** `{ wbs, links: [], count: 0 }` — not an error                                                                                                        |
 | Optional query              | `limit` (default **50**, max **200**) on the WBS lookup                                                                                                      |
+| `GET /api/runs/:runId/progress` | The `projectWorkflowProgress` projection `spur workflow progress` prints — one shared implementation; contract-only `runsContract.progress` (`packages/contracts/src/runs.ts`) |
+| Progress unknown id         | **404** `{ error, code: "RUN_NOT_FOUND", runId }`; every other projection, including `definition-unavailable`, is **200**                                    |
 
 **Layering.** Domain DAOs own SQL (`RunDao.traceRows` / `traceRowById` with `agent` +
 keyset `before`; `PhaseRunDao` / `TransitionRunDao` / `ActionRunDao` /
