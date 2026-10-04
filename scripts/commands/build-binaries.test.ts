@@ -2,7 +2,7 @@ import { afterEach, expect, test } from 'bun:test';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { writeSha256Sums } from './build-binaries';
+import { binaryAssetName, writeSha256Sums } from './build-binaries';
 
 let dir = '';
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
@@ -23,4 +23,11 @@ test('writeSha256Sums emits GNU sha256sum format that real tools verify (task 09
     // The format is what the installer's shasum/sha256sum fallback actually consumes.
     const check = Bun.spawnSync(['shasum', '-a', '256', '-c', 'SHA256SUMS'], { cwd: dir });
     expect(check.exitCode, check.stderr.toString()).toBe(0);
+});
+
+test('windows release assets use the .exe name bun compile writes', () => {
+    expect(binaryAssetName('linux-x64')).toBe('spur-linux-x64');
+    expect(binaryAssetName('darwin-arm64')).toBe('spur-darwin-arm64');
+    expect(binaryAssetName('windows-x64')).toBe('spur-windows-x64.exe');
+    expect(binaryAssetName('windows-arm64')).toBe('spur-windows-arm64.exe');
 });

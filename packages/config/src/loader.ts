@@ -138,6 +138,11 @@ function resolveSchemaSpecifier(specifier: string, manifestSpecifier: string): s
         const resolved = import.meta.resolve(specifier);
         return resolved.startsWith('file:') ? fileURLToPath(resolved) : resolved;
     } catch {
+        // Standalone desktop binaries ship the CLI manifest and schemas beside the executable.
+        if (specifier === manifestSpecifier && manifestSpecifier === '@gobing-ai/spur/package.json') {
+            const manifest = join(dirname(process.execPath), 'package.json');
+            if (existsSync(manifest) && existsSync(join(dirname(manifest), 'schemas'))) return manifest;
+        }
         return specifier;
     }
 }

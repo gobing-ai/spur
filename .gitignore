@@ -208,3 +208,6 @@ config/workflows/@gobing-ai/
 .spur/@gobing-ai/
 config/@gobing-ai/
 /.spur/memory/wrapup-metrics.jsonl
+
+# Staged Electron prod payload (compiled spur binary + web). Recreated by desktop:stage.
+/apps/desktop/resources/
