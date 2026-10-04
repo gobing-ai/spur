@@ -45,7 +45,6 @@ const {
 } = await import('node:fs');
 const { lstat, mkdir, readdir, readFile } = await import('node:fs/promises');
 
-import { spawnSync } from 'node:child_process';
 import { basename, join, resolve } from 'node:path';
 import type { DbAdapter, RunDefinitionSource } from '@gobing-ai/spur-domain';
 import {
@@ -61,7 +60,7 @@ import {
     DbWorkflowPersistenceAdapter,
     WorkflowService as EngineWorkflowService,
 } from '@gobing-ai/ts-dual-workflow-engine';
-import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
+import { createNodeFileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import { createWorkflowActionTraceWriter } from '../workflow/action-trace';
 import { DecideActionRunner, DecideOptionsSchema } from '../workflow/actions/decide';
 import { resolveDurableArtifactPath } from '../workflow/actions/run-path';
@@ -183,7 +182,9 @@ export interface ReadInstalledInventoryInput {
  * Let the selected CLI own config and layer resolution, then revalidate its snapshot in the app
  * (ADR-113 project→registered→shared). Moved here from `plugins/sp/scripts/inline-run-setup.ts`
  * (ADR-130 glue budget, task 1070's `--estimated` flag exhausted it): the script keeps only the
- * paths it derives from its own module URL, and the spawn/envelope logic is app-layer.
+ * paths it derives from its own module URL, and the spawn/envelope logic is app-layer. The spawn
+ * goes through `NodeProcessExecutor`, the sanctioned process boundary for app sources (the
+ * `no-direct-process-spawn` rule forbids `node:child_process`).
  */
 export async function readInstalledInventory(input: ReadInstalledInventoryInput): Promise<unknown> {
     const launch = input.spurBin
@@ -192,17 +193,19 @@ export async function readInstalledInventory(input: ReadInstalledInventoryInput)
           ? { command: 'bun', leadingArgs: [input.localCli] }
           : { command: 'spur', leadingArgs: [] };
     if ('error' in launch) throw new Error(launch.error);
-    const result = spawnSync(
-        launch.command,
-        [...launch.leadingArgs, 'workflow', 'show', input.file, '--format', 'todo', '--json'],
-        { cwd: input.workdir ?? process.cwd(), encoding: 'utf8', timeout: 30_000, maxBuffer: 4 * 1024 * 1024 },
-    );
-    if (result.status !== 0) {
-        throw new Error(
-            `could not resolve the workflow definition with the installed CLI: ${result.error?.message ?? result.stderr}`,
-        );
+    const res = await new NodeProcessExecutor().run({
+        command: launch.command,
+        args: [...launch.leadingArgs, 'workflow', 'show', input.file, '--format', 'todo', '--json'],
+        cwd: input.workdir ?? process.cwd(),
+        forceBuffered: true,
+        rejectOnError: false,
+        timeout: 30_000,
+    });
+    if (res.exitCode !== 0) {
+        const detail = res.stderr.trim() !== '' ? res.stderr.trim() : `exit ${res.exitCode ?? -1}`;
+        throw new Error(`could not resolve the workflow definition with the installed CLI: ${detail}`);
     }
-    const value: unknown = JSON.parse(result.stdout);
+    const value: unknown = JSON.parse(res.stdout);
     // Honor the existing optional JSON envelope without inventing another projection format.
     if (value && typeof value === 'object' && 'ok' in value && 'data' in value && value.ok === true) return value.data;
     return value;
