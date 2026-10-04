@@ -208,6 +208,10 @@ interface WorkflowActionAttempt {
     startedAt: string | null;
     completedAt: string | null;
     durationMs: number | null;
+    // 1070 R4: who reported `durationMs` — the inline host session stamps `host-reported` into the
+    // row's `result_json`; engine, legacy and unparseable rows read `unknown` (unlabelled).
+    provenance: 'host-reported' | 'unknown';
+    estimated: boolean;
 }
 
 interface WorkflowTransitionProgress {
