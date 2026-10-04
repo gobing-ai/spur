@@ -469,6 +469,7 @@ export {
     type TerminatedProcessInfo,
 } from './services/project-registry';
 export {
+    assertProjectServerAvailable,
     type DetachedServeChild,
     type DetachedServeSpawn,
     type DetachedServeSpawnOptions,

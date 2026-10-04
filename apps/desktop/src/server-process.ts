@@ -2,6 +2,7 @@ import { type ChildProcess, spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { getEnvVars } from '@gobing-ai/spur-config';
+import type { DesktopServerControlMessage } from '@gobing-ai/spur-contracts';
 import { DESKTOP_HOST, resolveServeLaunch, type ServeLaunch, type ServeLaunchKind } from './launch';
 import type { DesktopLayout } from './layout';
 
@@ -14,6 +15,8 @@ export interface SpawnedChild {
     readonly exitCode: number | null;
     readonly signalCode: NodeJS.Signals | null;
     kill(signal?: NodeJS.Signals): boolean;
+    /** Ask an owned Windows server to drain and close before forced termination. */
+    requestShutdown?(): boolean;
     onExit(listener: (code: number | null, signal: NodeJS.Signals | null) => void): void;
     onError(listener: (error: Error) => void): void;
 }
@@ -29,19 +32,31 @@ export interface ProcessSpawner {
 
 /**
  * `node:child_process` spawner. Electron main is Node, so this is not `Bun.spawn`.
- * On POSIX the child is its own process group: `bun run` keeps a grandchild that
- * survives a signal sent only to the pid Node is watching.
+ * On POSIX the child is its own process group so startup cancellation also stops descendants.
  */
-export function nodeSpawner(): ProcessSpawner {
+export function nodeSpawner(platform: NodeJS.Platform = process.platform): ProcessSpawner {
     return {
         spawn(command, args, options) {
-            const detached = process.platform !== 'win32';
+            const detached = platform !== 'win32';
             const child: ChildProcess = spawn(command, args, {
                 cwd: options.cwd,
                 env: options.env,
-                stdio: options.stdio,
+                stdio: [options.stdio, options.stdio, options.stdio, 'ipc'],
+                serialization: 'json',
                 windowsHide: true,
                 detached,
+            });
+            child.on('message', (message: unknown) => {
+                if (
+                    typeof message === 'object' &&
+                    message !== null &&
+                    'type' in message &&
+                    message.type === 'spur.desktop.startup-error' &&
+                    'message' in message &&
+                    typeof message.message === 'string'
+                ) {
+                    child.emit('error', new Error(message.message));
+                }
             });
             return {
                 pid: child.pid,
@@ -62,6 +77,16 @@ export function nodeSpawner(): ProcessSpawner {
                     }
                     return child.kill(signal);
                 },
+                ...(!detached
+                    ? {
+                          requestShutdown(): boolean {
+                              if (!child.connected) return false;
+                              const message: DesktopServerControlMessage = { type: 'spur.desktop.shutdown' };
+                              child.send(message, () => {});
+                              return true;
+                          },
+                      }
+                    : {}),
                 onExit(listener) {
                     child.once('exit', (code, signal) => listener(code, signal));
                 },
@@ -175,10 +200,10 @@ export async function waitForHealth(
     throw new Error(early ?? `Timed out waiting for ${url} (${last})`);
 }
 
-/** SIGTERM, then SIGKILL after `graceMs` if the child is still alive. */
+/** Request graceful shutdown (parent IPC on Windows, SIGTERM on POSIX), then force after `graceMs`. */
 export async function stopChild(child: SpawnedChild, graceMs: number): Promise<void> {
     if (child.exitCode !== null || child.signalCode !== null) return;
-    child.kill('SIGTERM');
+    if (!child.requestShutdown?.()) child.kill('SIGTERM');
     await new Promise<void>((resolve) => {
         const timer = setTimeout(() => {
             if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
@@ -254,7 +279,7 @@ export async function startDesktopServer(options: StartDesktopServerOptions): Pr
         launchCwd: options.launchCwd,
     });
     if (options.signal?.aborted) throw new DesktopStartupAborted();
-    const child = (options.spawn ?? nodeSpawner()).spawn(launch.command, launch.args, {
+    const child = (options.spawn ?? nodeSpawner(options.platform)).spawn(launch.command, launch.args, {
         cwd: launch.cwd,
         env: launch.env,
         stdio: options.stdio ?? 'inherit',

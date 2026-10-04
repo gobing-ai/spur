@@ -155,6 +155,7 @@ function fakeApp() {
 /** Build a StartServerDeps with sensible fakes; override per test. */
 function makeDeps(overrides: Partial<StartServerDeps> = {}): StartServerDeps {
     return {
+        assertProjectServerAvailable: async () => {},
         serverBootstrapConfig: () => ({
             logging: { enabled: false, level: 'info' as const, console: false },
             telemetry: { enabled: false },
@@ -193,7 +194,7 @@ function makeDeps(overrides: Partial<StartServerDeps> = {}): StartServerDeps {
  * 2. When exercising shutdown, await `exitCalled` so the mock is still in place.
  * 3. afterEach strips any leaked SIGINT/SIGTERM listeners and restores globals.
  */
-type SigHandler = () => void | Promise<void>;
+type SigHandler = (message?: unknown) => void | Promise<void>;
 
 describe('startServer', () => {
     let origServe: typeof Bun.serve | undefined;
@@ -1158,6 +1159,81 @@ describe('startServer', () => {
         // the server start (no infinite startup retry).
         expect(logMessages.some((m) => m.msg === 'Agent quota update startup drain failed')).toBe(true);
         expect(logMessages.some((m) => m.msg === 'agent quota update consumer started')).toBe(true);
+    });
+
+    test('duplicate project check runs before runtime/database boot and reports to the owned parent', async () => {
+        let booted = false;
+        const originalConnected = Object.getOwnPropertyDescriptor(process, 'connected');
+        const originalSend = Object.getOwnPropertyDescriptor(process, 'send');
+        const messages: unknown[] = [];
+        Object.defineProperty(process, 'connected', { configurable: true, value: true });
+        Object.defineProperty(process, 'send', {
+            configurable: true,
+            value: (message: unknown) => {
+                messages.push(message);
+                return true;
+            },
+        });
+        try {
+            await expect(
+                startServer(
+                    { port: 5002, host: '127.0.0.1', openBrowser: false, cwd: '/tmp/project' },
+                    makeDeps({
+                        assertProjectServerAvailable: async (cwd) => {
+                            expect(cwd).toBe('/tmp/project');
+                            throw new Error('already has a live server');
+                        },
+                        serverBootstrapConfig: () => {
+                            booted = true;
+                            throw new Error('must not boot');
+                        },
+                    }),
+                ),
+            ).rejects.toThrow('already has a live server');
+            expect(booted).toBe(false);
+            expect(messages).toEqual([{ type: 'spur.desktop.startup-error', message: 'already has a live server' }]);
+        } finally {
+            if (originalConnected) Object.defineProperty(process, 'connected', originalConnected);
+            else Reflect.deleteProperty(process, 'connected');
+            if (originalSend) Object.defineProperty(process, 'send', originalSend);
+            else Reflect.deleteProperty(process, 'send');
+        }
+    });
+
+    test('owned parent IPC shuts down gracefully and ignores other messages', async () => {
+        const original = Object.getOwnPropertyDescriptor(process, 'connected');
+        Object.defineProperty(process, 'connected', { configurable: true, value: true });
+        try {
+            const { sigHandlers, exitCodes, exitCalled } = installProcessMocks();
+            let drained = false;
+            const logs: { msg: string; data?: Record<string, unknown> }[] = [];
+            await startServer(
+                { port: 5002, host: '127.0.0.1', openBrowser: false, keepAlive: false },
+                makeDeps({
+                    runNodeApplication: runNodeApplicationWith(() => fakeRuntime(logs)),
+                    createServerContext: (() => ({
+                        supervisor: () => ({
+                            stopAll: async () => {
+                                drained = true;
+                            },
+                        }),
+                    })) as unknown as StartServerDeps['createServerContext'],
+                }),
+            );
+            expect(sigHandlers.message).toBeDefined();
+            sigHandlers.message?.(null);
+            sigHandlers.message?.({ type: 'unrecognized' });
+            expect(exitCodes).toEqual([]);
+            sigHandlers.message?.({ type: 'spur.desktop.shutdown' });
+            await exitCalled;
+            expect(drained).toBe(true);
+            expect(exitCodes).toEqual([0]);
+            expect(sigHandlers.message).toBeUndefined();
+            expect(logs.some((row) => row.data?.signal === 'desktop-ipc')).toBe(true);
+        } finally {
+            if (original) Object.defineProperty(process, 'connected', original);
+            else Reflect.deleteProperty(process, 'connected');
+        }
     });
 
     test('SIGTERM shutdown path and concurrent double-signal latch', async () => {

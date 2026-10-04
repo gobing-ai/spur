@@ -30,7 +30,6 @@ describe('launch', () => {
         expect(launch.command).toBe('bun');
         expect(launch.cwd).toBe('/repo');
         expect(launch.args).toEqual([
-            'run',
             'apps/cli/src/index.ts',
             'serve',
             '--host',
@@ -229,4 +228,17 @@ test('relative BUN_PATH resolves from launch cwd while bare commands use PATH', 
     const input = { layout, port: 1234, parentEnv: {}, exists: () => true, launchCwd: '/launcher' };
     expect(resolveServeLaunch({ ...input, bunPath: './bin/bun' }).command).toBe('/launcher/bin/bun');
     expect(resolveServeLaunch({ ...input, bunPath: 'bun' }).command).toBe('bun');
+});
+
+test('Windows dev launches the Bun script directly so its IPC descriptor is retained', () => {
+    const launch = buildDevCliLaunch({
+        bun: 'bun',
+        repoRoot: '/repo',
+        projectRoot: '/project',
+        port: 1234,
+        parentEnv: {},
+        platform: 'win32',
+    });
+    expect(launch.args[0]).toBe('apps/cli/src/index.ts');
+    expect(launch.args).not.toContain('run');
 });

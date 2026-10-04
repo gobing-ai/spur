@@ -18,7 +18,7 @@ bun run desktop:dev
 `desktop:dev` compiles the shell and runs Electron. The child command is:
 
 ```text
-bun run apps/cli/src/index.ts serve --host 127.0.0.1 --port <free> --no-open --cwd <projectRoot>
+bun apps/cli/src/index.ts serve --host 127.0.0.1 --port <free> --no-open --cwd <projectRoot>
 ```
 
 The default project root is this checkout. Point it at another project with `SPUR_PROJECT_ROOT` or `--project`:
@@ -64,3 +64,5 @@ bun run --filter @gobing-ai/spur-desktop smoke:serve
 ```
 
 Electron itself needs a display. On Linux without one, `xvfb-run -a bun run desktop:dev` is the manual check; CI for this package is the headless smoke above.
+
+The installed builder is pinned in the lockfile. A selected project with an existing live registered server is refused before database boot. Windows quit uses the private parent JSON IPC channel for graceful drain/deregistration; forced termination remains the timeout fallback.

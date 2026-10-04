@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { getEnvVar, removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
 import { ProjectRegistry, setPortProbeForTests } from '../../src/services/project-registry';
 import {
+    assertProjectServerAvailable,
     buildWindowsDetachedServeLaunch,
     type DetachedServeChild,
     type DetachedServeSpawn,
@@ -437,5 +438,29 @@ describe('project-start', () => {
             );
             expect(launch.env.SPUR_SERVE_ARG_3).toBe('C:\\tmp\\p%x');
         });
+    });
+});
+
+it('refuses a live registered server without mutating the registry', async () => {
+    const registry = {
+        readRaw: () => ({
+            schema_version: 1 as const,
+            projects: [{ name: 'project', path: '/tmp/spur-owner-test', port: 1234 }],
+        }),
+    };
+    const before = JSON.stringify(registry.readRaw());
+    await expect(
+        assertProjectServerAvailable('/tmp/spur-owner-test', { registry, isLive: async () => true }),
+    ).rejects.toThrow('already has a live server');
+    expect(JSON.stringify(registry.readRaw())).toBe(before);
+    await assertProjectServerAvailable('/tmp/spur-owner-test', { registry, isLive: async () => false });
+    await assertProjectServerAvailable('/tmp/other-project', { registry, isLive: async () => true });
+    await assertProjectServerAvailable('/tmp/spur-owner-test', {
+        registry: {
+            readRaw: () => ({
+                schema_version: 1,
+                projects: [{ name: 'project', path: '/tmp/spur-owner-test', port: 0 }],
+            }),
+        },
     });
 });

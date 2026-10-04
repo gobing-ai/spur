@@ -1,7 +1,7 @@
 import { BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { DESKTOP_WINDOW_CHANNEL, isSameOrigin, isWindowAction } from './ipc';
 
-/** Frameless window that loads the Board. IPC is registered separately and stays on the preload bridge. */
+/** Native window with a hidden title bar that loads the Board. IPC is registered separately and stays on the preload bridge. */
 export function createMainWindow(options: {
     url: string;
     preloadPath: string;

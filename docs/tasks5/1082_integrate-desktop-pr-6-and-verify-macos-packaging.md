@@ -4,7 +4,7 @@ name: Integrate desktop PR 6 and verify macOS packaging
 status: testing
 template: issue
 created_at: 2026-10-04T20:54:18.738Z
-updated_at: "2026-10-04T21:40:29.169Z"
+updated_at: "2026-10-04T22:10:54.019Z"
 
 ac_numbering: task-local
 ac_altitude: task-local
@@ -53,6 +53,8 @@ Keep Electron as a thin shell around the existing server. In packaged mode promp
 Packaging fixes also cover `packages/config/src/bundled-config.ts`, its tests, `apps/desktop/scripts/stage-resources.ts`, and `docs/design/configuration-contracts.md`; compiled executables require adjacent external config assets.
 
 Retain native traffic lights with the hidden title bar, deny permission requests/checks before load, constrain the preload and IPC to the main frame, and route validated HTTP(S) external links to the system browser.
+
+Before server database/runtime boot, use the shared application registry guard to refuse an existing live server. Carry private parent-only process DTOs for startup errors and graceful Windows shutdown/disconnect, with bounded forced termination fallback. Pin the packaging builder to the version exercised by native builds.
 
 ### Plan
 

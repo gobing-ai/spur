@@ -216,7 +216,6 @@ describe('server process', () => {
             expect(captured?.command).toBe('bun');
             expect(captured?.cwd).toBe('/repo');
             expect(captured?.args).toEqual([
-                'run',
                 'apps/cli/src/index.ts',
                 'serve',
                 '--host',
@@ -355,4 +354,50 @@ test('unexpected server exit after health is reported while normal stop is silen
         expect(failures.length).toBe(unexpected ? 1 : 0);
         if (unexpected) expect(failures[0]?.message).toContain('Reopen Spur');
     }
+});
+
+test('Windows adapter requests graceful shutdown over Node/Bun JSON IPC', async () => {
+    const child = nodeSpawner('win32').spawn(
+        'bun',
+        [
+            '-e',
+            "process.on('message', message => { if (message.type === 'spur.desktop.shutdown') process.exit(0); }); setTimeout(() => process.exit(9), 4000);",
+        ],
+        { cwd: tmpdir(), env: getEnvVars() as Record<string, string>, stdio: 'ignore' },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await stopChild(child, 2000);
+    expect(child.exitCode).toBe(0);
+    expect(child.signalCode).toBeNull();
+    expect(child.requestShutdown?.()).toBe(false);
+});
+
+test('graceful shutdown requests still escalate if an owned child ignores them', async () => {
+    const child = fakeChild({ exitOnKill: false });
+    let requested = false;
+    child.requestShutdown = () => {
+        requested = true;
+        return true;
+    };
+    await stopChild(child, 10);
+    expect(requested).toBe(true);
+    expect(child.signals).toEqual(['SIGKILL']);
+});
+
+test('startup refusal reports the owned child message to the shell', async () => {
+    const child = nodeSpawner().spawn(
+        'bun',
+        [
+            '-e',
+            "process.send(null); process.send({type:'other'}); process.send({type:'spur.desktop.startup-error',message:42}); process.send({type:'spur.desktop.startup-error',message:'already has a live server'}); process.exit(1);",
+        ],
+        { cwd: tmpdir(), env: getEnvVars() as Record<string, string>, stdio: 'ignore' },
+    );
+    const error = await new Promise<Error>((resolve) => child.onError(resolve));
+    expect(error.message).toBe('already has a live server');
+    await new Promise<void>((resolve) => {
+        if (child.exitCode !== null) resolve();
+        else child.onExit(() => resolve());
+    });
+    expect(child.exitCode).toBe(1);
 });
