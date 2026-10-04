@@ -484,3 +484,73 @@ test('G62 production loop claims ownership, dispatches gated tasks, reconciles a
         rmSync(base, { recursive: true, force: true });
     }
 });
+
+test('G62 dispatch failure surfaces the agent stderr instead of exiting silently', async () => {
+    const base = mkdtempSync(join(tmpdir(), 'spur-gtd-fail-'));
+    const project = join(base, 'proj');
+    mkdirSync(join(project, '.spur'), { recursive: true });
+    mkdirSync(join(project, 'docs', 'tasks'), { recursive: true });
+    mkdirSync(join(project, 'docs', 'features'), { recursive: true });
+    writeFileSync(join(project, 'docs/features/G62_fixture.md'), '# G62 Fixture\n');
+    const db = await createMigratedDb({ url: ':memory:' });
+    const previous = process.cwd();
+    const output = captureOutput();
+    const config = spurConfigSchema.parse({
+        agent: {
+            fleet: {
+                enabled: true,
+                orchestrator: 'lead',
+                members: [
+                    { id: 'lead', role: 'planner', purpose: 'orchestrator', executor: 'writer' },
+                    { id: 'coder', role: 'coder', executor: 'writer' },
+                ],
+            },
+            executors: [
+                {
+                    name: 'writer',
+                    agent: 'pi',
+                    executionCapabilities: {
+                        version: 1,
+                        axes: { fsWrite: { state: 'available', provenance: 'native-known' } },
+                    },
+                },
+            ],
+        },
+    });
+    const ctx = createCliContext({ cwd: project, output, db, spurConfig: config });
+    try {
+        process.chdir(project);
+        const path = realpathSync(project);
+        const team = new AgentCoordinationService(ctx);
+        await team.createAgentSpec({ id: 'proj-lead', type: 'pi' });
+        await team.createAgentSpec({ id: 'proj-coder', type: 'pi' });
+        writeFileSync(
+            join(project, 'docs', 'tasks', '0841_fixture.md'),
+            `---\nschema_version: 1\nname: Fixture 0841\nstatus: todo\ntemplate: meta\nfeature_id: G62\nupdated_at: 2026-09-12T00:00:00.000Z\ncreated_at: 2026-09-12T00:00:00.000Z\ntags: [fleet:auto]\ndependencies: []\n---\n\n## 0841. Fixture 0841\n\n### Background\n\nInspect this local fixture to exercise managed dispatch through the real task readiness checker.\n\n### Plan\n\n- [ ] Inspect the supplied fixture and record its result.\n`,
+        );
+        await new ProjectStrategyDao(db).set(path, 'gtd');
+        const managed: CliContext = {
+            ...ctx,
+            agentService: () =>
+                ({
+                    runTraced: async (
+                        _prompt: string,
+                        _flags: Record<string, string | boolean>,
+                        _deps: unknown,
+                        execution: { beforeDispatch: () => Promise<void> },
+                    ) => {
+                        await execution.beforeDispatch();
+                        // The provider rejected the prompt: agent exit, no `message`.
+                        return { exitCode: 3, stdout: '', stderr: '429 {"error":{"code":"AccountQuotaExceeded"}}' };
+                    },
+                }) as unknown as ReturnType<CliContext['agentService']>,
+        };
+        await runAgentLoop(managed, { spec: 'proj-lead', poll: '1' }, { maxIterations: 1 });
+        expect(output.stderr.join('\n')).toContain('AccountQuotaExceeded');
+        expect(output.stderr.join('\n')).toContain('0841');
+    } finally {
+        process.chdir(previous);
+        await db.close();
+        rmSync(base, { recursive: true, force: true });
+    }
+});

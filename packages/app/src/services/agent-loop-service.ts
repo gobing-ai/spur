@@ -393,7 +393,16 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
                                     runDeps,
                                     { signal, beforeDispatch },
                                 );
-                                if (result.message) deps.error(result.message);
+                                if (result.message) {
+                                    deps.error(result.message);
+                                } else if (result.exitCode !== 0) {
+                                    // An agent exit carries no `message`; without the tail of its
+                                    // output a provider rejection (e.g. 429 quota) is invisible.
+                                    const tail = (result.stderr || result.stdout).trim().slice(-2000);
+                                    deps.error(
+                                        `dispatch ${decision.taskId} → ${member.executor} exited ${result.exitCode}${tail ? `: ${tail}` : ''}`,
+                                    );
+                                }
                             },
                         );
                     } finally {
