@@ -142,15 +142,13 @@ describe('server process', () => {
     });
 
     test('waitForHealth rejects a 200 payload that is not ok', async () => {
-        const { server, url } = await listen((_req, res) => {
-            res.writeHead(200);
-            res.end('{"status":"starting"}');
-        });
-        try {
-            await expect(waitForHealth(url, { timeoutMs: 40, intervalMs: 5 })).rejects.toThrow(/not status ok/);
-        } finally {
-            await close(server);
-        }
+        await expect(
+            waitForHealth('http://127.0.0.1:1234/api/health', {
+                timeoutMs: 40,
+                intervalMs: 5,
+                fetchImpl: async () => Response.json({ status: 'starting' }),
+            }),
+        ).rejects.toThrow(/not status ok/);
     });
 
     test('stopChild is a no-op once the child has exited and escalates to SIGKILL', async () => {
