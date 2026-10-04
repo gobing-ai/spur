@@ -70,6 +70,9 @@ export const workflowProgressDiagnosticSchema = z.object({
         'definition-drift',
         'orphan-row',
         'orphan-action-row',
+        /** Task 1085 / feature E72 R10: a declared state the run did not visit, while its
+         *  action rows exist (a recorded row is never dropped without a diagnostic). */
+        'unvisited-state-row',
         'ambiguous-action',
     ]),
     message: z.string(),

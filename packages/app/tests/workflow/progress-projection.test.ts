@@ -4,7 +4,7 @@ import { ArtifactDao, applyCliMigrations, TransitionRunDao } from '@gobing-ai/sp
 import { createDbAdapter } from '@gobing-ai/ts-db';
 import type { WorkflowDef } from '@gobing-ai/ts-dual-workflow-engine';
 import { computeDefinitionDigest } from '../../src/workflow/composition-baseline';
-import { projectWorkflowProgress } from '../../src/workflow/progress-projection';
+import { projectWorkflowProgress, type WorkflowProgressProjection } from '../../src/workflow/progress-projection';
 
 const PROJECT_ROOT = resolve(__dirname, '../../../..');
 
@@ -79,8 +79,10 @@ describe('projectWorkflowProgress', () => {
         );
 
         const projection = await projectWorkflowProgress('r1', { db, workflowDef: testWorkflowDef });
-        const orphan = projection.diagnostics.find((d) => d.code === 'orphan-action-row');
-        expect(orphan).toBeDefined();
+        // One diagnostic per unclaimed row — never a silent drop, never a duplicate (1085 R4).
+        const orphans = projection.diagnostics.filter((d) => d.code === 'orphan-action-row');
+        expect(orphans).toHaveLength(1);
+        const orphan = orphans[0];
         expect(orphan?.message).toContain('a2');
         expect(orphan?.message).toContain('ghost');
         // The matched row is not flagged.
@@ -400,6 +402,338 @@ describe('projectWorkflowProgress', () => {
         });
         expect(pendProj.status).toBe('pending');
 
+        db.close();
+    });
+
+    // ── 1085: an inline run writes `action_runs` rows and no state/transition rows, so
+    // with an empty transition history the recorded rows ARE the visit evidence (R1-R4). ──
+
+    /** Inline-pipeline fixture: one declared action per state, two on `implement` (a loopBack state). */
+    const inlinePipelineDef: WorkflowDef = {
+        kind: 'state-machine',
+        name: 'inline-pipeline',
+        initialState: 'precheck',
+        terminalStates: ['done'],
+        states: [
+            { id: 'precheck', onEnter: [{ kind: 'shell', options: { command: 'echo precheck' } }] },
+            {
+                id: 'implement',
+                onEnter: [
+                    { kind: 'agent.run', options: { input: 'do work' } },
+                    { kind: 'shell', options: { command: 'echo format' } },
+                ],
+            },
+            { id: 'test', onEnter: [{ kind: 'shell', options: { command: 'echo test' } }] },
+            { id: 'done', onEnter: [{ kind: 'note', options: { message: 'done' } }] },
+        ],
+        transitions: [
+            { from: 'precheck', to: 'implement', description: 'precheck passed' },
+            { from: 'implement', to: 'test', description: 'implement passed' },
+            { from: 'test', to: 'implement', description: 'test failed — loop back' },
+            { from: 'test', to: 'done', description: 'test passed' },
+        ],
+    };
+
+    type TestDb = Awaited<ReturnType<typeof createDbAdapter>>;
+
+    /** Seed a run row whose metadata carries the fixture digest, so the projection reads no drift. */
+    async function seedInlineRun(db: TestDb, runId: string, status: string, def: WorkflowDef): Promise<void> {
+        const now = Date.now();
+        await db.run(
+            'INSERT INTO runs (id, workflow_name, status, started_at, metadata_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            runId,
+            def.name,
+            status,
+            '2026-08-19T00:00:00Z',
+            JSON.stringify({ definitionDigest: computeDefinitionDigest(def) }),
+            now,
+            now,
+        );
+    }
+
+    /** Seed one action row: `createdAt` is the recorded order the projection derives visits from. */
+    async function seedInlineActionRow(
+        db: TestDb,
+        runId: string,
+        row: { id: string; node: string; kind: string; durationMs: number; createdAt: number },
+    ): Promise<void> {
+        await db.run(
+            "INSERT INTO action_runs (id, run_id, node, kind, status, ok, duration_ms, started_at, completed_at, created_at) VALUES (?, ?, ?, ?, 'done', 1, ?, '2026-08-19T00:00:01Z', '2026-08-19T00:00:02Z', ?)",
+            row.id,
+            runId,
+            row.node,
+            row.kind,
+            row.durationMs,
+            row.createdAt,
+        );
+    }
+
+    /** `state@visit:status` per projected state, in projection order. */
+    function stateShape(projection: WorkflowProgressProjection): string[] {
+        return projection.states.map((state) => `${state.state}@${state.visit}:${state.status}`);
+    }
+
+    /** Attempt row ids of one state visit, in declared-action order. */
+    function attemptIds(projection: WorkflowProgressProjection, state: string, visit = 1): string[] {
+        return projection.states
+            .filter((entry) => entry.state === state && entry.visit === visit)
+            .flatMap((entry) =>
+                entry.actions.flatMap((action) => action.attempts.map((attempt) => attempt.actionRunId)),
+            );
+    }
+
+    test('marks every state with a recorded row visited, in row order, with its attempts (1085 R1/R2/AC1)', async () => {
+        const db = await setupDb();
+        await seedInlineRun(db, 'r-inline', 'running', inlinePipelineDef);
+        const base = Date.now();
+        await seedInlineActionRow(db, 'r-inline', {
+            id: 'ar-pre',
+            node: 'precheck',
+            kind: 'shell',
+            durationMs: 400,
+            createdAt: base + 1,
+        });
+        await seedInlineActionRow(db, 'r-inline', {
+            id: 'ar-impl-agent',
+            node: 'implement',
+            kind: 'agent.run',
+            durationMs: 500,
+            createdAt: base + 2,
+        });
+        await seedInlineActionRow(db, 'r-inline', {
+            id: 'ar-impl-shell',
+            node: 'implement',
+            kind: 'shell',
+            durationMs: 50,
+            createdAt: base + 3,
+        });
+        await seedInlineActionRow(db, 'r-inline', {
+            id: 'ar-test',
+            node: 'test',
+            kind: 'shell',
+            durationMs: 2500,
+            createdAt: base + 4,
+        });
+
+        const projection = await projectWorkflowProgress('r-inline', { db, workflowDef: inlinePipelineDef });
+
+        expect(projection.transitions).toEqual([]);
+        // R2: currentState is the last recorded state, not the definition's initial state.
+        expect(projection.currentState).toBe('test');
+        // Row order first; a declared state with no recorded row stays pending, appended after.
+        expect(stateShape(projection)).toEqual([
+            'precheck@1:passed',
+            'implement@1:passed',
+            'test@1:running',
+            'done@1:pending',
+        ]);
+        expect(attemptIds(projection, 'precheck')).toEqual(['ar-pre']);
+        expect(attemptIds(projection, 'implement')).toEqual(['ar-impl-agent', 'ar-impl-shell']);
+        expect(attemptIds(projection, 'test')).toEqual(['ar-test']);
+        expect(projection.diagnostics).toEqual([]);
+        db.close();
+    });
+
+    test('leaves no state with recorded work pending on a terminal inline run (1085 R1/AC1)', async () => {
+        const db = await setupDb();
+        await seedInlineRun(db, 'r-inline-done', 'done', inlinePipelineDef);
+        const base = Date.now();
+        await seedInlineActionRow(db, 'r-inline-done', {
+            id: 'ar-pre',
+            node: 'precheck',
+            kind: 'shell',
+            durationMs: 400,
+            createdAt: base + 1,
+        });
+        await seedInlineActionRow(db, 'r-inline-done', {
+            id: 'ar-impl',
+            node: 'implement',
+            kind: 'agent.run',
+            durationMs: 500,
+            createdAt: base + 2,
+        });
+        await seedInlineActionRow(db, 'r-inline-done', {
+            id: 'ar-test',
+            node: 'test',
+            kind: 'shell',
+            durationMs: 2500,
+            createdAt: base + 3,
+        });
+        await seedInlineActionRow(db, 'r-inline-done', {
+            id: 'ar-done',
+            node: 'done',
+            kind: 'note',
+            durationMs: 10,
+            createdAt: base + 4,
+        });
+
+        const projection = await projectWorkflowProgress('r-inline-done', { db, workflowDef: inlinePipelineDef });
+
+        expect(projection.status).toBe('completed');
+        // Terminal runs carry no current state today (transition-less terminal shape kept).
+        expect(projection.currentState).toBeNull();
+        expect(projection.states.filter((state) => state.status === 'pending')).toEqual([]);
+        expect(stateShape(projection)).toEqual([
+            'precheck@1:passed',
+            'implement@1:passed',
+            'test@1:passed',
+            'done@1:passed',
+        ]);
+        expect(attemptIds(projection, 'done')).toEqual(['ar-done']);
+        expect(projection.diagnostics).toEqual([]);
+        db.close();
+    });
+
+    test('gives a re-entered state one visit per contiguous row group, each with its own attempts (1085 R3)', async () => {
+        const db = await setupDb();
+        await seedInlineRun(db, 'r-inline-loop', 'running', inlinePipelineDef);
+        const base = Date.now();
+        await seedInlineActionRow(db, 'r-inline-loop', {
+            id: 'ar-pre',
+            node: 'precheck',
+            kind: 'shell',
+            durationMs: 400,
+            createdAt: base + 1,
+        });
+        await seedInlineActionRow(db, 'r-inline-loop', {
+            id: 'ar-i1-agent',
+            node: 'implement',
+            kind: 'agent.run',
+            durationMs: 500,
+            createdAt: base + 2,
+        });
+        await seedInlineActionRow(db, 'r-inline-loop', {
+            id: 'ar-i1-shell',
+            node: 'implement',
+            kind: 'shell',
+            durationMs: 50,
+            createdAt: base + 3,
+        });
+        await seedInlineActionRow(db, 'r-inline-loop', {
+            id: 'ar-test',
+            node: 'test',
+            kind: 'shell',
+            durationMs: 2500,
+            createdAt: base + 4,
+        });
+        await seedInlineActionRow(db, 'r-inline-loop', {
+            id: 'ar-i2-agent',
+            node: 'implement',
+            kind: 'agent.run',
+            durationMs: 700,
+            createdAt: base + 5,
+        });
+        await seedInlineActionRow(db, 'r-inline-loop', {
+            id: 'ar-i2-shell',
+            node: 'implement',
+            kind: 'shell',
+            durationMs: 60,
+            createdAt: base + 6,
+        });
+
+        const projection = await projectWorkflowProgress('r-inline-loop', { db, workflowDef: inlinePipelineDef });
+
+        // Statuses are not pinned here: `isCurrent` compares state ids, so both visits of the current
+        // state read with the current status — today's rule, unchanged by this task (1085 R5).
+        expect(projection.states.map((state) => `${state.state}@${state.visit}`)).toEqual([
+            'precheck@1',
+            'implement@1',
+            'test@1',
+            'implement@2',
+            'done@1',
+        ]);
+        expect(projection.currentState).toBe('implement');
+        // Each visit owns the rows recorded for it — the second visit is not a replay of the first.
+        expect(attemptIds(projection, 'implement', 1)).toEqual(['ar-i1-agent', 'ar-i1-shell']);
+        expect(attemptIds(projection, 'implement', 2)).toEqual(['ar-i2-agent', 'ar-i2-shell']);
+        expect(projection.diagnostics).toEqual([]);
+        db.close();
+    });
+
+    test('diagnoses a row for a declared state the run did not visit (1085 R4)', async () => {
+        const db = await setupDb();
+        await seedInlineRun(db, 'r-unvisited', 'running', testWorkflowDef);
+        const now = Date.now();
+        const transitionDao = new TransitionRunDao(db);
+        await transitionDao.open({ runId: 'r-unvisited', fromState: 'precheck', toState: 'done', status: 'completed' });
+        await seedInlineActionRow(db, 'r-unvisited', {
+            id: 'a1',
+            node: 'precheck',
+            kind: 'shell',
+            durationMs: 100,
+            createdAt: now + 1,
+        });
+        await seedInlineActionRow(db, 'r-unvisited', {
+            id: 'a2',
+            node: 'implement',
+            kind: 'agent.run',
+            durationMs: 500,
+            createdAt: now + 2,
+        });
+
+        const projection = await projectWorkflowProgress('r-unvisited', { db, workflowDef: testWorkflowDef });
+
+        // Implementation is declared but was never entered: its row is named, never silently consumed.
+        expect(projection.diagnostics).toHaveLength(1);
+        expect(projection.diagnostics[0]?.code).toBe('unvisited-state-row');
+        expect(projection.diagnostics[0]?.message).toContain('a2');
+        expect(projection.diagnostics[0]?.message).toContain('implement');
+        expect(attemptIds(projection, 'implement')).toEqual([]);
+        expect(attemptIds(projection, 'precheck')).toEqual(['a1']);
+        db.close();
+    });
+
+    test('keeps transition history as the visit source for engine runs (1085 R5/R6)', async () => {
+        const db = await setupDb();
+        await seedInlineRun(db, 'r-engine', 'done', testWorkflowDef);
+        const now = Date.now();
+        const transitionDao = new TransitionRunDao(db);
+        await transitionDao.open({
+            runId: 'r-engine',
+            fromState: 'precheck',
+            toState: 'implement',
+            status: 'completed',
+        });
+        await transitionDao.open({ runId: 'r-engine', fromState: 'implement', toState: 'done', status: 'completed' });
+        // Row order deliberately disagrees with the transition order: rows must not drive visits.
+        await seedInlineActionRow(db, 'r-engine', {
+            id: 'a1',
+            node: 'implement',
+            kind: 'shell',
+            durationMs: 50,
+            createdAt: now + 1,
+        });
+        await seedInlineActionRow(db, 'r-engine', {
+            id: 'a2',
+            node: 'implement',
+            kind: 'agent.run',
+            durationMs: 500,
+            createdAt: now + 2,
+        });
+        await seedInlineActionRow(db, 'r-engine', {
+            id: 'a3',
+            node: 'precheck',
+            kind: 'shell',
+            durationMs: 100,
+            createdAt: now + 3,
+        });
+
+        const projection = await projectWorkflowProgress('r-engine', { db, workflowDef: testWorkflowDef });
+
+        expect(projection.currentState).toBe('done');
+        expect(stateShape(projection)).toEqual([
+            'precheck@1:passed',
+            'implement@1:passed',
+            'done@1:passed',
+            'failed@1:pending',
+        ]);
+        expect(projection.transitions.map((t) => `${t.from}->${t.to}`)).toEqual([
+            'precheck->implement',
+            'implement->done',
+        ]);
+        expect(attemptIds(projection, 'precheck')).toEqual(['a3']);
+        expect(attemptIds(projection, 'implement')).toEqual(['a2', 'a1']);
+        expect(projection.diagnostics).toEqual([]);
         db.close();
     });
 });

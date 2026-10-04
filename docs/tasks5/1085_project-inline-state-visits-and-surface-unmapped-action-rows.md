@@ -4,7 +4,7 @@ name: Project inline state visits and surface unmapped action rows in the progre
 status: backlog
 template: standard
 created_at: 2026-10-04T22:48:26.495Z
-updated_at: "2026-10-04T22:56:47.823Z"
+updated_at: "2026-10-04T23:16:13.141Z"
 
 feature_id: E72
 ---
@@ -121,19 +121,22 @@ visits, attempts, statuses and empty diagnostics as before the change — the se
 
 ### Plan
 
-- [ ] 1. Tests first in `packages/app/tests/workflow/progress-projection.test.ts`: an inline-style seed
+- [x] 1. Tests first in `packages/app/tests/workflow/progress-projection.test.ts`: an inline-style seed
   (rows for `precheck`, `implement`, `test` with no transition rows) asserting each state is visited
   in row order with its attempts and a non-null `currentState`; a terminal-inline case with no state
   left `pending`; an unvisited-state row case and an unknown-node row case asserting one diagnostic
   each; and an engine-style case with transitions asserting the projection is unchanged.
-- [ ] 2. Implement the visit derivation in `packages/app/src/workflow/progress-projection.ts`
+- [x] 2. Implement the visit derivation in `packages/app/src/workflow/progress-projection.ts`
   (`deriveInlineStateVisits` + the visit-build branch + `currentState`) and the unvisited-state
   diagnostic; keep the engine branch untouched.
-- [ ] 3. Board check: confirm `apps/web/src/modules/observability/TraceTab.tsx` renders the richer
+- [x] 3. Board check: confirm `apps/web/src/modules/observability/TraceTab.tsx` renders the richer
   detail without changes and add a component assertion only if the fixtures need the new shape.
-- [ ] 4. Docs: `docs/design/workflow-observability.md` (visit derivation for transition-less runs) and
+  (`trace-tab.test.tsx` was already engine-style — its `precheck → test` transition — so no fixture
+  conversion and no web edit were needed.)
+- [x] 4. Docs: `docs/design/workflow-observability.md` (visit derivation for transition-less runs) and
   the Feature E72 section of `docs/design/run-record-contract.md`; `docs/design/cli-contracts.md` only
-  if a payload field is added.
+  if a payload field is added. (No field was added — the contract change is one diagnostic enum
+  member — so `cli-contracts.md` is untouched.)
 - [ ] 5. Gates:
   - `(cd packages/app && bun test tests/workflow/progress-projection.test.ts)`
   - `(cd apps/web && bun test tests/modules/observability/)`
@@ -144,7 +147,85 @@ visits, attempts, statuses and empty diagnostics as before the change — the se
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Root cause fixed at the projection, not at the driver: an inline run writes `action_runs` rows and no
+state/transition rows, so with `transitions: []` the visit builder recorded only the definition's
+`initialState` and every later declared state was appended as `visit: 1, pending`, while its rows were
+marked consumed without an attempt or a diagnostic.
+
+**Visit derivation** — `packages/app/src/workflow/progress-projection.ts:211-232`
+(`deriveInlineStateVisits`, pure): rows whose `node` names a declared state are grouped into
+contiguous same-node runs in recorded order (`actionRowsByRunId` is `ORDER BY created_at`), one visit
+per group, numbered per state, each visit owning its group. `DerivedStateVisit:160-168` carries that
+group, and the visit loop consumes it via `visitRows` (`:448`, `:479`), so a re-entered `loopBack`
+state (R3) reads as visit 1 then visit 2, each with its own attempts instead of the first visit's rows
+replayed. Rows whose `node` names no declared state neither start, split nor extend a visit.
+
+**Branch + current state** — `:385-390` derives inline visits only when `transitions.length === 0`;
+`:395-412` replaces the transition-less visit seed with the derived sequence, falling back to
+`initialState` when there are no rows at all (a run with no rows keeps today's initial-state-only
+shape). `:386-392` sets `currentState` to the last derived visit for an active (`pending`/`running`)
+run — R2 "visit order and `currentState` come from recorded evidence". Terminal transition-less runs
+keep today's `currentState: null`; the engine branch (`:415-423`) and the `currentState` from
+`transitions` (`:320-322`) are untouched.
+
+**Diagnostics (R4)** — `:496-501` marks candidate rows consumed only for a *visited* state, so a row
+belonging to a declared state the run did not visit reaches the trailing pass, which `:588-605` splits
+by cause: `unvisited-state-row` when the `node` is a declared state without a visit, and the unchanged
+`orphan-action-row` when the `node` matches no declared state action (unknown node, or a kind no
+declared action claims). Exactly one diagnostic per unclaimed row, each naming the row. *Design
+decision left to implementation* ("gains one value for the unvisited-state row case … or reuses
+`orphan-action-row` with a distinct message; decide in implementation and record it here"): the new
+`code: 'unvisited-state-row'` was chosen over a message-only variant — the cause must be readable
+without parsing English, and the pre-existing `orphan-action-row` message ("matches no declared state
+action") would be false for a declared state. Codes: `packages/app/src/workflow/progress-projection.ts:151` (`WorkflowProgressDiagnostic`), mirrored at `packages/contracts/src/runs.ts:75`.
+
+**Contract** — `packages/contracts/src/runs.ts:73-76` adds the one enum member to
+`workflowProgressDiagnosticSchema`. No field was added or changed, so
+`docs/design/cli-contracts.md` is untouched and the Board's client-side parse stays valid (a widened
+enum accepts every body it accepted before).
+
+**Board** — no web change: `apps/web/src/modules/observability/TraceTab.tsx` renders the projection
+as-is, and its fixture in `apps/web/tests/modules/observability/trace-tab.test.tsx` is already
+engine-style (it carries a `precheck → test` transition), so AC2's "engine-run projections unchanged"
+keeps its meaning and the trace-tab suite passes unchanged.
+
+**Tests** — `packages/app/tests/workflow/progress-projection.test.ts`: inline fixture + seed helpers
+`:412-483`; R1/R2/AC1 inline case `:485`; terminal-inline case `:537`; re-entry R3 case `:587`;
+unvisited-state R4 case `:653`; engine-style R5/R6 case `:686` (rows seeded in the reverse of the
+transition order to prove rows do not drive visits); the 0868 orphan case `:83` now asserts exactly
+one `orphan-action-row`.
+
+**Invariants held**
+- Engine runs with transitions: `deriveInlineStateVisits` is not called (`:385`), visits still come
+  from `transition_runs`, and the engine fixture asserts the same visits, statuses, attempts and empty
+  diagnostics as before (`:686`, plus the pre-existing completed-run case at `:174`).
+- Schema: additive enum member only; the 1069 bidirectional assignability guard
+  (`apps/server/tests/modules/runs/index.test.ts:338`) stays green.
+- No new `action_runs` column, no DAO change, no `DbWorkflowPersistenceAdapter`, engine or migration
+  change; the projection stays the single implementation shared by `spur workflow progress` and
+  `GET /api/runs/:runId/progress` (no web-side derivation).
+- Scope note (the one deliberate diagnostic change for transition-present runs): an engine row whose
+  `node` is a declared state the run did not visit used to be consumed silently; it now yields
+  `unvisited-state-row`. That is the design's R4 direction ("a row whose state the run did not
+  visit"), and it changes no engine visit, attempt or status.
+
+**Live evidence** (probe run seeded through the driver's own surface, then removed):
+`inline-run-setup --run-id verify-1085-probe --file config/workflows/task-pipeline.yaml` plus rows for
+`precheck`/`implement` (and later `test`/`review`/`verify`/`record`/`done`). Before:
+`implement@1:pending:attempts=0`, `currentState: precheck`. After:
+`precheck, implement, test, review, verify, record, done` all visited with their attempts,
+`currentState: done`, `diagnostics: []`. This worktree's real in-flight run
+`inline-1085-8b6cdda2` projects byte-identically before and after (`precheck@1:running:attempts=2`,
+`currentState: precheck`, same three `ambiguous-action` diagnostics). The probe's `runs`/`action_runs`
+rows and `.spur/memory/runs/verify-1085-probe.{md,state.json}` were deleted; `workflow progress
+verify-1085-probe` now reports "Run verify-1085-probe not found."
+
+**Deferred (not this task)**: mapping more than one row per declared action inside a single visit
+(retries recorded as repeated `node`+`kind`) still keeps today's behaviour — the first match is the
+attempt and the extras are consumed silently; the design scoped visited-state rows there ("rows
+consumed for a visited state keep today's ambiguous/skipped behaviour"), and changing it would alter
+engine projections (R5). Ordering also inherits `action_runs.created_at` ties from the DAO. Both are
+pre-existing; neither is reachable from the inline evidence this task fixes.
 
 ### Testing
 
