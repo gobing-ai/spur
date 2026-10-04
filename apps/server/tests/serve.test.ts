@@ -52,7 +52,8 @@ import {
     runTaskActionJob,
     SCHEDULER_CUSTOM_JOB,
     type StartServerDeps,
-    startServer,
+    type StartServerOptions,
+    startServer as startServerRaw,
     TASK_ACTION_JOB,
 } from '../src/serve';
 
@@ -153,6 +154,34 @@ function fakeApp() {
 }
 
 /** Build a StartServerDeps with sensible fakes; override per test. */
+/**
+ * Hermetic project root for every `startServer` test that does not declare its own `cwd`.
+ *
+ * `startServer` resolves its project root from `options.cwd ?? process.cwd()` and loads
+ * `.spur/config.yaml` from it (`apps/server/src/serve.ts:653,790`). The repository's own config
+ * declares `agent.fleet.enabled: true` (ff8aea341), so a test that omitted `cwd` materialized the
+ * real fleet against its stub context and failed (`ctx.getDb is not a function`, 20 tests). These
+ * tests own their inputs: a temp root whose `.spur/` holds no config keeps them independent of the
+ * checkout's config. A caller that passes an explicit `cwd` keeps it.
+ *
+ * WHY not `process.chdir`: the file's tests also resolve module/tooling paths through the process
+ * cwd, so only the server's project root is hermetic — not the whole test process.
+ */
+const HERMETIC_ROOT = mkdtempSync(join(tmpdir(), 'spur-serve-root-'));
+mkdirSync(join(HERMETIC_ROOT, '.spur'), { recursive: true });
+process.on('exit', () => {
+    try {
+        rmSync(HERMETIC_ROOT, { recursive: true, force: true });
+    } catch {
+        // best-effort temp cleanup; a leaked temp dir must never fail the suite
+    }
+});
+
+/** `startServer` with the hermetic project root injected when the caller declares none. */
+function startServer(options: StartServerOptions, deps: StartServerDeps = defaultDeps): Promise<void> {
+    return startServerRaw({ cwd: HERMETIC_ROOT, ...options }, deps);
+}
+
 function makeDeps(overrides: Partial<StartServerDeps> = {}): StartServerDeps {
     return {
         serverBootstrapConfig: () => ({
@@ -2433,6 +2462,10 @@ describe('startServer', () => {
         const { sigHandlers, exitCalled } = installProcessMocks();
 
         const tempDir = mkdtempSync(join(tmpdir(), 'spur-serve-registry-'));
+        // The registry keys rows by the resolved project root, so the test declares its own root
+        // instead of registering whatever checkout happens to host the run.
+        const projectDir = join(tempDir, 'project');
+        mkdirSync(join(projectDir, '.spur'), { recursive: true });
         const projectsFile = join(tempDir, 'projects.json');
         const prevProjectsFile = getEnvVar('SPUR_PROJECTS_FILE');
         setEnvVar('SPUR_PROJECTS_FILE', projectsFile);
@@ -2445,7 +2478,7 @@ describe('startServer', () => {
 
         try {
             await startServer(
-                { port: listenPort, host: '127.0.0.1', openBrowser: false, keepAlive: false },
+                { port: listenPort, host: '127.0.0.1', openBrowser: false, keepAlive: false, cwd: projectDir },
                 makeDeps(),
             );
 
@@ -2456,7 +2489,7 @@ describe('startServer', () => {
             const registered = JSON.parse(readFileSync(projectsFile, 'utf8')) as {
                 projects: Array<{ path: string; port: number; name: string }>;
             };
-            const cwdEntry = registered.projects.find((p) => p.name === basename(process.cwd()));
+            const cwdEntry = registered.projects.find((p) => p.name === basename(projectDir));
             expect(cwdEntry).toBeDefined();
             expect(cwdEntry?.port).toBe(listenPort);
 
@@ -2468,7 +2501,7 @@ describe('startServer', () => {
             const afterStop = JSON.parse(readFileSync(projectsFile, 'utf8')) as {
                 projects: Array<{ path: string; port: number; name: string }>;
             };
-            const stopped = afterStop.projects.find((p) => p.name === basename(process.cwd()));
+            const stopped = afterStop.projects.find((p) => p.name === basename(projectDir));
             expect(stopped?.port).toBe(0);
         } finally {
             if (prevProjectsFile === undefined) {
