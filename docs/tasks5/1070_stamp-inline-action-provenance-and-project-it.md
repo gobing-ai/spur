@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Stamp inline action provenance and project it
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-10-04T02:46:12.530Z
-updated_at: "2026-10-04T18:26:10.359Z"
+updated_at: "2026-10-04T19:21:22.038Z"
 feature_id: E72
 priority: P2
 tags:
@@ -14,6 +14,8 @@ tags:
 estimate_hours: 2
 
 dependencies: ["1069"]
+done_forced: "false"
+done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-runall-e72-4191/.spur/memory/evidence/1070-verdict.json
 ---
 
 ## 1070. Stamp inline action provenance and project it
@@ -48,19 +50,19 @@ Verified current state (2026-10-03):
 
 ### Requirements
 
-- [ ] R1. `InlineRunTraceInput` and `InlineRunActionEntry` gain `readonly estimated?: boolean`. `runInlineRunTrace` (non-close path only) and `runInlineRunTraceBatch` pass `result: { provenance: 'host-reported', estimated: input.estimated === true }` to `writer.recordAction`. Close calls are unchanged; they write no action row.
-- [ ] R2. `plugins/sp/scripts/inline-run-setup.ts`:
+- [x] R1. `InlineRunTraceInput` and `InlineRunActionEntry` gain `readonly estimated?: boolean`. `runInlineRunTrace` (non-close path only) and `runInlineRunTraceBatch` pass `result: { provenance: 'host-reported', estimated: input.estimated === true }` to `writer.recordAction`. Close calls are unchanged; they write no action row.
+- [x] R2. `plugins/sp/scripts/inline-run-setup.ts`:
   - `--estimated` is a **boolean** flag in the argv loop, next to `--persist-out`.
   - It is valid only with `--action`; with any other mode it calls `usage()` (exit 2) before any write.
   - The script forwards `estimated: true` to `runInlineRunTrace`, and the usage text (:21) lists it.
   - The `.mjs` twin is regenerated with `bun run build:scripts` and committed.
-- [ ] R3. `--actions-file` rows accept an optional `estimated`. If present, it must be a boolean; otherwise the batch fails with `actions[<i>]: estimated must be a boolean` before the first write, which keeps the all-or-nothing contract. If absent, it is `false`.
-- [ ] R4. `WorkflowActionAttempt` gains `provenance: 'host-reported' | 'unknown'` and `estimated: boolean`. At :433-440 the projection parses `matchingRow.result_json` inside a try/catch:
+- [x] R3. `--actions-file` rows accept an optional `estimated`. If present, it must be a boolean; otherwise the batch fails with `actions[<i>]: estimated must be a boolean` before the first write, which keeps the all-or-nothing contract. If absent, it is `false`.
+- [x] R4. `WorkflowActionAttempt` gains `provenance: 'host-reported' | 'unknown'` and `estimated: boolean`. At :433-440 the projection parses `matchingRow.result_json` inside a try/catch:
   - `provenance = parsed?.provenance === 'host-reported' ? 'host-reported' : 'unknown'`
   - `estimated = provenance === 'host-reported' && parsed?.estimated === true`
   - Null, unparseable or engine `result_json` gives `unknown`/`false` and never throws or adds a diagnostic.
-- [ ] R5. Engine writes stay byte-identical. No engine, `DbWorkflowPersistenceAdapter` or migration change.
-- [ ] R6. Contract and docs:
+- [x] R5. Engine writes stay byte-identical. No engine, `DbWorkflowPersistenceAdapter` or migration change.
+- [x] R6. Contract and docs:
   - `workflowProgressProjectionSchema`'s attempt (from 1069) gains `provenance: z.enum(['host-reported','unknown'])` and `estimated: z.boolean()`.
   - The 1069 assignability guard stays green.
   - The attempt field list at `docs/design/cli-contracts.md:676` adds `provenance` and `estimated`.
@@ -69,8 +71,8 @@ Verified current state (2026-10-03):
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Host-reported and estimated action durations are labelled
-- [ ] AC2 — Rows recorded before the provenance stamp read as unlabelled
+- [x] AC1 — Host-reported and estimated action durations are labelled
+- [x] AC2 — Rows recorded before the provenance stamp read as unlabelled
 
 Task-local verification:
 
@@ -150,7 +152,7 @@ Task-local verification:
 - [x] 4. Plugin script: boolean flag, mode guard, forwarding, usage text. Then run `bun run build:scripts` and commit the regenerated `inline-run-setup.mjs` and plugin lib bundle.
 - [x] 5. Contract: extend the attempt schema in `packages/contracts/src/runs.ts` (from 1069), and add the contract-test fixture fields.
 - [x] 6. Docs: `cli-contracts.md:676`, the `inline-pipeline-driver.md` `--action`/`--actions-file` blocks, and the run-record-contract Feature E72 section.
-- [ ] 7. Gates:
+- [x] 7. Gates:
   - `(cd packages/app && bun test tests/workflow/progress-projection.test.ts tests/services/inline-run-setup.test.ts)`
   - `(cd plugins/sp && bun test tests/inline-run-trace.test.ts tests/inline-run-installed.test.ts)`
   - `bun run script-contract-check`
@@ -166,7 +168,7 @@ it. Additive only — no migration, no new column, and engine writes are untouch
 
 Change map:
 
-- `packages/app/src/workflow/progress-projection.ts:97` — `WorkflowActionAttempt` gains
+- `packages/app/src/workflow/progress-projection.ts:79-99` — `WorkflowActionAttempt` gains
   `provenance: 'host-reported' | 'unknown'` and `estimated: boolean`.
 - `packages/app/src/workflow/progress-projection.ts:177` — new module-local `readProvenance(resultJson)`
   returns `unknown`/`false` for a null blob, a non-`host-reported` blob or a `JSON.parse` throw;
@@ -174,34 +176,34 @@ Change map:
   throws and never pushes a diagnostic, so legacy/engine/malformed rows read unlabelled (R4, R9/AC2).
 - `packages/app/src/workflow/progress-projection.ts:466` — the attempts build site spreads
   `readProvenance(matchingRow.result_json)` into the attempt.
-- `packages/app/src/services/inline-run-setup.ts:1143` — `InlineRunTraceInput` gains
+- `packages/app/src/services/inline-run-setup.ts:1167` — `InlineRunTraceInput` gains
   `readonly estimated?: boolean`.
-- `packages/app/src/services/inline-run-setup.ts:1247` — the non-close `runInlineRunTrace` write
+- `packages/app/src/services/inline-run-setup.ts:1232,1293` — the non-close `runInlineRunTrace` write
   passes `result: { provenance: 'host-reported', estimated: input.estimated === true }` through the
   writer's existing `result` boundary. The close path is unchanged — it writes no action row.
-- `packages/app/src/services/inline-run-setup.ts:1321` — `InlineRunActionEntry` gains the same
+- `packages/app/src/services/inline-run-setup.ts:1359` — `InlineRunActionEntry` gains the same
   optional field.
-- `packages/app/src/services/inline-run-setup.ts:1363-1380` — the batch row destructure/validation
+- `packages/app/src/services/inline-run-setup.ts:1386,1424-1426` — the batch row destructure/validation
   rejects a non-boolean `estimated` with `actions[<i>]: estimated must be a boolean` after the
   existing field checks and before the database opens, keeping the 1007 R5 all-or-nothing contract;
   an absent or non-true value stays falsy.
-- `packages/app/src/services/inline-run-setup.ts:1408` — the batch loop passes the same stamp.
-- `plugins/sp/scripts/inline-run-setup.ts:131` — `--estimated` is parsed in the boolean branch beside
+- `packages/app/src/services/inline-run-setup.ts:1454` — the batch loop passes the same stamp.
+- `plugins/sp/scripts/inline-run-setup.ts:104` — `--estimated` is parsed in the boolean branch beside
   `--persist-out`, so it can never consume the following argv token.
-- `plugins/sp/scripts/inline-run-setup.ts:150-152` — a mode guard calls `usage()` (exit 2, before any
-  write) unless `--action` is the selected mode; `:235` forwards `estimated: true`; `:21` lists the
+- `plugins/sp/scripts/inline-run-setup.ts:123-125` — a mode guard calls `usage()` (exit 2, before any
+  write) unless `--action` is the selected mode; `:208` forwards `estimated: true`; `:21` lists the
   flag in the usage text.
 - `plugins/sp/scripts/inline-run-setup.mjs` — regenerated twin from `bun run build:scripts` (never
   hand-edited), together with the regenerated `plugins/sp/lib/inline-run.generated.mjs` app bundle.
-- `packages/contracts/src/runs.ts:20-22` — `workflowActionAttemptSchema` gains
+- `packages/contracts/src/runs.ts:11,20-22` — `workflowActionAttemptSchema` gains
   `provenance: z.enum(['host-reported','unknown'])` and `estimated: z.boolean()`. The 1069
   bidirectional assignability guard (`apps/server/tests/modules/runs/index.test.ts:338`) stays green.
-- Docs: `docs/design/cli-contracts.md:676-683` adds the two attempt fields plus the
+- Docs: `docs/design/cli-contracts.md:677-683` adds the two attempt fields plus the
   host-reported/unknown semantics; `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:344-350`
   and `:628-657` document `--estimated` (pass it when the host did not time the action) and the
   optional batch row field; the Feature E72 section of `docs/design/run-record-contract.md:63` states
   that the stamp lives in `action_runs.result_json` and that engine/pre-stamp rows read
-  `unknown`/`estimated: false`.
+  `unknown`/`estimated: false`. The D5 satellite `docs/design/workflow-observability.md:204-214` mirrors the two fields on its `WorkflowActionAttempt` block, so the doc owning the DTO shape no longer contradicts the interface.
 
 Tests (written first, red then green):
 
@@ -225,13 +227,104 @@ Tests (written first, red then green):
 Invariants held: engine writes, `DbWorkflowPersistenceAdapter` and migrations are untouched; no new
 `action_runs` column; the redaction pipeline is unchanged; batch validation stays all-or-nothing.
 
+
+Follow-up inside this run (ADR-130 glue budget): the `--estimated` plumbing pushed
+`plugins/sp/scripts/inline-run-setup.ts` to 265 lines, past the 250-line budget the
+`sp-script-placement` rule enforces, so the pre-check gate failed before the suite ran.
+`readInstalledInventory` (the installed-CLI walk + JSON-envelope unwrap) moved into
+`packages/app/src/services/inline-run-setup.ts:170-206` — the script now passes only the paths it
+derives from its own module URL and is 244 lines. The walk spawns through `NodeProcessExecutor`
+(the `no-direct-process-spawn` rule forbids `node:child_process` in app sources). Regenerated the
+`.mjs` twin, `plugins/sp/lib/inline-run.generated.mjs` + `.d.mts`, and registered the export in
+`scripts/commands/bundle-plugin-lib.ts:582` `INLINE_RUN_EXPORTS`; the delegate-cleanup fixture in
+`plugins/sp/tests/inline-run-setup.test.ts:131` delegates to the production function so the fake
+CLI stays on the real code path.
+
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/services/inline-run-setup.ts:1167` declares `InlineRunTraceInput`, `:1359` `InlineRunActionEntry`; the non-close write stamps `result: { provenance: 'host-reported', estimated: input.estimated === true }` at `:1293` and the batch loop at `:1454`; the close branch at `:1285` still calls `closeRun` with no `result`. Fresh: `packages/app/tests/services/inline-run-setup.test.ts:1066` (byte-exact stored blob for estimated and omitted) and `:1118` — 37 pass / 0 fail. |
+| R2 | MET | `plugins/sp/scripts/inline-run-setup.ts:104` parses `--estimated` in the boolean branch; `:125` refuses it without `--action` via `usage()` before any mode branch or write; `:21` lists it; `:208` forwards it. Twin regenerated: `plugins/sp/scripts/inline-run-setup.mjs:79`, `plugins/sp/scripts/inline-run-setup.mjs:95-96`, `plugins/sp/scripts/inline-run-setup.mjs:116`, `plugins/sp/scripts/inline-run-setup.mjs:206`. Fresh: `plugins/sp/tests/inline-run-trace.test.ts:552` (flag placed first still records the stamped row) and `:596` (close, actions-file, setup modes exit 2, nothing written) — 38 pass / 0 fail; `bun run script-contract-check` re-converts the .ts and diffs the twin byte-for-byte, 0 violations. |
+| R3 | MET | `packages/app/src/services/inline-run-setup.ts:1423-1425` rejects a non-boolean with `actions[<i>]: estimated must be a boolean` inside the validation loop that completes at `:1426` before `let projectDb` at `:1428`, keeping the all-or-nothing contract; `:1426` omits the field unless it is exactly `true`. Fresh: `packages/app/tests/services/inline-run-setup.test.ts:1155` asserts exit 1 plus zero stored rows; 37 pass / 0 fail. |
+| R4 | MET | `packages/app/src/workflow/progress-projection.ts:79-99` adds `provenance: 'host-reported' \| 'unknown'` and `estimated: boolean`; `:177-186` (readProvenance) returns `unknown`/`false` for a null blob, a JSON.parse throw, a non-`host-reported` blob and a non-`true` estimated, never throwing and never pushing a diagnostic; `:466` spreads it at the single attempts build site. Fresh: `packages/app/tests/workflow/progress-projection.test.ts:243` asserts the five-row matrix with `diagnostics` empty — 37 pass / 0 fail. |
+| R5 | MET | No (1070)-tagged commit touches the engine, persistence adapter, migrations or the trace writer: `git diff-tree --name-only` over commits 2907a57ae, 0263e94a, ff11e243, a8a31707, 8294c326 has an empty intersection with `packages/domain/`, `drizzle/` and `packages/app/src/workflow/action-trace.ts`; `packages/app/src/workflow/action-trace.ts:62-63` (the `result`/`redactor` boundary) is unchanged and receives the new record through the pre-existing field. No in-run commit adds an `action_runs` column. |
+| R6 | MET | `packages/contracts/src/runs.ts:11` declares `workflowActionAttemptSchema`, gaining `provenance: z.enum(['host-reported','unknown'])` at `:20` and `estimated: z.boolean()` at `:22`. Fresh: the 1069 bidirectional assignability guard `apps/server/tests/modules/runs/index.test.ts:338` — 15 pass / 0 fail; wire fixture/assertions `packages/contracts/tests/runs-contract.test.ts:40-41`, `packages/contracts/tests/runs-contract.test.ts:61-62` — 4 pass / 0 fail. Docs: `docs/design/cli-contracts.md:677-683` lists both attempt fields plus host-reported/unknown semantics; `docs/design/run-record-contract.md:63` states the `result_json` location and the legacy/pre-stamp rule; `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:344-350` and `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:633-657` document `--estimated` and the optional `--actions-file` row field; `docs/design/workflow-observability.md:204-214` mirrors the two fields on the D5 attempt block. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Host-reported and estimated action durations are labelled | MET | test | `packages/app/tests/services/inline-run-setup.test.ts:1066` reads back `{"provenance":"host-reported","estimated":true}` and `{"provenance":"host-reported","estimated":false}` from stored `result_json`; `packages/app/tests/workflow/progress-projection.test.ts:243` asserts the projection labels inline measured and inline estimated rows while an engine-style blob reads unlabelled; `plugins/sp/tests/inline-run-trace.test.ts:552` drives the real plugin script with `--estimated` before `--action` and asserts the stored row is exactly `{provenance:'host-reported',estimated:true}`. Fresh: 37 pass / 0 fail (app) and 38 pass / 0 fail (plugin). |
+| AC2 — Rows recorded before the provenance stamp read as unlabelled | MET | test | `packages/app/src/workflow/progress-projection.ts:177-186` returns `unknown`/`false` for an engine-style `{"ok":true,"data":{}}`, the malformed `"{"` and a NULL `result_json`; `packages/app/tests/workflow/progress-projection.test.ts:243` asserts all three map to `provenance: 'unknown'`, `estimated: false` and that `projection.diagnostics` stays `[]`, i.e. no throw and no added diagnostic. Fresh: 37 pass / 0 fail. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review Report — 1070
+
+**Scope:** task 1070 diff — 18 files across the five in-run commits `2907a57ae`, `0263e94a0`, `ff11e243b`, `a8a317075`, `8294c326f`, re-derived this pass from `git diff-tree` over the `(1070)`-tagged commits minus the task file itself. Generated surfaces (`plugins/sp/lib/inline-run.generated.mjs`/`.d.mts`, `plugins/sp/scripts/inline-run-setup.mjs`) are in scope but not hand-reviewed line by line: `script-contract-check` rule 1 re-converts the `.ts` and diffs the twin byte-for-byte, and `plugins/sp/tests/inline-run-installed.test.ts` pins facade-to-twin export parity. A sixth `(1070)`-tagged commit, `15e4b0596`, is a pre-branch ancestor (dated 2026-10-03, before this task file was created) on an unrelated concern; its 5 files are excluded (finding 3).
+**Dimensions:** functional, security, efficiency, correctness, usability, architecture
+**Verdict:** PASS
+
+##### Findings (ranked)
+
+| # | Priority | Dimension | Finding | Location |
+|---|----------|-----------|---------|----------|
+| 1 | P4 (advisory) | correctness | Carried from passes 1-2, re-verified this pass: the stamp's blast radius is wider than the change map states. `runInlineRunDecide` records its row through `runInlineRunTrace({close: false, ...})`, so `--decide` rows now carry `result_json` `{"provenance":"host-reported","estimated":false}` where they previously wrote `null`. R1's own wording ("`runInlineRunTrace` (non-close path only)") does cover this path, and the duration is genuinely measured by the app runner (`packages/app/src/workflow/decide.ts:101,154,171` — `deps.now() - started`; the `?? 0` at the call site is a type-level fallback that `runDecideForInlineRun`'s three return sites all populate), so the label is truthful and the R6 docs stay correct. What is missing is only the written trace: no `### Solution` bullet names `runInlineRunDecide`, and no test pins the decide row's payload (the decide tests read the decision resultFile, never `action_runs`). Operator acknowledgment only. | `packages/app/src/services/inline-run-setup.ts:1549-1557` (routes into `:1286-1294`) |
+| 2 | P4 (advisory) | correctness | Carried from passes 1-2, re-verified this pass with a new control: `--estimated` mixes modes without refusal — `--estimated --action --fingerprint --task-file <f>` prints the digest and exits 0, silently discarding the flag. The same invocation without `--estimated` also exits 0 with the identical digest (`sha256:005b7c29…`), so this is pre-existing mode-mixing looseness the new boolean flag inherits, not a regression it introduced; the approved `### Design` guard `(!action \|\| close)` has the same hole. The new flag itself is safe: it sits in the boolean branch, so it can never swallow the next argv token. | `plugins/sp/scripts/inline-run-setup.ts:125` (guard), `:127-131` (fingerprint branch that wins) |
+| 3 | P4 (advisory) | correctness | Carried from passes 1-2, re-verified this pass: the tag-based Step 3 scope recipe pulls `packages/app/src/services/verify-answer-lint.ts`, its test, `plugins/sp/tests/skill-structure.test.ts` and the two code-verification skill docs into this task's scope. `git merge-base --is-ancestor 15e4b0596 a77a288fb` is true and `15e4b0596` is 41 commits old, predating task 1070's own file, so this is a mis-tagged historical commit (source citations in verify answers), not scope creep by this task. | `packages/app/src/services/verify-answer-lint.ts:1` (commit `15e4b0596`) |
+
+##### Prior-Finding Disposition (verified on the current tree)
+
+- Pass-2 finding 1 (`### Solution` change map cited `plugins/sp/scripts/inline-run-setup.ts:235` for the forwarding write) — **addressed**. The bullet now reads `:208`, and a fresh read of `plugins/sp/scripts/inline-run-setup.ts:208` returns `...(estimated ? { estimated: true } : {}),` — the forwarding write. The pass-2 diagnosis was correct: in the pre-move 265-line revision `2907a57ae` the forwarding *was* at `:235` (`git show 2907a57ae:plugins/sp/scripts/inline-run-setup.ts`, line 235) and `:235` in the committed 244-line script is `inventory,` inside the `runInlineRunSetup` call.
+- Every other `### Solution` anchor re-read this pass and confirmed to name its subject: `packages/app/src/workflow/progress-projection.ts:79-99` (interface decl), `:177` (`readProvenance`), `:466` (`...readProvenance(matchingRow.result_json)`); `packages/app/src/services/inline-run-setup.ts:1167`/`:1189`, `:1232`/`:1293`, `:1359`/`:1367`, `:1386`/`:1424-1426`, `:1454`, `:170-206`; `plugins/sp/scripts/inline-run-setup.ts:104`, `:123-125`, `:21`, `:208`; `packages/contracts/src/runs.ts:11,20-22`; `scripts/commands/bundle-plugin-lib.ts:582` (`INLINE_RUN_EXPORTS`); test anchors `packages/app/tests/services/inline-run-setup.test.ts:1066,1118,1155`, `packages/app/tests/workflow/progress-projection.test.ts:243`, `packages/contracts/tests/runs-contract.test.ts:40,61`, `plugins/sp/tests/inline-run-trace.test.ts:552,596`, `plugins/sp/tests/inline-run-setup.test.ts:131`, `apps/server/tests/modules/runs/index.test.ts:338`; doc anchors `docs/design/cli-contracts.md:677-683`, `docs/design/run-record-contract.md:63`, `docs/design/workflow-observability.md:204-214`, `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:344-350`, `:633-657`. `bun apps/cli/src/index.ts task check 1070 --json` returns `pass: true` with `findings: []`.
+- Pass-2 findings 2-4 (P4) — carried forward as findings 1-3 above with fresh evidence; none is a regression and none escalates.
+- Pass-2 PASS verdict — **upheld**. No P1/P2/P3 remains on the current tree.
+
+##### Functional Traceability
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | `packages/app/src/services/inline-run-setup.ts:1167` declares `InlineRunTraceInput` with `readonly estimated?: boolean` at `:1189`; `:1359` declares `InlineRunActionEntry` with the same field at `:1367`; the non-close write at `:1293` passes `result: { provenance: 'host-reported', estimated: input.estimated === true }` and the batch loop at `:1454` the same; the close branch `:1284-1285` still calls `writer.closeRun(...)` with no `result`. Fresh: `packages/app/tests/services/inline-run-setup.test.ts:1066` asserts byte-exact stored `result_json` for both `estimated: true` and omitted (`37 pass / 0 fail`). |
+| R2 | MET | `plugins/sp/scripts/inline-run-setup.ts:104` parses `--estimated` in the boolean branch beside `--persist-out` (revision `2907a57ae` line 131 shows the same statement before the ADR-130 move); `:125` refuses it without `--action` via `usage()` (exit 2, ahead of every mode branch and any write); `:21` lists the flag; `:208` forwards `estimated: true`; the regenerated twin carries the same logic (`plugins/sp/scripts/inline-run-setup.mjs:79,95-96,116,206`). Fresh: the two 1070 tests in `plugins/sp/tests/inline-run-trace.test.ts` pass (`38 pass / 0 fail`) and `bun run script-contract-check` reports 0 violations, whose rule 1 re-converts the `.ts` and diffs the twin byte-for-byte. |
+| R3 | MET | `packages/app/src/services/inline-run-setup.ts:1423-1424` rejects a non-boolean `estimated` with `actions[<i>]: estimated must be a boolean` inside the validation loop that completes before `let projectDb` (`:1428`); `:1426` omits the field unless it is exactly `true`. Fresh: the batch test at `:1155` asserts exit 1 plus zero stored rows, and the file's own doc string at `:1377` names `estimated?`. |
+| R4 | MET | `packages/app/src/workflow/progress-projection.ts:79-99` adds `provenance: 'host-reported' \| 'unknown'` and `estimated: boolean`; `:177-186` `readProvenance` try/catches `JSON.parse` and returns `unknown`/`false` for null, unparseable, non-`host-reported` and non-`true` blobs; `:466` spreads it at the single attempts build site (`:459` is the only `attempts.push` in the file). Fresh: the five-row projection test at `:243` passes and asserts `diagnostics` stays `[]`. |
+| R5 | MET | No in-run commit touches `packages/domain/`, `drizzle/`, `action-trace.ts` or the engine — `git diff-tree --name-only` over all five commits yields an empty intersection with those paths, so `action_runs` gains no column and the adapter/engine writes are unchanged. Redaction is unchanged: `applyRedactor` (`@gobing-ai/ts-dual-workflow-engine` `dist/persistence.js:47-50`) keeps a plain record as-is, and `defaultActionRedactor` (`:34-45`) returns the payload untouched for `kind !== 'shell'` and only rewrites `data.stdout`/`data.stderr` for `shell`, spreading the rest — so `{provenance, estimated}` survives byte-exact, as the passing app test for a `shell`/`agent.run` row asserts. |
+| R6 | MET | `packages/contracts/src/runs.ts:11` declares `workflowActionAttemptSchema`, gaining `provenance: z.enum(['host-reported','unknown'])` (`:20`) and `estimated: z.boolean()` (`:22`); the 1069 bidirectional assignability guard is green (fresh `apps/server` run: `15 pass / 0 fail`, `apps/server/tests/modules/runs/index.test.ts:338`), and the wire fixture/assertions are at `packages/contracts/tests/runs-contract.test.ts:40-41,61-62` (`4 pass / 0 fail`). Docs: `docs/design/cli-contracts.md:677-683` lists both fields plus the host-reported/unknown semantics, `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:344-350` and `:633-657` document `--estimated` and the optional row field, `docs/design/run-record-contract.md:63` states the `result_json` location and the legacy/pre-stamp rule. |
+
+##### AC Verification
+
+| AC | Status | Evidence |
+|----|--------|----------|
+| AC1 — Host-reported and estimated action durations are labelled (feature E72 R8) | MET | Writer stamps: `packages/app/src/services/inline-run-setup.ts:1293,1454` plus `packages/app/tests/services/inline-run-setup.test.ts:1066` reading back `{"provenance":"host-reported","estimated":true}` and `...:false`. Projection labels: `packages/app/src/workflow/progress-projection.ts:466` plus `packages/app/tests/workflow/progress-projection.test.ts:243` asserting the `host-reported`/`unknown` combinations. CLI surface: `plugins/sp/tests/inline-run-trace.test.ts:552` drives the real script with `--estimated` before `--action` and asserts the stored row is exactly `{provenance:'host-reported',estimated:true}` (`plugins/sp/tests/inline-run-trace.test.ts:587`). Wire shape: `packages/contracts/tests/runs-contract.test.ts:61-62`. All four suites re-run this pass, green. |
+| AC2 (@edge) — Rows recorded before the provenance stamp read as unlabelled (feature E72 R9) | MET | `packages/app/src/workflow/progress-projection.ts:177-186` returns `unknown`/`false` for an engine-style `{"ok":true,"data":{}}`, the malformed `"{"` and NULL; the projection test at `:243` asserts all three with `diagnostics` `[]`, i.e. no throw and no added diagnostic. Fresh suite green. |
+
+##### Verification Evidence (re-run this pass)
+
+```
+(cd packages/app && bun test tests/workflow/progress-projection.test.ts tests/services/inline-run-setup.test.ts)
+  37 pass / 0 fail, 187 expect() calls, 2 files [1.90s]
+(cd plugins/sp && bun test tests/inline-run-trace.test.ts tests/inline-run-setup.test.ts tests/inline-run-installed.test.ts)
+  38 pass / 0 fail, 247 expect() calls, 3 files [18.54s]
+bun run script-contract-check
+  script-contract-check: 19 script(s) baselined (18 standard, 1 repo-only), 0 violation(s) — PASS (exit 0)
+bun run inline-pipeline-parity-check
+  inline-pipeline-parity-check: ok (11 actions, 4 guards agree across 9 workflows and both reference sets; 0 spurious dependency edges) (exit 0)
+bun apps/cli/src/index.ts task check 1070 --json
+  {"wbs":"1070","status":"wip","findings":[],"missingSections":[],"pass":true,"notes":[],"repairs":[]} (exit 0)
+```
+
+Supporting checks re-run this pass: `bun run typecheck` → all 7 workspaces exit 0; `(cd apps/server && bun test tests/modules/runs/index.test.ts)` → 15 pass / 0 fail (R6 assignability guard); `(cd packages/contracts && bun test tests/runs-contract.test.ts)` → 4 pass / 0 fail; `bunx biome check` over the 11 changed TypeScript surfaces → "Checked 11 files. No fixes applied" (exit 0); `spur rule run --json` → 50 rules, 0 findings (`sp-script-placement`, `sp-plugin-standalone`, `no-direct-process-spawn` included). Behavioral probes: `--close … --estimated` → exit 2 with usage; `--actions-file … --estimated` → exit 2 with usage; `--estimated --run-id … --file …` (setup mode) → exit 2 with usage; `--estimated --action --fingerprint --task-file <f>` → exit 0 printing `sha256:005b7c29…` and the identical invocation without `--estimated` → the same exit 0 and the same digest (finding 2). The moved walk spawns without a shell (`NodeProcessExecutor`), so `--file` stays a single argv element.
+
+##### Design Conformance
+
+All approved `### Design` claims are DONE. The `{provenance:'host-reported', estimated}` stamp rides the existing `recordAction` `result` boundary (`packages/app/src/workflow/action-trace.ts:61-63` accessor, `:234-242` call) with no new column, migration or engine change; `readProvenance` matches the designed signature exactly; the projection throws on no `result_json`; batch validation stays all-or-nothing (`:1423-1427` completes before `:1428`); and the argv boolean branch plus the `estimated && !action` guard are equivalent to the designed `(!action || close)` because the later `action && close` check at `:172` fires first. Rejected alternatives (new column, engine-side `measured` stamp, `kind`-based inference) were correctly avoided. The ADR-130 glue-budget follow-up is itself conformant: the moved `readInstalledInventory` is not argv glue, the spawn goes through the sanctioned `NodeProcessExecutor` seam, and the exported facade is registered in `INLINE_RUN_EXPORTS` (`scripts/commands/bundle-plugin-lib.ts:582`). The one unclaimed consequence remains finding 1 (`--decide` rows inherit the stamp).
+
+**Next:** All previously blocking findings are cleared — no `### Solution` anchor is stale, `task check 1070` is clean, and no P1/P2/P3 remains. Findings 1-3 need only an operator disposition (accept as-is or note the decide-row payload in the change map). Gate is clear for `PASS`.
 
 ### References
 
@@ -245,3 +338,8 @@ Invariants held: engine writes, `DbWorkflowPersistenceAdapter` and migrations ar
 - Upstream: 1069 (schema). Downstream: 1071 AC7 (badges).
 
 ### History
+
+- 2026-10-04T18:29:08.843Z todo → wip (system)
+- 2026-10-04T19:21:12.142Z wip → testing (system)
+- 2026-10-04T19:21:22.032Z testing → done (system)
+

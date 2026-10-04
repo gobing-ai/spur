@@ -3,7 +3,7 @@ kind: design
 title: "Run record — two-file contract + the Observability read plane"
 status: implemented
 created_at: 2026-08-18
-updated_at: 2026-10-02
+updated_at: 2026-10-04
 related: [E7, I6, D3, "0598", "0610", "0683", "0709", "0712", "0925", "1051", "1053", "1064"]
 tags: [contract, E7, I6, workflow, observability]
 ---
@@ -213,9 +213,9 @@ Every current reader of a `.spur/run/*` artifact, with `path:line`:
 
 `apps/web/src/modules/observability/RoutingTab.tsx:236` reads `/api/observability/routing-summary` (routing aggregate + per-role token totals, tasks 0546/0547/0552). Source is the run/team store, not the token ledger or event plane. **Keep**; it already serves a slice of the operator's Overall view.
 
-### 6.3 TasksTab — **deferred, data gap named, no design**
+### 6.3 TasksTab — **deferred, data gap named, no design** (superseded by Feature E72)
 
-`apps/web/src/modules/observability/TasksTab.tsx:291` reads `/api/runs` (run list + phases/transitions/actions). **Gap:** run rows carry no per-task WBS/AC linkage — a task's section content and verdict live in `.spur/run` + task corpus, not in the `runs` table, so the tab cannot show *what a run did to which task* without a new join the backend does not have. **Deferred.**
+`apps/web/src/modules/observability/TasksTab.tsx:291` reads `/api/runs` (run list + phases/transitions/actions). **Gap:** run rows carry no per-task WBS/AC linkage — a task's section content and verdict live in `.spur/run` + task corpus, not in the `runs` table, so the tab cannot show *what a run did to which task* without a new join the backend does not have. **Deferred.** **Superseded (2026-10-04, task 1071):** the unregistered file was removed and the E72 Trace tab replaces it; the per-task WBS join stays out of scope.
 
 ### 6.4 JobsTab — **deferred, data gap named, no design**
 

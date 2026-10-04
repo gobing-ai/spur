@@ -3,7 +3,7 @@ kind: design
 title: "Observability and HTTP read contracts"
 status: implemented
 created_at: 2026-09-09
-updated_at: 2026-10-02
+updated_at: 2026-10-04
 related: ["0853", "0855", "0857", "0860", "0869", "0937"]
 tags: [contract, observability, server]
 ---

@@ -3,7 +3,7 @@ kind: design
 title: "Workflow run observability"
 status: implemented
 created_at: 2026-06-25
-updated_at: 2026-10-02
+updated_at: 2026-10-04
 related: [D2, D3, D9, "0109", "0114", "0365", "0597", "0603", "0604", "1064"]
 tags: [system, D2, D9, workflow, observability]
 ---
