@@ -4,7 +4,7 @@ name: Stamp inline action provenance and project it
 status: todo
 template: feature-impl
 created_at: 2026-10-04T02:46:12.530Z
-updated_at: "2026-10-04T03:05:40.821Z"
+updated_at: "2026-10-04T18:26:10.359Z"
 feature_id: E72
 priority: P2
 tags:
@@ -141,15 +141,15 @@ Task-local verification:
 
 ### Plan
 
-- [ ] 1. Write the failing tests first:
+- [x] 1. Write the failing tests first:
   - `packages/app/tests/workflow/progress-projection.test.ts`: four rows (inline measured, inline estimated, engine-style, NULL/malformed), using the seed SQL at :63-77 plus a `result_json` column.
   - `packages/app/tests/services/inline-run-setup.test.ts`: the stamp is written, and a non-boolean `estimated` rejects the batch with zero rows.
   - `plugins/sp/tests/inline-run-trace.test.ts`: `--estimated` with `--action` succeeds, with `--close` exits 2, and the ordering case.
-- [ ] 2. Projection: add the fields to `WorkflowActionAttempt` and `readProvenance`, and spread it at :433.
-- [ ] 3. App writer callers: add `estimated?` to both input types and pass `result` in `runInlineRunTrace` (~:1234) and the batch loop (~:1389). Add row validation after :1367.
-- [ ] 4. Plugin script: boolean flag, mode guard, forwarding, usage text. Then run `bun run build:scripts` and commit the regenerated `inline-run-setup.mjs` and plugin lib bundle.
-- [ ] 5. Contract: extend the attempt schema in `packages/contracts/src/runs.ts` (from 1069), and add the contract-test fixture fields.
-- [ ] 6. Docs: `cli-contracts.md:676`, the `inline-pipeline-driver.md` `--action`/`--actions-file` blocks, and the run-record-contract Feature E72 section.
+- [x] 2. Projection: add the fields to `WorkflowActionAttempt` and `readProvenance`, and spread it at :433.
+- [x] 3. App writer callers: add `estimated?` to both input types and pass `result` in `runInlineRunTrace` (~:1234) and the batch loop (~:1389). Add row validation after :1367.
+- [x] 4. Plugin script: boolean flag, mode guard, forwarding, usage text. Then run `bun run build:scripts` and commit the regenerated `inline-run-setup.mjs` and plugin lib bundle.
+- [x] 5. Contract: extend the attempt schema in `packages/contracts/src/runs.ts` (from 1069), and add the contract-test fixture fields.
+- [x] 6. Docs: `cli-contracts.md:676`, the `inline-pipeline-driver.md` `--action`/`--actions-file` blocks, and the run-record-contract Feature E72 section.
 - [ ] 7. Gates:
   - `(cd packages/app && bun test tests/workflow/progress-projection.test.ts tests/services/inline-run-setup.test.ts)`
   - `(cd plugins/sp && bun test tests/inline-run-trace.test.ts tests/inline-run-installed.test.ts)`
@@ -160,7 +160,70 @@ Task-local verification:
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Implemented task 1070 (feature E72 R8/R9): inline-driver action rows carry a host-reported
+provenance stamp in `action_runs.result_json`, and the progress projection labels each attempt from
+it. Additive only — no migration, no new column, and engine writes are untouched.
+
+Change map:
+
+- `packages/app/src/workflow/progress-projection.ts:97` — `WorkflowActionAttempt` gains
+  `provenance: 'host-reported' | 'unknown'` and `estimated: boolean`.
+- `packages/app/src/workflow/progress-projection.ts:177` — new module-local `readProvenance(resultJson)`
+  returns `unknown`/`false` for a null blob, a non-`host-reported` blob or a `JSON.parse` throw;
+  `estimated` is only true when the stamp says `host-reported` and `estimated === true`. It never
+  throws and never pushes a diagnostic, so legacy/engine/malformed rows read unlabelled (R4, R9/AC2).
+- `packages/app/src/workflow/progress-projection.ts:466` — the attempts build site spreads
+  `readProvenance(matchingRow.result_json)` into the attempt.
+- `packages/app/src/services/inline-run-setup.ts:1143` — `InlineRunTraceInput` gains
+  `readonly estimated?: boolean`.
+- `packages/app/src/services/inline-run-setup.ts:1247` — the non-close `runInlineRunTrace` write
+  passes `result: { provenance: 'host-reported', estimated: input.estimated === true }` through the
+  writer's existing `result` boundary. The close path is unchanged — it writes no action row.
+- `packages/app/src/services/inline-run-setup.ts:1321` — `InlineRunActionEntry` gains the same
+  optional field.
+- `packages/app/src/services/inline-run-setup.ts:1363-1380` — the batch row destructure/validation
+  rejects a non-boolean `estimated` with `actions[<i>]: estimated must be a boolean` after the
+  existing field checks and before the database opens, keeping the 1007 R5 all-or-nothing contract;
+  an absent or non-true value stays falsy.
+- `packages/app/src/services/inline-run-setup.ts:1408` — the batch loop passes the same stamp.
+- `plugins/sp/scripts/inline-run-setup.ts:131` — `--estimated` is parsed in the boolean branch beside
+  `--persist-out`, so it can never consume the following argv token.
+- `plugins/sp/scripts/inline-run-setup.ts:150-152` — a mode guard calls `usage()` (exit 2, before any
+  write) unless `--action` is the selected mode; `:235` forwards `estimated: true`; `:21` lists the
+  flag in the usage text.
+- `plugins/sp/scripts/inline-run-setup.mjs` — regenerated twin from `bun run build:scripts` (never
+  hand-edited), together with the regenerated `plugins/sp/lib/inline-run.generated.mjs` app bundle.
+- `packages/contracts/src/runs.ts:20-22` — `workflowActionAttemptSchema` gains
+  `provenance: z.enum(['host-reported','unknown'])` and `estimated: z.boolean()`. The 1069
+  bidirectional assignability guard (`apps/server/tests/modules/runs/index.test.ts:338`) stays green.
+- Docs: `docs/design/cli-contracts.md:676-683` adds the two attempt fields plus the
+  host-reported/unknown semantics; `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:344-350`
+  and `:628-657` document `--estimated` (pass it when the host did not time the action) and the
+  optional batch row field; the Feature E72 section of `docs/design/run-record-contract.md:63` states
+  that the stamp lives in `action_runs.result_json` and that engine/pre-stamp rows read
+  `unknown`/`estimated: false`.
+
+Tests (written first, red then green):
+
+- `packages/app/tests/workflow/progress-projection.test.ts:243` — five seeded rows (inline measured,
+  inline estimated, engine-style `{"ok":true,"data":{}}`, malformed `"{"`, NULL) map to
+  `host-reported/false`, `host-reported/true`, `unknown/false`, `unknown/false`, `unknown/false`
+  with `diagnostics` still empty.
+- `packages/app/tests/services/inline-run-setup.test.ts:1066` — `runInlineRunTrace` writes
+  `{"provenance":"host-reported","estimated":true}` with `estimated: true` and
+  `{"provenance":"host-reported","estimated":false}` when it is omitted.
+- `packages/app/tests/services/inline-run-setup.test.ts:1118` — batch rows carry the stamp, an
+  omitted `estimated` defaults to false.
+- `packages/app/tests/services/inline-run-setup.test.ts:1155` — a batch whose second row has
+  `estimated: "yes"` exits 1 with `actions[1]: estimated must be a boolean` and writes zero rows.
+- `plugins/sp/tests/inline-run-trace.test.ts:552` — `--estimated` placed before `--action` still
+  records the row (no token swallowed) with the stamp; `:596` — `--close`, `--actions-file` and the
+  setup mode all exit 2 on `--estimated` and write nothing.
+- `packages/contracts/tests/runs-contract.test.ts:40,61` — the wire fixture carries the fields and
+  the schema preserves them.
+
+Invariants held: engine writes, `DbWorkflowPersistenceAdapter` and migrations are untouched; no new
+`action_runs` column; the redaction pipeline is unchanged; batch validation stays all-or-nothing.
 
 ### Testing
 

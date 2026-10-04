@@ -15,6 +15,11 @@ export const workflowActionAttemptSchema = z.object({
     startedAt: z.string().nullable(),
     completedAt: z.string().nullable(),
     durationMs: z.number().nullable(),
+    /** Who reported `durationMs` (task 1070 / feature E72 R8): inline host rows are
+     * `host-reported`, engine/legacy rows are `unknown`. */
+    provenance: z.enum(['host-reported', 'unknown']),
+    /** True only for a `host-reported` attempt whose duration the host estimated. */
+    estimated: z.boolean(),
 });
 
 /** Progress record for one action declared on a workflow state. */

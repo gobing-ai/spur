@@ -18,7 +18,7 @@ function usage() {
   const text = [
     "Usage: bun plugins/sp/scripts/inline-run-setup.ts --run-id <id> --file <definition> [--spur-bin <path>]",
     "       bun plugins/sp/scripts/inline-run-setup.ts --fingerprint --task-file <path> [--feature-file <path>] [--spur-bin <path>]",
-    "       bun plugins/sp/scripts/inline-run-setup.ts --action --run-id <id> --node <state> --kind <kind> --status <done|failed> --ok <true|false> --duration-ms <n> [--spur-bin <path>]",
+    "       bun plugins/sp/scripts/inline-run-setup.ts --action --run-id <id> --node <state> --kind <kind> --status <done|failed> --ok <true|false> --duration-ms <n> [--estimated] [--spur-bin <path>]",
     "       bun plugins/sp/scripts/inline-run-setup.ts --actions-file <json-file> --run-id <id> [--spur-bin <path>]  (1007 R5 batch trace emission)",
     "       bun plugins/sp/scripts/inline-run-setup.ts --close --run-id <id> --status <done|failed|paused> [--reason <terminal-reason>] [--spur-bin <path>]",
     "       bun plugins/sp/scripts/inline-run-setup.ts --persist-out --from <worktree-path> [--task-file <path>]... [--spur-bin <path>]",
@@ -92,7 +92,7 @@ async function main() {
     process.exit(child.status ?? 1);
   }
   const flags = new Map;
-  let fingerprint = false, action = false, close = false, decide = false, persistOut = false;
+  let fingerprint = false, action = false, close = false, decide = false, persistOut = false, estimated = false;
   const taskFiles = [];
   let spurBin = getEnvVar("SPUR_BIN") ?? "";
   const argv = process.argv.slice(2);
@@ -108,6 +108,8 @@ async function main() {
       decide = true;
     else if (flag === "--persist-out")
       persistOut = true;
+    else if (flag === "--estimated")
+      estimated = true;
     else if (flag === "--task-file")
       taskFiles.push(argv[++i] ?? "");
     else if (flag === "--spur-bin")
@@ -127,6 +129,8 @@ async function main() {
   const okRaw = flags.get("--ok") ?? "";
   const durationRaw = flags.get("--duration-ms") ?? "";
   const actionsFile = flags.get("--actions-file") ?? "";
+  if (estimated && !action)
+    usage();
   if (fingerprint) {
     if (runId !== "" || file !== "" || taskFiles.length !== 1 || (taskFiles[0] ?? "").trim() === "")
       usage();
@@ -207,7 +211,16 @@ async function main() {
     const durationMs = Number(durationRaw);
     if (durationRaw.trim() === "" || !Number.isFinite(durationMs) || durationMs < 0)
       usage();
-    process.exit(await app2.runInlineRunTrace({ runId, close: false, node, kind, status, ok: okRaw === "true", durationMs }));
+    process.exit(await app2.runInlineRunTrace({
+      runId,
+      close: false,
+      node,
+      kind,
+      status,
+      ok: okRaw === "true",
+      durationMs,
+      ...estimated ? { estimated: true } : {}
+    }));
   }
   if (runId.trim() === "" || file.trim() === "")
     usage();

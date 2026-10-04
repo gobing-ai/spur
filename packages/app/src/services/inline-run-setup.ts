@@ -1135,6 +1135,12 @@ export interface InlineRunTraceInput {
     readonly status: 'done' | 'failed' | 'paused';
     readonly ok: boolean;
     readonly durationMs: number;
+    /**
+     * True when the host driver did not time the action (1070 R1) — for example a duration it
+     * reconstructed after a subagent returned. Stamped into `action_runs.result_json` so the
+     * projection can label the row instead of presenting it as measured.
+     */
+    readonly estimated?: boolean;
 }
 
 /**
@@ -1238,6 +1244,7 @@ export async function runInlineRunTrace(input: InlineRunTraceInput): Promise<num
                       status: input.status,
                       ok: input.ok,
                       durationMs: input.durationMs,
+                      result: { provenance: 'host-reported', estimated: input.estimated === true },
                   })
         ) as Record<string, unknown>;
         if (result.ok !== true && result.failure !== undefined) {
@@ -1310,6 +1317,8 @@ export interface InlineRunActionEntry {
     readonly status: 'done' | 'failed';
     readonly ok: boolean;
     readonly durationMs: number;
+    /** Same host-reported stamp as `--action` (1070 R1/R3); absent means measured. */
+    readonly estimated?: boolean;
 }
 
 /** Input for `runInlineRunTraceBatch` (`--actions-file`, 1007 R5). */
@@ -1319,7 +1328,7 @@ export interface InlineRunTraceBatchInput {
 }
 
 /**
- * Batch trace emission (1007 R5): read a JSON array of `{node,kind,status,ok,durationMs}` rows
+ * Batch trace emission (1007 R5): read a JSON array of `{node,kind,status,ok,durationMs,estimated?}` rows
  * and record one `action_runs` row per entry through the SAME `WorkflowActionTraceWriter` as
  * `--action`. The whole file is parsed and validated BEFORE the database opens, so an
  * unreadable file, invalid JSON, or a malformed row exits 1 with no partial writes. Accepted
@@ -1342,7 +1351,7 @@ export async function runInlineRunTraceBatch(input: InlineRunTraceBatchInput): P
         );
     }
     if (!Array.isArray(rows)) {
-        return batchFailed('actions file must be a JSON array of {node,kind,status,ok,durationMs}');
+        return batchFailed('actions file must be a JSON array of {node,kind,status,ok,durationMs,estimated?}');
     }
     const entries: InlineRunActionEntry[] = [];
     const rowError = (index: number, error: string): string => `actions[${index}]: ${error}`;
@@ -1351,7 +1360,7 @@ export async function runInlineRunTraceBatch(input: InlineRunTraceBatchInput): P
             return batchFailed(rowError(index, 'entry must be a JSON object'));
         }
         const record = row as Record<string, unknown>;
-        const { node, kind, status, ok, durationMs } = record;
+        const { node, kind, status, ok, durationMs, estimated } = record;
         if (typeof node !== 'string' || node.trim() === '') {
             return batchFailed(rowError(index, 'node must be a non-empty string'));
         }
@@ -1365,7 +1374,10 @@ export async function runInlineRunTraceBatch(input: InlineRunTraceBatchInput): P
         if (typeof durationMs !== 'number' || !Number.isFinite(durationMs) || durationMs < 0) {
             return batchFailed(rowError(index, 'durationMs must be a finite non-negative number'));
         }
-        entries.push({ node, kind, status, ok, durationMs });
+        if (estimated !== undefined && typeof estimated !== 'boolean') {
+            return batchFailed(rowError(index, 'estimated must be a boolean'));
+        }
+        entries.push({ node, kind, status, ok, durationMs, ...(estimated === true ? { estimated: true } : {}) });
     }
     let projectDb: InlineRunProjectDb | undefined;
     let recorded = 0;
@@ -1393,6 +1405,7 @@ export async function runInlineRunTraceBatch(input: InlineRunTraceBatchInput): P
                 status: entry.status,
                 ok: entry.ok,
                 durationMs: entry.durationMs,
+                result: { provenance: 'host-reported', estimated: entry.estimated === true },
             })) as Record<string, unknown>;
             if (result.ok === true) {
                 recorded += 1;

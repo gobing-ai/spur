@@ -89,6 +89,14 @@ export interface WorkflowActionAttempt {
     completedAt: string | null;
     /** Elapsed duration in milliseconds. */
     durationMs: number | null;
+    /**
+     * Who reported `durationMs` (1070 R4): the inline host session stamps
+     * `host-reported` into the row's `result_json`; every other row (engine, legacy,
+     * unparseable) is `unknown` and reads as unlabelled.
+     */
+    provenance: 'host-reported' | 'unknown';
+    /** True only for a `host-reported` row whose stamp declares the duration estimated. */
+    estimated: boolean;
 }
 
 /**
@@ -157,6 +165,24 @@ export interface ProjectWorkflowProgressOptions {
     workflowDef?: WorkflowDef;
     /** FileSystem abstraction. */
     fileSystem?: FileSystem;
+}
+
+/**
+ * Derive one attempt's duration provenance from its `action_runs.result_json` stamp (1070 R4).
+ *
+ * The inline driver writes `{provenance: 'host-reported', estimated}` through the trace writer's
+ * `result` boundary; every other row (engine-written, pre-stamp legacy, or unparseable) reads as
+ * `unknown`/`false`. A malformed blob is unlabelled, never an error and never a diagnostic.
+ */
+function readProvenance(resultJson: string | null): { provenance: 'host-reported' | 'unknown'; estimated: boolean } {
+    if (resultJson === null) return { provenance: 'unknown', estimated: false };
+    try {
+        const parsed = JSON.parse(resultJson) as { provenance?: unknown; estimated?: unknown } | null;
+        if (parsed?.provenance !== 'host-reported') return { provenance: 'unknown', estimated: false };
+        return { provenance: 'host-reported', estimated: parsed.estimated === true };
+    } catch {
+        return { provenance: 'unknown', estimated: false };
+    }
 }
 
 /**
@@ -437,6 +463,7 @@ export async function projectWorkflowProgress(
                             startedAt: matchingRow.started_at,
                             completedAt: matchingRow.completed_at,
                             durationMs: matchingRow.duration_ms,
+                            ...readProvenance(matchingRow.result_json),
                         });
 
                         if (matchingRow.status === 'running') {

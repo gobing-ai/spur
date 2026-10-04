@@ -18,7 +18,7 @@ function usage(): never {
     const text = [
         'Usage: bun plugins/sp/scripts/inline-run-setup.ts --run-id <id> --file <definition> [--spur-bin <path>]',
         '       bun plugins/sp/scripts/inline-run-setup.ts --fingerprint --task-file <path> [--feature-file <path>] [--spur-bin <path>]',
-        '       bun plugins/sp/scripts/inline-run-setup.ts --action --run-id <id> --node <state> --kind <kind> --status <done|failed> --ok <true|false> --duration-ms <n> [--spur-bin <path>]',
+        '       bun plugins/sp/scripts/inline-run-setup.ts --action --run-id <id> --node <state> --kind <kind> --status <done|failed> --ok <true|false> --duration-ms <n> [--estimated] [--spur-bin <path>]',
         '       bun plugins/sp/scripts/inline-run-setup.ts --actions-file <json-file> --run-id <id> [--spur-bin <path>]  (1007 R5 batch trace emission)',
         '       bun plugins/sp/scripts/inline-run-setup.ts --close --run-id <id> --status <done|failed|paused> [--reason <terminal-reason>] [--spur-bin <path>]',
         '       bun plugins/sp/scripts/inline-run-setup.ts --persist-out --from <worktree-path> [--task-file <path>]... [--spur-bin <path>]',
@@ -116,7 +116,8 @@ async function main(): Promise<void> {
         action = false,
         close = false,
         decide = false,
-        persistOut = false;
+        persistOut = false,
+        estimated = false;
     const taskFiles: string[] = [];
     let spurBin = getEnvVar('SPUR_BIN') ?? '';
     const argv = process.argv.slice(2);
@@ -127,6 +128,7 @@ async function main(): Promise<void> {
         else if (flag === '--close') close = true;
         else if (flag === '--decide') decide = true;
         else if (flag === '--persist-out') persistOut = true;
+        else if (flag === '--estimated') estimated = true;
         else if (flag === '--task-file') taskFiles.push(argv[++i] ?? '');
         else if (flag === '--spur-bin') spurBin = argv[++i] ?? spurBin;
         else if (flag !== undefined) flags.set(flag, argv[++i] ?? '');
@@ -144,6 +146,10 @@ async function main(): Promise<void> {
     const okRaw = flags.get('--ok') ?? '';
     const durationRaw = flags.get('--duration-ms') ?? '';
     const actionsFile = flags.get('--actions-file') ?? '';
+
+    // `--estimated` labels a host-reported duration the driver did NOT time around the action
+    // (1070 R2). Only `--action` carries one: every other mode is refused here, before any write.
+    if (estimated && !action) usage();
 
     if (fingerprint) {
         if (runId !== '' || file !== '' || taskFiles.length !== 1 || (taskFiles[0] ?? '').trim() === '') usage();
@@ -218,7 +224,16 @@ async function main(): Promise<void> {
         const durationMs = Number(durationRaw);
         if (durationRaw.trim() === '' || !Number.isFinite(durationMs) || durationMs < 0) usage();
         process.exit(
-            await app.runInlineRunTrace({ runId, close: false, node, kind, status, ok: okRaw === 'true', durationMs }),
+            await app.runInlineRunTrace({
+                runId,
+                close: false,
+                node,
+                kind,
+                status,
+                ok: okRaw === 'true',
+                durationMs,
+                ...(estimated ? { estimated: true } : {}),
+            }),
         );
     }
 

@@ -237,6 +237,74 @@ describe('projectWorkflowProgress', () => {
         db.close();
     });
 
+    // 1070 R4/AC1/AC2: per-attempt provenance and `estimated` come from the row's
+    // `result_json` stamp. Legacy/engine blobs (and unparseable ones) read unlabelled
+    // without adding a diagnostic.
+    test('labels host-reported attempts and reads legacy/engine rows as unlabelled (1070 R4)', async () => {
+        const db = await setupDb();
+        const now = Date.now();
+        const provenanceWf: WorkflowDef = {
+            kind: 'state-machine',
+            name: 'provenance-wf',
+            initialState: 's1',
+            terminalStates: ['done'],
+            states: [
+                {
+                    id: 's1',
+                    onEnter: [
+                        { kind: 'shell', options: { command: 'echo measured' } },
+                        { kind: 'agent.run', options: { input: 'estimated' } },
+                        { kind: 'note', options: { message: 'engine row' } },
+                        { kind: 'doctor.probe', options: {} },
+                        { kind: 'command.gate', options: {} },
+                    ],
+                },
+                { id: 'done' },
+            ],
+            transitions: [{ from: 's1', to: 'done' }],
+        };
+        const digest = computeDefinitionDigest(provenanceWf);
+        await db.run(
+            "INSERT INTO runs (id, workflow_name, status, started_at, metadata_json, created_at, updated_at) VALUES ('r1', 'provenance-wf', 'done', '2026-08-19T00:00:00Z', ?, ?, ?)",
+            JSON.stringify({ definitionDigest: digest }),
+            now,
+            now,
+        );
+        const seeded: Array<{ id: string; kind: string; result: string | null }> = [
+            { id: 'a1', kind: 'shell', result: JSON.stringify({ provenance: 'host-reported', estimated: false }) },
+            { id: 'a2', kind: 'agent.run', result: JSON.stringify({ provenance: 'host-reported', estimated: true }) },
+            { id: 'a3', kind: 'note', result: JSON.stringify({ ok: true, data: {} }) },
+            { id: 'a4', kind: 'doctor.probe', result: '{"' },
+            { id: 'a5', kind: 'command.gate', result: null },
+        ];
+        for (const [index, row] of seeded.entries()) {
+            await db.run(
+                "INSERT INTO action_runs (id, run_id, node, kind, status, ok, duration_ms, result_json, created_at) VALUES (?, 'r1', 's1', ?, 'success', 1, 10, ?, ?)",
+                row.id,
+                row.kind,
+                row.result,
+                now + index,
+            );
+        }
+
+        const projection = await projectWorkflowProgress('r1', { db, workflowDef: provenanceWf });
+
+        // A malformed blob is labelled, never a diagnostic.
+        expect(projection.diagnostics).toEqual([]);
+        const actions = projection.states.find((s) => s.state === 's1')?.actions ?? [];
+        const attemptOf = (kind: string) => actions.find((action) => action.kind === kind)?.attempts[0];
+        // Inline measured → host-reported, not estimated.
+        expect(attemptOf('shell')).toMatchObject({ provenance: 'host-reported', estimated: false });
+        // Inline estimated → host-reported and estimated.
+        expect(attemptOf('agent.run')).toMatchObject({ provenance: 'host-reported', estimated: true });
+        // Engine-style result blob → unlabelled.
+        expect(attemptOf('note')).toMatchObject({ provenance: 'unknown', estimated: false });
+        // Unparseable and NULL result_json → unlabelled.
+        expect(attemptOf('doctor.probe')).toMatchObject({ provenance: 'unknown', estimated: false });
+        expect(attemptOf('command.gate')).toMatchObject({ provenance: 'unknown', estimated: false });
+        db.close();
+    });
+
     test('detects ambiguous action mappings and emits diagnostic', async () => {
         const db = await setupDb();
         const now = Date.now();
