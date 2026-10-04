@@ -487,6 +487,11 @@ describe('CLI modes', () => {
             const durable = join(dir, '.spur/memory/evidence/0949-verdict.json');
             mkdirSync(join(dir, '.spur/memory/evidence'), { recursive: true });
             writeFileSync(durable, readFileSync(join(runDir, '0949-verdict.json')));
+            // Pin the freshness relation (1065): two back-to-back writes can land on equal mtimes,
+            // which resolves to the run copy and skips the durable sync — the fold's durable-newer path.
+            const stale = new Date(Date.now() - 60_000);
+            utimesSync(join(runDir, '0949-verdict.json'), stale, stale);
+            utimesSync(durable, new Date(), new Date());
             expect(main(['fold', '0949', '--root', dir], {}, SILENT)).toBe(0);
             const verdict = JSON.parse(readFileSync(join(runDir, '0949-verdict.json'), 'utf8')) as {
                 verdict: string;
