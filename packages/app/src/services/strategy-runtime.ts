@@ -307,7 +307,16 @@ export class StrategyRuntime {
             return { strategy, version, orchestrator, unresolved: [], reconciled: false };
         }
         const reconciler = new DeliveryReconciler({ getDb: async () => this.ctx.openDb(normalized) });
-        const unresolved = options.readOnly ? await reconciler.classify() : (await reconciler.reconcile()).unresolved;
+        // Only the fleet's own requests can hold its dispatch; an unscoped scan let a
+        // stale ad-hoc message to any agent block GTD forever.
+        const unresolved: UnresolvedDelivery[] = [];
+        for (const member of (await this.ctx.fleet.resolve(normalized)).members) {
+            unresolved.push(
+                ...(options.readOnly
+                    ? await reconciler.classify(member.instanceId)
+                    : (await reconciler.reconcile(member.instanceId)).unresolved),
+            );
+        }
         return { strategy, version, orchestrator, unresolved, reconciled: true };
     }
 

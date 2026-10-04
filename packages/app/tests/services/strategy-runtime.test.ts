@@ -539,6 +539,25 @@ describe('StrategyRuntime.resume (0838 R6)', () => {
             await rig.cleanup();
         }
     });
+
+    test('an unresolved delivery to an agent outside the fleet does not hold dispatch', async () => {
+        const rig = await makeRig({ strategy: 'gtd' });
+        try {
+            await rig.claims.claim(rig.project, 'orchestrator', 'proj-orch', 30_000);
+            // A stale terminal message to an unrelated ad-hoc agent, never settled.
+            const inbox = new (await import('@gobing-ai/spur-domain')).InboxMessageDao(rig.db);
+            await inbox.enqueue('terminal', 'demo-claude', 'hello');
+            await inbox.drainPending('demo-claude');
+
+            const report = await rig.runtime.resume(rig.project);
+            expect(report.reconciled).toBe(true);
+            expect(report.unresolved).toEqual([]);
+            const selected = await rig.runtime.selectNext(rig.project);
+            expect(selected.holds.some((hold) => hold.detail?.includes('unresolved-deliveries'))).toBe(false);
+        } finally {
+            await rig.cleanup();
+        }
+    });
 });
 
 describe('StrategyRuntime wake emits (0839 R1)', () => {
