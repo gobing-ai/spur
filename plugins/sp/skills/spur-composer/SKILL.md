@@ -1,6 +1,6 @@
 ---
 name: spur-composer
-description: "Select, compose and tune spur artifacts — tasks, features, rules, workflows and agent specs. Owns workflow catalog selection, the ephemeral→project→shared ladder, the ADR-115 budgets, trace-driven rule tuning, and applying accepted sp:spur-doctor proposals. Triggers: compose a workflow, tune a rule, apply doctor proposals."
+description: "Select, compose and tune spur artifacts — tasks, features, rules, workflows, agent specs and project Board modules. Owns workflow catalog selection, the ephemeral→project→shared ladder, ADR-115 budgets, trace-driven rule tuning and applying accepted sp:spur-doctor proposals. Triggers: compose a workflow, tune a rule, add a Board module."
 license: Apache-2.0
 version: 1.0.0
 metadata:
@@ -50,6 +50,7 @@ its own output and never runs a recurring loop — evaluation is the doctor's jo
 | rule | The trace-driven tuning loop (§ Rule tuning loop) | [../spur-cli/references/rules.md](../spur-cli/references/rules.md) · [fine-tuning](../spur-cli/references/rules/fine-tuning.md) |
 | workflow | Catalog selection, the composition ladder, and the ADR-115 budgets (§ below) | [../spur-cli/references/workflows.md](../spur-cli/references/workflows.md) · [operations](../spur-cli/references/workflows/operations.md) |
 | agent spec | Read through `spur agent list --specs`; specs are materialized from the fleet declaration at serve start | [../spur-cli/references/agent.md](../spur-cli/references/agent.md) |
+| board module | Declare under `bootstrap.modules`, gated by the serve preflight (§ Board module composition) | [../spur-cli/references/serve.md](../spur-cli/references/serve.md) |
 
 Do not drive the planning→execution lifecycle from here — that is `sp:spur-dev`.
 
@@ -105,6 +106,31 @@ budgets:
 
 A new model step in a shared workflow raises its `pipeline-budgets` `modelQueries`; that needs a
 recorded decision before the shared step.
+
+## Board module composition
+
+A project adds its own Spur Board modules (ADR-128) by declaration, never by editing the installed
+package. The contract — the `react`/`iframe` union, the `@gobing-ai/spur/board` type, the Vite
+externals and the frame/trust limits — is owned by
+[downstream Board modules §6](../../../../docs/design/downstream-board-modules.md#6-authoring-guide);
+the user walkthrough is
+[docs/help/how_to_customize_project_modules.md](../../../../docs/help/how_to_customize_project_modules.md).
+Link them, never restate them.
+
+| Step | Action |
+| --- | --- |
+| select | A built-in module or an existing declaration already covers the need → no new module. An app that already runs and permits framing → `type: iframe`. Otherwise → `type: react`. |
+| compose | Add one declaration to the project `.spur/config.yaml` `bootstrap.modules` list. Stage it with `enabled: false` first: it is fully validated (id shape, duplicates, host/retired collisions) but loads no assets. |
+| build | `react` only: the downstream project builds its own ESM entry plus CSS into the declared `directory`, externalizing exactly the `imports` keys of the installed `web/board-runtime.json`. Building the module is the project's code work, not composer's. |
+| gate | Restart `spur self serve`; the preflight fails startup on any declaration, asset or runtime-version error. Confirm the module in `GET /api/board/modules` and open `/board/modules/<id>`. `spur self serve --json` is a dry port probe and does **not** run this preflight. |
+| enable | Flip to `enabled: true`, restart and reload. There is no hot reload. |
+
+- The module is project-owned: it never climbs a shared layer, and it needs no `build:bundle`.
+- Declare only trusted code — importing a `react` entry evaluates it. Spur never starts or proxies an
+  `iframe` app, and a frame the child refuses stays blank by design.
+- Changing a built-in module is internal Board work in the spur repository
+  ([docs/help/how_to_add_a_new_ui_module.md](../../../../docs/help/how_to_add_a_new_ui_module.md)),
+  not a downstream declaration.
 
 ## Rule tuning loop
 
