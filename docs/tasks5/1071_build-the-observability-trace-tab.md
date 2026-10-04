@@ -4,7 +4,7 @@ name: Build the Observability Trace tab
 status: todo
 template: feature-impl
 created_at: 2026-10-04T02:46:12.531Z
-updated_at: "2026-10-04T03:05:41.401Z"
+updated_at: "2026-10-04T19:38:22.377Z"
 feature_id: E72
 priority: P2
 tags:
@@ -173,25 +173,53 @@ Task-local verification (happy-dom component tests with `setFetchForTesting`, fo
 
 ### Plan
 
-- [ ] 1. Tests first:
+- [x] 1. Tests first:
   - Write `apps/web/tests/modules/observability/trace-tab.test.tsx`, porting `tasks-tab.test.tsx`'s setup: `registerHappyDom`, `setFetchForTesting`, `jsonResponse`. It covers the list URL plus filters, paging, detail rendering, badges, slowest, the record, onNavigate, the history command and the schema-invalid path.
   - Update `tabs.test.ts:25-35` to the new exact id list.
   - Add a shell intent test: render `ObservabilityShell`, trigger the intent, assert the System Events run-id filter value.
-- [ ] 2. Create `TraceTab.tsx`: move the reusable pieces from `TasksTab.tsx` (:70-123, :216-241, :242-261, :757-880), then write the list, filters, detail and links.
-- [ ] 3. `tabs.ts`: add the `navIntent?` prop and register `trace`. `ObservabilityShell.tsx`: add the `navIntent` state, set it in `handleNavigate`, clear it on a tab click, and pass it to `<Active>` (:132).
-- [ ] 4. `SystemEventsTab.tsx`: accept `navIntent` and add an effect that applies `runId` to `filter`/`debouncedFilter` (:795-797).
-- [ ] 5. Delete `TasksTab.tsx`, `tasks-tab.test.tsx` and the `components.test.tsx` TasksTab block and import. Then check that `rg -n "observability/TasksTab" apps/web` returns nothing.
-- [ ] 6. Docs: in the run-record-contract Feature E72 section, change "proposed" to "implemented" for the tab and note the shell intent fix. Update `DESIGN.md` only if a new shared pattern was introduced (none is expected).
-- [ ] 7. Gates:
+- [x] 2. Create `TraceTab.tsx`: move the reusable pieces from `TasksTab.tsx` (:70-123, :216-241, :242-261, :757-880), then write the list, filters, detail and links.
+- [x] 3. `tabs.ts`: add the `navIntent?` prop and register `trace`. `ObservabilityShell.tsx`: add the `navIntent` state, set it in `handleNavigate`, clear it on a tab click, and pass it to `<Active>` (:132).
+- [x] 4. `SystemEventsTab.tsx`: accept `navIntent` and add an effect that applies `runId` to `filter`/`debouncedFilter` (:795-797).
+- [x] 5. Delete `TasksTab.tsx`, `tasks-tab.test.tsx` and the `components.test.tsx` TasksTab block and import. Then check that `rg -n "observability/TasksTab" apps/web` returns nothing.
+- [x] 6. Docs: in the run-record-contract Feature E72 section, change "proposed" to "implemented" for the tab and note the shell intent fix. Update `DESIGN.md` only if a new shared pattern was introduced (none is expected).
+- [x] 7. Gates:
   - `(cd apps/web && bun test tests/modules/observability/)`
   - `bun run typecheck`
   - `bun run spur-check`
   - `bun run build`
-- [ ] 8. Browser check (R8) against `spur self serve` with the Chrome tools: screenshot or GIF of the list, filters, detail with badges, System Events filtered, and the copied command. Put the evidence paths in Testing.
+- [x] 8. Browser check (R8) against `spur self serve` with the Chrome tools: screenshot or GIF of the list, filters, detail with badges, System Events filtered, and the copied command. Put the evidence paths in Testing.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Built the run-centric Trace tab and deleted the orphaned TasksTab (feature E72, task 1071).
+
+**New tab — `apps/web/src/modules/observability/TraceTab.tsx`**
+
+- `:237` `TraceTab({ timeRange, onNavigate })` (default export) — one run-centric view. Exports the test-visible helpers named in Design: `:169` `buildRunsUrl(base, {status?, workflow?, since?, cursor?, limit})`, `:185` `historyCommand(run)` (`--since` only while `completedAt` is null), `:193` `slowestAttemptIds(projection, n = 3)` (non-null `durationMs`, descending); `:32` `TRACE_STATUS_FILTERS` is the persisted `runs.status` vocabulary (`all|pending|running|paused|interrupted|done|failed|cancelled`).
+- List (R1/R2): `:263` `loadFirstPage` refetches page 1 on any filter or shell `timeRange` change (identity-keyed effect at `:288`), so every change resets paging; `:295` `loadMore` appends via `nextCursor` with the same filters. Rows carry workflow, status badge, `formatLocalTime(startedAt)`, duration (`completedAt − startedAt`, else `running`) and agent; empty state `No workflow runs in this window` (`:453`), inline error with `Retry` (`:432`). Selects are labelled `Status` (`:405`) and `Workflow` (`:422`); the workflow list is the distinct loaded `workflowName` values plus the active selection, and row toggles are `<button aria-expanded>` (`:467`).
+- Detail (R3/R4/R5/R7): `:328` fetches `GET /api/runs/:runId/progress` and parses with `workflowProgressProjectionSchema.safeParse`; 404 → `Run not found` (`:344`), invalid body → `progress response failed schema validation` (`:355`). Results are cached per runId for the mounted tab (`detailCache` state). `:541` `RunDetailPanel` renders, in order: header (workflow, status, `currentState`, 12-char digest, `:556`), states in projection order with visit + status (`:583`), actions with `actionKey`/kind/status and per-attempt `durationMs` via `formatDuration`, transitions (`from → to`, trigger, `at`, `:666`), diagnostics in warning style (`:685`), the moved `RunRecordSection` (`:731`, unchanged outcomes incl. the explicit `status: 'missing'` message), and links. The three slowest attempts are marked `data-slowest` and emphasised (`:617`); `provenance: 'host-reported'` renders an `info` badge (`:633`), `estimated: true` a `warning` badge (`:640`), `unknown` nothing.
+- Links: `:708` `System events for this run` calls `onNavigate?.({ tab: 'system-events', runId })`; `:717` the History window and `CopyValueButton`-backed `spur history analyze --since/--until` command (R7, History module untouched).
+
+**Shell intent fix — the AC5 enabler**
+
+- `apps/web/src/modules/observability/tabs.ts:61` registers `{ id: 'trace', label: 'Trace', component: TraceTab }` after `jobs`; `:36` adds the optional `ObservabilityTabProps.navIntent?: ObservabilityNavIntent | null`.
+- `apps/web/src/modules/observability/ObservabilityShell.tsx:22` keeps the last intent in `navIntent` state, `:36` sets it in `handleNavigate` (which previously dropped `runId`/`eventName`), `:41` clears it on a tab-button click, and `:145` passes it to the active tab.
+- `apps/web/src/modules/observability/SystemEventsTab.tsx:833-839` applies `navIntent.runId` to `filter.runId` and `debouncedFilter.runId` in an effect keyed on the intent, so a cross-tab run link filters on the first fetch. No other tab behaviour changed.
+
+**Removals** — `apps/web/src/modules/observability/TasksTab.tsx`, `apps/web/tests/modules/observability/tasks-tab.test.tsx`, and the TasksTab block plus its import in `apps/web/tests/modules/observability/components.test.tsx`. `rg -n "observability/TasksTab" apps/web` returns nothing.
+
+**Tests** — `apps/web/tests/modules/observability/trace-tab.test.tsx` (list URL + filters + paging `:244`, detail/badges/slowest/record/history/onNavigate `:325`, shell intent round-trip `:436`); `apps/web/tests/modules/observability/tabs.test.ts:26-35` now asserts `['summary','system-events','jobs','trace','routing']` with `tasks` absent.
+
+**Docs** — `docs/design/run-record-contract.md:58` E72 heading is now `implemented`, `:60` records the TasksTab removal, `:64` records the shell intent fix. No new shared design pattern, so `DESIGN.md` is untouched.
+
+**Browser check (R8)** — real data via `spur self serve --port 4399` on this worktree's DB (3 runs; 2 inside the default 4h window): list, `status=done` + `workflow=task-pipeline` narrowing, a real `finishedAt`-bounded run detail (35 projected states, host-reported badges, `data-slowest` = the 2 measured attempts 47 ms / 986 ms, diagnostics, run record), a running run's header (`current state: precheck`) and partial history window (`Oct 4 12:21:40 → running`, command with `--since` only), the `System events for this run` navigation landing on System Events with `filter-run-id-input = inline-1070-1f2c1f46`, and the copy button reaching its `Copied history analyze command` state. Evidence: `.spur/run/1071-browser/01-trace-list.png` … `07-detail-header-running.png` (gitignored; move/link into Testing at verify).
+
+Deferred / honest limits:
+
+- `bun run spur-check` is deliberately not run here: it is the pipeline `test` hop's gate (`sp:code-implementation` §implement scope). Targeted gates were run instead.
+- The browser environment denies clipboard *read* (`NotAllowedError`), so the copied text was evidenced by the component's success state, not by reading the clipboard back. A programmatic `.click()` (no transient activation) correctly degrades to `Copy … failed`.
+- No run in this DB projects transitions (`transitions: []` for all three runs), so the transitions section is covered by the fixture test only.
+- The global floating agent prompt bar (`.spur`-unrelated shell overlay, `fixed bottom-4 … z-30`) covers the last ~64 px of the module's scroll container, so the detail's final row (System events button / History row) is mouse-occluded until the prompt bar is dismissed or the viewport is scrolled. Geometry measured in-browser: button top 505–533 px vs overlay 513–550 px at a 577 px viewport. Pre-existing shell layout behaviour, not introduced by this tab; the browser clicks used a temporarily hidden overlay, and the finding is left for the verify stage rather than widening this task's scope.
 
 ### Testing
 

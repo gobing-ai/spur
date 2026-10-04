@@ -55,13 +55,13 @@ The 0594 injected-file-list cost idea is independent instrumentation, not a prer
 
 
 
-## Feature E72 — Trace tab (proposed, 2026-10-03)
+## Feature E72 — Trace tab (implemented, 2026-10-04)
 
-Supersedes the §6.3 deferral and the §7 "new tab" row: run inspection is a run-centric **Trace** tab in Observability (`TraceTab.tsx`, replacing the unregistered `TasksTab.tsx`). The per-task WBS join that §6.3 names stays out of scope.
+Supersedes the §6.3 deferral and the §7 "new tab" row: run inspection is a run-centric **Trace** tab in Observability (`TraceTab.tsx`, replacing the removed `TasksTab.tsx`). The per-task WBS join that §6.3 names stays out of scope.
 
 - **Read plane:** `GET /api/runs/:runId/progress` serves `projectWorkflowProgress`, the single implementation shared with `spur workflow progress`. Unknown runs return 404 `RUN_NOT_FOUND`. The response schema is `workflowProgressProjectionSchema` in `packages/contracts/src/runs.ts`; `runsContract.progress` is contract-only (OpenAPI surface) and the handler is a Hono route registered before the `/api/*` OpenAPI handler. `GET /api/runs` gains optional `workflow` and `since` filters (already bound by `RunDao.traceRows`); a malformed `since` returns 400 `MALFORMED_SINCE`. The run record stays on `GET /api/observability/run-record/:runId`.
 - **Provenance:** inline-driver action rows carry `result_json` `{provenance:'host-reported', estimated}`, and the projection exposes per-attempt `provenance` (`host-reported`|`unknown`) and `estimated`. Engine rows are unchanged and read `unknown`; a row recorded before the stamp (or one whose `result_json` is null/unparseable) also reads `unknown` with `estimated: false`, so a legacy row is never labelled as estimated and never raises a diagnostic. Inline `durationMs` is host-reported and may be post-hoc, so the Board labels it instead of presenting it as measured.
-- **Links:** run → System Events via the existing `runId` filter; `ObservabilityShell` carries the nav intent's `runId` into `SystemEventsTab` (today it drops it, so existing run links do not filter). Run → History is copyable text (time window + `spur history analyze` command), with no History module change.
+- **Links:** run → System Events via the existing `runId` filter; `ObservabilityShell` now applies the nav intent's `runId` by keeping the last intent and passing it to the active tab, and `SystemEventsTab` seeds `filter.runId`/`debouncedFilter.runId` from it — so existing Summary and Jobs run links filter too (before this, the shell dropped `runId`). Run → History is copyable text (time window + `spur history analyze` command), with no History module change.
 - **Out:** new module, inline run→session linkage, engine timing changes, live follow.
 
 ## 0. Historical 0598 rulings and snapshot

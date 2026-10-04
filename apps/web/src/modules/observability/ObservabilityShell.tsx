@@ -17,6 +17,9 @@ import {
 export default function ObservabilityShell() {
     const [activeId, setActiveId] = useState<string>(OBSERVABILITY_TABS[0]?.id ?? '');
     const [timeRange, setTimeRange] = useState<ObservabilityTimeRange>('4h');
+    // Last cross-tab intent. Kept until the user picks a tab themselves, so the
+    // target tab can apply it on mount (feature E72 R6).
+    const [navIntent, setNavIntent] = useState<ObservabilityNavIntent | null>(null);
     const [liveness, setLiveness] = useState<ObservabilityLiveness>({
         status: 'connecting',
         rate: 0,
@@ -31,7 +34,13 @@ export default function ObservabilityShell() {
     }, []);
 
     const handleNavigate = useCallback((intent: ObservabilityNavIntent) => {
+        setNavIntent(intent);
         setActiveId(intent.tab);
+    }, []);
+
+    const handleTabClick = useCallback((tabId: string) => {
+        setNavIntent(null);
+        setActiveId(tabId);
     }, []);
 
     // Derive display chip from current tab + reported liveness.
@@ -107,7 +116,7 @@ export default function ObservabilityShell() {
                                 aria-selected={selected}
                                 aria-controls={`observability-tab-panel-${tab.id}`}
                                 id={`observability-tab-${tab.id}`}
-                                onClick={() => setActiveId(tab.id)}
+                                onClick={() => handleTabClick(tab.id)}
                                 className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
                                     selected
                                         ? 'bg-primary text-primary-content font-bold shadow-sm'
@@ -129,7 +138,12 @@ export default function ObservabilityShell() {
                 className="mt-2 flex flex-col gap-4"
             >
                 {Active ? (
-                    <Active onLivenessChange={handleLivenessChange} timeRange={timeRange} onNavigate={handleNavigate} />
+                    <Active
+                        onLivenessChange={handleLivenessChange}
+                        timeRange={timeRange}
+                        onNavigate={handleNavigate}
+                        navIntent={navIntent}
+                    />
                 ) : null}
             </div>
         </div>
