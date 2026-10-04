@@ -45,6 +45,7 @@ const {
 } = await import('node:fs');
 const { lstat, mkdir, readdir, readFile } = await import('node:fs/promises');
 
+import { spawnSync } from 'node:child_process';
 import { basename, join, resolve } from 'node:path';
 import type { DbAdapter, RunDefinitionSource } from '@gobing-ai/spur-domain';
 import {
@@ -67,6 +68,7 @@ import { resolveDurableArtifactPath } from '../workflow/actions/run-path';
 import { parseFeatureVerificationReceipt } from '../workflow/feature-verification-receipt';
 import { computeProofInputFingerprint, readProofInputContents } from '../workflow/proof-input-fingerprint';
 import { InvalidWorkflowRunIdError } from '../workflow/run-record';
+import { splitLaunchCommand } from '../workflow/split-launch-command';
 import { isBookkeepingWorkflow, isTerminalReason, TERMINAL_REASONS } from '../workflow/terminal-reason';
 import { assertInventoryIdentity, parseWorkflowInventory } from '../workflow/workflow-inventory';
 import {
@@ -163,6 +165,47 @@ export async function openInlineRunProjectDb(workdir: string): Promise<InlineRun
     mkdirSync(join(url, '..'), { recursive: true });
     const adapter = await createMigratedDb({ url });
     return { adapter, close: () => adapter.close() };
+}
+
+/** Input for {@link readInstalledInventory}. */
+export interface ReadInstalledInventoryInput {
+    /** Workflow definition file (or name) to resolve. */
+    readonly file: string;
+    /** PATH-independent Spur invocation; empty falls back to the caller's checkout entry or a bare `spur`. */
+    readonly spurBin: string;
+    /** Repo-checkout CLI entry the caller resolved from its own plugin layout (the `--spur-bin`-less fallback). */
+    readonly localCli: string;
+    /** Project root the installed CLI resolves layers against. Defaults to the process cwd. */
+    readonly workdir?: string;
+}
+
+/**
+ * Let the selected CLI own config and layer resolution, then revalidate its snapshot in the app
+ * (ADR-113 project→registered→shared). Moved here from `plugins/sp/scripts/inline-run-setup.ts`
+ * (ADR-130 glue budget, task 1070's `--estimated` flag exhausted it): the script keeps only the
+ * paths it derives from its own module URL, and the spawn/envelope logic is app-layer.
+ */
+export async function readInstalledInventory(input: ReadInstalledInventoryInput): Promise<unknown> {
+    const launch = input.spurBin
+        ? splitLaunchCommand(input.spurBin, 'inline-run-setup "spurBin"')
+        : existsSync(input.localCli)
+          ? { command: 'bun', leadingArgs: [input.localCli] }
+          : { command: 'spur', leadingArgs: [] };
+    if ('error' in launch) throw new Error(launch.error);
+    const result = spawnSync(
+        launch.command,
+        [...launch.leadingArgs, 'workflow', 'show', input.file, '--format', 'todo', '--json'],
+        { cwd: input.workdir ?? process.cwd(), encoding: 'utf8', timeout: 30_000, maxBuffer: 4 * 1024 * 1024 },
+    );
+    if (result.status !== 0) {
+        throw new Error(
+            `could not resolve the workflow definition with the installed CLI: ${result.error?.message ?? result.stderr}`,
+        );
+    }
+    const value: unknown = JSON.parse(result.stdout);
+    // Honor the existing optional JSON envelope without inventing another projection format.
+    if (value && typeof value === 'object' && 'ok' in value && 'data' in value && value.ok === true) return value.data;
+    return value;
 }
 
 /** Input for {@link persistWorktreeRuns}. */

@@ -55,22 +55,6 @@ function resolveAppEntry(spurBin) {
   }
   return { entry, portable: true };
 }
-async function readInstalledInventory(file, spurBin) {
-  const localCli = fileURLToPath(new URL("../../../apps/cli/src/index.ts", import.meta.url));
-  const bundle = fileURLToPath(new URL("../lib/inline-run.generated.mjs", import.meta.url));
-  const { splitLaunchCommand } = await import(bundle);
-  const launch = spurBin ? splitLaunchCommand(spurBin, 'inline-run-setup "spurBin"') : existsSync(localCli) ? { command: "bun", leadingArgs: [localCli] } : { command: "spur", leadingArgs: [] };
-  if ("error" in launch)
-    throw new Error(launch.error);
-  const result = spawnSync(launch.command, [...launch.leadingArgs, "workflow", "show", file, "--format", "todo", "--json"], { cwd: process.cwd(), encoding: "utf8", timeout: 30000, maxBuffer: 4194304 });
-  if (result.status !== 0) {
-    throw new Error(`could not resolve the workflow definition with the installed CLI: ${result.error?.message ?? result.stderr}`);
-  }
-  const value = JSON.parse(result.stdout);
-  if (value && typeof value === "object" && "ok" in value && "data" in value && value.ok === true)
-    return value.data;
-  return value;
-}
 var TERMINAL_REASONS = new Set([
   "done",
   "paused-operator",
@@ -230,7 +214,11 @@ async function main() {
   const app = await import(entry);
   let inventory;
   try {
-    inventory = await readInstalledInventory(file, spurBin);
+    inventory = await app.readInstalledInventory({
+      file,
+      spurBin,
+      localCli: fileURLToPath(new URL("../../../apps/cli/src/index.ts", import.meta.url))
+    });
   } catch (error) {
     const message = `could not resolve the workflow definition: ${error instanceof Error ? error.message : String(error)}`;
     app.writeInlineRunOutcome(runId, { ok: false, runId, error: message });
