@@ -3,6 +3,7 @@ import type { TimeoutPolicyMs } from '@gobing-ai/spur-app';
 import {
     type AgentQuotaUpdateConsumer,
     AgentService,
+    assertProjectServerAvailable,
     configuredSecretValues,
     createSystemEventCatchAllSink,
     declaredBoardModules,
@@ -40,7 +41,7 @@ import {
     validateBoardModuleDeclarations,
 } from '@gobing-ai/spur-config';
 import { loadSpurConfig, resolveConfigFile } from '@gobing-ai/spur-config/loader';
-import type { BoardHostRuntime } from '@gobing-ai/spur-contracts';
+import type { BoardHostRuntime, DesktopServerStartupErrorMessage } from '@gobing-ai/spur-contracts';
 import {
     failOrphanedProcessingJobs,
     failStaleSchedulerCustomJob,
@@ -181,10 +182,12 @@ export interface StartServerDeps {
     createServerContext: typeof createServerContext;
     openUrl: typeof openUrl;
     resolveConfigFile: typeof resolveConfigFile;
+    assertProjectServerAvailable: typeof assertProjectServerAvailable;
 }
 
 /** Default collaborators wiring the real implementations. */
 export const defaultDeps: StartServerDeps = {
+    assertProjectServerAvailable,
     serverBootstrapConfig,
     runNodeApplication,
     createApp,
@@ -651,6 +654,18 @@ export async function startServer(options: StartServerOptions, deps: StartServer
     // `serve --cwd` against the invocation directory; embedding callers omit it and
     // keep the previous process.cwd() behavior.
     const projectRoot = options.cwd ?? process.cwd();
+    try {
+        await deps.assertProjectServerAvailable(projectRoot);
+    } catch (error) {
+        if (process.connected) {
+            const message: DesktopServerStartupErrorMessage = {
+                type: 'spur.desktop.startup-error',
+                message: error instanceof Error ? error.message : String(error),
+            };
+            process.send?.(message, () => {});
+        }
+        throw error;
+    }
     // Load the merged global+project config BEFORE boot so `bootstrap.options` (task 0902)
     // reaches serverBootstrapConfig. A load failure degrades to null (env-only), same
     // tolerance as the CLI root; the same value is reused for the server context below.
@@ -1083,11 +1098,30 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                 void shutdown('SIGTERM');
             };
 
+            const parentIpcConnected = process.connected === true;
+            const onDesktopShutdown = (message: unknown): void => {
+                if (
+                    typeof message === 'object' &&
+                    message !== null &&
+                    'type' in message &&
+                    message.type === 'spur.desktop.shutdown'
+                ) {
+                    void shutdown('desktop-ipc');
+                }
+            };
+            const onDesktopDisconnect = (): void => {
+                void shutdown('desktop-disconnect');
+            };
+
             const shutdown = async (signal: string) => {
                 if (shuttingDown) return;
                 shuttingDown = true;
                 process.off('SIGINT', onSigInt);
                 process.off('SIGTERM', onSigTerm);
+                if (parentIpcConnected) {
+                    process.off('message', onDesktopShutdown);
+                    process.off('disconnect', onDesktopDisconnect);
+                }
                 appRt.logger.info('Shutting down server', { signal });
                 // Die-with-server for job children: a restarted server must never
                 // inherit an orphaned importer holding the SQLite write lock. Kill
@@ -1132,6 +1166,10 @@ export async function startServer(options: StartServerOptions, deps: StartServer
 
             process.on('SIGINT', onSigInt);
             process.on('SIGTERM', onSigTerm);
+            if (parentIpcConnected) {
+                process.on('message', onDesktopShutdown);
+                process.once('disconnect', onDesktopDisconnect);
+            }
 
             const url = `http://${options.host}:${options.port}`;
 

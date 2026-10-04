@@ -2,7 +2,7 @@
 kind: design
 title: "Project switcher — system design (feature K1)"
 created_at: 2026-07-29
-updated_at: 2026-09-14
+updated_at: 2026-10-04
 related: [K1]
 tags: [system, K1, web, server]
 doc: design/project-switcher
@@ -164,6 +164,8 @@ Extend `startServer` / `registerServeCommand` (no new server process type):
    add registry deregister in the same teardown so intentional and crash-adjacent exits clear the port.
 5. SIGKILL: cannot run handlers; next `list`/`/api/projects` stale-heal clears the port.
 
+Before server database/runtime boot, `assertProjectServerAvailable` reads the selected registry entry without healing or mutating other projects. A live registered port causes startup refusal; stale or stopped entries permit startup. This applies to direct CLI, standalone and desktop server launches, so a desktop child cannot overwrite an existing live project server registration.
+
 When `agent.fleet.enabled` is `true` in the project config, startup materializes its enabled members
 after the quota-update drain and before autostart or HTTP admission; an absent or disabled fleet
 starts nothing and logs the state once. CLI and server share `resolveAgentRoles`, including configured
@@ -173,9 +175,8 @@ Registration preserves an existing project name because fleet mailbox IDs use th
 
 **Port assignment**
 
-- If CLI `--port` set → use it (fail if bind fails).
-- Else if registry entry has `port > 0` and still healthy → prefer reuse only when same process
-  restart is intentional; default safer path: if port free, reuse; if busy, allocate new.
+- A live registered project port is reused by `projects start`; direct server and desktop startup refuse a second owner, even when an explicit `--port` differs.
+- When no live project server exists, an explicit CLI `--port` is honored (fail if bind fails).
 - Else allocate lowest free port in a configurable band (default **3000–3999**), verifying OS bind
   readiness before commit to registry.
 

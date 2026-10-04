@@ -53,7 +53,7 @@ Runtime ownership (manifests also include build and test dependencies):
 apps/cli ────► packages/{app, config, contracts, domain} + engine/runtime facades
 apps/server ─► packages/{app, config, contracts, domain} + engine/runtime facades
 apps/web ────► packages/contracts (oRPC) + domain status vocabulary
-apps/desktop ► child `spur serve` only — no server, domain, or SQLite import
+apps/desktop ► child `spur serve` + config gateway + type-only process DTOs — no server, domain, or SQLite import
 packages/app ───► packages/{config, contracts, domain} + engine packages
 packages/domain ► @gobing-ai/ts-db (persistence owner — §8.1)
 ```
@@ -165,13 +165,15 @@ root; `src/worker-app.ts` is the Worker-safe HTTP root. The Worker graph must no
 
 The Electron app is a window around the existing Board. It does not import the server, open
 SQLite, or ship a second UI build. In development it takes a free loopback port and spawns
-`bun run apps/cli/src/index.ts serve --host 127.0.0.1 --port <port> --no-open --cwd <projectRoot>`.
+`bun apps/cli/src/index.ts serve --host 127.0.0.1 --port <port> --no-open --cwd <projectRoot>`.
 Packaged builds spawn the compiled `spur` binary the same way, or `dist/server/spur-server` with
 `PORT` and `HOST` when that CLI binary is absent. Web assets stay on the server's
 `resolveWebDistPath` search (a sibling `web/` directory next to the shipped binary). The child is
 the only SQLite owner (`<projectRoot>/.spur/spur.db`). Renderer IPC goes through the preload
 bridge; the page has Node integration disabled. A frameless drag strip turns on only when the
 preload sets `html[data-spur-desktop]`, so the browser and Cloudflare boards are unchanged.
+
+Server startup uses the application-owned registry guard before database/runtime boot to refuse an already-live project server. The owned desktop child has a private inherited JSON IPC channel for startup errors, Windows graceful shutdown, and parent-disconnect cleanup. Renderer code cannot access this process channel.
 
 ## 3. CLI Architecture (`apps/cli`)
 

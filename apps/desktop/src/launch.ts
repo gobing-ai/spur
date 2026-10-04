@@ -42,19 +42,19 @@ export function binaryKind(filePath: string): 'cli' | 'server' {
     return base === 'spur-server' ? 'server' : 'cli';
 }
 
-/** Dev launch: `bun run apps/cli/src/index.ts serve ...` from the checkout root. */
+/** Dev launch: `bun apps/cli/src/index.ts serve ...` from the checkout root. */
 export function buildDevCliLaunch(input: {
     bun: string;
     repoRoot: string;
     projectRoot: string;
     port: number;
     parentEnv: Record<string, string | undefined>;
+    platform?: NodeJS.Platform;
 }): ServeLaunch {
     return {
         kind: 'dev-cli',
         command: input.bun,
         args: [
-            'run',
             'apps/cli/src/index.ts',
             'serve',
             '--host',
@@ -167,6 +167,7 @@ export function resolveServeLaunch(input: {
             projectRoot: input.layout.projectRoot,
             port: input.port,
             parentEnv: input.parentEnv,
+            platform: input.platform ?? process.platform,
         });
     }
 

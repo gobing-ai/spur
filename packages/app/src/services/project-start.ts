@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import { getEnvVar, getEnvVars } from '@gobing-ai/spur-config';
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
-import { isPortLive, normalizeProjectPath, type ProjectRegistry } from './project-registry';
+import { isPortLive, normalizeProjectPath, ProjectRegistry } from './project-registry';
 
 /** Result of starting (or attaching to) a registered project serve instance. */
 export interface ProjectStartResult {
@@ -215,6 +215,21 @@ export function resolveSpurServeCommand(): string[] {
     throw new Error(
         'Could not resolve the spur CLI to spawn `spur serve`. Ensure `spur` is on PATH (or invoke start via the monorepo CLI).',
     );
+}
+
+/** Refuse a second project server before opening its database or changing its registry entry. */
+export async function assertProjectServerAvailable(
+    projectRoot: string,
+    options: { registry?: Pick<ProjectRegistry, 'readRaw'>; isLive?: typeof isPortLive } = {},
+): Promise<void> {
+    const registry = options.registry ?? new ProjectRegistry();
+    const path = normalizeProjectPath(projectRoot);
+    const existing = registry.readRaw().projects.find((entry) => normalizeProjectPath(entry.path) === path);
+    if (existing && existing.port > 0 && (await (options.isLive ?? isPortLive)(existing.port))) {
+        throw new Error(
+            `Project already has a live server at http://127.0.0.1:${existing.port}. Close that server before starting another one.`,
+        );
+    }
 }
 
 /**

@@ -26,7 +26,7 @@ The child process is the only database owner, at `<projectRoot>/.spur/spur.db`.
 Dev command, cwd = checkout root:
 
 ```text
-bun run apps/cli/src/index.ts serve --host 127.0.0.1 --port <free> --no-open --cwd <projectRoot>
+bun apps/cli/src/index.ts serve --host 127.0.0.1 --port <free> --no-open --cwd <projectRoot>
 ```
 
 Prod prefers a CLI binary (`serve` flags above, child cwd = `projectRoot`). A binary whose file name is `spur-server` (optional `.exe`) is the standalone server: no argv, `HOST=127.0.0.1`, `PORT=<free>`, child cwd = `projectRoot`. Candidate order when `SPUR_DESKTOP_BIN` is unset:
@@ -44,11 +44,13 @@ The shell binds `127.0.0.1:0` to pick the port, then polls `GET http://127.0.0.1
 
 `bun run build` produces `dist/server/spur-server` and `dist/web`, not a platform CLI. When stage falls back to that server it also ships a CLI companion at `dirname(serverBinary)/../cli/spur` (`.exe` on Windows). That is the path `resolveStandaloneSpurInvocation` in `apps/server/src/index.ts` uses for history refresh. Stage copies `dist/cli/spur-<os>-<arch>` or `dist/cli/spur` when present, and otherwise runs `scripts/spur-dev.ts build-cli`. Packaged builds publish both directories as `extraResources` (`spur` and `cli`).
 
-The desktop devDependency pins Electron **44.5.1** (supported stable line). Electron 35 is end of life and must not be reintroduced.
+The desktop devDependencies pin Electron **44.5.1** (supported stable line) and electron-builder **26.15.3**. Pack uses the installed, locked builder executable. Electron 35 is end of life and must not be reintroduced.
 
 ## Process lifetime
 
-One instance. A second launch focuses the existing window. `before-quit` stops the child with SIGTERM, then SIGKILL after a grace period. Quit while health is still pending aborts startup and kills the already spawned child; the process is not left holding the project database and port. The same stop runs when health never arrives or spawn fails. On POSIX the child is its own process group so `bun run` grandchildren die with it.
+One desktop instance. A second launch focuses the existing window. Before any server database/runtime boot, the shared application guard reads the selected project registry entry and refuses a live registered server without mutating the registry. The desktop reports that startup refusal instead of taking ownership of an existing server. `before-quit` stops the child with SIGTERM, then SIGKILL after a grace period. Quit while health is still pending aborts startup and kills the already spawned child; the process is not left holding the project database and port. The same stop runs when health never arrives or spawn fails. The dev shell invokes the Bun script directly, retaining its parent IPC descriptor. On POSIX the child is its own process group so descendants die with it.
+
+The owned child receives an inherited Node/Bun JSON IPC channel. Windows quit sends `spur.desktop.shutdown` so the server runs the same drain, job-child teardown, registry deregistration and runtime/database close as signal shutdown; SIGKILL remains a bounded timeout fallback. The server also drains on parent disconnect. Duplicate-server startup errors return to the owning parent through `spur.desktop.startup-error`. These private process DTOs live in `packages/contracts/src/desktop.ts`; they are unavailable to renderer IPC or remote HTTP clients.
 
 ## Renderer IPC
 
