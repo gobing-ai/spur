@@ -25,6 +25,8 @@
 
 ### Changed
 
+- pin verdict-copy freshness in the residual-scan fold case (1065) (027445e4c)
+- repin 0.3.99 citations after cog reword of the revert commit (ac4139c5a)
 - add change log (7a85c6a8f)
 - apply biome fixes so the lint gate is green at HEAD (e7d654dfd)
 - record E93 verifyall re-audit — 3 PASS force re-verifies (1028-1030) (8a06ead3a)
@@ -72,11 +74,14 @@
 - re-verify D62 forced batch to 28 PASS and settle residual dispositions (9e8b97fe9)
 - annotate retired basic/docs-pipeline/feature-dev definitions (0866) (0cfc5d8cb)
 
-> Verification: HIGH — coverage 61/61 hashes unique; mapping Added 8 / Fixed 7 / Changed 46 / Other 0;
-> header [0.3.99] - 2026-10-03 vs `--version 0.3.99`; dependency claim cited (`package.json:32`).
-> Citations repinned after the `Revert "…"` commit was reworded to `revert: …` for the cog gate: 11 hashes
-> changed (that commit + descendants), trees and both merges preserved. This repin commit is uncited and
-> lands in the next range.
+> Verification: HIGH — coverage 63/63 hashes unique (this footer commit is uncited and lands in the next range);
+> mapping Added 8 / Fixed 7 / Changed 48 / Other 0; header [0.3.99] - 2026-10-03 vs `--version 0.3.99`;
+> dependency claim cited (`package.json:32`).
+> Confidence: HIGH (section) — coverage, mapping and header reconciled against git; all API/dependency claims cited.
+> Confidence: HIGH (post-release fixes) — the `Revert "…"` commit was reworded to `revert: …` for the cog gate:
+> tree-identical to its predecessor (`52b3c9ed45`), both merges preserved, `cog check --ignore-merge-commits` clean,
+> 11 hashes changed and the citations above repinned; CI job `37163833414` and test-win `37163833409` green at
+> `027445e4c` after 9896 passing tests / 0 failing locally.
 
 ## [0.3.98] - 2026-10-02
 
