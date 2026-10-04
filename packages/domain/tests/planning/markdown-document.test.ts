@@ -667,6 +667,21 @@ describe('MarkdownDocument', () => {
             expect(out).not.toContain('0001');
         });
 
+        test('replaces a block-style list field, dropping its continuation items', () => {
+            const content =
+                '---\nname: "Demo"\ntags:\n  - observability\n  - server\ndeps:\n- 0001\nstatus: todo\n---\n\nbody\n';
+            const doc = MarkdownDocument.parse(content, 'task');
+            doc.setFrontmatterArray('tags', ['observability', 'fleet:auto']);
+            doc.setFrontmatterField('deps', 'none');
+            const out = doc.serialize();
+            expect(out).toBe(
+                '---\nname: "Demo"\ntags: ["observability", "fleet:auto"]\ndeps: none\nstatus: todo\n---\n\nbody\n',
+            );
+            const reparsed = MarkdownDocument.parse(out, 'task');
+            expect(reparsed.frontmatterData?.tags).toEqual(['observability', 'fleet:auto']);
+            expect(reparsed.frontmatterData?.status).toBe('todo');
+        });
+
         test('writes an empty array as `[]`', () => {
             const content = '---\nname: "Demo"\n---\n\nbody\n';
             const doc = MarkdownDocument.parse(content, 'task');

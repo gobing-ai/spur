@@ -619,7 +619,7 @@ export class MarkdownDocument {
         if (idx === -1) {
             lines.push(fieldLine);
         } else {
-            lines[idx] = fieldLine;
+            replaceFieldLines(lines, idx, fieldLine);
         }
         const raw = lines.join('\n');
         this._frontmatter = { raw, data: { ...this._frontmatter.data, [key]: value } };
@@ -664,7 +664,7 @@ export class MarkdownDocument {
         if (idx === -1) {
             lines.push(fieldLine);
         } else {
-            lines[idx] = fieldLine;
+            replaceFieldLines(lines, idx, fieldLine);
         }
         const raw = lines.join('\n');
         this._frontmatter = { raw, data: { ...this._frontmatter.data, [key]: values } };
@@ -691,6 +691,18 @@ export class MarkdownDocument {
         }
         return result;
     }
+}
+
+/**
+ * Replace the field at `lines[idx]` with `fieldLine`, also dropping the old
+ * value's continuation lines (block-sequence items `- x`, which YAML allows at
+ * the key's own indent, and any more-indented lines). Replacing only the key
+ * line would orphan those items and corrupt the frontmatter.
+ */
+function replaceFieldLines(lines: string[], idx: number, fieldLine: string): void {
+    let end = idx + 1;
+    while (end < lines.length && /^(\s|-(\s|$))/.test(lines[end] ?? '')) end++;
+    lines.splice(idx, end - idx, fieldLine);
 }
 
 /**
