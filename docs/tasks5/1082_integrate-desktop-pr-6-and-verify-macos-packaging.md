@@ -4,7 +4,7 @@ name: Integrate desktop PR 6 and verify macOS packaging
 status: testing
 template: issue
 created_at: 2026-10-04T20:54:18.738Z
-updated_at: "2026-10-04T21:25:11.302Z"
+updated_at: "2026-10-04T21:40:29.169Z"
 
 ac_numbering: task-local
 ac_altitude: task-local
@@ -19,7 +19,7 @@ Integrate PR #6 on GitHub and into local main while preserving existing work. Op
 
 ### Requirements
 
-- [ ] R1. Fix confirmed desktop startup, project selection, cancellation, and crash handling defects.
+- [ ] R1. Fix confirmed desktop startup, project selection, cancellation, crash handling, window controls, and renderer permission/IPC boundary defects.
 - [ ] R2. Build and verify the desktop package on this Apple Silicon macOS host.
 - [ ] R3. Synchronize desktop product and runtime contracts and obtain a fresh GitHub Codex review before merge.
 
@@ -51,6 +51,8 @@ Then product authorities match the desktop scope and actionable findings are res
 Keep Electron as a thin shell around the existing server. In packaged mode prompt for a project directory when no explicit path is supplied. Await pending startup cleanup on quit, notify main on unexpected child exit, and remove per-probe abort listeners. Update `apps/desktop/`, `docs/01_PRD.md`, `docs/02_ROADMAP.md`, and `docs/design/desktop-shell.md`; verify native packaging and the Board.
 
 Packaging fixes also cover `packages/config/src/bundled-config.ts`, its tests, `apps/desktop/scripts/stage-resources.ts`, and `docs/design/configuration-contracts.md`; compiled executables require adjacent external config assets.
+
+Retain native traffic lights with the hidden title bar, deny permission requests/checks before load, constrain the preload and IPC to the main frame, and route validated HTTP(S) external links to the system browser.
 
 ### Plan
 

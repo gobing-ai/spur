@@ -1,6 +1,6 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import { DESKTOP_WINDOW_CHANNEL } from '../src/ipc';
-import { FakeWindow, ipcMain } from './fixtures/electron';
+import { dialog, FakeWindow, ipcMain, shell } from './fixtures/electron';
 
 const { createMainWindow, registerWindowIpc } = await import('../src/window');
 
@@ -14,10 +14,11 @@ describe('desktop window', () => {
             preload: '/preload.cjs',
             contextIsolation: true,
             nodeIntegration: false,
+            nodeIntegrationInSubFrames: false,
             sandbox: true,
             webSecurity: true,
         });
-        expect(win.webContents.openHandler?.()).toEqual({ action: 'deny' });
+        expect(win.webContents.openHandler?.({ url: 'file:///tmp/blocked' })).toEqual({ action: 'deny' });
         let blocked = false;
         const event = {
             preventDefault: () => {
@@ -37,8 +38,10 @@ describe('desktop window', () => {
         registerWindowIpc();
         const win = new FakeWindow({});
         const send = (action: unknown, sender: unknown = win.webContents) =>
-            ipcMain.emit(DESKTOP_WINDOW_CHANNEL, { sender }, action);
+            ipcMain.emit(DESKTOP_WINDOW_CHANNEL, { sender, senderFrame: win.mainFrame }, action);
         send('minimize', {});
+        ipcMain.emit(DESKTOP_WINDOW_CHANNEL, { sender: win.webContents, senderFrame: {} }, 'close');
+        expect(win.closed).toBe(false);
         send('arbitrary');
         expect(win.minimized).toBe(false);
         send('minimize');
@@ -59,4 +62,45 @@ test('non-macOS windows reserve native title bar controls', () => {
         platform: 'win32',
     }) as unknown as FakeWindow;
     expect(win.options.titleBarOverlay).toEqual({ color: '#1a1d27', symbolColor: '#e2e8f0', height: 36 });
+});
+
+test('macOS uses hidden title bar with native traffic lights', () => {
+    const win = createMainWindow({
+        url: 'http://127.0.0.1:1234/board',
+        preloadPath: '/preload.cjs',
+        platform: 'darwin',
+    }) as unknown as FakeWindow;
+    expect(win.options.frame).toBeUndefined();
+    expect(win.options.titleBarStyle).toBe('hidden');
+    expect(win.options.trafficLightPosition).toEqual({ x: 12, y: 12 });
+});
+
+test('permissions are denied and external links use only HTTP(S) without credentials', async () => {
+    const open = spyOn(shell, 'openExternal').mockResolvedValue();
+    const error = spyOn(dialog, 'showErrorBox').mockImplementation(() => {});
+    try {
+        const win = createMainWindow({
+            url: 'http://127.0.0.1:1234/board',
+            preloadPath: '/preload.cjs',
+        }) as unknown as FakeWindow;
+        expect(win.webContents.session.checkPermission?.()).toBe(false);
+        let allowed: boolean | undefined;
+        win.webContents.session.requestPermission?.(win.webContents, 'media', (value) => {
+            allowed = value;
+        });
+        expect(allowed).toBe(false);
+        for (const url of ['file:///tmp/x', 'javascript:alert(1)', 'not a URL', 'https://user:pass@example.com']) {
+            expect(win.webContents.openHandler?.({ url })).toEqual({ action: 'deny' });
+        }
+        expect(open).not.toHaveBeenCalled();
+        expect(win.webContents.openHandler?.({ url: 'https://example.com/page' })).toEqual({ action: 'deny' });
+        expect(open).toHaveBeenCalledWith('https://example.com/page');
+        open.mockRejectedValueOnce(new Error('browser unavailable'));
+        win.webContents.openHandler?.({ url: 'http://example.com' });
+        await Promise.resolve();
+        expect(error).toHaveBeenCalledWith('Unable to open link', 'The system browser could not open this link.');
+    } finally {
+        open.mockRestore();
+        error.mockRestore();
+    }
 });

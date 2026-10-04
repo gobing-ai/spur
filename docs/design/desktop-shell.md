@@ -52,13 +52,13 @@ One instance. A second launch focuses the existing window. `before-quit` stops t
 
 ## Renderer IPC
 
-Preload (`contextIsolation`, no Node in the page, sandbox, `webSecurity`) exposes `window.spurDesktop` with `platform` and `minimize` / `toggleMaximize` / `close`. Those map to the `desktop:window` channel. Any other payload is ignored. The preload sets `html[data-spur-desktop]` and `html[data-spur-desktop-platform]` (`darwin`, `win32`, `linux`, …). Browsers and the Cloudflare worker never set those attributes.
+Preload (`contextIsolation`, no Node in the page, sandbox, `webSecurity`) exposes `window.spurDesktop` only in the main frame with `platform` and `minimize` / `toggleMaximize` / `close`. Those map to the `desktop:window` channel. Any other payload or IPC sender frame is ignored. Subframe Node integration is explicitly disabled. The preload sets `html[data-spur-desktop]` and `html[data-spur-desktop-platform]` (`darwin`, `win32`, `linux`, …). Browsers and the Cloudflare worker never set those attributes.
 
-Navigation that leaves the child origin is cancelled. `window.open` is denied.
+Navigation that leaves the child origin is cancelled. New Electron windows are denied; HTTP(S) links without embedded credentials open in the system browser. Other schemes and malformed targets are rejected. Permission requests and checks are denied before the Board loads.
 
 ## Window controls overlay
 
-The window is frameless (`titleBarStyle: hidden`). macOS uses traffic-light insets and a drag strip in the Board sidebar (`[data-spur-drag-region]`, 2.25rem, `-webkit-app-region: drag`), active only when `data-spur-desktop` is set.
+The window uses `titleBarStyle: hidden` with the native frame retained so macOS traffic lights remain visible. macOS uses traffic-light insets and a drag strip in the Board sidebar (`[data-spur-drag-region]`, 2.25rem, `-webkit-app-region: drag`), active only when `data-spur-desktop` is set.
 
 Windows and Linux set `titleBarOverlay` (`height: 36`, overlay color `#1a1d27`). Native controls sit on top of the web content; that rectangle is not usable by the page. The Board therefore, only when `data-spur-desktop-platform` is `win32` or `linux`:
 

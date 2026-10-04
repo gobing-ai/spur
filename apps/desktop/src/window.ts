@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain } from 'electron';
+import { BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { DESKTOP_WINDOW_CHANNEL, isSameOrigin, isWindowAction } from './ipc';
 
 /** Frameless window that loads the Board. IPC is registered separately and stays on the preload bridge. */
@@ -14,7 +14,6 @@ export function createMainWindow(options: {
         minHeight: 600,
         show: false,
         backgroundColor: '#0f1117',
-        frame: false,
         titleBarStyle: 'hidden',
         trafficLightPosition: { x: 12, y: 12 },
         ...((options.platform ?? process.platform) === 'darwin'
@@ -30,13 +29,28 @@ export function createMainWindow(options: {
             preload: options.preloadPath,
             contextIsolation: true,
             nodeIntegration: false,
+            nodeIntegrationInSubFrames: false,
             sandbox: true,
             webSecurity: true,
         },
     });
 
     const origin = new URL(options.url).origin;
-    win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    win.webContents.session.setPermissionCheckHandler(() => false);
+    win.webContents.session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
+    win.webContents.setWindowOpenHandler(({ url }) => {
+        try {
+            const target = new URL(url);
+            if (['http:', 'https:'].includes(target.protocol) && !target.username && !target.password) {
+                void shell.openExternal(target.href).catch(() => {
+                    dialog.showErrorBox('Unable to open link', 'The system browser could not open this link.');
+                });
+            }
+        } catch {
+            // Invalid targets never leave the Electron process.
+        }
+        return { action: 'deny' };
+    });
     win.webContents.on('will-navigate', (event, url) => {
         if (!isSameOrigin(url, origin)) event.preventDefault();
     });
@@ -50,7 +64,7 @@ export function createMainWindow(options: {
 /** Honor only the three window actions the preload exposes. */
 export function registerWindowIpc(): void {
     ipcMain.on(DESKTOP_WINDOW_CHANNEL, (event, action: unknown) => {
-        if (!isWindowAction(action)) return;
+        if (!isWindowAction(action) || event.senderFrame !== event.sender.mainFrame) return;
         const win = BrowserWindow.fromWebContents(event.sender);
         if (!win) return;
         if (action === 'minimize') win.minimize();
