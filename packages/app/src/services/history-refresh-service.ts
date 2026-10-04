@@ -283,7 +283,7 @@ export interface HistoryRefreshJobDeps {
     /** Exact database URL used by the server; keeps `serve --cwd` children on the same database. */
     databaseUrl?: string;
     /** PATH-independent Spur invocation; the CLI `serve` bootstrap passes `resolveSpurBin()`. */
-    invocation: string;
+    invocation: string | readonly string[];
     /** Process seam — the real server wires `NodeProcessExecutor`. */
     executor: ProcessExecutor;
     /**
@@ -341,7 +341,13 @@ export async function handleHistoryRefreshJob(deps: HistoryRefreshJobDeps, job: 
     // attempt, not silently refresh with defaulted trigger/window fields. The queue
     // registry hands Job<unknown>; this validation is the payload type gate.
     const payload = validateHistoryRefreshPayload(job.payload);
-    const split = splitLaunchCommand(deps.invocation, 'history refresh "invocation"');
+    const split =
+        typeof deps.invocation === 'string'
+            ? splitLaunchCommand(deps.invocation, 'history refresh "invocation"')
+            : deps.invocation[0] !== undefined &&
+                deps.invocation.every((part) => part.length > 0 && !part.includes('\0'))
+              ? { command: deps.invocation[0], leadingArgs: deps.invocation.slice(1) }
+              : { error: 'history refresh "invocation" must contain a non-empty executable argv' };
     if ('error' in split) throw new Error(split.error);
     // Task 0813 R3: the canonical payload policy (persisted with the queued work)
     // beats the legacy env-resolved deps value; both fall back to the ten-minute

@@ -46,6 +46,8 @@ export interface MainOptions {
     dbUrl?: string;
     /** Pre-built DB adapter. Injectable so tests can assert close-on-shutdown (ADR-018). */
     db?: DbAdapter;
+    /** Database-free serve launch seam for startup tests. */
+    startServer?: typeof import('@gobing-ai/spur-server').startServer;
 }
 
 /** Run the Spur CLI with explicit argv and injectable runtime dependencies. */
@@ -55,6 +57,34 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
 
     const cwd = options.cwd ?? process.cwd();
     const env = options.env ?? getEnvVars();
+    // Serve owns its sole runtime and database. Dispatch before the CLI's adapter
+    // and configuration runtime boot, including the canonical `self serve` form.
+    const commandTokens = argv.filter((token) => !['--no-logo', '--cli-verbose', '-v'].includes(token));
+    if (commandTokens[0] === 'serve' || (commandTokens[0] === 'self' && commandTokens[1] === 'serve')) {
+        const program = new Command().name('spur').exitOverride();
+        program.option('--no-logo').option('-v, --cli-verbose');
+        program.configureOutput({ writeOut: (str) => output.write(str), writeErr: (str) => output.error(str) });
+        const context = {
+            cwd,
+            output,
+            env,
+            setExitCode: (code: number) => {
+                exitCode = code;
+            },
+        };
+        registerServeCommand(program, context, { startServer: options.startServer });
+        registerServeCommand(program.command('self'), context, { startServer: options.startServer });
+        try {
+            await program.parseAsync(argv, { from: 'user' });
+            return exitCode;
+        } catch (error) {
+            const code = (error as { exitCode?: number }).exitCode;
+            if (code !== undefined) return code;
+            output.error(errorMessage(error));
+            return 1;
+        }
+    }
+
     // Task 0817 R1: forward `options.cwd` verbatim — which may be undefined — so the
     // loader's `SPUR_SKIP_PROJECT_CONFIG` gate can suppress the project layer for
     // unpinned programmatic runs. `cwd` stays materialized for the DB and context seams.

@@ -170,10 +170,10 @@ Packaged builds spawn the compiled `spur` binary the same way, or `dist/server/s
 `PORT` and `HOST` when that CLI binary is absent. Web assets stay on the server's
 `resolveWebDistPath` search (a sibling `web/` directory next to the shipped binary). The child is
 the only SQLite owner (`<projectRoot>/.spur/spur.db`). Renderer IPC goes through the preload
-bridge; the page has Node integration disabled. A frameless drag strip turns on only when the
+bridge; the page has Node integration disabled. A desktop drag strip turns on only when the
 preload sets `html[data-spur-desktop]`, so the browser and Cloudflare boards are unchanged.
 
-Server startup uses the application-owned registry guard before database/runtime boot to refuse an already-live project server. The owned desktop child has a private inherited JSON IPC channel for startup errors, Windows graceful shutdown, and parent-disconnect cleanup. Renderer code cannot access this process channel.
+Server startup acquires an application-owned atomic project lifetime claim before database/runtime boot, retains it until runtime shutdown and the separately owned lazy server-context database close complete, and uses the registry guard to refuse an already-live older project server. CLI serve dispatch bypasses the CLI database/runtime boot. The owned desktop child has a private inherited JSON IPC channel for startup errors, Windows graceful shutdown, and parent-disconnect cleanup. Renderer code cannot access this process channel.
 
 ## 3. CLI Architecture (`apps/cli`)
 

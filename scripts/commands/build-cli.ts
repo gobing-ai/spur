@@ -13,7 +13,7 @@
  * `const <var> = '@gobing-ai/ts-db'` declaration, captures the identifier, and
  * rewrites `await import(<var>)` → `await import('@gobing-ai/ts-db')`.
  */
-import { readFileSync, writeFileSync } from 'node:fs';
+import { closeSync, openSync, readFileSync, unlinkSync, writeFileSync, writeSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -41,40 +41,73 @@ function resolveTsRuntimeDist(): string {
  */
 export function patchTsRuntimeImport(): () => void {
     const distFile = resolveTsRuntimeDist();
-    const original = readFileSync(distFile, 'utf-8');
-
-    // Legacy fallback: the 0.4.6 dist used the identifier `moduleSpecifier`.
-    let patched = original.replace(/await import\(moduleSpecifier\)/g, "await import('@gobing-ai/ts-db')");
-
-    // Version-agnostic: detect `const <var> = '@gobing-ai/ts-db'` and rewrite
-    // `await import(<var>)` → `await import('@gobing-ai/ts-db')`.
-    const declMatch = original.match(/const\s+(\w+)\s*=\s*'@gobing-ai\/ts-db'/);
-    if (declMatch) {
-        const varName = declMatch[1];
-        const importRegex = new RegExp(`await import\\(${varName}\\)`, 'g');
-        patched = patched.replace(importRegex, "await import('@gobing-ai/ts-db')");
+    // Every native compilation facade (CLI, server and cross-target CLI) uses
+    // this exclusive claim. Concurrent invocations fail before mutating dist.
+    const lockPath = `${distFile}.spur-compile.lock`;
+    let lockFd: number;
+    try {
+        lockFd = openSync(lockPath, 'wx');
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+            throw new Error(`Another compiled build holds ${lockPath}; run CLI/server builds sequentially.`);
+        }
+        throw error;
     }
+    const release = (): void => {
+        closeSync(lockFd);
+        unlinkSync(lockPath);
+    };
+    try {
+        writeSync(lockFd, String(process.pid));
+        const original = readFileSync(distFile, 'utf-8');
 
-    if (patched === original) {
-        throw new Error(
-            `build-cli: no variable-specifier ts-db import found in ${distFile} — the ts-runtime dist shape changed; update patchTsRuntimeImport before compiling`,
-        );
+        // Legacy fallback: the 0.4.6 dist used the identifier `moduleSpecifier`.
+        let patched = original.replace(/await import\(moduleSpecifier\)/g, "await import('@gobing-ai/ts-db')");
+
+        // Version-agnostic: detect `const <var> = '@gobing-ai/ts-db'` and rewrite
+        // `await import(<var>)` → `await import('@gobing-ai/ts-db')`.
+        const declMatch = original.match(/const\s+(\w+)\s*=\s*'@gobing-ai\/ts-db'/);
+        if (declMatch) {
+            const varName = declMatch[1];
+            const importRegex = new RegExp(`await import\\(${varName}\\)`, 'g');
+            patched = patched.replace(importRegex, "await import('@gobing-ai/ts-db')");
+        }
+
+        if (patched === original) {
+            throw new Error(
+                `build-cli: no variable-specifier ts-db import found in ${distFile} — the ts-runtime dist shape changed; update patchTsRuntimeImport before compiling`,
+            );
+        }
+
+        writeFileSync(distFile, patched, 'utf-8');
+        console.log('compiled-build: patched ts-runtime variable-specifier import → string literal');
+        return () => {
+            try {
+                writeFileSync(distFile, original, 'utf-8');
+            } finally {
+                release();
+            }
+        };
+    } catch (error) {
+        release();
+        throw error;
     }
-
-    writeFileSync(distFile, patched, 'utf-8');
-    console.log('build-cli: patched ts-runtime variable-specifier import → string literal');
-    return () => writeFileSync(distFile, original, 'utf-8');
 }
 
-/** Build and compile the local `spur` binary into `dist/cli/spur`. */
-export async function buildCli(): Promise<void> {
+/** Compile a local Bun executable with its optional database peer registered in the bundle. */
+export async function buildCompiledBinary(entry: string, outfile: string): Promise<void> {
     const restore = patchTsRuntimeImport();
     try {
-        const result = Bun.spawnSync(['bun', 'build', CLI_ENTRY, '--compile', '--outfile', OUT_FILE], {
+        const result = Bun.spawnSync(['bun', 'build', entry, '--compile', '--outfile', outfile], {
             stdio: ['ignore', 'inherit', 'inherit'],
         });
         if (result.exitCode !== 0) throw new Error(`bun build failed with exit code ${result.exitCode}`);
     } finally {
         restore();
     }
+}
+
+/** Build and compile the local `spur` CLI binary. */
+export async function buildCli(): Promise<void> {
+    await buildCompiledBinary(CLI_ENTRY, OUT_FILE);
 }

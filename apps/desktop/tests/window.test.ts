@@ -1,5 +1,5 @@
 import { describe, expect, spyOn, test } from 'bun:test';
-import { DESKTOP_WINDOW_CHANNEL } from '../src/ipc';
+import { DESKTOP_EXTERNAL_CHANNEL, DESKTOP_WINDOW_CHANNEL } from '../src/ipc';
 import { dialog, FakeWindow, ipcMain, shell } from './fixtures/electron';
 
 const { createMainWindow, registerWindowIpc } = await import('../src/window');
@@ -94,11 +94,25 @@ test('permissions are denied and external links use only HTTP(S) without credent
         }
         expect(open).not.toHaveBeenCalled();
         expect(win.webContents.openHandler?.({ url: 'https://example.com/page' })).toEqual({ action: 'deny' });
+        expect(open).not.toHaveBeenCalled();
+        const send = (url: unknown, senderFrame: unknown = win.mainFrame) =>
+            ipcMain.emit(DESKTOP_EXTERNAL_CHANNEL, { sender: win.webContents, senderFrame }, url);
+        send('https://example.com/page', { url: 'https://untrusted.example' });
+        expect(open).not.toHaveBeenCalled();
+        send('https://user:pass@example.com');
+        send('file:///tmp/x');
+        send('not a URL');
+        send(123);
+        expect(open).not.toHaveBeenCalled();
+        send('https://example.com/page');
         expect(open).toHaveBeenCalledWith('https://example.com/page');
         open.mockRejectedValueOnce(new Error('browser unavailable'));
-        win.webContents.openHandler?.({ url: 'http://example.com' });
+        send('http://example.com');
         await Promise.resolve();
         expect(error).toHaveBeenCalledWith('Unable to open link', 'The system browser could not open this link.');
+        win.emit('closed');
+        send('https://example.com/after-close');
+        expect(open).toHaveBeenCalledTimes(2);
     } finally {
         open.mockRestore();
         error.mockRestore();

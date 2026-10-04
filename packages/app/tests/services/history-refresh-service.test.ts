@@ -646,3 +646,21 @@ describe('resolveHistoryRefreshTimeoutMs canonical precedence (task 0813 R3 / 09
         expect(() => resolveHistoryRefreshTimeoutMs(null, -1)).toThrow(/invalid canonical timeout/);
     });
 });
+
+test('history refresh preserves whitespace in executable and source argv', async () => {
+    const validPayload = { trigger: 'task-done', triggerId: '1082', windowStart: 1, windowEnd: 2 };
+    const { executor, runs } = fakeExecutor({});
+    await handleHistoryRefreshJob(
+        {
+            cwd: '/project',
+            invocation: ['/Applications/Spur Desktop.app/cli/spur', '/source with spaces/main.ts'],
+            executor,
+        },
+        jobOf(validPayload),
+    );
+    expect(runs[0]?.command).toBe('/Applications/Spur Desktop.app/cli/spur');
+    expect(runs[0]?.args?.[0]).toBe('/source with spaces/main.ts');
+    await expect(
+        handleHistoryRefreshJob({ cwd: '/project', invocation: [], executor }, jobOf(validPayload)),
+    ).rejects.toThrow('non-empty executable');
+});

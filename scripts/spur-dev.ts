@@ -18,6 +18,7 @@
  *   verify-pack <tgz>                            extract + assert the packed tarball ships plugin + marketplace
  *   build-binaries                              cross-compile per-platform spur
  *   build-cli                                  patch ts-runtime + compile local `spur` binary
+ *   build-server                               compile standalone server with the same native DB facade
  *   dev-all                                     run server + web under one supervisor
  *   link-check                                  fail if a linked @gobing-ai pkg serves a stale dist/
  *   eval-pipeline [args]                        run fixture tasks through a pipeline and record cost/outcome
@@ -27,6 +28,7 @@
  */
 import { buildBinaries } from './commands/build-binaries';
 import { buildCli } from './commands/build-cli';
+import { buildServer } from './commands/build-server';
 import { bundleConfig } from './commands/bundle-config';
 import { bundlePlugins } from './commands/bundle-plugins';
 import { bundleWeb } from './commands/bundle-web';
@@ -44,7 +46,7 @@ import { runWorkflowPromotion } from './commands/workflow-promotion';
 
 function usage(message?: string): never {
     console.error(
-        'Commands: bump-ver, drop-tags, publish, bundle-config, bundle-web, bundle-plugins, emit-board-types, check-marketplace-version, verify-pack, build-binaries, build-cli, dev-all, link-check, eval-pipeline, real-run-cost, check-pipeline-budgets, promotion',
+        'Commands: bump-ver, drop-tags, publish, bundle-config, bundle-web, bundle-plugins, emit-board-types, check-marketplace-version, verify-pack, build-binaries, build-cli, build-server, dev-all, link-check, eval-pipeline, real-run-cost, check-pipeline-budgets, promotion',
     );
     process.exit(message ? 1 : 0);
 }
@@ -103,6 +105,9 @@ try {
         }
         case 'build-cli':
             await buildCli();
+            break;
+        case 'build-server':
+            await buildServer();
             break;
         case 'build-binaries':
             await buildBinaries();

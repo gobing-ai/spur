@@ -185,6 +185,7 @@ function startServer(options: StartServerOptions, deps: StartServerDeps = defaul
 function makeDeps(overrides: Partial<StartServerDeps> = {}): StartServerDeps {
     return {
         assertProjectServerAvailable: async () => {},
+        acquireProjectServerOwner: () => ({ release() {} }),
         serverBootstrapConfig: () => ({
             logging: { enabled: false, level: 'info' as const, console: false },
             telemetry: { enabled: false },
@@ -1229,8 +1230,112 @@ describe('startServer', () => {
         }
     });
 
+    for (const event of ['message', 'disconnect'] as const) {
+        for (const phase of ['claim', 'runtime', 'callback', 'plugins'] as const) {
+            test(`early parent ${event} during ${phase} closes runtime before releasing ownership`, async () => {
+                const connected = Object.getOwnPropertyDescriptor(process, 'connected');
+                const send = Object.getOwnPropertyDescriptor(process, 'send');
+                Object.defineProperty(process, 'connected', { configurable: true, value: true });
+                Object.defineProperty(process, 'send', { configurable: true, value: () => true });
+                const { sigHandlers } = installProcessMocks();
+                const order: string[] = [];
+                const cancel = () => sigHandlers[event]?.({ type: 'spur.desktop.shutdown' });
+                try {
+                    await startServer(
+                        { port: 5002, host: '127.0.0.1', openBrowser: false, keepAlive: false },
+                        makeDeps({
+                            acquireProjectServerOwner: () => ({
+                                release() {
+                                    order.push('release');
+                                },
+                            }),
+                            assertProjectServerAvailable: async () => {
+                                if (phase === 'claim') cancel();
+                            },
+                            runNodeApplication: (async (opts: { start: (rt: ApplicationRuntime) => Promise<void> }) => {
+                                const rt = fakeRuntime();
+                                rt.stop = async () => {
+                                    order.push('stop');
+                                };
+                                if (phase === 'runtime') cancel();
+                                try {
+                                    await opts.start(rt);
+                                } catch (error) {
+                                    await rt.stop('error');
+                                    throw error;
+                                }
+                                order.push('plugins-complete');
+                                if (phase === 'plugins') cancel();
+                                return rt;
+                            }) as unknown as StartServerDeps['runNodeApplication'],
+                            createServerContext: (() => ({
+                                cwd: '/tmp/project',
+                                closeDb: async () => {
+                                    order.push('context-close');
+                                },
+                                eventBus: () => new EventBus(),
+                                getDb: async () => {
+                                    if (phase === 'callback') cancel();
+                                    throw new Error('empty test DB');
+                                },
+                                supervisor: () => ({
+                                    stopAll: async () => {
+                                        order.push('services-stop');
+                                    },
+                                }),
+                            })) as unknown as StartServerDeps['createServerContext'],
+                        }),
+                    );
+                    expect(order).toEqual(
+                        phase === 'claim'
+                            ? ['release']
+                            : phase === 'runtime'
+                              ? ['stop', 'release']
+                              : phase === 'callback'
+                                ? ['services-stop', 'stop', 'context-close', 'release']
+                                : ['plugins-complete', 'services-stop', 'stop', 'context-close', 'release'],
+                    );
+                    expect(sigHandlers.message).toBeUndefined();
+                    expect(sigHandlers.disconnect).toBeUndefined();
+                } finally {
+                    if (connected) Object.defineProperty(process, 'connected', connected);
+                    else Reflect.deleteProperty(process, 'connected');
+                    if (send) Object.defineProperty(process, 'send', send);
+                    else Reflect.deleteProperty(process, 'send');
+                }
+            });
+        }
+    }
+
+    test('an already disconnected IPC parent cancels before claiming or booting', async () => {
+        const connected = Object.getOwnPropertyDescriptor(process, 'connected');
+        const send = Object.getOwnPropertyDescriptor(process, 'send');
+        Object.defineProperty(process, 'connected', { configurable: true, value: false });
+        Object.defineProperty(process, 'send', { configurable: true, value: () => true });
+        const { sigHandlers } = installProcessMocks();
+        try {
+            await startServer(
+                { port: 5002, host: '127.0.0.1', openBrowser: false },
+                makeDeps({
+                    acquireProjectServerOwner: () => {
+                        throw new Error('must not claim');
+                    },
+                }),
+            );
+            expect(sigHandlers.message).toBeUndefined();
+            expect(sigHandlers.disconnect).toBeUndefined();
+        } finally {
+            if (connected) Object.defineProperty(process, 'connected', connected);
+            else Reflect.deleteProperty(process, 'connected');
+            if (send) Object.defineProperty(process, 'send', send);
+            else Reflect.deleteProperty(process, 'send');
+        }
+    });
+
     test('owned parent IPC shuts down gracefully and ignores other messages', async () => {
         const original = Object.getOwnPropertyDescriptor(process, 'connected');
+        const originalSend = Object.getOwnPropertyDescriptor(process, 'send');
+        Object.defineProperty(process, 'send', { configurable: true, value: () => true });
         Object.defineProperty(process, 'connected', { configurable: true, value: true });
         try {
             const { sigHandlers, exitCodes, exitCalled } = installProcessMocks();
@@ -1262,6 +1367,8 @@ describe('startServer', () => {
         } finally {
             if (original) Object.defineProperty(process, 'connected', original);
             else Reflect.deleteProperty(process, 'connected');
+            if (originalSend) Object.defineProperty(process, 'send', originalSend);
+            else Reflect.deleteProperty(process, 'send');
         }
     });
 
@@ -2633,25 +2740,27 @@ describe('startServer', () => {
     test('keepAlive parks the server after the start callback resolves', async () => {
         installProcessMocks();
         Bun.serve = (() => ({ stop: () => {}, ref: () => {}, unref: () => {} })) as unknown as typeof Bun.serve;
-        let startSettled = false;
+        let settleStart!: () => void;
+        const startSettled = new Promise<void>((resolve) => {
+            settleStart = resolve;
+        });
         const deps = makeDeps({
             runNodeApplication: (async (opts: { start: (rt: ApplicationRuntime) => Promise<void> }) => {
                 const inner = opts.start(fakeRuntime());
                 void inner.then(() => {
-                    startSettled = true;
+                    settleStart();
                 });
                 await inner;
             }) as unknown as StartServerDeps['runNodeApplication'],
         });
         // The user callback must settle so the runtime plugin chain can reach the
         // scheduler plugin (task 0734); the keep-alive parks startServer itself.
+        const running = startServer({ port: 4402, host: '127.0.0.1', openBrowser: false, keepAlive: true }, deps);
+        await startSettled;
         const raced = await Promise.race([
-            startServer({ port: 4402, host: '127.0.0.1', openBrowser: false, keepAlive: true }, deps).then(
-                () => 'resolved' as const,
-            ),
-            new Promise((resolve) => setTimeout(() => resolve('pending' as const), 40)),
+            running.then(() => 'resolved' as const),
+            new Promise((resolve) => setTimeout(() => resolve('pending' as const), 1)),
         ]);
-        expect(startSettled).toBe(true);
         expect(raced).toBe('pending');
     });
 

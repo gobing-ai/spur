@@ -242,3 +242,13 @@ test('Windows dev launches the Bun script directly so its IPC descriptor is reta
     expect(launch.args[0]).toBe('apps/cli/src/index.ts');
     expect(launch.args).not.toContain('run');
 });
+
+test('Windows environment removes all database and controlled-key case variants', () => {
+    expect(
+        childEnv(
+            { Database_URL: 'bad', database_url: 'also bad', Host: 'remote', pOrT: '99', PATH: 'ok' },
+            { HOST: '127.0.0.1', PORT: '123' },
+            'win32',
+        ),
+    ).toEqual({ PATH: 'ok', HOST: '127.0.0.1', PORT: '123' });
+});

@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { DESKTOP_WINDOW_CHANNEL, type WindowAction } from './ipc';
+import { DESKTOP_EXTERNAL_CHANNEL, DESKTOP_WINDOW_CHANNEL, type WindowAction } from './ipc';
 
 function send(action: WindowAction): void {
     ipcRenderer.send(DESKTOP_WINDOW_CHANNEL, action);
@@ -29,6 +29,21 @@ export function initializePreload(): void {
 
     if (document.documentElement) markDesktop();
     document.addEventListener('DOMContentLoaded', markDesktop);
+    document.addEventListener(
+        'click',
+        (event) => {
+            if (!event.isTrusted || event.button !== 0 || event.defaultPrevented) return;
+            const element = event.target instanceof Element ? event.target : null;
+            const link = element?.closest('a[href]');
+            if (!(link instanceof HTMLAnchorElement)) return;
+            const url = new URL(link.href, location.href);
+            if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return;
+            if (url.origin === location.origin && link.target !== '_blank' && !event.metaKey && !event.ctrlKey) return;
+            event.preventDefault();
+            ipcRenderer.send(DESKTOP_EXTERNAL_CHANNEL, url.href);
+        },
+        true,
+    );
 }
 
 initializePreload();

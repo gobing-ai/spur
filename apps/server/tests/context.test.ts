@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { PlanningEventBus } from '@gobing-ai/spur-app';
@@ -617,4 +617,75 @@ describe('createServerContext', () => {
         const healthy = await ctx.checkDbHealth();
         expect(healthy).toBe(true);
     });
+});
+
+test('closeDb never opens an unused database and blocks later first-touch opens', async () => {
+    const fs = createNodeFileSystem('/tmp/test');
+    fs.ensureDir = () => {
+        throw new Error('must not open');
+    };
+    const ctx = createServerContext(makeAppRt(), { cwd: '/tmp/test', fs });
+    await Promise.all([ctx.closeDb(), ctx.closeDb()]);
+    await expect(ctx.getDb()).rejects.toThrow('closing');
+});
+
+test('closeDb closes an already-open context adapter once and rejects future use', async () => {
+    const ctx = createServerContext(makeAppRt(), { cwd: '/tmp/test', fs: testFs, dbUrl: ':memory:' });
+    const db = await ctx.getDb();
+    const original = db.close.bind(db);
+    let calls = 0;
+    db.close = async () => {
+        calls++;
+        await original();
+    };
+    await Promise.all([ctx.closeDb(), ctx.closeDb()]);
+    expect(calls).toBe(1);
+    await expect(ctx.getDb()).rejects.toThrow('closing');
+    await expect(db.queryFirst('SELECT 1')).rejects.toThrow();
+});
+
+test('closeDb awaits a pending first-touch database open before closing it', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'spur-context-close-'));
+    const fs = createNodeFileSystem(root);
+    const ensure = fs.ensureDir.bind(fs);
+    let resume!: () => void;
+    const gate = new Promise<void>((resolve) => {
+        resume = resolve;
+    });
+    fs.ensureDir = async (path) => {
+        await gate;
+        await ensure(path);
+    };
+    const ctx = createServerContext(makeAppRt(), { cwd: root, fs });
+    try {
+        const opening = ctx.getDb();
+        let settled = false;
+        const closing = ctx.closeDb().then(() => {
+            settled = true;
+        });
+        await Promise.resolve();
+        expect(settled).toBe(false);
+        await expect(ctx.getDb()).rejects.toThrow('closing');
+        resume();
+        const db = await opening;
+        await closing;
+        await expect(db.queryFirst('SELECT 1')).rejects.toThrow();
+    } finally {
+        resume();
+        await ctx.closeDb();
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('closeDb handles a failed pending open without creating a replacement', async () => {
+    const fs = createNodeFileSystem('/tmp/test');
+    fs.ensureDir = async () => {
+        throw new Error('cannot open DB');
+    };
+    const ctx = createServerContext(makeAppRt(), { cwd: '/tmp/test', fs });
+    const opening = ctx.getDb();
+    const closing = ctx.closeDb();
+    await expect(opening).rejects.toThrow('cannot open DB');
+    await closing;
+    await expect(ctx.getDb()).rejects.toThrow('closing');
 });
