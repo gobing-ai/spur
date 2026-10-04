@@ -651,6 +651,14 @@ export async function startServer(options: StartServerOptions, deps: StartServer
     // `serve --cwd` against the invocation directory; embedding callers omit it and
     // keep the previous process.cwd() behavior.
     const projectRoot = options.cwd ?? process.cwd();
+    // Hermeticity (task 0817 R1): the loader suppresses the project layer only for an
+    // UNPINNED call (`cwd === undefined`) under SPUR_SKIP_PROJECT_CONFIG — the test
+    // harness sets it so a suite never binds to this checkout's live `.spur/config.yaml`
+    // through `process.cwd()`. Passing the resolved `projectRoot` here pins the layer and
+    // silently defeats that contract (the fleet load below then materializes the
+    // developer's own fleet), so the loader keeps receiving the raw `options.cwd`.
+    // An explicit `serve --cwd` still wins; production behavior is unchanged.
+    const configCwd = options.cwd;
     // Load the merged global+project config BEFORE boot so `bootstrap.options` (task 0902)
     // reaches serverBootstrapConfig. A load failure degrades to null (env-only), same
     // tolerance as the CLI root; the same value is reused for the server context below.
@@ -659,7 +667,7 @@ export async function startServer(options: StartServerOptions, deps: StartServer
     // `bootstrap.modules` must not be silently degraded to "no modules" — that turns a config
     // typo into a board that quietly renders nothing. Every other load failure keeps the
     // env-only fallback.
-    const spurConfig = await loadSpurConfig(projectRoot).catch((error: unknown) => {
+    const spurConfig = await loadSpurConfig(configCwd).catch((error: unknown) => {
         if (isBoardModuleConfigError(error)) throw error;
         return null;
     });
@@ -792,7 +800,7 @@ export async function startServer(options: StartServerOptions, deps: StartServer
             // a global-layer `agent.fleet`, a leftover `.spur/fleet.json`) or an invalid
             // `agent.fleet` must fail the START (design §3 step 1), not silently serve an
             // empty fleet.
-            const fleetConfig = await loadSpurConfig(projectRoot);
+            const fleetConfig = await loadSpurConfig(configCwd);
             const fleetSection = fleetConfig.agent?.fleet;
             const fleetService = new FleetService({
                 fs,
