@@ -243,7 +243,7 @@ export default function MemberDetail({
                                     type="button"
                                     className="px-1.5 py-0.5 rounded text-[10px] bg-spur-surface-2 hover:bg-spur-surface-3 border border-spur-border text-spur-text cursor-pointer transition-colors"
                                     onClick={() => {
-                                        void navigator.clipboard?.writeText(activeSession.id!);
+                                        void navigator.clipboard?.writeText(activeSession?.id ?? '');
                                         setCopied(true);
                                         setTimeout(() => setCopied(false), 1500);
                                     }}
