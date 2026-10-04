@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
 import {
+    buildRecentMessagesThread,
     buildThread,
     type ConversationEntry,
     type ConversationRef,
@@ -15,15 +16,18 @@ function inboxUrl(agent: string): string {
     return `${resolveApiUrl()}/messages/inbox?agent=${encodeURIComponent(agent)}`;
 }
 
+const messagesUrl = () => `${resolveApiUrl()}/messages?limit=100`;
+
 /**
- * Conversation tab (0841 R1/R4, feature G63): one request/response thread for
- * the served project, rehydrated on mount from the two non-consuming inbox
- * reads — never from client state. Submission is handled by GlobalAgentBar.
+ * Conversation tab: shows the inter-agent and operator conversation thread
+ * for the served project, rehydrated on mount from the message store.
  */
 export default function ConversationView() {
     const project = useProjectContext();
     const [entries, setEntries] = useState<ConversationEntry[] | null>(null);
     const [failed, setFailed] = useState(false);
+    const [agentFilter, setAgentFilter] = useState<string>('all');
+    const [searchFilter, setSearchFilter] = useState<string>('');
 
     const instanceId = project.fleet?.orchestrator.instanceId ?? null;
     const { requests, failed: requestsFailed } = useProjectRequests(instanceId);
@@ -41,6 +45,12 @@ export default function ConversationView() {
         const controller = new AbortController();
         let cancelled = false;
 
+        const fetchGlobalMessages = async () => {
+            const res = await fetchWithTimeout(new Request(messagesUrl(), { signal: controller.signal }));
+            if (!res.ok) throw new Error(`messages fetch failed: ${res.status}`);
+            return parseInboxMessages(await res.json());
+        };
+
         const fetchInbox = async (agent: string) => {
             const res = await fetchWithTimeout(new Request(inboxUrl(agent), { signal: controller.signal }));
             if (!res.ok) throw new Error(`inbox fetch failed: ${res.status}`);
@@ -50,15 +60,39 @@ export default function ConversationView() {
         // Orchestrator inbox only when an instance is bound; the operator read
         // always runs (an unbound project still renders its response side).
         const orchestratorSide = instanceId !== null ? fetchInbox(instanceId) : Promise.resolve([]);
-        Promise.all([orchestratorSide, fetchInbox(OPERATOR_AGENT_ID)])
-            .then(([toOrchestrator, toOperator]) => {
+
+        // Try global message feed first (across all agents/instances and operator)
+        fetchGlobalMessages()
+            .then(async (globalMsgs) => {
+                if (cancelled) return;
+                if (globalMsgs.length > 0) {
+                    setEntries(buildRecentMessagesThread(globalMsgs));
+                    setFailed(false);
+                    return;
+                }
+                const [toOrchestrator, toOperator] = await Promise.all([
+                    orchestratorSide,
+                    fetchInbox(OPERATOR_AGENT_ID),
+                ]);
                 if (!cancelled) {
                     setEntries(buildThread(toOrchestrator, toOperator));
                     setFailed(false);
                 }
             })
-            .catch(() => {
-                if (!cancelled) setFailed(true);
+            .catch(async () => {
+                if (cancelled) return;
+                try {
+                    const [toOrchestrator, toOperator] = await Promise.all([
+                        orchestratorSide,
+                        fetchInbox(OPERATOR_AGENT_ID),
+                    ]);
+                    if (!cancelled) {
+                        setEntries(buildThread(toOrchestrator, toOperator));
+                        setFailed(false);
+                    }
+                } catch {
+                    if (!cancelled) setFailed(true);
+                }
             });
 
         return () => {
@@ -67,9 +101,80 @@ export default function ConversationView() {
         };
     }, [project.path, instanceId]);
 
+    const availableAgents = useMemo(() => {
+        const seen = new Set<string>();
+        for (const e of entries ?? []) {
+            if (e.fromId) seen.add(e.fromId);
+            if (e.toId) seen.add(e.toId);
+        }
+        return [...seen].sort();
+    }, [entries]);
+
+    const filteredEntries = useMemo(() => {
+        if (!decorated) return null;
+        return decorated.filter((e) => {
+            if (agentFilter !== 'all' && e.fromId !== agentFilter && e.toId !== agentFilter) {
+                return false;
+            }
+            if (searchFilter.trim()) {
+                const q = searchFilter.toLowerCase();
+                const matchText = e.text.toLowerCase().includes(q);
+                const matchFrom = Boolean(e.fromId?.toLowerCase().includes(q));
+                const matchTo = e.toId.toLowerCase().includes(q);
+                const matchRef = e.refs.some((r) =>
+                    r.kind === 'task' ? r.wbs.toLowerCase().includes(q) : r.id.toLowerCase().includes(q),
+                );
+                if (!matchText && !matchFrom && !matchTo && !matchRef) return false;
+            }
+            return true;
+        });
+    }, [decorated, agentFilter, searchFilter]);
+
     return (
         <div className="flex flex-col h-full overflow-hidden bg-spur-bg" data-conversation-view>
-            <div className="flex-1 overflow-y-auto p-2 space-y-1" data-conversation-thread>
+            {/* Filter controls */}
+            {entries && entries.length > 0 && (
+                <div className="p-2 border-b border-spur-border bg-spur-surface flex flex-wrap items-center gap-2 text-xs shrink-0">
+                    <label className="flex items-center gap-1.5 text-spur-text-muted">
+                        <span>Agent:</span>
+                        <select
+                            value={agentFilter}
+                            onChange={(e) => setAgentFilter(e.target.value)}
+                            className="bg-spur-surface-2 border border-spur-border text-spur-text rounded px-2 py-0.5 font-mono text-xs"
+                        >
+                            <option value="all">All agents ({entries.length})</option>
+                            {availableAgents.map((ag) => (
+                                <option key={ag} value={ag}>
+                                    {ag}
+                                </option>
+                            ))}
+                        </select>
+                    </label>
+
+                    <input
+                        type="text"
+                        placeholder="Search conversation..."
+                        value={searchFilter}
+                        onChange={(e) => setSearchFilter(e.target.value)}
+                        className="bg-spur-surface-2 border border-spur-border text-spur-text rounded px-2 py-0.5 text-xs font-mono ml-auto w-48 focus:outline-none focus:border-spur-accent"
+                    />
+
+                    {(agentFilter !== 'all' || searchFilter) && (
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setAgentFilter('all');
+                                setSearchFilter('');
+                            }}
+                            className="text-xs text-spur-accent hover:underline px-1"
+                        >
+                            Reset
+                        </button>
+                    )}
+                </div>
+            )}
+
+            <div className="flex-1 overflow-y-auto p-2 space-y-1.5" data-conversation-thread>
                 {entries === null && !failed && (
                     <div className="p-4 text-sm text-spur-text-muted italic" data-conversation-loading>
                         Loading conversation…
@@ -87,10 +192,14 @@ export default function ConversationView() {
                 )}
                 {entries !== null && entries.length === 0 && (
                     <div className="p-4 text-sm text-spur-text-muted italic" data-conversation-empty>
-                        No messages yet for this project.
+                        No messages yet for this project. Messages sent between agents, terminal, or via{' '}
+                        <code className="font-mono text-spur-accent">spur message send</code> will appear here.
                     </div>
                 )}
-                {decorated?.map((entry) => (
+                {filteredEntries?.length === 0 && entries !== null && entries.length > 0 && (
+                    <div className="p-4 text-sm text-spur-text-muted italic">No messages match the current filter.</div>
+                )}
+                {filteredEntries?.map((entry) => (
                     <ConversationRow key={entry.id} entry={entry} />
                 ))}
             </div>

@@ -149,6 +149,25 @@ export function buildThread(toOrchestrator: InboxMessage[], toOperator: InboxMes
     );
 }
 
+/**
+ * Convert any message list (global feed or aggregated inboxes) into a thread.
+ * Identifies requests from operator, terminal, or user; everything else as responses or peer messages.
+ */
+export function buildRecentMessagesThread(messages: InboxMessage[]): ConversationEntry[] {
+    return messages
+        .map((m) => {
+            const isRequest =
+                m.fromId === OPERATOR_AGENT_ID ||
+                m.fromId === 'operator' ||
+                m.fromId === 'terminal' ||
+                m.fromId === 'user';
+            return toEntry(m, isRequest ? 'request' : 'response');
+        })
+        .sort((a, b) =>
+            a.createdAt === b.createdAt ? (a.id < b.id ? -1 : a.id > b.id ? 1 : 0) : a.createdAt < b.createdAt ? -1 : 1,
+        );
+}
+
 function toEntry(m: InboxMessage, kind: ConversationEntryKind): ConversationEntry {
     const decoded = decodeRequestEnvelope(m.body);
     return {
