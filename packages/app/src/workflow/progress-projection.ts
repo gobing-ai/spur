@@ -385,10 +385,14 @@ export async function projectWorkflowProgress(
     const inlineVisits = transitions.length === 0 ? deriveInlineStateVisits(defStates, actionRows) : [];
 
     if (!currentState) {
-        currentState =
-            normalizedStatus === 'pending' || normalizedStatus === 'running'
-                ? (inlineVisits[inlineVisits.length - 1]?.state ?? initialState)
-                : null;
+        if (normalizedStatus === 'pending' || normalizedStatus === 'running') {
+            currentState = inlineVisits[inlineVisits.length - 1]?.state ?? initialState;
+        } else if (normalizedStatus === 'failed' && inlineVisits.length > 0) {
+            // A failed transition-less run names its failing state (the last derived visit) so the
+            // Trace tab marks it `failed` like the engine path does, instead of every visited
+            // state reading `passed` while its own action row reads `failed` (1085 review P4).
+            currentState = inlineVisits[inlineVisits.length - 1]?.state ?? null;
+        }
     }
 
     // Build state visit sequence from transition history
@@ -445,6 +449,14 @@ export async function projectWorkflowProgress(
     // would otherwise silently vanish from the projection).
     const matchedActionRowIds = new Set<string>();
 
+    // The current visit is the LAST visit of the current state: a re-entered (`loopBack`) state
+    // has several visits, and only the most recent one is current (1085 review P4 — comparing
+    // state ids alone marked every visit of the current state `running`).
+    const lastVisitByState = new Map<string, number>();
+    for (const entry of stateVisits) {
+        lastVisitByState.set(entry.state, Math.max(lastVisitByState.get(entry.state) ?? 0, entry.visit));
+    }
+
     for (const { state: stateId, visit, rows: visitRows } of stateVisits) {
         const defState = defStates.find((s) => s.id === stateId);
         const onEnterActions = Array.isArray(defState?.onEnter) ? defState.onEnter : [];
@@ -455,7 +467,7 @@ export async function projectWorkflowProgress(
         ];
 
         const isVisited = visitedStateIds.has(stateId);
-        const isCurrent = currentState === stateId;
+        const isCurrent = currentState === stateId && visit === lastVisitByState.get(stateId);
         let stateStatus: WorkflowStateProgress['status'] = 'pending';
 
         if (isVisited) {

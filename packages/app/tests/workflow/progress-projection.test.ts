@@ -694,14 +694,14 @@ describe('projectWorkflowProgress', () => {
 
         const projection = await projectWorkflowProgress('r-inline-loop', { db, workflowDef: inlinePipelineDef });
 
-        // Statuses are not pinned here: `isCurrent` compares state ids, so both visits of the current
-        // state read with the current status — today's rule, unchanged by this task (1085 R5).
-        expect(projection.states.map((state) => `${state.state}@${state.visit}`)).toEqual([
-            'precheck@1',
-            'implement@1',
-            'test@1',
-            'implement@2',
-            'done@1',
+        // Per-visit statuses pinned: only the LAST visit of the re-entered current state reads
+        // `running`; earlier visits of the same state are finished (`passed`).
+        expect(stateShape(projection)).toEqual([
+            'precheck@1:passed',
+            'implement@1:passed',
+            'test@1:passed',
+            'implement@2:running',
+            'done@1:pending',
         ]);
         expect(projection.currentState).toBe('implement');
         // Each visit owns the rows recorded for it — the second visit is not a replay of the first.
@@ -741,6 +741,40 @@ describe('projectWorkflowProgress', () => {
         expect(projection.diagnostics[0]?.message).toContain('implement');
         expect(attemptIds(projection, 'implement')).toEqual([]);
         expect(attemptIds(projection, 'precheck')).toEqual(['a1']);
+        db.close();
+    });
+
+    // 1085 review P4: a failed transition-less run names its failing state (the last derived
+    // visit) so the Trace tab marks it `failed` like the engine path does.
+    test('names the failing state as current on a failed inline run (1085 review residual)', async () => {
+        const db = await setupDb();
+        await seedInlineRun(db, 'r-inline-failed', 'failed', inlinePipelineDef);
+        const base = Date.now();
+        await seedInlineActionRow(db, 'r-inline-failed', {
+            id: 'ar-pre',
+            node: 'precheck',
+            kind: 'shell',
+            durationMs: 400,
+            createdAt: base + 1,
+        });
+        await seedInlineActionRow(db, 'r-inline-failed', {
+            id: 'ar-impl',
+            node: 'implement',
+            kind: 'agent.run',
+            durationMs: 500,
+            createdAt: base + 2,
+        });
+
+        const projection = await projectWorkflowProgress('r-inline-failed', { db, workflowDef: inlinePipelineDef });
+
+        expect(projection.status).toBe('failed');
+        expect(projection.currentState).toBe('implement');
+        expect(stateShape(projection)).toEqual([
+            'precheck@1:passed',
+            'implement@1:failed',
+            'test@1:pending',
+            'done@1:pending',
+        ]);
         db.close();
     });
 

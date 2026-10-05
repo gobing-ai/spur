@@ -272,8 +272,10 @@ a declared state into contiguous same-node runs in recorded order (`ORDER BY act
 each group is one visit, numbered per state, so a re-entered `loopBack` state reads as visit 1 then
 visit 2. A visit maps **its own** rows, so a repeated visit is not a replay of the first. Visits keep
 row order, declared states with no recorded row are appended as `visit: 1, pending` as before, and a
-non-terminal (`running`/`pending`) run's `currentState` is its last derived visit. A terminal
-(`completed`/`failed`/`cancelled`) transition-less run keeps today's null `currentState`.
+non-terminal (`running`/`pending`) run's `currentState` is its last derived visit. A failed
+transition-less run names its failing state the same way (its last derived visit reads `failed`, as
+the engine path does); a `completed`/`cancelled` transition-less run keeps a null `currentState`.
+Only the last visit of a re-entered current state reads `running`; earlier visits read `passed`.
 
 With transition rows present `transition_runs` stays the visit source and the engine's visits, attempts
 and statuses are unchanged; the diagnostic split below also applies, so a row recorded for a declared
