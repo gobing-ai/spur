@@ -315,6 +315,11 @@ node "$RESIDUAL" fold <wbs>
 > for each dropped MET-matched scenario key and when the new rows match no feature scenario —
 > treat those warnings as a re-key instruction, not noise.
 
+> **Keying rule for feature-linked tasks (1086/1089 re-audits).** Key AC rows by the exact feature
+> scenario title (`R1 — …`): feature `Scenario:` titles are declared identities and satisfy L4
+> scenario matching directly. Bare `AC1` fails `ac-identity` on Gherkin AC sections, and checklist
+> labels truncate at the first colon (a `(req: …)` suffix), so the task's own AC title may not resolve.
+
 > **Do not write `## Review` directly, ever.** The `## Review` section is owned by the
 > `review` coordinator (`/sp:dev-review` → `sp:super-reviewer`), which merges
 > `functional-review` + `code-verification` review mode + `code-improvement` fragments. The

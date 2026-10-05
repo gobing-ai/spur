@@ -115,14 +115,25 @@ export function lintVerifyAnswer(
         const canonicalKey = resolution.ok ? normalizeAcTitle(resolution.canonical) : null;
         if (!resolution.ok) {
             if (resolution.error !== '') add(row.line, 'ac-ordinal', resolution.error);
-            else
+            else {
+                // 1091: name the declared identities so the author can re-key without reading
+                // buildAcIdentityIndex — the bare list of accepted forms is not actionable.
+                const declared = [...new Set(acIndex.byTitle.values())];
+                const sample = declared
+                    .slice(0, 5)
+                    .map((s) => `"${s.slice(0, 60)}"`)
+                    .join(', ');
                 add(
                     row.line,
                     'ac-identity',
                     `AC ID "${row.id.slice(0, 60)}" matches no task AC checklist label or scenario title ` +
                         "(accepted forms: exact title, bare title, a criterion bullet's bold head or full bold span, " +
-                        '`Scenario:` prefix, bracket tags, declared AC-N alias)',
+                        '`Scenario:` prefix, bracket tags, declared AC-N alias)' +
+                        (declared.length > 0
+                            ? ` — declared identities: ${sample}${declared.length > 5 ? ` (+${declared.length - 5} more)` : ''}`
+                            : ''),
                 );
+            }
         } else if (canonicalKey !== null && seenAc.has(canonicalKey)) {
             const first = seenAc.get(canonicalKey) ?? '';
             add(

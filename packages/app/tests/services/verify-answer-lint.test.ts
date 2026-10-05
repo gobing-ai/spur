@@ -142,6 +142,15 @@ describe('lintVerifyAnswer (task 1003 R1)', () => {
         );
     });
 
+    test('an ac-identity rejection names the declared identities (1091)', () => {
+        const findings = lintVerifyAnswer(answer(CLEAN_REQS, ['| AC9 | MET | test | `t.ts:1` |']), TASK, FEATURE);
+        const finding = findings.find((f) => f.rule === 'ac-identity');
+        expect(finding).toBeDefined();
+        expect(finding?.message).toContain('declared identities');
+        expect(finding?.message).toContain('"AC1 (R1)"');
+        expect(finding?.message).toContain('"Guard rejects unsafe input"');
+    });
+
     test('a scenario title from the linked feature is a valid AC identity', () => {
         const findings = lintVerifyAnswer(
             answer(CLEAN_REQS, ['| Scenario: Guard rejects unsafe input | MET | test | `tests/guard.test.ts:9` |']),
