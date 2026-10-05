@@ -4,7 +4,7 @@ name: Prove the inbox-only fleet end to end with a repeatable receipt
 status: todo
 template: feature-impl
 created_at: 2026-10-04T20:30:37.927Z
-updated_at: "2026-10-05T20:25:38.062Z"
+updated_at: "2026-10-05T23:56:50.170Z"
 feature_id: G71
 
 dependencies: ["1073", "1074", "1075", "1076", "1080", "1081"]
@@ -81,6 +81,8 @@ Task-local verification:
 Exit code 1 if any step `failed`.
 
 **Determinism.** No wall-clock assertions, polling only, fixed task ids from a fresh corpus. The stub output is fixed text.
+
+**Blocker (2026-10-05, session review).** The harness reaches 8 of 9 steps; the `kill-redispatch` leg is refuted, not flaky: see `docs/reports/2026-10-05-fleet-e2e-kill-leg-findings.md` for the two reproducible findings (K1 orchestrator does not dispatch a task created after its loops started; K2 an operator-dispatched/ unkeyed turn never finalizes when the member is killed) and `docs/reports/fleet-e2e-receipt.json` for the failing row. Task **1091** (feature G71) owns both product fixes and restoring the strategy attempt-2 assertion. This task stays open until the harness reports 9 of 9.
 
 ### Plan
 
