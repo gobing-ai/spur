@@ -208,7 +208,17 @@ function spawnLoop(scratch: string, state: RunState, specId: string, suffix = ''
         ['bun', 'run', CLI_ENTRY, 'agent', 'loop', '--spec', specId, '--poll', String(LOOP_POLL_MS)],
         {
             cwd: scratch,
-            env: { ...getEnvVars(), PATH: `${state.binDir}:${getEnvVar('PATH') ?? ''}` },
+            env: {
+                ...getEnvVars(),
+                PATH: `${state.binDir}:${getEnvVar('PATH') ?? ''}`,
+                // The stub resolves its own inputs from the environment the LOOP passes on: without
+                // these three the stub runs with an empty CLI path, its first `Bun.spawnSync` throws,
+                // and the turn dies right after logging its prompt — which looked like a hang
+                // (3 failed dispatches, no .cli rows, no run rows). G71 1077 R3.
+                SPUR_E2E_CLI: CLI_ENTRY,
+                SPUR_E2E_PROJECT: scratch,
+                SPUR_E2E_STUB_LOG: state.stubLog,
+            },
             stdin: 'ignore',
             stdout: Bun.file(join(logDir, `loop-${specId}${suffix}.out.log`)),
             stderr: Bun.file(join(logDir, `loop-${specId}${suffix}.err.log`)),
@@ -304,12 +314,22 @@ const resumedTurn = prompt.includes('--continue');
 appendFileSync(logPath, JSON.stringify({ at: new Date().toISOString(), spec: specId, argv, stdin: stdinText, prompt, directives }) + '\\n');
 
 function cliRun(args, input) {
-    const proc = Bun.spawnSync(['bun', 'run', cli, ...args], {
-        cwd: project,
-        stdin: input === undefined ? 'ignore' : Buffer.from(input),
-        stdout: 'pipe',
-        stderr: 'pipe',
-    });
+    // The stub must never die on a bad invocation: an unspawnable CLI is recorded and returned as a
+    // failed call, so a turn reports the real reason instead of vanishing (G71 1077 R3).
+    let proc;
+    try {
+        proc = Bun.spawnSync(['bun', 'run', cli, ...args], {
+            cwd: project,
+            stdin: input === undefined ? 'ignore' : Buffer.from(input),
+            stdout: 'pipe',
+            stderr: 'pipe',
+        });
+    } catch (error) {
+        const detail = 'stub: CLI invocation failed: ' + (error && error.message ? error.message : String(error)) + ' (cli=' + JSON.stringify(cli) + ')';
+        try { appendFileSync(logPath + '.cli', JSON.stringify({ at: new Date().toISOString(), spec: specId, args, exit: -1, stdout: '', stderr: detail }) + '\\n'); } catch {}
+        process.stderr.write(detail + '\\n');
+        return { exitCode: -1, stdout: '', stderr: detail };
+    }
     // Every stub CLI call is logged with its exit code: a refused transition is otherwise
     // invisible from the outside and looked exactly like a hang (G71 1077 R3 diagnosis).
     try {
