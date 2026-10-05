@@ -4,7 +4,7 @@ name: Persist task and feature evidence outside run scratch
 status: done
 template: feature-impl
 created_at: 2026-09-30T20:13:58.356Z
-updated_at: "2026-10-03T01:58:20.806Z"
+updated_at: "2026-10-05T23:33:25.917Z"
 feature_id: E71
 priority: P2
 tags:
@@ -117,13 +117,19 @@ Execution checks and per-requirement observability are frozen in Design. Preserv
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
+- Confidence: LOW
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | packages/app/src/services/task-service.ts:1414 + packages/app/src/workflow/feature-verification-receipt.ts:125 |
-| R2 | MET | packages/app/src/services/corpus-sweep.ts:112 + packages/app/src/services/feature-sync-suppression.ts:92 |
-| R3 | MET | packages/app/tests/services/task-record.test.ts:697 acceptance before/after disposal; malformed evidence rejection |
-| R4 | MET | packages/app/src/services/run-storage.ts:395 migration identity/live-owner/conflict/failure tests |
+| R1 | MET | `packages/app/src/services/task-service.ts:1414` + `packages/app/src/workflow/feature-verification-receipt.ts:125` — recorded evidence, carried |
+| R2 | MET | `packages/app/src/services/corpus-sweep.ts:112` + `packages/app/src/services/feature-sync-suppression.ts:92` — recorded evidence, carried |
+| R3 | MET | `packages/app/tests/services/task-record.test.ts:697` acceptance before/after disposal; malformed evidence rejection — recorded evidence, carried |
+| R4 | MET | `packages/app/src/services/run-storage.ts:395` migration identity/live-owner/conflict/failure tests — recorded evidence, carried |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R2 — Task and feature evidence remains valid without completed scratch | MET | test | `packages/app/tests/services/task-record.test.ts:697` acceptance before/after disposal and malformed-evidence rejection — aggregates the recorded R1-R3 MET rows |
+| R6 — Existing lasting data is preserved before its scratch dependency is retired | MET | test | Migration identity/live-owner/conflict/failure tests over `packages/app/src/services/run-storage.ts:395` — aggregates the recorded R4 MET row |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

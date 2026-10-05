@@ -4,7 +4,7 @@ name: Keep worktree-batch evidence references and prior-task evidence resolvable
 status: done
 template: feature-impl
 created_at: 2026-10-05T13:36:08.395Z
-updated_at: "2026-10-05T18:57:28.504Z"
+updated_at: "2026-10-05T23:27:24.064Z"
 feature_id: E71
 
 done_forced: "false"
@@ -223,21 +223,21 @@ service was introduced or moved.
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
-- Confidence: HIGH
+- Confidence: MEDIUM
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | § WT-2 "Evidence staging before the first task (create and reuse mode)" stages both untracked planes with `cp -n` before the first task; placement pinned inside WT-2 by `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:51-64` (47 pass). Executed this run: 246 `.spur/memory/evidence` + 258 `.spur/run` files staged. No-clobber arm: a seeded divergent `.spur/run/1049-verdict.json` was byte-identical after re-running the loop; planes stayed 246/258. Metrics A/B on scratch-only task 1078 from byte-identical trees: empty planes → `metrics-record: task 1078 has no certifying verdict … recording UNKNOWN telemetry` and row `{"wbs":"1078","verdict":"UNKNOWN"}`; staged plane → row `{"wbs":"1078","verdict":"PASS"}`. |
-| R2 | MET | `packages/app/src/services/task-transition.ts:203-222` records `relative(<project root>, artifact)` with POSIX separators, and the absolute path when the artifact is outside the root. `packages/app/tests/services/task-transition.test.ts:301-345` asserts the scratch plane, the durable `memory/evidence` plane, the forced-close rationale verbatim, and the foreign path; 22 pass. No consumer resolves `done_reason` as a path (`packages/app/src`, `apps/cli/src`, `config/workflows/task-lifecycle.yaml`). |
-| R3 | MET | `packages/app/src/services/anchor-qualifier.ts:110-127` (`normalizeDoneReason`) and `:369-389` (per-file application through the frontmatter writer); CLI wiring + dry-run/apply report at `apps/cli/src/commands/task.ts:1027-1032,1045-1047,1077`; `packages/app/tests/services/anchor-qualifier.test.ts` 26 pass. 36 files repaired through the CLI (`ad895ed51`); `spur task migrate-anchors --dry-run --json` → `reasons: 0` (was 36); `rg -c "done_reason:.*PASS artifact at /" docs/tasks*/*.md` → 0 files. |
-| R4 | MET | Same-commit § WT-2 statement, placement asserted as `wt2 < staging < wt3` in `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:51-64`; `bun run build:plugin-lib` produced no diff (the reference is not embedded in a generated bundle). |
-| R5 | MET | `apps/server/bunfig.toml` preloads `../../tests/setup.ts`. `HOME=<temp> bun test tests/serve.test.ts` wrote `$HOME/.config/spur/projects.json` before the change and writes nothing after. The full workspace run `HOME=<temp> cd apps/server && bun test` wrote `projects.json` before, then still wrote `slash_commands.json`; after `tests/setup.ts:71-84` also pins `SPUR_SLASH_COMMANDS_FILE`, the same run reports 521 pass / 0 fail and `find $HOME/.config` is empty. `apps/server/tests/workspace-test-isolation.test.ts:34-37` pins both env names; `docs/design/desktop-shell.md` § Packaging documents the manual-smoke override. |
+| R1 | MET | `plugins/sp/skills/spur-dev/references/execution-batch.md:747` — WT-2 "Evidence staging before the first task (create and reuse mode)" stages both untracked planes with cp -n; re-read this run; placement pin `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts` re-run green this run (47 pass / 0 fail) |
+| R2 | MET | `packages/app/src/services/task-transition.ts:212` projectRelativeArtifactPath (POSIX separators, absolute outside root) and `:315` close-audit call site, both re-read this run; `packages/app/tests/services/task-transition.test.ts` + anchor-qualifier re-run green this run (48 pass / 0 fail across both files); this task's own frontmatter `docs/tasks5/1089_keep-worktree-batch-evidence-references-and-prior-task-evide.md:11` records the relative form |
+| R3 | MET | `packages/app/src/services/anchor-qualifier.ts:110-127` normalizeDoneReason + CLI wiring `apps/cli/src/commands/task.ts:1029` / dry-run report `:1064`, re-read this run; `spur task migrate-anchors --dry-run --json` re-run this run: filesScanned 635, reasons [] (0 remaining); corpus repair commit ad895ed51 confirmed (36 task files) |
+| R4 | MET | Same-commit WT-2 staging statement at `plugins/sp/skills/spur-dev/references/execution-batch.md:747-767` re-read this run; wt2 < staging < wt3 placement pinned by the contract test re-run green this run (47 pass) |
+| R5 | MET | `apps/server/bunfig.toml:7` preloads ../../tests/setup.ts and `tests/setup.ts:71-84` isolates both SPUR_PROJECTS_FILE and SPUR_SLASH_COMMANDS_FILE (re-read this run); AC step (e) re-executed this run: HOME=$(mktemp -d) cd apps/server && bun test → 521 pass / 0 fail, find $HOME/.config → 0 files; pin `apps/server/tests/workspace-test-isolation.test.ts:34` green; smoke override documented `docs/design/desktop-shell.md:93` |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Task and feature evidence remains valid without completed scratch | MET | command | Staging executed (246 + 258 verdict files) and the `wrapup-steps metrics` A/B on scratch-only task 1078 flips `UNKNOWN` → `PASS` from byte-identical trees; `feature check E71 --strict --as done` reports the same findings with and without staging, and those seven `L4.scenario-unverified` rows name genuinely incomplete sibling tasks (1024-1027, 1089), not an evidence-plane gap. |
-| AC2 — Retained run inspection and artifact references survive scratch removal | MET | command | R2's relative `done_reason` is asserted for both evidence planes, and the temp-`HOME` workspace run leaves no `.config/spur/` directory behind (521 pass). |
-| AC3 — Existing lasting data is preserved before its scratch dependency is retired | MET | command | 36 absolute references repaired through `spur task migrate-anchors` after reviewing the dry-run, committed separately as `ad895ed51`; the unrelated 479 body-anchor rewrites were deliberately not applied; dry-run now reports `reasons: 0`. |
+| AC1 — Task and feature evidence remains valid without completed scratch | MET | test | Staging contract + placement pin re-run green this run (`plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts`, 47 pass / 0 fail); batch A/B staging/metrics receipts from the original run @spur-run `.spur/run/1089-verdict.json` line 1 |
+| AC2 — Retained run inspection and artifact references survive scratch removal | MET | command | R2 relative done_reason proven by this task's own close (`docs/tasks5/1089_keep-worktree-batch-evidence-references-and-prior-task-evide.md:11`); temp-HOME workspace run re-executed this run: 521 pass / 0 fail, zero files under $HOME/.config |
+| AC3 — Existing lasting data is preserved before its scratch dependency is retired | MET | command | `spur task migrate-anchors --dry-run --json` re-run this run → reasons [] (0 remaining absolute done_reason); 36-file repair commit ad895ed51 in scope |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

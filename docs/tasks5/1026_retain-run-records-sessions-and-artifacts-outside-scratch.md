@@ -4,7 +4,7 @@ name: Retain run records sessions and artifacts outside scratch
 status: done
 template: feature-impl
 created_at: 2026-09-30T20:13:58.357Z
-updated_at: "2026-10-03T01:58:21.011Z"
+updated_at: "2026-10-05T23:33:26.274Z"
 feature_id: E71
 priority: P2
 tags:
@@ -130,13 +130,20 @@ Final consumer audit also fixes `outputArtifactForRun` through the existing dura
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
+- Confidence: LOW
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | packages/app/src/services/inline-run-setup.ts:1383 durable records + authoritative trace tests |
-| R2 | MET | packages/app/src/workflow/actions/run-artifact.ts:53 provenance/collision/confinement |
-| R3 | MET | packages/app/src/services/inline-run-setup.ts:307 complete evidence/reference export |
-| R4 | MET | packages/domain/src/dao/run-storage-reference-dao.ts:12 rollback/live-consumer; history-service.test.ts:978 real importer checkpoint equivalence |
+| R1 | MET | `packages/app/src/services/inline-run-setup.ts:1383` durable records + authoritative trace tests — recorded evidence, carried |
+| R2 | MET | `packages/app/src/workflow/actions/run-artifact.ts:53` provenance/collision/confinement — recorded evidence, carried |
+| R3 | MET | `packages/app/src/services/inline-run-setup.ts:307` complete evidence/reference export — recorded evidence, carried |
+| R4 | MET | `packages/domain/src/dao/run-storage-reference-dao.ts:12` rollback/live-consumer; `packages/app/tests/services/history-service.test.ts:978` real importer checkpoint equivalence — recorded evidence, carried |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R3 — Retained run inspection and artifact references survive scratch removal | MET | test | Durable records + authoritative trace tests over `packages/app/src/services/inline-run-setup.ts:1383`; provenance/collision/confinement at `packages/app/src/workflow/actions/run-artifact.ts:53` — aggregates the recorded R1-R2 MET rows |
+| R4 — Session history and exported results remain available outside scratch | MET | test | `packages/app/tests/services/history-service.test.ts:978` real importer checkpoint equivalence; export path `packages/app/src/services/inline-run-setup.ts:307` — aggregates the recorded R3 MET row |
+| R6 — Existing lasting data is preserved before its scratch dependency is retired | MET | test | `packages/domain/src/dao/run-storage-reference-dao.ts:12` rollback/live-consumer with the importer equivalence test — aggregates the recorded R4 MET row |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

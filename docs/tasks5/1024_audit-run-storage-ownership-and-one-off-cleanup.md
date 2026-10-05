@@ -4,7 +4,7 @@ name: Audit run storage ownership and one-off cleanup
 status: done
 template: feature-impl
 created_at: 2026-09-30T20:13:58.349Z
-updated_at: "2026-10-03T01:58:20.598Z"
+updated_at: "2026-10-05T23:33:25.119Z"
 feature_id: E71
 priority: P2
 tags:
@@ -98,13 +98,18 @@ Completion audit (2026-10-02): the current census records every candidate locati
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
+- Confidence: LOW
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Census refreshed this session for post-baseline drift (commit d1a4c377b); verifier pass:true, 3249/3249 locations, 277 owners, unclassified:0 (.spur/run/verifyall-E71-logs/census.log) |
-| R2 | MET | docs/reports/2026-09-30-E71-run-storage-ownership.md:101 family/consumer dispositions (report unchanged; §9 rows closed per :338) |
-| R3 | MET | docs/reports/2026-09-30-E71-run-storage-ownership.md:143 W1-W14 correctness cleanup retained; unrelated U/T owners remain |
-| R4 | MET | scripts/commands/run-storage-census.ts persistent location/hash equality + regression map; fresh verifier exit 0 |
+| R1 | MET | Census refreshed for post-baseline drift (commit d1a4c377b); verifier pass:true, 3249/3249 locations, 277 owners, unclassified:0 — recorded evidence, carried |
+| R2 | MET | `docs/reports/2026-09-30-E71-run-storage-ownership.md:101` family/consumer dispositions (§9 rows closed per :338) — recorded evidence, carried |
+| R3 | MET | `docs/reports/2026-09-30-E71-run-storage-ownership.md:143` W1-W14 correctness cleanup retained — recorded evidence, carried |
+| R4 | MET | `scripts/commands/run-storage-census.ts` persistent location/hash equality + regression map — recorded evidence, carried |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R1 — Every run storage dependency and cleanup site has a disposition | MET | command | Census verifier pass:true, 3249/3249 locations, unclassified:0 (commit d1a4c377b); dispositions `docs/reports/2026-09-30-E71-run-storage-ownership.md:101` — aggregates the recorded R1-R4 MET rows |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

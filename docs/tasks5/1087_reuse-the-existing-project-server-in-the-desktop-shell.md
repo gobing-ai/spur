@@ -4,7 +4,7 @@ name: Reuse the existing project server in the desktop shell
 status: done
 template: standard
 created_at: 2026-10-05T04:19:48.947Z
-updated_at: "2026-10-05T04:43:06.706Z"
+updated_at: "2026-10-05T23:23:06.624Z"
 
 ac_numbering: task-local
 ac_altitude: task-local
@@ -70,23 +70,23 @@ The implementation stays in the existing permitted Node adapter; no new server e
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
-- Confidence: HIGH
+- Confidence: MEDIUM
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `apps/desktop/tests/server-process.test.ts:376` proves IPv6 attachment without spawning; reviewed-source-probe.log and native-proof.json verify live IPv6 owner 56190 independently of registry port. |
-| R2 | MET | `apps/desktop/src/server-process.ts:478` canonicalizes project, rejects redirects, requires Spur identity and rechecks the same claim; focused identity and symlink cases pass. |
-| R3 | MET | `apps/desktop/src/server-process.ts:279` returns shared ownership with no-op stop; native delivery app exited 0, health stayed ok and owner marker was unchanged; owned-smoke.log passed. |
-| R4 | MET | `apps/desktop/src/server-process.ts:390` preserves listener family/PID, native execFile is bounded and shell-free, discovery retries and failed-child cleanup precedes race attachment; corresponding tests pass. |
-| R5 | MET | `apps/desktop/README.md:34` documents packaging alongside shared shutdown instructions; final quality gate exit 0 (10044 pass, 0 fail, coverage, lint/types, 50 pre/2 post rules); CF exit 0; delivery root build exit 0; native attach/quit and DMG checksum passed. |
+| R1 | MET | `apps/desktop/tests/server-process.test.ts:376` — IPv6 attachment through symlink without spawning, re-run green this run (bun test apps/desktop: 62 pass / 0 fail); `apps/desktop/src/server-process.ts:390` listenerOrigins confines probes to the owner PID and literal loopback, re-read this run |
+| R2 | MET | `apps/desktop/src/server-process.ts:478` — findSharedServer reads the owner lock without mutation, canonicalizes via realpath, rejects non-http/redirects, rechecks the claim; re-read this run; wrong-identity/redirect/symlink tests green in this run's 62/0 suite |
+| R3 | MET | `apps/desktop/src/server-process.ts:268-279` — attach-before-spawn returns shared ownership with a no-op stop, owned path unchanged; re-read this run; lifecycle tests green in this run's suite |
+| R4 | MET | `apps/desktop/src/server-process.ts:364-370` — failed owned child is stopped before retrying attach against a concurrent owner; argv-based execFile inspection, no shell interpolation; re-read this run; race/cancellation tests green in this run's suite |
+| R5 | MET | `apps/desktop/README.md:34` and `docs/design/desktop-shell.md:51` document packaging and shared-vs-owned lifetime (re-read this run); desktop typecheck exit 0 this run; packaged attach/quit proof @spur-run `.spur/run/1087/native-proof.json` line 2 — PASS, Board at IPv6 loopback |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | command | native-proof.json shows the packaged Board at IPv6 loopback port 3000 with live project owner 56190 and no second server. |
-| AC2 | MET | test | desktop-tests-final.log: wrong identity, redirects, owner replacement, non-loopback origin and symlink canonicalization tests pass (62 tests, 0 fail). |
-| AC3 | MET | command | native-proof-delivery.log plus app exit 0 prove shared quit preserves claim and health; owned-smoke.log proves own server startup/shutdown; focused cancellation and existing lifecycle tests pass. |
-| AC4 | MET | test | desktop-tests-final.log: claim-before-bind retry, shared abort, inspection failure, dead/malformed claim and concurrent-owner cleanup tests pass. |
-| AC5 | MET | command | quality-gate-final.log, test-cf.log, build-delivery.log and dmg-verify-delivery.log all pass; native-shared-board.png and native-proof.json prove the final macOS package loads the existing Board and exits without stopping it. |
+| AC1 | MET | test | IPv6/symlink attach test re-run green this run (bun test apps/desktop, 62 pass / 0 fail, `apps/desktop/tests/server-process.test.ts:376`); packaged proof @spur-run `.spur/run/1087/native-proof.json` line 2 |
+| AC2 | MET | test | Wrong-identity, redirect, owner-replacement, non-loopback and symlink-canonicalization cases green in this run's 62/0 desktop suite (`apps/desktop/tests/server-process.test.ts:359`) |
+| AC3 | MET | test | Shared no-op stop and owned-child lifecycle tests green in this run's suite; `apps/desktop/src/server-process.ts:279` no-op shared stop re-read this run |
+| AC4 | MET | test | Claim-before-bind retry, shared abort, inspection-failure and concurrent-owner cleanup tests green in this run's suite; `apps/desktop/src/server-process.ts:364` failed-child cleanup re-read this run |
+| AC5 | MET | command | (cd apps/desktop && bun test) exit 0 this run: 62 pass / 0 fail; (cd apps/desktop && bun run typecheck) exit 0 this run; packaged attach/quit + DMG receipts @spur-run `.spur/run/1087/native-proof.json` line 2 |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

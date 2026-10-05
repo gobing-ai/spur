@@ -4,7 +4,7 @@ name: Verify disposable scratch and reconcile cleanup safeguards
 status: done
 template: feature-impl
 created_at: 2026-09-30T20:13:58.359Z
-updated_at: "2026-10-03T01:58:21.219Z"
+updated_at: "2026-10-05T23:33:26.621Z"
 feature_id: E71
 priority: P2
 tags:
@@ -128,13 +128,20 @@ Decisive disposal-equivalence test `packages/app/tests/services/run-storage.test
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
+- Confidence: LOW
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | docs/reports/2026-09-30-E71-run-storage-ownership.md:143 classified cleanup retained, no terminal deletion added |
-| R2 | MET | packages/app/tests/services/run-storage.test.ts:429 ownership/confinement/recovery (fresh 18 pass) |
-| R3 | MET | task-record.test.ts:697 real acceptance; history-service.test.ts:978 real imported history; repeated disposal and recreated scratch |
-| R4 | MET | docs/reports/2026-10-01-E71-run-storage-census.json (corrected citation; 2026-09-30 path in task body is stale) + owner build parity, installed sync, plugin-smoke PASS |
+| R1 | MET | `docs/reports/2026-09-30-E71-run-storage-ownership.md:143` classified cleanup retained, no terminal deletion added — recorded evidence, carried |
+| R2 | MET | `packages/app/tests/services/run-storage.test.ts:429` ownership/confinement/recovery — recorded evidence, carried |
+| R3 | MET | `packages/app/tests/services/task-record.test.ts:697` real acceptance; `packages/app/tests/services/history-service.test.ts:978` real imported history; repeated disposal and recreated scratch — recorded evidence, carried |
+| R4 | MET | `docs/reports/2026-10-01-E71-run-storage-census.json` + owner build parity, installed sync, plugin-smoke PASS — recorded evidence, carried |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R5 — Temporary handoffs retain freshness and confinement safeguards | MET | test | `packages/app/tests/services/run-storage.test.ts:429` ownership/confinement/recovery; classified cleanup retained per `docs/reports/2026-09-30-E71-run-storage-ownership.md:143` — aggregates the recorded R1-R2 MET rows |
+| R2 — Task and feature evidence remains valid without completed scratch | MET | test | `packages/app/tests/services/task-record.test.ts:697` real acceptance and `packages/app/tests/services/history-service.test.ts:978` imported history across repeated disposal — aggregates the recorded R3-R4 MET rows |
+| R7 — Completed scratch is disposable without per-workflow cleanup machinery | MET | test | Disposal-equivalence suite `packages/app/tests/services/run-storage.test.ts:291-419` (before/after/repeated scratch removal equality); census `docs/reports/2026-10-01-E71-run-storage-census.json` — aggregates the recorded R3 MET row |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

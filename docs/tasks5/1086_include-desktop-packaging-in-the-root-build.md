@@ -4,7 +4,7 @@ name: Include desktop packaging in the root build
 status: done
 template: standard
 created_at: 2026-10-05T01:52:28.356Z
-updated_at: "2026-10-05T04:19:20.975Z"
+updated_at: "2026-10-05T23:15:05.320Z"
 
 ac_altitude: task-local
 ac_numbering: task-local
@@ -75,17 +75,18 @@ Append the existing `bun run --filter @gobing-ai/spur-desktop pack` to the root 
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | package.json:67 appends the existing desktop pack command after web; real root build exits 0. |
-| R2 | MET | .spur/run/1086/build-final.log and build-output-final.json prove CLI/server/web, native app and DMG outputs; dmg-verify-final.log reports VALID checksum. |
-| R3 | MET | apps/desktop/README.md:34 and docs/design/desktop-shell.md:45 document unified build output and standalone pack. |
+| R1 | MET | `package.json:67` — root build chain appends the existing desktop pack after the web build; re-read at the cited line this run |
+| R2 | MET | `ls dist/desktop` (exit 0 this run) shows the native app and DMG; build receipt @spur-run `.spur/run/1086/build-final.log` line 100 — desktop pack exited 0; @spur-run `.spur/run/1086/build-output-final.json` line 1 — all five CLI/server/web/app/DMG outputs; DMG checksum @spur-run `.spur/run/1086/dmg-verify-final.log` line 18 — VALID |
+| R3 | MET | `apps/desktop/README.md:34` and `docs/design/desktop-shell.md:45` document the unified root build producing desktop output and retain the standalone pack command; both re-read at the cited lines this run |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | build | .spur/run/1086/build-final.log, build-output-final.json and dmg-verify-final.log |
-| AC2 | MET | inspection | README and owning packaging contract match package.json build and preserved standalone pack script. |
+| Scenario: AC1 — Unified root build includes native desktop packaging (req: R1, R2) | MET | command | `ls dist/desktop` (exit 0, this run): Spur.app and DMG present; root build ordering and pack exit 0 @spur-run `.spur/run/1086/build-final.log` line 100 |
+| Scenario: AC2 — Packaging instructions match the build command (req: R3) | MET | command | `grep -n 'bun run build' apps/desktop/README.md docs/design/desktop-shell.md` (exit 0, this run) matched `apps/desktop/README.md:34` and `docs/design/desktop-shell.md:45` — unified build documented, standalone pack retained |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
