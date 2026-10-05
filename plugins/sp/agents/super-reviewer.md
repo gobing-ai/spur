@@ -165,6 +165,16 @@ fails it. One explicit mapping, no transcription step anywhere downstream:
 Severity words stay visible in the same cell — the mapping adds the machine-readable label, it does
 not replace the semantics.
 
+**Disposition column (1089, E71).** The findings table carries a `Disposition` cell. It is not
+cosmetic: the record stage's residual sweep reads these rows (`parseReviewFindings` in
+`packages/app/src/services/residual-scan.ts`), and a `P1`–`P3` row with no disposition classifies as
+**blocking**, which downgrades a PASS verdict to PARTIAL and closes the `done` gate. A finding you
+resolved inside the same task therefore says so in that cell — `RESOLVED`/`FIXED`/`DONE` (optionally
+with the commit) drops the row from the sweep; `DEFER(<reason>)` reclassifies a P3 as deferrable
+(never P1/P2). Prose such as "Closed." inside the *Finding* cell does not count — the sweep reads
+the cell, not the sentence. `OPEN` states "still live", and `ACCEPTED` marks a non-blocking P4
+observation you are deliberately not acting on; both behave as an ordinary open row.
+
 **Section-relative headings.** In WBS mode (standalone or pipeline) the report body is written
 *into* the task's `### Review` section, so every heading inside it MUST be `####` or deeper. A
 `##`/`###` heading in the body becomes a new top-level task section and corrupts the document. With
@@ -180,12 +190,12 @@ shallower.
 
 ##### Findings (ranked)
 
-| # | Priority | Dimension | Finding | Location |
-|---|----------|-----------|---------|----------|
-| 1 | P1 (blocker) | security | SQL injection in query builder | `src/api/users.ts:42` |
-| 2 | P2 (major) | architecture | Shallow pass-through UserService | `src/services/users.ts:15` |
-| 3 | P3 (minor) | correctness | Missing error branch in createUser | `src/api/users.ts:48` |
-| 4 | P4 (advisory) | usability | `createUser` error text omits the field name | `src/api/users.ts:51` |
+| # | Priority | Dimension | Finding | Location | Disposition |
+|---|----------|-----------|---------|----------|-------------|
+| 1 | P1 (blocker) | security | SQL injection in query builder | `src/api/users.ts:42` | OPEN |
+| 2 | P2 (major) | architecture | Shallow pass-through UserService | `src/services/users.ts:15` | OPEN |
+| 3 | P3 (minor) | correctness | Missing error branch in createUser | `src/api/users.ts:48` | RESOLVED (fixed in <sha>) |
+| 4 | P4 (advisory) | usability | `createUser` error text omits the field name | `src/api/users.ts:51` | ACCEPTED |
 
 ##### Functional Traceability
 
@@ -202,9 +212,9 @@ row that states what was reviewed and what was found — placeholder cells (empt
 rejected by the checker, and so they should be:
 
 ```markdown
-| # | Priority | Dimension | Finding | Location |
-|---|----------|-----------|---------|----------|
-| 1 | P4 (advisory) | — | No P1–P3 findings: 6 changed files reviewed across all six dimensions; R1–R3 traceable to tests | `packages/app/src/workflow/proof-input-fingerprint.ts:102-160` |
+| # | Priority | Dimension | Finding | Location | Disposition |
+|---|----------|-----------|---------|----------|-------------|
+| 1 | P4 (advisory) | — | No P1–P3 findings: 6 changed files reviewed across all six dimensions; R1–R3 traceable to tests | `packages/app/src/workflow/proof-input-fingerprint.ts:102-160` | ACCEPTED |
 ```
 
 ## Out of scope
