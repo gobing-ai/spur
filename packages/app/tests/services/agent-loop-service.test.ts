@@ -5,14 +5,19 @@
  * unit-covered: the wake wait, the idle-hold dedupe, the not-accepted persistent send, and
  * ownership loss.
  */
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test, vi } from 'bun:test';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createMigratedDb, type DbAdapter, ProjectClaimDao, SystemEventDao } from '@gobing-ai/spur-domain';
 import { EventBus } from '@gobing-ai/ts-infra';
 import type { AgentLoopDeps } from '../../src/services/agent-loop-service';
-import { recordIdleHold, runAgentLoopCore, waitForWake } from '../../src/services/agent-loop-service';
+import {
+    createWriteSlotHeartbeat,
+    recordIdleHold,
+    runAgentLoopCore,
+    waitForWake,
+} from '../../src/services/agent-loop-service';
 import type { AgentService } from '../../src/services/agent-service';
 import type { FleetService } from '../../src/services/fleet-service';
 import { normalizeProjectPath } from '../../src/services/project-registry';
@@ -208,6 +213,238 @@ describe('0968 runAgentLoopCore', () => {
             proto.release = release;
             globalThis.setInterval = realSetInterval;
         }
+    });
+});
+
+describe('G71 R1/R2/R3 — member drain, keyed run path, slot heartbeat, resume seeding', () => {
+    /** Minimal live member process (G66 R2 shape) with a scripted stdin outcome. */
+    function fakeProcess(send: (message: string) => Promise<{ ok: boolean }>) {
+        return {
+            start: async () => {},
+            stop: async () => {},
+            send,
+            getStatus: () => 'running' as const,
+            getExitCode: () => null,
+        };
+    }
+
+    /** A fleet member that is NOT the orchestrator: `owner` is null, so it must drain. */
+    function memberOnlyDeps(db: DbAdapter, overrides: Record<string, unknown> = {}): AgentLoopDeps {
+        return memberDeps(db, {
+            fleet: {
+                load: async () => ({ enabled: true }),
+                resolveOrchestrator: async () => null,
+                assertLaunchGroundTruth: async () => {},
+            } as unknown as FleetService,
+            ...overrides,
+        });
+    }
+
+    test('R1: a fleet member drains its inbox and settles the run instead of only holding', async () => {
+        const db = await memDb();
+        const accepted: string[] = [];
+        const deps = memberOnlyDeps(db, {
+            // The bus the loop builds is handed to `agentService`; emitting the runner's own
+            // `agent.invoke.start` is what marks the invocation accepted (0831).
+            agentService: (bus: { emit: (name: string, payload: unknown) => void }) => ({
+                run: async () => {
+                    bus.emit('agent.invoke.start', { operation: 'prompt' });
+                    return 0;
+                },
+                runTraced: async () => ({}),
+            }),
+            settle: async (claimed: string[], outcome: string) => {
+                accepted.push(`${claimed.join(',')}:${outcome}`);
+            },
+            memberSession: {
+                executors: [{ name: 'e1', agent: 'pi' }],
+                env: {},
+                getDb: async () => db,
+                warn: () => {},
+                // stdin accepted → the drain is a delivery
+                processFactory: () => fakeProcess(async () => ({ ok: true })),
+                sessionCapability: () => ({ mode: 'persistent', supportsSessionDir: false }) as never,
+            },
+        });
+        const code = await runAgentLoopCore(deps, {
+            recipient: 'member-1',
+            pollMs: 10,
+            flags: {},
+            runtime: { maxIterations: 1 },
+        });
+        expect(code).toBe(0);
+        // The claimed row settled as delivered, and no idle hold was written for a skipped inbox.
+        expect(accepted).toEqual(['m1:accepted']);
+        const holds = await new SystemEventDao(db).query({ names: ['fleet.idle-hold'] });
+        expect(holds).toHaveLength(0);
+    });
+
+    test('R1: a keyed batch runs through the run path even for a persistent member (the receipt needs it)', async () => {
+        const db = await memDb();
+        const sent: string[] = [];
+        const runs: string[] = [];
+        const deps = memberOnlyDeps(db, {
+            agentService: () => ({
+                run: async (prompt: string) => {
+                    runs.push(prompt);
+                    return 0;
+                },
+                runTraced: async () => ({}),
+            }),
+            drain: async () => ({
+                prompt: 'dispatch: run the task',
+                flags: {},
+                claimed: ['m-keyed'],
+                requestKeys: ['fleet:task:0841:1'],
+            }),
+            memberSession: {
+                executors: [{ name: 'e1', agent: 'pi' }],
+                env: {},
+                getDb: async () => db,
+                warn: () => {},
+                // A persistent member whose stdin WOULD accept — the keyed batch must not use it.
+                processFactory: () =>
+                    fakeProcess(async (text: string) => {
+                        sent.push(text);
+                        return { ok: true };
+                    }),
+                sessionCapability: () => ({ mode: 'persistent', supportsSessionDir: false }) as never,
+            },
+        });
+        await runAgentLoopCore(deps, { recipient: 'member-1', pollMs: 10, flags: {}, runtime: { maxIterations: 1 } });
+        expect(runs).toEqual(['dispatch: run the task']);
+        expect(sent).toEqual([]);
+    });
+
+    test('R1: an unkeyed conversational batch claims and renews no write slot', async () => {
+        const db = await memDb();
+        const cwd = mkdtempSync(join(tmpdir(), 'loop-unkeyed-'));
+        const project = normalizeProjectPath(cwd);
+        await new ProjectClaimDao(db).claim(project, 'write', 'member-1', 30_000, 1);
+        const before = await new ProjectClaimDao(db).get(project, 'write');
+        const runs: string[] = [];
+        const deps = memberOnlyDeps(db, {
+            cwd,
+            agentService: () => ({
+                run: async (prompt: string) => {
+                    runs.push(prompt);
+                    return 0;
+                },
+                runTraced: async () => ({}),
+            }),
+            drain: async () => ({ prompt: 'hello there', flags: {}, claimed: ['m-chat'], requestKeys: [null] }),
+        });
+        await runAgentLoopCore(deps, { recipient: 'member-1', pollMs: 10, flags: {}, runtime: { maxIterations: 1 } });
+        // It ran (one-shot falls through to the run path) …
+        expect(runs).toEqual(['hello there']);
+        // … and it neither claimed nor renewed the slot: only a `fleet:task:*` key does (R2).
+        const after = await new ProjectClaimDao(db).get(project, 'write');
+        expect(after?.expiresAt).toBe(before?.expiresAt);
+    });
+
+    test('R2: the member heartbeat renews the held slot and stops when it is fenced out', async () => {
+        const db = await memDb();
+        const cwd = mkdtempSync(join(tmpdir(), 'loop-slot-'));
+        const project = normalizeProjectPath(cwd);
+        const dao = new ProjectClaimDao(db);
+        await dao.claim(project, 'write', 'member-1', 30_000, 1);
+        const before = await dao.get(project, 'write');
+        vi.useFakeTimers();
+        try {
+            const stop = createWriteSlotHeartbeat({
+                projectPath: project,
+                recipient: 'member-1',
+                getDb: async () => db,
+            });
+            try {
+                for (let i = 0; i < 3; i++) {
+                    vi.advanceTimersByTime(10_000);
+                    for (let j = 0; j < 30; j++) await Promise.resolve();
+                }
+            } finally {
+                stop();
+            }
+            const after = await dao.get(project, 'write');
+            expect(after?.expiresAt ?? 0).toBeGreaterThan(before?.expiresAt ?? 0);
+            // A different holder is not this member's slot to renew: it stops instead of fighting.
+            await dao.release(project, 'write', 'member-1', before?.ownerEpoch ?? 1);
+            await dao.claim(project, 'write', 'other-1', 30_000, 1);
+            const stop2 = createWriteSlotHeartbeat({
+                projectPath: project,
+                recipient: 'member-1',
+                getDb: async () => db,
+            });
+            const otherBefore = await dao.get(project, 'write');
+            try {
+                vi.advanceTimersByTime(30_000);
+                for (let j = 0; j < 30; j++) await Promise.resolve();
+            } finally {
+                stop2();
+            }
+            const otherAfter = await dao.get(project, 'write');
+            expect(otherAfter?.expiresAt).toBe(otherBefore?.expiresAt);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    test('R4: a throwing orchestrator drain is logged and does not take the dispatch loop down', async () => {
+        const db = await memDb();
+        const errors: string[] = [];
+        let ticked = 0;
+        const cwd = mkdtempSync(join(tmpdir(), 'loop-orch-'));
+        const deps = memberDeps(db, {
+            cwd,
+            error: (message: string) => errors.push(message),
+            fleet: {
+                load: async () => ({ enabled: true }),
+                resolveOrchestrator: async () => ({ instanceId: 'member-1' }),
+                assertLaunchGroundTruth: async () => {},
+            } as unknown as FleetService,
+            drain: async () => {
+                throw new Error('inbox unavailable');
+            },
+            makeStrategyRuntime: async () =>
+                ({
+                    resume: async () => {},
+                    observe: async () => ({ released: [] }),
+                    tick: async () => {
+                        ticked++;
+                        return { dispatched: [], holds: [] };
+                    },
+                    stop: () => {},
+                }) as unknown as StrategyRuntime,
+        });
+        const code = await runAgentLoopCore(deps, {
+            recipient: 'member-1',
+            pollMs: 10,
+            flags: {},
+            runtime: { maxIterations: 1 },
+        });
+        expect(code).toBe(0);
+        // The wake survived the failed drain and still reached the deterministic tick.
+        expect(ticked).toBe(1);
+        expect(errors.some((message) => message.includes('orchestrator drain failed'))).toBe(true);
+    });
+
+    test('R3: loop shutdown does not reset a resume session (the id must survive to the next start)', async () => {
+        const db = await memDb();
+        const warnings: string[] = [];
+        const deps = memberOnlyDeps(db, {
+            drain: async () => ({ prompt: undefined, flags: {}, claimed: [] }),
+            attachLedger: async () => ({ flush: async () => {}, unsubscribe: () => {} }),
+            memberSession: {
+                executors: [{ name: 'e1', agent: 'pi' }],
+                env: {},
+                getDb: async () => db,
+                warn: (message: string) => warnings.push(message),
+                processFactory: () => fakeProcess(async () => ({ ok: true })),
+                sessionCapability: () => ({ mode: 'resume', supportsSessionDir: true }) as never,
+            },
+        });
+        await runAgentLoopCore(deps, { recipient: 'member-1', pollMs: 10, flags: {}, runtime: { maxIterations: 1 } });
+        const resets = await new SystemEventDao(db).query({ names: ['fleet.member-session-reset'] });
+        expect(resets).toHaveLength(0);
     });
 });
 

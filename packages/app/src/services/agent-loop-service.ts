@@ -9,8 +9,42 @@ import type { MemberAgentProcess, MemberSessionDeps } from './member-session';
 import { MemberSession } from './member-session';
 import { normalizeProjectPath } from './project-registry';
 import type { StrategyRuntime } from './strategy-runtime';
+import { FLEET_TASK_KEY_PREFIX } from './strategy-runtime';
 import { FOLLOW_POLL_INTERVAL_MS } from './system-event-follow';
 import type { SystemEventBus } from './system-event-tap';
+import { WRITE_SLOT_TTL_MS } from './write-slot-service';
+
+/**
+ * G71 R2: while a KEYED dispatch's run is live, the MEMBER keeps the write slot claimed for it
+ * alive — the orchestrator's standby heartbeat (1073) stops once the receipt row is `running`.
+ * Fenced by holder identity: if someone else holds the slot this member is fenced out, so it
+ * stops heartbeating and lets the run finish. Returns the stop function.
+ *
+ * Exported because it is the one piece of the keyed drain path that cannot be exercised through
+ * the loop itself: the loop's wake wait owns the clock, so a fake-timer test would deadlock in
+ * `waitForWake` rather than reach the interval.
+ */
+export function createWriteSlotHeartbeat(input: {
+    projectPath: string;
+    recipient: string;
+    getDb: () => Promise<Awaited<ReturnType<MemberSessionDeps['getDb']>>>;
+}): () => void {
+    const timer = setInterval(() => {
+        void (async () => {
+            const dao = new ProjectClaimDao(await input.getDb());
+            const row = await dao.get(input.projectPath, 'write');
+            if (row === null || row.holderId !== input.recipient) {
+                // Fenced out (someone else holds the slot) or released: stop heartbeating and
+                // let the run finish — the holder identity is the fence, not a guess.
+                clearInterval(timer);
+                return;
+            }
+            await dao.heartbeat(input.projectPath, 'write', input.recipient, WRITE_SLOT_TTL_MS, row.ownerEpoch);
+        })().catch(() => undefined);
+    }, WRITE_SLOT_TTL_MS / 3);
+    (timer as { unref?: () => void }).unref?.();
+    return () => clearInterval(timer);
+}
 
 /**
  * The self-draining agent loop (task 0968, feature G67): `spur agent loop --spec <id>`
@@ -21,6 +55,13 @@ import type { SystemEventBus } from './system-event-tap';
 
 /** Backstop drain cadence when `--poll` is absent or malformed. */
 export const DEFAULT_LOOP_POLL_MS = 2000;
+
+/**
+ * G71 R4 / decision D2: the orchestrator answers its inbox in prose and leaves dispatch to the
+ * deterministic strategy tick. Appended to the orchestrator's drained prompt only.
+ */
+export const ORCHESTRATOR_REPLY_INSTRUCTION =
+    'Answer each message with `spur message reply <id> <answer>`; do not dispatch or edit tasks.';
 
 /** Injectable knobs for {@link runAgentLoopCore} — tests pass maxIterations/signal to bound runs. */
 export interface AgentLoopRuntime {
@@ -60,6 +101,8 @@ export interface AgentLoopDeps {
         prompt?: string;
         flags: Record<string, string | boolean>;
         claimed: string[];
+        /** The claimed rows' request keys (G71 R1) — a `fleet:task:*` key marks a keyed dispatch. */
+        requestKeys?: Array<string | null | undefined>;
     }>;
     settle(claimed: string[], outcome: 'accepted' | 'not-started'): Promise<void>;
     attachLedger(bus: SystemEventBus): Promise<{ flush(): Promise<void>; unsubscribe(): void }>;
@@ -367,6 +410,81 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
         });
 
         let iteration = 0;
+
+        /**
+         * One drain → execute → settle pass (G71 R1/R4). Returns whether anything ran, so the
+         * caller can decide between a fresh idle hold and a reset one.
+         *
+         * A batch carrying a `fleet:task:*` dispatch key runs through `svc.run` even for a
+         * persistent member: that is the only path that writes the `coordination_runs` receipt
+         * 1073's dispatcher waits on — a stdin-accepted send writes none. Unkeyed
+         * conversational traffic keeps the stdin path (0831's acceptance-is-delivery contract).
+         */
+        const runDrain = async (opts: { replyInstruction?: boolean } = {}): Promise<boolean> => {
+            const { prompt, flags: rewritten, claimed, requestKeys } = await deps.drain({ ...flags, drain: true });
+            if (prompt === undefined) return false;
+            // Reset per iteration: each drain is an independent delivery attempt.
+            invocationStarted = false;
+            lastExitRunId = undefined;
+            const keyed = (requestKeys ?? []).some(
+                (key) => typeof key === 'string' && key.startsWith(FLEET_TASK_KEY_PREFIX),
+            );
+            const body = opts.replyInstruction === true ? `${prompt}\n\n${ORCHESTRATOR_REPLY_INSTRUCTION}` : prompt;
+            const ledger = await deps.attachLedger(bus);
+            let drainFailed: boolean;
+            let stopHeartbeat: (() => void) | undefined;
+            try {
+                if (!keyed && memberSession.mode === 'persistent' && memberSpec !== undefined) {
+                    // G66 R2: one long-lived member process for the loop's
+                    // lifetime — each drained prompt is injected through its
+                    // stdin. A successful send IS the delivery acceptance
+                    // (0831): the prompt reached the agent, so the claimed
+                    // rows settle delivered, never redelivered (R5).
+                    try {
+                        const process = await memberSession.ensureProcess(memberSpec);
+                        const sent = await process.send(body);
+                        if (!sent.ok) {
+                            // 0831: a not-accepted send is a never-started
+                            // delivery — report it like the one-shot path
+                            // reports a failed spawn, then release below.
+                            deps.error('member session: drain delivery failed: stdin send not accepted');
+                        }
+                        invocationStarted = sent.ok;
+                        drainFailed = !sent.ok;
+                    } catch (error) {
+                        drainFailed = true;
+                        deps.error(
+                            `member session: drain delivery failed: ${error instanceof Error ? error.message : String(error)}`,
+                        );
+                    }
+                } else {
+                    // R2: a keyed run holds the write slot, so the member heartbeats it
+                    // for the run's duration. An unkeyed batch claims no slot.
+                    if (keyed) stopHeartbeat = createWriteSlotHeartbeat({ projectPath, recipient, getDb: deps.getDb });
+                    // G66 R1: resume mode re-opens the previous drain's session;
+                    // one-shot keeps today's fresh process (R3's warning already
+                    // fired once at loop start).
+                    const drainFlags =
+                        memberSession.mode === 'resume' && memberSession.id !== undefined
+                            ? { ...rewritten, 'session-id': memberSession.id }
+                            : rewritten;
+                    const exitCode = await svc.run(body, drainFlags, runDeps);
+                    drainFailed = exitCode !== 0 || !invocationStarted;
+                }
+            } finally {
+                stopHeartbeat?.();
+                // 0831 R4: settle even on abort; the loop keeps iterating either
+                // way — a released row redelivers on the next drain.
+                await deps.settle(claimed, invocationStarted ? 'accepted' : 'not-started');
+                await ledger.flush();
+                ledger.unsubscribe();
+            }
+            // G66 R4/R7: the service owns the consecutive-failed-drain budget
+            // (poisoned-session reset) and the resume-id capture (R1).
+            await memberSession.recordDrain(drainFailed, lastExitRunId);
+            return true;
+        };
+
         while (
             !ownershipLost &&
             !runtime.signal?.aborted &&
@@ -375,102 +493,60 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
             const wake = await waitForWake(wakeDao, cursor, pollMs, runtime.signal);
             cursor = wake.sequence;
             if (runtime.signal?.aborted) break;
-            if ((await fleet.load(deps.cwd)) !== null) {
-                if (owner !== null) {
-                    strategyRuntime ??= await deps.makeStrategyRuntime();
-                    const ledger = await deps.attachLedger(bus);
+            const fleetDeclared = (await fleet.load(deps.cwd)) !== null;
+            if (fleetDeclared && owner !== null) {
+                strategyRuntime ??= await deps.makeStrategyRuntime();
+                const ledger = await deps.attachLedger(bus);
+                try {
+                    // G71 R4: the orchestrator converses before it dispatches. Its own drain
+                    // runs the same path as a member's — answer through the inbox, then the
+                    // DETERMINISTIC strategy tick decides dispatch (D2: the LLM never does).
+                    //
+                    // A throwing drain (inbox DB error) must not take the orchestrator down:
+                    // before this drain existed the owner branch could not fail here, and an
+                    // orchestrator outage stops dispatch for the whole project. Log and keep the
+                    // wake loop alive — the tick still runs, and the next wake retries the drain.
                     try {
-                        // G71 R1/R3: settle, then dispatch — both non-blocking. Member work
-                        // never runs in the orchestrator process; the receipt is completion.
-                        await strategyRuntime.observe(projectPath, { ownerEpoch: owner.ownerEpoch });
-                        const ticked = await strategyRuntime.tick(projectPath, {
-                            ownerEpoch: owner.ownerEpoch,
-                            orchestratorId: recipient,
-                        });
-                        // Only a wake that dispatched nothing is an idle hold; a dispatch is
-                        // work, and the next idle stretch records its own hold row.
-                        lastHoldKey =
-                            ticked.dispatched.length === 0
-                                ? await recordIdleHold(deps, recipient, wake.source, lastHoldKey)
-                                : '';
-                    } finally {
-                        await ledger.flush();
-                        ledger.unsubscribe();
+                        await runDrain({ replyInstruction: true });
+                    } catch (error) {
+                        deps.error(
+                            `orchestrator drain failed: ${error instanceof Error ? error.message : String(error)}`,
+                        );
                     }
-                } else {
-                    lastHoldKey = await recordIdleHold(deps, recipient, wake.source, lastHoldKey);
+                    // G71 R1/R3: settle, then dispatch — both non-blocking. Member work
+                    // never runs in the orchestrator process; the receipt is completion.
+                    await strategyRuntime.observe(projectPath, { ownerEpoch: owner.ownerEpoch });
+                    const ticked = await strategyRuntime.tick(projectPath, {
+                        ownerEpoch: owner.ownerEpoch,
+                        orchestratorId: recipient,
+                    });
+                    // Only a wake that dispatched nothing is an idle hold; a dispatch is
+                    // work, and the next idle stretch records its own hold row.
+                    lastHoldKey =
+                        ticked.dispatched.length === 0
+                            ? await recordIdleHold(deps, recipient, wake.source, lastHoldKey)
+                            : '';
+                } finally {
+                    await ledger.flush();
+                    ledger.unsubscribe();
                 }
                 iteration++;
                 continue;
             }
-            // Consume this member's inbox (queued → injected). A non-empty drain yields a
-            // prompt to run the agent on; an empty drain records the idle hold (R3).
-            const { prompt, flags: rewritten, claimed } = await deps.drain({ ...flags, drain: true });
-            if (prompt !== undefined) {
-                // Reset per iteration: each drain is an independent delivery attempt.
-                invocationStarted = false;
-                lastExitRunId = undefined;
-                const ledger = await deps.attachLedger(bus);
-                let drainFailed: boolean;
-                try {
-                    if (memberSession.mode === 'persistent' && memberSpec !== undefined) {
-                        // G66 R2: one long-lived member process for the loop's
-                        // lifetime — each drained prompt is injected through its
-                        // stdin. A successful send IS the delivery acceptance
-                        // (0831): the prompt reached the agent, so the claimed
-                        // rows settle delivered, never redelivered (R5).
-                        try {
-                            const process = await memberSession.ensureProcess(memberSpec);
-                            const sent = await process.send(prompt);
-                            if (!sent.ok) {
-                                // 0831: a not-accepted send is a never-started
-                                // delivery — report it like the one-shot path
-                                // reports a failed spawn, then release below.
-                                deps.error('member session: drain delivery failed: stdin send not accepted');
-                            }
-                            invocationStarted = sent.ok;
-                            drainFailed = !sent.ok;
-                        } catch (error) {
-                            drainFailed = true;
-                            deps.error(
-                                `member session: drain delivery failed: ${error instanceof Error ? error.message : String(error)}`,
-                            );
-                        }
-                    } else {
-                        // G66 R1: resume mode re-opens the previous drain's session;
-                        // one-shot keeps today's fresh process (R3's warning already
-                        // fired once at loop start).
-                        const drainFlags =
-                            memberSession.mode === 'resume' && memberSession.id !== undefined
-                                ? { ...rewritten, 'session-id': memberSession.id }
-                                : rewritten;
-                        const exitCode = await svc.run(prompt, drainFlags, runDeps);
-                        drainFailed = exitCode !== 0 || !invocationStarted;
-                    }
-                } finally {
-                    // 0831 R4: settle even on abort; the loop keeps iterating either
-                    // way — a released row redelivers on the next drain.
-                    await deps.settle(claimed, invocationStarted ? 'accepted' : 'not-started');
-                    await ledger.flush();
-                    ledger.unsubscribe();
-                }
-                // G66 R4/R7: the service owns the consecutive-failed-drain budget
-                // (poisoned-session reset) and the resume-id capture (R1).
-                await memberSession.recordDrain(drainFailed, lastExitRunId);
-                // The hold that described the previous idle stretch is stale: work
-                // ran, so the next idle wake records a fresh hold row.
-                lastHoldKey = '';
-            } else {
-                lastHoldKey = await recordIdleHold(deps, recipient, wake.source, lastHoldKey);
-            }
+            // G71 R1: EVERY member loop drains. The fleet bypass that only recorded an idle
+            // hold (C1) is deleted, so messages addressed to a member are actually consumed;
+            // the hold describes an idle stretch, never a skipped inbox (R3).
+            const drained = await runDrain();
+            lastHoldKey = drained ? '' : await recordIdleHold(deps, recipient, wake.source, lastHoldKey);
             iteration++;
         }
         return ownershipLost ? 2 : 0;
     } finally {
-        // G66 R4: the loop process is ending — `spur agent stop`, a serve
-        // shutdown/restart, or a crash. The member's session state dies with the
-        // process, so the next start opens a fresh session; name that reset.
-        if (memberSession.hasLiveState()) {
+        // G66 R4 / G71 R3: a persistent member's process IS its session, so loop shutdown
+        // resets it (the next start opens a fresh one). A RESUME member keeps its id — the
+        // whole point of `resume` is that a restart re-opens the same conversation, and the
+        // id is seeded back from the ledger on the next start.
+        if (memberSession.mode === 'persistent' && memberSession.hasLiveState()) {
             await memberSession.reset('operator').catch(() => undefined);
         }
         // G71 R1: no orphan standby heartbeat outlives the loop that owns the lease.

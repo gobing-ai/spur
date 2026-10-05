@@ -17,6 +17,7 @@ import {
     type DbAdapter,
     RunSessionDao,
     readMemberSessions,
+    recordMemberSession,
     SystemEventDao,
 } from '@gobing-ai/spur-domain';
 import type { AgentProcessOptions, AgentSpec } from '@gobing-ai/ts-ai-runner';
@@ -415,5 +416,59 @@ describe('selectsPersistentStdinDispatch (Review P3 argv gate)', () => {
         expect(selectsPersistentStdinDispatch(['pi', '--mode', 'rpc'])).toBe(true);
         expect(selectsPersistentStdinDispatch(['claude', '-p', '<p>', '--output-format', 'text'])).toBe(false);
         expect(selectsPersistentStdinDispatch([])).toBe(false);
+    });
+});
+
+describe('G71 R3 — resume seeding from the ledger', () => {
+    /** Resume-only capability: no persistent stdin, so `resolveMode` lands on `resume`. */
+    const resumeCapability = () => ({
+        supportsResumeById: true,
+        supportsSessionDir: false,
+        supportsPersistentStdin: false,
+        supportsStructuredOutput: false,
+    });
+
+    test('start seeds a resume member with the exact id its last drain recorded', async () => {
+        const h = await harness({ sessionCapability: resumeCapability as never });
+        await recordMemberSession(h.db, 'member', { mode: 'resume', id: 'sess-exact-1' });
+        await h.session.start(spec({ type: 'gemini' }));
+        expect(h.session.mode).toBe('resume');
+        expect(h.session.id).toBe('sess-exact-1');
+    });
+
+    test('a deliberate reset clears the seed — the next start does not resume the old conversation', async () => {
+        const h = await harness({ sessionCapability: resumeCapability as never });
+        await recordMemberSession(h.db, 'member', { mode: 'resume', id: 'sess-old' });
+        await h.session.start(spec({ type: 'gemini' }));
+        expect(h.session.id).toBe('sess-old');
+        await h.session.reset('operator');
+        await h.session.start(spec({ type: 'gemini' }));
+        expect(h.session.id).toBeUndefined();
+    });
+
+    test('an unreadable ledger starts the resume member without an id instead of failing the loop', async () => {
+        const h = await harness({
+            sessionCapability: resumeCapability as never,
+            // The adapter resolves but its reads fail — the observability-down path (G71 R3).
+            getDb: async (real) =>
+                new Proxy(real, {
+                    get: (target, key) =>
+                        key === 'queryAll'
+                            ? async () => {
+                                  throw new Error('ledger unavailable');
+                              }
+                            : Reflect.get(target, key),
+                }) as never,
+        });
+        await h.session.start(spec({ type: 'gemini' }));
+        expect(h.session.mode).toBe('resume');
+        expect(h.session.id).toBeUndefined();
+    });
+
+    test('a member with no recorded observation starts without an id', async () => {
+        const h = await harness({ sessionCapability: resumeCapability as never });
+        await h.session.start(spec({ type: 'gemini' }));
+        expect(h.session.mode).toBe('resume');
+        expect(h.session.id).toBeUndefined();
     });
 });

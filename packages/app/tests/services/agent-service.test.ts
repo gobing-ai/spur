@@ -4536,6 +4536,13 @@ test('fleet spec execution validates actual launch context and requires the mana
         expect(runner.runPromptCommand).not.toHaveBeenCalled();
         expect((await service.runTraced('work', flags, deps, { beforeDispatch: async () => {} })).exitCode).toBe(0);
         expect(runner.runPromptCommand).toHaveBeenCalledTimes(1);
+        // G71 R1: a DRAINED run carries the claimed message ids, so the orchestrator boundary
+        // does not apply to it — a member's drain is admitted without `beforeDispatch`. Only a
+        // bare `--spec-id` dispatch (no originating request) still needs the owning loop.
+        expect(
+            (await service.runTraced('work', { ...flags, requestMessage: 'msg-1' }, deps)).message ?? '',
+        ).not.toContain('owning orchestrator');
+        expect(runner.runPromptCommand).toHaveBeenCalledTimes(2);
     } finally {
         process.chdir(previous);
         await db.close();

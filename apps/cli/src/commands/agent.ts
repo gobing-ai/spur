@@ -886,7 +886,13 @@ async function drainIntoPrompt(
     prompt: string | undefined,
     context: CliContext,
     flags: Record<string, string | boolean>,
-): Promise<{ prompt: string | undefined; flags: Record<string, string | boolean>; claimed: string[] }> {
+): Promise<{
+    prompt: string | undefined;
+    flags: Record<string, string | boolean>;
+    claimed: string[];
+    /** Claimed rows' request keys (G71 R1) — a `fleet:task:*` key selects the keyed drain path. */
+    requestKeys?: Array<string | null>;
+}> {
     const specFlag = typeof flags.spec === 'string' ? flags.spec : '';
     const agentFlag = typeof flags.agent === 'string' ? flags.agent : '';
     const recipient = specFlag !== '' ? specFlag : agentFlag;
@@ -920,6 +926,9 @@ async function drainIntoPrompt(
     // joined, dual spelling per the sessionDir convention) so the exit sink can
     // persist the run↔message receipt.
     const requestMessage = claimed.join(',');
+    // G71 R1: the loop decides between the stdin path and the run path from the batch's
+    // request keys, so the claimed rows' keys ride out with the drain result.
+    const requestKeys = inbox.messages.map((message) => message.requestKey ?? null);
     return {
         prompt: merged,
         flags: {
@@ -929,6 +938,7 @@ async function drainIntoPrompt(
             ...(fleetTask !== undefined ? { task: fleetTask } : {}),
         },
         claimed,
+        requestKeys,
     };
 }
 

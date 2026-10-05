@@ -259,16 +259,19 @@ describe('agent loop wake sources (0839 R1)', () => {
 });
 
 describe('agent loop backstop and idle holds (0839 R3/R5)', () => {
-    test('a declared fleet in rest keeps queued assignments unstarted (0838 R2)', async () => {
+    test('a declared fleet in rest delivers a queued message but dispatches nothing (0838 R2 / G71 R1)', async () => {
         const rig = await makeRig({ corpus: true });
         try {
             writeFileSync(join(rig.tempDir, '.spur', 'config.yaml'), 'agent:\n  fleet:\n    members: []\n');
             await new ProjectStrategyDao(rig.db).set(realpathSync(rig.tempDir), 'rest');
             await rig.inbox.enqueue('operator', 'wake-worker', 'queued assignment');
             await runAgentLoop(rig.customCtx, { spec: 'wake-worker', poll: '10' }, { maxIterations: 1 });
-            expect(rig.run).toHaveBeenCalledTimes(0);
-            const inbox = await rig.inbox.inbox('wake-worker');
-            expect(inbox[0]?.status).toBe('queued');
+            // G71 R1: a member DRAINS its inbox — delivery is not dispatch, so the message is
+            // consumed instead of sitting queued forever (the old bypass).
+            expect((await rig.inbox.inbox('wake-worker'))[0]?.status).not.toBe('queued');
+            // `rest` still dispatches nothing: no keyed fleet dispatch was enqueued for anyone.
+            const all = await rig.inbox.inbox('wake-worker');
+            expect(all.some((m) => (m.requestKey ?? '').startsWith('fleet:task:'))).toBe(false);
         } finally {
             rig.cleanup();
         }
@@ -354,15 +357,20 @@ describe('agent loop backstop and idle holds (0839 R3/R5)', () => {
     });
 });
 
-test('G62 GTD without an orchestrator never drains arbitrary queued work', async () => {
+test('G71 GTD without an orchestrator delivers a message but dispatches no task', async () => {
     const rig = await makeRig({ corpus: true });
     try {
         writeFileSync(join(rig.tempDir, '.spur', 'config.yaml'), 'agent:\n  fleet:\n    members: []\n');
         await new ProjectStrategyDao(rig.db).set(realpathSync(rig.tempDir), 'gtd');
-        await rig.inbox.enqueue('operator', 'wake-worker', 'unapproved queued work');
+        await rig.inbox.enqueue('operator', 'wake-worker', 'operator message');
         await runAgentLoop(rig.customCtx, { spec: 'wake-worker', poll: '1' }, { maxIterations: 1 });
-        expect(rig.run).not.toHaveBeenCalled();
-        expect((await rig.inbox.inbox('wake-worker'))[0]?.status).toBe('queued');
+        // G71 R1: the member drains its own inbox — an operator message is delivery, not
+        // dispatch, and no orchestrator is needed to hand it over.
+        expect((await rig.inbox.inbox('wake-worker'))[0]?.status).not.toBe('queued');
+        // Dispatch still belongs to the deterministic tick, which has no live orchestrator
+        // claim here: nothing keyed was enqueued, so no task work started.
+        const all = await rig.inbox.inbox('wake-worker');
+        expect(all.some((m) => (m.requestKey ?? '').startsWith('fleet:task:'))).toBe(false);
     } finally {
         rig.cleanup();
     }

@@ -312,17 +312,17 @@ describe('agent loop member sessions (G66, task 0896)', () => {
         }
     }, 15000);
 
-    test('operator stop ends an active resume session deliberately (reason: operator) (R4)', async () => {
+    test('G71 R3: loop shutdown leaves a resume session alone — the id survives to the next start', async () => {
         const rig = await makeSessionRig('codex');
         try {
             await rig.inbox.enqueue('operator', 'member', 'only request');
             const code = await runAgentLoop(rig.customCtx, { spec: 'member', poll: '50' }, { maxIterations: 1 });
             expect(code).toBe(0);
             expect(rig.runs).toHaveLength(1);
-            // The loop shutdown reset is recorded with the session mode it ended.
-            const resets = await resetRows(rig);
-            expect(resets).toHaveLength(1);
-            expect(resets[0]).toMatchObject({ reason: 'operator', mode: 'resume' });
+            // A resume conversation must outlive the process that served it: no operator reset
+            // row, and the ledger still carries the id the drain captured.
+            expect(await resetRows(rig)).toHaveLength(0);
+            expect((await readMemberSessions(rig.db, ['member'])).get('member')?.id).toBeTruthy();
         } finally {
             rig.cleanup();
         }
@@ -502,7 +502,7 @@ describe('agent loop member sessions (G66, task 0896)', () => {
 });
 
 describe('member session ledger rows (0897 observability)', () => {
-    test('resume mode mirrors { mode, id } mid-loop; the operator stop reset clears the id', async () => {
+    test('resume mode mirrors { mode, id } mid-loop and keeps the id across shutdown', async () => {
         const rig = await makeSessionRig('codex');
         try {
             await rig.inbox.enqueue('operator', 'member', 'first request');
@@ -522,10 +522,13 @@ describe('member session ledger rows (0897 observability)', () => {
                 id: 'sess-2',
             });
             expect(await loop).toBe(0);
-            // Shutdown reset (operator): id cleared, mode retained.
+            // G71 R3: shutdown no longer clears a resume id (only a PERSISTENT session's
+            // process dies with the loop) — the next start resumes this conversation.
             expect(await readMemberSessions(rig.db, ['member']).then((m) => m.get('member'))).toEqual({
                 mode: 'resume',
+                id: 'sess-2',
             });
+            expect(await resetRows(rig)).toHaveLength(0);
         } finally {
             rig.cleanup();
         }

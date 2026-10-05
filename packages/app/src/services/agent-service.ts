@@ -1021,6 +1021,16 @@ export class AgentService {
         const silent = options.silent;
         const nonInteractive = options.nonInteractive === true;
 
+        // Originating request message ids (0833 R1): the CLI drain path writes the
+        // claimed inbox message ids as a comma-joined list (dual-spelling flag per
+        // the sessionDir convention). Never inferred from the recipient or the most
+        // recent queued row — absent flag means an empty correlation list (R7).
+        // Computed BEFORE the fleet guard: a drained run carries ids and must be admitted (G71 R1).
+        const requestMessageIds = (stringFlag(flags, 'requestMessage', '') || stringFlag(flags, 'request-message', ''))
+            .split(',')
+            .map((id) => id.trim())
+            .filter((id) => id !== '');
+
         const launchSpecId = stringFlag(flags, 'spec-id', '');
         if (launchSpecId !== '') {
             const fs = this.ctx.fs ?? createNodeFileSystem(this.ctx.cwd);
@@ -1036,7 +1046,11 @@ export class AgentService {
                     return { ok: false, exitCode: 2, message: `Missing fleet spec: ${launchSpecId}` };
                 await fleet.assertLaunchGroundTruth(spec.workspace);
                 await fleet.assertLaunchGroundTruth(stringFlag(flags, 'cwd', this.ctx.cwd));
-                if (options.execution?.beforeDispatch === undefined) {
+                // G71 R1: the refusal is an ORCHESTRATOR-boundary rule, not a spec-id rule. A
+                // member's DRAINED run carries the claimed message ids (and writes the receipt
+                // the dispatcher waits on), so it is admitted; only a dispatch with no
+                // originating request still needs the owning orchestrator loop (1075 deletes it).
+                if (options.execution?.beforeDispatch === undefined && requestMessageIds.length === 0) {
                     return { ok: false, exitCode: 2, message: 'Fleet dispatch requires the owning orchestrator loop' };
                 }
             }
@@ -1225,14 +1239,6 @@ export class AgentService {
         const taskId = stringFlag(flags, 'task', '') || undefined;
         const sessionDir = stringFlag(flags, 'session-dir', '') || stringFlag(flags, 'sessionDir', '') || undefined;
         const sessionId = stringFlag(flags, 'session-id', '') || stringFlag(flags, 'sessionId', '') || undefined;
-        // Originating request message ids (0833 R1): the CLI drain path writes the
-        // claimed inbox message ids as a comma-joined list (dual-spelling flag per
-        // the sessionDir convention). Never inferred from the recipient or the most
-        // recent queued row — absent flag means an empty correlation list (R7).
-        const requestMessageIds = (stringFlag(flags, 'requestMessage', '') || stringFlag(flags, 'request-message', ''))
-            .split(',')
-            .map((id) => id.trim())
-            .filter((id) => id !== '');
         // Capability gate input (0706 R4): JSON-serialized axis → minimum-state
         // requirements from the workflow action. Parsed+validated once here;
         // invalid shapes fail closed (exit 2) before any resolution/spawn.

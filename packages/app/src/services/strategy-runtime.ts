@@ -39,8 +39,11 @@ export const MAX_DISPATCH_ATTEMPTS = 3;
  * The keyed-dispatch prefix a task's attempts live under (G71 R1). The attempt number
  * is the trailing segment, so the prefix is an exact filter and the suffix an ordinal.
  */
+export const FLEET_TASK_KEY_PREFIX = 'fleet:task:';
+
+/** The full attempt-key prefix for one task: `fleet:task:<wbs>:`. */
 export function fleetTaskKeyPrefix(wbs: string): string {
-    return `fleet:task:${wbs}:`;
+    return `${FLEET_TASK_KEY_PREFIX}${wbs}:`;
 }
 
 /**

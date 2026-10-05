@@ -3,6 +3,7 @@ import {
     type DbAdapter,
     MEMBER_SESSION_RESET_EVENT,
     RunSessionDao,
+    readMemberSessions,
     recordMemberSession,
     SystemEventDao,
 } from '@gobing-ai/spur-domain';
@@ -240,10 +241,30 @@ export class MemberSession {
      */
     async start(spec: AgentSpec): Promise<void> {
         this.mode = this.resolveMode(spec);
+        // G71 R3: a RESUME member re-opens the conversation its last drain recorded. The
+        // exact id already lives in the `fleet.member-session` ledger (recordDrain writes it),
+        // so a restart seeds from that observation instead of losing it to process memory.
+        // ORDER MATTERS: seed BEFORE mirroring the mode below — the mirror writes a fresh
+        // `fleet.member-session` row, and a row without the id would become the latest
+        // observation and hide the id this seeding exists to recover.
+        // Persistent members carry no id (the live process IS the session) and one-shot
+        // members never resume, so neither seeds here.
+        if (this.mode === 'resume') {
+            const observation = (
+                await readMemberSessions(await this.deps.getDb(), [this.recipient]).catch(() => undefined)
+            )?.get(this.recipient);
+            if (observation?.id !== undefined && observation.id !== '') {
+                this.id = observation.id;
+            }
+        }
         // 0897: mirror the resolved mode to the ledger so the fleet
         // snapshot / process entries / CLI can show it. Observability
-        // only — a failed write never blocks the drain loop.
-        await recordMemberSession(await this.deps.getDb(), this.recipient, { mode: this.mode }).catch(() => undefined);
+        // only — a failed write never blocks the drain loop. The seeded id rides along so the
+        // mirror never erases the resume identity it just recovered.
+        await recordMemberSession(await this.deps.getDb(), this.recipient, {
+            mode: this.mode,
+            ...(this.id !== undefined ? { id: this.id } : {}),
+        }).catch(() => undefined);
         if (this.mode === 'one-shot') {
             // G66 R3: exactly one warning per member lifetime — the loop
             // process IS the member's lifetime, not one per drain.
