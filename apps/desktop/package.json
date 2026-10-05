@@ -16,7 +16,8 @@
         "smoke": "bun test tests",
         "smoke:serve": "bun scripts/smoke-serve.ts",
         "test": "bun test tests",
-        "typecheck": "tsc --noEmit"
+        "typecheck": "tsc --noEmit",
+        "smoke:packaged": "bun scripts/smoke-packaged.ts"
     },
     "devDependencies": {
         "@types/bun": "catalog:",
