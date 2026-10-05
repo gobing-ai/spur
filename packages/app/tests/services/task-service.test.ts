@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MarkdownDocument } from '@gobing-ai/spur-domain';
@@ -2099,6 +2099,30 @@ describe('TaskService 0416: WBS collision guard + baseCounter', () => {
         const target = svc as unknown as Allocatable;
         target.allocateWbs = async () => wbs;
     }
+
+    test('allocation counts sibling worktrees of the same repository (no cross-tree duplicate WBS)', async () => {
+        // WHY: WBS ids are unique per repository, not per checkout. Two worktrees allocating
+        // independently both returned 1086 on 2026-10-04 and the duplicate only surfaced at merge
+        // time. The shared `.git` metadata names the other trees, so they count toward the maximum.
+        const root = mkdtempSync(join(tmpdir(), 'spur-task-svc-wt-'));
+        const fs = createNodeFileSystem(root);
+        const dir = join(root, 'docs', 'tasks5');
+        mkdirSync(dir, { recursive: true });
+        mkdirSync(join(root, '.git', 'worktrees', 'wt1'), { recursive: true });
+        writeFileSync(join(root, '.git', 'worktrees', 'wt1', 'gitdir'), `${root}/wt1/.git\n`);
+        const siblingDir = join(root, 'wt1', 'docs', 'tasks5');
+        mkdirSync(siblingDir, { recursive: true });
+        writeFileSync(join(siblingDir, '1099_sibling.md'), '---\nname: sibling\n---\n');
+        writeFileSync(join(dir, '1000_local.md'), '---\nname: local\n---\n');
+        const writeService = new PlanningWriteService({ fs });
+        const isolateSvc = new TaskService({ fs, tasksDir: dir, writeService, sectionMatrix: TEST_SECTION_MATRIX });
+        try {
+            const result = await isolateSvc.create({ title: 'Next task' });
+            expect(result.ref.id).toBe('1100');
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
 
     test('R1: create() refuses to overwrite an existing WBS (collision -> WbsCollisionError)', async () => {
         const root = mkdtempSync(join(tmpdir(), 'spur-task-collision-'));

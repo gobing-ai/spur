@@ -375,6 +375,8 @@ export {
     type PersistWorktreeRunsInput,
     type PersistWorktreeRunsSuccess,
     persistWorktreeRuns,
+    type ReadInstalledInventoryInput,
+    readInstalledInventory,
     runDecideForInlineRun,
     runInlineRunDecide,
     runInlineRunFingerprint,
@@ -484,7 +486,9 @@ export {
     setProcessHelpersForTests,
     type TerminatedProcessInfo,
 } from './services/project-registry';
+export { acquireProjectServerOwner, type ProjectServerOwner } from './services/project-server-owner';
 export {
+    assertProjectServerAvailable,
     type DetachedServeChild,
     type DetachedServeSpawn,
     type DetachedServeSpawnOptions,

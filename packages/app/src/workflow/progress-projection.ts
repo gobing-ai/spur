@@ -1,4 +1,4 @@
-import type { DbAdapter } from '@gobing-ai/spur-domain';
+import type { ActionRunRow, DbAdapter } from '@gobing-ai/spur-domain';
 import { ActionRunDao, ArtifactDao, RunDao, TransitionRunDao } from '@gobing-ai/spur-domain';
 import type { ActionDef, StateMachineWorkflowDef, WorkflowDef } from '@gobing-ai/ts-dual-workflow-engine';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
@@ -89,6 +89,14 @@ export interface WorkflowActionAttempt {
     completedAt: string | null;
     /** Elapsed duration in milliseconds. */
     durationMs: number | null;
+    /**
+     * Who reported `durationMs` (1070 R4): the inline host session stamps
+     * `host-reported` into the row's `result_json`; every other row (engine, legacy,
+     * unparseable) is `unknown` and reads as unlabelled.
+     */
+    provenance: 'host-reported' | 'unknown';
+    /** True only for a `host-reported` row whose stamp declares the duration estimated. */
+    estimated: boolean;
 }
 
 /**
@@ -140,9 +148,22 @@ export interface WorkflowProgressDiagnostic {
         | 'definition-drift'
         | 'orphan-row'
         | 'orphan-action-row'
+        | 'unvisited-state-row'
         | 'ambiguous-action';
     /** Human-readable explanation. */
     message: string;
+}
+
+/**
+ * One state visit derived from recorded action rows for a run with no transition history.
+ */
+interface DerivedStateVisit {
+    /** Workflow state identifier. */
+    state: string;
+    /** 1-based visit count for this state, numbered in recorded order. */
+    visit: number;
+    /** The contiguous rows that produced this visit, in recorded order. */
+    rows: ActionRunRow[];
 }
 
 /**
@@ -157,6 +178,57 @@ export interface ProjectWorkflowProgressOptions {
     workflowDef?: WorkflowDef;
     /** FileSystem abstraction. */
     fileSystem?: FileSystem;
+}
+
+/**
+ * Derive one attempt's duration provenance from its `action_runs.result_json` stamp (1070 R4).
+ *
+ * The inline driver writes `{provenance: 'host-reported', estimated}` through the trace writer's
+ * `result` boundary; every other row (engine-written, pre-stamp legacy, or unparseable) reads as
+ * `unknown`/`false`. A malformed blob is unlabelled, never an error and never a diagnostic.
+ */
+function readProvenance(resultJson: string | null): { provenance: 'host-reported' | 'unknown'; estimated: boolean } {
+    if (resultJson === null) return { provenance: 'unknown', estimated: false };
+    try {
+        const parsed = JSON.parse(resultJson) as { provenance?: unknown; estimated?: unknown } | null;
+        if (parsed?.provenance !== 'host-reported') return { provenance: 'unknown', estimated: false };
+        return { provenance: 'host-reported', estimated: parsed.estimated === true };
+    } catch {
+        return { provenance: 'unknown', estimated: false };
+    }
+}
+
+/**
+ * Derive the visit sequence of a run that has no transition history (1085 R2/R3).
+ *
+ * Inline-driven runs write `action_runs` rows and no state or transition rows (the engine's
+ * persistence adapter is not part of the inline path), so the recorded rows are the only visit
+ * evidence. Contiguous rows of the same `node` are one visit, numbered per state; a state the run
+ * re-entered (`loopBack`) therefore reads as visit 1 then visit 2, each owning the rows recorded
+ * for it. Rows whose `node` names no declared state start, split and extend no visit — they stay
+ * the `orphan-action-row` diagnostic's business.
+ */
+function deriveInlineStateVisits(
+    defStates: readonly { id: string }[],
+    rows: readonly ActionRunRow[],
+): DerivedStateVisit[] {
+    const declaredStateIds = new Set(defStates.map((state) => state.id));
+    const visits: DerivedStateVisit[] = [];
+    const visitCounts: Record<string, number> = {};
+
+    for (const row of rows) {
+        if (!declaredStateIds.has(row.node)) continue;
+        const open = visits[visits.length - 1];
+        if (open && open.state === row.node) {
+            open.rows.push(row);
+            continue;
+        }
+        const visit = (visitCounts[row.node] ?? 0) + 1;
+        visitCounts[row.node] = visit;
+        visits.push({ state: row.node, visit, rows: [row] });
+    }
+
+    return visits;
 }
 
 /**
@@ -308,12 +380,19 @@ export async function projectWorkflowProgress(
     const defStates = Array.isArray(smDef.states) ? smDef.states : [];
     const initialState = smDef.initialState ?? (defStates[0]?.id || 'start');
 
+    // 1085 R2/R3: with no transition history (every inline run) the recorded action rows are the
+    // visit evidence. Engine runs keep the transition-derived visits below, untouched.
+    const inlineVisits = transitions.length === 0 ? deriveInlineStateVisits(defStates, actionRows) : [];
+
     if (!currentState) {
-        currentState = normalizedStatus === 'pending' || normalizedStatus === 'running' ? initialState : null;
+        currentState =
+            normalizedStatus === 'pending' || normalizedStatus === 'running'
+                ? (inlineVisits[inlineVisits.length - 1]?.state ?? initialState)
+                : null;
     }
 
     // Build state visit sequence from transition history
-    const stateVisits: Array<{ state: string; visit: number }> = [];
+    const stateVisits: Array<{ state: string; visit: number; rows?: ActionRunRow[] }> = [];
     const visitCounter: Record<string, number> = {};
 
     const recordVisit = (stateId: string): number => {
@@ -324,8 +403,14 @@ export async function projectWorkflowProgress(
     };
 
     if (transitions.length === 0) {
-        if (initialState) {
-            recordVisit(initialState);
+        if (inlineVisits.length === 0) {
+            if (initialState) {
+                recordVisit(initialState);
+            }
+        } else {
+            for (const derived of inlineVisits) {
+                stateVisits.push(derived);
+            }
         }
     } else {
         const firstFrom = transitions[0]?.from;
@@ -360,7 +445,7 @@ export async function projectWorkflowProgress(
     // would otherwise silently vanish from the projection).
     const matchedActionRowIds = new Set<string>();
 
-    for (const { state: stateId, visit } of stateVisits) {
+    for (const { state: stateId, visit, rows: visitRows } of stateVisits) {
         const defState = defStates.find((s) => s.id === stateId);
         const onEnterActions = Array.isArray(defState?.onEnter) ? defState.onEnter : [];
         const onExitActions = Array.isArray(defState?.onExit) ? defState.onExit : [];
@@ -389,7 +474,9 @@ export async function projectWorkflowProgress(
             }
         }
 
-        const stateActionRows = actionsByNode[stateId] ?? [];
+        // A derived visit maps only the rows recorded for it; every other visit (engine or
+        // declared-but-unvisited) uses the state's rows as before.
+        const stateActionRows = visitRows ?? actionsByNode[stateId] ?? [];
         const actionsProgress: WorkflowActionProgress[] = [];
 
         // Track used action row ids
@@ -406,7 +493,12 @@ export async function projectWorkflowProgress(
 
             // Find matching rows by node + kind
             const candidateRows = stateActionRows.filter((r) => r.kind === kind && !usedActionRowIds.has(r.id));
-            for (const r of candidateRows) matchedActionRowIds.add(r.id);
+            if (isVisited) {
+                // A visited state consumes its candidate rows (mapped as an attempt below, or
+                // reported by the ambiguous branch). Rows of a state the run never visited stay
+                // unclaimed so the trailing pass names them (1085 R4).
+                for (const r of candidateRows) matchedActionRowIds.add(r.id);
+            }
 
             let actionStatus: WorkflowActionProgress['status'] = 'pending';
             const attempts: WorkflowActionAttempt[] = [];
@@ -425,20 +517,28 @@ export async function projectWorkflowProgress(
                     });
                     actionStatus = 'ambiguous';
                 } else {
-                    // Map candidate rows (or first available)
+                    // Map candidate rows. A single declared action of this kind owns ALL its
+                    // recorded rows as attempts — retries stay visible in recorded order instead
+                    // of vanishing claimed-but-unsurfaced (1085 R4 residual). With several
+                    // same-kind def actions, rows keep distributing one per action as before.
                     const matchingRow = candidateRows[0];
                     if (matchingRow) {
-                        usedActionRowIds.add(matchingRow.id);
+                        const rowsToMap = sameKindDefCount === 1 ? candidateRows : [matchingRow];
+                        for (const row of rowsToMap) {
+                            usedActionRowIds.add(row.id);
 
-                        attempts.push({
-                            actionRunId: matchingRow.id,
-                            status: matchingRow.status,
-                            ok: matchingRow.ok !== null ? matchingRow.ok === 1 : null,
-                            startedAt: matchingRow.started_at,
-                            completedAt: matchingRow.completed_at,
-                            durationMs: matchingRow.duration_ms,
-                        });
+                            attempts.push({
+                                actionRunId: row.id,
+                                status: row.status,
+                                ok: row.ok !== null ? row.ok === 1 : null,
+                                startedAt: row.started_at,
+                                completedAt: row.completed_at,
+                                durationMs: row.duration_ms,
+                                ...readProvenance(row.result_json),
+                            });
+                        }
 
+                        // Action status keeps today's semantics: the first recorded row decides.
                         if (matchingRow.status === 'running') {
                             actionStatus = 'running';
                         } else if (matchingRow.status === 'passed') {
@@ -494,14 +594,23 @@ export async function projectWorkflowProgress(
         }
     }
 
-    // Surface rows no declared state action claimed — invisible-orphan failure mode (0868 #7).
+    // Surface rows no declared state action claimed — the invisible-orphan failure mode (0868 #7),
+    // split into its two causes (1085 R4): a node with no declared state, or a declared state the
+    // run did not visit. Every unclaimed row produces exactly one diagnostic naming it.
+    const declaredStateIds = new Set(defStates.map((state) => state.id));
     for (const row of actionRows) {
-        if (!matchedActionRowIds.has(row.id)) {
+        if (matchedActionRowIds.has(row.id)) continue;
+        if (declaredStateIds.has(row.node) && !visitedStateIds.has(row.node)) {
             diagnostics.push({
-                code: 'orphan-action-row',
-                message: `Action row ${row.id} (node ${row.node}, kind ${row.kind}) matches no declared state action`,
+                code: 'unvisited-state-row',
+                message: `Action row ${row.id} (node ${row.node}, kind ${row.kind}) belongs to state ${row.node}, which run ${runId} did not visit`,
             });
+            continue;
         }
+        diagnostics.push({
+            code: 'orphan-action-row',
+            message: `Action row ${row.id} (node ${row.node}, kind ${row.kind}) matches no declared state action`,
+        });
     }
 
     return {

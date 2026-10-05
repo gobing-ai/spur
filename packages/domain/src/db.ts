@@ -54,20 +54,31 @@ export async function createMigratedDbViaRuntime(config: DatabaseConfig): Promis
     const { loadRuntimeFactory } = await import('@gobing-ai/ts-runtime');
     const factory = await loadRuntimeFactory();
     const runtimeAdapter = await factory.createDbAdapter(config);
-    // Concurrent spur processes (or a stale WAL lock) retry within
-    // SQLITE_BUSY_TIMEOUT_MS instead of throwing SQLITE_BUSY immediately; the
-    // upstream BunSqliteAdapter defaults omit busy_timeout. (Run via exec
-    // because the typed pragmas option only accepts journalMode/synchronous/
-    // foreignKeys — the runtime constructor only applies those three.)
-    await runtimeAdapter.exec(`PRAGMA busy_timeout = ${SQLITE_BUSY_TIMEOUT_MS}`);
-    // SAFETY: the runtime factory's Bun/Node adapter implements the full ts-db DbAdapter
-    // surface; its declared factory return type is the narrower runtime subset, so the
-    // widening cast is a static-superset claim exercised immediately below —
-    // applyCliMigrations drives every migrated table through the adapter.
-    await applyCliMigrations(runtimeAdapter as unknown as DbAdapter);
-    // SAFETY: same widening as the applyCliMigrations call above — migrations just ran
-    // through this adapter, so it is the full DbAdapter surface by construction.
-    return runtimeAdapter as unknown as DbAdapter;
+    try {
+        // Concurrent spur processes (or a stale WAL lock) retry within
+        // SQLITE_BUSY_TIMEOUT_MS instead of throwing SQLITE_BUSY immediately; the
+        // upstream BunSqliteAdapter defaults omit busy_timeout. (Run via exec
+        // because the typed pragmas option only accepts journalMode/synchronous/
+        // foreignKeys — the runtime constructor only applies those three.)
+        await runtimeAdapter.exec(`PRAGMA busy_timeout = ${SQLITE_BUSY_TIMEOUT_MS}`);
+        // SAFETY: the runtime factory's Bun/Node adapter implements the full ts-db DbAdapter
+        // surface; its declared factory return type is the narrower runtime subset, so the
+        // widening cast is a static-superset claim exercised immediately below —
+        // applyCliMigrations drives every migrated table through the adapter.
+        await applyCliMigrations(runtimeAdapter as unknown as DbAdapter);
+        // SAFETY: same widening as the applyCliMigrations call above — migrations just ran
+        // through this adapter, so it is the full DbAdapter surface by construction.
+        return runtimeAdapter as unknown as DbAdapter;
+    } catch (error) {
+        // The caller never receives a failed migration's adapter. Close it here
+        // so a rejected lazy-open promise cannot leak the project DB handle.
+        try {
+            await runtimeAdapter.close();
+        } catch {
+            /* Preserve the startup failure. */
+        }
+        throw error;
+    }
 }
 
 export type { DbAdapter } from '@gobing-ai/ts-db';

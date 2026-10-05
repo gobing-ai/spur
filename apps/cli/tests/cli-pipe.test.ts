@@ -36,6 +36,14 @@ test('CLI drains large JSON to a pipe before exiting (0781)', async () => {
         expect(stderr).toBe('');
         expect(code).toBe(0);
         expect(JSON.parse(stdout)).toContain(goal);
+    } finally {
+        await rm(folder, { recursive: true, force: true });
+    }
+});
+
+test('CLI preserves a missing feature error and exit status (0781)', async () => {
+    const folder = await mkdtemp(join(tmpdir(), 'spur-cli-pipe-missing-'));
+    try {
         const missing = Bun.spawn(
             [
                 process.execPath,

@@ -6,7 +6,7 @@
         ".": "./src/index.ts"
     },
     "scripts": {
-        "build": "bun build src/index.ts --compile --outfile ../../dist/server/spur-server",
+        "build": "bun run ../../scripts/spur-dev.ts build-server",
         "build:cf": "vite build",
         "dev": "vite",
         "test": "bun test tests --preload ./tests/setup.ts",

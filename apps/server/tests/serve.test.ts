@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
@@ -52,7 +52,8 @@ import {
     runTaskActionJob,
     SCHEDULER_CUSTOM_JOB,
     type StartServerDeps,
-    startServer,
+    type StartServerOptions,
+    startServer as startServerRaw,
     TASK_ACTION_JOB,
 } from '../src/serve';
 
@@ -153,8 +154,38 @@ function fakeApp() {
 }
 
 /** Build a StartServerDeps with sensible fakes; override per test. */
+/**
+ * Hermetic project root for every `startServer` test that does not declare its own `cwd`.
+ *
+ * `startServer` resolves its project root from `options.cwd ?? process.cwd()` and loads
+ * `.spur/config.yaml` from it (`apps/server/src/serve.ts:653,790`). The repository's own config
+ * declares `agent.fleet.enabled: true` (ff8aea341), so a test that omitted `cwd` materialized the
+ * real fleet against its stub context and failed (`ctx.getDb is not a function`, 20 tests). These
+ * tests own their inputs: a temp root whose `.spur/` holds no config keeps them independent of the
+ * checkout's config. A caller that passes an explicit `cwd` keeps it.
+ *
+ * WHY not `process.chdir`: the file's tests also resolve module/tooling paths through the process
+ * cwd, so only the server's project root is hermetic — not the whole test process.
+ */
+const HERMETIC_ROOT = mkdtempSync(join(tmpdir(), 'spur-serve-root-'));
+mkdirSync(join(HERMETIC_ROOT, '.spur'), { recursive: true });
+process.on('exit', () => {
+    try {
+        rmSync(HERMETIC_ROOT, { recursive: true, force: true });
+    } catch {
+        // best-effort temp cleanup; a leaked temp dir must never fail the suite
+    }
+});
+
+/** `startServer` with the hermetic project root injected when the caller declares none. */
+function startServer(options: StartServerOptions, deps: StartServerDeps = defaultDeps): Promise<void> {
+    return startServerRaw({ cwd: HERMETIC_ROOT, ...options }, deps);
+}
+
 function makeDeps(overrides: Partial<StartServerDeps> = {}): StartServerDeps {
     return {
+        assertProjectServerAvailable: async () => {},
+        acquireProjectServerOwner: () => ({ release() {} }),
         serverBootstrapConfig: () => ({
             logging: { enabled: false, level: 'info' as const, console: false },
             telemetry: { enabled: false },
@@ -193,7 +224,7 @@ function makeDeps(overrides: Partial<StartServerDeps> = {}): StartServerDeps {
  * 2. When exercising shutdown, await `exitCalled` so the mock is still in place.
  * 3. afterEach strips any leaked SIGINT/SIGTERM listeners and restores globals.
  */
-type SigHandler = () => void | Promise<void>;
+type SigHandler = (message?: unknown) => void | Promise<void>;
 
 describe('startServer', () => {
     let origServe: typeof Bun.serve | undefined;
@@ -1158,6 +1189,256 @@ describe('startServer', () => {
         // the server start (no infinite startup retry).
         expect(logMessages.some((m) => m.msg === 'Agent quota update startup drain failed')).toBe(true);
         expect(logMessages.some((m) => m.msg === 'agent quota update consumer started')).toBe(true);
+    });
+
+    test('duplicate project check runs before runtime/database boot and reports to the owned parent', async () => {
+        let booted = false;
+        const originalConnected = Object.getOwnPropertyDescriptor(process, 'connected');
+        const originalSend = Object.getOwnPropertyDescriptor(process, 'send');
+        const messages: unknown[] = [];
+        Object.defineProperty(process, 'connected', { configurable: true, value: true });
+        Object.defineProperty(process, 'send', {
+            configurable: true,
+            value: (message: unknown) => {
+                messages.push(message);
+                return true;
+            },
+        });
+        try {
+            await expect(
+                startServer(
+                    { port: 5002, host: '127.0.0.1', openBrowser: false, cwd: '/tmp/project' },
+                    makeDeps({
+                        assertProjectServerAvailable: async (cwd) => {
+                            expect(cwd).toBe('/tmp/project');
+                            throw new Error('already has a live server');
+                        },
+                        serverBootstrapConfig: () => {
+                            booted = true;
+                            throw new Error('must not boot');
+                        },
+                    }),
+                ),
+            ).rejects.toThrow('already has a live server');
+            expect(booted).toBe(false);
+            expect(messages).toEqual([{ type: 'spur.desktop.startup-error', message: 'already has a live server' }]);
+        } finally {
+            if (originalConnected) Object.defineProperty(process, 'connected', originalConnected);
+            else Reflect.deleteProperty(process, 'connected');
+            if (originalSend) Object.defineProperty(process, 'send', originalSend);
+            else Reflect.deleteProperty(process, 'send');
+        }
+    });
+
+    for (const event of ['message', 'disconnect'] as const) {
+        for (const phase of ['claim', 'runtime', 'callback', 'plugins'] as const) {
+            test(`early parent ${event} during ${phase} closes runtime before releasing ownership`, async () => {
+                const connected = Object.getOwnPropertyDescriptor(process, 'connected');
+                const send = Object.getOwnPropertyDescriptor(process, 'send');
+                Object.defineProperty(process, 'connected', { configurable: true, value: true });
+                Object.defineProperty(process, 'send', { configurable: true, value: () => true });
+                const { sigHandlers } = installProcessMocks();
+                const order: string[] = [];
+                const cancel = () => sigHandlers[event]?.({ type: 'spur.desktop.shutdown' });
+                try {
+                    await startServer(
+                        { port: 5002, host: '127.0.0.1', openBrowser: false, keepAlive: false },
+                        makeDeps({
+                            acquireProjectServerOwner: () => ({
+                                release() {
+                                    order.push('release');
+                                },
+                            }),
+                            assertProjectServerAvailable: async () => {
+                                if (phase === 'claim') cancel();
+                            },
+                            runNodeApplication: (async (opts: { start: (rt: ApplicationRuntime) => Promise<void> }) => {
+                                const rt = fakeRuntime();
+                                rt.stop = async () => {
+                                    order.push('stop');
+                                };
+                                if (phase === 'runtime') cancel();
+                                try {
+                                    await opts.start(rt);
+                                } catch (error) {
+                                    await rt.stop('error');
+                                    throw error;
+                                }
+                                order.push('plugins-complete');
+                                if (phase === 'plugins') cancel();
+                                return rt;
+                            }) as unknown as StartServerDeps['runNodeApplication'],
+                            createServerContext: (() => ({
+                                cwd: '/tmp/project',
+                                closeDb: async () => {
+                                    order.push('context-close');
+                                },
+                                eventBus: () => new EventBus(),
+                                getDb: async () => {
+                                    if (phase === 'callback') cancel();
+                                    throw new Error('empty test DB');
+                                },
+                                supervisor: () => ({
+                                    stopAll: async () => {
+                                        order.push('services-stop');
+                                    },
+                                }),
+                            })) as unknown as StartServerDeps['createServerContext'],
+                        }),
+                    );
+                    expect(order).toEqual(
+                        phase === 'claim'
+                            ? ['release']
+                            : phase === 'runtime'
+                              ? ['stop', 'release']
+                              : phase === 'callback'
+                                ? ['services-stop', 'stop', 'context-close', 'release']
+                                : ['plugins-complete', 'services-stop', 'stop', 'context-close', 'release'],
+                    );
+                    expect(sigHandlers.message).toBeUndefined();
+                    expect(sigHandlers.disconnect).toBeUndefined();
+                } finally {
+                    if (connected) Object.defineProperty(process, 'connected', connected);
+                    else Reflect.deleteProperty(process, 'connected');
+                    if (send) Object.defineProperty(process, 'send', send);
+                    else Reflect.deleteProperty(process, 'send');
+                }
+            });
+        }
+    }
+
+    test('a later runtime plugin failure drains callback services before releasing ownership', async () => {
+        const { sigHandlers } = installProcessMocks();
+        const order: string[] = [];
+        const failure = new Error('scheduler startup failed');
+        Bun.serve = (() => ({ stop: () => order.push('listener-stop') })) as unknown as typeof Bun.serve;
+        const lookup = spyOn(ProjectRegistry.prototype, 'getByPath').mockResolvedValue(undefined);
+        const register = spyOn(ProjectRegistry.prototype, 'upsert').mockImplementation(async (entry) => {
+            order.push('registry-upsert');
+            return { ...entry, port: entry.port ?? 0 };
+        });
+        const clear = spyOn(ProjectRegistry.prototype, 'setPort').mockImplementation(async (_cwd, port) => {
+            expect(port).toBe(0);
+            order.push('registry-clear');
+            return true;
+        });
+        try {
+            await expect(
+                startServer(
+                    { port: 5002, host: '127.0.0.1', openBrowser: false, keepAlive: false },
+                    makeDeps({
+                        acquireProjectServerOwner: () => ({ release: () => order.push('owner-release') }),
+                        runNodeApplication: (async (opts: { start: (rt: ApplicationRuntime) => Promise<void> }) => {
+                            const rt = fakeRuntime();
+                            rt.stop = async () => {
+                                order.push('runtime-stop');
+                            };
+                            await opts.start(rt);
+                            // The upstream scheduler starts after the user callback and
+                            // tears down its plugins before a fail-fast rejection.
+                            order.push('scheduler-failure');
+                            await rt.stop('error');
+                            throw failure;
+                        }) as unknown as StartServerDeps['runNodeApplication'],
+                        createServerContext: (() => ({
+                            cwd: '/tmp/project',
+                            eventBus: () => {
+                                throw new Error('events disabled in fixture');
+                            },
+                            closeDb: async () => {
+                                order.push('context-close');
+                            },
+                            supervisor: () => ({
+                                stopAll: async () => {
+                                    order.push('supervisor-stop');
+                                },
+                            }),
+                        })) as unknown as StartServerDeps['createServerContext'],
+                    }),
+                ),
+            ).rejects.toBe(failure);
+            expect(order).toEqual([
+                'registry-upsert',
+                'scheduler-failure',
+                'runtime-stop',
+                'registry-clear',
+                'supervisor-stop',
+                'listener-stop',
+                'context-close',
+                'owner-release',
+            ]);
+            expect(sigHandlers.SIGINT).toBeUndefined();
+            expect(sigHandlers.SIGTERM).toBeUndefined();
+        } finally {
+            lookup.mockRestore();
+            register.mockRestore();
+            clear.mockRestore();
+        }
+    });
+
+    test('an already disconnected IPC parent cancels before claiming or booting', async () => {
+        const connected = Object.getOwnPropertyDescriptor(process, 'connected');
+        const send = Object.getOwnPropertyDescriptor(process, 'send');
+        Object.defineProperty(process, 'connected', { configurable: true, value: false });
+        Object.defineProperty(process, 'send', { configurable: true, value: () => true });
+        const { sigHandlers } = installProcessMocks();
+        try {
+            await startServer(
+                { port: 5002, host: '127.0.0.1', openBrowser: false },
+                makeDeps({
+                    acquireProjectServerOwner: () => {
+                        throw new Error('must not claim');
+                    },
+                }),
+            );
+            expect(sigHandlers.message).toBeUndefined();
+            expect(sigHandlers.disconnect).toBeUndefined();
+        } finally {
+            if (connected) Object.defineProperty(process, 'connected', connected);
+            else Reflect.deleteProperty(process, 'connected');
+            if (send) Object.defineProperty(process, 'send', send);
+            else Reflect.deleteProperty(process, 'send');
+        }
+    });
+
+    test('owned parent IPC shuts down gracefully and ignores other messages', async () => {
+        const original = Object.getOwnPropertyDescriptor(process, 'connected');
+        const originalSend = Object.getOwnPropertyDescriptor(process, 'send');
+        Object.defineProperty(process, 'send', { configurable: true, value: () => true });
+        Object.defineProperty(process, 'connected', { configurable: true, value: true });
+        try {
+            const { sigHandlers, exitCodes, exitCalled } = installProcessMocks();
+            let drained = false;
+            const logs: { msg: string; data?: Record<string, unknown> }[] = [];
+            await startServer(
+                { port: 5002, host: '127.0.0.1', openBrowser: false, keepAlive: false },
+                makeDeps({
+                    runNodeApplication: runNodeApplicationWith(() => fakeRuntime(logs)),
+                    createServerContext: (() => ({
+                        supervisor: () => ({
+                            stopAll: async () => {
+                                drained = true;
+                            },
+                        }),
+                    })) as unknown as StartServerDeps['createServerContext'],
+                }),
+            );
+            expect(sigHandlers.message).toBeDefined();
+            sigHandlers.message?.(null);
+            sigHandlers.message?.({ type: 'unrecognized' });
+            expect(exitCodes).toEqual([]);
+            sigHandlers.message?.({ type: 'spur.desktop.shutdown' });
+            await exitCalled;
+            expect(drained).toBe(true);
+            expect(exitCodes).toEqual([0]);
+            expect(sigHandlers.message).toBeUndefined();
+            expect(logs.some((row) => row.data?.signal === 'desktop-ipc')).toBe(true);
+        } finally {
+            if (original) Object.defineProperty(process, 'connected', original);
+            else Reflect.deleteProperty(process, 'connected');
+            if (originalSend) Object.defineProperty(process, 'send', originalSend);
+            else Reflect.deleteProperty(process, 'send');
+        }
     });
 
     test('SIGTERM shutdown path and concurrent double-signal latch', async () => {
@@ -2433,6 +2714,10 @@ describe('startServer', () => {
         const { sigHandlers, exitCalled } = installProcessMocks();
 
         const tempDir = mkdtempSync(join(tmpdir(), 'spur-serve-registry-'));
+        // The registry keys rows by the resolved project root, so the test declares its own root
+        // instead of registering whatever checkout happens to host the run.
+        const projectDir = join(tempDir, 'project');
+        mkdirSync(join(projectDir, '.spur'), { recursive: true });
         const projectsFile = join(tempDir, 'projects.json');
         const prevProjectsFile = getEnvVar('SPUR_PROJECTS_FILE');
         setEnvVar('SPUR_PROJECTS_FILE', projectsFile);
@@ -2445,7 +2730,7 @@ describe('startServer', () => {
 
         try {
             await startServer(
-                { port: listenPort, host: '127.0.0.1', openBrowser: false, keepAlive: false },
+                { port: listenPort, host: '127.0.0.1', openBrowser: false, keepAlive: false, cwd: projectDir },
                 makeDeps(),
             );
 
@@ -2456,7 +2741,7 @@ describe('startServer', () => {
             const registered = JSON.parse(readFileSync(projectsFile, 'utf8')) as {
                 projects: Array<{ path: string; port: number; name: string }>;
             };
-            const cwdEntry = registered.projects.find((p) => p.name === basename(process.cwd()));
+            const cwdEntry = registered.projects.find((p) => p.name === basename(projectDir));
             expect(cwdEntry).toBeDefined();
             expect(cwdEntry?.port).toBe(listenPort);
 
@@ -2468,7 +2753,7 @@ describe('startServer', () => {
             const afterStop = JSON.parse(readFileSync(projectsFile, 'utf8')) as {
                 projects: Array<{ path: string; port: number; name: string }>;
             };
-            const stopped = afterStop.projects.find((p) => p.name === basename(process.cwd()));
+            const stopped = afterStop.projects.find((p) => p.name === basename(projectDir));
             expect(stopped?.port).toBe(0);
         } finally {
             if (prevProjectsFile === undefined) {
@@ -2524,25 +2809,27 @@ describe('startServer', () => {
     test('keepAlive parks the server after the start callback resolves', async () => {
         installProcessMocks();
         Bun.serve = (() => ({ stop: () => {}, ref: () => {}, unref: () => {} })) as unknown as typeof Bun.serve;
-        let startSettled = false;
+        let settleStart!: () => void;
+        const startSettled = new Promise<void>((resolve) => {
+            settleStart = resolve;
+        });
         const deps = makeDeps({
             runNodeApplication: (async (opts: { start: (rt: ApplicationRuntime) => Promise<void> }) => {
                 const inner = opts.start(fakeRuntime());
                 void inner.then(() => {
-                    startSettled = true;
+                    settleStart();
                 });
                 await inner;
             }) as unknown as StartServerDeps['runNodeApplication'],
         });
         // The user callback must settle so the runtime plugin chain can reach the
         // scheduler plugin (task 0734); the keep-alive parks startServer itself.
+        const running = startServer({ port: 4402, host: '127.0.0.1', openBrowser: false, keepAlive: true }, deps);
+        await startSettled;
         const raced = await Promise.race([
-            startServer({ port: 4402, host: '127.0.0.1', openBrowser: false, keepAlive: true }, deps).then(
-                () => 'resolved' as const,
-            ),
-            new Promise((resolve) => setTimeout(() => resolve('pending' as const), 40)),
+            running.then(() => 'resolved' as const),
+            new Promise((resolve) => setTimeout(() => resolve('pending' as const), 1)),
         ]);
-        expect(startSettled).toBe(true);
         expect(raced).toBe('pending');
     });
 

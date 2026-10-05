@@ -1,4 +1,5 @@
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
+import ModuleIcon from '../../components/ModuleIcon';
 import { SETTINGS_TABS } from './tabs';
 import { useSettingsTab } from './useSettingsTab';
 
@@ -36,9 +37,7 @@ export default function SettingsShell() {
                 data-settings-header
             >
                 <div className="flex items-center gap-3">
-                    <span className="text-2xl" aria-hidden="true">
-                        ⚙️
-                    </span>
+                    <ModuleIcon id="settings" size="lg" className="h-7 w-7 text-spur-accent" aria-hidden="true" />
                     <div>
                         <h1 className="text-xl font-bold tracking-tight">Settings</h1>
                         <p className="text-xs text-base-content/60">

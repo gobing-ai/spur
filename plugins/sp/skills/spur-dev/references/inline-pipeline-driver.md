@@ -342,8 +342,12 @@ or terminal close. Measure its actual duration and preserve its declared failure
 
 ```bash
 bun "$SETUP_SCRIPT" --action --run-id "$RUN_ID" --node <state-id> --kind <action-kind> \
-  --status <done|failed> --ok <true|false> --duration-ms <measured-ms>
+  --status <done|failed> --ok <true|false> --duration-ms <measured-ms> [--estimated]
 ```
+
+`--duration-ms` is the wall clock measured around the action. Pass `--estimated` when you did
+**not** time it — for example a duration reconstructed after a subagent returned — so the row is
+labelled instead of presented as measured. `--estimated` is valid only with `--action`.
 
 For a multi-action state, `--actions-file` may emit the measured boundaries together before leaving
 that state. Follow [Structured trace emission](#structured-trace-emission-adr-117-task-0868) for the
@@ -628,23 +632,29 @@ The driver reaches it through the existing run delegate (`$SETUP_SCRIPT`,
 
   ```bash
   bun "$SETUP_SCRIPT" --action --run-id "$RUN_ID" --node <state-id> --kind <action-kind> \
-    --status <done|failed> --ok <true|false> --duration-ms <measured-ms>
+    --status <done|failed> --ok <true|false> --duration-ms <measured-ms> [--estimated]
   ```
 
   `<state-id>` is the current YAML state id (the `node`), `<action-kind>` the YAML action kind
   (`agent.run`, `shell`, `note`, `doctor.probe`, …). `--status` is `done` when the action settled
   under its declared error policy and `failed` otherwise; `--duration-ms` is the wall clock the
-  driver measured around the action. This writes the `action_runs` row (node, kind, status, `ok`,
-  `duration_ms`, `run_id`) the engine would have written, so the run's rows are queryable by run id
-  (`spur workflow progress <run-id>`, `ActionRunDao`) without reading the text log. The writer
+  driver measured around the action, and `--estimated` marks a duration the driver did **not**
+  time (a value reconstructed after the action returned). The row's provenance stamp rides
+  `action_runs.result_json` as `{provenance:'host-reported', estimated}`, and the projection
+  exposes it per attempt — `provenance` is `host-reported` for every inline row and `unknown`
+  for an engine-written or pre-stamp row, so the Board can label a host-reported duration
+  instead of presenting it as measured. This writes the `action_runs` row (node, kind, status,
+  `ok`, `duration_ms`, `run_id`) the engine would have written, so the run's rows are queryable
+  by run id (`spur workflow progress <run-id>`, `ActionRunDao`) without reading the text log.
+  The writer
   back-dates the row's `started_at` from its own `completed_at` minus the measured duration
   (0887 R8), so `completed_at − started_at == duration_ms` exactly; a back-date failure is
   recorded (`action.backdate`) and never affects the run.
 
 - **A state with several actions (1007 R5)** — emit the whole state's boundaries in one call
   instead of one `--action` invocation per action. Write a JSON array
-  (`[{node,kind,status,ok,durationMs}, …]` — same fields the `--action` flags carry) to a temp
-  file and pass it with `--actions-file`:
+  (`[{node,kind,status,ok,durationMs,estimated?}, …]` — the `--action` fields, `estimated`
+  optional and `false` when absent) to a temp file and pass it with `--actions-file`:
 
   ```bash
   bun "$SETUP_SCRIPT" --actions-file <actions.json> --run-id "$RUN_ID"

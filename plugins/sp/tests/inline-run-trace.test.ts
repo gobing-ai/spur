@@ -546,3 +546,82 @@ test('1007 R5: --actions-file rejects other mode flags and --action still works 
         p.cleanup();
     }
 }, 60_000);
+
+// ─── 1070 R2: host-reported provenance for `--action` rows ───────────────────
+
+test('1070 R2/AC1: --action --estimated stamps host-reported provenance and the estimated flag', () => {
+    const p = makeProject();
+    const runId = 'run-1070-estimated';
+    try {
+        const setup = runScript(p.workdir, ['--run-id', runId, '--file', '.spur/workflows/inline-smoke.yaml']);
+        expect(setup.status, setup.stderr).toBe(0);
+
+        // `--estimated` sits FIRST: as a boolean flag it must not swallow the next argv token.
+        const action = runScript(p.workdir, [
+            '--estimated',
+            '--action',
+            '--run-id',
+            runId,
+            '--node',
+            'implement',
+            '--kind',
+            'agent.run',
+            '--status',
+            'done',
+            '--ok',
+            'true',
+            '--duration-ms',
+            '1234',
+        ]);
+        expect(action.status, action.stderr).toBe(0);
+        expect(JSON.parse(action.stdout)).toMatchObject({ ok: true, runId });
+
+        const db = new Database(join(p.workdir, '.spur', 'spur.db'), { readonly: true });
+        try {
+            const row = db
+                .query<{ result_json: string | null; ok: number; duration_ms: number }, [string]>(
+                    'SELECT result_json, ok, duration_ms FROM action_runs WHERE run_id = ?',
+                )
+                .get(runId);
+            expect(row).toMatchObject({ ok: 1, duration_ms: 1234 });
+            expect(JSON.parse(row?.result_json ?? '')).toEqual({ provenance: 'host-reported', estimated: true });
+        } finally {
+            db.close();
+        }
+    } finally {
+        p.cleanup();
+    }
+}, 60_000);
+
+test('1070 R2: --estimated is valid only with --action — other modes exit 2 before any write', () => {
+    const p = makeProject();
+    const runId = 'run-1070-estimated-usage';
+    try {
+        const setup = runScript(p.workdir, ['--run-id', runId, '--file', '.spur/workflows/inline-smoke.yaml']);
+        expect(setup.status, setup.stderr).toBe(0);
+
+        const batchFile = actionsFile([{ node: 'a', kind: 'b', status: 'done', ok: true, durationMs: 1 }]);
+        for (const args of [
+            ['--close', '--run-id', runId, '--status', 'done', '--estimated'],
+            ['--actions-file', batchFile, '--run-id', runId, '--estimated'],
+            ['--run-id', runId, '--file', '.spur/workflows/inline-smoke.yaml', '--estimated'],
+        ]) {
+            const proc = runScript(p.workdir, args);
+            expect(proc.status, `expected usage exit 2 for ${args.join(' ')}`).toBe(2);
+            expect(proc.stderr).toContain('Usage:');
+        }
+
+        // A refused mode flag writes nothing: no action rows, and the run is not closed.
+        const db = new Database(join(p.workdir, '.spur', 'spur.db'), { readonly: true });
+        try {
+            expect(db.query<unknown, [string]>('SELECT 1 FROM action_runs WHERE run_id = ?').get(runId)).toBeNull();
+            expect(
+                db.query<{ status: string }, [string]>('SELECT status FROM runs WHERE id = ?').get(runId)?.status,
+            ).toBe('running');
+        } finally {
+            db.close();
+        }
+    } finally {
+        p.cleanup();
+    }
+}, 60_000);

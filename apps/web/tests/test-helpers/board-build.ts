@@ -4,7 +4,8 @@
  * The task's distribution evidence must come from a build made by the test, never from a
  * `dist/web` that happens to exist (the plan's step 0 precondition).
  */
-import { cp, mkdtemp, rm } from 'node:fs/promises';
+import { cpSync, rmSync } from 'node:fs';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -41,11 +42,14 @@ export interface BoardBuildOptions {
  */
 export async function buildBoardToTemp(options: BoardBuildOptions = {}): Promise<string> {
     const dir = await mkdtemp(join(tmpdir(), 'spur-board-0988-'));
-    if (options.testAdapterDir) {
-        await rm(TEST_ADAPTER_MODULE_DIR, { recursive: true, force: true });
-        await cp(options.testAdapterDir, TEST_ADAPTER_MODULE_DIR, { recursive: true });
-    }
     try {
+        if (options.testAdapterDir) {
+            // Keep injection, the blocking build and removal in one synchronous turn.
+            // An awaited copy lets other tests discover the proof adapter in their
+            // production registry before this build has removed it.
+            rmSync(TEST_ADAPTER_MODULE_DIR, { recursive: true, force: true });
+            cpSync(options.testAdapterDir, TEST_ADAPTER_MODULE_DIR, { recursive: true });
+        }
         const proc = Bun.spawnSync(['bun', ASTRO_BIN, 'build', '--outDir', dir], {
             cwd: WEB_ROOT,
             stdout: 'pipe',
@@ -58,10 +62,10 @@ export async function buildBoardToTemp(options: BoardBuildOptions = {}): Promise
         }
         return dir;
     } catch (error) {
-        await rm(dir, { recursive: true, force: true });
+        rmSync(dir, { recursive: true, force: true });
         throw error;
     } finally {
-        await rm(TEST_ADAPTER_MODULE_DIR, { recursive: true, force: true });
+        rmSync(TEST_ADAPTER_MODULE_DIR, { recursive: true, force: true });
     }
 }
 

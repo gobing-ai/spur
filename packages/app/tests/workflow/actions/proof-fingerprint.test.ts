@@ -7,6 +7,12 @@ import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { ProofFingerprintActionRunner } from '../../../src/workflow/actions/proof-fingerprint';
 import type { WorkflowObservabilityBus, WorkflowTripwireFiredEvent } from '../../../src/workflow/observability';
 
+/**
+ * CLI-spawning / fingerprint tests: `agent doctor` measures ~1.5s on a quiet host and 7-8s while
+ * the agent fleet runs, against bun's 5000ms default — the calibration is recorded here once.
+ */
+const slowTest = (name: string, fn: () => Promise<void> | void): void => void test(name, fn, 30_000);
+
 const fs = createNodeFileSystem();
 const runner = new ProofFingerprintActionRunner(fs);
 const ctx: ActionRunContext = {
@@ -35,7 +41,7 @@ describe('proof.fingerprint action', () => {
         expect(runner.kind).toBe('proof.fingerprint');
     });
 
-    test('captures the digest into the declared var', async () => {
+    slowTest('captures the digest into the declared var', async () => {
         const result = await runner.execute({ var: 'proofDigest' }, ctx);
         expect(result.ok).toBeTrue();
         expect(digestFor(result, 'proofDigest')).toMatch(/^sha256:[a-f0-9]{64}$/);

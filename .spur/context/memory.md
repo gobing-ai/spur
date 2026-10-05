@@ -288,3 +288,11 @@
 - Final: spur-check PASS 9816/0; review+verify single fresh sp-super-reviewer (fa9c1d11) PASS, 4×P4 advisory + 1 FIXED during review; verdict PASS; record→done guard PASS; 1063 done; F96 closed.
 - Commits: 846fe4225 (test+task doc), 565e5b0da (F96 close). Concurrent Robin commits preserved (0330b46d9, 16000cb5e).
 - 2026-10-03 dev-run 1066 inline-full (worktree, auto): chunked-dispatch contract codified in inline-pipeline-driver.md; gate/review/verify/record/done all PASS; merged f637dcecb. Learnings: emit action rows per state at settle time.
+
+## 2026-10-04 — runall feature:G71 (worktree sp/runall-g71-302b, marker 302b)
+
+Tasks 1073, 1074, 1075, 1076 all reached `done` with PASS verdicts and PASS quality gates; 1077 was
+excluded as blocked (out-of-set deps 1080, 1081). WT-4 FF-merge refused because main advanced during the
+batch: the worktree and branch are RETAINED for a merge-commit integration. Evidence:
+`.spur/memory/runs/runall-g71-302b-t1073*.md` + `-t1074..-t1076.md`, verdict artifacts under
+`.spur/run/`, and the two commits per task on the branch.

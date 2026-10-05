@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { Button } from '@/ui';
 import DocumentMetadataModal from '../../components/DocumentMetadataModal';
+import ModuleIcon from '../../components/ModuleIcon';
 import {
     type DesignFileDetail,
     type DesignFileSummary,
@@ -157,9 +158,7 @@ export default function DesignsShell() {
                 {/* Module Header */}
                 <header className="flex flex-wrap items-center justify-between gap-4 border-b border-spur-border pb-3 shrink-0">
                     <div className="flex items-center gap-3">
-                        <span className="text-2xl" aria-hidden="true">
-                            📐
-                        </span>
+                        <ModuleIcon id="designs" size="lg" className="h-7 w-7 text-spur-accent" aria-hidden="true" />
                         <div>
                             <h1 className="text-xl font-bold tracking-tight text-spur-text">Designs</h1>
                             <p className="text-xs text-spur-text-muted">

@@ -427,12 +427,7 @@ function settleMode(opts, env, io) {
     prior = JSON.parse(fs.readFileSync(residualsPath, "utf8"));
   const deferred = scan.items.filter((i) => i.class === "deferrable");
   if (deferred.length > 0 && prior.followUp === undefined) {
-    if (task.featureId === "") {
-      io.err(`residual-settle: ${wbs} deferrals pending but feature_id unknown; re-run: residual-scan settle ${wbs}
-`);
-      return 0;
-    }
-    const args = ["task", "create", `Residuals from ${wbs}`, "--feature", task.featureId, "--skip-ready", "--json"];
+    const args = ["task", "create", `Residuals from ${wbs}`, "--skip-ready", "--json"];
     const created = spur(env, opts.spurBin, args, opts.root);
     let wbsNew = "";
     try {
@@ -448,7 +443,7 @@ function settleMode(opts, env, io) {
       return 0;
     }
     const rows = deferred.map((i) => `- ${i.id} \u2014 ${i.location}: ${i.text}`);
-    const head = `Source task: ${wbs} (feature ${task.featureId}) \u2014 deferred residuals filed by residual-scan settle.`;
+    const head = `Source task: ${wbs}${task.featureId === "" ? "" : ` (feature ${task.featureId})`} \u2014 deferred residuals filed by residual-scan settle (unlinked: a deferral must not hold the completing feature open).`;
     const bgFile = join2(runDir, `${wbs}-residual-background.md`);
     fs.writeFileSync(bgFile, `${[head, "", ...rows].join(`
 `)}

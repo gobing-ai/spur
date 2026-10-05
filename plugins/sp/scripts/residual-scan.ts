@@ -170,13 +170,12 @@ function settleMode(opts: ParsedArgs, env: ScanEnv, io: ScanIo): number {
     if (fs.existsSync(residualsPath)) prior = JSON.parse(fs.readFileSync(residualsPath, 'utf8'));
     const deferred = scan.items.filter((i) => i.class === 'deferrable');
     if (deferred.length > 0 && prior.followUp === undefined) {
-        if (task.featureId === '') {
-            io.err(
-                `residual-settle: ${wbs} deferrals pending but feature_id unknown; re-run: residual-scan settle ${wbs}\n`,
-            );
-            return 0;
-        }
-        const args = ['task', 'create', `Residuals from ${wbs}`, '--feature', task.featureId, '--skip-ready', '--json'];
+        // The follow-up is filed UNLINKED: carrying a feature edge to the feature whose run produced
+        // it made that feature's done-gate fail with `L4.verifying-incomplete-tasks` the moment a
+        // residual was deferred (2026-10-04 session, E72/1086→1087), so a deferral must not be able
+        // to block the completing feature. The source task and its feature stay named in the
+        // Background, which keeps the traceability without the lifecycle coupling.
+        const args = ['task', 'create', `Residuals from ${wbs}`, '--skip-ready', '--json'];
         const created = spur(env, opts.spurBin, args, opts.root);
         let wbsNew = '';
         try {
@@ -191,7 +190,7 @@ function settleMode(opts: ParsedArgs, env: ScanEnv, io: ScanIo): number {
             return 0;
         }
         const rows = deferred.map((i) => `- ${i.id} — ${i.location}: ${i.text}`);
-        const head = `Source task: ${wbs} (feature ${task.featureId}) — deferred residuals filed by residual-scan settle.`;
+        const head = `Source task: ${wbs}${task.featureId === '' ? '' : ` (feature ${task.featureId})`} — deferred residuals filed by residual-scan settle (unlinked: a deferral must not hold the completing feature open).`;
         const bgFile = join(runDir, `${wbs}-residual-background.md`);
         fs.writeFileSync(bgFile, `${[head, '', ...rows].join('\n')}\n`);
         const updArgs = ['task', 'update', wbsNew, '--section', 'Background', '--from-file', bgFile];

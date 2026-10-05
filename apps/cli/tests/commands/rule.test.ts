@@ -10,6 +10,12 @@ import { main } from '../../src/index';
 import type { CommandOutput } from '../../src/output';
 import { createCapturedOutput, createTempProject } from '../helpers';
 
+/**
+ * CLI-spawning / fingerprint tests: `agent doctor` measures ~1.5s on a quiet host and 7-8s while
+ * the agent fleet runs, against bun's 5000ms default — the calibration is recorded here once.
+ */
+const slowTest = (name: string, fn: () => Promise<void> | void): void => void test(name, fn, 30_000);
+
 function nullOutput(): CommandOutput {
     return { write: () => {}, error: () => {} };
 }
@@ -37,7 +43,7 @@ describe('runRuleCommand dispatch', () => {
         expect(exitCode).toBe(1);
     });
 
-    test('list subcommand returns a number', async () => {
+    slowTest('list subcommand returns a number', async () => {
         const exitCode = await main(['rule', 'list'], { output: nullOutput() });
         expect(typeof exitCode).toBe('number');
     });

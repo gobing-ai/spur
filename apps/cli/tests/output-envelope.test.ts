@@ -1,13 +1,42 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import { mkdtempSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getEnvVars, removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
 import { apiErrorSchema, apiSuccessSchema, paginatedResponseSchema } from '@gobing-ai/spur-contracts';
+import { AgentDetector, type DetectedAgent } from '@gobing-ai/ts-ai-runner';
 import { z } from 'zod';
-import { main } from '../src/index';
+import { type MainOptions, main as runMain } from '../src/index';
 import type { CommandOutput } from '../src/output';
 import { envelopeEnabled, toEnvelopeError, toEnvelopeJson, toJson, writeJsonError } from '../src/output';
+
+/** Stable probe state for envelope comparisons; version detection has its own tests. */
+const DETECTED_AGENTS: DetectedAgent[] = [
+    { name: 'claude', installed: true, version: '1.0.0', channels: [], error: null },
+    { name: 'gemini', installed: false, version: null, channels: [], error: 'fixture agent unavailable' },
+];
+
+/** Keep only detection hermetic; CLI parsing, service rendering and envelope selection run normally. */
+async function main(argv: string[], options: MainOptions): Promise<number> {
+    if (argv[0] !== 'agent' || !['list', 'doctor'].includes(argv[1] ?? '')) return runMain(argv, options);
+    const all = spyOn(AgentDetector.prototype, 'detectAll').mockResolvedValue(DETECTED_AGENTS);
+    const one = spyOn(AgentDetector.prototype, 'detectOne').mockImplementation(
+        async (name) =>
+            DETECTED_AGENTS.find((agent) => agent.name === name) ?? {
+                name,
+                installed: false,
+                version: null,
+                channels: [],
+                error: 'fixture agent unavailable',
+            },
+    );
+    try {
+        return await runMain(argv, options);
+    } finally {
+        one.mockRestore();
+        all.mockRestore();
+    }
+}
 
 // ── raw byte-identity (ADR-091 regression guard: the 0688 break class) ──
 
@@ -151,7 +180,7 @@ const ENVELOPE_ENV = 'SPUR_JSON_ENVELOPE';
 /** The four confirmed service-emitting verbs (task 0697 Background table). */
 const SERVICE_VERBS: Array<{ label: string; argv: string[]; assertExit: boolean }> = [
     { label: 'agent list', argv: ['agent', 'list'], assertExit: true },
-    // doctor exits 1 when a tier-1 agent is unusable on the host — the enveloped
+    // doctor exits 1 when a tier-1 fixture agent is unusable — the enveloped
     // document is still a success-shaped payload about agents, so exit is not asserted.
     { label: 'agent doctor', argv: ['agent', 'doctor'], assertExit: false },
     { label: 'rule run', argv: ['rule', 'run'], assertExit: true },
@@ -188,7 +217,8 @@ describe('service-emitting verbs honor --json-envelope end-to-end (0697 AC2)', (
             } finally {
                 removeEnvVar(ENVELOPE_ENV);
             }
-        }, 30000);
+            // Two in-process service verbs per test; each costs 4-8s of CPU under host load.
+        }, 60_000);
     }
 });
 
@@ -238,7 +268,7 @@ describe('agent run honors SPUR_JSON_ENVELOPE end-to-end (0697 F-R1)', () => {
 // The fixture was captured BEFORE any source edit (plan step 1) via the same in-process
 // harness: `rule run --json` / `rule validate --json --kind preset recommended-pre-check`
 // in a fresh temp project. The agent verbs emit host-detected payloads, so a committed
-// byte fixture would be machine-specific; their identity is pinned structurally instead:
+// byte fixture would be machine-specific without the stable detector fixture above; identity is pinned structurally:
 // raw bytes === toJson(enveloped document data), which fails if the conversion changes the
 // payload, its key order, or the serialization settings.
 

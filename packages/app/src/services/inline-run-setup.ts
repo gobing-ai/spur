@@ -60,13 +60,14 @@ import {
     DbWorkflowPersistenceAdapter,
     WorkflowService as EngineWorkflowService,
 } from '@gobing-ai/ts-dual-workflow-engine';
-import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
+import { createNodeFileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import { createWorkflowActionTraceWriter } from '../workflow/action-trace';
 import { DecideActionRunner, DecideOptionsSchema } from '../workflow/actions/decide';
 import { resolveDurableArtifactPath } from '../workflow/actions/run-path';
 import { parseFeatureVerificationReceipt } from '../workflow/feature-verification-receipt';
 import { computeProofInputFingerprint, readProofInputContents } from '../workflow/proof-input-fingerprint';
 import { InvalidWorkflowRunIdError } from '../workflow/run-record';
+import { splitLaunchCommand } from '../workflow/split-launch-command';
 import { isBookkeepingWorkflow, isTerminalReason, TERMINAL_REASONS } from '../workflow/terminal-reason';
 import { assertInventoryIdentity, parseWorkflowInventory } from '../workflow/workflow-inventory';
 import {
@@ -163,6 +164,51 @@ export async function openInlineRunProjectDb(workdir: string): Promise<InlineRun
     mkdirSync(join(url, '..'), { recursive: true });
     const adapter = await createMigratedDb({ url });
     return { adapter, close: () => adapter.close() };
+}
+
+/** Input for {@link readInstalledInventory}. */
+export interface ReadInstalledInventoryInput {
+    /** Workflow definition file (or name) to resolve. */
+    readonly file: string;
+    /** PATH-independent Spur invocation; empty falls back to the caller's checkout entry or a bare `spur`. */
+    readonly spurBin: string;
+    /** Repo-checkout CLI entry the caller resolved from its own plugin layout (the `--spur-bin`-less fallback). */
+    readonly localCli: string;
+    /** Project root the installed CLI resolves layers against. Defaults to the process cwd. */
+    readonly workdir?: string;
+}
+
+/**
+ * Let the selected CLI own config and layer resolution, then revalidate its snapshot in the app
+ * (ADR-113 project→registered→shared). Moved here from `plugins/sp/scripts/inline-run-setup.ts`
+ * (ADR-130 glue budget, task 1070's `--estimated` flag exhausted it): the script keeps only the
+ * paths it derives from its own module URL, and the spawn/envelope logic is app-layer. The spawn
+ * goes through `NodeProcessExecutor`, the sanctioned process boundary for app sources (the
+ * `no-direct-process-spawn` rule forbids `node:child_process`).
+ */
+export async function readInstalledInventory(input: ReadInstalledInventoryInput): Promise<unknown> {
+    const launch = input.spurBin
+        ? splitLaunchCommand(input.spurBin, 'inline-run-setup "spurBin"')
+        : existsSync(input.localCli)
+          ? { command: 'bun', leadingArgs: [input.localCli] }
+          : { command: 'spur', leadingArgs: [] };
+    if ('error' in launch) throw new Error(launch.error);
+    const res = await new NodeProcessExecutor().run({
+        command: launch.command,
+        args: [...launch.leadingArgs, 'workflow', 'show', input.file, '--format', 'todo', '--json'],
+        cwd: input.workdir ?? process.cwd(),
+        forceBuffered: true,
+        rejectOnError: false,
+        timeout: 30_000,
+    });
+    if (res.exitCode !== 0) {
+        const detail = res.stderr.trim() !== '' ? res.stderr.trim() : `exit ${res.exitCode ?? -1}`;
+        throw new Error(`could not resolve the workflow definition with the installed CLI: ${detail}`);
+    }
+    const value: unknown = JSON.parse(res.stdout);
+    // Honor the existing optional JSON envelope without inventing another projection format.
+    if (value && typeof value === 'object' && 'ok' in value && 'data' in value && value.ok === true) return value.data;
+    return value;
 }
 
 /** Input for {@link persistWorktreeRuns}. */
@@ -1135,6 +1181,12 @@ export interface InlineRunTraceInput {
     readonly status: 'done' | 'failed' | 'paused';
     readonly ok: boolean;
     readonly durationMs: number;
+    /**
+     * True when the host driver did not time the action (1070 R1) — for example a duration it
+     * reconstructed after a subagent returned. Stamped into `action_runs.result_json` so the
+     * projection can label the row instead of presenting it as measured.
+     */
+    readonly estimated?: boolean;
 }
 
 /**
@@ -1238,6 +1290,7 @@ export async function runInlineRunTrace(input: InlineRunTraceInput): Promise<num
                       status: input.status,
                       ok: input.ok,
                       durationMs: input.durationMs,
+                      result: { provenance: 'host-reported', estimated: input.estimated === true },
                   })
         ) as Record<string, unknown>;
         if (result.ok !== true && result.failure !== undefined) {
@@ -1310,6 +1363,8 @@ export interface InlineRunActionEntry {
     readonly status: 'done' | 'failed';
     readonly ok: boolean;
     readonly durationMs: number;
+    /** Same host-reported stamp as `--action` (1070 R1/R3); absent means measured. */
+    readonly estimated?: boolean;
 }
 
 /** Input for `runInlineRunTraceBatch` (`--actions-file`, 1007 R5). */
@@ -1319,7 +1374,7 @@ export interface InlineRunTraceBatchInput {
 }
 
 /**
- * Batch trace emission (1007 R5): read a JSON array of `{node,kind,status,ok,durationMs}` rows
+ * Batch trace emission (1007 R5): read a JSON array of `{node,kind,status,ok,durationMs,estimated?}` rows
  * and record one `action_runs` row per entry through the SAME `WorkflowActionTraceWriter` as
  * `--action`. The whole file is parsed and validated BEFORE the database opens, so an
  * unreadable file, invalid JSON, or a malformed row exits 1 with no partial writes. Accepted
@@ -1342,7 +1397,7 @@ export async function runInlineRunTraceBatch(input: InlineRunTraceBatchInput): P
         );
     }
     if (!Array.isArray(rows)) {
-        return batchFailed('actions file must be a JSON array of {node,kind,status,ok,durationMs}');
+        return batchFailed('actions file must be a JSON array of {node,kind,status,ok,durationMs,estimated?}');
     }
     const entries: InlineRunActionEntry[] = [];
     const rowError = (index: number, error: string): string => `actions[${index}]: ${error}`;
@@ -1351,7 +1406,7 @@ export async function runInlineRunTraceBatch(input: InlineRunTraceBatchInput): P
             return batchFailed(rowError(index, 'entry must be a JSON object'));
         }
         const record = row as Record<string, unknown>;
-        const { node, kind, status, ok, durationMs } = record;
+        const { node, kind, status, ok, durationMs, estimated } = record;
         if (typeof node !== 'string' || node.trim() === '') {
             return batchFailed(rowError(index, 'node must be a non-empty string'));
         }
@@ -1365,7 +1420,10 @@ export async function runInlineRunTraceBatch(input: InlineRunTraceBatchInput): P
         if (typeof durationMs !== 'number' || !Number.isFinite(durationMs) || durationMs < 0) {
             return batchFailed(rowError(index, 'durationMs must be a finite non-negative number'));
         }
-        entries.push({ node, kind, status, ok, durationMs });
+        if (estimated !== undefined && typeof estimated !== 'boolean') {
+            return batchFailed(rowError(index, 'estimated must be a boolean'));
+        }
+        entries.push({ node, kind, status, ok, durationMs, ...(estimated === true ? { estimated: true } : {}) });
     }
     let projectDb: InlineRunProjectDb | undefined;
     let recorded = 0;
@@ -1393,6 +1451,7 @@ export async function runInlineRunTraceBatch(input: InlineRunTraceBatchInput): P
                 status: entry.status,
                 ok: entry.ok,
                 durationMs: entry.durationMs,
+                result: { provenance: 'host-reported', estimated: entry.estimated === true },
             })) as Record<string, unknown>;
             if (result.ok === true) {
                 recorded += 1;

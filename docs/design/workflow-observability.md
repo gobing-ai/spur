@@ -3,7 +3,7 @@ kind: design
 title: "Workflow run observability"
 status: implemented
 created_at: 2026-06-25
-updated_at: 2026-10-02
+updated_at: 2026-10-04
 related: [D2, D3, D9, "0109", "0114", "0365", "0597", "0603", "0604", "1064"]
 tags: [system, D2, D9, workflow, observability]
 ---
@@ -208,6 +208,10 @@ interface WorkflowActionAttempt {
     startedAt: string | null;
     completedAt: string | null;
     durationMs: number | null;
+    // 1070 R4: who reported `durationMs` — the inline host session stamps `host-reported` into the
+    // row's `result_json`; engine, legacy and unparseable rows read `unknown` (unlabelled).
+    provenance: 'host-reported' | 'unknown';
+    estimated: boolean;
 }
 
 interface WorkflowTransitionProgress {
@@ -235,6 +239,8 @@ interface WorkflowProgressDiagnostic {
         | 'definition-digest-missing'
         | 'definition-drift'
         | 'orphan-row'
+        | 'orphan-action-row'
+        | 'unvisited-state-row'
         | 'ambiguous-action';
     message: string;
 }
@@ -245,8 +251,8 @@ The projection maps existing sources as follows:
 | Projection field | Persisted/definition source |
 |---|---|
 | workflow, terminal status, launch definition digest | `runs` + merged `runs.metadata_json.definitionDigest` |
-| state visits | resolved definition plus ordered `phase_runs`/transition history |
-| taken edges and current state | ordered `transition_runs` plus run status |
+| state visits | resolved definition plus ordered `phase_runs`/transition history; a run with **no** transition history derives them from its ordered `action_runs` rows (1085) |
+| taken edges and current state | ordered `transition_runs` plus run status; with no transition history, the last derived visit (1085) |
 | action attempts | ordered `action_runs` (`node`, `kind`, attempt id, timing, outcome) |
 | action effect and pending actions | resolved definition plus the composition baseline |
 | artifacts | existing run-linked artifact metadata; path and kind only |
@@ -256,6 +262,29 @@ Definition actions use `<state>:<onEnter|onExit>:<ordinal>` after extensions res
 action rows do not carry that definition key, so the projector matches ordered rows by node/kind
 within a state visit. Zero matches leave the definition action pending; more than one valid mapping
 emits `ambiguous-action` and marks the action `ambiguous`. It never guesses or mutates stored rows.
+
+### Visit derivation for transition-less runs (1085 / E72 R10)
+
+Inline-driven runs write `action_runs` rows and no state or transition rows — the engine's
+`DbWorkflowPersistenceAdapter` is not part of the inline path — so with `transitions: []` the
+recorded rows are the only visit evidence. `deriveInlineStateVisits` groups rows whose `node` names
+a declared state into contiguous same-node runs in recorded order (`ORDER BY action_runs.created_at`);
+each group is one visit, numbered per state, so a re-entered `loopBack` state reads as visit 1 then
+visit 2. A visit maps **its own** rows, so a repeated visit is not a replay of the first. Visits keep
+row order, declared states with no recorded row are appended as `visit: 1, pending` as before, and a
+non-terminal (`running`/`pending`) run's `currentState` is its last derived visit. A terminal
+(`completed`/`failed`/`cancelled`) transition-less run keeps today's null `currentState`.
+
+With transition rows present `transition_runs` stays the visit source and the engine's visits, attempts
+and statuses are unchanged; the diagnostic split below also applies, so a row recorded for a declared
+state the run did not visit is now named (`unvisited-state-row`) where the older projection claimed it
+silently. Unclaimed rows are reported by cause
+(0868 #7, extended by 1085 R4): `orphan-action-row` when the `node` matches no declared state action,
+`unvisited-state-row` when the row's `node` is a declared state the run did not visit. Each unclaimed
+row yields exactly one diagnostic naming it. Same-kind rows beyond the first match of a single
+declared action surface as additional attempts in recorded order (retries stay visible), so no
+recorded row of a visited state is dropped unsurfaced; rows claimed under a multi-same-kind-action
+mapping keep the `ambiguous-action` behaviour above.
 
 ### Definition digest persistence
 

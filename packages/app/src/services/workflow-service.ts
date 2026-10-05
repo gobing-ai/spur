@@ -415,6 +415,11 @@ export interface WorkflowTraceEntry {
     nextAction?: SystemEventAction;
     /** Terminal failure reason (e.g. `no-passing-transition`) when the engine recorded one. */
     failureReason?: string;
+    /**
+     * Authoritative terminal reason from the run row (`done`, `cancelled`, `failed-check`, …).
+     * Distinct from `failureReason`, which comes from run metadata and is absent on most rows.
+     */
+    terminalReason?: string;
     /** Declared version literal or null; absent for pre-0768 rows (unknown identity, 0768 R1). */
     version?: string | null;
     /** Persisted definition digest from run metadata (0768 R1). */
@@ -2448,6 +2453,7 @@ function rowToTraceEntry(
         started_at: string;
         completed_at: string | null;
         metadata_json: string;
+        terminal_reason?: string | null;
     },
     cwd: string,
 ): WorkflowTraceEntry {
@@ -2484,6 +2490,9 @@ function rowToTraceEntry(
         durationMs: durationBetween(row.started_at, row.completed_at),
         outcome: traceOutcome(row.status),
         ...(failureReason !== undefined ? { failureReason } : {}),
+        ...(typeof row.terminal_reason === 'string' && row.terminal_reason !== ''
+            ? { terminalReason: row.terminal_reason }
+            : {}),
         ...(version !== undefined ? { version } : {}),
         ...(definitionDigest !== undefined ? { definitionDigest } : {}),
     };

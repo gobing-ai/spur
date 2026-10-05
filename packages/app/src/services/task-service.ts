@@ -2045,20 +2045,91 @@ export class TaskService {
         for (const dir of dirs) {
             const baseCounter = folderFloors.get(dir) ?? 0;
             if (baseCounter > max) max = baseCounter;
-            try {
-                const entries = await this.ctx.fs.readDir(dir);
-                for (const name of entries) {
-                    const [, digits] = /^(\d{4})_.*\.md$/.exec(name) ?? [];
-                    if (digits) {
-                        const n = parseInt(digits, 10);
-                        if (n > max) max = n;
-                    }
+            max = Math.max(max, await this.folderMax(dir));
+        }
+        // WBS ids are unique per REPOSITORY, not per checkout: two worktrees allocating
+        // independently both returned 1086 on 2026-10-04 and the duplicate only surfaced at merge
+        // time. A sibling tree's ids therefore count toward the local maximum.
+        const siblings = await this.siblingWorktreeRoots();
+        if (siblings !== null) {
+            for (const root of siblings.roots) {
+                if (root === siblings.repoRoot) continue;
+                for (const dir of dirs) {
+                    if (!dir.startsWith(`${siblings.repoRoot}/`)) continue;
+                    max = Math.max(max, await this.folderMax(`${root}${dir.slice(siblings.repoRoot.length)}`));
                 }
-            } catch {
-                /* folder may not exist yet */
             }
         }
         return String(max + 1).padStart(4, '0');
+    }
+
+    /** Highest `NNNN_*.md` WBS id in one folder; 0 when the folder is absent or unreadable. */
+    private async folderMax(dir: string): Promise<number> {
+        let max = 0;
+        try {
+            for (const name of await this.ctx.fs.readDir(dir)) {
+                const [, digits] = /^(\d{4})_.*\.md$/.exec(name) ?? [];
+                if (digits) max = Math.max(max, parseInt(digits, 10));
+            }
+        } catch {
+            /* folder may not exist yet */
+        }
+        return max;
+    }
+
+    /**
+     * The repository root and the roots of every OTHER git worktree sharing it, derived from the
+     * shared `.git` metadata — no process spawn (app sources may not use `node:child_process`, and
+     * the process-executor seam lives in the workflow layer). Best-effort: a directory that is not
+     * a checkout, or unreadable metadata, yields `null` and single-tree behaviour is unchanged.
+     */
+    private async siblingWorktreeRoots(): Promise<{ repoRoot: string; roots: string[] } | null> {
+        let dir = this.ctx.fs.resolve(this.ctx.tasksDir);
+        for (;;) {
+            const gitPath = `${dir}/.git`;
+            // A `.git` FILE only exists in a linked worktree and points at the shared metadata.
+            let gitFile: string | null = null;
+            try {
+                gitFile = await this.ctx.fs.readFile(gitPath);
+            } catch {
+                gitFile = null;
+            }
+            if (gitFile !== null) {
+                const pointer = gitFile.trim().replace(/^gitdir:\s*/, '');
+                const commonDir = pointer.replace(/\/worktrees\/[^/]+\/?$/, '');
+                return { repoRoot: dir, roots: await this.readWorktreeRoots(commonDir) };
+            }
+            // A `.git` DIRECTORY marks the main checkout, whose linked trees live in its metadata.
+            try {
+                await this.ctx.fs.readDir(gitPath);
+                return { repoRoot: dir, roots: await this.readWorktreeRoots(gitPath) };
+            } catch {
+                /* keep walking up */
+            }
+            const parent = dir.replace(/\/[^/]+$/, '');
+            if (parent === dir || dir === '/') return null;
+            dir = parent;
+        }
+    }
+
+    /** Trees registered under `<commonDir>/worktrees/<id>/gitdir`, each naming a tree's `.git`. */
+    private async readWorktreeRoots(commonDir: string): Promise<string[]> {
+        const roots: string[] = [];
+        try {
+            for (const name of await this.ctx.fs.readDir(`${commonDir}/worktrees`)) {
+                try {
+                    const pointer = (await this.ctx.fs.readFile(`${commonDir}/worktrees/${name}/gitdir`))
+                        .trim()
+                        .replace(/^gitdir:\s*/, '');
+                    roots.push(pointer.replace(/\/\.git\/?$/, ''));
+                } catch {
+                    /* skip an unreadable worktree entry */
+                }
+            }
+        } catch {
+            /* no linked worktrees */
+        }
+        return roots;
     }
 
     /**

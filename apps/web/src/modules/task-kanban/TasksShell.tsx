@@ -2,6 +2,7 @@ import { TASK_STATUSES, taskStatusIcon } from '@gobing-ai/spur-domain/schema';
 import type { FormEvent } from 'react';
 import { useEffect, useState } from 'react';
 import { Button, Checkbox, Input, Select } from '@/ui';
+import ModuleIcon from '../../components/ModuleIcon';
 import { api } from '../../lib/rpc-client';
 import { BOOTSTRAP_FOLDER } from './KanbanBoard';
 import NewTaskPanel from './NewTaskPanel';
@@ -98,9 +99,7 @@ export default function TasksShell() {
                     rail; only the board body below stays full-bleed. */}
                 <div className="flex flex-nowrap items-center justify-between gap-4 border-b border-spur-border pb-3">
                     <div className="flex shrink-0 items-center gap-3">
-                        <span className="text-2xl" aria-hidden="true">
-                            📋
-                        </span>
+                        <ModuleIcon id="tasks" size="lg" className="h-7 w-7 text-spur-accent" aria-hidden="true" />
                         <div>
                             <div className="flex items-center gap-2.5">
                                 <h1 className="text-xl font-bold tracking-tight text-spur-text">Tasks</h1>

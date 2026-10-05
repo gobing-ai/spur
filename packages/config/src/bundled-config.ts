@@ -24,30 +24,32 @@ let cachedRoot: string | null | undefined;
  *   - npm package (current): `spur.js` + package-root `config/`
  *   - npm package (legacy): `spur.js` + `spur-cli/config/`
  *
- * Returns `null` when no matching directory is reachable. NOTE: a `bun build
- * --compile` single binary has no sibling filesystem, so this returns `null`
- * there — callers fall back to their built-in defaults. Embedding config into the
- * compiled binary (0117 R6) is not yet implemented; `--asset name=path` is not a
- * valid Bun flag, and asset embedding requires importing the files so Bun bundles
- * them, plus reading them back via `Bun.embeddedFiles` at runtime.
+ * Compiled Bun binaries also resolve a `config/` sibling of `process.execPath`
+ * because their module paths live in a virtual filesystem. Returns `null` when
+ * neither location carries the required directories; assets remain external.
  */
 export function bundledConfigRoot(): string | null {
     if (cachedRoot !== undefined) return cachedRoot;
-    let dir = import.meta.dirname;
+    cachedRoot = resolveBundledConfigRoot(import.meta.dirname, process.execPath);
+    return cachedRoot;
+}
+
+/** Uncached resolver; explicit anchors also support virtual-module packaging tests. */
+export function resolveBundledConfigRoot(moduleDir: string, execPath: string): string | null {
+    let dir = moduleDir;
     while (true) {
         for (const name of BUNDLED_CONFIG_DIRS) {
             const candidate = join(dir, name);
-            if (isBundledConfigDir(candidate)) {
-                cachedRoot = candidate;
-                return cachedRoot;
-            }
+            if (isBundledConfigDir(candidate)) return candidate;
         }
         const parent = dirname(dir);
         if (parent === dir) break;
         dir = parent;
     }
-    cachedRoot = null;
-    return cachedRoot;
+    // Compiled Bun modules live in /$bunfs, which cannot see packaged resources.
+    // Search only beside the executable, never the launch cwd or selected project.
+    const executableConfig = join(dirname(execPath), 'config');
+    return isBundledConfigDir(executableConfig) ? executableConfig : null;
 }
 
 /** Check that a candidate dir exists and contains the expected subdirectories. */

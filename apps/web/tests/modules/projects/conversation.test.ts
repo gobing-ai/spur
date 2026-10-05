@@ -1,5 +1,4 @@
 import { describe, expect, test } from 'bun:test';
-
 import {
     buildRecentMessagesThread,
     buildThread,
@@ -12,157 +11,210 @@ import {
     sameRef,
 } from '../../../src/modules/projects/conversation';
 
-function msg(overrides: Partial<InboxMessage> = {}): InboxMessage {
+function msg(over: Partial<InboxMessage> & { id: string }): InboxMessage {
     return {
-        id: 'm1',
-        fromId: OPERATOR_AGENT_ID,
-        toId: 'lead',
-        body: 'plain body',
+        fromId: null,
+        toId: 'orchestrator-1',
+        body: 'body',
         status: 'queued',
-        createdAt: '2026-09-12T10:00:00.000Z',
+        createdAt: '2026-10-04T00:00:00Z',
         inReplyTo: null,
-        ...overrides,
+        ...over,
     };
 }
 
-describe('request envelope (0841 R3)', () => {
-    test('no refs → plain text, no prefix emitted', () => {
-        expect(encodeRequestEnvelope('hello', [])).toBe('hello');
+describe('conversation entry model (G63)', () => {
+    test('the operator mailbox id satisfies the engine agent-id shape and is not a fleet member', () => {
+        expect(OPERATOR_AGENT_ID).toMatch(/^[a-z][a-z0-9_-]{1,63}$/);
     });
 
-    test('refs travel as a deterministic prefix line + blank line + verbatim text', () => {
-        const out = encodeRequestEnvelope('please run this', [
-            { kind: 'task', wbs: '0844' },
-            { kind: 'feature', id: 'G63' },
+    test('sameRef compares identity within a kind and never across kinds', () => {
+        expect(sameRef({ kind: 'task', wbs: '0042' }, { kind: 'task', wbs: '0042' })).toBe(true);
+        expect(sameRef({ kind: 'task', wbs: '0042' }, { kind: 'task', wbs: '0043' })).toBe(false);
+        expect(sameRef({ kind: 'feature', id: 'E72' }, { kind: 'feature', id: 'E72' })).toBe(true);
+        expect(sameRef({ kind: 'feature', id: 'E72' }, { kind: 'feature', id: 'E71' })).toBe(false);
+        expect(sameRef({ kind: 'task', wbs: '0042' }, { kind: 'feature', id: '0042' })).toBe(false);
+    });
+
+    test('a plain request stays plain text, so spur message sees exactly the operator text', () => {
+        expect(encodeRequestEnvelope('fix the gate', [])).toBe('fix the gate');
+    });
+
+    test('encoding is deterministic: a fixed ref field order, prefix line, blank line, verbatim text', () => {
+        const encoded = encodeRequestEnvelope('please review', [
+            { kind: 'feature', id: 'E72' },
+            { kind: 'task', wbs: '1069' },
         ]);
-        expect(out).toBe(
-            `${REQUEST_ENVELOPE_PREFIX}{"refs":[{"kind":"task","wbs":"0844"},{"kind":"feature","id":"G63"}]}\n\nplease run this`,
+        expect(encoded).toBe(
+            `${REQUEST_ENVELOPE_PREFIX}{"refs":[{"kind":"feature","id":"E72"},{"kind":"task","wbs":"1069"}]}\n\nplease review`,
         );
-    });
-
-    test('round-trip preserves refs and multiline text verbatim', () => {
-        const text = 'line one\nline two\n\nwith a blank line inside';
-        const refs = [{ kind: 'task', wbs: '0841' }] as const;
-        const decoded = decodeRequestEnvelope(encodeRequestEnvelope(text, refs));
-        expect(decoded).toEqual({ text, refs: [{ kind: 'task', wbs: '0841' }] });
-    });
-
-    test('body without the prefix decodes as prose', () => {
-        expect(decodeRequestEnvelope('just words')).toEqual({ text: 'just words', refs: [] });
-    });
-
-    test('truncated or non-JSON prefix line degrades to the WHOLE body as text', () => {
-        const truncated = `${REQUEST_ENVELOPE_PREFIX}{"refs":[{"kind":"task"`;
-        expect(decodeRequestEnvelope(truncated)).toEqual({ text: truncated, refs: [] });
-        const nonJson = `${REQUEST_ENVELOPE_PREFIX}not json at all\n\nbody`;
-        expect(decodeRequestEnvelope(nonJson)).toEqual({ text: nonJson, refs: [] });
-    });
-
-    test('wrong-shape JSON (array, missing refs, non-array refs) degrades to prose', () => {
-        for (const payload of ['[]', '{}', '{"refs":5}', 'null', '"str"']) {
-            const body = `${REQUEST_ENVELOPE_PREFIX}${payload}\n\ntext`;
-            expect(decodeRequestEnvelope(body)).toEqual({ text: body, refs: [] });
-        }
-    });
-
-    test('junk items inside a valid refs array are dropped, valid ones kept', () => {
-        const body = `${REQUEST_ENVELOPE_PREFIX}{"refs":[{"kind":"task","wbs":"0841"},{"kind":"nope"},{"wbs":"x"}]}\n\ntext`;
-        expect(decodeRequestEnvelope(body)).toEqual({ text: 'text', refs: [{ kind: 'task', wbs: '0841' }] });
-    });
-
-    test('prefix line with valid JSON and no blank line yields empty text', () => {
-        const body = `${REQUEST_ENVELOPE_PREFIX}{"refs":[]}`;
-        expect(decodeRequestEnvelope(body)).toEqual({ text: '', refs: [] });
-    });
-});
-
-describe('sameRef / parseInboxMessages (0841)', () => {
-    test('sameRef matches on kind + identity field only', () => {
-        expect(sameRef({ kind: 'task', wbs: '0841' }, { kind: 'task', wbs: '0841' })).toBe(true);
-        expect(sameRef({ kind: 'task', wbs: '0841' }, { kind: 'task', wbs: '0844' })).toBe(false);
-        expect(sameRef({ kind: 'task', wbs: '0841' }, { kind: 'feature', id: '0841' })).toBe(false);
-        expect(sameRef({ kind: 'feature', id: 'G63' }, { kind: 'feature', id: 'G63' })).toBe(true);
-    });
-
-    test('parseInboxMessages keeps well-formed rows and skips malformed ones', () => {
-        const raw = {
-            messages: [
-                msg(),
-                { id: 'bad' },
-                null,
-                { ...msg(), id: 'm2', fromId: 'lead', inReplyTo: 'm1', status: 'injected' },
+        expect(decodeRequestEnvelope(encoded)).toEqual({
+            text: 'please review',
+            refs: [
+                { kind: 'feature', id: 'E72' },
+                { kind: 'task', wbs: '1069' },
             ],
-        };
-        const rows = parseInboxMessages(raw);
-        expect(rows).toHaveLength(2);
-        expect(rows[1]).toEqual({
-            id: 'm2',
-            fromId: 'lead',
-            toId: 'lead',
-            body: 'plain body',
-            status: 'injected',
-            createdAt: '2026-09-12T10:00:00.000Z',
-            inReplyTo: 'm1',
         });
+    });
+
+    test('round trip preserves multi-line text after the envelope', () => {
+        const encoded = encodeRequestEnvelope('line one\nline two', [{ kind: 'task', wbs: '1069' }]);
+        expect(decodeRequestEnvelope(encoded)).toEqual({
+            text: 'line one\nline two',
+            refs: [{ kind: 'task', wbs: '1069' }],
+        });
+    });
+
+    test('a body without the prefix is whole prose with no refs', () => {
+        expect(decodeRequestEnvelope('unrelated traffic')).toEqual({ text: 'unrelated traffic', refs: [] });
+    });
+
+    test('an envelope with no blank line yields empty text instead of dropping the message', () => {
+        expect(decodeRequestEnvelope(`${REQUEST_ENVELOPE_PREFIX}{"refs":[]}`)).toEqual({ text: '', refs: [] });
+    });
+
+    test('every malformed envelope degrades to the whole body as prose', () => {
+        const truncated = `${REQUEST_ENVELOPE_PREFIX}{"refs":[`;
+        expect(decodeRequestEnvelope(truncated)).toEqual({ text: truncated, refs: [] });
+        const scalar = `${REQUEST_ENVELOPE_PREFIX}null\n\nhi`;
+        expect(decodeRequestEnvelope(scalar)).toEqual({ text: scalar, refs: [] });
+        const array = `${REQUEST_ENVELOPE_PREFIX}[]\n\nhi`;
+        expect(decodeRequestEnvelope(array)).toEqual({ text: array, refs: [] });
+        const notArray = `${REQUEST_ENVELOPE_PREFIX}{"refs":"nope"}\n\nhi`;
+        expect(decodeRequestEnvelope(notArray)).toEqual({ text: notArray, refs: [] });
+    });
+
+    test('unusable ref entries are filtered, the usable ones survive', () => {
+        const body = `${REQUEST_ENVELOPE_PREFIX}${JSON.stringify({
+            refs: [
+                { kind: 'task', wbs: '1069' },
+                { kind: 'task' },
+                { kind: 'other', id: 'x' },
+                { kind: 'feature', id: '' },
+                null,
+                { kind: 'feature', id: 'E72' },
+            ],
+        })}\n\nhi`;
+        expect(decodeRequestEnvelope(body)).toEqual({
+            text: 'hi',
+            refs: [
+                { kind: 'task', wbs: '1069' },
+                { kind: 'feature', id: 'E72' },
+            ],
+        });
+    });
+
+    test('parseInboxMessages tolerates every malformed response shape and normalizes optional keys', () => {
+        expect(parseInboxMessages(null)).toEqual([]);
+        expect(parseInboxMessages('nope')).toEqual([]);
         expect(parseInboxMessages({})).toEqual([]);
         expect(parseInboxMessages({ messages: 'nope' })).toEqual([]);
-        expect(parseInboxMessages(null)).toEqual([]);
-    });
-});
 
-describe('buildThread (0841 R1/R6)', () => {
-    test('keeps only operator-sent rows as requests, all operator-inbox rows as responses', () => {
-        const toOrchestrator = [
-            msg({ id: 'r1', body: 'operator request' }),
-            msg({ id: 'x1', fromId: 'other-agent', body: 'orchestrator-internal traffic' }),
-        ];
-        const toOperator = [
-            msg({
-                id: 'p1',
-                fromId: 'lead',
-                toId: OPERATOR_AGENT_ID,
-                body: 'response',
-                inReplyTo: 'r1',
-                createdAt: '2026-09-12T10:00:01.000Z',
-            }),
-        ];
-        const thread = buildThread(toOrchestrator, toOperator);
-        expect(thread.map((e) => e.id)).toEqual(['r1', 'p1']);
-        expect(thread[0]?.kind).toBe('request');
-        expect(thread[1]?.kind).toBe('response');
-    });
-
-    test('sorts ascending by createdAt with id tie-break, so refresh order is stable', () => {
-        const toOrchestrator = [
-            msg({ id: 'b', createdAt: '2026-09-12T10:00:00.000Z' }),
-            msg({ id: 'a', createdAt: '2026-09-12T10:00:00.000Z' }),
-            msg({ id: 'z', createdAt: '2026-09-12T09:00:00.000Z' }),
-        ];
-        const thread = buildThread(toOrchestrator, []);
-        expect(thread.map((e) => e.id)).toEqual(['z', 'a', 'b']);
+        const parsed = parseInboxMessages({
+            messages: [
+                { id: 'm1', toId: 'r1', body: 'b1', status: 'queued', createdAt: 't1' },
+                {
+                    id: 'm2',
+                    fromId: 'agent-1',
+                    toId: 'r1',
+                    body: 'b2',
+                    status: 'delivered',
+                    createdAt: 't2',
+                    inReplyTo: 'm1',
+                },
+                { id: 7, toId: 'r1', body: 'b', status: 'queued', createdAt: 't' },
+                { id: 'm3', toId: 'r1', body: 'b', status: 'queued', createdAt: 12 },
+                'garbage',
+                null,
+            ],
+        });
+        expect(parsed).toEqual([
+            { id: 'm1', fromId: null, toId: 'r1', body: 'b1', status: 'queued', createdAt: 't1', inReplyTo: null },
+            {
+                id: 'm2',
+                fromId: 'agent-1',
+                toId: 'r1',
+                body: 'b2',
+                status: 'delivered',
+                createdAt: 't2',
+                inReplyTo: 'm1',
+            },
+        ]);
     });
 
-    test('decodes envelopes and renders deliveryStatus verbatim; unlinked response is kept', () => {
-        const toOrchestrator = [
-            msg({ id: 'r1', body: encodeRequestEnvelope('do the thing', [{ kind: 'task', wbs: '0844' }]) }),
-        ];
-        const toOperator = [
-            msg({
-                id: 'p1',
-                fromId: 'lead',
-                toId: OPERATOR_AGENT_ID,
-                body: 'done',
-                inReplyTo: 'r1',
-                status: 'injected',
-            }),
-            msg({ id: 'p2', fromId: 'lead', toId: OPERATOR_AGENT_ID, body: 'notice', inReplyTo: 'missing-id' }),
-        ];
-        const thread = buildThread(toOrchestrator, toOperator);
-        expect(thread.find((e) => e.id === 'r1')?.text).toBe('do the thing');
-        expect(thread.find((e) => e.id === 'r1')?.refs).toEqual([{ kind: 'task', wbs: '0844' }]);
-        expect(thread.find((e) => e.id === 'p1')?.deliveryStatus).toBe('injected');
-        expect(thread.find((e) => e.id === 'p2')?.inReplyTo).toBe('missing-id');
-        expect(thread).toHaveLength(3);
+    test('buildThread keeps only operator-authored requests, then sorts both sides ascending by time and id', () => {
+        const thread = buildThread(
+            [
+                msg({ id: 'r2', fromId: OPERATOR_AGENT_ID, body: 'second request', createdAt: '2026-10-04T02:00:00Z' }),
+                msg({ id: 'r1', fromId: OPERATOR_AGENT_ID, body: 'first request', createdAt: '2026-10-04T01:00:00Z' }),
+                msg({
+                    id: 'internal',
+                    fromId: 'agent-9',
+                    body: 'orchestrator-internal',
+                    createdAt: '2026-10-04T00:30:00Z',
+                }),
+            ],
+            [
+                msg({
+                    id: 'a2',
+                    status: 'delivered',
+                    body: 'reply',
+                    createdAt: '2026-10-04T03:00:00Z',
+                    inReplyTo: 'r2',
+                }),
+                msg({ id: 'a1', body: 'earlier reply', createdAt: '2026-10-04T01:30:00Z' }),
+            ],
+        );
+
+        expect(thread.map((e) => e.id)).toEqual(['r1', 'a1', 'r2', 'a2']);
+        expect(thread.every((e) => e.text !== 'orchestrator-internal')).toBe(true);
+        expect(thread.map((e) => e.kind)).toEqual(['request', 'response', 'request', 'response']);
+        expect(thread[3]).toMatchObject({
+            deliveryStatus: 'delivered',
+            inReplyTo: 'r2',
+            toId: 'orchestrator-1',
+        });
+    });
+
+    test('an unlinked response renders at its timestamp instead of being hidden', () => {
+        const thread = buildThread([], [msg({ id: 'a1', body: 'orphan', createdAt: '2026-10-04T03:00:00Z' })]);
+        expect(thread).toHaveLength(1);
+        expect(thread[0]).toMatchObject({ id: 'a1', kind: 'response', inReplyTo: null });
+    });
+
+    test('equal timestamps tie-break by id so refresh order is stable', () => {
+        const at = '2026-10-04T01:00:00Z';
+        const thread = buildThread([], [msg({ id: 'b', createdAt: at }), msg({ id: 'a', createdAt: at })]);
+        expect(thread.map((e) => e.id)).toEqual(['a', 'b']);
+    });
+
+    test('buildRecentMessagesThread classifies operator, terminal and user senders as requests', () => {
+        const thread = buildRecentMessagesThread([
+            msg({ id: 'm1', fromId: 'terminal', createdAt: '2026-10-04T01:00:00Z' }),
+            msg({ id: 'm2', fromId: 'user', createdAt: '2026-10-04T02:00:00Z' }),
+            msg({ id: 'm3', fromId: 'operator', createdAt: '2026-10-04T03:00:00Z' }),
+            msg({ id: 'm4', fromId: OPERATOR_AGENT_ID, createdAt: '2026-10-04T04:00:00Z' }),
+            msg({ id: 'm5', fromId: 'agent-1', createdAt: '2026-10-04T05:00:00Z' }),
+            msg({ id: 'm6', fromId: null, createdAt: '2026-10-04T06:00:00Z' }),
+        ]);
+        expect(thread.map((e) => `${e.id}:${e.kind}`)).toEqual([
+            'm1:request',
+            'm2:request',
+            'm3:request',
+            'm4:request',
+            'm5:response',
+            'm6:response',
+        ]);
+    });
+
+    test('the thread decodes each row envelope into text plus refs, keeping the raw status verbatim', () => {
+        const body = encodeRequestEnvelope('linked ask', [{ kind: 'task', wbs: '1069' }]);
+        const thread = buildRecentMessagesThread([msg({ id: 'm1', fromId: 'operator', body, status: 'held' })]);
+        expect(thread[0]).toMatchObject({
+            text: 'linked ask',
+            refs: [{ kind: 'task', wbs: '1069' }],
+            deliveryStatus: 'held',
+        });
     });
 });
 

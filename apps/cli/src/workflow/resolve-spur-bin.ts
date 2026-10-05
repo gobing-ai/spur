@@ -48,3 +48,18 @@ export function resolveSpurBin(): string {
     const mainModule = typeof Bun !== 'undefined' ? Bun.main : process.argv[1];
     return resolveSpurBinFrom({ execPath: process.execPath, mainModule });
 }
+
+/** Lossless argv for native process launches, including paths containing spaces. */
+export function resolveSpurArgv(
+    launch: SpurBinLaunch = {
+        execPath: process.execPath,
+        mainModule: typeof Bun !== 'undefined' ? Bun.main : process.argv[1],
+    },
+): string[] {
+    const runtime = basename(launch.execPath)
+        .toLowerCase()
+        .replace(/\.exe$/, '');
+    return (runtime === 'bun' || runtime === 'node') && launch.mainModule
+        ? [launch.execPath, launch.mainModule]
+        : [launch.execPath];
+}

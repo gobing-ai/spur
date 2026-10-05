@@ -1,3 +1,7 @@
+import { afterAll, beforeEach } from 'bun:test';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import util from 'node:util';
 import { setLoggerMuted } from '@gobing-ai/ts-infra';
@@ -63,6 +67,29 @@ process.env.SPUR_SKIP_GLOBAL_CONFIG = 'true';
 // `process.cwd()`. The loader honours this only for unpinned calls; fixture tests
 // that pass an explicit `cwd` are unaffected.
 process.env.SPUR_SKIP_PROJECT_CONFIG = 'true';
+
+// Registry hermeticity: `spur serve` upserts its project root into
+// `getProjectsFilePath()` at startup (apps/server/src/serve.ts). Tests that start a
+// server without overriding SPUR_PROJECTS_FILE — the ~38 unisolated `startServer`
+// calls in apps/server/tests/serve.test.ts — appended their throwaway temp roots to
+// the operator's real ~/.config/spur/projects.json. `refreshProjects` cannot purge
+// them afterwards: the directory still exists, because Bun's test runner never fires
+// `process.on('exit')`, so serve.test.ts's own cleanup handler is dead code. Point
+// every test process at a disposable registry instead.
+const testRegistryDir = mkdtempSync(join(tmpdir(), 'spur-test-projects-'));
+const testRegistryFile = join(testRegistryDir, 'projects.json');
+process.env.SPUR_PROJECTS_FILE = testRegistryFile;
+// Re-assert before every test. Suites that own a registry (apps/cli projects,
+// health.test, project-registry.test) call `removeEnvVar('SPUR_PROJECTS_FILE')` in
+// `afterEach` and never restore it; because Bun runs test files in one process, that
+// stranded later files on the operator's real registry. Their own beforeEach runs
+// after this one, so an explicit per-suite path still wins.
+beforeEach(() => {
+    process.env.SPUR_PROJECTS_FILE = testRegistryFile;
+});
+afterAll(() => {
+    rmSync(testRegistryDir, { recursive: true, force: true });
+});
 
 // 0817 residual (buglog 2026-09-09): pin bare `spur` resolution for any test-spawned
 // child to this checkout's source-local CLI. A stale global `spur` on PATH is

@@ -3,6 +3,7 @@ import JobsTab from './JobsTab';
 import RoutingTab from './RoutingTab';
 import SummaryTab from './SummaryTab';
 import SystemEventsTab from './SystemEventsTab';
+import TraceTab from './TraceTab';
 
 /** Time range filter presets supported across observability tabs. */
 export type ObservabilityTimeRange = '30s' | '5m' | '1h' | '4h' | '24h' | '7d' | 'all';
@@ -30,6 +31,9 @@ export interface ObservabilityTabProps {
     onLivenessChange?: (next: ObservabilityLiveness) => void;
     timeRange: ObservabilityTimeRange;
     onNavigate?: (intent: ObservabilityNavIntent) => void;
+    /** Last cross-tab intent, replayed by the shell so a target tab can apply it
+     * (feature E72 R6: the System Events tab filters to the intent's run id). */
+    navIntent?: ObservabilityNavIntent | null;
 }
 
 /**
@@ -47,11 +51,13 @@ export interface ObservabilityTab {
 /** Built-in tabs shipped in the observability module.
  *
  * J92 consolidation: Observability keeps system-wide telemetry: system events,
- * jobs, and routing. Legacy tasks and tool-using tabs removed.
+ * jobs, and routing. Legacy tasks and tool-using tabs removed. E72 adds the
+ * run-centric Trace tab in place of the removed task-centric TasksTab.
  */
 export const OBSERVABILITY_TABS: readonly ObservabilityTab[] = [
     { id: 'summary', label: 'Summary', component: SummaryTab },
     { id: 'system-events', label: 'System Events', component: SystemEventsTab },
     { id: 'jobs', label: 'Jobs', component: JobsTab },
+    { id: 'trace', label: 'Trace', component: TraceTab },
     { id: 'routing', label: 'Routing', component: RoutingTab },
 ];

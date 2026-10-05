@@ -5,7 +5,7 @@ authority: derived
 version: 1.11.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-09-09
+updated_at: 2026-10-04
 read_before: placing work in a phase
 edit_rules: 99 §6.3
 sync: [T5, T6]
@@ -105,5 +105,10 @@ Current seam: architecture §11; historical choices: ADR-012.
 
 ## Deferred / under review
 
-Asset SSOT, remote/multi-tenant execution and desktop/mobile require scope reconfirmation in
+The approved desktop Board shell integrates after the existing server and Board builds. Its
+release exit requires native macOS packaging and startup/shutdown validation; Windows and Linux
+packaging remain separate platform validation work. Scope: [01 PRD](01_PRD.md) §5.4;
+contract: [desktop shell](design/desktop-shell.md).
+
+Asset SSOT, remote/multi-tenant execution and mobile require scope reconfirmation in
 [01 PRD](01_PRD.md). Feature/task records own individual dispositions.

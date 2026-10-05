@@ -593,6 +593,9 @@ const INLINE_RUN_EXPORTS: readonly InlineRunExport[] = [
         'isInlineRunCloseStatus',
         'openInlineRunProjectDb',
         'persistWorktreeRuns',
+        // Task 1070: the installed-CLI inventory walk moved into the app service (ADR-130 glue
+        // budget) — the facade calls it, so both twins must export it.
+        'readInstalledInventory',
         'runDecideForInlineRun',
         // Task 1006 R3: mode runners moved into the app service; the plugin script dispatches them.
         // Task 1007 R5: the driver's per-state batch emission (`--actions-file`).

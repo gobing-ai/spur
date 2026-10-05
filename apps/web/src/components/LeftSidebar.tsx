@@ -3,6 +3,7 @@ import { NavLink } from 'react-router';
 import { Button, Tooltip } from '@/ui';
 import { fetchWithTimeout, resolveApiUrl } from '../lib/rpc-client';
 import { useBoardRegistry } from '../modules/RegistryProvider';
+import ModuleIcon from './ModuleIcon';
 import ProjectSwitcher from './ProjectSwitcher';
 import ThemeToggle from './ThemeToggle';
 
@@ -128,6 +129,13 @@ export default function LeftSidebar({ collapsed, onToggle, onMobileClose }: Prop
                 collapsed ? 'overflow-visible' : 'overflow-hidden'
             }`}
         >
+            {/* Zero height until the Electron preload sets html[data-spur-desktop]. */}
+            <div
+                data-spur-drag-region=""
+                data-testid="desktop-drag-region"
+                className="h-0 w-full shrink-0"
+                aria-hidden="true"
+            />
             {collapsed ? (
                 // Collapsed rail: project icon/switcher at the top of the icon list.
                 <div className="flex items-center justify-center border-b border-spur-border shrink-0 py-2">
@@ -169,7 +177,9 @@ export default function LeftSidebar({ collapsed, onToggle, onMobileClose }: Prop
                                     } ${collapsed ? 'justify-center py-3' : ''}`
                                 }
                             >
-                                <span className="text-lg">{mod.icon}</span>
+                                <span className="flex h-5 w-5 items-center justify-center shrink-0">
+                                    <ModuleIcon id={mod.id} icon={mod.icon} />
+                                </span>
                                 {!collapsed && <span>{label}</span>}
                             </NavLink>
                         );

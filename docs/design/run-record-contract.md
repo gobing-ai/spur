@@ -3,7 +3,7 @@ kind: design
 title: "Run record — two-file contract + the Observability read plane"
 status: implemented
 created_at: 2026-08-18
-updated_at: 2026-10-02
+updated_at: 2026-10-04
 related: [E7, I6, D3, "0598", "0610", "0683", "0709", "0712", "0925", "1051", "1053", "1064"]
 tags: [contract, E7, I6, workflow, observability]
 ---
@@ -55,13 +55,14 @@ The 0594 injected-file-list cost idea is independent instrumentation, not a prer
 
 
 
-## Feature E72 — Trace tab (proposed, 2026-10-03)
+## Feature E72 — Trace tab (implemented, 2026-10-04)
 
-Supersedes the §6.3 deferral and the §7 "new tab" row: run inspection is a run-centric **Trace** tab in Observability (`TraceTab.tsx`, replacing the unregistered `TasksTab.tsx`). The per-task WBS join that §6.3 names stays out of scope.
+Supersedes the §6.3 deferral and the §7 "new tab" row: run inspection is a run-centric **Trace** tab in Observability (`TraceTab.tsx`, replacing the removed `TasksTab.tsx`). The per-task WBS join that §6.3 names stays out of scope.
 
 - **Read plane:** `GET /api/runs/:runId/progress` serves `projectWorkflowProgress`, the single implementation shared with `spur workflow progress`. Unknown runs return 404 `RUN_NOT_FOUND`. The response schema is `workflowProgressProjectionSchema` in `packages/contracts/src/runs.ts`; `runsContract.progress` is contract-only (OpenAPI surface) and the handler is a Hono route registered before the `/api/*` OpenAPI handler. `GET /api/runs` gains optional `workflow` and `since` filters (already bound by `RunDao.traceRows`); a malformed `since` returns 400 `MALFORMED_SINCE`. The run record stays on `GET /api/observability/run-record/:runId`.
-- **Provenance:** inline-driver action rows carry `result_json` `{provenance:'host-reported', estimated}`, and the projection exposes per-attempt `provenance` (`host-reported`|`unknown`) and `estimated`. Engine rows are unchanged and read `unknown`. Inline `durationMs` is host-reported and may be post-hoc, so the Board labels it instead of presenting it as measured.
-- **Links:** run → System Events via the existing `runId` filter; `ObservabilityShell` carries the nav intent's `runId` into `SystemEventsTab` (today it drops it, so existing run links do not filter). Run → History is copyable text (time window + `spur history analyze` command), with no History module change.
+- **Provenance:** inline-driver action rows carry `result_json` `{provenance:'host-reported', estimated}`, and the projection exposes per-attempt `provenance` (`host-reported`|`unknown`) and `estimated`. Engine rows are unchanged and read `unknown`; a row recorded before the stamp (or one whose `result_json` is null/unparseable) also reads `unknown` with `estimated: false`, so a legacy row is never labelled as estimated and never raises a diagnostic. Inline `durationMs` is host-reported and may be post-hoc, so the Board labels it instead of presenting it as measured.
+- **Inline visit derivation (1085):** an inline run writes `action_runs` rows and no transition rows, so with an empty transition history the projection derives the state visits from the run's ordered rows — contiguous same-`node` groups in recorded order, numbered per state, each visit owning the rows recorded for it — and a non-terminal run's `currentState` becomes its last derived visit. Engine runs keep `transition_runs` as the visit source with unchanged visits, attempts and statuses; the same diagnostic split applies there, so a row recorded for a declared-but-unvisited state is named rather than claimed silently. Unclaimed rows are named by cause: `orphan-action-row` (the `node` matches no declared state action) or the added `unvisited-state-row` (a declared state the run did not visit); `workflowProgressProjectionSchema` gains only that code, and the Board still consumes the one projection unchanged. Same-kind rows beyond the first match of a single declared action surface as additional attempts in recorded order, so retry rows of a visited state are never dropped unsurfaced.
+- **Links:** run → System Events via the existing `runId` filter; `ObservabilityShell` now applies the nav intent's `runId` by keeping the last intent and passing it to the active tab, and `SystemEventsTab` seeds `filter.runId`/`debouncedFilter.runId` from it — so existing Summary and Jobs run links filter too (before this, the shell dropped `runId`). Run → History is copyable text (time window + `spur history analyze` command), with no History module change.
 - **Out:** new module, inline run→session linkage, engine timing changes, live follow.
 
 ## 0. Historical 0598 rulings and snapshot
@@ -213,9 +214,9 @@ Every current reader of a `.spur/run/*` artifact, with `path:line`:
 
 `apps/web/src/modules/observability/RoutingTab.tsx:236` reads `/api/observability/routing-summary` (routing aggregate + per-role token totals, tasks 0546/0547/0552). Source is the run/team store, not the token ledger or event plane. **Keep**; it already serves a slice of the operator's Overall view.
 
-### 6.3 TasksTab — **deferred, data gap named, no design**
+### 6.3 TasksTab — **deferred, data gap named, no design** (superseded by Feature E72)
 
-`apps/web/src/modules/observability/TasksTab.tsx:291` reads `/api/runs` (run list + phases/transitions/actions). **Gap:** run rows carry no per-task WBS/AC linkage — a task's section content and verdict live in `.spur/run` + task corpus, not in the `runs` table, so the tab cannot show *what a run did to which task* without a new join the backend does not have. **Deferred.**
+`apps/web/src/modules/observability/TasksTab.tsx:291` reads `/api/runs` (run list + phases/transitions/actions). **Gap:** run rows carry no per-task WBS/AC linkage — a task's section content and verdict live in `.spur/run` + task corpus, not in the `runs` table, so the tab cannot show *what a run did to which task* without a new join the backend does not have. **Deferred.** **Superseded (2026-10-04, task 1071):** the unregistered file was removed and the E72 Trace tab replaces it; the per-task WBS join stays out of scope.
 
 ### 6.4 JobsTab — **deferred, data gap named, no design**
 

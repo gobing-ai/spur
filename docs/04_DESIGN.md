@@ -2,10 +2,10 @@
 doc: 04_DESIGN
 owns: SURFACE — index of non-UI CLI, API, config, schema and boundary contracts
 authority: derived
-version: 1.89.0
+version: 1.90.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
-updated_at: 2026-10-02
+updated_at: 2026-10-04
 read_before: changing a command, flag, env var, or schema
 edit_rules: 99 §6.5
 sync: [T3, T9]
@@ -32,6 +32,7 @@ Root [DESIGN.md](../DESIGN.md) owns visual and interaction design;
 | Downstream Board modules — embedded config, native React contributions and iframe URLs | [downstream-board-modules](design/downstream-board-modules.md) |
 | Data and output contracts | [data-output-contracts](design/data-output-contracts.md) |
 | Server bootstrap and scheduler contracts | [server-contracts](design/server-contracts.md) |
+| Desktop shell — Electron launch, project and binary env, packaging, IPC, title-bar overlay | [desktop-shell](design/desktop-shell.md) |
 | Planning records and lifecycle contracts | [planning-record-contracts](design/planning-record-contracts.md) |
 | Planning workflow and operation contracts | [planning-workflow-contracts](design/planning-workflow-contracts.md) |
 | Observability and HTTP read contracts | [observability-contracts](design/observability-contracts.md) |
@@ -78,7 +79,7 @@ Root [DESIGN.md](../DESIGN.md) owns visual and interaction design;
 | Inter-agent control plane | [inter-agent-control-plane.md](design/inter-agent-control-plane.md) |
 | Historical spine cost/drift measurement — analysis only | [dev-spine-cost-and-drift.md](design/dev-spine-cost-and-drift.md) |
 | Event tracking — System Event 5W1H SSOT | [event-tracking.md](design/event-tracking.md) |
-| E7 run-record contract — implemented (two-file pair, terminal state projection, inline driver setup); Feature E72 Trace tab + run progress route — proposed | [run-record-contract.md](design/run-record-contract.md) |
+| E7 run-record contract — implemented (two-file pair, terminal state projection, inline driver setup); Feature E72 Trace tab + run progress route — implemented (2026-10-04) | [run-record-contract.md](design/run-record-contract.md) |
 | E71 disposable run storage and durable evidence (ADR-131; implemented) | [disposable-run-storage.md](design/disposable-run-storage.md) |
 | Board module-boundary recommendations — **superseded by ADR-116** (the Workspace/Inbox/Teams split is retired; current boundary in [project-switcher.md](design/project-switcher.md)) | [board-module-boundaries.md](design/board-module-boundaries.md) |
 | History Board module — Conversation Analytics & Agent Forensic Plane | [history-board-module.md](design/history-board-module.md) |
@@ -452,3 +453,13 @@ pass (ADR-119). A candidate graph change is shadow-run and promoted-or-deleted
 on measured run history (ADR-076 amendment).
 
 See [contract detail](design/workflow-execution-economy.md).
+
+## Desktop shell
+
+Electron (`apps/desktop`) is a thin shell around the Board. It spawns one child server on
+`127.0.0.1` and loads `/board`. It does not open SQLite. Launch mode, project root, binary
+override, the staged CLI companion for standalone-server history refresh, preload IPC, and the
+Windows/Linux window-controls overlay inset are the contract.
+
+See [contract detail](design/desktop-shell.md).
+

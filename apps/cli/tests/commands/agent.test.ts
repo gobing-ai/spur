@@ -1,7 +1,7 @@
 /**
  * Comprehensive tests for apps/cli/src/commands/agent.ts.
  */
-import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -12,7 +12,7 @@ import {
     type AgentRunDeps,
 } from '@gobing-ai/spur-app';
 import { createMigratedDb, type DbAdapter, InboxMessageDao } from '@gobing-ai/spur-domain';
-import { saveAgentSpec } from '@gobing-ai/ts-ai-runner';
+import { AgentDetector, saveAgentSpec } from '@gobing-ai/ts-ai-runner';
 import {
     resetAgentServerFetchForTesting,
     runAgentLoop,
@@ -23,6 +23,12 @@ import {
 import { type CliContext, createCliContext, resolveAgentRoles } from '../../src/context';
 import { main } from '../../src/index';
 import type { CommandOutput } from '../../src/output';
+
+/**
+ * CLI-spawning / fingerprint tests: `agent doctor` measures ~1.5s on a quiet host and 7-8s while
+ * the agent fleet runs, against bun's 5000ms default — the calibration is recorded here once.
+ */
+const slowTest = (name: string, fn: () => Promise<void> | void): void => void test(name, fn, 30_000);
 
 function captureOutput(): CommandOutput & { stdout: string[]; stderr: string[] } {
     const stdout: string[] = [];
@@ -52,15 +58,21 @@ describe('agent command (main)', () => {
         expect(exitCode).toBe(1);
     });
 
-    test(
-        'list subcommand returns a number',
-        async () => {
-            const output = captureOutput();
-            const exitCode = await main(['agent', 'list'], { output });
-            expect(typeof exitCode).toBe('number');
-        },
-        { timeout: 15000 },
-    );
+    slowTest('list renders detected agent state through the CLI JSON action', async () => {
+        // Installation probes have separate detector coverage. This command
+        // fixture must not depend on every coding agent installed on the host.
+        const agents = [{ name: 'claude' as const, installed: true, version: '1.0.0', channels: [], error: null }];
+        const detect = spyOn(AgentDetector.prototype, 'detectAll').mockResolvedValue(agents);
+        const output = captureOutput();
+        try {
+            const exitCode = await main(['agent', 'list', '--json'], { output });
+            expect(exitCode).toBe(0);
+            expect(JSON.parse(output.stdout.join(''))).toEqual({ agents });
+            expect(detect).toHaveBeenCalledTimes(1);
+        } finally {
+            detect.mockRestore();
+        }
+    });
 
     test('run subcommand with no prompt → exit 1', async () => {
         const output = captureOutput();
@@ -206,7 +218,7 @@ describe('agent list --specs', () => {
 });
 
 describe('agent doctor', () => {
-    test('doctor command invokes doctor on AgentService with args', async () => {
+    slowTest('doctor command invokes doctor on AgentService with args', async () => {
         const output = captureOutput();
         const exitCode = await main(['agent', 'doctor', 'claude-code', '--json'], {
             output,
@@ -307,7 +319,7 @@ describe('member session rendering (0897)', () => {
         expect(parsed.specs.find((sp) => sp.id === 'worker')?.session).toBeUndefined();
     });
 
-    test('status renders live status and session per spec; unreachable server reports stopped', async () => {
+    slowTest('status renders live status and session per spec; unreachable server reports stopped', async () => {
         await seedSpecs();
         stubProcessesFeed();
         const output = captureOutput();

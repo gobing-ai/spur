@@ -127,7 +127,7 @@ features:
 # (~/.config/spur/config.yaml agent.roles/executors); pin `executor:` to override.
 agent:
   fleet:
-    enabled: true
+    enabled: false
     # rest = no autonomous dispatch (drive work with `--agent fleet`);
     # gtd = auto-dispatch todo tasks tagged `fleet:auto`, by priority.
     strategy: gtd

@@ -143,9 +143,15 @@ function fixtureAppSource(behavior: DelegateBehavior, markerFile: string): strin
               ? "    throw new Error('fixture thrown failure');"
               : "    return { ok: true, attached: false, runId: input.runId, workflowName: 'fixture', definitionDigest: 'sha256:' + 'a'.repeat(64), workflowVersion: null, resolvedPath: 'fixture', layer: 'project', workdir: input.workdir, status: 'running' };";
     return `import { appendFileSync } from 'node:fs';
-import { writeInlineRunOutcome as writeOutcomeImpl } from ${appService};
+import { readInstalledInventory as readInventoryImpl, writeInlineRunOutcome as writeOutcomeImpl } from ${appService};
 
 let closed = false;
+
+// 1070: the installed-CLI inventory walk moved into the app service, so the stub delegates to the
+// production implementation — the fake CLI (and its canary body) stays on the real code path.
+export async function readInstalledInventory(input: { file: string; spurBin: string; localCli: string }) {
+    return readInventoryImpl(input);
+}
 
 export async function openInlineRunProjectDb(_workdir: string) {
     appendFileSync(${marker}, 'open\\n');

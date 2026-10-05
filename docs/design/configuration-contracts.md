@@ -3,7 +3,7 @@ kind: design
 title: "Configuration and asset contracts"
 status: implemented
 created_at: 2026-09-09
-updated_at: 2026-10-02
+updated_at: 2026-10-04
 related: ["0857", "0858", "0861", "0890"]
 tags: [contract, config]
 ---
@@ -180,9 +180,10 @@ through one owner; callers do not need a separate regeneration pass.
 evaluator) + a generic `example.yaml` preset for its own tests. Spur owns its presets and workflows
 here. The bare `recommended` preset is removed; `recommended-pre-check` is the default (BREAKING, ADR-015).
 
-**`--compile` caveat.** The compiled binary (`dist/cli/spur`) cannot read a sibling package `config/`;
-it relies on the `~/.config/spur` seed. The published global install (`spur.js` + package-root
-`config/`) reads the bundled tree directly and is the primary path.
+**Compiled binary assets.** When a compiled Bun module's virtual path cannot find the bundled
+tree, `bundledConfigRoot()` tries `dirname(process.execPath)/config`. A binary distributed alone
+still has no config assets; desktop staging ships the generated tree beside the server and CLI
+companion, together with the CLI manifest and schemas for package schema references. Discovery never uses the launch cwd or selected project as a bundled-asset fallback.
 
 No symlinks participate in install or init — config propagates by copy-and-resolve only.
 

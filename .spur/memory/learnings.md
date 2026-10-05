@@ -4713,3 +4713,362 @@ Target artifact written to [.spur/run/d9511f50-a9f7-47b7-b74d-a0d7cb7c490b-wrapu
 ### Gotchas
 - **ADR scope confusion:** ADR-091 governs `--json` contract envelopes, not human-mode error hint strings or line counts.
 - **`createRun` vs `workflow.run.started`:** In `ts-dual-workflow-engine`, `RunLifecycle.run` delegates row creation to `persistence.createRun` as its first step; `ObservableWorkflowAdapter` emits `workflow.run.started` only after `createRun` resolves, making that event the authoritative signal of row commitment.
+Confidence verification added: **HIGH** for the repair and doc-sync claims, with the evidence table and named limits appended to the artifact at `/Users/robin/xprojects/spur-new-runall-e72-4191/.spur/run/be6a04e9-b951-434f-90e0-1d69f38ec6c8-wrapup-learnings.md`.
+
+Why HIGH, not MEDIUM: every finding was detected mechanically and every repair is a state/date correction (no new semantics), each re-checked by a re-runnable command — `git diff --numstat` (8 lines across the 4 owning docs only), `packages/contracts/src/runs.ts` fields matching the documented `provenance`/`estimated`, route registrations matching the documented table, unchanged CLI verb set, no anchor consumers of the edited heading, and `spur rule run --json` clean. Why not over-claimed: it is a focused §7.1/§7.3 check, not a repo-wide audit; E72's feature transition and the 1071 advisories remain unrepaired by design.
+
+# Wrap-up learnings — batch 1069–1071 (feature E72, Observability Trace tab)
+
+Source: `spur task show` for 1069/1070/1071, the batch commits (`dbc95f3db`, `2907a57ae`,
+`0263e94a0`, `ff11e243b`, `a8a317075`, `69b0619f2`), and the wrap `sp:doc-evolve` pass.
+Tasks and feature corpus were read-only throughout; all corpus writes stayed CLI-gated.
+
+## 2026-10-04 — 1069 (feature E72) — Serve the run progress projection and run list filters
+
+### Conventions
+- One projection, two transports: an HTTP route that serves an existing app projection calls the
+  same function with the same context the CLI uses (`projectWorkflowProgress(runId, { db: await ctx.getDb(), projectRoot: ctx.cwd })`). No second projection path and no new service method — this is the default for "expose what the CLI already computes".
+- A Hono-served route that must appear in generated OpenAPI is a protocol-level `orpc` **contract-only** `oc.route` (`runsContract.progress` in `packages/contracts/src/runs.ts`); contract paths omit `/api` because `apps/server/src/openapi.ts` sets `servers: /api`, and the handler registers before the `/api/*` OpenAPI handler.
+- Degenerate input is rejected at the route before the service is called (malformed `since` → 400 `MALFORMED_SINCE`), mirroring the established `MALFORMED_CURSOR` shape rather than inventing a new error convention.
+- Before adding SQL or a column for a filter, read the DAO: `RunDao.traceRows` already bound `workflow` (`workflow_name = ?1`) and `since` (`started_at >= ?3`); the task only plumbed the values through — no DAO, SQL, or schema change.
+
+### Patterns
+- Diagnostic-to-status mapping must be **exact, not "diagnostics exist"**: only an `orphan-row` diagnostic maps to 404 `RUN_NOT_FOUND`; `definition-unavailable` and every other non-empty projection stays 200.
+- Test the non-degenerate branch positively. The first 404 test only asserted the 404 path, so a regression to `diagnostics.length > 0` would still pass while 404ing real runs; the fix commit added a case locking `definition-unavailable` to 200.
+
+### Gotchas
+- T3 satellite sync is easy to miss on a new route: the first commit shipped the route but `docs/design/observability-contracts.md`'s run-store table lacked the `workflow`/`since` filters, `MALFORMED_SINCE`, and the progress route. Review caught it (`dbc95f3db`); treat "new route/filter/error code" as an automatic satellite row diff.
+
+## 2026-10-04 — 1070 (feature E72) — Stamp inline action provenance and project it
+
+### Errors fixed
+- **ADR-130 glue budget broke the pre-check, not the suite:** adding `--estimated` pushed `plugins/sp/scripts/inline-run-setup.ts` to 265 lines, past `GLUE_BUDGET_LINES = 250` enforced by `sp-script-placement`. The gate failed before any test ran. Fix: `readInstalledInventory` (which spawns the selected CLI for `workflow show --format todo --json` and unwraps the optional envelope) is not argv glue — it moved to `packages/app/src/services/inline-run-setup.ts`, taking the plugin-layout `localCli` fallback as an input. Script back to 244 lines; same precedent as task 1006 R3.
+- **Unsactioned spawn:** the moved walk initially spawned directly; it was corrected to go through the `NodeProcessExecutor` seam (`ff11e243b`), which also keeps `--file` a single argv element.
+
+### Conventions
+- Extend an existing seam before adding a column: the provenance stamp rides `ActionTraceBoundary.result` (`action-trace.ts`) into `action_runs.result_json` via `saveActionFinalize(..., boundary.result, boundary.redactor)`. No writer, schema, engine, or migration change — "no new column" was a stated requirement and held.
+- A moved app-service export must be registered in `INLINE_RUN_EXPORTS` in `scripts/commands/bundle-plugin-lib.ts`, because the facade↔twin parity test pins every `app.<name>` call site and both twins must export it.
+- Generated plugin twins are never hand-edited: `inline-run-setup.mjs` comes from `bun run build:scripts` (`build:plugin-lib` + `superskill script convert sp inline-run-setup.ts`); `script-contract-check` rule 1 re-converts the `.ts` and byte-diffs the twin.
+- Batch action writes stay all-or-nothing: every row's types (including `estimated` must be boolean) are validated before the first `recordAction`.
+
+### Patterns
+- Never-throwing provenance reader: `readProvenance(result_json)` returns `unknown`/`estimated: false` for null, unparseable JSON, non-`host-reported`, and non-`true` blobs, and pushes no diagnostic. Absent stamp means "no `provenance === 'host-reported'` key", not "null `result_json`" — engine rows and pre-stamp rows are unlabelled, never mislabelled as measured.
+- Plug the derived field in at the single attempts build site so the projection has one spread point (`...readProvenance(matchingRow.result_json)`).
+- Redaction compatibility is a design input: `defaultActionRedactor` only rewrites `data.stdout`/`data.stderr` for `shell` kind, so the `{provenance, estimated}` record survives byte-exact.
+
+### Gotchas
+- **Plugin argv parsing is positional and greedy:** in `inline-run-setup.ts` only `--fingerprint/--action/--close/--decide/--persist-out` are booleans; any other flag consumes the next argv token as its value. A new boolean flag must join the boolean branch or it silently swallows the following argument.
+- Gate a flag tightly and refuse the wrong mode: `--estimated` is valid only with `--action` (exit 2 with usage otherwise), so it can never reach the fingerprint/setup paths.
+- Blast radius wider than the change map (advisory, accepted): `runInlineRunDecide` records through `runInlineRunTrace({ close: false, ... })`, so `--decide` rows also gained the stamp. The label is truthful (the app runner measures the duration) but no decide-row test pins the payload.
+- Pre-existing mode-mixing looseness inherited by the new flag (advisory): `--estimated --action --fingerprint --task-file <f>` exits 0 and silently discards the flag; the same invocation without `--estimated` gives the identical digest. Not a regression, but the `(!action || close)` guard has the same hole.
+
+## 2026-10-04 — 1071 (feature E72) — Build the Observability Trace tab
+
+### Errors fixed
+- **Dead surface replaced, not accumulated:** `TasksTab.tsx` (903 lines, unregistered since `df9b03b68`) was deleted and its run parsers, detail panel, and `RunRecordSection` moved into the new `TraceTab.tsx`; its tests and the `components.test.tsx` block went with it.
+- **Shell silently dropped the nav intent:** `ObservabilityShell.handleNavigate` only called `setActiveId(intent.tab)`, discarding `runId`/`eventName`, so the pre-existing Summary and Jobs run links never filtered. Keeping the last intent in state and passing it to the active tab (cleared on a manual tab click) fixed Trace, Summary, and Jobs links in one change.
+
+### Conventions
+- Update the test that pins a registry's exact contents when the registry changes: `tabs.test.ts` asserted `['summary','system-events','jobs','routing']` and became `[...,'trace','routing']`.
+- Reuse the shared projection schema on the client (`workflowProgressProjectionSchema.safeParse`) instead of writing a second parser; distinguish 404 ("Run not found") from parse failure ("progress response failed schema validation").
+- Wrong-source advisories stay advisories: the deleted tab's per-WBS `/api/runs/by-wbs` fan-out was intentionally not carried forward; the per-task WBS join remains out of scope per the E72 satellite.
+
+### Patterns
+- Seeded-filter vs mount fetch race: `SystemEventsTab` seeds `filter.runId`/`debouncedFilter.runId` from the nav intent in an effect, and its `fetchIdRef` stale guard stops the mount-time unfiltered response from overwriting the filtered one.
+- Honest live-evidence disclosure: transitions were fixture-only (no run in the DB projected any), the `estimated` badge branch was test-only (no estimated row existed), paging was component-only (3 runs, no >50 dataset), and clipboard copy was not live-verifiable. Each limit is named in Testing rather than implied as covered.
+- Browser verification ran against `spur self serve` on this repo's DB with screenshots under `.spur/run/1071-browser/`.
+
+### Gotchas
+- Cross-tab coupling (advisory): importing `formatDuration`/`CopyValueButton` from the sibling `SystemEventsTab.tsx` makes one tab depend on another for helpers that own no System Events concept; leaf modules (`observability/format.ts`, `CopyValueButton.tsx`) would remove the edge, and `ObservabilityFilters.tsx` is the in-tree precedent.
+- `loadMore` is neither joined to the first-page `AbortController` nor keyed to the filter identity, so a filter or time-range change during an in-flight cursor fetch can append superseded rows and republish a stale `nextCursor` (self-heals on the next filter change; same shape as the pre-existing `SystemEventsTab` pager).
+- Accessibility: the row toggle exposes `aria-expanded` but no `aria-controls`/region link to the detail it expands.
+- Shell-wide overlay occlusion (pre-existing, not this diff): `GlobalAgentBar` (`fixed bottom-4 z-30`) overlaps the detail's last row at short viewports; the fix belongs to the layout shell.
+- Doc drift caught in review and left to wrap: promoting the satellite to "implemented" while `docs/04_DESIGN.md:81` still said "proposed" put two owners one line apart. The wrap `sp:doc-evolve` pass owns that refresh.
+
+## 2026-10-04 — wrap `sp:doc-evolve` (batch 1069–1071)
+
+### Conventions
+- Repair the conflicting projection, not the authority: `docs/design/run-record-contract.md` already recorded E72 as implemented (2026-10-04) and the route payloads were documented, so the only stale statement was the `docs/04_DESIGN.md` index row ("proposed") — repaired there, with the §4.3 minor version bump (1.89.0 → 1.90.0) and `updated_at` refresh.
+- Preserve historical evidence while correcting a stale fact: `run-record-contract.md` §6.3 (the 0598 TasksTab disposition) keeps its original text and gains a marked "**Superseded (2026-10-04, task 1071)**" note instead of being rewritten.
+- Refresh `updated_at` on satellites whose content changed in the batch (`run-record-contract`, `cli-contracts`, `observability-contracts` all read `2026-10-02` while edited on `2026-10-04`). Contract-verify treats a lagging date as a metadata finding even when the body is correct.
+
+### Patterns
+- Zero-finding claims need commands: 00_ADR and 03_ARCHITECTURE were left untouched because no batch commit added a noun/verb or a boundary — ADR-130 already places Spur logic in `packages/app` behind glue scripts (the 1070 move enforces it), ADR-070 already owns the projection, and 03 §21 documents mechanism without exact shapes. `spur rule run --json` returned 50 rules / 0 findings on the repaired tree.
+
+### Gotchas
+- Feature state is tool-owned even when it looks stale: E72 is still `[active]` in the generated index with all three tasks `done`. Closing/transitioning it is a wrap/feature-tool action, never a raw edit — `sp:doc-evolve` reported it instead of touching feature corpus.
+- Task files 1069/1070/1071 were already dirty from the pipeline on entry; the wrap diff was scoped to `docs/04_DESIGN.md` and `docs/design/` and left the task records alone.
+
+## Verification — confidence level
+
+**Confidence: HIGH** (drift repair and doc-sync claims for batch 1069–1071).
+
+Basis — each claim is backed by a re-runnable command whose output is reproduced below:
+
+| Claim | Evidence command | Result |
+|-------|------------------|--------|
+| Repair is bounded to the four owning docs | `git diff --numstat -- docs/04_DESIGN.md docs/design/` | `3/3`, `1/1`, `1/1`, `3/3` — 8 lines, 4 files; no other path touched |
+| Corpus writes stayed CLI-gated | `git diff --numstat -- docs/tasks5/` | only the three pre-existing pipeline dirty files; no wrap edit |
+| Index state corrected, no residual "proposed" | `rg -n "E72.*proposed\|proposed.*E72" docs/04_DESIGN.md docs/design/ docs/features/INDEX.md` | no matches |
+| Documented fields match the wire schema | `sed -n '1,30p' packages/contracts/src/runs.ts` | `workflowActionAttemptSchema` declares `provenance: z.enum(['host-reported','unknown'])` and `estimated: z.boolean()` — same two fields `docs/design/cli-contracts.md` and `run-record-contract.md` name |
+| Documented routes match the handler | `rg -n "\.get\(" apps/server/src/modules/runs/index.ts` | `/api/runs`, `/api/runs/by-wbs/:wbs`, `/api/runs/:runId/progress`, `/api/runs/:runId` all present and all documented |
+| No new public noun/verb (T1/T3 gate) | `rg -n "\.command\('" apps/cli/src/commands/workflow.ts` | verb set unchanged (validate/run/continue/clean/cancel/list/show/trace/progress) |
+| Edited heading has no anchor consumers | `rg -n "run-record-contract\.md#\|#63-tasksab"` | no references |
+| Constraint gate clean on the repaired tree | `spur rule run --json` | `ruleCount: 50, findings: []` |
+| Frontmatter still matches constitution §4.1 | `rg -n '^authority:' docs/{00,03,04}*.md` | `authoritative` (00), `derived` (03, 04) as required |
+| Link target resolves | `test -f docs/design/run-record-contract.md` | OK |
+
+Why not MEDIUM: the findings were detected mechanically (git diff vs satellite text, schema vs doc field list, route table vs handler registration) and each repair is a state/date correction with no new prose or semantics — there is no judgment call left unverified. Why not over-claiming a broader result: this is a **focused** check under §7.1/§7.3, not a repository-wide audit.
+
+Named limits (do not read this HIGH as covering them):
+
+- E72 remains `[active]` in the tool-owned `docs/features/INDEX.md`; the feature transition is a wrap/feature-tool action and was **reported, not repaired**.
+- The 1071 advisories are open and untouched by wrap: `loadMore` cursor/filter race, missing `aria-controls`, cross-tab `SystemEventsTab` imports, and the shell-level `GlobalAgentBar` overlay occlusion.
+- No live/browser re-run of the Trace tab this pass; the tab's behavior rests on the task's recorded evidence (136 web tests, screenshots under `.spur/run/1071-browser/`).
+- `docs/01_PRD.md`, `02_ROADMAP.md`, `05_FEATURES.md`, root `DESIGN.md` and `AGENTS.md` were not edited because no fact they own changed; that is an in-scope non-change, not an audited-clean claim.
+
+### Addendum — second `sp:doc-evolve` pass (single remaining defect repaired)
+
+- **Sweep every path in the batch's changed-doc set, not just the ones you edited.** The first pass refreshed `updated_at` on three satellites it had touched but left `docs/design/workflow-observability.md` at `2026-10-02` while its content had already changed on `2026-10-04` (`8294c326f`, the D5 `WorkflowActionAttempt` provenance block). Repaired here (`updated_at` → `2026-10-04`); no body change needed — the body already matched the interface.
+- Detection that finds it: pair each satellite's `updated_at` with `git log -1 --format=%cs -- <file>` over the whole batch diff path list (`git diff --numstat`), not only the files the wrap itself edits. A lagging date is a §4.3 metadata finding even when the body is correct.
+- Re-verified after the repair: all four batch satellites now read `2026-10-04` against a `2026-10-04` last content commit; `spur rule run --json` → `ruleCount: 50, findings: []`; docs diff bounded to `docs/04_DESIGN.md` + `docs/design/` (5 files / 9 lines), task and feature corpus untouched.
+Doc-evolve wrap pass complete for batch 1069/1070/1071 (feature E72).
+
+**Repairs (constitution §7.2 / §4.3):**
+- `docs/04_DESIGN.md:81` — index row `proposed` → `implemented (2026-10-04)`; §4.3 version 1.89.0 → 1.90.0, `updated_at` → 2026-10-04 *(applied by the first pass, verified)*
+- `docs/design/run-record-contract.md` §6.3 — marked superseded instead of rewritten; date refreshed
+- `docs/design/observability-contracts.md`, `docs/design/cli-contracts.md` — dates refreshed (bodies already in sync)
+- `docs/design/workflow-observability.md:6` — **`updated_at: 2026-10-02` → `2026-10-04`** (this pass; content changed in `8294c326f` but the date was missed)
+- `docs/00_ADR.md` / `docs/03_ARCHITECTURE.md` — zero findings: no new noun/verb or boundary; ADR-005 (contracts seam), ADR-070 (projection), ADR-130 (glue) already own the batch
+
+**Verification:** all 4 batch satellites show `2026-10-04` against a `2026-10-04` content commit; docs diff bounded to 5 files / 9 lines; `spur rule run --json` → 50 rules, 0 findings; task/feature corpus untouched. Artifact written to `.spur/run/638e808f-e3af-4bed-9d7d-fefcecbe35c7-wrapup-learnings.md`; the same lessons were deduplicated into `.spur/memory/learnings.md` (§8) with one addendum for the missed satellite date.
+
+# Wrap-up learnings — batch 1069–1071 (feature E72, Observability Trace tab)
+
+Source: `spur task show` for 1069/1070/1071, the batch commits (`dbc95f3db`, `2907a57ae`,
+`0263e94a0`, `ff11e243b`, `a8a317075`, `69b0619f2`, `8294c326f`, `c68baae18`), and the wrap
+`sp:doc-evolve` pass over `docs/00_ADR.md`, `docs/03_ARCHITECTURE.md`, `docs/04_DESIGN.md` and
+`docs/design/*`. Tasks and feature corpus were read-only throughout; all corpus writes stayed
+CLI-gated.
+
+## 2026-10-04 — 1069 (feature E72) — Serve the run progress projection and run list filters
+
+### Conventions
+- One projection, two transports: an HTTP route that serves an existing app projection calls the
+  same function with the same context the CLI uses
+  (`projectWorkflowProgress(runId, { db: await ctx.getDb(), projectRoot: ctx.cwd })`). No second
+  projection path and no new service method — the default for "expose what the CLI already computes".
+- A Hono-served route that must appear in generated OpenAPI is a **contract-only** `oc.route`
+  (`runsContract.progress` in `packages/contracts/src/runs.ts`); contract paths omit `/api` because
+  `apps/server/src/openapi.ts` sets `servers: /api`, and the handler registers before the `/api/*`
+  OpenAPI handler.
+- Degenerate input is rejected at the route before the service is called (malformed `since` → 400
+  `MALFORMED_SINCE`), mirroring the established `MALFORMED_CURSOR` shape rather than inventing a
+  new error convention.
+- Before adding SQL or a column for a filter, read the DAO: `RunDao.traceRows` already bound
+  `workflow` (`workflow_name = ?1`) and `since` (`started_at >= ?3`); the task only plumbed the
+  values through — no DAO, SQL, or schema change.
+
+### Patterns
+- Diagnostic-to-status mapping must be **exact, not "diagnostics exist"**: only an `orphan-row`
+  diagnostic maps to 404 `RUN_NOT_FOUND`; `definition-unavailable` and every other non-empty
+  projection stays 200.
+- Test the non-degenerate branch positively. The first 404 test only asserted the 404 path, so a
+  regression to `diagnostics.length > 0` would still pass while 404ing real runs; the fix commit
+  added a case locking `definition-unavailable` to 200.
+
+### Gotchas
+- T3 satellite sync is easy to miss on a new route: the first commit shipped the route but
+  `docs/design/observability-contracts.md`'s run-store table lacked the `workflow`/`since` filters,
+  `MALFORMED_SINCE`, and the progress route. Review caught it (`dbc95f3db`); treat "new
+  route/filter/error code" as an automatic satellite row diff.
+
+## 2026-10-04 — 1070 (feature E72) — Stamp inline action provenance and project it
+
+### Errors fixed
+- **ADR-130 glue budget broke the pre-check, not the suite:** adding `--estimated` pushed
+  `plugins/sp/scripts/inline-run-setup.ts` to 265 lines, past `GLUE_BUDGET_LINES = 250` enforced by
+  `sp-script-placement`. The gate failed before any test ran. Fix: `readInstalledInventory` (which
+  spawns the selected CLI for `workflow show --format todo --json` and unwraps the optional
+  envelope) is not argv glue — it moved to `packages/app/src/services/inline-run-setup.ts`, taking
+  the plugin-layout `localCli` fallback as an input. Script back to 244 lines; same precedent as
+  task 1006 R3.
+- **Unsanctioned spawn:** the moved walk initially spawned directly; it was corrected to go through
+  the `NodeProcessExecutor` seam (`ff11e243b`), which also keeps `--file` a single argv element.
+
+### Conventions
+- Extend an existing seam before adding a column: the provenance stamp rides
+  `ActionTraceBoundary.result` (`action-trace.ts`) into `action_runs.result_json` via
+  `saveActionFinalize(..., boundary.result, boundary.redactor)`. No writer, schema, engine, or
+  migration change — "no new column" was a stated requirement and held.
+- A moved app-service export must be registered in `INLINE_RUN_EXPORTS` in
+  `scripts/commands/bundle-plugin-lib.ts`, because the facade↔twin parity test pins every
+  `app.<name>` call site and both twins must export it.
+- Generated plugin twins are never hand-edited: `inline-run-setup.mjs` comes from
+  `bun run build:scripts` (`build:plugin-lib` + `superskill script convert sp
+  inline-run-setup.ts`); `script-contract-check` rule 1 re-converts the `.ts` and byte-diffs the twin.
+- Batch action writes stay all-or-nothing: every row's types (including `estimated` must be boolean)
+  are validated before the first `recordAction`.
+
+### Patterns
+- Never-throwing provenance reader: `readProvenance(result_json)` returns `unknown`/`estimated:
+  false` for null, unparseable JSON, non-`host-reported`, and non-`true` blobs, and pushes no
+  diagnostic. Absent stamp means "no `provenance === 'host-reported'` key", not "null
+  `result_json`" — engine rows and pre-stamp rows are unlabelled, never mislabelled as measured.
+- Plug the derived field in at the single attempts build site so the projection has one spread point
+  (`...readProvenance(matchingRow.result_json)`).
+- Redaction compatibility is a design input: `defaultActionRedactor` only rewrites
+  `data.stdout`/`data.stderr` for `shell` kind, so the `{provenance, estimated}` record survives
+  byte-exact.
+
+### Gotchas
+- **Plugin argv parsing is positional and greedy:** in `inline-run-setup.ts` only
+  `--fingerprint/--action/--close/--decide/--persist-out` are booleans; any other flag consumes the
+  next argv token as its value. A new boolean flag must join the boolean branch or it silently
+  swallows the following argument.
+- Gate a flag tightly and refuse the wrong mode: `--estimated` is valid only with `--action` (exit 2
+  with usage otherwise), so it can never reach the fingerprint/setup paths.
+- Blast radius wider than the change map (advisory, accepted): `runInlineRunDecide` records through
+  `runInlineRunTrace({ close: false, ... })`, so `--decide` rows also gained the stamp. The label is
+  truthful (the app runner measures the duration) but no decide-row test pins the payload.
+- Pre-existing mode-mixing looseness inherited by the new flag (advisory):
+  `--estimated --action --fingerprint --task-file <f>` exits 0 and silently discards the flag; the
+  same invocation without `--estimated` gives the identical digest. Not a regression, but the
+  `(!action || close)` guard has the same hole.
+- A satellite the batch already edited can still lag its date: `docs/design/workflow-observability.md`
+  gained the D5 `provenance`/`estimated` fields in `8294c326f` (2026-10-04) but kept
+  `updated_at: 2026-10-02` until the second wrap pass.
+
+## 2026-10-04 — 1071 (feature E72) — Build the Observability Trace tab
+
+### Errors fixed
+- **Dead surface replaced, not accumulated:** `TasksTab.tsx` (903 lines, unregistered since
+  `df9b03b68`) was deleted and its run parsers, detail panel, and `RunRecordSection` moved into the
+  new `TraceTab.tsx`; its tests and the `components.test.tsx` block went with it.
+- **Shell silently dropped the nav intent:** `ObservabilityShell.handleNavigate` only called
+  `setActiveId(intent.tab)`, discarding `runId`/`eventName`, so the pre-existing Summary and Jobs run
+  links never filtered. Keeping the last intent in state and passing it to the active tab (cleared on
+  a manual tab click) fixed Trace, Summary, and Jobs links in one change.
+
+### Conventions
+- Update the test that pins a registry's exact contents when the registry changes: `tabs.test.ts`
+  asserted `['summary','system-events','jobs','routing']` and became `[...,'trace','routing']`.
+- Reuse the shared projection schema on the client (`workflowProgressProjectionSchema.safeParse`)
+  instead of writing a second parser; distinguish 404 ("Run not found") from parse failure ("progress
+  response failed schema validation").
+- Wrong-source advisories stay advisories: the deleted tab's per-WBS `/api/runs/by-wbs` fan-out was
+  intentionally not carried forward; the per-task WBS join remains out of scope per the E72 satellite.
+- Root `DESIGN.md` was correctly left untouched (task 1071 Plan step 6): the tab reuses existing
+  tokens/components and introduces no shared UI pattern; §6.9 updates that owner only when shared UI
+  rules change.
+
+### Patterns
+- Seeded-filter vs mount fetch race: `SystemEventsTab` seeds `filter.runId`/`debouncedFilter.runId`
+  from the nav intent in an effect, and its `fetchIdRef` stale guard stops the mount-time unfiltered
+  response from overwriting the filtered one.
+- Honest live-evidence disclosure: transitions were fixture-only (no run in the DB projected any),
+  the `estimated` badge branch was test-only (no estimated row existed), paging was component-only
+  (3 runs, no >50 dataset), and clipboard copy was not live-verifiable. Each limit is named in
+  Testing rather than implied as covered.
+- Browser verification ran against `spur self serve` on this repo's DB with screenshots under
+  `.spur/run/1071-browser/`.
+
+### Gotchas
+- Cross-tab coupling (advisory): importing `formatDuration`/`CopyValueButton` from the sibling
+  `SystemEventsTab.tsx` makes one tab depend on another for helpers that own no System Events concept;
+  leaf modules (`observability/format.ts`, `CopyValueButton.tsx`) would remove the edge, and
+  `ObservabilityFilters.tsx` is the in-tree precedent.
+- `loadMore` is neither joined to the first-page `AbortController` nor keyed to the filter identity,
+  so a filter or time-range change during an in-flight cursor fetch can append superseded rows and
+  republish a stale `nextCursor` (self-heals on the next filter change; same shape as the pre-existing
+  `SystemEventsTab` pager).
+- Accessibility: the row toggle exposes `aria-expanded` but no `aria-controls`/region link to the
+  detail it expands.
+- Shell-wide overlay occlusion (pre-existing, not this diff): `GlobalAgentBar` (`fixed bottom-4
+  z-30`) overlaps the detail's last row at short viewports; the fix belongs to the layout shell.
+- Doc drift caught in review and repaired at wrap: promoting the satellite to "implemented" while
+  `docs/04_DESIGN.md:81` still said "proposed" put two owners one line apart.
+
+## 2026-10-04 — wrap `sp:doc-evolve` (batch 1069–1071)
+
+### Conventions
+- Repair the conflicting projection, not the authority: `docs/design/run-record-contract.md` already
+  recorded E72 as implemented (2026-10-04) and the route payloads were documented, so the only stale
+  statement was the `docs/04_DESIGN.md` index row ("proposed") — repaired there, with the §4.3 minor
+  version bump (1.89.0 → 1.90.0) and `updated_at` refresh.
+- Preserve historical evidence while correcting a stale fact: `run-record-contract.md` §6.3 (the
+  0598 TasksTab disposition) keeps its original text and gains a marked "**Superseded (2026-10-04,
+  task 1071)**" note instead of being rewritten.
+- Refresh `updated_at` on every satellite whose content changed in the batch. Contract-verify treats
+  a lagging date as a metadata finding even when the body is correct.
+
+### Patterns
+- Zero-finding claims need commands: 00_ADR and 03_ARCHITECTURE were left untouched because no batch
+  commit added a noun/verb or a boundary — ADR-005 already owns the oRPC/contracts type seam,
+  ADR-070 already owns the progress projection, ADR-130 already places Spur logic in `packages/app`
+  behind glue scripts (the 1070 move enforces it), and 03 §21 documents mechanism without exact
+  shapes. Detection: `rg -n "\.command\('" apps/cli/src/commands/` (verb set unchanged),
+  `rg -n "^## ADR-.*(oRPC|Contract|OpenAPI|Transport|Thin)" docs/00_ADR.md`,
+  `git log -1 --format=%cs -- <doc>` per satellite.
+
+### Gotchas
+- Feature state is tool-owned even when it looks stale: E72 remains `[active]` in the generated index
+  with all three tasks `done`. Closing/transitioning it is a wrap/feature-tool action, never a raw
+  edit — `sp:doc-evolve` reported it instead of touching feature corpus.
+- Task files 1069/1070/1071 were already dirty from the pipeline on entry; the wrap diff scoped
+  itself to `docs/04_DESIGN.md` and `docs/design/` and left the task records alone.
+
+### Second pass — single remaining defect repaired
+- **Sweep every path in the batch's changed-doc set, not just the ones you edited.** The first pass
+  refreshed three satellites it had touched but left `docs/design/workflow-observability.md` at
+  `2026-10-02` while its content had already changed on `2026-10-04` (`8294c326f`, the D5
+  `WorkflowActionAttempt` provenance block). Repaired here (`updated_at` → `2026-10-04`); no body
+  change needed — the body already matched
+  `packages/app/src/workflow/progress-projection.ts:79-99`.
+- Detection: pair each satellite's `updated_at` with `git log -1 --format=%cs -- <file>` over the
+  whole batch diff path list (`git diff --numstat`), not only the files the wrap itself edits.
+- Re-verified after the repair: all four batch satellites read `2026-10-04` against a `2026-10-04`
+  last content commit; `spur rule run --json` → `ruleCount: 50, findings: []`; the docs diff is
+  bounded to `docs/04_DESIGN.md` + `docs/design/` (5 files / 9 lines), task and feature corpus
+  untouched.
+
+## Verification — confidence level
+
+**Confidence: HIGH** (drift repair and doc-sync claims for batch 1069–1071).
+
+Basis — each claim is backed by a re-runnable command whose result is reproduced below:
+
+| Claim | Evidence command | Result |
+|-------|------------------|--------|
+| Repair is bounded to the owning docs | `git diff --numstat -- docs/` | `docs/04_DESIGN.md` 3/3; `cli-contracts.md` 1/1; `observability-contracts.md` 1/1; `run-record-contract.md` 3/3; `workflow-observability.md` 1/1 — 5 files, 9 lines; no other doc path touched |
+| Corpus writes stayed CLI-gated | `git diff --numstat -- docs/tasks5/ docs/features/` | only the three pre-existing pipeline-dirty task files and the tool-owned feature record/index; no wrap edit |
+| Index state corrected, no residual "proposed" | `rg -n "E72.*proposed\|proposed.*E72" docs/04_DESIGN.md docs/design/ docs/features/INDEX.md` | no matches |
+| Documented fields match the wire schema | `rg -n "provenance\|estimated" packages/contracts/src/runs.ts docs/design/cli-contracts.md docs/design/run-record-contract.md docs/design/workflow-observability.md` | the schema declares `provenance: z.enum(['host-reported','unknown'])` + `estimated: z.boolean()`, and all three docs name the same two fields |
+| Documented routes match the handler | `rg -n "\.get\(" apps/server/src/modules/runs/index.ts` | `/api/runs`, `/api/runs/by-wbs/:wbs`, `/api/runs/:runId/progress`, `/api/runs/:runId` all present and all documented in `observability-contracts.md` |
+| No new public noun/verb (T1/T3 gate) | `rg -n "\.command\('" apps/cli/src/commands/ \| wc -l` | 81, unchanged |
+| No new architectural decision (T1) | `rg -n "^## ADR-.*(oRPC\|Contract\|OpenAPI\|Transport\|Thin)" docs/00_ADR.md` | ADR-005, ADR-091, ADR-118, ADR-130 — existing owners cover the batch; no append warranted |
+| Satellite dates match their content commits | per-file `rg -m1 '^updated_at:'` vs `git log -1 --format=%cs -- <file>` | 00 `2026-10-01`/`2026-10-01`, 03 `2026-10-02`/`2026-10-02`, 04 `2026-10-04`/`2026-10-03`, all four satellites `2026-10-04`/`2026-10-04` — no lagging date |
+| Index pointer resolves | `rg -n "run-record-contract.md" docs/04_DESIGN.md` | row 81 points at the existing `docs/design/run-record-contract.md` |
+| Constraint gate clean on the repaired tree | `spur rule run --json` | `ruleCount: 50, findings: []` |
+
+Why not MEDIUM: every finding was detected mechanically (git diff vs satellite text, schema vs doc
+field list, route table vs handler registration, date vs content commit) and each repair is a
+state/date correction with no new prose or semantics — no judgment call is left unverified. Why not
+over-claiming a broader result: this is a **focused** check under §7.1/§7.3, not a repository-wide
+audit.
+
+Named limits (do not read this HIGH as covering them):
+
+- E72 remains `[active]` in the tool-owned `docs/features/INDEX.md`; the feature transition is a
+  wrap/feature-tool action and was **reported, not repaired**.
+- The 1071 advisories are open and untouched by wrap: `loadMore` cursor/filter race, missing
+  `aria-controls`, cross-tab `SystemEventsTab` imports, and the shell-level `GlobalAgentBar` overlay
+  occlusion.
+- No live/browser re-run of the Trace tab this pass; the tab's behavior rests on the task's recorded
+  evidence (136 web tests, screenshots under `.spur/run/1071-browser/`).
+- `docs/01_PRD.md`, `02_ROADMAP.md`, `05_FEATURES.md`, root `DESIGN.md` and `AGENTS.md` were not
+  edited because no fact they own changed; that is an in-scope non-change, not an audited-clean
+  claim.
+- `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md` was verified to carry the
+  `--estimated` contract (lines 345, 348-350, 635-656) but is a plugin reference, outside the
+  `docs/` doc-map, so its own metadata was not swept.

@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: ["wayfinder-map"]
 created_at: "2026-07-21T20:46:29.481Z"
-updated_at: "2026-07-30T21:10:15.480Z"
+updated_at: "2026-10-05T03:25:42.519Z"
 ---
 
 # P: workflow run observability — enriched step lines, FSM transitions, async follow
@@ -229,7 +229,12 @@ independent of every display decision.
 The CLI has no task-rename verb (`spur task` exposes no `delete` or `rename`), so the title was left rather
 than direct-writing the corpus. Read the scope from `### Background`.
 ## History
+
 - 2026-07-25T19:33:21.180Z backlog → active (system)
 - 2026-07-25T19:33:21.408Z active → verifying (system)
 - 2026-07-28T00:31:37.075Z moved P → D1 (system)
 - 2026-07-30T20:03:20.156Z verifying → done (system)
+- 2026-10-05T02:58:04.466Z done → active (system)
+- 2026-10-05T03:14:10.531Z active → verifying (system)
+- 2026-10-05T03:25:42.519Z verifying → done (system)
+
