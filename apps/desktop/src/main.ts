@@ -7,7 +7,7 @@ import { DesktopStartupAborted, type RunningDesktopServer, startDesktopServer } 
 import { createMainWindow, registerWindowIpc } from './window';
 
 // Thin shell only. Do not import the server, bun:sqlite, or startServer.
-// The child process is the sole SQLite owner (<projectRoot>/.spur/spur.db).
+// The project server owns SQLite; shared servers remain managed by their launcher.
 
 const preloadPath = fileURLToPath(new URL('./preload.cjs', import.meta.url));
 

@@ -91,7 +91,7 @@ function nonempty(value: string | undefined): string | undefined {
 
 /**
  * Resolve dev vs prod, the checkout that contains `apps/cli`, and the project
- * whose `.spur/spur.db` the child server owns.
+ * whose `.spur/spur.db` the selected project server owns.
  */
 export function resolveLayout(input: LayoutInput, fs: LayoutFs = nodeLayoutFs()): DesktopLayout {
     const mode = resolveDesktopMode(input.env.SPUR_DESKTOP_MODE, input.isPackaged);

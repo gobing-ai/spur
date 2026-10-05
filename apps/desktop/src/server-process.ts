@@ -1,6 +1,8 @@
-import { type ChildProcess, spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { type ChildProcess, execFile, spawn } from 'node:child_process';
+import { existsSync, readdirSync, realpathSync } from 'node:fs';
 import { createServer } from 'node:net';
+import { join } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import { getEnvVars } from '@gobing-ai/spur-config';
 import type { DesktopServerControlMessage } from '@gobing-ai/spur-contracts';
 import { DESKTOP_HOST, resolveServeLaunch, type ServeLaunch, type ServeLaunchKind } from './launch';
@@ -216,11 +218,12 @@ export async function stopChild(child: SpawnedChild, graceMs: number): Promise<v
     });
 }
 
-/** Running child server. `stop` is idempotent and kills the process on quit. */
+/** Shared servers remain alive on quit; owned children have idempotent cleanup. */
 export interface RunningDesktopServer {
     port: number;
     url: string;
-    kind: ServeLaunchKind;
+    kind: ServeLaunchKind | 'shared';
+    ownership: 'owned' | 'shared';
     pid: number | undefined;
     stop: () => Promise<void>;
 }
@@ -246,6 +249,8 @@ export interface StartDesktopServerOptions {
     launchCwd?: string;
     /** Report unexpected exits after the health handshake. Normal stop does not notify. */
     onUnexpectedExit?: (error: Error) => void;
+    /** Native listener inspection; injectable for lifecycle tests. */
+    inspectOwner?: SharedServerOptions['inspect'];
 }
 
 function formatSpawnFailure(error: Error, launch: ServeLaunch): string {
@@ -257,11 +262,28 @@ function formatSpawnFailure(error: Error, launch: ServeLaunch): string {
 }
 
 /**
- * Spawn the Spur server and wait until `/api/health` reports ok.
- * The Electron process never opens the database; the child does.
+ * Reuse a verified live project server, or spawn and wait for an owned child.
+ * The Electron process never opens the database; the selected server does.
  */
 export async function startDesktopServer(options: StartDesktopServerOptions): Promise<RunningDesktopServer> {
     if (options.signal?.aborted) throw new DesktopStartupAborted();
+    const attach = async (): Promise<RunningDesktopServer | undefined> => {
+        try {
+            const shared = await findSharedServer({
+                projectRoot: options.layout.projectRoot,
+                timeoutMs: options.healthTimeoutMs ?? 60_000,
+                signal: options.signal,
+                fetchImpl: options.fetchImpl,
+                inspect: options.inspectOwner,
+            });
+            return shared ? { ...shared, kind: 'shared', ownership: 'shared', stop: async () => {} } : undefined;
+        } catch (error) {
+            if (options.signal?.aborted) throw new DesktopStartupAborted();
+            throw error;
+        }
+    };
+    const shared = await attach();
+    if (shared) return shared;
     const port = options.port ?? (await findFreePort());
     if (options.signal?.aborted) throw new DesktopStartupAborted();
     if (!Number.isInteger(port) || port < 1 || port > 65_535) {
@@ -342,6 +364,8 @@ export async function startDesktopServer(options: StartDesktopServerOptions): Pr
         await stopSpawned(startupGrace);
         options.signal?.removeEventListener('abort', onAbort);
         if (options.signal?.aborted || error instanceof DesktopStartupAborted) throw new DesktopStartupAborted();
+        const concurrent = await attach();
+        if (concurrent) return concurrent;
         throw error;
     }
     options.signal?.removeEventListener('abort', onAbort);
@@ -356,7 +380,174 @@ export async function startDesktopServer(options: StartDesktopServerOptions): Pr
         port,
         url: `http://${DESKTOP_HOST}:${port}`,
         kind: launch.kind,
+        ownership: 'owned',
         pid: child.pid,
         stop: () => stopSpawned(options.killGraceMs ?? 5_000),
     };
+}
+
+/** Translate native listener output into literal loopback origins only. */
+export function listenerOrigins(output: string, pid: number, platform: NodeJS.Platform): string[] {
+    let family: string | undefined;
+    const addresses =
+        platform === 'win32'
+            ? output.split(/\r?\n/).flatMap((line) => {
+                  const fields = line.trim().split(/\s+/);
+                  return fields[0] === 'TCP' && fields[3] === 'LISTENING' && fields[4] === String(pid)
+                      ? [fields[1] ?? '']
+                      : [];
+              })
+            : output.split(/\r?\n/).flatMap((line) => {
+                  if (line.startsWith('f') || line.startsWith('p')) family = undefined;
+                  if (line.startsWith('t')) family = line.slice(1);
+                  if (!line.startsWith('n')) return [];
+                  const address = line.slice(1);
+                  if (!address.startsWith('*:')) return [address];
+                  if (family === 'IPv4') return [address.replace('*', '0.0.0.0')];
+                  if (family === 'IPv6') return [address.replace('*', '[::]')];
+                  return []; // Unknown wildcard family cannot identify the owner's loopback listener.
+              });
+    const origins = new Set<string>();
+    for (const address of addresses) {
+        const match = address.match(/^(127\.0\.0\.1|\[::1\]|0\.0\.0\.0|\[::\]):(\d+)$/);
+        if (!match) continue;
+        const port = Number(match[2]);
+        if (!Number.isInteger(port) || port < 1 || port > 65535) continue;
+        const host = match[1] === '127.0.0.1' || match[1] === '0.0.0.0' ? '127.0.0.1' : '[::1]';
+        origins.add(`http://${host}:${port}`);
+    }
+    return [...origins];
+}
+
+/** Read OS listeners without a shell, registry writes or signals to the owner. */
+export async function inspectOwnerListeners(pid: number, signal?: AbortSignal): Promise<string[]> {
+    const platform = process.platform;
+    const command = platform === 'win32' ? 'netstat' : platform === 'darwin' ? '/usr/sbin/lsof' : 'lsof';
+    const args =
+        platform === 'win32'
+            ? ['-ano', '-p', 'tcp']
+            : ['-nP', '-a', '-p', String(pid), '-iTCP', '-sTCP:LISTEN', '-F', 'ftn'];
+    const output = await new Promise<string>((resolve, reject) => {
+        execFile(
+            command,
+            args,
+            { timeout: 2000, maxBuffer: 1024 * 1024, signal, windowsHide: true },
+            (error, stdout, stderr) => {
+                // lsof reports no matching sockets as exit 1 with empty output.
+                if (error && !(platform !== 'win32' && error.code === 1 && !stdout && !stderr)) reject(error);
+                else resolve(stdout);
+            },
+        );
+    });
+    return listenerOrigins(output, pid, platform);
+}
+
+function ownerMarker(directory: string): string | undefined {
+    let entries: string[];
+    try {
+        entries = readdirSync(directory);
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+        throw error;
+    }
+    const marker = entries.length === 1 ? entries[0] : undefined;
+    if (!marker || !/^\d+-[a-f0-9-]+$/.test(marker)) {
+        throw new Error(`Project server ownership claim is incomplete at ${directory}`);
+    }
+    const pid = Number(marker.split('-')[0]);
+    if (!Number.isSafeInteger(pid) || pid < 1) throw new Error('Invalid project server owner pid');
+    try {
+        process.kill(pid, 0);
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ESRCH') return undefined;
+        throw error;
+    }
+    return marker;
+}
+
+/** Read-only owner discovery inputs within the desktop Node adapter. */
+interface SharedServerOptions {
+    projectRoot: string;
+    timeoutMs: number;
+    signal?: AbortSignal;
+    fetchImpl?: (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+    inspect?: (pid: number, signal?: AbortSignal) => Promise<string[]>;
+}
+
+/** Attach only after verifying service, canonical project and the unchanged live claim. */
+export async function findSharedServer(
+    options: SharedServerOptions,
+): Promise<{ url: string; port: number; pid: number } | undefined> {
+    const directory = join(options.projectRoot, '.spur', 'server-owner.lock');
+    const marker = ownerMarker(directory);
+    if (!marker) return undefined;
+    const canonicalRoot = realpathSync(options.projectRoot);
+    const pid = Number(marker.split('-')[0]);
+    const deadline = Date.now() + options.timeoutMs;
+    const fetchImpl = options.fetchImpl ?? fetch;
+    do {
+        options.signal?.throwIfAborted();
+        const origins = await (options.inspect ?? inspectOwnerListeners)(pid, options.signal);
+        options.signal?.throwIfAborted();
+        for (const origin of origins) {
+            const url = new URL(origin);
+            if (
+                url.protocol !== 'http:' ||
+                !['127.0.0.1', '[::1]'].includes(url.hostname) ||
+                url.username ||
+                url.password ||
+                url.pathname !== '/' ||
+                url.search ||
+                url.hash
+            ) {
+                throw new Error('Owner inspection returned a non-loopback origin');
+            }
+            const probe = new AbortController();
+            const abort = (): void => probe.abort();
+            const timer = setTimeout(abort, Math.min(2000, Math.max(1, deadline - Date.now())));
+            options.signal?.addEventListener('abort', abort, { once: true });
+            try {
+                const init: RequestInit = { signal: probe.signal, redirect: 'error' };
+                const health = await fetchImpl(`${origin}/api/health`, init);
+                if (!health.ok) continue;
+                const body: unknown = await health.json();
+                if (
+                    typeof body !== 'object' ||
+                    body === null ||
+                    !('status' in body) ||
+                    body.status !== 'ok' ||
+                    !('service' in body) ||
+                    body.service !== 'spur'
+                )
+                    continue;
+                const project = await fetchImpl(`${origin}/api/project`, init);
+                if (!project.ok) continue;
+                const identity: unknown = await project.json();
+                if (
+                    typeof identity !== 'object' ||
+                    identity === null ||
+                    !('path' in identity) ||
+                    identity.path !== canonicalRoot
+                )
+                    continue;
+                options.signal?.throwIfAborted();
+                if (ownerMarker(directory) !== marker)
+                    throw new Error('Project server ownership changed during attachment');
+                return { url: origin, port: Number(url.port || 80), pid };
+            } catch (error) {
+                options.signal?.throwIfAborted();
+                if (ownerMarker(directory) !== marker) throw error;
+                // Refused, redirected or mismatched endpoints never become a trusted renderer origin.
+            } finally {
+                clearTimeout(timer);
+                options.signal?.removeEventListener('abort', abort);
+            }
+        }
+        if (ownerMarker(directory) !== marker) throw new Error('Project server ownership changed during attachment');
+        if (Date.now() >= deadline) break;
+        await delay(Math.min(200, Math.max(1, deadline - Date.now())), undefined, { signal: options.signal });
+    } while (Date.now() <= deadline);
+    throw new Error(
+        `Could not verify the existing Spur server for ${canonicalRoot} (pid ${pid}). The server was left running.`,
+    );
 }
