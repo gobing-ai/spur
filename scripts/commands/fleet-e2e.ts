@@ -69,14 +69,17 @@ const PLANNER_LOCAL_ID = 'planner-1';
 const CODER_LOCAL_ID = 'coder-1';
 const TASK_TITLE = 'E2E inbox-only fleet task';
 const HANG_TAG = 'e2e:hang';
-const LOOP_POLL_MS = 500;
+const LOOP_POLL_MS = 1_000; // wake backstop: a prompt tick keeps dispatch latency far below the poll budgets below (G71 1077 R3).
 
 /** Bounded waits. Generous enough for a cold `bun run` CLI start, never a wall-clock assertion. */
 const BOUNDS = {
     loops: 90_000,
     dispatch: 120_000,
     done: 120_000,
-    reply: 60_000,
+    // The kill leg waits for a SECOND dispatch cycle after the done-task's turn has settled, so it
+    // gets a wider budget than a single tick under load (G71 1077 R3).
+    hang: 240_000,
+    reply: 180_000,
     kill: 90_000,
     resume: 60_000,
     guest: 60_000,
@@ -272,10 +275,13 @@ if (argv.includes('--help')) {
     process.exit(0);
 }
 
-const cli = process.env.SPUR_E2E_CLI ?? '';
-const project = process.env.SPUR_E2E_PROJECT ?? process.cwd();
-const logPath = process.env.SPUR_E2E_STUB_LOG ?? project + '/stub-prompts.jsonl';
-const specId = process.env.SPUR_SPEC_ID ?? '';
+const GATEWAY = ${JSON.stringify(join(REPO_ROOT, 'packages/config/src/index.ts'))};
+const { getEnvVars } = await import(GATEWAY);
+const env = getEnvVars();
+const cli = env.SPUR_E2E_CLI ?? '';
+const project = env.SPUR_E2E_PROJECT ?? process.cwd();
+const logPath = env.SPUR_E2E_STUB_LOG ?? project + '/stub-prompts.jsonl';
+const specId = env.SPUR_SPEC_ID ?? '';
 
 let stdinText = '';
 if (!process.stdin.isTTY) {
@@ -288,9 +294,10 @@ if (!process.stdin.isTTY) {
 }
 
 const DIRECTIVE = /\\/sp:dev-run\\s+\\d{4}(?:\\s+--?[A-Za-z][\\w-]*)*/g;
-// Directives are read from the JOINED prompt: a per-source scan missed argv-split prompts, so a resumed turn looked fresh and the stub hung on it (G71 1077 R3).
-const prompt = [...argv, stdinText].join(' ');
-const directives = prompt.match(DIRECTIVE) ?? [];
+// Directives are read from EVERY input shape (each argv slot, the stdin frame, and the joined text) because the shim may carry the prompt whole in one slot, split across slots, or on stdin (G71 1077 R3).
+const sources = [...argv, stdinText, [...argv, stdinText].join(' ')];
+const prompt = sources[sources.length - 1] ?? '';
+const directives = sources.flatMap((source) => source.match(DIRECTIVE) ?? []);
 // The hang gate asks the semantic question directly: this turn IS a resume.
 const resumedTurn = prompt.includes('--continue');
 
@@ -326,11 +333,13 @@ function readJson(text) {
     return JSON.parse(text.slice(start));
 }
 
-const dispatch = /\\/sp:dev-run\\s+(\\d{4})/.exec(prompt);
+const dispatch = /\\/sp:dev-run\\s+(\\d{4})/.exec(sources.join(' '));
 if (dispatch !== null) {
     const wbs = dispatch[1];
     const directive = directives.find((entry) => entry.includes(wbs)) ?? '';
     const resumed = resumedTurn || directive.includes('--continue');
+    // Gate diagnosis: one line per dispatch-branch entry, naming what the gate will read.
+    appendFileSync(logPath + '.gate', JSON.stringify({ at: new Date().toISOString(), spec: specId, wbs, resumedTurn, resumed, tags, directives }) + '\\n');
     const show = cliRun(['task', 'show', wbs, '--json']);
     const task = readJson(show.stdout);
     const manifest = task.frontmatter ?? (task.task && task.task.frontmatter) ?? {};
@@ -617,10 +626,7 @@ export async function runFleetE2e(args: string[]): Promise<number> {
                 scratch,
                 { input: design },
             );
-            cliOk(
-                ['task', 'update', state.wbs, '--add-tag', 'fleet:auto', '--add-tag', HANG_TAG, '--no-lifecycle'],
-                scratch,
-            );
+            cliOk(['task', 'update', state.wbs, '--add-tag', 'fleet:auto', '--no-lifecycle'], scratch);
             cliOk(['task', 'update', state.wbs, 'todo', '--no-lifecycle'], scratch);
             const shown = jsonOk<{ status: string; frontmatter: { tags?: string[] } }>(
                 ['task', 'show', state.wbs, '--json'],
@@ -633,7 +639,7 @@ export async function runFleetE2e(args: string[]): Promise<number> {
             pass(
                 state,
                 'create-task',
-                `spur task create + task update (${state.wbs}, tags fleet:auto ${HANG_TAG})`,
+                `spur task create + task update (${state.wbs}, tags fleet:auto)`,
                 STEP_TWO_ASSERTION,
                 `wbs=${state.wbs} status=todo tags=${(shown.frontmatter.tags ?? []).join(',')} feature=${state.featureId} readiness=task check --as wip PASS`,
             );
@@ -684,12 +690,24 @@ export async function runFleetE2e(args: string[]): Promise<number> {
             );
         }
 
-        // ── 6. kill-redispatch (executed first: the single strategy dispatch is the hang) ──
-        const wbs = state.wbs;
+        // ── 6. kill-redispatch: its OWN hang-tagged task, so the done-task above is never blocked ──
         let hungDirective: string | null = null;
         let resumedDirective: string | null = null;
         try {
-            if (!loopsStarted || wbs === null) throw new Error('loops or task missing; no dispatch can be observed');
+            if (!loopsStarted || state.wbs === null)
+                throw new Error('loops or task missing; no dispatch can be observed');
+            // (0) the hang leg needs a second, separately tagged task: tagging the done-task would
+            // make its very first turn hang and `dispatch-to-done` could never close on its own.
+            const hungTask = jsonOk<{ wbs: string }>(
+                ['task', 'create', `${TASK_TITLE} (hang)`, '--skip-ready', '--json'],
+                scratch,
+            );
+            cliOk(
+                ['task', 'update', hungTask.wbs, '--add-tag', 'fleet:auto', '--add-tag', HANG_TAG, '--no-lifecycle'],
+                scratch,
+            );
+            cliOk(['task', 'update', hungTask.wbs, 'todo', '--no-lifecycle'], scratch);
+            const wbs = hungTask.wbs;
             // (a) the planner's keyed attempt must reach the coder and the stub must hang on it.
             const hung = await pollUntil(
                 'the hung first turn',
@@ -697,7 +715,7 @@ export async function runFleetE2e(args: string[]): Promise<number> {
                     const records = readStubPrompts(state).filter((record) => directiveFor(record, wbs) !== undefined);
                     return records.find((record) => !(directiveFor(record, wbs) ?? '').includes('--continue'));
                 },
-                BOUNDS.dispatch,
+                BOUNDS.hang,
             );
             hungDirective = directiveFor(hung, wbs) ?? null;
             const inbox = jsonOk<{
@@ -776,8 +794,9 @@ export async function runFleetE2e(args: string[]): Promise<number> {
             fail(state, 'kill-redispatch', 'kill coder loop; spur message send --continue', STEP_SIX_ASSERTION, error);
         }
 
-        // ── 4. dispatch-to-done (the resumed turn closes the task) ─────────────────────
+        // ── 4. dispatch-to-done (the done-task's own keyed dispatch closes it) ──────────
         try {
+            const wbs = state.wbs;
             if (wbs === null) throw new Error('no task to close');
             const done = await pollUntil(
                 `task ${wbs} to reach done`,
@@ -787,24 +806,31 @@ export async function runFleetE2e(args: string[]): Promise<number> {
                 },
                 BOUNDS.done,
             );
-            if (state.dispatchMessageId === null) throw new Error('no keyed dispatch message recorded');
-            const inbox = jsonOk<{ messages: Array<{ id: string; runId?: string | null; runStatus?: string | null }> }>(
-                ['message', 'inbox', '--agent', state.coderId, '--json'],
-                scratch,
-            );
-            const keyed = inbox.messages.find((message) => message.id === state.dispatchMessageId);
+            const inbox = jsonOk<{
+                messages: Array<{
+                    id: string;
+                    requestKey?: string | null;
+                    runId?: string | null;
+                    runStatus?: string | null;
+                }>;
+            }>(['message', 'inbox', '--agent', state.coderId, '--json'], scratch);
+            const keyed = inbox.messages.find((message) => (message.requestKey ?? '').startsWith(`fleet:task:${wbs}:`));
+            if (keyed === undefined) throw new Error(`no keyed fleet dispatch found for ${wbs}`);
+            state.dispatchMessageId = keyed.id;
+            if (state.dispatchRunId === null) state.dispatchRunId = keyed.runId ?? null;
+            state.ids.dispatchMessage = keyed.id;
             pass(
                 state,
                 'dispatch-to-done',
                 `spur task show ${wbs} --json (poll) + spur message inbox --agent ${state.coderId} --json`,
                 STEP_FOUR_ASSERTION,
-                `status=${done.status} keyed message=${state.dispatchMessageId} run=${state.dispatchRunId ?? 'unknown'} runStatus=${keyed?.runStatus ?? 'unknown'} closure=resumed turn of the same wbs`,
+                `status=${done.status} keyed message=${keyed.id} requestKey=${keyed.requestKey ?? 'unknown'} run=${state.dispatchRunId ?? 'unknown'} closure=the member's own turn`,
             );
         } catch (error) {
             fail(
                 state,
                 'dispatch-to-done',
-                `spur task show ${wbs ?? '<wbs>'} --json (poll)`,
+                `spur task show ${state.wbs ?? '<wbs>'} --json (poll)`,
                 STEP_FOUR_ASSERTION,
                 error,
             );
@@ -848,7 +874,7 @@ export async function runFleetE2e(args: string[]): Promise<number> {
             );
             state.guestId = joined.guest.id;
             const request = jsonOk<{ msgId: string }>(
-                ['message', 'send', '--to', state.guestId, `review request: ${wbs ?? 'task'}`, '--json'],
+                ['message', 'send', '--to', state.guestId, `review request: ${state.wbs ?? 'task'}`, '--json'],
                 scratch,
             );
             // The harness plays the joined session: the real pull verb, then the (stubbed) model answer.
