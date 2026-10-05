@@ -126,16 +126,19 @@ step 4 excludes. Use `n/a` for any value not supported by the measurement.
 
 ### Resolved issues
 
-| Issue | Root cause | Resolution | Evidence |
-| --- | --- | --- | --- |
+| Issue | Root cause | Resolution | Evidence | Confidence |
+| --- | --- | --- | --- | --- |
 
 Evidence names the tool result, verification command, or concrete repository state visible in the
-session. Do not list ordinary implementation steps as issues.
+session. Do not list ordinary implementation steps as issues. **Confidence** is `HIGH`, `MEDIUM`, or
+`LOW` for that row's claim, with its grounds in the cell (a level without grounds is not
+verification); any API/library statement in a row cites the installed source as `path:line` or a URL,
+and a claim the session could not ground is written `LOW` with the missing evidence named.
 
 ### Open issues and risks
 
-| Issue or risk | State | Evidence or confirmation needed |
-| --- | --- | --- |
+| Issue or risk | State | Evidence or confirmation needed | Confidence |
+| --- | --- | --- | --- |
 
 ### Process and environment improvements
 
