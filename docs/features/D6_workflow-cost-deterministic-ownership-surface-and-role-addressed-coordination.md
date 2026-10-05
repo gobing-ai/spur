@@ -2,11 +2,11 @@
 schema_version: 1
 id: "D6"
 name: "Workflow cost, deterministic ownership surface, and role-addressed coordination"
-status: active
+status: done
 priority: P2
 tags: []
 created_at: "2026-08-20T00:08:14.252Z"
-updated_at: "2026-09-10T00:34:13.173Z"
+updated_at: "2026-10-05T19:13:12.209Z"
 ---
 
 # D6: Workflow cost, deterministic ownership surface, and role-addressed coordination
@@ -196,7 +196,7 @@ Feature: Workflow cost, deterministic ownership surface, and role-addressed coor
 | 0817 | Fix test hermeticity and dogfood-harness findings from run 20260908-2330-devrun-0815 | done |
 | 0818 | Fix harness reliability findings from 0815 session review | done |
 | 0862 | Harden batch execution against the G65 failure modes | done |
-| 1072 | Start or resume a workflow run from a chosen state | backlog |
+| 1072 | Start or resume a workflow run from a chosen state | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -209,4 +209,6 @@ Feature: Workflow cost, deterministic ownership surface, and role-addressed coor
 - 2026-08-30T19:42:38.148Z done → active (system)
 - 2026-09-06T22:53:04.389Z active → verifying (system)
 - 2026-09-10T00:34:13.173Z verifying → active (system)
+- 2026-10-05T19:13:11.716Z active → verifying (system)
+- 2026-10-05T19:13:12.209Z verifying → done (system)
 
