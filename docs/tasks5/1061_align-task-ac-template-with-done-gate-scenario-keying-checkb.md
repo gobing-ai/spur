@@ -4,7 +4,7 @@ name: Align task AC template with done-gate scenario keying (checkbox ACs key L4
 status: done
 template: feature-impl
 created_at: 2026-10-02T23:30:56.374Z
-updated_at: "2026-10-03T03:18:31.606Z"
+updated_at: "2026-10-05T18:22:32.266Z"
 feature_id: F96
 
 priority: P3
@@ -12,7 +12,7 @@ ac_numbering: task-local
 ac_altitude: task-local
 estimate_hours: 3
 done_forced: "false"
-done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-dev-run-1061-d36a/.spur/memory/evidence/1061-verdict.json
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1061-verdict.json
 ---
 
 ## 1061. Align task AC template with done-gate scenario keying (checkbox ACs key L4.uncovered-task-scenario)

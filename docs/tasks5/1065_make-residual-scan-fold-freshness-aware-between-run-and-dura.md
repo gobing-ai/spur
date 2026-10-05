@@ -4,13 +4,13 @@ name: make residual scan fold freshness aware between run and durable verdict co
 status: done
 template: issue
 created_at: 2026-10-03T04:25:10.514Z
-updated_at: "2026-10-03T16:03:03.719Z"
+updated_at: "2026-10-05T18:22:32.269Z"
 
 feature_id: D3
 priority: P2
 ac_altitude: task-local
 done_forced: "false"
-done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-runall-d3-82ca7e3c/.spur/memory/evidence/1065-verdict.json
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1065-verdict.json
 ---
 
 ## 1065. make residual scan fold freshness aware between run and durable verdict copies

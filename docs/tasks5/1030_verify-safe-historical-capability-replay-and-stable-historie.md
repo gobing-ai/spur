@@ -4,7 +4,7 @@ name: Verify safe historical capability replay and stable Histories results
 status: done
 template: feature-impl
 created_at: 2026-09-30T20:26:19.399Z
-updated_at: "2026-10-03T22:18:46.069Z"
+updated_at: "2026-10-05T18:22:32.242Z"
 feature_id: E93
 priority: P1
 tags:
@@ -14,7 +14,7 @@ estimate_hours: 5
 
 dependencies: ["1028", "1029"]
 done_forced: "false"
-done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-dev-runall-e93-4ff4/.spur/memory/evidence/1030-verdict.json
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1030-verdict.json
 ---
 
 ## 1030. Verify safe historical capability replay and stable Histories results

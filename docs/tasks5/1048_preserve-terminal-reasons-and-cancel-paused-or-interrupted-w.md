@@ -4,7 +4,7 @@ name: Preserve terminal reasons and cancel paused or interrupted workflow runs
 status: done
 template: issue
 created_at: 2026-10-02T05:46:39.101Z
-updated_at: "2026-10-03T03:55:57.740Z"
+updated_at: "2026-10-05T18:22:32.251Z"
 feature_id: D64
 
 priority: P2
@@ -12,7 +12,7 @@ ac_altitude: task-local
 ac_numbering: task-local
 dependencies: ["0937"]
 done_forced: "false"
-done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-dev-run-1048-c88b/.spur/memory/evidence/1048-verdict.json
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1048-verdict.json
 ---
 
 ## 1048. Preserve terminal reasons and cancel paused or interrupted workflow runs
@@ -91,8 +91,8 @@ Each entry cites the first changed line per file (`file:line`).
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
 | R1 | MET | `RunDao.cancelRun` `packages/domain/src/dao/run-dao.ts:274-286` (re-read): status=failed, completed_at, terminal_reason='cancelled', staleReason metadata, WHERE status IN (running,pending,paused,interrupted); domain suite 28 pass (`packages/domain/tests/dao/run-dao.test.ts`, re-run this session) |
-| R2 | MET | conditional UPDATE … WHERE status IN (4 resumable) is the race fence (`run-dao.ts:277-284` re-read); single runs-row write — trace/artifacts/checkpoints/task-links untouched; service never signals terminal rows |
-| R3 | MET | `finalizeStale` `run-dao.ts:250` + listStaleRuns unchanged (stale sweep stays running/pending — comment at `:270-273` re-read); clean-path tests untouched and green; bounded ESRCH-tolerant signalling preserved |
+| R2 | MET | conditional UPDATE … WHERE status IN (4 resumable) is the race fence (`packages/domain/src/dao/run-dao.ts:277-284` re-read); single runs-row write — trace/artifacts/checkpoints/task-links untouched; service never signals terminal rows |
+| R3 | MET | `finalizeStale` `packages/domain/src/dao/run-dao.ts:250` + listStaleRuns unchanged (stale sweep stays running/pending — comment at `:270-273` re-read); clean-path tests untouched and green; bounded ESRCH-tolerant signalling preserved |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|

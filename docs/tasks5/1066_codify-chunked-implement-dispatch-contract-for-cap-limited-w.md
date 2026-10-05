@@ -4,13 +4,13 @@ name: codify chunked implement dispatch contract for cap limited worker models
 status: done
 template: issue
 created_at: 2026-10-03T04:25:11.249Z
-updated_at: "2026-10-03T05:19:57.542Z"
+updated_at: "2026-10-05T18:22:32.270Z"
 
 feature_id: B1
 priority: P3
 ac_altitude: task-local
 done_forced: "false"
-done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-run-1066-fbda/.spur/memory/evidence/1066-verdict.json
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1066-verdict.json
 ---
 
 ## 1066. codify chunked implement dispatch contract for cap limited worker models

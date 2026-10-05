@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Keep worktree-batch evidence references and prior-task evidence resolvable after teardown
-status: backlog
+status: todo
 template: feature-impl
 created_at: 2026-10-05T13:36:08.395Z
-updated_at: "2026-10-05T14:01:03.534Z"
+updated_at: "2026-10-05T18:23:45.746Z"
 feature_id: E71
 
 ---
@@ -206,3 +206,6 @@ today's `UNKNOWN`-for-absent-evidence behavior.
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-10-05T18:23:45.746Z backlog → todo (system)
+

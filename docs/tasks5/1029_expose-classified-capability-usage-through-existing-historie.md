@@ -4,7 +4,7 @@ name: Expose classified capability usage through existing Histories breakdowns
 status: done
 template: feature-impl
 created_at: 2026-09-30T20:26:19.398Z
-updated_at: "2026-10-03T22:17:46.510Z"
+updated_at: "2026-10-05T18:22:32.241Z"
 feature_id: E93
 priority: P1
 tags:
@@ -14,7 +14,7 @@ estimate_hours: 8
 
 dependencies: ["1028"]
 done_forced: "false"
-done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-dev-runall-e93-4ff4/.spur/memory/evidence/1029-verdict.json
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1029-verdict.json
 ---
 
 ## 1029. Expose classified capability usage through existing Histories breakdowns
@@ -169,12 +169,12 @@ Token accounting, existing query bounds, and the materialized-only policy are un
 | R1 — Explicit user commands retain command identity | MET | test | Producer-side contract re-certified at 1028 this batch (upstream suite 398 pass / 0 fail); installed 0.5.12 receipt above. Not exercised by the 1029 diff (no extraction code in spur). |
 | R2 — Model delegation identifies subagents separately from user requests | MET | test | 1028 evidence base stands (re-certified this batch); delegation remains an independent evidence class in the 1029 grain (rollup PK + oracle fixture, domain suite green this run). |
 | R3 — Ordinary skill loads include explicit and implicit use | MET | test | 1028 evidence base stands; load/ok vs load/error vs load/unknown materialize as separate classes (status in rollup PK; `packages/domain/src/analytics/history-board-rollup.ts:311` re-read this run). |
-| R4 — Converted capabilities preserve verifiable origin kinds | MET | test | Origin forwarding path green: cli history-capability-origin tests 5/0 this run; `history-service.ts:597` forwarding + `apps/cli/src/commands/history.ts:84` parser re-read; unresolved origins surface as null-kind rows via reader NULLIF. |
+| R4 — Converted capabilities preserve verifiable origin kinds | MET | test | Origin forwarding path green: cli history-capability-origin tests 5/0 this run; `packages/app/src/services/history-service.ts:597` forwarding + `apps/cli/src/commands/history.ts:84` parser re-read; unresolved origins surface as null-kind rows via reader NULLIF. |
 | R5 — Duplicate representations collapse without losing repeated invocations | MET | test | Representative-selection oracle (8.3) green in this run's domain suite; invocation-key fallback re-read at `packages/domain/src/analytics/history-board-rollup.ts:314`. |
 | R6 — Quoted examples and unrelated tool reads produce no invocation | MET | test | 1028 exclusion evidence stands (re-certified this batch); 1029 adds no extraction logic (importer consumed as node_modules dependency). |
 | R7 — Source coverage distinguishes verified extraction from unavailable evidence | MET | test | 1028 coverage evidence stands; honest-unknown preserved consumer-side ('' sentinel → null via NULLIF in `historyBoardSkillBreakdownFromRollup`, `packages/domain/src/analytics/history-board-rollup.ts:1229`). |
-| R8 — Histories breakdowns preserve capability semantics across read paths | MET | test | Kind + invoker independently identifiable in byCapability (`packages/contracts/src/history.ts:151` re-read); requests not counted as loads (`packages/domain/src/analytics/history-board-marts.ts:209`); both read paths thread byCapability (`history-board-service.ts:331`/`:697`); fresh materialized = SQL reference parity (8.3 oracle green this run); token totals unchanged (no token lines in the 1029 diff surface). Focused run this batch: 194 pass / 0 fail across domain/app/cli/web history homes. |
-| R9 — Historical reprocessing upgrades safely and remains repeatable | N/A | n/a | 1030 scope. Groundwork re-verified here: additive ledger migration 0050 (`migrations.ts:1590`), v7 invalidates old-definition rollups (`rollup-watermark.ts:31`), legacy '' sentinels (migrations tests green this run). |
+| R8 — Histories breakdowns preserve capability semantics across read paths | MET | test | Kind + invoker independently identifiable in byCapability (`packages/contracts/src/history.ts:151` re-read); requests not counted as loads (`packages/domain/src/analytics/history-board-marts.ts:209`); both read paths thread byCapability (`packages/app/src/services/history-board-service.ts:331`/`:697`); fresh materialized = SQL reference parity (8.3 oracle green this run); token totals unchanged (no token lines in the 1029 diff surface). Focused run this batch: 194 pass / 0 fail across domain/app/cli/web history homes. |
+| R9 — Historical reprocessing upgrades safely and remains repeatable | N/A | n/a | 1030 scope. Groundwork re-verified here: additive ledger migration 0050 (`packages/domain/src/migrations.ts:1590`), v7 invalidates old-definition rollups (`packages/domain/src/analytics/rollup-watermark.ts:31`), legacy '' sentinels (migrations tests green this run). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

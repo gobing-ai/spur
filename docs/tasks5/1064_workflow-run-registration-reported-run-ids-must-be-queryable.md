@@ -4,12 +4,12 @@ name: "Workflow run registration: reported run ids must be queryable"
 status: done
 template: feature-impl
 created_at: 2026-10-03T03:01:26.649Z
-updated_at: "2026-10-03T16:01:46.745Z"
+updated_at: "2026-10-05T18:22:32.268Z"
 feature_id: D3
 
 ac_altitude: task-local
 done_forced: "false"
-done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-run-1064-b02a/.spur/memory/evidence/1064-verdict.json
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1064-verdict.json
 ---
 
 ## 1064. Workflow run registration: reported run ids must be queryable

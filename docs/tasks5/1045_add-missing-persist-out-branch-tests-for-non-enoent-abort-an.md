@@ -4,13 +4,13 @@ name: Add missing persist-out branch tests for non-ENOENT abort and external-key
 status: done
 template: feature-impl
 created_at: 2026-10-01T23:59:13.672Z
-updated_at: "2026-10-03T01:58:21.637Z"
+updated_at: "2026-10-05T18:22:32.246Z"
 feature_id: E71
 
 priority: P2
 estimate_hours: 0.5
 done_forced: "false"
-done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-run-1045-b5fe/.spur/memory/evidence/1045-verdict.json
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1045-verdict.json
 ---
 
 ## 1045. Add missing persist-out branch tests for non-ENOENT abort and external-key-conflict exclusion

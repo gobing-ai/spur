@@ -4,7 +4,7 @@ name: Make agent-driven corpus writes cwd-deterministic across pipeline surfaces
 status: done
 template: issue
 created_at: 2026-10-02T22:50:39.301Z
-updated_at: "2026-10-03T01:55:50.890Z"
+updated_at: "2026-10-05T18:22:32.264Z"
 
 feature_id: D63
 ac_altitude: task-local
@@ -12,7 +12,7 @@ priority: P2
 ac_numbering: task-local
 estimate_hours: 3
 done_forced: "false"
-done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-runall-d63-2ebbd97c/.spur/memory/evidence/1058-verdict.json
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1058-verdict.json
 ---
 
 ## 1058. Make agent-driven corpus writes cwd-deterministic across pipeline surfaces

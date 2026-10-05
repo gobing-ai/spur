@@ -4,7 +4,7 @@ name: Reconcile existing task lifecycle rows after no-lifecycle terminal writes
 status: done
 template: issue
 created_at: 2026-10-02T05:46:34.440Z
-updated_at: "2026-10-02T16:02:28.151Z"
+updated_at: "2026-10-05T18:22:32.249Z"
 feature_id: D62
 
 priority: P2
@@ -12,7 +12,7 @@ ac_altitude: task-local
 ac_numbering: task-local
 dependencies: ["1040"]
 done_forced: "false"
-done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-dev-runall-d62-7b87/.spur/memory/evidence/1047-verdict.json
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1047-verdict.json
 ---
 
 ## 1047. Reconcile existing task lifecycle rows after no-lifecycle terminal writes

@@ -4,11 +4,11 @@ name: Classify nested .spur/run citations in persist-out instead of truncating t
 status: done
 template: issue
 created_at: 2026-10-02T21:08:29.604Z
-updated_at: "2026-10-03T01:29:29.157Z"
+updated_at: "2026-10-05T18:22:32.262Z"
 feature_id: D62
 
 done_forced: "false"
-done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-runall-d62-1c23/.spur/memory/evidence/1056-verdict.json
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1056-verdict.json
 ---
 
 ## 1056. Classify nested .spur/run citations in persist-out instead of truncating to directory name

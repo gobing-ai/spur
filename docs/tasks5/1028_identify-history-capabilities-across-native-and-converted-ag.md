@@ -4,7 +4,7 @@ name: Identify history capabilities across native and converted agent formats
 status: done
 template: feature-impl
 created_at: 2026-09-30T20:26:19.390Z
-updated_at: "2026-10-03T22:16:18.314Z"
+updated_at: "2026-10-05T18:22:32.239Z"
 feature_id: E93
 priority: P1
 tags:
@@ -13,7 +13,7 @@ tags:
 estimate_hours: 14
 
 done_forced: "false"
-done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-dev-runall-e93-4ff4/.spur/memory/evidence/1028-verdict.json
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1028-verdict.json
 ---
 
 ## 1028. Identify history capabilities across native and converted agent formats

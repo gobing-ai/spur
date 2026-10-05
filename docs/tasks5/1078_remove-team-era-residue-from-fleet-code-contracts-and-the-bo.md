@@ -4,13 +4,13 @@ name: Remove team-era residue from fleet code, contracts and the Board
 status: done
 template: feature-impl
 created_at: 2026-10-04T20:30:38.321Z
-updated_at: "2026-10-05T07:25:21.271Z"
+updated_at: "2026-10-05T18:22:32.287Z"
 feature_id: G72
 
 priority: P2
 estimate_hours: 4
 done_forced: "false"
-done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new/.spur/run/1078-verdict.json
+done_reason: unforced close; PASS artifact at .spur/run/1078-verdict.json
 ---
 
 ## 1078. Remove team-era residue from fleet code, contracts and the Board
@@ -163,7 +163,7 @@ same text in the loop's `--spec` error), with its two test expectations updated.
 | The Board's Team filter, memo, prop and detail cell removed | `apps/web/src/modules/projects/ProcessesView.tsx:161` |
 | `activity-history` stops surfacing the grouping id | `apps/web/src/modules/projects/activity-history.ts:34` |
 | Dead `RosterMember` fields and their reads removed | `packages/app/src/services/fleet-service.ts:152` |
-| Retired `agent.team` block dropped from the tracked schemas | `config/@gobing-ai/spur/schemas/spur-config.schema.json:196` |
+| Retired `agent.team` block dropped from the tracked schemas | `apps/cli/schemas/spur-config.schema.json:196` |
 
 Verification per the task's own checks: `rg -n "TeamOrchestrator|TeamStatus|teamId" packages apps --glob
 '!**/tests/**' --glob '!**/node_modules/**' --glob '!apps/cli/web/**'` returns ONLY the two 1079-owned

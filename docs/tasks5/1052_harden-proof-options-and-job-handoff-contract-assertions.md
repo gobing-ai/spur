@@ -4,7 +4,7 @@ name: Harden proof options and job handoff contract assertions
 status: done
 template: issue
 created_at: 2026-10-02T17:00:25.447Z
-updated_at: "2026-10-02T22:58:14.608Z"
+updated_at: "2026-10-05T18:22:32.257Z"
 feature_id: D63
 
 ac_numbering: task-local
@@ -12,7 +12,7 @@ ac_altitude: task-local
 priority: P2
 estimate_hours: 3
 done_forced: "false"
-done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-dev-run-1052-782b/.spur/run/1052-verdict.json
+done_reason: unforced close; PASS artifact at .spur/run/1052-verdict.json
 ---
 
 ## 1052. Harden proof options and job handoff contract assertions

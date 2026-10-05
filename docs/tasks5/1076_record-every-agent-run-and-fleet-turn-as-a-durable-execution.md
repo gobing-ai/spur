@@ -4,14 +4,14 @@ name: Record every agent run and fleet turn as a durable execution record with s
 status: done
 template: feature-impl
 created_at: 2026-10-04T20:30:37.507Z
-updated_at: "2026-10-05T05:28:48.053Z"
+updated_at: "2026-10-05T18:22:32.285Z"
 feature_id: G71
 
 dependencies: ["1073", "1074"]
 priority: P2
 estimate_hours: 8
 done_forced: "false"
-done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-runall-g71-302b/.spur/memory/evidence/1076-verdict.json
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1076-verdict.json
 ---
 
 ## 1076. Record every agent run and fleet turn as a durable execution record with spur agent trace

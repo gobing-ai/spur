@@ -4,7 +4,7 @@ name: Build the Observability Trace tab
 status: done
 template: feature-impl
 created_at: 2026-10-04T02:46:12.531Z
-updated_at: "2026-10-05T03:28:24.651Z"
+updated_at: "2026-10-05T18:22:32.279Z"
 feature_id: E72
 priority: P2
 tags:
@@ -14,7 +14,7 @@ estimate_hours: 5
 
 dependencies: ["1069", "1070"]
 done_forced: "false"
-done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-runall-e72-4191/.spur/memory/evidence/1071-verdict.json
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1071-verdict.json
 ---
 
 ## 1071. Build the Observability Trace tab

@@ -4,14 +4,14 @@ name: Residuals from 1061
 status: done
 template: feature-impl
 created_at: 2026-10-03T01:53:33.466Z
-updated_at: "2026-10-03T03:12:53.560Z"
+updated_at: "2026-10-05T18:22:32.267Z"
 feature_id: F96
 
 priority: P3
 ac_numbering: task-local
 ac_altitude: task-local
 done_forced: "false"
-done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new/.spur/memory/evidence/1063-verdict.json
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1063-verdict.json
 ---
 
 ## 1063. Residuals from 1061

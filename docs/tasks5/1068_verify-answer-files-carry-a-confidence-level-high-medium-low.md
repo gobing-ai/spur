@@ -4,10 +4,10 @@ name: Verify answer files carry a confidence level (HIGH/MEDIUM/LOW)
 status: done
 template: standard
 created_at: 2026-10-03T16:19:55.477Z
-updated_at: "2026-10-03T16:32:12.467Z"
+updated_at: "2026-10-05T18:22:32.274Z"
 
 done_forced: "false"
-done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new/.spur/memory/evidence/1068-verdict.json
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1068-verdict.json
 ---
 
 ## 1068. Verify answer files carry a confidence level (HIGH/MEDIUM/LOW)

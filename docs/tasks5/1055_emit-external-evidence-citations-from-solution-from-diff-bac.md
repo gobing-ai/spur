@@ -4,11 +4,11 @@ name: Emit external-evidence citations from solution-from-diff backfill
 status: done
 template: issue
 created_at: 2026-10-02T20:15:07.448Z
-updated_at: "2026-10-03T01:29:28.954Z"
+updated_at: "2026-10-05T18:22:32.261Z"
 feature_id: D62
 
 done_forced: "false"
-done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-runall-d62-1c23/.spur/memory/evidence/1055-verdict.json
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1055-verdict.json
 ---
 
 ## 1055. Emit external-evidence citations from solution-from-diff backfill
