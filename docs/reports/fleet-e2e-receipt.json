@@ -1,13 +1,15 @@
 {
     "schemaVersion": 1,
-    "generatedAt": "2026-10-05T20:18:38.422Z",
-    "projectPath": "/private/var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/spur-fleet-e2e-1791231209934",
+    "generatedAt": "2026-10-05T21:25:46.660Z",
+    "projectPath": "/private/var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/spur-fleet-e2e-1791235353987",
     "ids": {
-        "planner": "spur-fleet-e2e-1791231209934-planner-1",
-        "coder": "spur-fleet-e2e-1791231209934-coder-1",
+        "planner": "spur-fleet-e2e-1791235353987-planner-1",
+        "coder": "spur-fleet-e2e-1791235353987-coder-1",
         "feature": "A",
         "wbs": "0001",
-        "replyMessage": "253fca8a-c247-4258-98d4-6cdbdafa76af"
+        "dispatchMessage": "de96b09e-fd04-4d51-8b2e-96b03101fced",
+        "dispatchRun": "a39e6a05-0371-4fbb-bac2-9d09b811c5e2",
+        "replyMessage": "bb4024a5-416a-4cc7-baaa-ef25b3db9e44"
     },
     "steps": [
         {
@@ -16,7 +18,7 @@
             "exitCode": 0,
             "status": "passed",
             "assertion": "a scratch project scaffolds with a declared agent.fleet (gtd, planner-1 orchestrator, coder-1 member), the project strategy row reconciled to gtd, and a PATH stub named after the member agent type",
-            "evidence": "scratch=/private/var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/spur-fleet-e2e-1791231209934 | fleet=spur-fleet-e2e-1791231209934-planner-1, spur-fleet-e2e-1791231209934-coder-1 | strategy=gtd v1 | stub=/private/var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/spur-fleet-e2e-1791231209934/bin/claude (PATH first)"
+            "evidence": "scratch=/private/var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/spur-fleet-e2e-1791235353987 | fleet=spur-fleet-e2e-1791235353987-planner-1, spur-fleet-e2e-1791235353987-coder-1 | strategy=gtd v1 | stub=/private/var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/spur-fleet-e2e-1791235353987/bin/claude (PATH first)"
         },
         {
             "step": "create-task",
@@ -28,11 +30,11 @@
         },
         {
             "step": "start-loops",
-            "command": "spur agent loop --spec spur-fleet-e2e-1791231209934-planner-1 | --spec spur-fleet-e2e-1791231209934-coder-1",
+            "command": "spur agent loop --spec spur-fleet-e2e-1791235353987-planner-1 | --spec spur-fleet-e2e-1791235353987-coder-1",
             "exitCode": 0,
             "status": "passed",
             "assertion": "the planner and coder loops attach: a live orchestrator claim and a recorded fleet member session, with the stub first on PATH",
-            "evidence": "pids=69840,69841 (stub first on PATH) orchestrator claim live member session recorded"
+            "evidence": "pids=40852,40853 (stub first on PATH) orchestrator claim live member session recorded"
         },
         {
             "step": "dispatch-to-done",
@@ -52,11 +54,11 @@
         },
         {
             "step": "kill-redispatch",
-            "command": "kill coder loop; spur message send --continue",
-            "exitCode": 1,
-            "status": "failed",
+            "command": "kill -TERM <coder loop>; spur message send --to spur-fleet-e2e-1791235353987-coder-1 \"/sp:dev-run 0001 --continue\" (a05c08b7-91ae-4dda-beb8-5a03cf11510e)",
+            "exitCode": 0,
+            "status": "passed",
             "assertion": "a coder loop killed mid-turn (run errored, message delivered) is restarted and the task is resumed through the real `spur message send <...> --continue` CLI path, with the stub's next directive for the wbs carrying --continue. NOT proven: strategy auto-retry of a drained turn (residual risk strategy-retry-unreachable)",
-            "evidence": "error: timed out after 120000ms waiting for the hung first turn"
+            "evidence": "killed run=a39e6a05-0371-4fbb-bac2-9d09b811c5e2 status=errored message=de96b09e-fd04-4d51-8b2e-96b03101fced delivery=delivered | hung directive=/sp:dev-run 0001 --auto --permission-mode | resumed directive=/sp:dev-run 0001 --auto --continue (new pid=40955) | strategy auto-retry: attempt-2 key=fleet:task:0001:2 message=de96b09e-fd04-4d51-8b2e-96b03101fced"
         },
         {
             "step": "guest-join",
@@ -64,15 +66,15 @@
             "exitCode": 0,
             "status": "passed",
             "assertion": "a joined guest occupant (agent join --role) pulls a dispatched review request through agent wait --inbox and its reply lands in the operator inbox",
-            "evidence": "guest=reviewer-g request=885e1581-2bcb-4e0f-a82c-17b263a9c498 pending=1 reply=b95617e2-3658-4641-87a9-6b747b93c3fe left=reviewer-g"
+            "evidence": "guest=reviewer-g request=3d8c0454-d7ab-48b3-91a7-9b8314df3861 pending=1 reply=366552af-26dc-4edd-93dc-ddaa0058340f left=reviewer-g"
         },
         {
             "step": "trace",
-            "command": "spur agent trace <run> --json",
-            "exitCode": 1,
-            "status": "failed",
+            "command": "spur agent trace a39e6a05-0371-4fbb-bac2-9d09b811c5e2 --json",
+            "exitCode": 0,
+            "status": "passed",
             "assertion": "spur agent trace resolves the execution record of the dispatched turn: an agent node whose durable stream exists with content, over a loop-free lineage",
-            "evidence": "error: ENOENT: no such file or directory, scandir '/private/var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/spur-fleet-e2e-1791231209934/.spur/memory/runs'"
+            "evidence": "root=a39e6a05-0371-4fbb-bac2-9d09b811c5e2 nodes=1 node=agent/errored stream=/private/var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/spur-fleet-e2e-1791235353987/.spur/memory/runs/a39e6a05-0371-4fbb-bac2-9d09b811c5e2.md lines=11 sessionIds=[] parentRunId=null"
         },
         {
             "step": "teardown",
@@ -80,7 +82,7 @@
             "exitCode": 0,
             "status": "passed",
             "assertion": "loop pids are killed, the guest leaves, and the scratch dir under $TMPDIR is removed",
-            "evidence": "killed pids=69840,69841 | scratch removed=true | problems=none"
+            "evidence": "killed pids=40852,40955 | scratch kept at /private/var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/spur-fleet-e2e-1791235353987 (--keep) | problems=none"
         }
     ],
     "residualRisks": [

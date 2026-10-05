@@ -288,10 +288,7 @@ if (!process.stdin.isTTY) {
 }
 
 const DIRECTIVE = /\\/sp:dev-run\\s+\\d{4}(?:\\s+--?[A-Za-z][\\w-]*)*/g;
-// The prompt arrives whole in one argv slot on some paths and SPLIT across argv (shim flags +
-fragments) or the stdin frame on others, so the directive is read from the JOINED text: a
-per-source scan missed the split form, which made a resumed turn look like a fresh one and the
-stub hung forever on it (G71 1077 R3 diagnosis).
+// Directives are read from the JOINED prompt: a per-source scan missed argv-split prompts, so a resumed turn looked fresh and the stub hung on it (G71 1077 R3).
 const prompt = [...argv, stdinText].join(' ');
 const directives = prompt.match(DIRECTIVE) ?? [];
 // The hang gate asks the semantic question directly: this turn IS a resume.
