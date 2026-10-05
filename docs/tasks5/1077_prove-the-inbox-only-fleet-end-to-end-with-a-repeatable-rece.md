@@ -4,7 +4,7 @@ name: Prove the inbox-only fleet end to end with a repeatable receipt
 status: todo
 template: feature-impl
 created_at: 2026-10-04T20:30:37.927Z
-updated_at: "2026-10-04T20:57:55.158Z"
+updated_at: "2026-10-05T20:25:38.062Z"
 feature_id: G71
 
 dependencies: ["1073", "1074", "1075", "1076", "1080", "1081"]
