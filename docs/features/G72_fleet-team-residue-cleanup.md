@@ -2,11 +2,11 @@
 schema_version: 1
 id: "G72"
 name: "Fleet team-residue cleanup"
-status: active
+status: verifying
 priority: P2
 tags: []
 created_at: "2026-10-04T20:29:21.387Z"
-updated_at: "2026-10-05T08:46:52.513Z"
+updated_at: "2026-10-05T08:53:07.107Z"
 ---
 
 # G72: Fleet team-residue cleanup
@@ -53,7 +53,7 @@ Feature: Fleet team-residue cleanup
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 1078 | Remove team-era residue from fleet code, contracts and the Board | done |
-| 1079 | Derive agent instances from agent.fleet, drop the instance store and sync fleet docs | testing |
+| 1079 | Derive agent instances from agent.fleet, drop the instance store and sync fleet docs | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -61,4 +61,5 @@ Feature: Fleet team-residue cleanup
 ## History
 
 - 2026-10-05T08:46:52.513Z backlog → active (system)
+- 2026-10-05T08:53:07.107Z active → verifying (system)
 
