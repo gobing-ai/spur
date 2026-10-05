@@ -4,7 +4,7 @@ name: Retain task 1041 job-handoff contract checks in the normal repository suit
 status: done
 template: issue
 created_at: 2026-10-02T05:46:49.743Z
-updated_at: "2026-10-02T17:15:51.430Z"
+updated_at: "2026-10-05T18:22:32.254Z"
 feature_id: D62
 
 priority: P3
@@ -12,7 +12,7 @@ ac_altitude: task-local
 ac_numbering: task-local
 dependencies: ["1041"]
 done_forced: "false"
-done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-dev-runall-d62-7b87/.spur/memory/evidence/1050-verdict.json
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1050-verdict.json
 ---
 
 ## 1050. Retain task 1041 job-handoff contract checks in the normal repository suite

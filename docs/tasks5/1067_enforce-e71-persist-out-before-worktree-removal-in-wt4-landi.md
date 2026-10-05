@@ -4,13 +4,13 @@ name: enforce e71 persist out before worktree removal in wt4 landings
 status: done
 template: issue
 created_at: 2026-10-03T04:25:11.012Z
-updated_at: "2026-10-03T16:05:04.635Z"
+updated_at: "2026-10-05T18:22:32.271Z"
 
 feature_id: D3
 priority: P3
 ac_altitude: task-local
 done_forced: "false"
-done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-runall-d3-82ca7e3c/.spur/memory/evidence/1067-verdict.json
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1067-verdict.json
 ---
 
 ## 1067. enforce e71 persist out before worktree removal in wt4 landings

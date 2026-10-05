@@ -4,11 +4,11 @@ name: Report closeAuditError from the server task transition handler
 status: done
 template: issue
 created_at: 2026-10-02T20:15:07.141Z
-updated_at: "2026-10-03T00:57:41.917Z"
+updated_at: "2026-10-05T18:22:32.259Z"
 feature_id: D62
 
 done_forced: "false"
-done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-runall-d62-1c23/.spur/memory/evidence/1054-verdict.json
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1054-verdict.json
 ---
 
 ## 1054. Report closeAuditError from the server task transition handler

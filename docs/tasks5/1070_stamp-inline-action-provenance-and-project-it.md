@@ -4,7 +4,7 @@ name: Stamp inline action provenance and project it
 status: done
 template: feature-impl
 created_at: 2026-10-04T02:46:12.530Z
-updated_at: "2026-10-05T03:22:02.264Z"
+updated_at: "2026-10-05T18:22:32.278Z"
 feature_id: E72
 priority: P2
 tags:
@@ -15,7 +15,7 @@ estimate_hours: 2
 
 dependencies: ["1069"]
 done_forced: "false"
-done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-runall-e72-4191/.spur/memory/evidence/1070-verdict.json
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1070-verdict.json
 ---
 
 ## 1070. Stamp inline action provenance and project it

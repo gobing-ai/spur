@@ -4,13 +4,13 @@ name: Guard task section writes against silent wholesale overwrite of populated 
 status: done
 template: issue
 created_at: 2026-10-02T21:08:29.909Z
-updated_at: "2026-10-02T22:31:48.571Z"
+updated_at: "2026-10-05T18:22:32.263Z"
 feature_id: D63
 
 ac_numbering: task-local
 ac_altitude: task-local
 done_forced: "false"
-done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-dev-run-1057-9552/.spur/memory/evidence/1057-verdict.json
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1057-verdict.json
 ---
 
 ## 1057. Guard task section writes against silent wholesale overwrite of populated sections

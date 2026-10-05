@@ -4,14 +4,14 @@ name: Derive agent instances from agent.fleet, drop the instance store and sync 
 status: done
 template: feature-impl
 created_at: 2026-10-04T20:30:38.690Z
-updated_at: "2026-10-05T08:47:01.446Z"
+updated_at: "2026-10-05T18:22:32.288Z"
 feature_id: G72
 
 dependencies: ["1074", "1078"]
 priority: P2
 estimate_hours: 6
 done_forced: "false"
-done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-runall-g72-f14c/.spur/memory/evidence/1079-verdict.json
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1079-verdict.json
 ---
 
 ## 1079. Derive agent instances from agent.fleet, drop the instance store and sync fleet docs

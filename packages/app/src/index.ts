@@ -131,6 +131,7 @@ export type {
 export {
     anchorQualify,
     buildTrackedBasenameIndex,
+    normalizeDoneReason,
     qualifyAnchors,
     qualifySectionBody,
     resolveConfiguredTaskDirs,

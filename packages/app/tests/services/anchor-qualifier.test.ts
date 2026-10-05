@@ -6,6 +6,7 @@ import { createNodeFileSystem, type FileSystem } from '@gobing-ai/ts-runtime';
 import {
     anchorQualify,
     buildTrackedBasenameIndex,
+    normalizeDoneReason,
     qualifyAnchors,
     qualifySectionBody,
     resolveConfiguredTaskDirs,
@@ -237,6 +238,164 @@ Evidence: \`index.ts:10\`
 
         expect(report.filesScanned).toBe(0);
         expect(report.filesModified).toBe(0);
+    });
+});
+
+describe('normalizeDoneReason (1089 R3)', () => {
+    test('rewrites a worktree-absolute artifact reference to its repo-relative form', () => {
+        expect(
+            normalizeDoneReason(
+                'unforced close; PASS artifact at /Users/someone/xprojects/spur-new-run-1049-e7e0/.spur/memory/evidence/1049-verdict.json',
+            ),
+        ).toBe('unforced close; PASS artifact at .spur/memory/evidence/1049-verdict.json');
+    });
+
+    test('is idempotent — an already-relative reason is not a rewrite', () => {
+        expect(normalizeDoneReason('unforced close; PASS artifact at .spur/run/1046-verdict.json')).toBeNull();
+    });
+
+    test('leaves operator rationale and non-.spur absolute paths untouched', () => {
+        expect(normalizeDoneReason('operator emergency close')).toBeNull();
+        expect(normalizeDoneReason('Verified with 23 passing tests')).toBeNull();
+        expect(normalizeDoneReason('unforced close; PASS artifact at /var/tmp/elsewhere/1049-verdict.json')).toBeNull();
+    });
+});
+
+describe('done_reason normalization in the qualification pass (1089 R3)', () => {
+    const ABSOLUTE_REASON =
+        'unforced close; PASS artifact at /Users/someone/xprojects/spur-new-run-1049-e7e0/.spur/memory/evidence/1049-verdict.json';
+    const RELATIVE_REASON = 'unforced close; PASS artifact at .spur/memory/evidence/1049-verdict.json';
+
+    interface FieldWrite {
+        filePath: string;
+        wbs: string;
+        key: string;
+        value: string;
+    }
+
+    /** Two done tasks: one absolute reason (drift), one free-form (operator text). */
+    function mockFs(opts: { drifted?: boolean; anchor?: string } = {}): FileSystem {
+        const drifted = opts.drifted ?? true;
+        const testing = opts.anchor === undefined ? '`bun test` — green' : `Evidence: \`${opts.anchor}\``;
+        const files: Record<string, string> = {
+            '/mock/docs/tasks/1049_task.md': `---
+wbs: "1049"
+name: "Worktree close"
+status: done
+done_reason: "${drifted ? ABSOLUTE_REASON : RELATIVE_REASON}"
+---
+
+## 1049. Worktree close
+
+### Testing
+
+${testing}
+`,
+            '/mock/docs/tasks/1046_task.md': `---
+wbs: "1046"
+name: "Inline close"
+status: done
+done_reason: "Verified with 23 passing tests"
+---
+
+## 1046. Inline close
+
+### Testing
+
+\`bun test\` — green
+`,
+        };
+        return {
+            resolve: (p: string) => p,
+            cwd: () => '/mock',
+            readDir: async (dir: string) => {
+                if (dir === '/mock/docs/tasks') return ['1049_task.md', '1046_task.md'];
+                throw new Error('Directory not found');
+            },
+            readFile: async (p: string) => {
+                const content = files[p];
+                if (content !== undefined) return content;
+                throw new Error(`File not found: ${p}`);
+            },
+        } as unknown as FileSystem;
+    }
+
+    test('dry-run reports the rewrite and writes nothing', async () => {
+        const writes: FieldWrite[] = [];
+        const report = await qualifyAnchors(mockFs(), {
+            fs: mockFs(),
+            dryRun: true,
+            taskDirs: ['/mock/docs/tasks'],
+            projectRoot: process.cwd(),
+            writeField: async (filePath, wbs, key, value) => {
+                writes.push({ filePath, wbs, key, value });
+            },
+        });
+        const entry = report.fileReports.find((r) => r.wbs === '1049');
+        expect(entry?.doneReasons).toEqual([{ from: ABSOLUTE_REASON, to: RELATIVE_REASON }]);
+        expect(entry?.modified).toBe(true);
+        expect(writes).toHaveLength(0);
+        // A free-form reason is operator text, not corpus drift — never reported.
+        expect(report.fileReports.some((r) => r.wbs === '1046')).toBe(false);
+    });
+
+    test('apply writes the normalized reason through the frontmatter writer', async () => {
+        const writes: FieldWrite[] = [];
+        const report = await qualifyAnchors(mockFs(), {
+            fs: mockFs(),
+            dryRun: false,
+            taskDirs: ['/mock/docs/tasks'],
+            projectRoot: process.cwd(),
+            writeField: async (filePath, wbs, key, value) => {
+                writes.push({ filePath, wbs, key, value });
+            },
+        });
+        expect(writes).toEqual([
+            {
+                filePath: '/mock/docs/tasks/1049_task.md',
+                wbs: '1049',
+                key: 'done_reason',
+                value: RELATIVE_REASON,
+            },
+        ]);
+        expect(report.filesModified).toBe(1);
+    });
+
+    test('an already-relative reason is not rewritten on apply', async () => {
+        const writes: FieldWrite[] = [];
+        const report = await qualifyAnchors(mockFs({ drifted: false }), {
+            fs: mockFs({ drifted: false }),
+            dryRun: false,
+            taskDirs: ['/mock/docs/tasks'],
+            projectRoot: process.cwd(),
+            writeField: async (filePath, wbs, key, value) => {
+                writes.push({ filePath, wbs, key, value });
+            },
+        });
+        expect(writes).toHaveLength(0);
+        expect(report.filesModified).toBe(0);
+    });
+
+    test('an unwritable task reports the skip and never attempts the reason write', async () => {
+        const writes: FieldWrite[] = [];
+        // The Testing anchor is what makes the section writer run — and throw.
+        const report = await qualifyAnchors(mockFs({ anchor: 'project-registry.ts:42' }), {
+            fs: mockFs({ anchor: 'project-registry.ts:42' }),
+            dryRun: false,
+            taskDirs: ['/mock/docs/tasks'],
+            projectRoot: process.cwd(),
+            write: async () => {
+                throw new Error('schema predates the current frontmatter');
+            },
+            writeField: async (filePath, wbs, key, value) => {
+                writes.push({ filePath, wbs, key, value });
+            },
+        });
+        const entry = report.fileReports.find((r) => r.wbs === '1049');
+        expect(entry?.skipped).toContain('schema predates');
+        expect(entry?.modified).toBe(false);
+        expect(entry?.doneReasons).toEqual([]);
+        expect(writes).toHaveLength(0);
     });
 });
 

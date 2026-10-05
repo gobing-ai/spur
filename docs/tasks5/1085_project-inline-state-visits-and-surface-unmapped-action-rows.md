@@ -4,11 +4,11 @@ name: Project inline state visits and surface unmapped action rows in the progre
 status: done
 template: standard
 created_at: 2026-10-04T22:48:26.495Z
-updated_at: "2026-10-05T03:32:21.276Z"
+updated_at: "2026-10-05T18:22:32.292Z"
 
 feature_id: E72
 done_forced: "false"
-done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-1085-7647/.spur/memory/evidence/1085-verdict.json
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1085-verdict.json
 ---
 
 ## 1085. Project inline state visits and surface unmapped action rows in the progress projection

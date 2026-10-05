@@ -744,6 +744,34 @@ existing batch loop (Steps 1–5) with the worktree as process cwd. `spur workfl
 from the process (`apps/cli/src/commands/workflow.ts:124`), so no CLI change is needed — `cd` into
 the worktree directory before launching the loop.
 
+#### Evidence staging before the first task (create and reuse mode)
+
+`.spur/memory/evidence/` and `.spur/run/` are **untracked per-tree** planes, so a fresh worktree
+starts with neither while the invoking tree holds every earlier task's verdict. Both
+`preflightFeature` (`plugins/sp/scripts/wrapup-steps.ts` → `spur feature check --strict --as done`
+with cwd = the worktree) and `runMetrics` resolve verdict artifacts relative to the tree they run
+in, so without this step an already-`done` linked task reads as missing evidence
+(`L4.evidence-not-recoverable`, `L4.scenario-unverified`) and its metrics row degrades to
+`UNKNOWN`.
+
+Stage the invoking tree's verdict artifacts into the worktree **before the first task runs** —
+from the invoking tree (cwd), with `$WT` the resolved absolute worktree path. `cp -n` is
+load-bearing: reuse mode may be re-entering a tree that already owns divergence-checked evidence,
+and this step must never clobber it. Only `*-verdict.json` travels in each direction; receipts and
+other scratch artifacts are not staged, so WT-4a's identity classification is unaffected.
+
+```bash
+# Run from the INVOKING tree; $WT is the worktree (create- or reuse-mode) absolute path.
+for d in .spur/memory/evidence .spur/run; do
+  mkdir -p "$WT/$d"
+  for f in "$d"/*-verdict.json; do [ -f "$f" ] && cp -n "$f" "$WT/$d/"; done
+done
+```
+
+The position relative to the dependency install is immaterial (this is a plain copy into an
+untracked plane); the position relative to the **first task** is not — a preflight or metrics read
+that runs before this step sees an empty evidence plane.
+
 #### Name resolution (`--worktree <name>`)
 
 <a id="name-resolution---worktree-name"></a>

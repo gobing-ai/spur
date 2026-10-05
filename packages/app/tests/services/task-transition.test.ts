@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { GuardDeniedError } from '../../src/errors';
 import type { GuardedTransitionDeps } from '../../src/services/task-transition';
-import { transitionTaskGuarded } from '../../src/services/task-transition';
+import { projectRelativeArtifactPath, transitionTaskGuarded } from '../../src/services/task-transition';
 
 const PASS_ARTIFACT = {
     wbs: '0001',
@@ -345,5 +345,62 @@ describe('1040 — close-audit reconciliation on unforced done (R2)', () => {
             expect(out.closeAuditError).toContain('audit write failed');
         }
         h.cleanup();
+    });
+});
+
+describe('1089 R2 — the close reason records a repo-relative artifact path', () => {
+    test('the scratch verdict is recorded relative to the project root', async () => {
+        const h = makeHarness({ task: GATED_TASK, verdict: PASS_ARTIFACT });
+        const out = await transitionTaskGuarded(h.deps, { wbs: '0001', toStatus: 'done' });
+        expect(out.kind).toBe('transitioned');
+        // A committed absolute path is machine-specific and stops resolving once the
+        // tree that produced it is removed (the `--worktree` close case).
+        expect(h.calls.fieldValues['0001:done_reason']).toBe(
+            'unforced close; PASS artifact at .spur/run/0001-verdict.json',
+        );
+        h.cleanup();
+    });
+
+    test('the durable evidence copy is recorded relative too', async () => {
+        const h = makeHarness({ task: GATED_TASK, verdict: PASS_ARTIFACT });
+        const evidenceDir = join(h.deps.runDir, '..', 'memory', 'evidence');
+        try {
+            mkdirSync(evidenceDir, { recursive: true });
+            renameSync(join(h.deps.runDir, '0001-verdict.json'), join(evidenceDir, '0001-verdict.json'));
+            await transitionTaskGuarded(h.deps, { wbs: '0001', toStatus: 'done' });
+            expect(h.calls.fieldValues['0001:done_reason']).toBe(
+                'unforced close; PASS artifact at .spur/memory/evidence/0001-verdict.json',
+            );
+        } finally {
+            h.cleanup();
+        }
+    });
+
+    test('a forced close keeps the operator rationale verbatim', async () => {
+        const h = makeHarness({ task: GATED_TASK });
+        await transitionTaskGuarded(h.deps, {
+            wbs: '0001',
+            toStatus: 'done',
+            forceDone: true,
+            reason: 'operator emergency close',
+        });
+        expect(h.calls.fieldValues['0001:done_reason']).toBe('operator emergency close');
+        h.cleanup();
+    });
+
+    test('projectRelativeArtifactPath keeps a foreign artifact path as-is', () => {
+        const root = join(tmpdir(), 'spur-relroot');
+        const runDir = join(root, '.spur', 'run');
+        expect(projectRelativeArtifactPath(runDir, join(runDir, '0001-verdict.json'))).toBe(
+            '.spur/run/0001-verdict.json',
+        );
+        expect(projectRelativeArtifactPath(runDir, join(root, '.spur', 'memory', 'evidence', 'x.json'))).toBe(
+            '.spur/memory/evidence/x.json',
+        );
+        // Outside the project root: recorded as-is rather than rewritten into `../..`.
+        const foreign = join(tmpdir(), 'spur-foreign-evidence', '0001-verdict.json');
+        expect(projectRelativeArtifactPath(runDir, foreign)).toBe(foreign);
+        // The root itself has no meaningful relative form.
+        expect(projectRelativeArtifactPath(runDir, root)).toBe(root);
     });
 });

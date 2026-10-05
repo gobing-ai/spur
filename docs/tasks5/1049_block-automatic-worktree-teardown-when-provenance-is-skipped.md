@@ -4,7 +4,7 @@ name: Block automatic worktree teardown when provenance is skipped for an extern
 status: done
 template: issue
 created_at: 2026-10-02T05:46:44.406Z
-updated_at: "2026-10-03T01:58:22.042Z"
+updated_at: "2026-10-05T18:22:32.253Z"
 feature_id: E71
 
 priority: P2
@@ -12,7 +12,7 @@ ac_altitude: task-local
 ac_numbering: task-local
 dependencies: ["1043", "1045"]
 done_forced: "false"
-done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-dev-run-1049-e7e0/.spur/memory/evidence/1049-verdict.json
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1049-verdict.json
 ---
 
 ## 1049. Block automatic worktree teardown when provenance is skipped for an external-key conflict

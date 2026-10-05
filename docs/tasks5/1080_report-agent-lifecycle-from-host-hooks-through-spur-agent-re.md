@@ -4,14 +4,14 @@ name: Report agent lifecycle from host hooks through spur agent report
 status: done
 template: feature-impl
 created_at: 2026-10-04T20:30:39.110Z
-updated_at: "2026-10-05T14:46:38.673Z"
+updated_at: "2026-10-05T18:22:32.290Z"
 feature_id: G73
 
 dependencies: ["1074", "1078"]
 priority: P2
 estimate_hours: 5
 done_forced: "false"
-done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-runall-g73-cde6/.spur/memory/evidence/1080-verdict.json
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1080-verdict.json
 ---
 
 ## 1080. Report agent lifecycle from host hooks through spur agent report

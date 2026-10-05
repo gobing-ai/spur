@@ -4,14 +4,14 @@ name: Serve the run progress projection and run list filters
 status: done
 template: feature-impl
 created_at: 2026-10-04T02:46:12.527Z
-updated_at: "2026-10-05T03:18:32.907Z"
+updated_at: "2026-10-05T18:22:32.277Z"
 feature_id: E72
 priority: P2
 tags: ["observability", "server", "contracts", "fleet:auto"]
 estimate_hours: 3
 
 done_forced: "false"
-done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-runall-e72-4191/.spur/memory/evidence/1069-verdict.json
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1069-verdict.json
 ---
 
 ## 1069. Serve the run progress projection and run list filters

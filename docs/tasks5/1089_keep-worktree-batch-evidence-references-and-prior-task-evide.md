@@ -1,12 +1,14 @@
 ---
 schema_version: 1
 name: Keep worktree-batch evidence references and prior-task evidence resolvable after teardown
-status: backlog
+status: done
 template: feature-impl
 created_at: 2026-10-05T13:36:08.395Z
-updated_at: "2026-10-05T14:01:03.534Z"
+updated_at: "2026-10-05T18:57:28.504Z"
 feature_id: E71
 
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1089-verdict.json
 ---
 
 ## 1089. Keep worktree-batch evidence references and prior-task evidence resolvable after teardown
@@ -61,19 +63,19 @@ a divergent one as a hard conflict; scratch `<wbs>-*` evidence travels only for 
 
 ### Requirements
 
-- [ ] R1. WT-2 (create and reuse mode) stages the invoking tree's verdict artifacts into the worktree before
+- [x] R1. WT-2 (create and reuse mode) stages the invoking tree's verdict artifacts into the worktree before
       the first task runs: `.spur/memory/evidence/*-verdict.json` → same path, `.spur/run/*-verdict.json` →
       same path, never overwriting a file the worktree already has. This single step fixes both symptom 1
       (preflight) and symptom 2 (metrics); neither `preflightFeature` nor `runMetrics` changes.
-- [ ] R2. An unforced done close records the PASS artifact path relative to the project root
+- [x] R2. An unforced done close records the PASS artifact path relative to the project root
       (`.spur/memory/evidence/<wbs>-verdict.json`), so `done_reason` resolves in any tree of the repository;
       a path outside the project root is recorded as-is.
-- [ ] R3. `spur task migrate-anchors` normalizes existing `done_reason` values of the form
+- [x] R3. `spur task migrate-anchors` normalizes existing `done_reason` values of the form
       `PASS artifact at <abs>/.spur/<rest>` to `PASS artifact at .spur/<rest>` (dry-run reports them), so the
       35 existing absolute references are repaired through the CLI.
-- [ ] R4. `plugins/sp/skills/spur-dev/references/execution-batch.md` § WT-2 states the staging step in the
+- [x] R4. `plugins/sp/skills/spur-dev/references/execution-batch.md` § WT-2 states the staging step in the
       same change (T3).
-- [ ] R5. Every workspace whose tests start a server runs `tests/setup.ts`: add `apps/server/bunfig.toml`
+- [x] R5. Every workspace whose tests start a server runs `tests/setup.ts`: add `apps/server/bunfig.toml`
       with `preload = ["../../tests/setup.ts"]` (mirroring `apps/cli/bunfig.toml`), so a workspace-local
       `bun test` never writes the operator's `~/.config/spur/projects.json` or `slash_commands.json`.
       Manual desktop native/packaged smoke runs export `SPUR_PROJECTS_FILE` to a disposable path, stated
@@ -81,9 +83,9 @@ a divergent one as a hard conflict; scratch `<wbs>-*` evidence travels only for 
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Task and feature evidence remains valid without completed scratch
-- [ ] AC2 — Retained run inspection and artifact references survive scratch removal
-- [ ] AC3 — Existing lasting data is preserved before its scratch dependency is retired
+- [x] AC1 — Task and feature evidence remains valid without completed scratch
+- [x] AC2 — Retained run inspection and artifact references survive scratch removal
+- [x] AC3 — Existing lasting data is preserved before its scratch dependency is retired
 
 The three titles are E71's scenarios verbatim (DD-09 subset rule): AC1 ↔ R1, AC2 ↔ R2 + R5 (scratch
 roots must not outlive their run in the operator registry), AC3 ↔ R3.
@@ -191,18 +193,106 @@ today's `UNKNOWN`-for-absent-evidence behavior.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map: one `file:line` per row. `ad895ed51` carries the 36 repaired corpus files and is not
+re-listed here (its rewrite is exercised by the `migrate-anchors` row below).
+
+| Change (`file:line`) | What changed |
+| --- | --- |
+| `plugins/sp/skills/spur-dev/references/execution-batch.md:747` | WT-2 gains the "Evidence staging before the first task (create and reuse mode)" subsection — the requirement R1 statement, placed inside WT-2 for R4 |
+| `plugins/sp/skills/spur-dev/references/execution-batch.md:767` | the staging loop itself: both untracked planes copied with `cp -n` so a worktree-owned verdict is never clobbered |
+| `packages/app/src/services/task-transition.ts:212` | `projectRelativeArtifactPath` — project-root-relative artifact path with POSIX separators, absolute when the artifact lies outside the root (R2) |
+| `packages/app/src/services/task-transition.ts:315` | the unforced close-audit call site now records the relative form instead of the guard's absolute path (R2) |
+| `packages/app/src/services/anchor-qualifier.ts:125` | `normalizeDoneReason` — the single rewrite rule over an absolute `done_reason` artifact reference (R3) |
+| `packages/app/src/services/anchor-qualifier.ts:380` | the per-file application through the frontmatter writer, skipped when the section write already reported the file unwritable (R3) |
+| `apps/cli/src/commands/task.ts:1029` | `spur task migrate-anchors` wires the frontmatter writer so the rewrite lands through the existing `PlanningWriteService.updateFrontmatter` path (R3) |
+| `apps/cli/src/commands/task.ts:1064` | the dry-run / apply report gains its done-reason section, so R3's rewrites are reviewable before they are written |
+| `tests/setup.ts:89` | the shared preload isolates the global slash-command catalog beside the isolated project registry (R5) |
+| `apps/server/bunfig.toml:7` | the server workspace preloads `tests/setup.ts`, so a workspace-local run reaches the shared isolation (R5) |
+| `apps/server/tests/workspace-test-isolation.test.ts:34` | the pin asserts both isolated env names are present in the preload (R5) |
+| `docs/design/desktop-shell.md:93` | the manual native/packaged smoke procedure documents the disposable `SPUR_PROJECTS_FILE` (R5) |
+| `packages/app/tests/services/task-transition.test.ts:351` | the R2 assertions: scratch plane, durable evidence plane, forced-close rationale verbatim, foreign path as-is |
+| `packages/app/tests/services/anchor-qualifier.test.ts:244` | the R3 assertions: rewrite, idempotency, untouched operator prose, dry-run reporting, and the unwritable-file skip |
+| `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:56` | the R1/R4 pin: staging present, both planes, `cp -n`, no-clobber, and placement between WT-2 and WT-3 |
+
+No speculative abstraction was added: the two new helpers are single-purpose functions on the
+existing write paths, the CLI surface is unchanged (`migrate-anchors` keeps its flags), and no
+service was introduced or moved.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | § WT-2 "Evidence staging before the first task (create and reuse mode)" stages both untracked planes with `cp -n` before the first task; placement pinned inside WT-2 by `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:51-64` (47 pass). Executed this run: 246 `.spur/memory/evidence` + 258 `.spur/run` files staged. No-clobber arm: a seeded divergent `.spur/run/1049-verdict.json` was byte-identical after re-running the loop; planes stayed 246/258. Metrics A/B on scratch-only task 1078 from byte-identical trees: empty planes → `metrics-record: task 1078 has no certifying verdict … recording UNKNOWN telemetry` and row `{"wbs":"1078","verdict":"UNKNOWN"}`; staged plane → row `{"wbs":"1078","verdict":"PASS"}`. |
+| R2 | MET | `packages/app/src/services/task-transition.ts:203-222` records `relative(<project root>, artifact)` with POSIX separators, and the absolute path when the artifact is outside the root. `packages/app/tests/services/task-transition.test.ts:301-345` asserts the scratch plane, the durable `memory/evidence` plane, the forced-close rationale verbatim, and the foreign path; 22 pass. No consumer resolves `done_reason` as a path (`packages/app/src`, `apps/cli/src`, `config/workflows/task-lifecycle.yaml`). |
+| R3 | MET | `packages/app/src/services/anchor-qualifier.ts:110-127` (`normalizeDoneReason`) and `:369-389` (per-file application through the frontmatter writer); CLI wiring + dry-run/apply report at `apps/cli/src/commands/task.ts:1027-1032,1045-1047,1077`; `packages/app/tests/services/anchor-qualifier.test.ts` 26 pass. 36 files repaired through the CLI (`ad895ed51`); `spur task migrate-anchors --dry-run --json` → `reasons: 0` (was 36); `rg -c "done_reason:.*PASS artifact at /" docs/tasks*/*.md` → 0 files. |
+| R4 | MET | Same-commit § WT-2 statement, placement asserted as `wt2 < staging < wt3` in `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:51-64`; `bun run build:plugin-lib` produced no diff (the reference is not embedded in a generated bundle). |
+| R5 | MET | `apps/server/bunfig.toml` preloads `../../tests/setup.ts`. `HOME=<temp> bun test tests/serve.test.ts` wrote `$HOME/.config/spur/projects.json` before the change and writes nothing after. The full workspace run `HOME=<temp> cd apps/server && bun test` wrote `projects.json` before, then still wrote `slash_commands.json`; after `tests/setup.ts:71-84` also pins `SPUR_SLASH_COMMANDS_FILE`, the same run reports 521 pass / 0 fail and `find $HOME/.config` is empty. `apps/server/tests/workspace-test-isolation.test.ts:34-37` pins both env names; `docs/design/desktop-shell.md` § Packaging documents the manual-smoke override. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Task and feature evidence remains valid without completed scratch | MET | command | Staging executed (246 + 258 verdict files) and the `wrapup-steps metrics` A/B on scratch-only task 1078 flips `UNKNOWN` → `PASS` from byte-identical trees; `feature check E71 --strict --as done` reports the same findings with and without staging, and those seven `L4.scenario-unverified` rows name genuinely incomplete sibling tasks (1024-1027, 1089), not an evidence-plane gap. |
+| AC2 — Retained run inspection and artifact references survive scratch removal | MET | command | R2's relative `done_reason` is asserted for both evidence planes, and the temp-`HOME` workspace run leaves no `.config/spur/` directory behind (521 pass). |
+| AC3 — Existing lasting data is preserved before its scratch dependency is retired | MET | command | 36 absolute references repaired through `spur task migrate-anchors` after reviewing the dry-run, committed separately as `ad895ed51`; the unrelated 479 body-anchor rewrites were deliberately not applied; dry-run now reports `reasons: 0`. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review Report — 1089 (pass 2)
+
+**Scope:** `c7840e2fa..HEAD` on `sp/run-1089-9e8af77d` — 13 source/doc/test files (b6107a373, 68bf13242, 54abbe0d9) plus the 37-file corpus migration (ad895ed51). This pass re-reads the full diff after the remediation hop; pass 1 covered b6107a373 + 68bf13242 + ad895ed51 only.
+**Dimensions:** functional traceability, security, efficiency, correctness, usability, architecture
+**Verdict:** PASS
+
+##### Findings (ranked)
+
+| # | Priority | Dimension | Finding | Location | Disposition |
+|---|----------|-----------|---------|----------|-------------|
+| 1 | P3 (minor) | correctness | `path.relative` yields `\` on Windows, so the recorded `done_reason` would have violated R2's `.spur/…` form and escaped the R3 normalization rule. Raised in pass 1 and corrected in 68bf13242; the assertion pins the POSIX form and would go red on the windows-latest leg of `test-win.yml`. Closed. | `packages/app/src/services/task-transition.ts:213-222`, `packages/app/tests/services/task-transition.test.ts:322-334`| RESOLVED (68bf13242) |
+| 2 | P4 (advisory) | correctness | The two global-config leaks a workspace-local run could reach were not closed together: pass 1 shipped `SPUR_PROJECTS_FILE` isolation and the verify stage caught the surviving `slash_commands.json` write. 54abbe0d9 now isolates both through one preload and pins both names, so the class is closed at its single owner. | `tests/setup.ts:71-84`, `apps/server/tests/workspace-test-isolation.test.ts:34-37`| RESOLVED (54abbe0d9) |
+| 3 | P4 (advisory) | architecture | The qualification pass owns two rules (body anchors and the `done_reason` frontmatter rule) while its module name and CLI verb stay anchor-scoped. The module header states the widening; acceptable at two rules, rename when a third arrives. | `packages/app/src/services/anchor-qualifier.ts:16-22`| ACCEPTED |
+| 4 | P4 (advisory) | correctness | `normalizeDoneReason` requires the literal `unforced close; ` prefix, so the same absolute shape under a different prefix (a future close-audit writer) would not be repaired. Deliberate per Design: operator prose must never be rewritten. `spur task migrate-anchors --dry-run --json` reporting `reasons: 0` is the only detector. | `packages/app/src/services/anchor-qualifier.ts:110-127`| ACCEPTED |
+| 5 | P4 (advisory) | testability | R1's staging step is prose plus a static `SPEC` string pin; a driver that silently omits the loop fails no automated check. R4 asked for the doc statement, and the A/B receipts in `## Testing` are the compensating control. | `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:51-64`| ACCEPTED |
+
+`Disposition` is the residual-sweep contract: a `RESOLVED`/`FIXED`/`DONE` cell closes the row,
+`DEFER(<reason>)` reclassifies a P3, and a bare P1-P3 row stays blocking.
+
+##### Functional Traceability
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | § WT-2 "Evidence staging before the first task (create and reuse mode)"; placement pinned inside WT-2 (47 pass). Executed this run (246 + 258 verdict files); `cp -n` no-clobber verified against a seeded divergent worktree verdict; the metrics A/B on scratch-only task 1078 flips `UNKNOWN` → `PASS`. |
+| R2 | MET | `packages/app/src/services/task-transition.ts:203-222` — project-root-relative with POSIX separators, absolute outside the root; 22 pass in `packages/app/tests/services/task-transition.test.ts`. No consumer resolves `done_reason` as a path. |
+| R3 | MET | `normalizeDoneReason` + per-file application (`packages/app/src/services/anchor-qualifier.ts:110-127, 369-389`), CLI report/JSON wiring, 26 pass; 36 files repaired through the CLI; dry-run `reasons: 0`. |
+| R4 | MET | Same-commit § WT-2 statement with the `wt2 < staging < wt3` placement pin. |
+| R5 | MET | `apps/server/bunfig.toml` preloads the shared setup; `tests/setup.ts` isolates both `SPUR_PROJECTS_FILE` and `SPUR_SLASH_COMMANDS_FILE`; `HOME=<temp> cd apps/server && bun test` → 521 pass / 0 fail and `find $HOME/.config` empty (it wrote `projects.json` before, then also `slash_commands.json`); the pin asserts both names; `docs/design/desktop-shell.md` § Packaging documents the manual-smoke override. |
+
+##### AC Traceability
+
+| AC | Status | Evidence |
+| --- | --- | --- |
+| AC1 — Task and feature evidence remains valid without completed scratch | MET | Staging receipt plus the metrics A/B from byte-identical trees. |
+| AC2 — Retained run inspection and artifact references survive scratch removal | MET | R2's relative `done_reason` assertions and R5's empty-`$HOME/.config` temp-`HOME` run close both halves. |
+| AC3 — Existing lasting data is preserved before its scratch dependency is retired | MET | 36 absolute references repaired through `spur task migrate-anchors` as their own corpus commit; the unrelated 479 anchor rewrites deliberately not applied; dry-run `reasons: 0`. |
+
+**Verification evidence:** `bun run spur-check` PASS at proof digest `sha256:6068dbeff…` — 10161 pass / 0 fail, lint clean, pre/post rule presets clean; targeted suites 22 + 26 + 47 + 1 pass; the temp-`HOME` workspace run 521 pass.
+
+**Security / efficiency:** no new trust boundary; `done_reason` is provenance text derived from the run dir and written only through `PlanningWriteService.updateFrontmatter`. The added per-file work is one already-parsed frontmatter read, and no scan count changed.
+
+**Next:** verify R1-R5 against AC1-AC3 on the fresh digest, then record.
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-10-05T18:23:45.746Z backlog → todo (system)
+- 2026-10-05T18:25:26.177Z todo → wip (system)
+- 2026-10-05T18:55:36.254Z wip → testing (system)
+- 2026-10-05T18:57:28.496Z testing → done (system)
+

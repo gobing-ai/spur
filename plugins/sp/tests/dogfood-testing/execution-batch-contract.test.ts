@@ -53,6 +53,24 @@ describe('execution-batch spec contract (task 0701)', () => {
     });
 });
 
+describe('execution-batch spec contract (task 1089 R1)', () => {
+    test('WT-2 stages prior-task verdicts into the worktree, never clobbering one', () => {
+        const wt2 = SPEC.indexOf('### WT-2 — Worktree creation or adoption');
+        const wt3 = SPEC.indexOf('### WT-3 — Crash-safe state marker');
+        const staging = SPEC.indexOf('#### Evidence staging before the first task (create and reuse mode)');
+        // R4: the step lives inside § WT-2, in the create/adopt → marker → loop sequence.
+        expect(wt2).toBeGreaterThan(-1);
+        expect(wt3).toBeGreaterThan(wt2);
+        expect(staging).toBeGreaterThan(wt2);
+        expect(staging).toBeLessThan(wt3);
+        // R1: both untracked evidence planes, `cp -n`, and the before-first-task ordering.
+        expect(SPEC).toContain('for d in .spur/memory/evidence .spur/run; do');
+        expect(SPEC).toContain('cp -n "$f" "$WT/$d/"');
+        expect(SPEC).toContain('before the first task runs');
+        expect(SPEC).toContain('must never clobber it');
+    });
+});
+
 describe('execution-batch spec contract (task 0948 R9)', () => {
     test('default worktree root is a sibling path, not under .spur/', () => {
         expect(SPEC).toContain('git worktree add "../<repo>-<command>-<selector-slug>-<short-id>"');

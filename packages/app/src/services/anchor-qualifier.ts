@@ -16,6 +16,12 @@
  * files can never be a target — a gitignored `.spur/run/**` artifact is external
  * evidence (task 0584's form), never a qualification candidate.
  *
+ * Since 1089 R3 the pass also owns the one machine-specific reference the close
+ * audit puts in tracked corpus: an absolute `done_reason` artifact path. It is
+ * normalized to its repo-relative form by {@link normalizeDoneReason} through a
+ * separate frontmatter writer, because a `PASS artifact at /Users/<someone>/…`
+ * reason stops resolving once that worktree is removed.
+ *
  * Line numbers are out of scope (R3): a qualified path keeps its original line
  * range byte-for-byte. A still-stale line is caught by subject matching, not by
  * this pass rewriting the author's intended line.
@@ -58,6 +64,12 @@ export interface AnchorFileReport {
      * case already follows.
      */
     skipped?: string;
+    /**
+     * Absolute `done_reason` artifact references normalized to a repo-relative path
+     * (1089 R3). Reported on a dry run exactly like {@link qualified}, and written
+     * through the frontmatter writer on apply.
+     */
+    doneReasons: Array<{ from: string; to: string }>;
 }
 
 /** Aggregate qualification report (mirrors MigrationReport shape). */
@@ -81,6 +93,12 @@ export interface AnchorQualifierOptions {
     taskDirs?: string[];
     /** Writer callback: (ref, section, newBody) => Promise<void> via updateSection. */
     write?: (filePath: string, wbs: string, section: string, newBody: string) => Promise<void>;
+    /**
+     * Frontmatter writer callback for the `done_reason` rule (1089 R3):
+     * (filePath, wbs, key, value) => Promise<void> via `updateFrontmatter`. Absent
+     * means the reason is reported on a dry run and left unwritten on apply.
+     */
+    writeField?: (filePath: string, wbs: string, key: string, value: string) => Promise<void>;
     /** Resolve the planning folders (used when taskDirs not provided). */
     resolveFolders?: () => Promise<string[]>;
     /** Repo root for the git tracked-file index. Defaults to `git rev-parse --show-toplevel`. */
@@ -88,6 +106,28 @@ export interface AnchorQualifierOptions {
 }
 
 const ANCHOR_RE = /`([^`\n]+?):(\d+)(?:-(\d+))?`/g;
+
+/**
+ * The unforced close reason's absolute-artifact shape (1089 R3).
+ *
+ * `task-transition.ts` writes `unforced close; PASS artifact at <path>`; before
+ * 1089 R2 that path went in absolute, and for a `--worktree` close it pointed into
+ * a tree the success path then deletes. Anchored on the full prefix on purpose —
+ * a forced-close rationale, a research note, or an already-relative reason is
+ * operator text and must be left exactly as written.
+ */
+const ABSOLUTE_DONE_REASON_RE = /^(unforced close; PASS artifact at )\/.*?\/(\.spur\/.*)$/;
+
+/**
+ * Normalize a `done_reason` artifact reference to repo-relative form. Returns the
+ * replacement value, or `null` when the reason is not that shape (nothing to do).
+ */
+export function normalizeDoneReason(reason: string): string | null {
+    const match = ABSOLUTE_DONE_REASON_RE.exec(reason);
+    if (match === null) return null;
+    const next = `${match[1] ?? ''}${match[2] ?? ''}`;
+    return next === reason ? null : next;
+}
 
 /**
  * Resolve the repository root from `git rev-parse --show-toplevel` (falls back
@@ -244,6 +284,7 @@ export async function anchorQualify(
     opts: AnchorQualifyOptions & {
         taskDirs?: string[];
         write?: AnchorQualifierOptions['write'];
+        writeField?: AnchorQualifierOptions['writeField'];
         /**
          * Repo root for the tracked-file index. Forwarded so a caller can scope the
          * pass to the project it is operating on. Without it `resolveRepoRoot` falls
@@ -259,6 +300,7 @@ export async function anchorQualify(
         dryRun: opts.dryRun ?? false,
         taskDirs: opts.taskDirs,
         write: opts.write,
+        writeField: opts.writeField,
         projectRoot: opts.projectRoot,
     });
 }
@@ -303,6 +345,7 @@ export async function qualifyAnchors(
             let modified = false;
             let skipped: string | undefined;
             const qualified: QualifiedAnchor[] = [];
+            const doneReasons: Array<{ from: string; to: string }> = [];
             const ambiguous: Array<{ cited: string; candidates: string[] }> = [];
             for (const section of ['Testing', 'Solution'] as const) {
                 const body = doc.getSection(section);
@@ -326,13 +369,37 @@ export async function qualifyAnchors(
                     modified = true; // dry-run still reports the would-be change
                 }
             }
-            if (qualified.length > 0 || ambiguous.length > 0 || modified || skipped !== undefined) {
+            // 1089 R3: the same pass owns the other machine-specific reference in
+            // tracked corpus. An unwritable legacy task was already reported via
+            // `skipped` by the section loop — do not attempt a second gate-failing
+            // write on the same file.
+            const doneReason = doc.frontmatterData?.done_reason;
+            const normalizedReason = typeof doneReason === 'string' ? normalizeDoneReason(doneReason) : null;
+            if (normalizedReason !== null && skipped === undefined) {
+                doneReasons.push({ from: doneReason as string, to: normalizedReason });
+                if (!dryRun && opts.writeField !== undefined) {
+                    try {
+                        await opts.writeField(filePath, wbs, 'done_reason', normalizedReason);
+                    } catch (err) {
+                        skipped = String(err instanceof Error ? err.message : err);
+                    }
+                }
+                if (skipped === undefined) modified = true;
+            }
+            if (
+                qualified.length > 0 ||
+                ambiguous.length > 0 ||
+                doneReasons.length > 0 ||
+                modified ||
+                skipped !== undefined
+            ) {
                 fileReports.push({
                     path: filePath,
                     wbs,
                     modified: skipped === undefined && modified,
                     qualified,
                     ambiguous,
+                    doneReasons,
                     ...(skipped === undefined ? {} : { skipped }),
                 });
             }

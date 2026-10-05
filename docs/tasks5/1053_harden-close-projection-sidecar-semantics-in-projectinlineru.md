@@ -4,12 +4,12 @@ name: Harden close-projection sidecar semantics in projectInlineRunClose
 status: done
 template: issue
 created_at: 2026-10-02T20:15:00.291Z
-updated_at: "2026-10-03T01:29:28.749Z"
+updated_at: "2026-10-05T18:22:32.258Z"
 feature_id: D62
 
 priority: P2
 done_forced: "false"
-done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-runall-d62-1c23/.spur/memory/evidence/1053-verdict.json
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1053-verdict.json
 ---
 
 ## 1053. Harden close-projection sidecar semantics in projectInlineRunClose

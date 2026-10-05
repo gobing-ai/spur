@@ -4,14 +4,14 @@ name: Resume wip fleet work with --continue and stop deriving member ids from ex
 status: done
 template: feature-impl
 created_at: 2026-10-04T20:30:37.131Z
-updated_at: "2026-10-05T04:31:35.014Z"
+updated_at: "2026-10-05T18:22:32.283Z"
 feature_id: G71
 
 dependencies: ["1073"]
 priority: P1
 estimate_hours: 4
 done_forced: "false"
-done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-runall-g71-302b/.spur/memory/evidence/1075-verdict.json
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1075-verdict.json
 ---
 
 ## 1075. Resume wip fleet work with --continue and stop deriving member ids from executors

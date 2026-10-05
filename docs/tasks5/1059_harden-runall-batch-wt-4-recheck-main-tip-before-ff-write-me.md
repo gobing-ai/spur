@@ -4,7 +4,7 @@ name: "Harden runall batch WT-4: recheck main tip before FF, write merged marker
 status: done
 template: feature-impl
 created_at: 2026-10-02T23:30:10.890Z
-updated_at: "2026-10-03T03:29:11.455Z"
+updated_at: "2026-10-05T18:22:32.265Z"
 feature_id: D63
 
 priority: P2
@@ -12,7 +12,7 @@ ac_numbering: task-local
 ac_altitude: task-local
 estimate_hours: 4
 done_forced: "false"
-done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-runall-d63-2ebbd97c/.spur/memory/evidence/1059-verdict.json
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1059-verdict.json
 ---
 
 ## 1059. Harden runall batch WT-4: recheck main tip before FF, write merged marker only after ref move

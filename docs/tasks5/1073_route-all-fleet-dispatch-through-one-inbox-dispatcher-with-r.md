@@ -4,13 +4,13 @@ name: Route all fleet dispatch through one inbox dispatcher with receipt waits a
 status: done
 template: feature-impl
 created_at: 2026-10-04T20:30:28.484Z
-updated_at: "2026-10-05T03:50:10.139Z"
+updated_at: "2026-10-05T18:22:32.280Z"
 feature_id: G71
 
 priority: P1
 estimate_hours: 8
 done_forced: "false"
-done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-runall-g71-302b/.spur/memory/evidence/1073-verdict.json
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1073-verdict.json
 ---
 
 ## 1073. Route all fleet dispatch through one inbox dispatcher with receipt waits and a non-blocking GTD tick
