@@ -534,6 +534,67 @@ describe('projectWorkflowProgress', () => {
         db.close();
     });
 
+    // 1085 R4 residual (review-finding 857e62b5): same-kind rows beyond the first match inside
+    // one visit are retries — they must surface as attempts, not vanish claimed-but-unsurfaced.
+    test('surfaces same-kind retry rows of a visited state as attempts in recorded order (1085 residual)', async () => {
+        const db = await setupDb();
+        await seedInlineRun(db, 'r-inline-retry', 'running', inlinePipelineDef);
+        const base = Date.now();
+        // precheck declares one shell action; three same-kind rows = first run plus two retries.
+        await seedInlineActionRow(db, 'r-inline-retry', {
+            id: 'ar-p1',
+            node: 'precheck',
+            kind: 'shell',
+            durationMs: 100,
+            createdAt: base + 1,
+        });
+        await seedInlineActionRow(db, 'r-inline-retry', {
+            id: 'ar-p2',
+            node: 'precheck',
+            kind: 'shell',
+            durationMs: 120,
+            createdAt: base + 2,
+        });
+        await seedInlineActionRow(db, 'r-inline-retry', {
+            id: 'ar-p3',
+            node: 'precheck',
+            kind: 'shell',
+            durationMs: 90,
+            createdAt: base + 3,
+        });
+        // implement declares agent.run + shell; a retried shell keeps the kinds apart.
+        await seedInlineActionRow(db, 'r-inline-retry', {
+            id: 'ar-i-agent',
+            node: 'implement',
+            kind: 'agent.run',
+            durationMs: 500,
+            createdAt: base + 4,
+        });
+        await seedInlineActionRow(db, 'r-inline-retry', {
+            id: 'ar-i-sh1',
+            node: 'implement',
+            kind: 'shell',
+            durationMs: 50,
+            createdAt: base + 5,
+        });
+        await seedInlineActionRow(db, 'r-inline-retry', {
+            id: 'ar-i-sh2',
+            node: 'implement',
+            kind: 'shell',
+            durationMs: 60,
+            createdAt: base + 6,
+        });
+
+        const projection = await projectWorkflowProgress('r-inline-retry', { db, workflowDef: inlinePipelineDef });
+
+        // Every recorded row of a visited state is an attempt, in recorded order; none is
+        // dropped and none needs a diagnostic.
+        expect(attemptIds(projection, 'precheck')).toEqual(['ar-p1', 'ar-p2', 'ar-p3']);
+        expect(attemptIds(projection, 'implement')).toEqual(['ar-i-agent', 'ar-i-sh1', 'ar-i-sh2']);
+        expect(projection.diagnostics).toEqual([]);
+        db.close();
+    });
+
     test('leaves no state with recorded work pending on a terminal inline run (1085 R1/AC1)', async () => {
         const db = await setupDb();
         await seedInlineRun(db, 'r-inline-done', 'done', inlinePipelineDef);

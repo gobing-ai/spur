@@ -517,21 +517,28 @@ export async function projectWorkflowProgress(
                     });
                     actionStatus = 'ambiguous';
                 } else {
-                    // Map candidate rows (or first available)
+                    // Map candidate rows. A single declared action of this kind owns ALL its
+                    // recorded rows as attempts — retries stay visible in recorded order instead
+                    // of vanishing claimed-but-unsurfaced (1085 R4 residual). With several
+                    // same-kind def actions, rows keep distributing one per action as before.
                     const matchingRow = candidateRows[0];
                     if (matchingRow) {
-                        usedActionRowIds.add(matchingRow.id);
+                        const rowsToMap = sameKindDefCount === 1 ? candidateRows : [matchingRow];
+                        for (const row of rowsToMap) {
+                            usedActionRowIds.add(row.id);
 
-                        attempts.push({
-                            actionRunId: matchingRow.id,
-                            status: matchingRow.status,
-                            ok: matchingRow.ok !== null ? matchingRow.ok === 1 : null,
-                            startedAt: matchingRow.started_at,
-                            completedAt: matchingRow.completed_at,
-                            durationMs: matchingRow.duration_ms,
-                            ...readProvenance(matchingRow.result_json),
-                        });
+                            attempts.push({
+                                actionRunId: row.id,
+                                status: row.status,
+                                ok: row.ok !== null ? row.ok === 1 : null,
+                                startedAt: row.started_at,
+                                completedAt: row.completed_at,
+                                durationMs: row.duration_ms,
+                                ...readProvenance(row.result_json),
+                            });
+                        }
 
+                        // Action status keeps today's semantics: the first recorded row decides.
                         if (matchingRow.status === 'running') {
                             actionStatus = 'running';
                         } else if (matchingRow.status === 'passed') {

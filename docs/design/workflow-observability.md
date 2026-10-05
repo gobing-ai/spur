@@ -281,8 +281,10 @@ state the run did not visit is now named (`unvisited-state-row`) where the older
 silently. Unclaimed rows are reported by cause
 (0868 #7, extended by 1085 R4): `orphan-action-row` when the `node` matches no declared state action,
 `unvisited-state-row` when the row's `node` is a declared state the run did not visit. Each unclaimed
-row yields exactly one diagnostic naming it; rows a visited state consumes keep the
-mapping/`ambiguous-action` behaviour above.
+row yields exactly one diagnostic naming it. Same-kind rows beyond the first match of a single
+declared action surface as additional attempts in recorded order (retries stay visible), so no
+recorded row of a visited state is dropped unsurfaced; rows claimed under a multi-same-kind-action
+mapping keep the `ambiguous-action` behaviour above.
 
 ### Definition digest persistence
 
