@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 
 import {
+    buildRecentMessagesThread,
     buildThread,
     decodeRequestEnvelope,
     encodeRequestEnvelope,
@@ -162,5 +163,57 @@ describe('buildThread (0841 R1/R6)', () => {
         expect(thread.find((e) => e.id === 'p1')?.deliveryStatus).toBe('injected');
         expect(thread.find((e) => e.id === 'p2')?.inReplyTo).toBe('missing-id');
         expect(thread).toHaveLength(3);
+    });
+});
+
+describe('buildRecentMessagesThread (0844)', () => {
+    test('operator, terminal, user and board-operator senders are requests; everyone else is a response', () => {
+        const thread = buildRecentMessagesThread([
+            msg({ id: 'a', fromId: OPERATOR_AGENT_ID, createdAt: '2026-09-12T10:00:00.000Z' }),
+            msg({ id: 'b', fromId: 'terminal', createdAt: '2026-09-12T10:01:00.000Z' }),
+            msg({ id: 'c', fromId: 'user', createdAt: '2026-09-12T10:02:00.000Z' }),
+            msg({ id: 'd', fromId: 'operator', createdAt: '2026-09-12T10:03:00.000Z' }),
+            msg({ id: 'e', fromId: 'lead', createdAt: '2026-09-12T10:04:00.000Z' }),
+            msg({ id: 'f', fromId: null, createdAt: '2026-09-12T10:05:00.000Z' }),
+        ]);
+        expect(thread.map((e) => [e.id, e.kind])).toEqual([
+            ['a', 'request'],
+            ['b', 'request'],
+            ['c', 'request'],
+            ['d', 'request'],
+            ['e', 'response'],
+            ['f', 'response'],
+        ]);
+    });
+
+    test('sorts ascending by createdAt with an id tie-break, and decodes envelopes like buildThread', () => {
+        const same = '2026-09-12T10:00:00.000Z';
+        const thread = buildRecentMessagesThread([
+            msg({ id: 'z', createdAt: same }),
+            msg({ id: 'y', createdAt: same, body: encodeRequestEnvelope('run it', [{ kind: 'feature', id: 'G63' }]) }),
+            msg({ id: 'older', createdAt: '2026-09-12T09:00:00.000Z' }),
+        ]);
+        expect(thread.map((e) => e.id)).toEqual(['older', 'y', 'z']);
+        expect(thread.find((e) => e.id === 'y')?.text).toBe('run it');
+        expect(thread.find((e) => e.id === 'y')?.refs).toEqual([{ kind: 'feature', id: 'G63' }]);
+    });
+});
+
+describe('decodeRequestEnvelope line-ending and normalization edges (0841)', () => {
+    test('CRLF separators decode like LF', () => {
+        const body = `${REQUEST_ENVELOPE_PREFIX}{"refs":[{"kind":"task","wbs":"0841"}]}\r\n\r\nmulti\r\nline`;
+        expect(decodeRequestEnvelope(body)).toEqual({
+            text: 'multi\r\nline',
+            refs: [{ kind: 'task', wbs: '0841' }],
+        });
+    });
+
+    test('non-string fromId/inReplyTo normalize to null in parseInboxMessages', () => {
+        const rows = parseInboxMessages({
+            messages: [{ id: 'a', toId: 'b', body: 'c', status: 'queued', createdAt: 't', fromId: 7, inReplyTo: 9 }],
+        });
+        expect(rows).toEqual([
+            { id: 'a', fromId: null, toId: 'b', body: 'c', status: 'queued', createdAt: 't', inReplyTo: null },
+        ]);
     });
 });
