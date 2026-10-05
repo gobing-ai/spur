@@ -1,13 +1,15 @@
 ---
 schema_version: 1
 name: Include desktop packaging in the root build
-status: testing
+status: done
 template: standard
 created_at: 2026-10-05T01:52:28.356Z
-updated_at: "2026-10-05T02:21:22.968Z"
+updated_at: "2026-10-05T04:19:20.975Z"
 
 ac_altitude: task-local
 ac_numbering: task-local
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/run/1086/verdict.json
 ---
 
 ## 1086. Include desktop packaging in the root build
@@ -44,6 +46,10 @@ And the standalone desktop pack command remains documented.
      condition. Not a parking lot for open questions — an unanswered question here means the task
      is not ready to hand off. Keep empty if none. -->
 
+#### Q&A entry — 2026-10-05T04:05:17.766Z
+
+The operator explicitly requested resolving task 1086 before implementing server reuse. The unchanged scratch-disposal test now passes in both the live main checkout and the isolated `feat/desktop-server-reuse` worktree (approximately 0.5 seconds). Its Git fingerprint capture measures approximately 50 ms in both trees. Earlier five-second failures are retained as historical failed attempts; current evidence does not justify a speculative code fix or longer timeout. The remaining completion condition is a clean full gate on a fixed revision, followed by recorded PASS provenance. The isolated worktree protects the verification from other sessions committing or editing main.
+
 ### Design
 
 Append the existing `bun run --filter @gobing-ai/spur-desktop pack` to the root `package.json` build chain. Reuse its staging and Electron builder configuration. Packaging targets the current host platform; this does not introduce cross-platform builds, new scripts, dependencies or signing policy. Update only `apps/desktop/README.md` and `docs/design/desktop-shell.md`. Validate through a real root build on this Mac and the required task gate.
@@ -53,8 +59,8 @@ Append the existing `bun run --filter @gobing-ai/spur-desktop pack` to the root 
 - [x] Add the existing desktop pack command after the web build in `package.json`.
 - [x] Synchronize `apps/desktop/README.md` and `docs/design/desktop-shell.md`.
 - [x] Run the root build and verify CLI/server/web/app/DMG outputs.
-- [x] Review the diff and record the actual validation evidence.
-- [ ] Achieve a full quality-gate PASS: the unchanged task-record scratch-disposal test currently times out after 5000ms.
+- [x] Review the diff and record actual validation evidence.
+- [x] Complete the full quality gate on a stable revision: 10036 tests passed, no failures, coverage and all lint/type/rule checks passed.
 
 ### Solution
 
@@ -68,7 +74,7 @@ Append the existing `bun run --filter @gobing-ai/spur-desktop pack` to the root 
 
 **Pipeline verify results**
 
-- Verdict: PARTIAL (from verdict artifact)
+- Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
@@ -86,13 +92,13 @@ Append the existing `bun run --filter @gobing-ai/spur-desktop pack` to the root 
 
 Scope: `package.json:67`, `apps/desktop/README.md:34`, `docs/design/desktop-shell.md:45`.
 
-Functional: R1 uses the existing pack script after web, with shell failure propagation preserved. R2 is verified by the successful real macOS root build and recorded outputs. R3 synchronizes the README and existing packaging owner under constitution T3.
+Functional: R1 composes the existing native pack script after web with shell failure propagation. R2 is proven by the real root build and app/DMG output receipts. R3 synchronizes the README and owning contract under constitution T3. SECUA and architecture: no new inputs, dependencies or runtime/security boundaries; packaging reuses the existing staging, builder and signing policy.
 
-SECUA: no new inputs, dependencies, runtime code or security boundary. Accessibility is unaffected. Native packaging uses the existing signing configuration. Architecture: the app remains a thin transport and reuses existing staging and packaging.
+The earlier validation limitations are resolved by the stable-revision rerun: 10036 tests across 584 files passed, coverage passed, lint/typechecks and all 50 pre/2 post rules passed. The unchanged scratch-disposal case passed in 777.43 ms and D61 feature-check case in 130.13 ms. An earlier isolated run was interrupted by SIGTERM; it is retained as interrupted evidence, not a PASS. Its completed lint/pre-rule phases were followed by a fresh full test phase and post-rules on the same unchanged source revision. No timeout increase, suppression or speculative code fix was applied. No blocking findings remain. Native artifacts were verified on macOS; no Windows/Linux package verification is claimed.
 
-No blocking findings. Builds now include native Electron packaging for the current host platform, increasing build time and using the existing packaging tooling. The CI build also invokes this same command on its host. Windows and Linux native packages are not verified by this macOS run.
-
-Validation limitation: the first full gate mixed code and tests while another session merged task 1085; its four workflow failures pass against the final revision. The second gate has 10,033 passes and one failure: the unchanged `packages/app/tests/services/task-record.test.ts:709` scratch-disposal test times out after 5000ms. The same case reproduces directly. This blocks full-gate certification; no timeout increase, suppression or out-of-scope test edit was applied. Lint, typechecks, all 50 pre-check rules and both post-check rules pass.
+| Priority | Finding | File:Line | Disposition |
+| --- | --- | --- | --- |
+| P4 | Native packaging evidence covers macOS; Windows/Linux packaging remains outside this task's verification. | `apps/desktop/README.md:34` | Advisory; no blocking findings for the requested macOS root build. |
 
 ### References
 
@@ -103,4 +109,5 @@ Validation limitation: the first full gate mixed code and tests while another se
 - 2026-10-05T01:53:53.240Z backlog → todo (system)
 - 2026-10-05T01:53:54.649Z todo → wip (system)
 - 2026-10-05T02:21:22.968Z wip → testing (system)
+- 2026-10-05T04:19:20.971Z testing → done (system)
 
