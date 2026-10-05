@@ -17,6 +17,7 @@ git ls-files docs/dogfood | grep -Ev '(README|INDEX)\.md$'
 
 ## Reports
 
+- `2026-07-28-D1-0365-workflow-observability-dogfood.md`
 - `2026-08-08-E1-history-data-plane-dogfood.md`
 - `2026-08-10-H12-dev-find-next-dogfood.md`
 - `2026-08-13-D4-0533-workflow-yaml-extensions-dogfood.md`

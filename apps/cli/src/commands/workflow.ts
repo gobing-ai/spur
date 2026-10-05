@@ -1890,7 +1890,8 @@ function formatTraceList(result: WorkflowTraceListResult): string {
 export function formatTraceTimeline(result: WorkflowTraceTimeline): string {
     const { run, events } = result;
     const dryLabel = run.isDryRun ? ' [DRY RUN]' : '';
-    const reasonLabel = run.failureReason ? ` — ${run.failureReason}` : '';
+    const reason = run.failureReason ?? run.terminalReason;
+    const reasonLabel = reason ? ` — ${reason}` : '';
     const lines = [
         `Run: ${run.runId} — ${run.workflowName} (${run.mode}) — ${run.status}${dryLabel}${reasonLabel}`,
         `Project: ${run.project.name} (${run.project.root})`,

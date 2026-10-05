@@ -2351,6 +2351,34 @@ failureStates:
         await rm(cwd, { recursive: true, force: true });
     });
 
+    test('trace --json surfaces the run terminal reason (cancel parity)', async () => {
+        const cwd = await createTempProject();
+        const dbPath = join(cwd, '.spur', 'spur.db');
+        await mkdir(join(cwd, '.spur'), { recursive: true });
+        const db = await createMigratedDb({ url: dbPath });
+        const now = Date.now();
+        await db.run(
+            'INSERT INTO runs (id, workflow_name, mode, status, started_at, completed_at, terminal_reason, metadata_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            ['cancelled-run-1', 'test-flow', 'sync', 'failed', now, now, 'cancelled', '{}', now, now],
+        );
+        db.close();
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['workflow', 'trace', 'cancelled-run-1', '--json'], {
+            output,
+            cwd,
+            dbUrl: dbPath,
+        });
+
+        expect(exitCode).toBe(0);
+        const parsed = JSON.parse(output.messages.at(-1) ?? '{}') as {
+            run?: { status?: string; terminalReason?: string };
+        };
+        expect(parsed.run?.status).toBe('failed');
+        expect(parsed.run?.terminalReason).toBe('cancelled');
+        await rm(cwd, { recursive: true, force: true });
+    });
+
     test('trace --follow --output emits no-log message for a terminal run without a log file', async () => {
         const cwd = await createTempProject();
         const dbPath = join(cwd, '.spur', 'spur.db');

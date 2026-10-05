@@ -760,6 +760,9 @@ clean` reclaims retained logs older than `workflow.logRetentionDays` (default 30
 - `trace` — query persisted workflow run history. No argument: list recent runs (default last 20,
   newest first) with filters `--workflow`, `--status`, `--since`, `--last`. With `<run-id>`:
   per-run timeline of state entries, transitions, and action executions interleaved by `created_at`.
+  The run summary carries `terminalReason` — the authoritative `runs.terminal_reason` (`done`,
+  `cancelled`, `failed-check`, `interrupted`, …) — alongside `failureReason`, which is only present
+  when the run metadata recorded one.
   `--follow` requires a run id, replays that durable timeline, polls every `--poll` milliseconds
   (default 1000; minimum 50), emits changed action rows, and exits at terminal status. It is a
   human stream and cannot be combined with `--json`. `--output` (requires `--follow`) swaps the
