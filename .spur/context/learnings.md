@@ -907,3 +907,25 @@ Full trace: `docs/plans/2026-07-03-feature-cycle-prioritization-brainstorm.md`. 
 - Batch-runId-scoped driver markers (`<runId>-<wbs>-*.status/.digest`, batch-report, env.sh) have no DB run row, so persist-out's ownership enumeration (1012 R1/R2: `<wbs>-*` + DB run ids) never copies them; the driver must copy that family itself before teardown — persist-out-check `--run-id <batchId>` catches the gap (proved live: BLOCKED 40 → 12 → ok).
 - Parallel feature-lifecycle rows for one external key (worktree `running` vs main `interrupted`) block persist-out with `external-key-conflict` (1049, fail-closed). Reconcile = delete the worktree duplicate row + its `__reseed__` children (no unique provenance), then persist-out passes; main's row stays untouched.
 - Landing a batch onto a main that moved: rebase the batch branch in the worktree, resolve append-append learnings conflicts, re-run the full gate on the rebased tip, then FF-only. Feature-scoped L4 then reports a STALE feature-verification receipt (tree digest drift) — expected; the next feature pass re-records it.
+
+## 2026-10-04 — G71 batch (1073-1076) on sp/runall-g71-302b
+
+- **A red repo gate can be pre-existing.** `bun run spur-check` failed on `conversation.ts` coverage
+  (7.98% lines) identically at the batch base — prove a gate failure against the base commit before
+  attributing it to the change. Repaired once, as its own commit, with operator approval.
+- **Per-test timeouts do not survive host contention.** With 13-18 fleet `agent loop` processes running
+  their own pipelines, the same suite that takes 264s idle took 336-1135s and failed only on
+  spawn-heavy tests at 5s/15s/30s/120s budgets. The fix is a quiet host (drain the fleet strategy to
+  `rest`, stop the duplicate serves), not a bigger timeout.
+- **`bun run format` before every gate.** Three gate attempts were lost to lint/format findings
+  (biome line-wrapping, unused imports) that the pre-check rules catch in seconds.
+- **The rule gates are fast and worth running first.** `bun run test-pre-check` / `test-post-check`
+  caught `no-direct-fs-io`, `require-corresponding-test` and `every-export-has-tsdoc` in ~7s each,
+  versus a 5-minute full gate cycle per finding.
+- **New public surfaces must update every doc tree.** `agent trace` needed the spur-cli reference, the
+  CLI-contracts page, `docs/help/cmd_agent.md`, `docs/help2/agent.md` and the CLI matrix (grid cell,
+  per-noun verb-count row and the total-cells summary) before the parity gates went green.
+- **Bare `file.ts:NN` anchors are rejected.** Evidence anchors in Solution/Review/Testing must be
+  repo-root paths; `task check --as done` fails on `L4.anchor-unresolved` otherwise.
+- **Verify answer-file shape is strict**: one `Confidence:` line, bare `R1`-`Rn` IDs in the Req table,
+  the task's exact AC labels, and exactly two tables (an extra table is parsed as more AC rows).
