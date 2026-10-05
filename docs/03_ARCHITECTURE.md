@@ -1199,6 +1199,17 @@ in `packages/app/src/services/done-transition-guard.ts`) read lasting structured
 byte-copies valid verdicts, receipts, and terminal run-record pairs into durable roots with atomic digests
 and manifest tracking, and is composed into `spur workflow clean` (dry-run and apply).
 
+The **agent-run record** lives in the same durable root (1076 R1/R4, ADR-132). `spur agent run` and every
+keyed fleet member turn append redacted, byte-capped `stdout`/`stderr` frames to
+`.spur/memory/runs/<runId>.md` through `AgentRunLog` (`packages/app/src/observability/agent-run-log.ts`),
+the sibling of `WorkflowRunLogSink` — same redaction boundary, same byte cap, same truncation marker, same
+best-effort failure rule, and deliberately no `.state.json` because the `coordination_runs` row IS that run's
+state. `coordination_runs.parent_run_id` is the dispatch edge (a workflow dispatch key `<runId>/<state>` or
+the inherited `SPUR_RUN_ID`), and `AgentTraceService` reads the two families as one lineage:
+`spur agent trace <runId>` walks the edge up to a root and back down, naming each run's status, its exact
+`history_run_session` ids and its stream. The supervisor's per-process ring buffer stays a LIVE VIEW — it is
+tagged with the current `run_id` while a keyed drain is live, but the file is the record.
+
 New run records (`.md` and `.state.json`), including active runs, write directly to `recordsDir` (`.spur/memory/runs/`), registered artifact bytes copy to
 `runArtifactsDir` (`.spur/memory/runs/<runId>/artifacts/`) before DAO registration (`persistDurableArtifact`),
 and agent session dirs write to `runSessionsDir` (`.spur/memory/runs/<runId>/agent-sessions/`). Readers

@@ -106,6 +106,11 @@ export interface AgentLoopDeps {
     }>;
     settle(claimed: string[], outcome: 'accepted' | 'not-started'): Promise<void>;
     attachLedger(bus: SystemEventBus): Promise<{ flush(): Promise<void>; unsubscribe(): void }>;
+    /**
+     * 1076 R2: name the run a member's live frames belong to, for the duration of a keyed drain.
+     * Optional — a host without a supervisor simply keeps untagged frames.
+     */
+    setSupervisorRun?(agentId: string, runId: string | undefined): void;
     memberSession: MemberSessionDeps;
 }
 
@@ -461,15 +466,26 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
                     // R2: a keyed run holds the write slot, so the member heartbeats it
                     // for the run's duration. An unkeyed batch claims no slot.
                     if (keyed) stopHeartbeat = createWriteSlotHeartbeat({ projectPath, recipient, getDb: deps.getDb });
-                    // G66 R1: resume mode re-opens the previous drain's session;
-                    // one-shot keeps today's fresh process (R3's warning already
-                    // fired once at loop start).
-                    const drainFlags =
-                        memberSession.mode === 'resume' && memberSession.id !== undefined
-                            ? { ...rewritten, 'session-id': memberSession.id }
-                            : rewritten;
-                    const exitCode = await svc.run(body, drainFlags, runDeps);
-                    drainFailed = exitCode !== 0 || !invocationStarted;
+                    // 1076 R2/R3 (ADR-132): a keyed run OWNS its id, so the durable record, the
+                    // coordination row, the lineage edge and the live frame tags all name the same
+                    // run. AgentService reads `run-id` from the flags; the supervisor is told the
+                    // same id for as long as the run is live.
+                    const runId = keyed ? randomUUID() : undefined;
+                    if (runId !== undefined) deps.setSupervisorRun?.(recipient, runId);
+                    try {
+                        // G66 R1: resume mode re-opens the previous drain's session;
+                        // one-shot keeps today's fresh process (R3's warning already
+                        // fired once at loop start).
+                        const baseFlags = { ...rewritten, ...(runId !== undefined ? { 'run-id': runId } : {}) };
+                        const drainFlags =
+                            memberSession.mode === 'resume' && memberSession.id !== undefined
+                                ? { ...baseFlags, 'session-id': memberSession.id }
+                                : baseFlags;
+                        const exitCode = await svc.run(body, drainFlags, runDeps);
+                        drainFailed = exitCode !== 0 || !invocationStarted;
+                    } finally {
+                        if (runId !== undefined) deps.setSupervisorRun?.(recipient, undefined);
+                    }
                 }
             } finally {
                 stopHeartbeat?.();

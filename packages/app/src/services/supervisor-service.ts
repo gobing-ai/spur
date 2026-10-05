@@ -18,6 +18,12 @@ export interface ProcessFrame {
     ts: string;
     line: string;
     /**
+     * The run that produced this frame (1076 R2, ADR-132), when one is current. The ring
+     * buffer is a LIVE VIEW, never the record — the durable stream is the run's `.md` file —
+     * so an untagged frame is a conversation turn with no run, not a lost record.
+     */
+    runId?: string;
+    /**
      * Monotonic sequence stamped at push time. Ring-buffer overflow splices
      * old frames from the front, so an array index is not a stable cursor —
      * live tails must track the last seq they delivered instead.
@@ -420,7 +426,7 @@ export class SupervisorService {
     private pipeStream(
         stream: ReadableStream<Uint8Array> | null,
         name: 'stdout' | 'stderr',
-        _agentId: string,
+        agentId: string,
         frames: ProcessFrame[],
     ): void {
         if (!stream) return;
@@ -436,24 +442,42 @@ export class SupervisorService {
                     const lines = partial.split('\n');
                     partial = lines.pop() ?? '';
                     for (const line of lines) {
-                        this.pushFrame(frames, { stream: name, ts: new Date().toISOString(), line });
+                        this.pushFrame(frames, { stream: name, ts: new Date().toISOString(), line }, agentId);
                     }
                     pump();
                 })
                 .catch((err) => {
                     const message = err instanceof Error ? err.message : String(err);
-                    this.pushFrame(frames, {
-                        stream: name,
-                        ts: new Date().toISOString(),
-                        line: `[stream error: ${message}]`,
-                    });
+                    this.pushFrame(
+                        frames,
+                        {
+                            stream: name,
+                            ts: new Date().toISOString(),
+                            line: `[stream error: ${message}]`,
+                        },
+                        agentId,
+                    );
                 });
         };
         pump();
     }
 
-    private pushFrame(frames: ProcessFrame[], frame: Omit<ProcessFrame, 'seq'>): void {
-        frames.push({ ...frame, seq: this.frameSeq++ });
+    /**
+     * 1076 R2 (ADR-132): name the run a member's frames belong to, for the duration of a keyed
+     * drain. `undefined` clears it (persistent stdin conversation has no run).
+     */
+    setCurrentRun(agentId: string, runId: string | undefined): void {
+        if (runId === undefined) this.currentRunIds.delete(agentId);
+        else this.currentRunIds.set(agentId, runId);
+    }
+
+    private readonly currentRunIds = new Map<string, string>();
+
+    private pushFrame(frames: ProcessFrame[], frame: Omit<ProcessFrame, 'seq'>, agentId?: string): void {
+        // Tag with the member's current run when one is live: the ring buffer is a live view,
+        // and a frame that belongs to a named run must say so while it is being watched.
+        const currentRunId = agentId === undefined ? undefined : this.currentRunIds.get(agentId);
+        frames.push({ ...frame, ...(currentRunId !== undefined ? { runId: currentRunId } : {}), seq: this.frameSeq++ });
         if (frames.length > this.ringBufferSize) {
             frames.splice(0, frames.length - this.ringBufferSize);
         }

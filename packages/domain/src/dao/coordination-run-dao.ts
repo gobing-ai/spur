@@ -47,6 +47,8 @@ export interface CoordinationRunRow {
     message_ids_json: string;
     task_id: string | null;
     outcome: string;
+    /** ADR-132 lineage edge: the run that dispatched this one (null for a root). */
+    parent_run_id: string | null;
 }
 
 /**
@@ -77,6 +79,11 @@ export interface StartCoordinationRunInput {
     /** Persist origin before dispatch so an interrupted run remains attributable. */
     messageIds?: string[];
     taskId?: string;
+    /**
+     * The dispatching run's id (1076 R3, ADR-132): a workflow dispatch names it in the request
+     * key `<runId>/<state>`, and a nested agent run inherits `SPUR_RUN_ID`. Absent = root.
+     */
+    parentRunId?: string;
 }
 
 // ── DAO ──
@@ -93,8 +100,8 @@ export class CoordinationRunDao {
     async insertStart(input: StartCoordinationRunInput): Promise<void> {
         await this.db.run(
             `INSERT INTO coordination_runs
-                (spec_id, agent_kind, process_id, run_id, generation, status, started_at, completed_at, artifact_refs_json, message_ids_json, task_id)
-             VALUES (?, ?, ?, ?, ?, 'running', ?, NULL, '[]', ?, ?)`,
+                (spec_id, agent_kind, process_id, run_id, generation, status, started_at, completed_at, artifact_refs_json, message_ids_json, task_id, parent_run_id)
+             VALUES (?, ?, ?, ?, ?, 'running', ?, NULL, '[]', ?, ?, ?)`,
             input.specId,
             input.agentKind,
             input.processId,
@@ -103,6 +110,7 @@ export class CoordinationRunDao {
             input.startedAt,
             JSON.stringify(input.messageIds ?? []),
             input.taskId ?? null,
+            input.parentRunId ?? null,
         );
     }
 
@@ -140,7 +148,7 @@ export class CoordinationRunDao {
     async listByMessageId(messageId: string): Promise<CoordinationRunRow[]> {
         return (
             (await this.db.queryAll<CoordinationRunRow>(
-                `SELECT spec_id, agent_kind, process_id, run_id, generation, status, started_at, completed_at, artifact_refs_json, message_ids_json, task_id, outcome
+                `SELECT spec_id, agent_kind, process_id, run_id, generation, status, started_at, completed_at, artifact_refs_json, message_ids_json, task_id, outcome, parent_run_id
                  FROM coordination_runs r, json_each(r.message_ids_json)
                  WHERE json_each.value = ?
                  ORDER BY r.started_at DESC`,
@@ -153,7 +161,7 @@ export class CoordinationRunDao {
     async listByTaskId(taskId: string): Promise<CoordinationRunRow[]> {
         return (
             (await this.db.queryAll<CoordinationRunRow>(
-                `SELECT spec_id, agent_kind, process_id, run_id, generation, status, started_at, completed_at, artifact_refs_json, message_ids_json, task_id, outcome
+                `SELECT spec_id, agent_kind, process_id, run_id, generation, status, started_at, completed_at, artifact_refs_json, message_ids_json, task_id, outcome, parent_run_id
                  FROM coordination_runs
                  WHERE task_id = ?
                  ORDER BY started_at DESC`,
@@ -162,12 +170,35 @@ export class CoordinationRunDao {
         );
     }
 
+    /**
+     * Runs dispatched BY `runId` (1076 R3, ADR-132) — the downward half of the lineage tree.
+     * Ordered oldest-first so a trace reads in dispatch order.
+     */
+    async listByParentRunId(runId: string): Promise<CoordinationRunRow[]> {
+        try {
+            return (
+                (await this.db.queryAll<CoordinationRunRow>(
+                    `SELECT spec_id, agent_kind, process_id, run_id, generation, status, started_at, completed_at, artifact_refs_json, message_ids_json, task_id, outcome, parent_run_id
+                     FROM coordination_runs
+                     WHERE parent_run_id = ?
+                     ORDER BY started_at ASC`,
+                    runId,
+                )) ?? []
+            );
+        } catch (error) {
+            if (error instanceof Error && error.message.includes('no such table: coordination_runs')) {
+                return [];
+            }
+            throw error;
+        }
+    }
+
     /** Get a run row by runId, or null. */
     async getByRunId(runId: string): Promise<CoordinationRunRow | null> {
         try {
             return (
                 (await this.db.queryFirst<CoordinationRunRow>(
-                    `SELECT spec_id, agent_kind, process_id, run_id, generation, status, started_at, completed_at, artifact_refs_json, message_ids_json, task_id, outcome
+                    `SELECT spec_id, agent_kind, process_id, run_id, generation, status, started_at, completed_at, artifact_refs_json, message_ids_json, task_id, outcome, parent_run_id
                      FROM coordination_runs WHERE run_id = ?`,
                     runId,
                 )) ?? null
@@ -195,7 +226,7 @@ export class CoordinationRunDao {
         try {
             return (
                 (await this.db.queryFirst<CoordinationRunRow>(
-                    `SELECT spec_id, agent_kind, process_id, run_id, generation, status, started_at, completed_at, artifact_refs_json, message_ids_json, task_id, outcome
+                    `SELECT spec_id, agent_kind, process_id, run_id, generation, status, started_at, completed_at, artifact_refs_json, message_ids_json, task_id, outcome, parent_run_id
                      FROM coordination_runs
                      WHERE spec_id = ?
                      ORDER BY generation DESC, started_at DESC

@@ -33,6 +33,7 @@ function runRow(overrides: Partial<CoordinationRunRow> = {}): CoordinationRunRow
         message_ids_json: '["msg-1"]',
         task_id: '1073',
         outcome: 'run-exit-only',
+        parent_run_id: null,
         ...overrides,
     };
 }

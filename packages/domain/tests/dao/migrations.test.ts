@@ -11,6 +11,7 @@ import {
     CLI_MIGRATIONS,
     CLI_RUNS_TERMINAL_REASON_SCHEMA_SQL,
     CLI_SCHEMA_SQL,
+    COORDINATION_RUNS_PARENT_SCHEMA_SQL,
     COORDINATION_RUNS_RECEIPT_COLUMNS_SCHEMA_SQL,
     HISTORY_BOARD_SKILL_5M_CAPABILITY_GRAIN_SCHEMA_SQL,
     HISTORY_PERFORMANCE_INDEXES_SCHEMA_SQL,
@@ -127,7 +128,7 @@ describe('db migrations', () => {
         });
 
         test('has foundation through History Board indexes, rollups, checkpoint identity, the history-refresh single-flight index, the 0722 task↔session attribution table, the 0817 queue-jobs deadline/lease columns, the 0832 inbox request key, the 0833 coordination-runs receipt columns, the 0836 project_claims table, the 0838 project_strategy table, the 0863 scheduler-custom single-flight index, and the 0890 executor-update owner columns', () => {
-            expect(CLI_MIGRATIONS).toHaveLength(51);
+            expect(CLI_MIGRATIONS).toHaveLength(52);
             expect(CLI_MIGRATIONS[0]?.id).toBe('0000_spur_cli_foundation');
             expect(CLI_MIGRATIONS[1]?.id).toBe('0001_spur_cli_team_inbox');
             expect(CLI_MIGRATIONS[2]?.id).toBe('0002_spur_cli_rule_history');
@@ -229,6 +230,15 @@ describe('db migrations', () => {
             expect(CLI_MIGRATIONS[49]?.sql).toBe(CLI_RUNS_TERMINAL_REASON_SCHEMA_SQL);
             expect(CLI_MIGRATIONS[49]?.addColumnIfMissing).toEqual({ table: 'runs', column: 'terminal_reason' });
             expect(CLI_MIGRATIONS[49]?.sql).toContain('ALTER TABLE runs ADD COLUMN terminal_reason TEXT');
+            // 1076 R3 (ADR-132): the lineage edge on coordination_runs — the dispatch parent a
+            // fleet turn records, and the downward lookup `spur agent trace` reads.
+            expect(CLI_MIGRATIONS[51]?.id).toBe('0051_spur_cli_coordination_runs_parent');
+            expect(CLI_MIGRATIONS[51]?.sql).toBe(COORDINATION_RUNS_PARENT_SCHEMA_SQL);
+            expect(CLI_MIGRATIONS[51]?.addColumnIfMissing).toEqual({
+                table: 'coordination_runs',
+                column: 'parent_run_id',
+            });
+            expect(CLI_MIGRATIONS[51]?.sql).toContain('idx_coordination_runs_parent');
             for (const column of [
                 "message_ids_json TEXT NOT NULL DEFAULT '[]'",
                 'task_id TEXT',
@@ -329,7 +339,7 @@ describe('db migrations', () => {
             // 0048 journals but skips (the stub journal has no agent_executor_updates —
             // 0041 precedent).
             const applied = await applyCliMigrations(adapter);
-            expect(applied).toBe(47);
+            expect(applied).toBe(48);
             // 0005 and 0007 backfilled columns on the legacy runs table.
             const cols = await adapter.queryAll<{ name: string }>('PRAGMA table_info(runs)');
             expect(cols.some((c) => c.name === 'pid')).toBe(true);
@@ -383,7 +393,7 @@ describe('db migrations', () => {
             // 0044 likewise: CLI_SCHEMA_SQL already ships the receipt columns.
             // 0046 likewise: CLI_SCHEMA_SQL already ships project_strategy (journal counts).
             // 0048 likewise: CLI_SCHEMA_SQL already ships the owner columns (journal counts).
-            expect(applied).toBe(50);
+            expect(applied).toBe(51);
             await adapter.run(
                 'INSERT INTO inbox_messages (id, to_id, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
                 'm1',
@@ -642,7 +652,7 @@ describe('db migrations', () => {
             // the 0041 precedent).
             // + 0049 runs terminal_reason (journaled but skipped: no runs table here —
             // the 0041 table-absence precedent).
-            expect(await applyCliMigrations(adapter)).toBe(42);
+            expect(await applyCliMigrations(adapter)).toBe(43);
             const columns = await adapter.queryAll<{ name: string }>(
                 'PRAGMA index_info(idx_history_message_provenance_run)',
             );
@@ -699,10 +709,10 @@ describe('db migrations', () => {
             adapter.close();
         });
 
-        test('upgraded DB journaled through 0021 receives 0022-0049 and converges with a fresh DB', async () => {
+        test('upgraded DB journaled through 0021 receives 0022-0051 and converges with a fresh DB', async () => {
             const upgraded = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
             await applyCliMigrations(upgraded, CLI_MIGRATIONS.slice(0, 22));
-            expect(await applyCliMigrations(upgraded)).toBe(29);
+            expect(await applyCliMigrations(upgraded)).toBe(30);
 
             const fresh = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
             await applyCliMigrations(fresh);

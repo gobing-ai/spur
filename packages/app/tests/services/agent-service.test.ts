@@ -3322,7 +3322,7 @@ describe('AgentService coordination (G4 / ADR-057 wave 1)', () => {
     // two-file record seam — a pair record refs the `.md`; a legacy run keeps its
     // `.log` ref in place; no record → no ref. A consumer that regresses to probing
     // only the legacy `.log` fails the pair case below (no `.log` exists there).
-    test('artifact refs read the run-record pair, legacy log in place, none when missing', async () => {
+    test('artifact refs name the durable agent-run record every execution now writes (1076 R1)', async () => {
         const dir = mkdtempSync(join(tmpdir(), 'agent-artifact-refs-'));
         const { writeFileSync } = await import('node:fs');
         try {
@@ -3343,12 +3343,15 @@ describe('AgentService coordination (G4 / ADR-057 wave 1)', () => {
                 expect(code).toBe(0);
             }
 
-            const pair = await svc.getCoordinationRun('refs-pair-run');
-            expect(pair?.artifactRefs).toEqual([{ kind: 'log', path: '.spur/run/refs-pair-run.md' }]);
-            const legacy = await svc.getCoordinationRun('refs-legacy-run');
-            expect(legacy?.artifactRefs).toEqual([{ kind: 'log', path: '.spur/run/refs-legacy-run.log' }]);
-            const missing = await svc.getCoordinationRun('refs-none-run');
-            expect(missing?.artifactRefs).toEqual([]);
+            // 1076 R1: every agent execution writes its OWN durable stream, and ADR-131's
+            // durable-first resolution therefore names it for all three runs — a pre-existing
+            // scratch pair or a legacy `.log` no longer wins over the run's own record. The
+            // resolution ladder itself (pair → md → log, scratch fallback) still applies to runs
+            // that write no agent record, which the workflow suites cover.
+            for (const runId of ['refs-pair-run', 'refs-legacy-run', 'refs-none-run']) {
+                const run = await svc.getCoordinationRun(runId);
+                expect(run?.artifactRefs).toEqual([{ kind: 'log', path: `.spur/memory/runs/${runId}.md` }]);
+            }
 
             adapter.close();
         } finally {

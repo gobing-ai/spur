@@ -105,6 +105,14 @@ export type {
     AgentServiceOutput,
 } from './services/agent-service';
 export { _resetAgentServiceShimsForTest, AgentService } from './services/agent-service';
+// One fleet dispatch primitive (G71 R1/R2, ADR-126 A4) — the single inbox enqueue + receipt wait
+// ADR-132 execution record: the lineage a fleet turn belongs to (1076 R4)
+export {
+    type AgentTraceDeps,
+    AgentTraceService,
+    type TraceNode,
+    type TraceTree,
+} from './services/agent-trace-service';
 export {
     type AgentUsageChange,
     type AgentUsageProducerContext,
@@ -268,7 +276,6 @@ export {
     type FindingCode,
     isFindingCode,
 } from './services/finding-codes';
-// One fleet dispatch primitive (G71 R1/R2, ADR-126 A4) — the single inbox enqueue + receipt wait
 export {
     FleetDispatcher,
     type FleetDispatcherDeps,

@@ -176,11 +176,13 @@ CREATE TABLE IF NOT EXISTS coordination_runs (
     artifact_refs_json TEXT NOT NULL DEFAULT '[]',
     message_ids_json TEXT NOT NULL DEFAULT '[]',
     task_id TEXT,
-    outcome TEXT NOT NULL DEFAULT 'run-exit-only'
+    outcome TEXT NOT NULL DEFAULT 'run-exit-only',
+    parent_run_id TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_coordination_runs_spec ON coordination_runs (spec_id, generation DESC);
 CREATE INDEX IF NOT EXISTS idx_coordination_runs_task ON coordination_runs (task_id);
+CREATE INDEX IF NOT EXISTS idx_coordination_runs_parent ON coordination_runs (parent_run_id);
 `;
 
 /**
@@ -201,6 +203,18 @@ ALTER TABLE coordination_runs ADD COLUMN message_ids_json TEXT NOT NULL DEFAULT 
 ALTER TABLE coordination_runs ADD COLUMN task_id TEXT;
 ALTER TABLE coordination_runs ADD COLUMN outcome TEXT NOT NULL DEFAULT 'run-exit-only';
 CREATE INDEX IF NOT EXISTS idx_coordination_runs_task ON coordination_runs (task_id);
+`;
+
+/**
+ * Add the ADR-132 lineage edge to legacy `coordination_runs` tables (1076 R3). The exit sink
+ * writes `parent_run_id` on every invocation whose parent is known, and `CREATE TABLE IF NOT
+ * EXISTS` never adds columns to an existing table — the 0044 precedent. Mirrored in
+ * `drizzle/0051_spur_cli_coordination_runs_parent.sql`; byte-compatible with the
+ * `CREATE TABLE` above.
+ */
+export const COORDINATION_RUNS_PARENT_SCHEMA_SQL = `
+ALTER TABLE coordination_runs ADD COLUMN parent_run_id TEXT;
+CREATE INDEX IF NOT EXISTS idx_coordination_runs_parent ON coordination_runs (parent_run_id);
 `;
 
 /**
@@ -1589,6 +1603,15 @@ export const CLI_MIGRATIONS: CliMigration[] = [
         // (foundation-only journals); fresh DBs create the extended grain via 0032 + 0050.
         id: '0050_spur_cli_history_board_skill_5m_capability_grain',
         sql: HISTORY_BOARD_SKILL_5M_CAPABILITY_GRAIN_SCHEMA_SQL,
+    },
+    {
+        // 1076: ADR-132 lineage edge on coordination_runs. The prefix is 0051, not the 0050 its
+        // task text predicted — 0050 is the history-board capability grain above, which journals
+        // without a drizzle file of its own. addColumnIfMissing guards with `parent_run_id`;
+        // table-absent DBs skip via the 0041/0044 precedent.
+        id: '0051_spur_cli_coordination_runs_parent',
+        sql: COORDINATION_RUNS_PARENT_SCHEMA_SQL,
+        addColumnIfMissing: { table: 'coordination_runs', column: 'parent_run_id' },
     },
 ];
 

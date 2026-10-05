@@ -89,6 +89,17 @@ spur agent doctor [agent] [--probe-health] [--force-refresh] [--json]
 Readiness check (installed, authenticated, usable). Detection results are cached —
 `--force-refresh` bypasses the cache and `--probe-health` opts into live model probing.
 
+## spur agent trace
+
+```bash
+spur agent trace <runId> [--follow] [--timeout <ms>] [--json]
+```
+
+Print one execution record as a lineage: the run, the runs that dispatched it and the runs it
+dispatched, each with its status, the agent session ids recorded for it and its durable stream under
+`.spur/memory/runs/<runId>.md`. `--follow` polls until every run in the lineage is terminal and prints
+one checkpoint line before exiting 1 on timeout.
+
 ## spur agent wait
 
 ```bash

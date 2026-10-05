@@ -252,6 +252,14 @@ anything else.
 
 <a id="spur-agent-run-prompt---agent-name---spec-id---continue---model-name---mode-mode---cwd-path---drain---json"></a>
 
+#### `spur agent trace <runId> [--follow] [--timeout <ms>] [--json]`
+
+The ADR-132 execution record as one lineage (1076 R4): `trace <runId>` walks
+`coordination_runs.parent_run_id` up to the root and back down, printing each run's kind, status,
+parent, exact agent session ids and durable stream. Logic lives in `AgentTraceService`; the CLI is a
+thin transport (ADR-130). `--follow` polls until every node is terminal and prints one checkpoint line
+before exiting 1 on timeout, matching `spur workflow trace --follow`.
+
 #### `spur agent run <prompt> [--agent <name>] [--spec <id>] [--continue] [--model <name>] [--mode <mode>] [--cwd <path>] [--drain] [--json]`
 
 **The subprocess LLM execution surface.** Every out-of-process model invocation in Spur routes

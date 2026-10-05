@@ -198,6 +198,22 @@ No AUTH column — the auth signal cannot distinguish "not authenticated" from
 }
 ```
 
+## spur agent trace
+
+```
+spur agent trace [options] <runId>
+```
+
+| Argument | Description |
+|---|---|
+| `runId` | Run id to trace (a workflow run or an agent run) |
+
+| Flag | Description |
+|---|---|
+| `--follow` | Poll until every run in the lineage reaches a terminal status |
+| `--timeout <ms>` | `--follow` budget (default 600000); on expiry one checkpoint line is printed and the exit code is 1 |
+| `--json` | Print `{ rootRunId, nodes: [{ runId, kind, status, parentRunId, sessionIds, logPath }] }` |
+
 ## spur agent wait
 
 ```

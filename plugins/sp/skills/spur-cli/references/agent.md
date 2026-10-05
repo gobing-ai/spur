@@ -23,6 +23,7 @@ that before using `run` for fan-out dispatch.
 | ---- | ------- | --------- |
 | `run <prompt>` | Execute a prompt or slash command via a coding agent | `--agent <name>` `--spec <id>` `--model <name>` `--mode <mode>` `--continue` `--cwd <path>` `--drain` `--json` |
 | `wait [<specId>]` | Identity-pinned wait for an occupant run to reach a lifecycle state (G4 wave 2; `--role` selector per 0685) | `--role <name>` `--run <runId>` `--until <state>...` `--timeout <ms>` `--json` |
+| `trace <runId>` | Print one execution record's lineage — the run, its dispatch parents, agent session ids and streams (1076 R4, ADR-132) | `--follow` `--timeout <ms>` `--json` |
 | `list` | List detected coding agents, or agent specs with `--specs` (live run status + member session merged from `spur self serve`) | `--specs` `--server <url>` `--json` |
 | `status` | Agent specs with live process status and member session (requires `spur self serve`) | `--server <url>` `--json` |
 | `doctor [agent]` | Check agent readiness | `--json` `--probe-health` `--force-refresh` |
@@ -30,7 +31,7 @@ that before using `run` for fan-out dispatch.
 | `start <spec-id>` | Start a supervised agent process (requires `spur self serve`) | `--server <url>` `--json` |
 | `stop <spec-id>` | Stop a supervised agent process (requires `spur self serve`) | `--server <url>` `--json` |
 
-`list`, `status`, `doctor`, `run`, `wait`, `start`, and `stop` accept `--json` plus `--json-envelope`. The hidden
+`list`, `status`, `doctor`, `run`, `wait`, `trace`, `start`, and `stop` accept `--json` plus `--json-envelope`. The hidden
 `loop` is a supervisor-internal process surface. **Exit codes:** `0` success, `1` failure, and `2`
 invalid usage; `run` can also propagate the invoked agent's non-zero result.
 
@@ -192,6 +193,31 @@ render their recorded values. A `usage:` footer reports the `agent usage` snapsh
 stderr-clean and carries `capabilities`, `capabilityStale: {verifiedAgainst, detected}`, the
 normalized `availability` object, and a top-level `usage` per agent row instead. Exit `1` if any
 checked agent is not ready.
+
+## `trace` - one execution record's lineage (1076 R4, ADR-132)
+
+```bash
+spur agent trace <runId>              # the run, its parents, its children
+spur agent trace <rootId> --follow    # poll until every run in the lineage is terminal
+spur agent trace <runId> --json
+```
+
+`trace` reports ADR-132's execution record as one lineage. A node is a run: a workflow run comes from
+the `runs` table, an agent run from `coordination_runs`, and the dispatch edge is
+`coordination_runs.parent_run_id` — set from a workflow dispatch key (`<runId>/<state>`) or the
+inherited `SPUR_RUN_ID`. `trace <runId>` first walks that edge UP to the root and then DOWN to the
+leaves, so any id in the chain yields the whole picture. Each node carries its status, the agent
+session ids recorded for it (`history_run_session`, exact rows only) and its durable stream under
+`.spur/memory/runs/<runId>.md` when one was written. The stream is the record; the supervisor's ring
+buffer is only a live view.
+
+### Flags
+
+| Flag | Purpose |
+| ------ | --------- |
+| `--follow` | Poll until every run in the lineage reaches a terminal status. |
+| `--timeout <ms>` | `--follow` budget (default 600000). On expiry one checkpoint line is printed and the command exits 1; the runs continue. |
+| `--json` | `{ rootRunId, nodes: [{ runId, kind, status, parentRunId, sessionIds, logPath }] }` — root first, depth-first. |
 
 ## `start` - start a supervised process
 

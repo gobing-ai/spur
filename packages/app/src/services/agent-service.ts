@@ -55,6 +55,7 @@ import {
     type CapabilityEvidenceEntry,
     configuredSecretValues,
 } from '../observability/agent-execution';
+import { AgentRunLog } from '../observability/agent-run-log';
 import { toEnvelopeJson } from '../output/envelope';
 import { readWorkflowRunRecord } from '../workflow/run-record';
 import { type NormalizedAgentUsage, normalizeAgentUsage } from './agent-usage';
@@ -1287,6 +1288,29 @@ export class AgentService {
         // only needs an addressable, monotonic pin (ponytail: one source of truth).
         const specId = stringFlag(flags, 'spec-id', '');
         const coordinationRunId = runCorrelation.runId;
+        // 1076 R3 (ADR-132): the lineage edge. A workflow dispatch names its parent in the
+        // request key (`<runId>/<state>`, set by `drainIntoPrompt`); a nested agent run inherits
+        // `SPUR_RUN_ID` from the run that spawned it (ts-ai-runner injects that name verbatim).
+        // A strategy dispatch has neither and is a root.
+        const flagParentRunId = stringFlag(flags, 'parentRunId', '') || stringFlag(flags, 'parent-run-id', '');
+        const envParentRunId = this.ctx.env.SPUR_RUN_ID ?? '';
+        const parentRunId =
+            flagParentRunId !== ''
+                ? flagParentRunId
+                : envParentRunId !== '' && envParentRunId !== coordinationRunId
+                  ? envParentRunId
+                  : undefined;
+        // 1076 R1 (ADR-132): every execution gets a durable record. Opened beside the workflow
+        // run records so one trace reader covers both, and closed in the `finally` below. An
+        // unwritable directory leaves it inert — the record never fails the run (R8).
+        const agentLog = new AgentRunLog({
+            dir: join(this.ctx.cwd, '.spur', 'memory', 'runs'),
+            runId: coordinationRunId,
+            secrets: configuredSecretValues(this.ctx.env),
+        });
+        agentLog.writeHeader(
+            `spur agent run ${coordinationRunId} — ${currentAgent} — started ${new Date().toISOString()}`,
+        );
         let occupantRef: OccupantRef | undefined;
         if (this.ctx.getDb !== undefined) {
             receiptRunId = coordinationRunId;
@@ -1310,6 +1334,7 @@ export class AgentService {
                     startedAt: new Date().toISOString(),
                     messageIds: requestMessageIds,
                     ...(taskId !== undefined ? { taskId } : {}),
+                    ...(parentRunId !== undefined ? { parentRunId } : {}),
                 });
             } catch (error) {
                 // Non-fatal: the agent run is primary; coordination persistence is secondary.
@@ -1509,7 +1534,12 @@ export class AgentService {
                                   },
                               }
                             : {}),
-                        onOutput: (output) => lifecycle.observe(output),
+                        onOutput: (output) => {
+                            lifecycle.observe(output);
+                            // 1076 R1: the same frame that reaches the live observer is the
+                            // one persisted — redacted and byte-capped at the boundary.
+                            agentLog.append(output.stream, output.chunk);
+                        },
                     });
                 } catch (error) {
                     if (attempt === 0) {
@@ -1653,6 +1683,9 @@ export class AgentService {
             options.execution?.signal?.removeEventListener('abort', onExternalAbort);
 
             // Finalize the coordination run row (terminal status + artifact paths).
+            // 1076 R1: close the durable record first so a trace never reads a live file as a
+            // finished run's stream (the coordination row is the state, the file is the stream).
+            agentLog.close();
             if (this.ctx.getDb !== undefined) {
                 try {
                     const dao = new CoordinationRunDao(await this.ctx.getDb());
