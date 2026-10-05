@@ -109,7 +109,7 @@
     └── [backlog] **G7**: Inbox-only agent fleet and execution record ([G7_inbox-only-agent-fleet-and-execution-record.md](./G7_inbox-only-agent-fleet-and-execution-record.md))
         ├── [backlog] **G71**: Core inbox fleet: one dispatcher, member execution, execution record ([G71_core-inbox-fleet-one-dispatcher-member-execution-execution-record.md](./G71_core-inbox-fleet-one-dispatcher-member-execution-execution-record.md))
         ├── [verifying] **G72**: Fleet team-residue cleanup ([G72_fleet-team-residue-cleanup.md](./G72_fleet-team-residue-cleanup.md))
-        └── [backlog] **G73**: Cooperative fleet participation: hook lifecycle and guest join ([G73_cooperative-fleet-participation-hook-lifecycle-and-guest-join.md](./G73_cooperative-fleet-participation-hook-lifecycle-and-guest-join.md))
+        └── [done] **G73**: Cooperative fleet participation: hook lifecycle and guest join ([G73_cooperative-fleet-participation-hook-lifecycle-and-guest-join.md](./G73_cooperative-fleet-participation-hook-lifecycle-and-guest-join.md))
 [done] **H**: Agent integration ([H_agent-integration.md](./H_agent-integration.md))
     ├── [verifying] **H1**: spur-dev umbrella skill ([H1_spur-dev-skill.md](./H1_spur-dev-skill.md))
         ├── [verifying] **H11**: Semantic conflict finder: authority-aware indexed audit and confirmed remediation ([H11_semantic-conflict-finder-authority-aware-indexed-audit-and-confirmed-remediation.md](./H11_semantic-conflict-finder-authority-aware-indexed-audit-and-confirmed-remediation.md))
