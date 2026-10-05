@@ -41,7 +41,12 @@ async function makeCtx(): Promise<{ cwd: string; out: CapturedOutput; cleanup: (
 
 async function seedTaskAndSpec(cwd: string, taskId: string, specId: string): Promise<string> {
     const taskPath = join(cwd, 'docs', 'tasks', `${taskId}_demo.md`);
-    await writeFile(taskPath, '---\nname: "Demo"\nstatus: Todo\n---\n\nbody\n');
+    // 1078 R2: the write now goes through TaskService, which validates the L1 frontmatter, so the
+    // fixture must be a schema-valid task file (the raw MarkdownDocument write accepted anything).
+    await writeFile(
+        taskPath,
+        '---\nschema_version: 1\nname: "Demo"\nstatus: todo\ntemplate: feature-impl\ncreated_at: 2026-10-05T00:00:00.000Z\nupdated_at: 2026-10-05T00:00:00.000Z\n---\n\n## 0042. Demo\n\nbody\n',
+    );
     await new AgentCoordinationService(createCliContext({ cwd, output: createCapturedOutput() })).createAgentSpec({
         id: specId,
         type: 'claude-code',

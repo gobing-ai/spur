@@ -61,8 +61,6 @@ export type {
     RecentMessagesResult,
     SendResult,
     TaskAssignedEventPayload,
-    TeamStatusEntry,
-    TeamStatusResult,
 } from './services/agent-coordination-service';
 export { AgentCoordinationService } from './services/agent-coordination-service';
 export {

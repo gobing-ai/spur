@@ -1,28 +1,19 @@
 import { join } from 'node:path';
 import type { SpurConfig } from '@gobing-ai/spur-config';
-import {
-    atomicWriteAsync,
-    type DbAdapter,
-    InboxMessageDao,
-    InboxRecentDao,
-    MarkdownDocument,
-    SystemEventDao,
-} from '@gobing-ai/spur-domain';
+import { type DbAdapter, InboxMessageDao, InboxRecentDao, SystemEventDao } from '@gobing-ai/spur-domain';
 import {
     type AgentEvents,
     type AgentSpec,
     buildIdentityPreamble,
     loadAgentSpecs,
     saveAgentSpec,
-    TeamOrchestrator,
     validateAgentId,
 } from '@gobing-ai/ts-ai-runner';
 import type { EventBus } from '@gobing-ai/ts-infra';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
-import { resolvePlanningFolders } from '../config/planning-folders';
 import type { AgentRoleDefinition } from './agent-service';
 import { FleetService } from './fleet-service';
-import { TaskLocator } from './task-locator';
+import type { TaskService } from './task-service';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -48,6 +39,12 @@ export interface AgentCoordinationServiceContext {
     reloadAgentConfig?: () => Promise<SpurConfig | null>;
     /** Optional output sink; the service does not read it (kept for CLI stdout coupling). */
     output?: AgentCoordinationServiceOutput;
+    /**
+     * Task-corpus writer for `assignTask` (1078 R2). Injected rather than constructed because a
+     * TaskService needs the section matrix and template bodies the composition root owns; when it
+     * is absent `assignTask` refuses instead of falling back to a second write path.
+     */
+    tasks?: Pick<TaskService, 'assign'>;
     getDb(): Promise<DbAdapter>;
     /** Filesystem port for reading/writing task files. */
     fs: FileSystem;
@@ -62,7 +59,7 @@ export interface AgentCoordinationServiceContext {
     /**
      * Optional EventBus for agent lifecycle events (`agent.started`,
      * `agent.stopped`, `agent.invoke.*`, `agent.message.sent`). When absent,
-     * TeamOrchestrator runs without publishing — the server injects its bus
+     * The coordination service runs without publishing — the server injects its bus
      * so the system_events tap persists and SSE streams agent lifecycle.
      */
     events?: EventBus<AgentEvents>;
@@ -196,29 +193,6 @@ export interface RecentMessagesResult {
     count: number;
 }
 
-/** A single agent's status for team listing. */
-export interface TeamStatusEntry {
-    id: string;
-    name: string;
-    type: string;
-    /**
-     * Declared Layer-1 role read off the materialized spec (`config.role`,
-     * 0544 R1). Undefined = unset — never inferred from the executor's tier.
-     */
-    role?: string;
-    /** Executor name the spec is bound to (0537 R1; resolved for role-only members, 0543 R1). */
-    executor?: string;
-    workspace?: string;
-    purpose?: string;
-    status: 'running' | 'stopped' | 'errored' | 'unknown';
-    pid?: number;
-}
-
-/** Result of listing all team agents with status. */
-export interface TeamStatusResult {
-    agents: TeamStatusEntry[];
-}
-
 // ---------------------------------------------------------------------------
 // AgentCoordinationService
 // ---------------------------------------------------------------------------
@@ -237,7 +211,7 @@ export interface AgentSpecInput {
 
 /**
  * Application-layer coordination for `spur message`, `spur task update --assignee`, and
- * fleet-aware `spur agent` commands. Wraps `TeamOrchestrator` from `@gobing-ai/ts-ai-runner`
+ * fleet-aware `spur agent` commands. Reads specs and delivers inbox messages
  * over the CLI's SQLite adapter. Agent specs are read from and written to
  * `.spur/agents/` via the package's spec helpers.
  *
@@ -248,7 +222,6 @@ export interface AgentSpecInput {
 export class AgentCoordinationService {
     private readonly ctx: AgentCoordinationServiceContext;
     private readonly configDir: string;
-    private orchestratorPromise?: Promise<TeamOrchestrator>;
 
     constructor(ctx: AgentCoordinationServiceContext) {
         this.ctx = ctx;
@@ -479,55 +452,21 @@ export class AgentCoordinationService {
     // -------------------------------------------------------------------------
 
     /**
-     * List every agent spec under `.spur/agents/` with its current process state.
-     * In Phase 1-3 (no daemon) every agent reports `stopped`; once the orchestrator
-     * holds live processes, real status is returned.
-     */
-    async getStatus(): Promise<TeamStatusResult> {
-        const orchestrator = await this.orchestrator();
-        const specs = await orchestrator.loadSpecs();
-        const running = orchestrator.getRunningAgents();
-        const agents = await Promise.all(
-            specs.map(async (spec) => {
-                const status = await orchestrator.getAgentStatus(spec.id);
-                const pid = running.get(spec.id)?.getPid() ?? null;
-                return {
-                    id: spec.id,
-                    name: spec.name,
-                    type: spec.type,
-                    workspace: spec.workspace,
-                    purpose: spec.purpose,
-                    status,
-                    // 0544 R1: role + resolved executor surface wherever the
-                    // roster shows (unset = field absent, never inferred).
-                    ...(typeof spec.config?.role === 'string' && spec.config.role.length > 0
-                        ? { role: spec.config.role }
-                        : {}),
-                    ...(spec.executor !== undefined ? { executor: spec.executor } : {}),
-                    ...(pid !== null ? { pid } : {}),
-                };
-            }),
-        );
-        return { agents };
-    }
-
-    /**
      * Assign a task to an agent by setting `assignee:` in the task file's YAML
      * frontmatter. The task id is matched against `<folder>/<id>_*.md` across all
      * registered task folders (phase folders).
      */
     async assignTask(taskId: string, agentId: string): Promise<void> {
         validateAgentId(agentId);
-        const path = await this.resolveTaskFile(taskId);
-        if (path === null) {
-            throw new Error(`No task file found for id "${taskId}" in any registered task folder`);
+        // 1078 R2: the corpus write goes through TaskService, so the task file has exactly one
+        // writer. This service keeps the validated caller, the spec lookup and the event.
+        const tasks = this.ctx.tasks;
+        if (tasks === undefined) {
+            throw new Error(
+                'assignTask requires the TaskService seam (1078 R2) — wire `tasks` on the coordination context',
+            );
         }
-        const fs = this.ctx.fs;
-        const source = await fs.readFile(path);
-        const doc = MarkdownDocument.parse(source, 'task');
-        doc.setFrontmatterField('assignee', agentId);
-        // Atomic temp+rename: a raw writeFile can leave a torn SSOT task file on crash.
-        await atomicWriteAsync(path, doc.serialize(), taskId, fs);
+        await tasks.assign(taskId, agentId);
 
         // Task assignment event (task 0371 R1/R2; renamed by 0860 R2 — the subject
         // is the task). Spec lookup is best-effort: an unknown member still emits
@@ -665,31 +604,5 @@ export class AgentCoordinationService {
     private async inboxRecentDao(): Promise<InboxRecentDao> {
         const db = await this.ctx.getDb();
         return new InboxRecentDao(db);
-    }
-
-    private orchestrator(): Promise<TeamOrchestrator> {
-        this.orchestratorPromise ??= this.inboxDao().then((dao) => {
-            const orch = new TeamOrchestrator(this.configDir, dao, { events: this.ctx.events });
-            // 0860 R2: the retired member-scoped lifecycle bridge is gone — the
-            // orchestrator's own `agent.started|stopped` events are the cataloged
-            // lifecycle fact, and SupervisorService emits them on the serve path.
-            // Nothing re-publishes agent lifecycle under a second name.
-            return orch;
-        });
-        return this.orchestratorPromise;
-    }
-
-    private async resolveTaskFile(taskId: string): Promise<string | null> {
-        const fs = this.ctx.fs;
-        // Scan every registered task folder (phase folders), not a hardcoded one —
-        // the corpus may span docs/tasks + docs/tasks2 + … (rd3:tasks heritage).
-        // Folders resolve against the invocation `cwd` here (as the rest of this
-        // service does), not the fs project root — hence `forDirs` rather than
-        // handing the raw config to TaskLocator.
-        const { foldersConfig } = await resolvePlanningFolders(fs);
-        const dirs = [...new Set([foldersConfig.active_folder, ...Object.keys(foldersConfig.folders)])].map((dir) =>
-            join(this.ctx.cwd, dir),
-        );
-        return await TaskLocator.forDirs(fs, dirs).findPathByWbs(taskId);
     }
 }

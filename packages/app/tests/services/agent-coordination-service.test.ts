@@ -25,6 +25,7 @@ import {
     type TaskAssignedEventPayload,
 } from '../../src/index';
 import { resolveMemberExecutor } from '../../src/services/fleet-service';
+import type { TaskService } from '../../src/services/task-service';
 
 // ---------------------------------------------------------------------------
 // Harness
@@ -40,10 +41,12 @@ async function makeService(
     events?: EventBus<AgentEvents>,
     roles?: ReadonlyMap<string, AgentRoleDefinition>,
     spurConfig?: SpurConfig | null,
+    tasks?: Pick<TaskService, 'assign'>,
 ): Promise<{ svc: AgentCoordinationService; cwd: string; db: DbAdapter; cleanup: () => Promise<void> }> {
     const cwd = await mkdtemp(join(tmpdir(), 'spur-team-'));
     const db = await createMigratedDb({ url: ':memory:' });
     const ctx: AgentCoordinationServiceContext = {
+        ...(tasks !== undefined ? { tasks } : {}),
         cwd,
         env: {},
         output: nullOutput(),
@@ -448,153 +451,40 @@ describe('AgentCoordinationService agent specs', () => {
 // ---------------------------------------------------------------------------
 
 describe('AgentCoordinationService status & assignment', () => {
-    test('getStatus reports stopped for non-running specs', async () => {
+    test('assignTask delegates the frontmatter write to the injected TaskService (R2)', async () => {
+        const calls: Array<[string, string]> = [];
+        const { svc, cleanup } = await makeService(undefined, undefined, undefined, undefined, {
+            assign: async (wbs: string, agentId: string) => {
+                calls.push([wbs, agentId]);
+                return { written: true, filePath: '', changed: true } as never;
+            },
+        });
+        try {
+            await svc.assignTask('0042', 'planner');
+            // The corpus write belongs to TaskService now — one writer per task file.
+            expect(calls).toEqual([['0042', 'planner']]);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('assignTask refuses without the TaskService seam instead of writing the file itself', async () => {
         const { svc, cleanup } = await makeService();
         try {
-            await svc.createAgentSpec({ id: 'planner', type: 'claude-code', purpose: 'plan it' });
-            const status = await svc.getStatus();
-            expect(status.agents).toHaveLength(1);
-            expect(status.agents[0]?.id).toBe('planner');
-            expect(status.agents[0]?.status).toBe('stopped');
-            expect(status.agents[0]?.pid).toBeUndefined();
+            await expect(svc.assignTask('0042', 'planner')).rejects.toThrow(/requires the TaskService seam/);
         } finally {
             await cleanup();
         }
     });
 
-    test('0544 R1: getStatus carries the declared role and resolved executor; unset when absent', async () => {
-        // 0857: the roster comes from the project fleet declaration, so this case
-        // seeds the two generated specs the fleet would write and asserts the
-        // spec → status projection it actually owns.
-        const { svc, cwd, cleanup } = await makeService();
+    test('assignTask propagates a seam failure rather than reporting success', async () => {
+        const { svc, cleanup } = await makeService(undefined, undefined, undefined, undefined, {
+            assign: async () => {
+                throw new Error('Frontmatter validation failed for task 0042');
+            },
+        });
         try {
-            const configDir = join(cwd, '.spur', 'agents');
-            await saveAgentSpec(
-                {
-                    id: 'demo-reviewer-1',
-                    name: 'reviewer',
-                    type: 'claude',
-                    workspace: cwd,
-                    purpose: 'reviewer-1',
-                    executor: 'capable-exec',
-                    tags: ['team:demo', 'spur:generated'],
-                    config: { role: 'reviewer' },
-                },
-                configDir,
-            );
-            await saveAgentSpec(
-                {
-                    id: 'demo-capable-exec',
-                    name: 'capable-exec',
-                    type: 'claude',
-                    workspace: cwd,
-                    purpose: 'capable-exec',
-                    executor: 'capable-exec',
-                    tags: ['team:demo', 'spur:generated'],
-                    config: {},
-                },
-                configDir,
-            );
-            const status = await svc.getStatus();
-            const byId = new Map(status.agents.map((a) => [a.id, a]));
-            const reviewer = byId.get('demo-reviewer-1');
-            expect(reviewer?.role).toBe('reviewer');
-            expect(reviewer?.executor).toBe('capable-exec');
-            const plain = byId.get('demo-capable-exec');
-            expect(plain?.role).toBeUndefined();
-            expect(plain?.executor).toBe('capable-exec');
-        } finally {
-            await cleanup();
-        }
-    });
-
-    test('assignTask sets assignee in the task frontmatter', async () => {
-        const { svc, cwd, cleanup } = await makeService();
-        try {
-            const tasksDir = join(cwd, 'docs', 'tasks');
-            await createNodeFileSystem().ensureDir(tasksDir);
-            const taskPath = join(tasksDir, '0042_demo_task.md');
-            await writeFile(taskPath, '---\nname: "Demo"\nstatus: Todo\n---\n\n## Body\n');
-
-            await svc.assignTask('0042', 'planner');
-            const updated = await readFile(taskPath, 'utf8');
-            expect(updated).toContain('assignee: planner');
-            // Existing fields are preserved.
-            expect(updated).toContain('status: Todo');
-        } finally {
-            await cleanup();
-        }
-    });
-
-    test('assignTask replaces an existing assignee', async () => {
-        const { svc, cwd, cleanup } = await makeService();
-        try {
-            const tasksDir = join(cwd, 'docs', 'tasks');
-            await createNodeFileSystem().ensureDir(tasksDir);
-            const taskPath = join(tasksDir, '0042_demo_task.md');
-            await writeFile(taskPath, '---\nname: "Demo"\nassignee: oldagent\n---\n\nbody\n');
-
-            await svc.assignTask('0042', 'newagent');
-            const updated = await readFile(taskPath, 'utf8');
-            expect(updated).toContain('assignee: newagent');
-            expect(updated).not.toContain('oldagent');
-        } finally {
-            await cleanup();
-        }
-    });
-
-    test('assignTask finds a task in a NON-active registered phase folder', async () => {
-        // Regression: when `.spur/config.yaml` sets active=docs/tasks2 but the task
-        // lives in docs/tasks (a registered phase folder), assignTask must still find
-        // it. The old hardcoded `docs/tasks` (or a single-folder scan) would miss it
-        // whenever active ≠ the task's folder.
-        const { svc, cwd, cleanup } = await makeService();
-        try {
-            const nodeFs = createNodeFileSystem();
-            await nodeFs.ensureDir(join(cwd, '.spur'));
-            await writeFile(
-                join(cwd, '.spur', 'config.yaml'),
-                ['tasks:', '  active: docs/tasks2', '  folders:', '    docs/tasks: {}', '    docs/tasks2: {}'].join(
-                    '\n',
-                ),
-            );
-            // Task is in docs/tasks, NOT the active docs/tasks2.
-            const tasksDir = join(cwd, 'docs', 'tasks');
-            await nodeFs.ensureDir(tasksDir);
-            const taskPath = join(tasksDir, '0099_phase_one.md');
-            await writeFile(taskPath, '---\nname: "Phase One"\nstatus: Todo\n---\n\nbody\n');
-
-            await svc.assignTask('0099', 'planner');
-            expect(await readFile(taskPath, 'utf8')).toContain('assignee: planner');
-        } finally {
-            await cleanup();
-        }
-    });
-
-    test('assignTask rejects a missing task file', async () => {
-        const { svc, cleanup } = await makeService();
-        try {
-            await expect(svc.assignTask('9999', 'planner')).rejects.toThrow(/No task file found/);
-        } finally {
-            await cleanup();
-        }
-    });
-
-    test('assignTask preserves $-sequences in the frontmatter body', async () => {
-        // Guards against `String.replace` interpreting `$&`/`$1` in existing
-        // frontmatter as special replacement patterns, which would corrupt the file.
-        const { svc, cwd, cleanup } = await makeService();
-        try {
-            const tasksDir = join(cwd, 'docs', 'tasks');
-            await createNodeFileSystem().ensureDir(tasksDir);
-            const taskPath = join(tasksDir, '0042_demo_task.md');
-            await writeFile(taskPath, '---\nname: "Cost $1.00 and $& literal"\nstatus: Todo\n---\n\nbody\n');
-
-            await svc.assignTask('0042', 'planner');
-            const updated = await readFile(taskPath, 'utf8');
-            expect(updated).toContain('name: "Cost $1.00 and $& literal"');
-            expect(updated).toContain('assignee: planner');
-            expect(updated).toContain('status: Todo');
+            await expect(svc.assignTask('0042', 'planner')).rejects.toThrow(/validation failed/);
         } finally {
             await cleanup();
         }
@@ -676,9 +566,9 @@ describe('AgentCoordinationService agent lifecycle bus (task 0237)', () => {
     test('R6: AgentCoordinationServiceContext without events still constructs (optional field)', async () => {
         const { svc, cleanup } = await makeService();
         try {
-            // getStatus touches orchestrator(); CLI path omits events → throwaway bus.
-            const status = await svc.getStatus();
-            expect(Array.isArray(status.agents)).toBe(true);
+            // 1078 R1: the retired getStatus was the caller here; any read that goes through
+            // the context's optional `events` proves the same thing — construction without a bus.
+            expect(Array.isArray(await svc.listAgentSpecs())).toBe(true);
         } finally {
             await cleanup();
         }
@@ -809,7 +699,9 @@ function makeAssignmentCapturingBus(): {
 describe('AgentCoordinationService task.assigned event (task 0371; 0860 R2)', () => {
     test('R16: assignTask emits task.assigned with memberId/agentType/outcome/taskId', async () => {
         const { bus, assigned } = makeAssignmentCapturingBus();
-        const { svc, cwd, cleanup } = await makeService(bus);
+        const { svc, cwd, cleanup } = await makeService(bus, undefined, undefined, undefined, {
+            assign: async () => ({ written: true, filePath: '', changed: true }) as never,
+        });
         try {
             await seedSpec(join(cwd, '.spur', 'agents'), 'devops-claude', ['spur:generated']);
             const tasksDir = join(cwd, 'docs', 'tasks');
@@ -829,7 +721,9 @@ describe('AgentCoordinationService task.assigned event (task 0371; 0860 R2)', ()
 
     test('R17: assignTask for unknown member still emits with null unresolved fields', async () => {
         const { bus, assigned } = makeAssignmentCapturingBus();
-        const { svc, cwd, cleanup } = await makeService(bus);
+        const { svc, cwd, cleanup } = await makeService(bus, undefined, undefined, undefined, {
+            assign: async () => ({ written: true, filePath: '', changed: true }) as never,
+        });
         try {
             const tasksDir = join(cwd, 'docs', 'tasks');
             await mkdir(tasksDir, { recursive: true });
@@ -853,7 +747,7 @@ describe('AgentCoordinationService task.assigned event (task 0371; 0860 R2)', ()
     test('0860 R2: agent lifecycle is not re-published under a second event name', async () => {
         const { bus, assigned } = makeAssignmentCapturingBus();
         const agentBus = new EventBus<AgentEvents>();
-        const { svc, cwd, cleanup } = await makeService(bus, agentBus);
+        const { cwd, cleanup } = await makeService(bus, agentBus);
         try {
             const configDir = join(cwd, '.spur', 'agents');
             await createNodeFileSystem(cwd).ensureDir(configDir);
@@ -870,7 +764,6 @@ describe('AgentCoordinationService task.assigned event (task 0371; 0860 R2)', ()
                 configDir,
             );
 
-            await svc.getStatus();
             agentBus.emit('agent.started', {
                 agentId: 'devops-coder',
                 agentType: 'codex',

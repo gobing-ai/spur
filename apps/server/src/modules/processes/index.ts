@@ -55,10 +55,8 @@ export const processesModule: ServerModule = {
         // `executions` is the full ts-runtime ProcessRegistry watch list (spur#0264).
         app.get('/api/processes', async (c) => {
             const supervisor = ctx.supervisor();
-            // `teamId` stays on the wire with the predecessor's `null` shape (0860):
-            // the grouping id is no longer written anywhere, but the Board's watch-list
-            // parsers and rows still read the key — omitting it broke the poll entirely.
-            // It is deliberately NOT written: the retired spec-tag group stays retired.
+            // 1078 R5: the retired grouping id is GONE from the wire, contract and Board together
+            // — its predecessor's `null` shape survived only while the Board still read it.
             const entries = supervisor.list();
             const sessions = await sessionByAgent(
                 ctx,
@@ -70,7 +68,6 @@ export const processesModule: ServerModule = {
                 status: p.status,
                 startedAt: p.startedAt,
                 exitCode: p.exitCode ?? null,
-                teamId: null,
                 ...(sessions.get(p.agentId) !== undefined ? { session: sessions.get(p.agentId) } : {}),
             }));
             const executions = ctx
@@ -87,7 +84,6 @@ export const processesModule: ServerModule = {
                     exitedAt: e.exitedAt ?? null,
                     exitCode: e.exitCode ?? null,
                     source: e.source,
-                    teamId: e.teamId ?? null,
                     agentId: e.agentId ?? null,
                 }));
             return c.json({

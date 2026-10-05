@@ -536,7 +536,9 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                         context.setExitCode(2);
                         return;
                     }
-                    await assignTaskWithLedger(wbs, options.assignee, context);
+                    // 1078 R2: reuse the handler's TaskService — the same writer every other
+                    // `task update` field goes through, so construction happens once.
+                    await assignTaskWithLedger(wbs, options.assignee, context, svc);
                     return;
                 }
                 if (options.section !== undefined) {
@@ -1832,7 +1834,12 @@ export function registerTaskCommand(program: Command, context: CliContext): void
 }
 
 /** `task update --assignee`: assign through a CLI ledger so `task.assigned` reaches system_events without serve (0371 R6; renamed by 0860 R2). */
-async function assignTaskWithLedger(wbs: string, agentId: string, context: CliContext): Promise<void> {
+async function assignTaskWithLedger(
+    wbs: string,
+    agentId: string,
+    context: CliContext,
+    tasks: Pick<TaskService, 'assign'>,
+): Promise<void> {
     const bus = new EventBus() as SystemEventBus;
     const ledger = await attachSystemEventLedger(bus, context);
     // SAFETY: one structural ts-infra EventBus behind the nominal names (ADR-044).
@@ -1842,6 +1849,9 @@ async function assignTaskWithLedger(wbs: string, agentId: string, context: CliCo
         eventBus: bus as unknown as CoordinationEventBus,
         roles: context.agentRoles,
         reloadAgentConfig: () => context.loadAgentConfig(context.cwd),
+        // 1078 R2: the frontmatter write goes through TaskService, so the task file keeps exactly
+        // one writer.
+        tasks,
     });
     try {
         await svc.assignTask(wbs, agentId);

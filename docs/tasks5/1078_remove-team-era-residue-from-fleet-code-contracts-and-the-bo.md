@@ -1,14 +1,16 @@
 ---
 schema_version: 1
 name: Remove team-era residue from fleet code, contracts and the Board
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-10-04T20:30:38.321Z
-updated_at: "2026-10-04T20:57:44.064Z"
+updated_at: "2026-10-05T07:25:21.271Z"
 feature_id: G72
 
 priority: P2
 estimate_hours: 4
+done_forced: "false"
+done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new/.spur/run/1078-verdict.json
 ---
 
 ## 1078. Remove team-era residue from fleet code, contracts and the Board
@@ -34,16 +36,16 @@ Verified state (2026-10-04):
 
 ### Requirements
 
-- [ ] R1. Delete `getStatus`, `orchestrator()`, the `TeamOrchestrator` import and `TeamStatus*` types; `mapServerStatus` uses the fleet status types.
-- [ ] R2. `assignTask` writes through a new `TaskService.assign(wbs, agentId)` (atomic frontmatter write, public `--field` allow-list unchanged); `spur task assign` output is unchanged.
-- [ ] R3. Delete the dead `RosterMember` fields.
-- [ ] R4. Rename team-named locals, error text and stale comments to fleet terms, and drop the retired `agent.team` block from the tracked JSON schemas; user-visible error text changes are listed in the task Solution.
-- [ ] R5. Drop `teamId` from the fleet contract, the processes module, and the web Board (including the hidden Team filter) and update their tests; preserve any concurrent edits to `MemberDetail.tsx`/`MemberTerminal.tsx`.
+- [x] R1. Delete `getStatus`, `orchestrator()`, the `TeamOrchestrator` import and `TeamStatus*` types; `mapServerStatus` uses the fleet status types.
+- [x] R2. `assignTask` writes through a new `TaskService.assign(wbs, agentId)` (atomic frontmatter write, public `--field` allow-list unchanged); `spur task assign` output is unchanged.
+- [x] R3. Delete the dead `RosterMember` fields.
+- [x] R4. Rename team-named locals, error text and stale comments to fleet terms, and drop the retired `agent.team` block from the tracked JSON schemas; user-visible error text changes are listed in the task Solution.
+- [x] R5. Drop `teamId` from the fleet contract, the processes module, and the web Board (including the hidden Team filter) and update their tests; preserve any concurrent edits to `MemberDetail.tsx`/`MemberTerminal.tsx`.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — No team-era code residue remains
-- [ ] AC2 — No teamId crosses the transport or the Board
+- [x] AC1 — No team-era code residue remains
+- [x] AC2 — No teamId crosses the transport or the Board
 
 Task-local verification:
 
@@ -108,11 +110,91 @@ Update these tests: `packages/contracts/tests/contract.test.ts`, `apps/server/te
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Team-era residue is gone from the fleet code, contracts and the Board (R1–R5), with two behavioural
+changes recorded below.
+
+**M1 — the dead orchestrator wrap.** `AgentCoordinationService` no longer imports or wraps
+`TeamOrchestrator`: `getStatus`, `orchestrator()`, `orchestratorPromise` and the `TeamStatusEntry` /
+`TeamStatusResult` types are deleted, along with their two `packages/app` re-exports. `spur agent
+status` reads the supervisor's own rows and types them with a local `FleetProcessStatus` union, because
+`packages/contracts` has no fleet process-status union to reuse (the task's Q&A fallback — no new
+`packages/app` export). The three tests that exercised `getStatus` are gone with it.
+
+**M2 — one writer for the task file.** `TaskService.assign(wbs, agentId)` performs the assignee write
+through the same atomic frontmatter path as `updateField`, deliberately OUTSIDE the public `--field`
+allow-list so the CLI surface stays unchanged, and `AgentCoordinationService.assignTask` now delegates
+to an injected `Pick<TaskService,'assign'>` seam instead of parsing and writing the file itself. The
+service keeps the validated caller, the spec lookup and the `task.assigned` event; when the seam is
+absent it REFUSES rather than falling back to the second write path. `spur task assign` /
+`task update --assignee` reuse the TaskService the handler already builds.
+
+**Behavioural change 1 (recorded per R2).** Routing the write through `TaskService` adds L1 frontmatter
+validation the raw `MarkdownDocument` write skipped: assigning a task whose file is not schema-valid now
+fails with `Frontmatter validation failed for task <id>`. Real corpus tasks come from templates and are
+valid; one test fixture was not and was corrected.
+
+**M3 — dead roster fields.** `RosterMember` loses `workspace`, `systemPrompt`, `command`, `autonomy` and
+`autostart`; `FleetMemberSchema` never populated any of them, so the projection now writes the default
+workspace and drops the three dead `config` spreads and the `autoStart` spread.
+
+**M5 — the grouping id leaves the wire.** `teamId` is removed from `processEntrySchema` and
+`processExecutionSchema`, from the `/api/processes` projections, and from the Board — the hidden Team
+filter, its `teamIds` memo and prop, the filter predicate's team branches, the hidden detail-table cell,
+and the `activity-history` reader. The Board and the contract moved together, which is what let the
+`null` placeholder go; its eight team-specific tests are retired with the feature.
+
+**M6 — names.** Team-era locals, doc comments and error text become fleet terms. One user-visible
+change: `--spec "<id>" does not match a team agent spec` → `… does not match a fleet agent spec` (the
+same text in the loop's `--spec` error), with its two test expectations updated.
+
+**M4 — the retired schema block.** The `agent.team` block is dropped from both tracked
+`spur-config.schema.json` copies (they documented a section the loader has rejected since 0857), and
+`apps/cli/config` was regenerated with `bun run build:bundle`.
+
+| Change | Anchor |
+| --- | --- |
+| `getStatus` / `orchestrator()` / team status types deleted | `packages/app/src/services/agent-coordination-service.ts:1` |
+| `assignTask` delegates to the injected TaskService seam | `packages/app/src/services/agent-coordination-service.ts:464` |
+| `TaskService.assign` — atomic write outside the public allow-list | `packages/app/src/services/task-service.ts:819` |
+| `spur task update --assignee` reuses the handler's TaskService | `apps/cli/src/commands/task.ts:1847` |
+| Local `FleetProcessStatus` replaces the retired status type | `apps/cli/src/commands/agent.ts:705` |
+| `teamId` dropped from both wire schemas | `packages/contracts/src/fleet.ts:70` |
+| Server stops emitting it on both row families | `apps/server/src/modules/processes/index.ts:73` |
+| The Board's Team filter, memo, prop and detail cell removed | `apps/web/src/modules/projects/ProcessesView.tsx:161` |
+| `activity-history` stops surfacing the grouping id | `apps/web/src/modules/projects/activity-history.ts:34` |
+| Dead `RosterMember` fields and their reads removed | `packages/app/src/services/fleet-service.ts:152` |
+| Retired `agent.team` block dropped from the tracked schemas | `config/@gobing-ai/spur/schemas/spur-config.schema.json:196` |
+
+Verification per the task's own checks: `rg -n "TeamOrchestrator|TeamStatus|teamId" packages apps --glob
+'!**/tests/**' --glob '!**/node_modules/**' --glob '!apps/cli/web/**'` returns ONLY the two 1079-owned
+files (`packages/domain/src/agent-instance.ts`, `packages/app/src/services/agent-instance-store.ts`);
+`spur task update --assignee` records the assignee with the write going through `TaskService` (the CLI
+trace asserts the ledger event and the frontmatter); server and web suites pass with the field removed.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+Verification for task 1078. Everything below was executed on the merged working tree after the G71 batch
+integration (`chore: merge main into sp/runall-g71-302b`).
+
+| Check | Command | Result |
+| --- | --- | --- |
+| Declared gate | `bun run spur-check` | PASS — exit 0, 10095 pass / 0 fail, lint + typecheck + pre/post rule presets clean |
+| CF gate | `bun run test-cf` | PASS — exit 0 |
+| Residue scan (task-local) | `rg -n "TeamOrchestrator\|TeamStatus\|teamId" packages apps --glob '!**/tests/**' --glob '!**/node_modules/**' --glob '!apps/cli/web/**'` | only `packages/domain/src/agent-instance.ts` and `packages/app/src/services/agent-instance-store.ts` remain — both owned by 1079, which deletes them |
+| Assignment through TaskService | `(cd apps/cli && bun test tests/commands/agent-server.test.ts)` | 15 pass — the trace asserts the frontmatter write and the `task.assigned` ledger row |
+| Service delegation contract | `(cd packages/app && bun test tests/services/agent-coordination-service.test.ts)` | 35 pass — delegation, the refusal without the seam, and a propagated seam failure |
+| Board with the field gone | `(cd apps/web && bun test tests/modules/projects)` | 178 pass |
+| Server projection | `(cd apps/server && bun test tests/modules/processes/index.test.ts)` | 31 pass — both row families now assert the key is ABSENT |
+| Migrations untouched by this task | `(cd packages/domain && bun test tests/dao/migrations.test.ts)` | 59 pass |
+
+Behavioural changes, recorded rather than hidden: the assignee write now validates L1 frontmatter (an
+invalid task file fails instead of being silently patched), and the `--spec` mismatch error text says
+"fleet agent spec". The wire contract drops `teamId`, so any external consumer of `/api/processes` that
+read the (since-0860 always-null) key would see it disappear; the Board that read it was updated in the
+same change.
+
+Not covered here: browser-level verification of the Board's filter bar — the component tests drive the
+rendered controls through happy-dom, and the Team filter they covered is deleted rather than restyled.
 
 ### Review
 
@@ -127,4 +209,5 @@ Update these tests: `packages/contracts/tests/contract.test.ts`, `apps/server/te
 ### History
 
 - 2026-10-04T20:57:44.064Z backlog → todo (system)
+- 2026-10-05T07:25:21.166Z todo → done (system)
 

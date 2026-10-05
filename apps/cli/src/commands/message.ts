@@ -627,7 +627,7 @@ async function readLatestInvokeEvent(
  */
 async function waitForPendingDrain(
     agentService: AgentService,
-    teamService: AgentCoordinationService,
+    coordination: AgentCoordinationService,
     pin: { specId: string; runId: string; generation: number },
     timeoutMs: number | undefined,
     signal?: AbortSignal,
@@ -644,7 +644,7 @@ async function waitForPendingDrain(
         if (occupant === null) throw new WaitError('occupant_gone', `occupant for specId "${pin.specId}" is gone`);
         if (occupant.runId !== pin.runId) throw new WaitError('run_replaced', `run ${pin.runId} replaced`);
         if (occupant.generation > pin.generation) throw new WaitError('run_replaced', `generation bumped`);
-        const pending = await teamService.countPending(pin.specId);
+        const pending = await coordination.countPending(pin.specId);
         // Progress = the queued count moved (a drain or a new inject). A
         // non-moving count from an idle occupant is a stall, not a wait.
         const progressed = lastPending >= 0 && pending !== lastPending;

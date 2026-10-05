@@ -190,7 +190,7 @@ describe('processes module', () => {
         // `parseExecutions` reads `teamId`, and an absent key rejected the whole response,
         // wedging the Processes watch list. Asserting presence (not only the values) is what
         // makes the client-side tolerance a backstop rather than the contract.
-        test('keeps teamId on both row families of the moved /api/processes route (0860)', async () => {
+        test('1078 R5: the retired grouping id is absent from both row families of /api/processes', async () => {
             const entry: ProcessEntry = {
                 agentId: 'planner',
                 pid: 12345,
@@ -229,10 +229,10 @@ describe('processes module', () => {
                 processes: Array<Record<string, unknown>>;
                 executions: Array<Record<string, unknown>>;
             };
-            expect(Object.hasOwn(body.processes[0] ?? {}, 'teamId')).toBe(true);
-            expect(body.processes[0]?.teamId).toBeNull();
-            expect(Object.hasOwn(body.executions[0] ?? {}, 'teamId')).toBe(true);
-            expect(body.executions[0]?.teamId).toBeNull();
+            // 1078 R5: the field left the contract, the module and the Board together — neither
+            // row family carries the key at all any more (it was a `null` placeholder since 0860).
+            expect(Object.hasOwn(body.processes[0] ?? {}, 'teamId')).toBe(false);
+            expect(Object.hasOwn(body.executions[0] ?? {}, 'teamId')).toBe(false);
         });
     });
 

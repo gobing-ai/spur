@@ -134,7 +134,7 @@ function memberDispatchCommand(
 
 /**
  * Build the `TeamAgentProcess` options for a persistent member (G66 R2): the
- * same shared command-build seam `TeamOrchestrator.startAgent` uses, so the
+ * same shared command-build seam the runner's orchestrator uses, so the
  * long-lived member gets the runner's canonical identity-preamble argv.
  */
 function memberProcessOptions(spec: AgentSpec, binary: string, deps: MemberSessionDeps): AgentProcessOptions {

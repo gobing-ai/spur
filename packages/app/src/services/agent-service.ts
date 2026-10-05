@@ -321,7 +321,7 @@ export interface AgentServiceContext {
     roles?: ReadonlyMap<string, AgentRoleDefinition>;
     /**
      * Optional canonical server EventBus. When provided, every `agent.invoke.*`
-     * and `agent.*` event emitted by the underlying AiRunner/TeamOrchestrator
+     * and `agent.*` event emitted by the underlying AiRunner
      * is also forwarded onto the bus so the system_events tap (R3) and SSE
      * stream can observe it. Same shape as `SystemEventBus`.
      */

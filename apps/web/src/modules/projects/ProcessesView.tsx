@@ -27,7 +27,6 @@ export interface WatchRow {
     status: string;
     startedAt: string;
     source: string;
-    teamId: string | null;
     command?: string;
     args?: string[];
     exitCode?: number | null;
@@ -50,7 +49,6 @@ export function buildWatchRows(processes: ProcessStatus[], executions: RegistryE
         status: p.status,
         startedAt: p.startedAt,
         source: 'supervisor',
-        teamId: p.teamId ?? null,
         exitCode: p.exitCode,
         session: (p as { session?: MemberSession }).session ?? null,
     }));
@@ -69,7 +67,6 @@ export function buildWatchRows(processes: ProcessStatus[], executions: RegistryE
             status: e.status,
             startedAt: e.startedAt,
             source: e.source,
-            teamId: e.teamId ?? null,
             command: e.command,
             args: e.args,
             exitCode: e.exitCode,
@@ -88,8 +85,6 @@ export interface WatchFilters {
      * `other` matches any source that is neither `supervisor` nor `one-shot`.
      */
     source: string;
-    /** Team filter: `all` | team id. `unassigned` selects rows with null teamId. */
-    team: string;
 }
 
 /** Pure filter helper exported for unit testing (0267 R2/R5, restored by 0852 R3). */
@@ -100,11 +95,6 @@ export function filterWatchRows(rows: WatchRow[], filters: WatchFilters): WatchR
             if (row.source === 'supervisor' || row.source === 'one-shot') return false;
         } else if (filters.source !== 'all' && row.source !== filters.source) {
             return false;
-        }
-        if (filters.team === 'unassigned') {
-            if (row.teamId != null) return false;
-        } else if (filters.team !== 'all') {
-            if (row.teamId !== filters.team) return false;
         }
         return true;
     });
@@ -120,13 +110,11 @@ export function filterWatchRows(rows: WatchRow[], filters: WatchFilters): WatchR
 function ProcessFilterControls({
     filters,
     onFilters,
-    teamIds,
     totalCount,
     shownCount,
 }: {
     filters: WatchFilters;
     onFilters: (next: WatchFilters) => void;
-    teamIds: string[];
     totalCount: number;
     shownCount: number;
 }) {
@@ -158,30 +146,10 @@ function ProcessFilterControls({
                 </select>
             </label>
 
-            {/* Team filter: hidden stale per design, preserved in DOM for test harness compatibility */}
-            <label className="hidden">
-                <span>Team</span>
-                <select
-                    value={filters.team}
-                    onChange={(e) => onFilters({ ...filters, team: e.target.value })}
-                    className="border border-spur-border rounded px-1 py-0.5 bg-spur-bg text-spur-text"
-                    data-processes-filter-team
-                    aria-label="Team filter"
-                >
-                    <option value="all">all teams</option>
-                    <option value="unassigned">unassigned</option>
-                    {teamIds.map((t) => (
-                        <option key={t} value={t}>
-                            {t}
-                        </option>
-                    ))}
-                </select>
-            </label>
-
             <button
                 type="button"
                 className="border border-spur-border rounded px-2 py-0.5 text-spur-text hover:bg-base-200 transition-colors cursor-pointer"
-                onClick={() => onFilters({ runningOnly: false, source: 'all', team: 'all' })}
+                onClick={() => onFilters({ runningOnly: false, source: 'all' })}
                 data-processes-filter-clear
             >
                 Clear
@@ -210,7 +178,7 @@ export default function ProcessesView({ pollMs = STATUS_POLL_MS }: { pollMs?: nu
     );
     const [error, setError] = useState<string | null>(null);
     // Ephemeral filter state (0267 R3) — not persisted across remounts.
-    const [filters, setFilters] = useState<WatchFilters>({ runningOnly: false, source: 'all', team: 'all' });
+    const [filters, setFilters] = useState<WatchFilters>({ runningOnly: false, source: 'all' });
     const mountedRef = useRef(true);
 
     // Sync detail panel width with TaskDetail (spur:detail-width)
@@ -277,18 +245,6 @@ export default function ProcessesView({ pollMs = STATUS_POLL_MS }: { pollMs?: nu
     );
 
     const filteredRows = useMemo(() => filterWatchRows(watchRows, filters), [watchRows, filters]);
-
-    // Unique teams from both halves for the team filter dropdown (0267 R2).
-    const teamIds = useMemo(() => {
-        const seen = new Set<string>();
-        for (const p of snapshot?.processes ?? []) {
-            if (p.teamId) seen.add(p.teamId);
-        }
-        for (const e of snapshot?.executions ?? []) {
-            if (e.teamId) seen.add(e.teamId);
-        }
-        return [...seen].sort();
-    }, [snapshot]);
 
     const project = useProjectContext();
     const [selectedRow, setSelectedRow] = useState<WatchRow | null>(null);
@@ -375,7 +331,6 @@ export default function ProcessesView({ pollMs = STATUS_POLL_MS }: { pollMs?: nu
                 <ProcessFilterControls
                     filters={filters}
                     onFilters={setFilters}
-                    teamIds={teamIds}
                     totalCount={watchRows.length}
                     shownCount={0}
                 />
@@ -394,7 +349,6 @@ export default function ProcessesView({ pollMs = STATUS_POLL_MS }: { pollMs?: nu
             <ProcessFilterControls
                 filters={filters}
                 onFilters={setFilters}
-                teamIds={teamIds}
                 totalCount={watchRows.length}
                 shownCount={filteredRows.length}
             />
@@ -556,12 +510,6 @@ export default function ProcessesView({ pollMs = STATUS_POLL_MS }: { pollMs?: nu
                                 </td>
                                 <td className="text-xs text-spur-text-muted" data-process-source={p.source}>
                                     {p.source}
-                                </td>
-                                <td
-                                    className="hidden font-mono text-xs text-spur-text-muted"
-                                    data-process-team={p.teamId ?? ''}
-                                >
-                                    {p.teamId ?? '—'}
                                 </td>
                             </tr>
                         );

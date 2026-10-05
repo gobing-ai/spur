@@ -11,21 +11,6 @@ import {
  * history fetch/parse helpers survive because Projects' MemberDetail consumes them. */
 
 describe('toRow (0254 R7, 0269 R9/P4)', () => {
-    test('maps a process payload teamId/agentId/agentType (0269 P4 residual)', () => {
-        const row = toRow({
-            id: 'e1',
-            eventName: 'process.spawned',
-            occurredAt: '2026-07-16T00:00:00.000Z',
-            actor: null,
-            payload: { agentId: 'alpha-planner', teamId: 'alpha', agentType: 'claude', pid: 9 },
-        });
-        expect(row).not.toBeNull();
-        expect(row?.actor).toBe('alpha-planner');
-        expect(row?.teamId).toBe('alpha');
-        expect(row?.memberLabel).toBe('alpha-planner');
-        expect(row?.agentType).toBe('claude');
-    });
-
     test('rejects malformed events and out-of-scope telemetry without crashing', () => {
         for (const bad of [
             null,

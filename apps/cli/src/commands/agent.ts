@@ -24,7 +24,6 @@ import {
     runAgentUsageProducer,
     StrategyRuntime,
     type SystemEventBus,
-    type TeamStatusEntry,
     type TraceTree,
     type UsageSource,
     UsageSourceError,
@@ -530,7 +529,7 @@ function formatSessionColumn(session: MemberSessionObservation | undefined): str
     return session.id === undefined ? session.mode : `${session.mode} id=${shortSessionId(session.id)}`;
 }
 
-/** `spur agent list [--json] [--specs]` — optionally list team agent specs instead of detection. */
+/** `spur agent list [--json] [--specs]` — optionally list fleet agent specs instead of detection. */
 async function runAgentList(
     svc: AgentService,
     context: CliContext,
@@ -667,7 +666,7 @@ async function runAgentStatus(
  */
 /** Live facts the server supervisor reports for one agent id (`GET /api/processes`). */
 interface LiveProcess {
-    status: TeamStatusEntry['status'];
+    status: FleetProcessStatus;
     pid: number | null;
     /** Member session state (0897) when the served project's ledger has one. */
     session?: MemberSessionObservation;
@@ -702,8 +701,15 @@ async function fetchServerProcesses(server: string): Promise<Map<string, LivePro
     }
 }
 
-/** Map a `SupervisorService` process status onto the `TeamStatusEntry` status union. */
-function mapServerStatus(status: string): TeamStatusEntry['status'] {
+/**
+ * The process-status union `spur agent status` projects (1078 R1). The retired team-era status row
+ * carried it; `packages/contracts` has no fleet process-status union, so it lives here locally
+ * rather than becoming a new `packages/app` export (1078 Q&A).
+ */
+export type FleetProcessStatus = 'running' | 'stopped' | 'errored' | 'unknown';
+
+/** Map a `SupervisorService` process status onto {@link FleetProcessStatus}. */
+function mapServerStatus(status: string): FleetProcessStatus {
     switch (status) {
         case 'running':
             return 'running';
@@ -803,9 +809,9 @@ export async function settleClaimedMessages(
     outcome: 'accepted' | 'not-started',
 ): Promise<void> {
     if (claimed.length === 0) return;
-    const team = new AgentCoordinationService(context);
+    const coordination = new AgentCoordinationService(context);
     if (outcome === 'accepted') {
-        await team.settleDelivered(claimed);
+        await coordination.settleDelivered(claimed);
         return;
     }
     // Not started: release within the claim budget, else a queryable terminal failure.
@@ -820,9 +826,9 @@ export async function settleClaimedMessages(
         if (row.injectAttempts >= MAX_INJECT_ATTEMPTS) exhausted.push(id);
         else releasable.push(id);
     }
-    if (releasable.length > 0) await team.releasePending(releasable);
+    if (releasable.length > 0) await coordination.releasePending(releasable);
     for (const id of exhausted) {
-        await team.settleFailed(
+        await coordination.settleFailed(
             [id],
             `delivery not accepted: invocation never started after ${MAX_INJECT_ATTEMPTS} inject attempts`,
         );
@@ -879,13 +885,13 @@ export async function runAgentRun(
             // Track the claim immediately: a validation failure BEFORE the run
             // must still settle (release) the rows, not strand them at injected.
             claimed = drainedIds;
-            // R1 (0542): an explicit --spec must resolve to a real team spec — a
+            // R1 (0542): an explicit --spec must resolve to a real fleet spec — a
             // typo'd id must not silently fall through to auto resolution.
             if (typeof flags.spec === 'string' && flags.spec !== '' && rewritten['spec-id'] !== flags.spec) {
                 writeJsonError(
                     context.output,
                     jsonFlags(flags),
-                    `--spec "${flags.spec}" does not match a team agent spec`,
+                    `--spec "${flags.spec}" does not match a fleet agent spec`,
                     'VALIDATION_FAILED',
                 );
                 return 2;
@@ -955,15 +961,15 @@ async function drainIntoPrompt(
         return { prompt, flags, claimed: [] };
     }
 
-    const team = new AgentCoordinationService(context);
-    const spec = (await team.listAgentSpecs()).find((entry) => entry.id === recipient);
+    const coordination = new AgentCoordinationService(context);
+    const spec = (await coordination.listAgentSpecs()).find((entry) => entry.id === recipient);
     const flagsOut =
         spec === undefined ? flags : { ...flags, 'spec-id': spec.id, agent: drainAgentSelector(spec, context) };
 
     // `--spec` without `--drain`: address the occupant, leave the inbox alone.
     if (flags.drain !== true) return { prompt, flags: flagsOut, claimed: [] };
 
-    const inbox = await team.drainPending(recipient);
+    const inbox = await coordination.drainPending(recipient);
     if (inbox.count === 0) return { prompt, flags: flagsOut, claimed: [] };
 
     const header = inbox.messages.map((m) => `- ${m.fromId ?? 'operator'}: ${m.body}`).join('\n');
@@ -1125,7 +1131,7 @@ export async function runAgentLoop(
 ): Promise<number> {
     const recipient = typeof flags.spec === 'string' ? flags.spec : '';
     if (recipient === '' || recipient === 'auto') {
-        context.output.error('agent loop requires an explicit --spec <id> matching a team agent spec');
+        context.output.error('agent loop requires an explicit --spec <id> matching a fleet agent spec');
         return 2;
     }
     const pollMs = parseLoopPoll(flags.poll);
@@ -1196,7 +1202,7 @@ async function runAgentWait(
     }
 
     const agentService = context.agentService();
-    const teamService = new AgentCoordinationService(context);
+    const coordination = new AgentCoordinationService(context);
     const eventDao = new SystemEventDao(await context.getDb());
 
     const controller = new AbortController();
@@ -1225,7 +1231,7 @@ async function runAgentWait(
                 result = await waitForOccupant(
                     {
                         getOccupant: (id) => agentService.getOccupant({ specId: id }),
-                        countPending: (id) => teamService.countPending(id),
+                        countPending: (id) => coordination.countPending(id),
                         latestInvokeEvent: (r) => readLatestInvokeEvent(eventDao, r),
                         // Snapshot-then-follow over the shared ledger (G4 R8):
                         // only the pinned run's invoke events are followed.

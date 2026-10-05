@@ -11,7 +11,6 @@ export interface ProcessStatus {
     startedAt: string;
     exitCode: number | null;
     /** Owning team id — `null` when unassigned (0852: watch-list team filter). */
-    teamId: string | null;
     /** Member agent session (0897) when the served project's ledger has one. */
     session?: { mode: 'persistent' | 'resume' | 'one-shot'; id?: string };
 }
@@ -37,12 +36,10 @@ export function parseProcessList(value: unknown): ProcessStatus[] | null {
         if (typeof r.pid !== 'number') return null;
         const exitCode = r.exitCode;
         if (exitCode !== null && typeof exitCode !== 'number') return null;
-        // teamId is additive enrichment for the watch list (0852): a missing or
         // non-string value narrows to null instead of failing the poll, so the
         // accept/reject behavior existing callers see is untouched.
-        const teamId = r.teamId;
         // 0897: session is additive — a well-formed { mode } object narrows through,
-        // anything else is dropped rather than failing the poll (same posture as teamId).
+        // anything else is dropped rather than failing the poll.
         const rawSession = r.session as { mode?: unknown; id?: unknown } | undefined;
         const session: ProcessStatus['session'] =
             rawSession !== null &&
@@ -59,7 +56,6 @@ export function parseProcessList(value: unknown): ProcessStatus[] | null {
             status: r.status,
             startedAt: r.startedAt,
             exitCode: exitCode as number | null,
-            teamId: typeof teamId === 'string' ? teamId : null,
             ...(session !== undefined ? { session } : {}),
         });
     }
@@ -78,7 +74,6 @@ export interface RegistryExecution {
     exitedAt: string | null;
     exitCode: number | null;
     source: string;
-    teamId: string | null;
     agentId: string | null;
 }
 
@@ -108,11 +103,6 @@ export function parseExecutions(value: unknown): RegistryExecution[] | null {
         if (r.exitCode !== null && typeof r.exitCode !== 'number') return null;
         if (typeof r.source !== 'string') return null;
         if (r.agentId !== null && typeof r.agentId !== 'string') return null;
-        // teamId is additive enrichment (0852) and the producer no longer writes the
-        // grouping id (0860), so any missing or non-string value narrows to null instead
-        // of failing the poll — the same tolerance `parseProcessList` documents. A strict
-        // check here rejected the whole response and wedged the watch list.
-        const teamId = r.teamId;
         out.push({
             id: r.id,
             label: r.label,
@@ -124,7 +114,6 @@ export function parseExecutions(value: unknown): RegistryExecution[] | null {
             exitedAt: r.exitedAt as string | null,
             exitCode: r.exitCode as number | null,
             source: r.source,
-            teamId: typeof teamId === 'string' ? teamId : null,
             agentId: r.agentId as string | null,
         });
     }

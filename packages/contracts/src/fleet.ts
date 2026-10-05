@@ -66,8 +66,6 @@ export const processEntrySchema = z.object({
     status: z.enum(['running', 'stopped', 'exited', 'errored']),
     startedAt: z.string(),
     exitCode: z.number().nullable(),
-    /** Retired grouping id — always null on the wire since 0860. */
-    teamId: z.null(),
     session: memberSessionSchema.optional(),
 });
 
@@ -83,7 +81,6 @@ export const processExecutionSchema = z.object({
     exitedAt: z.string().nullable(),
     exitCode: z.number().nullable(),
     source: z.string(),
-    teamId: z.string().nullable(),
     agentId: z.string().nullable(),
 });
 

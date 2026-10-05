@@ -7,7 +7,6 @@ export interface ActivityRow {
     occurredAt: string;
     actor: string | null;
     /** Identity resolved from payload when present; fallback to actor parse. */
-    teamId?: string;
     memberLabel?: string;
     agentType?: string;
 }
@@ -32,8 +31,8 @@ function isCoordinationEvent(name: string): boolean {
  *
  * Identity resolution (0269 R9/P4): payload `memberLabel` / `agentType` / `agentId`
  * win; `agentId` doubles as memberLabel when memberLabel is absent. Rows persisted
- * before 0860 still carry a `teamId`, so the reader tolerates it (R2: no data
- * migration, readers stay generic).
+ * stay generic: unknown keys are ignored rather than rejected (R2: no data
+ * migration).
  */
 export function toRow(value: unknown): ActivityRow | null {
     if (value === null || typeof value !== 'object') return null;
@@ -42,8 +41,6 @@ export function toRow(value: unknown): ActivityRow | null {
     if (!isCoordinationEvent(obj.eventName)) return null;
     const payload =
         obj.payload !== null && typeof obj.payload === 'object' ? (obj.payload as Record<string, unknown>) : null;
-    const teamId =
-        payload && typeof payload.teamId === 'string' && payload.teamId.length > 0 ? payload.teamId : undefined;
     const agentType =
         payload && typeof payload.agentType === 'string' && payload.agentType.length > 0
             ? payload.agentType
@@ -65,7 +62,6 @@ export function toRow(value: unknown): ActivityRow | null {
         eventName: obj.eventName,
         occurredAt: obj.occurredAt,
         actor,
-        ...(teamId ? { teamId } : {}),
         ...(memberLabel ? { memberLabel } : {}),
         ...(agentType ? { agentType } : {}),
     };

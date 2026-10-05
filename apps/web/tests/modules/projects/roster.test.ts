@@ -21,7 +21,6 @@ function proc(agentId: string, status = 'running', overrides: Partial<ProcessSta
         status,
         startedAt: '2026-09-12T10:00:00.000Z',
         exitCode: null,
-        teamId: null,
         ...overrides,
     };
 }

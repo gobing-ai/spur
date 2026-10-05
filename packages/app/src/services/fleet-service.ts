@@ -151,11 +151,6 @@ export interface OrchestratorBinding {
  */
 export interface RosterMember extends MemberIdentity {
     purpose?: string;
-    workspace?: string;
-    systemPrompt?: string;
-    command?: string[];
-    autonomy?: string;
-    autostart?: boolean;
     /** Fleet-only (0835): `false` keeps the derived id but skips materialization. */
     enabled?: boolean;
 }
@@ -335,7 +330,9 @@ export function materializeRoster(params: MaterializeRosterParams): RosterProjec
             // AiRunner resolves the runner from it, and pre-existing specs
             // carry only `type` (drain falls back to it).
             executor: executorName,
-            workspace: member.workspace ?? defaultWorkspace,
+            // 1078 R3: the roster carries no `workspace` — `FleetMemberSchema` never populated it,
+            // so this was always the default. The retired field's dead reads are gone with it.
+            workspace: defaultWorkspace,
             purpose: member.purpose && member.purpose.length > 0 ? member.purpose : `${resolved.agent} agent`,
             tags: [`fleet:${slug}`, 'spur:generated'],
             config: {
@@ -344,11 +341,7 @@ export function materializeRoster(params: MaterializeRosterParams): RosterProjec
                 // routing reads it off the spec (0543 R1 — the role and the
                 // resolved executor name are BOTH recorded).
                 ...(member.role !== undefined ? { role: member.role } : {}),
-                ...(member.systemPrompt !== undefined ? { systemPrompt: member.systemPrompt } : {}),
-                ...(member.command !== undefined ? { command: member.command } : {}),
-                ...(member.autonomy !== undefined ? { autonomy: member.autonomy } : {}),
             },
-            ...(member.autostart !== undefined ? { autoStart: member.autostart } : {}),
         };
         toUpsert.push(spec);
     }

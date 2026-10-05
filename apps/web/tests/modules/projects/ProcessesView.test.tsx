@@ -37,7 +37,6 @@ describe('ProcessesView supervised rows (0852 R5)', () => {
                             status: 'running',
                             startedAt: '2026-07-15T12:00:00.000Z',
                             exitCode: null,
-                            teamId: null,
                         },
                         {
                             agentId: 'builder',
@@ -45,7 +44,6 @@ describe('ProcessesView supervised rows (0852 R5)', () => {
                             status: 'exited',
                             startedAt: '2026-07-15T11:00:00.000Z',
                             exitCode: 0,
-                            teamId: null,
                         },
                     ],
                     count: 2,
@@ -88,7 +86,6 @@ describe('ProcessesView supervised rows (0852 R5)', () => {
                             status: 'running',
                             startedAt: '2026-07-15T12:00:00.000Z',
                             exitCode: null,
-                            teamId: null,
                         },
                     ],
                     count: 1,
@@ -104,7 +101,6 @@ describe('ProcessesView supervised rows (0852 R5)', () => {
                             exitedAt: '2026-07-15T12:01:01.000Z',
                             exitCode: 0,
                             source: 'one-shot',
-                            teamId: null,
                             agentId: null,
                         },
                         // Duplicate of the supervised agent — de-duped by agentId (0264).
@@ -119,7 +115,6 @@ describe('ProcessesView supervised rows (0852 R5)', () => {
                             exitedAt: null,
                             exitCode: null,
                             source: 'supervisor',
-                            teamId: null,
                             agentId: 'planner',
                         },
                     ],
@@ -214,7 +209,6 @@ describe('ProcessesView supervised rows (0852 R5)', () => {
                             status: 'running',
                             startedAt: '2026-07-15T12:00:00.000Z',
                             exitCode: null,
-                            teamId: null,
                         },
                     ],
                     count: 1,
@@ -253,7 +247,6 @@ describe('buildWatchRows + filterWatchRows (0267 port, 0852 R3)', () => {
             status: 'running',
             startedAt: '2026-07-15T00:00:00Z',
             exitCode: null,
-            teamId: 'red',
         },
         {
             agentId: 'beta',
@@ -261,7 +254,6 @@ describe('buildWatchRows + filterWatchRows (0267 port, 0852 R3)', () => {
             status: 'exited',
             startedAt: '2026-07-15T00:00:00Z',
             exitCode: 0,
-            teamId: null,
         },
     ];
     const executions = [
@@ -276,7 +268,6 @@ describe('buildWatchRows + filterWatchRows (0267 port, 0852 R3)', () => {
             exitedAt: null,
             exitCode: null,
             source: 'one-shot',
-            teamId: 'blue',
             agentId: null,
         },
         {
@@ -290,23 +281,13 @@ describe('buildWatchRows + filterWatchRows (0267 port, 0852 R3)', () => {
             exitedAt: null,
             exitCode: null,
             source: 'serve',
-            teamId: null,
             agentId: 'gamma',
         },
     ];
 
-    test('buildWatchRows threads teamId from both supervised and registry rows', () => {
-        const rows = buildWatchRows(supervised, executions);
-        const byKey = new Map(rows.map((r) => [r.key, r]));
-        expect(byKey.get('sup:alpha')?.teamId).toBe('red');
-        expect(byKey.get('sup:beta')?.teamId).toBeNull();
-        expect(byKey.get('reg:e1')?.teamId).toBe('blue');
-        expect(byKey.get('reg:e2')?.teamId).toBeNull();
-    });
-
     test('runningOnly filter hides non-running rows', () => {
         const rows = buildWatchRows(supervised, executions);
-        const filtered = filterWatchRows(rows, { runningOnly: true, source: 'all', team: 'all' });
+        const filtered = filterWatchRows(rows, { runningOnly: true, source: 'all' });
         const keys = filtered.map((r) => r.key);
         expect(keys).toContain('sup:alpha');
         expect(keys).toContain('reg:e1');
@@ -317,48 +298,25 @@ describe('buildWatchRows + filterWatchRows (0267 port, 0852 R3)', () => {
 
     test('source=supervisor hides non-supervisor rows', () => {
         const rows = buildWatchRows(supervised, executions);
-        const filtered = filterWatchRows(rows, { runningOnly: false, source: 'supervisor', team: 'all' });
+        const filtered = filterWatchRows(rows, { runningOnly: false, source: 'supervisor' });
         expect(filtered.map((r) => r.key)).toEqual(['sup:alpha', 'sup:beta']);
     });
 
     test('source=one-shot keeps only one-shot registry rows', () => {
         const rows = buildWatchRows(supervised, executions);
-        const filtered = filterWatchRows(rows, { runningOnly: false, source: 'one-shot', team: 'all' });
+        const filtered = filterWatchRows(rows, { runningOnly: false, source: 'one-shot' });
         expect(filtered.map((r) => r.key)).toEqual(['reg:e1']);
     });
 
     test('source=other keeps rows that are neither supervisor nor one-shot', () => {
         const rows = buildWatchRows(supervised, executions);
-        const filtered = filterWatchRows(rows, { runningOnly: false, source: 'other', team: 'all' });
-        expect(filtered.map((r) => r.key)).toEqual(['reg:e2']);
-    });
-
-    test('team filter narrows to a specific team', () => {
-        const rows = buildWatchRows(supervised, executions);
-        const filtered = filterWatchRows(rows, { runningOnly: false, source: 'all', team: 'red' });
-        expect(filtered.map((r) => r.key)).toEqual(['sup:alpha']);
-    });
-
-    test('team=unassigned selects only rows with null teamId', () => {
-        const rows = buildWatchRows(supervised, executions);
-        const filtered = filterWatchRows(rows, { runningOnly: false, source: 'all', team: 'unassigned' });
-        const keys = filtered.map((r) => r.key);
-        expect(keys).toContain('sup:beta');
-        expect(keys).toContain('reg:e2');
-        expect(keys).not.toContain('sup:alpha');
-        expect(keys).not.toContain('reg:e1');
-    });
-
-    test('combined runningOnly + team filter intersects correctly', () => {
-        const rows = buildWatchRows(supervised, executions);
-        const filtered = filterWatchRows(rows, { runningOnly: true, source: 'all', team: 'unassigned' });
-        // Only reg:e2 is both running AND unassigned (beta is exited).
+        const filtered = filterWatchRows(rows, { runningOnly: false, source: 'other' });
         expect(filtered.map((r) => r.key)).toEqual(['reg:e2']);
     });
 
     test('all-pass filter returns every row unchanged', () => {
         const rows = buildWatchRows(supervised, executions);
-        const filtered = filterWatchRows(rows, { runningOnly: false, source: 'all', team: 'all' });
+        const filtered = filterWatchRows(rows, { runningOnly: false, source: 'all' });
         expect(filtered).toHaveLength(rows.length);
     });
 });
@@ -374,34 +332,6 @@ describe('ProcessesView filter bar (0852 R3 / 0267)', () => {
         }) as unknown as typeof fetch);
     }
 
-    test('renders filter controls and the team column (0267 R2)', async () => {
-        stubProcesses({
-            processes: [
-                {
-                    agentId: 'alpha',
-                    pid: 1,
-                    status: 'running',
-                    startedAt: '2026-07-15T12:00:00Z',
-                    exitCode: null,
-                    teamId: 'red',
-                },
-            ],
-            count: 1,
-            executions: [],
-            executionsCount: 0,
-        });
-
-        const { container } = render(<ProcessesView />);
-
-        await waitFor(() => expect(container.querySelector('[data-processes-tab]')).not.toBeNull());
-        expect(container.querySelector('[data-processes-filters]')).not.toBeNull();
-        expect(container.querySelector('[data-processes-filter-running-input]')).not.toBeNull();
-        expect(container.querySelector('[data-processes-filter-source]')).not.toBeNull();
-        expect(container.querySelector('[data-processes-filter-team]')).not.toBeNull();
-        // Team column shows the teamId.
-        expect(container.querySelector('[data-process-team="red"]')).not.toBeNull();
-    });
-
     test('running-only checkbox hides non-running rows (0267 R2)', async () => {
         stubProcesses({
             processes: [
@@ -411,7 +341,6 @@ describe('ProcessesView filter bar (0852 R3 / 0267)', () => {
                     status: 'running',
                     startedAt: '2026-07-15T12:00:00Z',
                     exitCode: null,
-                    teamId: null,
                 },
                 {
                     agentId: 'stopped',
@@ -419,7 +348,6 @@ describe('ProcessesView filter bar (0852 R3 / 0267)', () => {
                     status: 'exited',
                     startedAt: '2026-07-15T12:00:00Z',
                     exitCode: 0,
-                    teamId: null,
                 },
             ],
             count: 2,
@@ -448,7 +376,6 @@ describe('ProcessesView filter bar (0852 R3 / 0267)', () => {
                     status: 'running',
                     startedAt: '2026-07-15T12:00:00Z',
                     exitCode: null,
-                    teamId: null,
                 },
             ],
             count: 1,
@@ -464,7 +391,6 @@ describe('ProcessesView filter bar (0852 R3 / 0267)', () => {
                     exitedAt: null,
                     exitCode: null,
                     source: 'one-shot',
-                    teamId: null,
                     agentId: null,
                 },
             ],
@@ -483,78 +409,6 @@ describe('ProcessesView filter bar (0852 R3 / 0267)', () => {
         expect(container.querySelector('[data-processes-row="reg:job"]')).not.toBeNull();
     });
 
-    test('team filter narrows rows to the selected team (0267 R2)', async () => {
-        stubProcesses({
-            processes: [
-                {
-                    agentId: 'alpha',
-                    pid: 1,
-                    status: 'running',
-                    startedAt: '2026-07-15T12:00:00Z',
-                    exitCode: null,
-                    teamId: 'red',
-                },
-                {
-                    agentId: 'beta',
-                    pid: 2,
-                    status: 'running',
-                    startedAt: '2026-07-15T12:00:00Z',
-                    exitCode: null,
-                    teamId: 'blue',
-                },
-            ],
-            count: 2,
-            executions: [],
-            executionsCount: 0,
-        });
-
-        const { container } = render(<ProcessesView />);
-
-        await waitFor(() => expect(container.querySelector('[data-processes-row="sup:alpha"]')).not.toBeNull());
-
-        const select = container.querySelector('[data-processes-filter-team]') as HTMLSelectElement;
-        act(() => fireEvent.change(select, { target: { value: 'red' } }));
-
-        await waitFor(() => expect(container.querySelector('[data-processes-row="sup:beta"]')).toBeNull());
-        expect(container.querySelector('[data-processes-row="sup:alpha"]')).not.toBeNull();
-    });
-
-    test('team=unassigned selects only rows with no teamId (0267 R2)', async () => {
-        stubProcesses({
-            processes: [
-                {
-                    agentId: 'alpha',
-                    pid: 1,
-                    status: 'running',
-                    startedAt: '2026-07-15T12:00:00Z',
-                    exitCode: null,
-                    teamId: 'red',
-                },
-                {
-                    agentId: 'beta',
-                    pid: 2,
-                    status: 'running',
-                    startedAt: '2026-07-15T12:00:00Z',
-                    exitCode: null,
-                    teamId: null,
-                },
-            ],
-            count: 2,
-            executions: [],
-            executionsCount: 0,
-        });
-
-        const { container } = render(<ProcessesView />);
-
-        await waitFor(() => expect(container.querySelector('[data-processes-row="sup:alpha"]')).not.toBeNull());
-
-        const select = container.querySelector('[data-processes-filter-team]') as HTMLSelectElement;
-        act(() => fireEvent.change(select, { target: { value: 'unassigned' } }));
-
-        await waitFor(() => expect(container.querySelector('[data-processes-row="sup:alpha"]')).toBeNull());
-        expect(container.querySelector('[data-processes-row="sup:beta"]')).not.toBeNull();
-    });
-
     test('filters hiding all rows show the no-matches empty state (0267 R4)', async () => {
         stubProcesses({
             processes: [
@@ -564,7 +418,6 @@ describe('ProcessesView filter bar (0852 R3 / 0267)', () => {
                     status: 'exited',
                     startedAt: '2026-07-15T12:00:00Z',
                     exitCode: 0,
-                    teamId: null,
                 },
             ],
             count: 1,

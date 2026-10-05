@@ -97,7 +97,7 @@ describe('runAgentRun --spec occupant addressing (0542 R1)', () => {
             const code = await runAgentRun('prompt', customCtx, { drain: true, spec: 'no-such-spec' });
             expect(code).toBe(2);
             expect(run).not.toHaveBeenCalled();
-            expect(output.stderr.join('\n')).toContain('--spec "no-such-spec" does not match a team agent spec');
+            expect(output.stderr.join('\n')).toContain('--spec "no-such-spec" does not match a fleet agent spec');
         } finally {
             rmSync(tempDir, { recursive: true, force: true });
         }

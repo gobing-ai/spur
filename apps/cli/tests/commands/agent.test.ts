@@ -654,7 +654,7 @@ describe('runAgentLoop', () => {
         expect(code1).toBe(2);
         // 0542 R3: the loop addresses the occupant via --spec <id>.
         expect(output.stderr.join('\n')).toContain(
-            'agent loop requires an explicit --spec <id> matching a team agent spec',
+            'agent loop requires an explicit --spec <id> matching a fleet agent spec',
         );
 
         const output2 = captureOutput();
@@ -662,7 +662,7 @@ describe('runAgentLoop', () => {
         const code2 = await runAgentLoop(ctx2, { spec: 'auto' });
         expect(code2).toBe(2);
         expect(output2.stderr.join('\n')).toContain(
-            'agent loop requires an explicit --spec <id> matching a team agent spec',
+            'agent loop requires an explicit --spec <id> matching a fleet agent spec',
         );
     });
 

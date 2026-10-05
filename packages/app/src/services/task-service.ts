@@ -816,6 +816,18 @@ export class TaskService {
      * lifecycle-guarded `updateStatus`, not here. The L1 schema still validates
      * the value after the write (e.g. an unknown priority is rejected).
      */
+    /**
+     * Set a task's `assignee` (1078 R2). Deliberately OUTSIDE {@link updateField}'s allow-list:
+     * assignment has one validated caller (`spur task assign`) and its own `task.assigned` event,
+     * so widening the public `--field` surface for it would add a second write path for no gain.
+     * Same atomic frontmatter write and same write-service path as `updateField`.
+     */
+    async assign(wbs: string, agentId: string): Promise<WriteResult> {
+        const filePath = await this.resolveTaskFile(wbs);
+        const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder: this.ctx.tasksDir };
+        return await this.writeService.updateFrontmatter(ref, 'assignee', agentId);
+    }
+
     async updateField(wbs: string, key: string, value: string): Promise<WriteResult> {
         // `done_forced` / `done_reason` are set by the CLI verdict-guard override
         // path (R3, task 0292) — they record an operator's explicit decision to
