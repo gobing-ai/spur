@@ -767,6 +767,45 @@ describe('StrategyRuntime.resume (0838 R6)', () => {
         }
     });
 
+    test('a DEFINITE terminal receipt is reported but never holds dispatch (G71 1077 R3)', async () => {
+        const rig = await makeRig({ strategy: 'gtd' });
+        try {
+            await rig.claims.claim(rig.project, 'orchestrator', 'proj-orch', 30_000);
+            const inbox = new InboxMessageDao(rig.db);
+            const messageId = await inbox.enqueue('operator', 'proj-coder', 'do the work');
+            await inbox.drainPending('proj-coder');
+            // The dispatch drained the message and closed as `run-exit-only` — the only terminal
+            // outcome a strategy sink can write (agent-service never writes 'verified'), which is
+            // exactly the state that used to wedge the project forever.
+            const runs = new CoordinationRunDao(rig.db);
+            const runId = 'run-definite-1';
+            await runs.insertStart({
+                specId: 'proj-coder',
+                agentKind: 'pi',
+                processId: null,
+                runId,
+                generation: 1,
+                startedAt: new Date().toISOString(),
+                messageIds: [messageId],
+            });
+            await runs.updateExit(runId, 'exited', new Date().toISOString(), '[]', {
+                messageIds: [messageId],
+                outcome: 'run-exit-only',
+            });
+
+            const report = await rig.runtime.resume(rig.project);
+            expect(report.reconciled).toBe(true);
+            // The reconciler's reporting contract is unchanged — the delivery is still LISTED…
+            expect(report.unresolved.map((u) => [u.messageId, u.reason])).toEqual([[messageId, 'run-exit-only']]);
+            // …but a definite receipt must not block new dispatch: the attempt cap and the
+            // `--continue` resume hint own the retry (1073 R4).
+            const selected = await rig.runtime.selectNext(rig.project);
+            expect(selected.holds.some((hold) => hold.detail?.includes('unresolved-deliveries'))).toBe(false);
+        } finally {
+            await rig.cleanup();
+        }
+    });
+
     test('an unresolved delivery to an agent outside the fleet does not hold dispatch', async () => {
         const rig = await makeRig({ strategy: 'gtd' });
         try {

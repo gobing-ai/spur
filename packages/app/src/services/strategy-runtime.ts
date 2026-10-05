@@ -645,10 +645,18 @@ export class StrategyRuntime {
         const candidates = [...new Map([...todoCandidates, ...wipCandidates].map((c) => [c.wbs, c])).values()];
         const statusByWbs = new Map(candidates.map((candidate) => [candidate.wbs, candidate.status]));
         if (name === 'gtd') {
-            if (!resumed.reconciled || resumed.unresolved.length > 0) {
+            // A DEFINITE prior receipt — `delivery-failed`, `attempts-exhausted`, `run-exit-only` —
+            // is not an ambiguous outcome: the strategy's own attempt cap and the `--continue`
+            // resume hint decide the retry (1073 R4). Blocking on those wedged the project
+            // permanently after the very first drained dispatch, because a strategy sink can only
+            // ever close a run as `run-exit-only`/`errored`, never `verified` (G71 1077 R3; repro
+            // in docs/reports/fleet-e2e-receipt.json `residualRisks`). Only an outcome we cannot
+            // establish at all still holds new dispatch.
+            const ambiguous = resumed.unresolved.filter((delivery) => delivery.reason === 'outcome-unknown');
+            if (!resumed.reconciled || ambiguous.length > 0) {
                 const detail = !resumed.reconciled
                     ? `orchestrator:${resumed.orchestrator.state}; restore its live claim before dispatch`
-                    : 'unresolved-deliveries; reconcile prior results before dispatch';
+                    : `unresolved-deliveries; reconcile prior results before dispatch (${ambiguous.length} ambiguous)`;
                 return {
                     name,
                     statusByWbs,
