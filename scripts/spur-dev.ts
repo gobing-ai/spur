@@ -22,6 +22,7 @@
  *   dev-all                                     run server + web under one supervisor
  *   link-check                                  fail if a linked @gobing-ai pkg serves a stale dist/
  *   eval-pipeline [args]                        run fixture tasks through a pipeline and record cost/outcome
+ *   fleet-e2e [--inject-failure <step>]         prove the inbox-only fleet end to end, write the receipt
  *   real-run-cost [args]                        report real pipeline-run cost from the project DB
  *   check-pipeline-budgets [args]               fail when pipeline cost exceeds config/pipeline-budgets.json
  *   promotion [args]                            workflow candidate promotion/retirement records
@@ -36,6 +37,7 @@ import { checkMarketplaceVersion } from './commands/check-marketplace-version';
 import { devAll } from './commands/dev-all';
 import { emitBoardDeclarations } from './commands/emit-board-types';
 import { evalPipeline } from './commands/eval-pipeline';
+import { runFleetE2e } from './commands/fleet-e2e';
 import { linkCheck } from './commands/link-check';
 import { checkPipelineBudgets } from './commands/pipeline-budgets';
 import { publish } from './commands/publish';
@@ -46,7 +48,7 @@ import { runWorkflowPromotion } from './commands/workflow-promotion';
 
 function usage(message?: string): never {
     console.error(
-        'Commands: bump-ver, drop-tags, publish, bundle-config, bundle-web, bundle-plugins, emit-board-types, check-marketplace-version, verify-pack, build-binaries, build-cli, build-server, dev-all, link-check, eval-pipeline, real-run-cost, check-pipeline-budgets, promotion',
+        'Commands: bump-ver, drop-tags, publish, bundle-config, bundle-web, bundle-plugins, emit-board-types, check-marketplace-version, verify-pack, build-binaries, build-cli, build-server, dev-all, link-check, eval-pipeline, fleet-e2e, real-run-cost, check-pipeline-budgets, promotion',
     );
     process.exit(message ? 1 : 0);
 }
@@ -117,6 +119,9 @@ try {
             break;
         case 'eval-pipeline':
             process.exit(await evalPipeline(args));
+            break;
+        case 'fleet-e2e':
+            process.exit(await runFleetE2e(args));
             break;
         case 'link-check':
             process.exit(await linkCheck());

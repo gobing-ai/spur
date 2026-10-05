@@ -1,0 +1,94 @@
+{
+    "schemaVersion": 1,
+    "generatedAt": "2026-10-05T20:18:38.422Z",
+    "projectPath": "/private/var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/spur-fleet-e2e-1791231209934",
+    "ids": {
+        "planner": "spur-fleet-e2e-1791231209934-planner-1",
+        "coder": "spur-fleet-e2e-1791231209934-coder-1",
+        "feature": "A",
+        "wbs": "0001",
+        "replyMessage": "253fca8a-c247-4258-98d4-6cdbdafa76af"
+    },
+    "steps": [
+        {
+            "step": "scaffold",
+            "command": "git init + spur self init + agent.fleet + PATH stub + strategy reconcile",
+            "exitCode": 0,
+            "status": "passed",
+            "assertion": "a scratch project scaffolds with a declared agent.fleet (gtd, planner-1 orchestrator, coder-1 member), the project strategy row reconciled to gtd, and a PATH stub named after the member agent type",
+            "evidence": "scratch=/private/var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/spur-fleet-e2e-1791231209934 | fleet=spur-fleet-e2e-1791231209934-planner-1, spur-fleet-e2e-1791231209934-coder-1 | strategy=gtd v1 | stub=/private/var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/spur-fleet-e2e-1791231209934/bin/claude (PATH first)"
+        },
+        {
+            "step": "create-task",
+            "command": "spur task create + task update (0001, tags fleet:auto e2e:hang)",
+            "exitCode": 0,
+            "status": "passed",
+            "assertion": "a fleet:auto task is created through the source-local CLI and promoted to todo with a passing `task check --as wip` readiness gate",
+            "evidence": "wbs=0001 status=todo tags=fleet:auto,e2e:hang feature=A readiness=task check --as wip PASS"
+        },
+        {
+            "step": "start-loops",
+            "command": "spur agent loop --spec spur-fleet-e2e-1791231209934-planner-1 | --spec spur-fleet-e2e-1791231209934-coder-1",
+            "exitCode": 0,
+            "status": "passed",
+            "assertion": "the planner and coder loops attach: a live orchestrator claim and a recorded fleet member session, with the stub first on PATH",
+            "evidence": "pids=69840,69841 (stub first on PATH) orchestrator claim live member session recorded"
+        },
+        {
+            "step": "dispatch-to-done",
+            "command": "spur task show 0001 --json (poll)",
+            "exitCode": 1,
+            "status": "failed",
+            "assertion": "one keyed dispatch fleet:task:<wbs>:1 reaches the coder member, the member process runs the turn, and the task ends done",
+            "evidence": "error: timed out after 120000ms waiting for task 0001 to reach done"
+        },
+        {
+            "step": "orchestrator-reply",
+            "command": "spur message send --to planner \"status?\"",
+            "exitCode": 1,
+            "status": "failed",
+            "assertion": "an operator 'status?' message to the orchestrator is drained by the orchestrator loop and answered in the operator inbox",
+            "evidence": "error: timed out after 60000ms waiting for the orchestrator reply in the operator inbox"
+        },
+        {
+            "step": "kill-redispatch",
+            "command": "kill coder loop; spur message send --continue",
+            "exitCode": 1,
+            "status": "failed",
+            "assertion": "a coder loop killed mid-turn (run errored, message delivered) is restarted and the task is resumed through the real `spur message send <...> --continue` CLI path, with the stub's next directive for the wbs carrying --continue. NOT proven: strategy auto-retry of a drained turn (residual risk strategy-retry-unreachable)",
+            "evidence": "error: timed out after 120000ms waiting for the hung first turn"
+        },
+        {
+            "step": "guest-join",
+            "command": "spur agent join --role reviewer --id reviewer-g → agent wait --inbox → message reply → agent leave",
+            "exitCode": 0,
+            "status": "passed",
+            "assertion": "a joined guest occupant (agent join --role) pulls a dispatched review request through agent wait --inbox and its reply lands in the operator inbox",
+            "evidence": "guest=reviewer-g request=885e1581-2bcb-4e0f-a82c-17b263a9c498 pending=1 reply=b95617e2-3658-4641-87a9-6b747b93c3fe left=reviewer-g"
+        },
+        {
+            "step": "trace",
+            "command": "spur agent trace <run> --json",
+            "exitCode": 1,
+            "status": "failed",
+            "assertion": "spur agent trace resolves the execution record of the dispatched turn: an agent node whose durable stream exists with content, over a loop-free lineage",
+            "evidence": "error: ENOENT: no such file or directory, scandir '/private/var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/spur-fleet-e2e-1791231209934/.spur/memory/runs'"
+        },
+        {
+            "step": "teardown",
+            "command": "kill loop pids + spur agent leave + rm -rf $TMPDIR/<scratch>",
+            "exitCode": 0,
+            "status": "passed",
+            "assertion": "loop pids are killed, the guest leaves, and the scratch dir under $TMPDIR is removed",
+            "evidence": "killed pids=69840,69841 | scratch removed=true | problems=none"
+        }
+    ],
+    "residualRisks": [
+        {
+            "id": "strategy-dispatch-has-no-lineage-parent",
+            "summary": "A strategy dispatch records no parent run edge, so its execution record is a single-node lineage: the dispatch → member-turn depth of 2 requires the workflow dispatcher.",
+            "rootCause": "drainIntoPrompt sets parentRunId only from a workflow request key of the shape `<runId>/<state>` (apps/cli/src/commands/agent.ts:1391-1394); the strategy's `fleet:task:<wbs>:<n>` key is deliberately excluded, so the member turn is a lineage root (packages/app/src/services/agent-service.ts:1322-1326).",
+            "evidence": "the traced dispatch run reports parentRunId=null and nodes.length=1; its stream and status are still readable, which is what the step asserts."
+        }
+    ]
+}
