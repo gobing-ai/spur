@@ -544,6 +544,11 @@ describe('CLI modes', () => {
             expect(main(argv, {}, SILENT)).toBe(0);
             const callsTxt = readFileSync(join(dir, 'calls.log'), 'utf8');
             expect(callsTxt).toContain('create');
+            // The follow-up is filed unlinked: a feature edge to the completing feature would fail
+            // that feature's done-gate (L4.verifying-incomplete-tasks) as soon as a residual defers.
+            const createLine = callsTxt.split('\n').find((l) => l.includes('create')) ?? '';
+            expect(createLine).toContain('Residuals from 0949');
+            expect(createLine).not.toContain('--feature');
             expect(main(argv, {}, SILENT)).toBe(0);
             const callsAfterSecond = readFileSync(join(dir, 'calls.log'), 'utf8');
             expect(callsAfterSecond.split('\n').filter((l) => l.includes('create'))).toHaveLength(1);
