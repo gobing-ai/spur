@@ -380,3 +380,39 @@ describe('ObservableWorkflowAdapter usage propagation (task 0707 P1)', () => {
         expect(finished[1]?.usage).toMatchObject({ availability: 'unavailable' });
     });
 });
+
+// Engine 0.5.15: the observability adapter mirrors the step lifecycle and must not alter
+// branch persistence — every parallel-region call reaches the wrapped adapter unchanged.
+describe('ObservableWorkflowAdapter — branch pass-through (engine 0.5.15)', () => {
+    test('delegates the four parallel-region methods without emitting', async () => {
+        const calls: string[] = [];
+        const inner = {
+            saveBranchStart: async () => {
+                calls.push('start');
+                return 'branch-row-id';
+            },
+            saveBranchFinalize: async () => {
+                calls.push('finalize');
+            },
+            listRunBranches: async () => {
+                calls.push('list');
+                return [];
+            },
+            commitJoin: async () => {
+                calls.push('join');
+            },
+        } as unknown as WorkflowPersistenceAdapter;
+        const bus = new EventBus<WorkflowObservabilityEventMap>();
+        const emitted: string[] = [];
+        bus.on('workflow.action.finished', () => emitted.push('finished'));
+
+        const dec = new ObservableWorkflowAdapter(inner, bus);
+        expect(await dec.saveBranchStart('run-1', 'fan', 'b1', 'child')).toBe('branch-row-id');
+        await dec.saveBranchFinalize('run-1', 'b1', 'done', 5);
+        expect(await dec.listRunBranches('run-1')).toEqual([]);
+        await dec.commitJoin('run-1', 'fan', 'join');
+
+        expect(calls).toEqual(['start', 'finalize', 'list', 'join']);
+        expect(emitted).toEqual([]);
+    });
+});

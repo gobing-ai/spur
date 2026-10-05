@@ -3,7 +3,11 @@
  * Assert on the emitted strings (not timing), per task 0114 R5.
  */
 import { describe, expect, test } from 'bun:test';
-import type { StateMachineWorkflowDef, TransitionFlowWorkflowDef } from '@gobing-ai/ts-dual-workflow-engine';
+import type {
+    DagWorkflowDef,
+    StateMachineWorkflowDef,
+    TransitionFlowWorkflowDef,
+} from '@gobing-ai/ts-dual-workflow-engine';
 import {
     buildStepLabels,
     buildWorkflowSteps,
@@ -596,5 +600,62 @@ describe('renderRunPlan (builder parity, 0695 R5)', () => {
         // The todo body (header + blank = 2 lines) must match the plan body.
         expect(tfPlanLines).toEqual(renderWorkflowTodo(tf).split('\n').slice(2));
         expect(tfPlanLines).toEqual(['- [ ] A. x — initial', '- [ ] B. y']);
+    });
+});
+
+// Engine 0.5.15: DAG workflows project to a step list from `nodes` + `dependsOn` — roots are
+// the entry points, nodes nothing depends on are terminal, `condition` maps to conditional.
+describe('buildWorkflowSteps — DAG kind (engine 0.5.15)', () => {
+    test('projects nodes with root/terminal/pause/conditional flags and descriptions', () => {
+        const dag: DagWorkflowDef = {
+            kind: 'dag',
+            name: 'test-dag',
+            nodes: [
+                { id: 'root', description: 'entry' },
+                { id: 'mid', dependsOn: ['root'], pause: true },
+                { id: 'leaf', dependsOn: ['mid'], condition: { kind: 'shell' } },
+            ],
+        };
+        expect(buildWorkflowSteps(dag)).toEqual([
+            {
+                id: 'root',
+                initial: true,
+                terminal: false,
+                failure: false,
+                pause: false,
+                loopBack: false,
+                conditional: false,
+                description: 'entry',
+            },
+            {
+                id: 'mid',
+                initial: false,
+                terminal: false,
+                failure: false,
+                pause: true,
+                loopBack: false,
+                conditional: false,
+            },
+            {
+                id: 'leaf',
+                initial: false,
+                terminal: true,
+                failure: false,
+                pause: false,
+                loopBack: false,
+                conditional: true,
+            },
+        ]);
+    });
+
+    test('renderWorkflowTodo covers a DAG definition without state-machine fields', () => {
+        const dag: DagWorkflowDef = {
+            kind: 'dag',
+            name: 'todo-dag',
+            nodes: [{ id: 'one' }, { id: 'two', dependsOn: ['one'] }],
+        };
+        const out = renderWorkflowTodo(dag);
+        expect(out).toContain('one');
+        expect(out).toContain('two');
     });
 });

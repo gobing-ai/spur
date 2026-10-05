@@ -185,6 +185,24 @@ export interface WorkflowStep {
  * source at-or-after this position transitions back here (self-loops included).
  */
 export function buildWorkflowSteps(def: WorkflowDef): WorkflowStep[] {
+    if (def.kind === 'dag') {
+        // DAG (engine 0.5.15): a node list plus `dependsOn` edges — no states, no
+        // transitions. Roots (nothing they depend on) are the entry points and nodes
+        // nothing depends on are terminal; the other flags have no DAG meaning.
+        const dependedOn = new Set<string>(def.nodes.flatMap((node) => node.dependsOn ?? []));
+        return def.nodes.map((node) => ({
+            id: node.id,
+            initial: (node.dependsOn ?? []).length === 0,
+            terminal: !dependedOn.has(node.id),
+            failure: false,
+            pause: node.pause === true,
+            loopBack: false,
+            conditional: node.condition !== undefined,
+            ...(typeof node.description === 'string' && node.description !== ''
+                ? { description: node.description }
+                : {}),
+        }));
+    }
     if (def.kind === 'transition-flow') {
         const order = new Map(def.nodes.map((n, i) => [n.id, i] as const));
         const terminal = new Set<string>(def.terminalNodes ?? []);

@@ -37,6 +37,16 @@ import {
     type WorkflowRunRecord,
     type WorkflowStatus,
 } from '@gobing-ai/ts-dual-workflow-engine';
+
+/**
+ * Branch types the engine 0.5.15 defines in `types.d.ts` but does not re-export from its
+ * package index, so they are DERIVED from the adapter interface it does export — the
+ * signature stays the single source of truth and cannot drift from it.
+ */
+type BranchStatus = Parameters<WorkflowPersistenceAdapter['saveBranchFinalize']>[2];
+type BranchRecord = Awaited<ReturnType<WorkflowPersistenceAdapter['listRunBranches']>>[number];
+type BranchVars = Parameters<WorkflowPersistenceAdapter['commitJoin']>[3];
+
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { ensureDurablePlaneIgnored, runStoragePaths } from '../services/run-storage';
 import { resolveDurableArtifactPath } from './actions/run-path';
@@ -391,6 +401,33 @@ export class WorkflowActionTraceWriter implements WorkflowPersistenceAdapter {
     }
     listPausedRuns(options?: { workflowName?: string; limit?: number }): Promise<readonly WorkflowRunRecord[]> {
         return this.inner.listPausedRuns(options);
+    }
+    // Engine 0.5.15 parallel-region persistence: pure pass-through like every other
+    // non-action method — branch records are durable state, not action telemetry.
+    saveBranchStart(runId: string, parallelNode: string, branchId: string, startNode: string): Promise<string> {
+        return this.inner.saveBranchStart(runId, parallelNode, branchId, startNode);
+    }
+    saveBranchFinalize(
+        runId: string,
+        branchId: string,
+        status: BranchStatus,
+        durationMs: number,
+        outputVars?: BranchVars,
+        error?: string,
+    ): Promise<void> {
+        return this.inner.saveBranchFinalize(runId, branchId, status, durationMs, outputVars, error);
+    }
+    listRunBranches(runId: string, parallelNode?: string): Promise<readonly BranchRecord[]> {
+        return this.inner.listRunBranches(runId, parallelNode);
+    }
+    commitJoin(
+        runId: string,
+        parallelNode: string,
+        joinNode: string,
+        mergedVars?: BranchVars,
+        phase?: { phase: string; status: WorkflowStatus },
+    ): Promise<void> {
+        return this.inner.commitJoin(runId, parallelNode, joinNode, mergedVars, phase);
     }
 }
 

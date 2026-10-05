@@ -868,7 +868,9 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                 const executors = context.spurConfig?.agent?.executors;
                 const flow = resolvedDefinition.workflow;
                 const agentRunActions =
-                    flow.kind === 'transition-flow'
+                    // `kind` is optional on the state-machine shape, so a discriminant test cannot
+                    // narrow the union; membership does (`nodes` exists on transition-flow and dag).
+                    'nodes' in flow
                         ? flow.nodes.flatMap((node) => (node.action?.kind === 'agent.run' ? [node.action] : []))
                         : flow.states.flatMap((state) => (state.onEnter ?? []).filter((a) => a.kind === 'agent.run'));
                 for (const action of agentRunActions) {

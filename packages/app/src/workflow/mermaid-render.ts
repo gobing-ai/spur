@@ -326,7 +326,31 @@ export function renderWorkflowMermaid(def: WorkflowDef, options: RenderWorkflowM
     // ── Render by workflow kind ─────────────────────────────────────────────
     const tooltips: string[] = [];
 
-    if (def.kind === 'transition-flow') {
+    if (def.kind === 'dag') {
+        // DAG (engine 0.5.15): one box per node, one edge per `dependsOn` entry, roots
+        // marked initial. Same shape vocabulary as the other kinds so the diagram reads alike.
+        const dependedOn = new Set<string>(def.nodes.flatMap((node) => node.dependsOn ?? []));
+        for (const node of def.nodes) {
+            const actions = node.action === undefined ? [] : [node.action];
+            const nid = escId(node.id);
+            lines.push(`    ${nid}["${escQuotedText(stateLabel(node.id, actions))}"]`);
+            const cat = dominantCategory(actions);
+            if (cat) lines.push(classLine(node.id, categoryClass(cat)));
+            const tip = stateTooltip(node.description, actions);
+            if (tip) tooltips.push(`    click ${nid} href "javascript:void(0)" "${escQuotedText(tip)}"`);
+        }
+        for (const node of def.nodes) {
+            const style = guardEdgeStyle(node.condition?.kind);
+            const label = formatEdgeLabel(undefined, node.condition?.kind);
+            for (const dependency of node.dependsOn ?? []) {
+                lines.push(edgeLine(dependency, node.id, label, style));
+            }
+        }
+        for (const node of def.nodes) {
+            if (!dependedOn.has(node.id)) lines.push(classLine(node.id, 'terminal'));
+            if ((node.dependsOn ?? []).length === 0) lines.push(classLine(node.id, 'initial'));
+        }
+    } else if (def.kind === 'transition-flow') {
         const terminal = new Set<string>(def.terminalNodes ?? []);
         const typeShape: Record<string, string> = {
             gate: '{{',

@@ -570,3 +570,54 @@ describe('createRunLogTraceFailureRecorder (task 0868 R3/R4)', () => {
         expect(log).not.toContain('node=');
     });
 });
+
+// Engine 0.5.15 parallel-region persistence: the trace writer is a decorator, so a branch
+// row must reach the wrapped adapter untouched (durability unchanged by observability).
+describe('WorkflowActionTraceWriter — branch pass-through (engine 0.5.15)', () => {
+    test('delegates saveBranchStart/saveBranchFinalize/listRunBranches/commitJoin', async () => {
+        type BranchRecord = Awaited<ReturnType<WorkflowPersistenceAdapter['listRunBranches']>>[number];
+        const branchRow = {
+            id: 'b1',
+            run_id: RUN_ID,
+            parallel_node: 'fan',
+            branch_id: 'b1',
+            status: 'done',
+            node: 'child',
+            started_at: '2026-06-25T00:00:00.000Z',
+            completed_at: null,
+            duration_ms: null,
+            output_vars_json: null,
+            error: null,
+        } as BranchRecord;
+        const calls: string[] = [];
+        const inner = {
+            saveBranchStart: async (runId: string, parallelNode: string, branchId: string, startNode: string) => {
+                calls.push(`start:${runId}:${parallelNode}:${branchId}:${startNode}`);
+                return 'branch-row-id';
+            },
+            saveBranchFinalize: async (runId: string, branchId: string, status: string, durationMs: number) => {
+                calls.push(`finalize:${runId}:${branchId}:${status}:${durationMs}`);
+            },
+            listRunBranches: async (runId: string, parallelNode?: string) => {
+                calls.push(`list:${runId}:${parallelNode ?? '-'}`);
+                return [branchRow];
+            },
+            commitJoin: async (runId: string, parallelNode: string, joinNode: string) => {
+                calls.push(`join:${runId}:${parallelNode}:${joinNode}`);
+            },
+        } as unknown as WorkflowPersistenceAdapter;
+
+        const writer = withActionTrace(inner);
+        expect(await writer.saveBranchStart(RUN_ID, 'fan', 'b1', 'child')).toBe('branch-row-id');
+        await writer.saveBranchFinalize(RUN_ID, 'b1', 'done', 12, { merged: 'true' });
+        expect(await writer.listRunBranches(RUN_ID, 'fan')).toEqual([branchRow]);
+        await writer.commitJoin(RUN_ID, 'fan', 'join', { merged: 'true' });
+
+        expect(calls).toEqual([
+            `start:${RUN_ID}:fan:b1:child`,
+            `finalize:${RUN_ID}:b1:done:12`,
+            `list:${RUN_ID}:fan`,
+            `join:${RUN_ID}:fan:join`,
+        ]);
+    });
+});

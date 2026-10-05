@@ -165,3 +165,35 @@ describe('packages/app renderWorkflowMermaid', () => {
         expect(out).toContain('click start href "javascript:void(0)" "shell: echo hello"');
     });
 });
+
+// Engine 0.5.15 added a third workflow kind (`kind: 'dag'`, node list + `dependsOn`); the
+// renderer must produce a diagram for it instead of falling into the state-machine branch.
+describe('renderWorkflowMermaid — DAG kind (engine 0.5.15)', () => {
+    const dag: WorkflowDef = {
+        kind: 'dag',
+        name: 'test-dag',
+        nodes: [
+            { id: 'fetch', action: { kind: 'shell', options: { command: 'echo fetch' } } },
+            { id: 'build', dependsOn: ['fetch'], action: { kind: 'agent.run', options: { input: '/x' } } },
+            { id: 'ship', dependsOn: ['build'], condition: { kind: 'shell' }, description: 'guarded ship' },
+        ],
+    };
+
+    test('renders one box per node with dependency edges and root/leaf classes', () => {
+        const out = renderWorkflowMermaid(dag, { fenced: false });
+        expect(out.startsWith('flowchart TD')).toBe(true);
+        for (const id of ['fetch', 'build', 'ship']) expect(out).toContain(`${id}[`);
+        // dependency edges: fetch --> build, then a guarded (dotted) build -> ship
+        expect(out).toContain('fetch --> build');
+        expect(out).toContain('build -.->');
+        expect(out).toContain('guard: shell');
+        // the root is initial, the dependency-free leaf is terminal
+        expect(out).toContain('class fetch initial;');
+        expect(out).toContain('class ship terminal;');
+        expect(out).not.toContain('undefined');
+    });
+
+    test('renders the declared description as a tooltip', () => {
+        expect(renderWorkflowMermaid(dag, { fenced: false })).toContain('guarded ship');
+    });
+});
