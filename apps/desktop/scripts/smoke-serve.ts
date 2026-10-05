@@ -14,17 +14,27 @@ const repo = findRepoRoot(import.meta.dir);
 if (!repo) throw new Error('Could not find the spur repo root (apps/cli/src/index.ts).');
 
 const project = await mkdtemp(join(tmpdir(), 'spur-desktop-smoke-'));
+// serve upserts its project root into the registry on start; reuse this env for both
+// layout resolution and the spawned child so the smoke run stays out of the operator's
+// real ~/.config/spur/projects.json.
+const smokeEnv = {
+    ...getEnvVars(),
+    SPUR_PROJECT_ROOT: project,
+    SPUR_DESKTOP_MODE: 'dev',
+    SPUR_PROJECTS_FILE: join(project, 'projects.json'),
+};
 let server: Awaited<ReturnType<typeof startDesktopServer>> | undefined;
 try {
     const layout = resolveLayout({
         isPackaged: false,
         cwd: repo,
         execDir: join(repo, 'apps', 'desktop'),
-        env: { ...getEnvVars(), SPUR_PROJECT_ROOT: project, SPUR_DESKTOP_MODE: 'dev' },
+        env: smokeEnv,
         argv: [],
     });
     server = await startDesktopServer({
         layout,
+        parentEnv: smokeEnv,
         healthTimeoutMs: 90_000,
         stdio: 'inherit',
     });
