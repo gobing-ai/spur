@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { Button } from '@/ui';
 import DocumentMetadataModal from '../../components/DocumentMetadataModal';
+import ModuleIcon from '../../components/ModuleIcon';
 import { parseMarkdownFrontmatter } from '../../lib/frontmatter';
 import { loadPlanContent, loadPlanFiles, type PlanFileDetail, type PlanFileSummary } from '../../lib/plan-client';
 import PlanFileList from './PlanFileList';
@@ -152,9 +153,7 @@ export default function PlansShell() {
                 {/* Module Header */}
                 <header className="flex flex-wrap items-center justify-between gap-4 border-b border-spur-border pb-3 shrink-0">
                     <div className="flex items-center gap-3">
-                        <span className="text-2xl" aria-hidden="true">
-                            🧭
-                        </span>
+                        <ModuleIcon id="plans" size="lg" className="h-7 w-7 text-spur-accent" aria-hidden="true" />
                         <div>
                             <h1 className="text-xl font-bold tracking-tight text-spur-text">Plans</h1>
                             <p className="text-xs text-spur-text-muted">

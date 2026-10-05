@@ -10,6 +10,7 @@ import type {
 } from '@gobing-ai/spur-contracts';
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
+import ModuleIcon from '../../components/ModuleIcon';
 import { api } from '../../lib/rpc-client';
 import type { HistoryFilterOption } from './HistoryFilters';
 import HistoryFilters from './HistoryFilters';
@@ -509,7 +510,7 @@ export const HistoryShell: React.FC = () => {
             {/* Header & Tab Navigation Bar */}
             <div className="flex flex-wrap items-center justify-between gap-4 border-b border-base-content/10 pb-3">
                 <div className="flex items-center gap-3">
-                    <span className="text-2xl">📊</span>
+                    <ModuleIcon id="history" size="lg" className="h-7 w-7 text-spur-accent" aria-hidden="true" />
                     <div>
                         <h1 className="text-xl font-bold tracking-tight">Histories</h1>
                         <p className="text-xs text-base-content/60">

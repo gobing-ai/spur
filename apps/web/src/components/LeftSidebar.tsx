@@ -3,6 +3,7 @@ import { NavLink } from 'react-router';
 import { Button, Tooltip } from '@/ui';
 import { fetchWithTimeout, resolveApiUrl } from '../lib/rpc-client';
 import { useBoardRegistry } from '../modules/RegistryProvider';
+import ModuleIcon from './ModuleIcon';
 import ProjectSwitcher from './ProjectSwitcher';
 import ThemeToggle from './ThemeToggle';
 
@@ -176,7 +177,9 @@ export default function LeftSidebar({ collapsed, onToggle, onMobileClose }: Prop
                                     } ${collapsed ? 'justify-center py-3' : ''}`
                                 }
                             >
-                                <span className="text-lg">{mod.icon}</span>
+                                <span className="flex h-5 w-5 items-center justify-center shrink-0">
+                                    <ModuleIcon id={mod.id} icon={mod.icon} />
+                                </span>
                                 {!collapsed && <span>{label}</span>}
                             </NavLink>
                         );

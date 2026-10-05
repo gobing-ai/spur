@@ -1071,6 +1071,11 @@ so the two modules' headers align at the same width while Tasks' lanes keep ever
 pixel below. `index.test.tsx` pins this split: `max-w-[1600px]` appears only in the header, never
 inside `[data-kanban-board]`.
 
+**Amendment (2026-10-04 · ADR-133).** Module shell header icons MUST use the shared
+`<ModuleIcon id={moduleId} size="lg" />` vector component rather than raw Unicode emojis or
+ad-hoc SVGs. This guarantees shell/sidebar visual parity and eliminates missing/blank glyph
+rendering caused by macOS sandboxing restrictions in the Electron desktop shell.
+
 **Decision.** Every multi-view Board module composes a shell: a `<Module>Shell.tsx` owning a single
 header row — icon + module name + live chip on the left, module-specific inline filters in the
 middle, tab strip on the right — backed by an append-only `tabs.ts` contract
@@ -2108,3 +2113,34 @@ posture); [workflow composition](design/workflow-composition-contract.md#composi
   and secret redaction. Inline host-session output stays out of scope — ADR-129's hook ledger owns it.
 - **Retains:** ADR-059, ADR-117, ADR-129, ADR-131.
 - **Detail:** [agent fleet inbox redesign](plans/2026-10-04-agent-fleet-inbox-redesign.md).
+
+## ADR-133: Unified Vector Icon System; Lucide and ModuleIcon Precedence
+
+- **Status:** Accepted (implemented) · **Date:** 2026-10-04 · **Amends:** ADR-081 · **Extends:** ADR-034
+- **Decision:** All Spur UI surfaces (navigation rails, module shells, utility toggles) MUST prioritize
+  **Lucide Icons** (`lucide-react`) over system Unicode emojis, HTML numeric entities, and ad-hoc inline
+  SVGs. Module identification icons MUST resolve exclusively through the centralized
+  `<ModuleIcon id={moduleId} size={...} />` component.
+- **Why:**
+  1. Under desktop sandboxing (macOS Chromium sandbox in Electron), renderer processes are denied
+     access to system emoji font extensions (`/System/Library/Fonts/Apple Color Emoji.ttc` via
+     `com.apple.ImageIOXPCService`), causing Unicode emojis and HTML entities (`&#x1F4E1;`) to render as
+     blank or missing glyphs.
+  2. Raw Unicode emojis cannot adapt to dark/light theme tokens or active state styles (`currentColor`,
+     `text-spur-accent`), introducing visual inconsistency between sidebar navigation, headers, and controls.
+  3. Ad-hoc SVGs create stylistic divergence and maintenance churn; standardizing on Lucide Icons
+     establishes a single coherent vector design language across the Board.
+- **Alternatives:**
+  1. *Native Unicode emoji / HTML numeric entities (`&#x1F4E1;`)*: Rejected because HTML entities resolve
+     to the identical Unicode code point at parse time and fail under macOS sandboxing, while lacking
+     theme-token color adaptation.
+  2. *Ad-hoc hand-crafted SVGs*: Rejected due to uneven stroke weights, inconsistent viewboxes, maintenance
+     overhead, and unpolished visual aesthetics.
+  3. *Custom icon webfont*: Rejected due to FOIT/FOUT flashes, font bundle overhead, and lack of component
+     tree-shaking.
+- **Consequence:** `lucide-react` is added as a direct dependency of `apps/web`.
+  `<ModuleIcon id={moduleId} size="sm"|"lg" />` acts as the single source of truth for module icons with
+  accessible screen-reader fallbacks (`<span className="sr-only">`). Module headers (ADR-081) and sidebar
+  navigation (`LeftSidebar`) share identical icon definitions.
+- **Retains:** ADR-034 (accessible naming & contrast-verified tokens), ADR-081 (single-row header anatomy).
+- **Detail:** [DESIGN.md](../DESIGN.md) §Iconography; implementation in `apps/web/src/components/ModuleIcon.tsx`.

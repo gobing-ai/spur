@@ -1,4 +1,5 @@
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
+import ModuleIcon from '../../components/ModuleIcon';
 import { PROJECT_TABS } from './tabs';
 import type { OrchestratorState, ProjectFleetSnapshot } from './useProjectContext';
 import { useProjectContext } from './useProjectContext';
@@ -73,9 +74,7 @@ export default function ProjectsShell() {
                 data-projects-state={stateAttr}
             >
                 <div className="flex items-center gap-3">
-                    <span className="text-2xl" aria-hidden="true">
-                        📁
-                    </span>
+                    <ModuleIcon id="projects" size="lg" className="h-7 w-7 text-spur-accent" aria-hidden="true" />
                     <div>
                         <h1 className="text-xl font-bold tracking-tight">Projects</h1>
                         <p className="text-xs text-base-content/60">Conversation and processes for this project</p>

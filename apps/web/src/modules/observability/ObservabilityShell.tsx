@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import ModuleIcon from '../../components/ModuleIcon';
 import { TimeRangePresets } from './ObservabilityFilters';
 import {
     OBSERVABILITY_TABS,
@@ -70,7 +71,7 @@ export default function ObservabilityShell() {
             {/* Header & Tab Navigation Bar */}
             <div className="flex flex-wrap items-center justify-between gap-4 border-b border-base-content/10 pb-3 shrink-0">
                 <div className="flex items-center gap-3">
-                    <span className="text-2xl">📡</span>
+                    <ModuleIcon id="observability" size="lg" className="h-7 w-7 text-spur-accent" aria-hidden="true" />
                     <div>
                         <h1 className="text-xl font-bold tracking-tight">Observabilities</h1>
                         <p className="text-xs text-base-content/60">

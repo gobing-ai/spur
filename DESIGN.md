@@ -314,6 +314,18 @@ caption for metadata, eyebrow for taxonomy and mono for code or identifiers.
 Use the declared system fallback stacks when the named fonts are unavailable.
 A different font requires visual verification; the design does not require a new dependency.
 
+## Iconography
+
+### Vector Icon Precedence (ADR-133)
+
+Board UI surfaces prioritize **Lucide Icons** (`lucide-react`) over Unicode emojis, HTML entities, and ad-hoc inline SVGs:
+
+- **Library**: `lucide-react` is the canonical icon library for all Board UI surfaces.
+- **Module Identity**: Module icons MUST be rendered via the shared `<ModuleIcon id={moduleId} size="sm"|"lg" />` component to ensure strict parity between sidebar navigation and module headers (ADR-081).
+- **Styling**: Icons inherit color via `currentColor` or semantic utility classes (e.g. `text-spur-accent`). Multi-color or arbitrary decorative stroke colors are prohibited.
+- **Stroke & Weight**: Standard 2px stroke weight (Lucide default) across all scales.
+- **Accessibility**: Purely decorative or redundant icons must use `aria-hidden="true"`. Icon-only interactive affordances must provide accessible text via `<span className="sr-only">` or `aria-label` (ADR-034).
+
 ## Layout
 
 ### Spacing System
