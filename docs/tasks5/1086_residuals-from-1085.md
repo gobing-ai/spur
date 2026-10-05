@@ -4,8 +4,8 @@ name: Residuals from 1085
 status: backlog
 template: feature-impl
 created_at: 2026-10-05T01:57:42.383Z
-updated_at: "2026-10-05T01:57:44.031Z"
-feature_id: E72
+updated_at: "2026-10-05T01:59:43.260Z"
+feature_id: O
 
 ---
 
