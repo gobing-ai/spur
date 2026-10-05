@@ -4,6 +4,12 @@ import { tmpdir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
 import { runCli } from './helpers';
 
+/**
+ * CLI-spawning / fingerprint tests: `agent doctor` measures ~1.5s on a quiet host and 7-8s while
+ * the agent fleet runs, against bun's 5000ms default — the calibration is recorded here once.
+ */
+const slowTest = (name: string, fn: () => Promise<void> | void): void => void test(name, fn, 30_000);
+
 // A5/ADR-082: composition-root merged-config wiring regression tests (R6).
 // Hermetic-subprocess pattern copied from packages/config/tests/loader-layers.test.ts:
 // every case spawns the REAL CLI entry with HOME/USERPROFILE -> temp dir and
@@ -107,9 +113,7 @@ afterEach(async () => {
 describe('config layering — composition-root merged-config (A5)', () => {
     // The doctor tests below shell out to the CLI; a contended host measures 7-8s per spawn
     // against bun's 5000ms default (2026-10-04 session), so each declares an explicit budget.
-    test('R2: a global-only executor is honored by every CLI command (reversion tripwire)', {
-        timeout: 30_000,
-    }, async () => {
+    slowTest('R2: a global-only executor is honored by every CLI command (reversion tripwire)', async () => {
         const dirs = await makeLayerDirs(GLOBAL_EXECUTOR, 'version: "1"\nname: proj\n');
         dirsToClean.push(dirs);
         // Project config has no agent section — the merged config must supply the
@@ -124,7 +128,7 @@ describe('config layering — composition-root merged-config (A5)', () => {
         expect(json.agents?.find((a) => a.agent === 'coder-exec')?.capabilityTier).toBe('capable-1');
     });
 
-    test('R3: a project config value overrides the same global key', { timeout: 30_000 }, async () => {
+    slowTest('R3: a project config value overrides the same global key', async () => {
         // Global defines coder-exec as claude; project re-declares it as codex.
         const projectYaml = [
             'version: "1"',
@@ -199,28 +203,27 @@ describe('config layering — composition-root merged-config (A5)', () => {
         if (sharedIdx !== -1) expect(sharedIdx).toBeGreaterThan(registeredIdx);
     });
 
-    test('R7: no config layer defines agent.roles → doctor reports rolesSource: fallback (explicit fallback proven)', {
-        timeout: 30_000,
-    }, async () => {
-        // Neither layer supplies an `agent.roles` table; a `coder` role selector
-        // resolves via DEFAULT_AGENT_ROLES. The doctor --json payload must carry
-        // top-level `rolesSource: 'fallback'` (whole-table provenance).
-        const dirs = await makeLayerDirs(
-            'version: "1"\nname: global\nagent:\n  executors:\n    - name: coder-exec\n      agent: claude\n      tier: standard\n',
-            'version: "1"\nname: proj\n',
-        );
-        dirsToClean.push(dirs);
-        const res = await runCli(['agent', 'doctor', 'coder', '--json'], dirs.projectDir, dirs.env);
-        const json = res.json as { rolesSource?: string; agents?: Array<{ agent?: string }> };
-        expect(res.stderr).toBe('');
-        expect(json.rolesSource).toBe('fallback');
-        // The coder role still resolves (fallback table), so doctor is usable.
-        expect(Array.isArray(json.agents)).toBe(true);
-    });
+    slowTest(
+        'R7: no config layer defines agent.roles → doctor reports rolesSource: fallback (explicit fallback proven)',
+        async () => {
+            // Neither layer supplies an `agent.roles` table; a `coder` role selector
+            // resolves via DEFAULT_AGENT_ROLES. The doctor --json payload must carry
+            // top-level `rolesSource: 'fallback'` (whole-table provenance).
+            const dirs = await makeLayerDirs(
+                'version: "1"\nname: global\nagent:\n  executors:\n    - name: coder-exec\n      agent: claude\n      tier: standard\n',
+                'version: "1"\nname: proj\n',
+            );
+            dirsToClean.push(dirs);
+            const res = await runCli(['agent', 'doctor', 'coder', '--json'], dirs.projectDir, dirs.env);
+            const json = res.json as { rolesSource?: string; agents?: Array<{ agent?: string }> };
+            expect(res.stderr).toBe('');
+            expect(json.rolesSource).toBe('fallback');
+            // The coder role still resolves (fallback table), so doctor is usable.
+            expect(Array.isArray(json.agents)).toBe(true);
+        },
+    );
 
-    test('R7: text-mode doctor prints the explicit-fallback note when no layer defines agent.roles', {
-        timeout: 30_000,
-    }, async () => {
+    slowTest('R7: text-mode doctor prints the explicit-fallback note when no layer defines agent.roles', async () => {
         const dirs = await makeLayerDirs(
             'version: "1"\nname: global\nagent:\n  executors:\n    - name: coder-exec\n      agent: claude\n      tier: standard\n',
             'version: "1"\nname: proj\n',
@@ -230,54 +233,56 @@ describe('config layering — composition-root merged-config (A5)', () => {
         expect(res.stderr.trim()).toBe(`${FALLBACK_NOTE}\n${CAPABILITY_STALE_WARNING}`);
     });
 
-    test('0898 R3: text-mode doctor table carries the runner-declared CAPS cell with the staleness marker', {
-        timeout: 30_000,
-    }, async () => {
-        const dirs = await makeLayerDirs(GLOBAL_EXECUTOR, 'version: "1"\nname: proj\n');
-        dirsToClean.push(dirs);
-        // The capability surface under test is the doctor TABLE cell (CAPS header);
-        // a role selector renders the eligible ladder, which has no CAPS column, so
-        // the table is read in full mode. The column is located by header lookup —
-        // never by exact line or fixed offset (parallel doctor-column work).
-        const res = await runCli(['agent', 'doctor'], dirs.projectDir, dirs.env);
-        expect(res.code).toBe(0);
-        const lines = res.stdout.split('\n');
-        const header = lines.find((line) => line.includes('CAPS'));
-        expect(header).toBeDefined();
-        const capsIdx = (header as string).indexOf('CAPS');
-        const row = lines.find((line) => line !== header && line.includes('coder-exec'));
-        expect(row).toBeDefined();
-        // Column start positions align across header and data rows (left-aligned
-        // padEnd columns), so the header index slices the same column in the row.
-        const capsCell = (row as string).slice(capsIdx).split(/\s{2,}/)[0] ?? '';
-        // claude record: resume-by-id true (r✓); staleness from the 1.0.0 stub vs
-        // the record's verifiedAgainst appends the ⚠ suffix.
-        expect(capsCell.startsWith('r✓')).toBe(true);
-        expect(capsCell.endsWith('⚠')).toBe(true);
-    });
+    slowTest(
+        '0898 R3: text-mode doctor table carries the runner-declared CAPS cell with the staleness marker',
+        async () => {
+            const dirs = await makeLayerDirs(GLOBAL_EXECUTOR, 'version: "1"\nname: proj\n');
+            dirsToClean.push(dirs);
+            // The capability surface under test is the doctor TABLE cell (CAPS header);
+            // a role selector renders the eligible ladder, which has no CAPS column, so
+            // the table is read in full mode. The column is located by header lookup —
+            // never by exact line or fixed offset (parallel doctor-column work).
+            const res = await runCli(['agent', 'doctor'], dirs.projectDir, dirs.env);
+            expect(res.code).toBe(0);
+            const lines = res.stdout.split('\n');
+            const header = lines.find((line) => line.includes('CAPS'));
+            expect(header).toBeDefined();
+            const capsIdx = (header as string).indexOf('CAPS');
+            const row = lines.find((line) => line !== header && line.includes('coder-exec'));
+            expect(row).toBeDefined();
+            // Column start positions align across header and data rows (left-aligned
+            // padEnd columns), so the header index slices the same column in the row.
+            const capsCell = (row as string).slice(capsIdx).split(/\s{2,}/)[0] ?? '';
+            // claude record: resume-by-id true (r✓); staleness from the 1.0.0 stub vs
+            // the record's verifiedAgainst appends the ⚠ suffix.
+            expect(capsCell.startsWith('r✓')).toBe(true);
+            expect(capsCell.endsWith('⚠')).toBe(true);
+        },
+    );
 
-    test('0898 R3: doctor --json carries capabilities (verifiedAgainst) and capabilityStale with clean stderr', {
-        timeout: 30_000,
-    }, async () => {
-        const dirs = await makeLayerDirs(GLOBAL_EXECUTOR, 'version: "1"\nname: proj\n');
-        dirsToClean.push(dirs);
-        const res = await runCli(['agent', 'doctor', 'coder', '--json'], dirs.projectDir, dirs.env);
-        expect(res.code).toBe(0);
-        expect(res.stderr).toBe('');
-        const json = res.json as {
-            agents?: Array<{
-                agent?: string;
-                capabilities?: { supportsResumeById?: boolean; verifiedAgainst?: string } | null;
-                capabilityStale?: { verifiedAgainst?: string; detected?: string } | null;
-            }>;
-        };
-        const coderExec = json.agents?.find((a) => a.agent === 'coder-exec');
-        expect(coderExec).toBeDefined();
-        expect(typeof coderExec?.capabilities?.verifiedAgainst).toBe('string');
-        expect((coderExec?.capabilities?.verifiedAgainst ?? '').length).toBeGreaterThan(0);
-        expect(coderExec?.capabilities?.supportsResumeById).toBe(true);
-        expect(coderExec?.capabilityStale?.verifiedAgainst).toBe(coderExec?.capabilities?.verifiedAgainst);
-        expect(typeof coderExec?.capabilityStale?.detected).toBe('string');
-        expect((coderExec?.capabilityStale?.detected ?? '').startsWith('1.0.0')).toBe(true);
-    });
+    slowTest(
+        '0898 R3: doctor --json carries capabilities (verifiedAgainst) and capabilityStale with clean stderr',
+        async () => {
+            const dirs = await makeLayerDirs(GLOBAL_EXECUTOR, 'version: "1"\nname: proj\n');
+            dirsToClean.push(dirs);
+            const res = await runCli(['agent', 'doctor', 'coder', '--json'], dirs.projectDir, dirs.env);
+            expect(res.code).toBe(0);
+            expect(res.stderr).toBe('');
+            const json = res.json as {
+                agents?: Array<{
+                    agent?: string;
+                    capabilities?: { supportsResumeById?: boolean; verifiedAgainst?: string } | null;
+                    capabilityStale?: { verifiedAgainst?: string; detected?: string } | null;
+                }>;
+            };
+            const coderExec = json.agents?.find((a) => a.agent === 'coder-exec');
+            expect(coderExec).toBeDefined();
+            expect(typeof coderExec?.capabilities?.verifiedAgainst).toBe('string');
+            expect((coderExec?.capabilities?.verifiedAgainst ?? '').length).toBeGreaterThan(0);
+            expect(coderExec?.capabilities?.supportsResumeById).toBe(true);
+            expect(coderExec?.capabilityStale?.verifiedAgainst).toBe(coderExec?.capabilities?.verifiedAgainst);
+            expect(typeof coderExec?.capabilityStale?.detected).toBe('string');
+            expect((coderExec?.capabilityStale?.detected ?? '').startsWith('1.0.0')).toBe(true);
+        },
+    );
 });

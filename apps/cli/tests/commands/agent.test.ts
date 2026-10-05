@@ -24,6 +24,12 @@ import { type CliContext, createCliContext, resolveAgentRoles } from '../../src/
 import { main } from '../../src/index';
 import type { CommandOutput } from '../../src/output';
 
+/**
+ * CLI-spawning / fingerprint tests: `agent doctor` measures ~1.5s on a quiet host and 7-8s while
+ * the agent fleet runs, against bun's 5000ms default — the calibration is recorded here once.
+ */
+const slowTest = (name: string, fn: () => Promise<void> | void): void => void test(name, fn, 30_000);
+
 function captureOutput(): CommandOutput & { stdout: string[]; stderr: string[] } {
     const stdout: string[] = [];
     const stderr: string[] = [];
@@ -52,7 +58,7 @@ describe('agent command (main)', () => {
         expect(exitCode).toBe(1);
     });
 
-    test('list renders detected agent state through the CLI JSON action', { timeout: 30_000 }, async () => {
+    slowTest('list renders detected agent state through the CLI JSON action', async () => {
         // Installation probes have separate detector coverage. This command
         // fixture must not depend on every coding agent installed on the host.
         const agents = [{ name: 'claude' as const, installed: true, version: '1.0.0', channels: [], error: null }];
@@ -212,7 +218,7 @@ describe('agent list --specs', () => {
 });
 
 describe('agent doctor', () => {
-    test('doctor command invokes doctor on AgentService with args', { timeout: 30_000 }, async () => {
+    slowTest('doctor command invokes doctor on AgentService with args', async () => {
         const output = captureOutput();
         const exitCode = await main(['agent', 'doctor', 'claude-code', '--json'], {
             output,
@@ -313,9 +319,7 @@ describe('member session rendering (0897)', () => {
         expect(parsed.specs.find((sp) => sp.id === 'worker')?.session).toBeUndefined();
     });
 
-    test('status renders live status and session per spec; unreachable server reports stopped', {
-        timeout: 30_000,
-    }, async () => {
+    slowTest('status renders live status and session per spec; unreachable server reports stopped', async () => {
         await seedSpecs();
         stubProcessesFeed();
         const output = captureOutput();
