@@ -159,6 +159,11 @@ the human/native presentation layer — labels are display addresses only, never
    resolved definition identity against the bound `__definitionDigest`; a mismatch is identity drift
    and fails closed (step 8 already caught projection-side drift; this re-checks the same definition
    the interpreter will execute).
+   - **Runtime-written vars are re-read, never cached.** A var a later state writes (`proofDigest`,
+     `proofDigestNow`, `taskSpecPath`, `featureSpecPath`, `taskPriority`, `mode`, `gateFindings`) is a
+     run artifact, not a YAML default: re-resolve it from `.spur/run/`/`.spur/memory/runs/` at every
+     state boundary, and never let a host-side copy of the invocation vars shadow it — a stale empty
+     `proofDigest` silently fails the bound `run.artifact` equivalence and the `record` proof guard.
    - **Layer 2** = the active state's `onEnter` actions (`kind` + resolved `input`/`command`), from
      the YAML read here, shown only for the active state.
    - **Refresh cadence** = stage boundaries only (when the current state changes after a transition),
