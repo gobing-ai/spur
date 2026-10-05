@@ -81,6 +81,7 @@ import {
     type SkippedCheckpoint,
     type WorkflowRunRecordInspection,
 } from '../workflow/run-record';
+import { assertStartStateStartable, readContinuedFrom, StartStateRefusedError } from '../workflow/start-state';
 import type { WorkflowSteeringController } from '../workflow/steering';
 import {
     type ResolvedWorkflowDefinition,
@@ -321,6 +322,20 @@ export interface WorkflowRunOptions {
     /** Synchronous in-process steering only; intentionally never serialized for detached runs. */
     steeringController?: WorkflowSteeringController;
     /**
+     * Fresh-run start point (task 1072). The engine begins this run at the named
+     * state/node instead of the definition's entry point, with fresh-run
+     * semantics: no snapshot, no `resumeMode`, and the start state's action runs.
+     * The definition must mark the target `startable: true`.
+     */
+    startState?: string;
+    /**
+     * Lineage to a prior run; only meaningful together with `startState`. Its last
+     * snapshot's effective vars are inherited under `vars` (engine-internal `__*`
+     * keys excluded) and `continuedFrom` / `continuedFromDigest` are stamped into
+     * the new run's metadata. The source run is never mutated.
+     */
+    continuedFrom?: string;
+    /**
      * Pre-resolved definition + digest (0768 R1). When provided, run() uses this
      * exact resolution for the engine, the identity stamp, and the plan preview
      * instead of re-resolving the file — the launcher and the run share one
@@ -424,6 +439,13 @@ export interface WorkflowTraceEntry {
     version?: string | null;
     /** Persisted definition digest from run metadata (0768 R1). */
     definitionDigest?: string;
+    /**
+     * Fresh-run start point recorded at run start (task 1072 R7). Present only on
+     * runs launched with `--from`; absent from every legacy row.
+     */
+    startState?: string;
+    /** Source run id recorded at run start for a continued run (task 1072 R7). */
+    continuedFrom?: string;
 }
 
 /** Result of a trace listing (no run-id). */
@@ -713,6 +735,18 @@ export class WorkflowAppService {
             }));
         const absolute = resolved.path;
         const workflow = resolved.workflow;
+        // Fresh-run start state (task 1072 R2/R3/R5). Validation and lineage resolution
+        // happen BEFORE any side effect — no run row, run record, plan artifact or worker.
+        const startState = opts.startState;
+        const continuedFrom = opts.continuedFrom;
+        if (continuedFrom !== undefined && startState === undefined) {
+            throw new StartStateRefusedError('--from-run requires --from: lineage needs a start state.');
+        }
+        if (startState !== undefined) {
+            assertStartStateStartable(workflow, startState);
+        }
+        const continued =
+            continuedFrom === undefined ? undefined : await readContinuedFrom(await this.ctx.getDb(), continuedFrom);
         const svc = await this.createEngineService({
             recordSelfPid: opts.recordSelfPid === true,
             events: eventsBus,
@@ -741,16 +775,27 @@ export class WorkflowAppService {
         // (0485 R2) `implementAgent` is injected on the same seam so `agent.default` also
         // governs the implement hop; a stale default warns instead of failing dispatch.
         const warnings: string[] = [];
+        const callerVars = mapFleetExecutorVar(opts.vars);
+        const mergedCallerVars = { ...(continued?.vars ?? {}), ...callerVars };
+        if (continued?.digest !== undefined && continued.digest !== resolved.digest) {
+            // Q&A Q5: a differing definition prints a warning, never a refusal — the
+            // lineage is recorded so the difference stays auditable.
+            warnings.push(
+                `--from-run ${continuedFrom}: source definition digest differs from the current definition ` +
+                    `(source ${continued.digest.slice(0, 19)}…, current ${resolved.digest.slice(0, 19)}…). ` +
+                    'The new run executes the CURRENT definition; the difference is recorded.',
+            );
+        }
         // Declared defaults are the base. Caller --vars overlay them; an explicit
         // empty string that would blank a declared var is rejected (0948 R2).
         // The engine also merges, but the map handed to it is already complete so
         // a replace-style consumer cannot drop a declared var the caller omitted.
         const runVars = {
             ...mergeWorkflowRunVars(workflow.vars as Record<string, unknown> | undefined, {
-                ...resolveDefaultAgentVar(this.ctx.spurConfig ?? null, mapFleetExecutorVar(opts.vars), (m) =>
-                    warnings.push(m),
-                ),
-                ...mapFleetExecutorVar(opts.vars),
+                // R5 var precedence: workflow defaults < source-run effective vars (already
+                // stripped of engine-internal `__*` keys) < caller `--vars`.
+                ...resolveDefaultAgentVar(this.ctx.spurConfig ?? null, mergedCallerVars, (m) => warnings.push(m)),
+                ...mergedCallerVars,
             }),
             __runId: runId,
             // 0759 R5: inject the canonical definition digest on the same seam as __runId so a
@@ -771,6 +816,7 @@ export class WorkflowAppService {
             runId,
             vars: runVars,
             ...(isDry ? { dryRun: true } : {}),
+            ...(startState !== undefined ? { startState } : {}),
             ...(opts.redactor !== undefined ? { redactor: opts.redactor } : {}),
             ...(eventsBus !== undefined
                 ? {
@@ -783,10 +829,20 @@ export class WorkflowAppService {
                   }
                 : {}),
         });
-        // Stamp dryRun into metadata_json so trace can label dry runs
-        if (isDry) {
+        // Stamp dryRun and any start-state lineage into metadata_json so `workflow trace`
+        // can label a dry run and a continued run's source (task 1072 R4/R7).
+        if (isDry || startState !== undefined) {
             const db = await this.ctx.getDb();
-            await new RunDao(db).mergeMetadata(runId, { dryRun: true });
+            await new RunDao(db).mergeMetadata(runId, {
+                ...(isDry ? { dryRun: true } : {}),
+                ...(startState !== undefined ? { startState } : {}),
+                ...(continuedFrom !== undefined
+                    ? {
+                          continuedFrom,
+                          ...(continued?.digest !== undefined ? { continuedFromDigest: continued.digest } : {}),
+                      }
+                    : {}),
+            });
         }
         // R7 (0366): persist terminal failure reason so `workflow trace` can surface
         // `no-passing-transition` (and siblings) rather than only the command result.
@@ -2461,6 +2517,8 @@ function rowToTraceEntry(
     let failureReason: string | undefined;
     let version: string | null | undefined;
     let definitionDigest: string | undefined;
+    let startState: string | undefined;
+    let continuedFrom: string | undefined;
     try {
         const meta = JSON.parse(row.metadata_json);
         isDryRun = meta.dryRun === true;
@@ -2474,6 +2532,13 @@ function rowToTraceEntry(
         }
         if (typeof meta.definitionDigest === 'string' && meta.definitionDigest !== '') {
             definitionDigest = meta.definitionDigest;
+        }
+        // 1072 R7: start-state lineage, surfaced only when recorded.
+        if (typeof meta.startState === 'string' && meta.startState !== '') {
+            startState = meta.startState;
+        }
+        if (typeof meta.continuedFrom === 'string' && meta.continuedFrom !== '') {
+            continuedFrom = meta.continuedFrom;
         }
     } catch {
         // metadata_json unparseable — treat as not dry-run
@@ -2495,6 +2560,8 @@ function rowToTraceEntry(
             : {}),
         ...(version !== undefined ? { version } : {}),
         ...(definitionDigest !== undefined ? { definitionDigest } : {}),
+        ...(startState !== undefined ? { startState } : {}),
+        ...(continuedFrom !== undefined ? { continuedFrom } : {}),
     };
     const nextAction = traceNextAction(entry);
     if (nextAction !== undefined) entry.nextAction = nextAction;

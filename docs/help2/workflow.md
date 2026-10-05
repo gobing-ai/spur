@@ -42,6 +42,8 @@ spur workflow run [--trace-file] [--no-log] [--steer] [--json]
 | --- | --- |
 | `--run-id <id>` | Persisted run id for the workflow run |
 | `--vars <json>` | Per-run variable overrides as a JSON object |
+| `--from <state-id>` | Start a fresh run at this state/node (must be declared `startable: true`) instead of the entry point |
+| `--from-run <run-id>` | With `--from`: inherit the source run's effective vars and record lineage |
 | `--dry-run` | Validate and walk transitions without executing actions |
 | `--async` | Start in a detached background process; monitor with `trace` |
 | `--no-plan` | Suppress the run-start plan preview (synchronous runs only) |

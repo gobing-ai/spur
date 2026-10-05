@@ -704,7 +704,7 @@ overrides the global root and suppresses the bundled fallback for a hermetic run
 
 <a id="spur-workflow-show-workflowyaml---format-mermaidtodo---json--spur-workflow-validate-workflowyaml---json---no-schema--spur-workflow-run-workflowyaml---run-id-id---vars-json---dry-run---async---no-plan---detail-minimalinvocationfull---quiet--silent--verbose---trace-file---steer---no-log---json--spur-workflow-continue-run-id---yes---answer-yesnocancel---json--spur-workflow-cancel-run-id---json--spur-workflow-list---json--spur-workflow-trace-run-id---workflow-name---status-s---since-date---last-n---follow---poll-ms---output---timeout-ms---json--spur-workflow-clean---older-than-minutes---force---logs---dry-run---json--spur-workflow-progress-run-id---json"></a>
 
-#### `spur workflow show <workflow.yaml> [--format <mermaid|todo>] [--json]` · `spur workflow validate <workflow.yaml> [--json] [--no-schema]` · `spur workflow run <workflow.yaml> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan] [--detail <minimal|invocation|full>] [--quiet|--silent|--verbose] [--trace-file] [--steer] [--no-log] [--json]` · `spur workflow continue [run-id] [--yes] [--answer <yes|no|cancel> | --answer-text <text>] [--async] [--no-log] [--json]` · `spur workflow cancel <run-id> [--json]` · `spur workflow list [--json]` · `spur workflow trace [run-id] [--workflow <name>] [--status <s>] [--since <date>] [--last <n>] [--follow] [--poll <ms>] [--output] [--timeout <ms>] [--json]` · `spur workflow clean [--older-than <minutes>] [--force] [--logs] [--dry-run] [--json]` · `spur workflow progress <run-id> [--json]`
+#### `spur workflow show <workflow.yaml> [--format <mermaid|todo>] [--json]` · `spur workflow validate <workflow.yaml> [--json] [--no-schema]` · `spur workflow run <workflow.yaml> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--from <state-id>] [--from-run <run-id>] [--no-plan] [--detail <minimal|invocation|full>] [--quiet|--silent|--verbose] [--trace-file] [--steer] [--no-log] [--json]` · `spur workflow continue [run-id] [--yes] [--answer <yes|no|cancel> | --answer-text <text>] [--async] [--no-log] [--json]` · `spur workflow cancel <run-id> [--json]` · `spur workflow list [--json]` · `spur workflow trace [run-id] [--workflow <name>] [--status <s>] [--since <date>] [--last <n>] [--follow] [--poll <ms>] [--output] [--timeout <ms>] [--json]` · `spur workflow clean [--older-than <minutes>] [--force] [--logs] [--dry-run] [--json]` · `spur workflow progress <run-id> [--json]`
 
 > **Shipped surface (ADR-045 / feature D2, tasks 0426–0429):** `run --no-log` opts out of the
 > consolidated `.spur/run/<RUNID>.log` (retained by default otherwise); `trace --follow --output`
@@ -739,6 +739,41 @@ clean` reclaims retained logs older than `workflow.logRetentionDays` (default 30
   unanswered values as `unknown`
   (`null` digest/state, absent attempts, `diagnostics` naming what is missing). An unknown run id
   exits `1` with `Run <run-id> not found.` (`NOT_FOUND` under `--json-envelope`).
+- `run <file> --from <state-id> [--from-run <run-id>]` — begin a **fresh** run at a declared state
+  instead of the definition's entry point (task 1072, ADR-051 consent 2026-10-05; engine
+  `WorkflowRunOptions.startState`, ADR-035 in ts-libs). The target must be marked `startable: true`
+  in the definition; every other target — undeclared (the refusal lists the valid `startable` ids),
+  terminal, a failure state, not opted in, or any `kind: dag` workflow — exits `2` before any run
+  row, run record, plan artifact or async worker exists. Var precedence is workflow defaults <
+  the source run's last-snapshot effective vars (engine-internal `__*` keys excluded) < `--vars`.
+  `--from-run` records `continuedFrom` + `continuedFromDigest` and never mutates the source;
+  a differing definition digest warns rather than refusing. `--dry-run --from` walks from the start
+  state without executing actions, and `--async --from` threads both flags to the worker.
+  `spur workflow trace` (list and single, human and `--json`) and the `.state.json` run-record
+  projection surface `startState` / `continuedFrom` additively; a run without `--from` gains neither
+  key. The run-start plan marks states that precede the start point `unattempted` with note
+  `before start state` — never `completed`.
+
+  Worked example — re-drive the publish tail of a completed daily run after fixing a credential:
+
+  ```bash
+  # The source run finished with publishing off, so it skipped the publish channels.
+  spur workflow trace kk-daily-20261002 --json | jq '{startState, status}'
+
+  # Continue the CURRENT definition from the publish gate, inheriting the source's vars
+  # (its __* internals are dropped) and overriding only what changed.
+  spur workflow run workflows/kk-daily-ai-voice.yaml \
+    --from daily-publish-prep --from-run kk-daily-20261002 \
+    --vars '{"publish_enabled":"true"}' --run-id kk-daily-20261002-tail
+
+  # The new run is its own record; the source stays untouched.
+  spur workflow trace kk-daily-20261002-tail --json | jq '{startState, continuedFrom}'
+  ```
+
+  A state whose `onEnter` assumes artifacts from earlier states still fails loud when it is used as
+  a start point — that is why the marker is an author-level opt-in with no override flag. When a run
+  genuinely has to redo an earlier gate, mark that gate `startable` too rather than weakening the
+  refusal.
 - `validate <file>` — load + Zod-validate a workflow definition.
 - **YAML extensions (0533/D4):** a workflow may declare `extensions.actions: [./module.ts]` /
   `extensions.guards: [...]` — relative module paths resolved against the workflow file's own

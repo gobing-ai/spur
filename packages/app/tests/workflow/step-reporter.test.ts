@@ -13,6 +13,7 @@ import {
     buildWorkflowSteps,
     columnLabel,
     labelChild,
+    preStartStepIds,
     renderActionHeartbeat,
     renderProgressMarkdown,
     renderRunPlan,
@@ -657,5 +658,64 @@ describe('buildWorkflowSteps — DAG kind (engine 0.5.15)', () => {
         const out = renderWorkflowTodo(dag);
         expect(out).toContain('one');
         expect(out).toContain('two');
+    });
+});
+
+describe('preStartStepIds / renderRunPlan start state (task 1072 R4)', () => {
+    const sm: StateMachineWorkflowDef = {
+        kind: 'state-machine',
+        name: 'sm',
+        initialState: 's1',
+        terminalStates: ['done'],
+        states: [{ id: 's1' }, { id: 's2', startable: true }, { id: 's3' }, { id: 'done' }],
+        transitions: [
+            { from: 's1', to: 's2' },
+            { from: 's2', to: 's3' },
+            { from: 's3', to: 'done' },
+        ],
+    };
+
+    test('marks only the states that cannot be reached forward from the start point', () => {
+        expect([...preStartStepIds(sm, 's2')].sort()).toEqual(['s1']);
+        expect([...preStartStepIds(sm, 's1')]).toEqual([]);
+        expect([...preStartStepIds(sm, 'done')].sort()).toEqual(['s1', 's2', 's3']);
+    });
+
+    test('walks transition-flow edges and DAG dependencies', () => {
+        const tf: TransitionFlowWorkflowDef = {
+            kind: 'transition-flow',
+            name: 'tf',
+            initialNode: 'n1',
+            terminalNodes: ['end'],
+            nodes: [{ id: 'n1' }, { id: 'n2', startable: true }, { id: 'end' }],
+            edges: [
+                { from: 'n1', to: 'n2' },
+                { from: 'n2', to: 'end' },
+            ],
+        };
+        expect([...preStartStepIds(tf, 'n2')].sort()).toEqual(['n1']);
+
+        const dag: DagWorkflowDef = {
+            kind: 'dag',
+            name: 'dag',
+            nodes: [{ id: 'root' }, { id: 'mid', dependsOn: ['root'] }, { id: 'leaf', dependsOn: ['mid'] }],
+        };
+        expect([...preStartStepIds(dag, 'mid')].sort()).toEqual(['root']);
+        expect([...preStartStepIds(dag, 'root')]).toEqual([]);
+    });
+
+    test('renders the start point and the pre-start steps truthfully in the plan', () => {
+        const out = renderRunPlan(sm, 's2');
+        expect(out).toContain('starting at s2');
+        expect(out).toMatch(/s2 — start state/);
+        expect(out).toMatch(/s1 — initial · unattempted \(before start state\)/);
+        expect(out).not.toMatch(/s3 — unattempted/);
+    });
+
+    test('renders the unchanged plan when no start state is given', () => {
+        const out = renderRunPlan(sm);
+        expect(out).not.toContain('starting at');
+        expect(out).not.toContain('unattempted');
+        expect(out).not.toContain('start state');
     });
 });

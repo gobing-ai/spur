@@ -5,6 +5,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import type { Command } from '@commander-js/extra-typings';
 import type { AgentQuotaEventBus } from '@gobing-ai/spur-app';
 import {
+    assertStartStateStartable,
     buildWorkflowSteps,
     configuredSecretValues,
     createShellOutputRedactor,
@@ -12,6 +13,7 @@ import {
     decorateWorkflowEvent,
     EscalationPacketSink,
     parseWorkflowInventory,
+    preStartStepIds,
     projectWorkflowProgress,
     type ResolvedWorkflowDefinition,
     readWorkflowRunRecord,
@@ -288,6 +290,49 @@ export function existingRunRefusal(runId: string): string {
 }
 
 /**
+ * 1072 R3: refuse an illegal `--from` / `--from-run` BEFORE any plan artifact, run
+ * record, run row or async worker exists. Returns `true` when the run may proceed;
+ * otherwise it writes the refusal, sets exit 2, and returns `false`.
+ *
+ * The app service re-validates on `run()` (and would refuse before the run row); this
+ * earlier gate exists because the async launcher resolves the definition and writes the
+ * plan artifact itself, so the engine never gets the chance to refuse first.
+ */
+async function refuseIllegalStartState(
+    context: CliContext,
+    options: Record<string, unknown>,
+    service: Pick<WorkflowAppService, 'trace'>,
+    workflow: ResolvedWorkflowDefinition['workflow'],
+    fromState: string | undefined,
+    fromRun: string | undefined,
+): Promise<boolean> {
+    if (fromState === undefined) return true;
+    try {
+        assertStartStateStartable(workflow, fromState);
+    } catch (error) {
+        writeJsonError(
+            context.output,
+            options,
+            error instanceof Error ? error.message : String(error),
+            'VALIDATION_FAILED',
+        );
+        context.setExitCode(2);
+        return false;
+    }
+    if (fromRun !== undefined && !(await existingWorkflowRun(service, fromRun))) {
+        writeJsonError(
+            context.output,
+            options,
+            `--from-run ${fromRun}: no such run — lineage needs an existing source run.`,
+            'VALIDATION_FAILED',
+        );
+        context.setExitCode(2);
+        return false;
+    }
+    return true;
+}
+
+/**
  * Verify the worker's own resolution against the expected digest shipped by the
  * async launcher (0768 R2). Returns the refusal message, or null when the run
  * may start. A missing resolution counts as a mismatch: the worker cannot prove
@@ -320,8 +365,13 @@ export async function writeWorkflowPlanArtifact(
     runId: string,
     resolved: ResolvedWorkflowDefinition,
     secretValues: readonly string[],
+    startState?: string,
 ): Promise<string> {
     const def = resolved.workflow;
+    // 1072 R4: a continued run marks the steps that precede its start point with the
+    // existing `unattempted` outcome — never `completed` — so the plan artifact cannot
+    // claim work this run will not do.
+    const preStart = startState === undefined ? undefined : preStartStepIds(def, startState);
     const payload = toJson({
         runId,
         name: def.name,
@@ -329,8 +379,16 @@ export async function writeWorkflowPlanArtifact(
         format: 'todo',
         version: def.version ?? null,
         definitionDigest: resolved.digest,
+        ...(startState !== undefined ? { startState } : {}),
         steps: buildWorkflowSteps(def).map((step) => ({
             ...step,
+            ...(startState === undefined
+                ? {}
+                : step.id === startState
+                  ? { outcome: 'active' as const, note: 'run start state' }
+                  : preStart?.has(step.id) === true
+                    ? { outcome: 'unattempted' as const, note: 'before start state' }
+                    : {}),
             ...(step.description !== undefined
                 ? { description: redactAndBound(step.description, secretValues, 512) }
                 : {}),
@@ -526,6 +584,11 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             '--async',
             'Start the workflow in the background and exit immediately — monitor with `spur workflow trace <run-id>`',
         )
+        .option(
+            '--from <state-id>',
+            'Start a FRESH run at this state/node (which must be declared startable: true) instead of the entry point',
+        )
+        .option('--from-run <run-id>', "With --from: inherit the source run's effective vars and record lineage")
         .option('--no-plan', 'Suppress the run-start plan preview (synchronous runs only)')
         .option('--quiet', 'Suppress plan and per-step progress; keep the final summary')
         .option('--silent', 'Suppress all routine output; errors still set a non-zero exit status')
@@ -585,6 +648,19 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                 options.verbose === true
                     ? 'full'
                     : ((requestedDetail as WorkflowOutputDetail | undefined) ?? 'invocation');
+
+            // 1072 R3: `--from-run` is lineage for a start point; without a start point
+            // there is nothing to continue from.
+            if (options.fromRun !== undefined && options.from === undefined) {
+                writeJsonError(
+                    context.output,
+                    options,
+                    '--from-run requires --from: lineage needs a start state',
+                    'VALIDATION_FAILED',
+                );
+                context.setExitCode(2);
+                return;
+            }
 
             // Nested-run refusal (task 0610 R4). Refuse BEFORE any side effect — no run record, no
             // worktree, no agent spawn.
@@ -650,6 +726,14 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                 if (options.log === false) {
                     cmd.push('--no-log');
                 }
+                // 1072 R6: the worker re-validates and re-resolves from these flags, so
+                // the continued run's start point and lineage cross the process boundary.
+                if (options.from !== undefined) {
+                    cmd.push('--from', options.from);
+                }
+                if (options.fromRun !== undefined) {
+                    cmd.push('--from-run', options.fromRun);
+                }
                 // 0768 R2: the launcher resolves the definition and writes the
                 // run-scoped plan artifact BEFORE the worker starts. A resolution
                 // failure or an artifact-write failure must not start actions, so
@@ -661,11 +745,25 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                         embeddedSchemas: EMBEDDED_SPUR_SCHEMAS,
                         registered: resolveWorkflowPaths(context.spurConfig ?? null),
                     });
+                    // 1072 R3: refuse an illegal start point before the plan artifact below.
+                    if (
+                        !(await refuseIllegalStartState(
+                            context,
+                            options,
+                            makeSvc(options.json),
+                            resolvedDefinition.workflow,
+                            options.from,
+                            options.fromRun,
+                        ))
+                    ) {
+                        return;
+                    }
                     planArtifactPath = await writeWorkflowPlanArtifact(
                         context.cwd,
                         runId,
                         resolvedDefinition,
                         configuredSecretValues(context.env),
+                        options.from,
                     );
                 } catch (error) {
                     writeJsonError(
@@ -693,6 +791,9 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                             runId,
                             vars: { spurBin: resolveSpurBin(), ...parseVars(options.vars) },
                             dryRun: options.dryRun || undefined,
+                            // 1072 R2: the fresh start point and its lineage.
+                            ...(options.from !== undefined ? { startState: options.from } : {}),
+                            ...(options.fromRun !== undefined ? { continuedFrom: options.fromRun } : {}),
                             // 0768 R1: the fallback run reuses the launcher's resolution.
                             resolvedDefinition,
                             // 0901 R5: shell streams persisted by this run pass the
@@ -857,7 +958,21 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             }
             let planPreview: string | undefined;
             if (options.plan !== false && resolvedDefinition !== undefined) {
-                planPreview = renderRunPlan(resolvedDefinition.workflow);
+                // 1072 R3: the sync path refuses the start point before the preview and
+                // before the service call, so a refused run leaves nothing behind either.
+                if (
+                    !(await refuseIllegalStartState(
+                        context,
+                        options,
+                        makeSvc(json, bus),
+                        resolvedDefinition.workflow,
+                        options.from,
+                        options.fromRun,
+                    ))
+                ) {
+                    return;
+                }
+                planPreview = renderRunPlan(resolvedDefinition.workflow, options.from);
             }
             // 0777 R4 (F4): run-start capability preflight — BEFORE plan display and
             // any dispatch, warn when a pinned executor cannot satisfy a step's
@@ -903,6 +1018,15 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                           dir: runStoragePaths(context.cwd).recordsDir,
                           runId,
                           ...(planPreview !== undefined ? { planPreview } : {}),
+                          // 1072 R7: lineage in the two-file run record's state projection.
+                          ...(options.from !== undefined || options.fromRun !== undefined
+                              ? {
+                                    lineage: {
+                                        ...(options.from !== undefined ? { startState: options.from } : {}),
+                                        ...(options.fromRun !== undefined ? { continuedFrom: options.fromRun } : {}),
+                                    },
+                                }
+                              : {}),
                           secrets: configuredSecretValues(context.env),
                           ...resolveOutputLogConfig(context.spurConfig ?? null),
                       });
@@ -1020,6 +1144,9 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                     runId,
                     vars,
                     dryRun: options.dryRun || undefined,
+                    // 1072 R2: the fresh start point and its lineage.
+                    ...(options.from !== undefined ? { startState: options.from } : {}),
+                    ...(options.fromRun !== undefined ? { continuedFrom: options.fromRun } : {}),
                     // Async worker self-records its pid so `spur workflow cancel` can
                     // signal the live process group (set by the --async launcher).
                     recordSelfPid: getEnvVar('SPUR_ASYNC_WORKER') === '1',

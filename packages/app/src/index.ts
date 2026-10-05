@@ -997,6 +997,13 @@ export {
     resolveOutputLogConfig,
     resolveWorkflowLogRetentionDays,
 } from './workflow/run-record';
+// Fresh-run start state — app-layer early validation + `--from-run` lineage (1072)
+export {
+    assertStartStateStartable,
+    type ContinuedFrom,
+    readContinuedFrom,
+    StartStateRefusedError,
+} from './workflow/start-state';
 export {
     parseSteeringPolicy,
     type SteeringAck,
@@ -1012,6 +1019,7 @@ export {
 // Workflow step reporter — pure event→line / def→plan formatters for CLI progress (0114)
 export {
     buildWorkflowSteps,
+    preStartStepIds,
     renderActionHeartbeat,
     renderRunPlan,
     renderStepLine,

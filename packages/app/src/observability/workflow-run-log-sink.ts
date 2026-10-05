@@ -72,6 +72,11 @@ export class WorkflowRunLogSink {
     private readonly maxBytes: number;
     private readonly maxLines: number | undefined;
     private readonly planPreview?: string;
+    /**
+     * Start-state lineage for this run (task 1072 R7), projected into `.state.json`
+     * additively — absent for every run that did not pass `--from`.
+     */
+    private readonly lineage?: { startState?: string; continuedFrom?: string };
     private readonly secrets: readonly string[];
     private readonly runId: string;
     private workflowName: string | undefined;
@@ -92,6 +97,8 @@ export class WorkflowRunLogSink {
             dir: string;
             runId: string;
             planPreview?: string;
+            /** 1072 R7: start-state lineage, projected into `.state.json` additively. */
+            lineage?: { startState?: string; continuedFrom?: string };
             /** Configured secret values scrubbed at this persistence boundary (0925 R3). */
             secrets?: readonly string[];
         } & WorkflowRunLogConfig,
@@ -101,6 +108,7 @@ export class WorkflowRunLogSink {
         this.maxBytes = options.maxBytes ?? DEFAULT_RUN_LOG_MAX_BYTES;
         this.maxLines = options.maxLines;
         this.planPreview = options.planPreview;
+        this.lineage = options.lineage;
         this.secrets = options.secrets ?? [];
         this.runId = options.runId;
         // No eager open here (1064 R2): the file pair is created by `ensureOpen()`
@@ -236,6 +244,9 @@ export class WorkflowRunLogSink {
             startedAt: this.startedAt ?? at,
             updatedAt: at,
             ...(status !== 'running' ? { finalizedAt: at } : {}),
+            // 1072 R7: additive optional lineage fields — readers tolerate their absence.
+            ...(this.lineage?.startState !== undefined ? { startState: this.lineage.startState } : {}),
+            ...(this.lineage?.continuedFrom !== undefined ? { continuedFrom: this.lineage.continuedFrom } : {}),
         };
         const temp = `${this.statePath}.tmp`;
         try {

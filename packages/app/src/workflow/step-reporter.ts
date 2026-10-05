@@ -305,7 +305,7 @@ export function renderWorkflowTodo(def: WorkflowDef): string {
  * remains `step.id`. When no label is supplied the line renders exactly as
  * before, so existing callers/tests are unchanged.
  */
-function formatWorkflowStepLine(step: WorkflowStep, label?: string): string {
+function formatWorkflowStepLine(step: WorkflowStep, label?: string, outcome?: StepOutcome): string {
     const markers = [
         step.initial ? 'initial' : undefined,
         step.terminal ? 'terminal' : undefined,
@@ -315,8 +315,56 @@ function formatWorkflowStepLine(step: WorkflowStep, label?: string): string {
         step.conditional ? 'conditional' : undefined,
         step.nodeType !== undefined && step.nodeType !== 'action' ? step.nodeType : undefined,
     ].filter((m): m is string => m !== undefined);
+    // 1072 R4: a fresh run started mid-graph marks the pre-start states with the
+    // EXISTING `unattempted` outcome — never `completed` — and marks the chosen
+    // start point so the plan reads truthfully before the run touches anything.
+    if (outcome?.start === true) markers.push('start state');
+    if (outcome?.preStartNote !== undefined) markers.push(`unattempted (${outcome.preStartNote})`);
     const head = label === undefined ? step.id : `${label}. ${step.id}`;
     return markers.length > 0 ? `- [ ] ${head} — ${markers.join(' · ')}` : `- [ ] ${head}`;
+}
+
+/** Plan-line outcome annotations for a fresh run that starts at a chosen state (task 1072 R4). */
+interface StepOutcome {
+    /** This step is the run's start point. */
+    start?: boolean;
+    /** This step precedes the start point and cannot execute in this run. */
+    preStartNote?: string;
+}
+
+/**
+ * Every step id NOT reachable forward from `startState` — the steps that precede the
+ * chosen start point and cannot execute in this run (task 1072 R4).
+ */
+export function preStartStepIds(def: WorkflowDef, startState: string): Set<string> {
+    const outgoing = new Map<string, string[]>();
+    const push = (from: string, to: string): void => {
+        const list = outgoing.get(from);
+        if (list === undefined) outgoing.set(from, [to]);
+        else list.push(to);
+    };
+    if (def.kind === 'dag') {
+        for (const node of def.nodes) for (const dep of node.dependsOn ?? []) push(dep, node.id);
+    } else if (def.kind === 'transition-flow') {
+        for (const edge of def.edges) push(edge.from, edge.to);
+    } else {
+        for (const transition of def.transitions) push(transition.from, transition.to);
+    }
+    const reachable = new Set<string>([startState]);
+    const queue: string[] = [startState];
+    for (let i = 0; i < queue.length; i += 1) {
+        const current = queue[i] as string;
+        for (const next of outgoing.get(current) ?? []) {
+            if (reachable.has(next)) continue;
+            reachable.add(next);
+            queue.push(next);
+        }
+    }
+    return new Set(
+        buildWorkflowSteps(def)
+            .map((step) => step.id)
+            .filter((id) => !reachable.has(id)),
+    );
 }
 
 /**
@@ -351,13 +399,19 @@ export function renderWorkflowActiveDetail(
  * built from the DEFINITION, not a run result — the plan answers "what does
  * this workflow declare", before any execution.
  */
-export function renderRunPlan(def: WorkflowDef): string {
+export function renderRunPlan(def: WorkflowDef, startState?: string): string {
     const kind = def.kind ?? 'state-machine';
     const steps = buildWorkflowSteps(def);
     const labels = buildStepLabels(steps.length);
+    const preStart = startState === undefined ? undefined : preStartStepIds(def, startState);
     return [
-        `plan (${kind}) — declared inventory, not a predicted route:`,
-        ...steps.map((step, i) => formatWorkflowStepLine(step, labels[i])),
+        `plan (${kind}) — declared inventory, not a predicted route:${startState === undefined ? '' : ` (starting at ${startState})`}`,
+        ...steps.map((step, i) =>
+            formatWorkflowStepLine(step, labels[i], {
+                ...(step.id === startState ? { start: true } : {}),
+                ...(preStart?.has(step.id) === true ? { preStartNote: 'before start state' } : {}),
+            }),
+        ),
     ].join('\n');
 }
 

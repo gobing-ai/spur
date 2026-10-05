@@ -1,12 +1,14 @@
 ---
 schema_version: 1
 name: Start or resume a workflow run from a chosen state
-status: backlog
+status: done
 template: feature-impl
 created_at: 2026-10-04T06:57:19.805Z
-updated_at: "2026-10-05T04:47:47.885Z"
+updated_at: "2026-10-05T19:12:39.039Z"
 feature_id: D6
 
+done_forced: "false"
+done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new/.spur/run/1072-verdict.json
 ---
 
 ## 1072. Start or resume a workflow run from a chosen state
@@ -44,30 +46,30 @@ be added from spur-new either. This task therefore depends on an upstream engine
 
 ### Requirements
 
-- [ ] R1. **Engine dependency.** Consume an engine release (≥ 0.5.16, upstream ts-libs task) that adds
+- [x] R1. **Engine dependency.** Consume an engine release (≥ 0.5.16, upstream ts-libs task) that adds
   `WorkflowRunOptions.startState` and a per-state/per-node `startable: boolean` schema field, with fresh-run
   semantics: the start state's on-enter/node action **executes**, no snapshot is loaded, `transitionsTaken` starts at
   0, and an undeclared / terminal / failure / non-`startable` start state, or any `kind: dag` workflow, is refused
   with an `FSMError` before a run row is created. Bump the spur-new `catalog` pins accordingly.
-- [ ] R2. `spur workflow run <file> --from <state-id>` starts a **fresh** run at that state. `--from-run <run-id>`
+- [x] R2. `spur workflow run <file> --from <state-id>` starts a **fresh** run at that state. `--from-run <run-id>`
   (only valid together with `--from`) records lineage to a prior run and inherits its vars. Run ids are never
   reused: the source run is never mutated and the 0901 R1 existing-run refusal stays.
-- [ ] R3. Refusals are loud and side-effect free: unknown state (message lists the valid `startable` ids), state not
+- [x] R3. Refusals are loud and side-effect free: unknown state (message lists the valid `startable` ids), state not
   marked `startable`, terminal/failure state, DAG workflow, `--from-run` without `--from`, unknown source run id. Each
   exits non-zero (validation → 2) before any run row, run-record file, plan artifact, or async worker is created.
-- [ ] R4. Nothing before the start state executes or is recorded as done. Run-row `metadata_json` carries
+- [x] R4. Nothing before the start state executes or is recorded as done. Run-row `metadata_json` carries
   `startState` (and `continuedFrom`, `continuedFromDigest` when `--from-run` is given); the run-start plan marks
   states that precede the start point as `unattempted` with note `before start state` — never `completed`.
-- [ ] R5. Var precedence: workflow defaults < source run's last-snapshot effective vars (only with `--from-run`,
+- [x] R5. Var precedence: workflow defaults < source run's last-snapshot effective vars (only with `--from-run`,
   excluding engine/runtime-internal `__*` keys) < `--vars`. Guards, transitions, `terminalReason`, failure states,
   `iterationBound` and `onError` policies behave exactly as in a normal run from that state onward.
-- [ ] R6. `--dry-run --from` walks the graph from the start state without executing actions; `--async --from` threads
+- [x] R6. `--dry-run --from` walks the graph from the start state without executing actions; `--async --from` threads
   `startState`/`continuedFrom` to the worker and the worker's digest/plan check covers them.
-- [ ] R7. Lineage is visible: `spur workflow trace` (list and `trace <run-id>`, human and `--json`) shows
+- [x] R7. Lineage is visible: `spur workflow trace` (list and `trace <run-id>`, human and `--json`) shows
   `startState` and `continuedFrom`; the `.state.json` projection gains the same optional fields additively.
-- [ ] R8. Absent `--from`, behavior and output are byte-for-byte unchanged: pause/`continue`, interrupt, `--async`,
+- [x] R8. Absent `--from`, behavior and output are byte-for-byte unchanged: pause/`continue`, interrupt, `--async`,
   `--steer`, run memory, the two-file run record, and no `startState` key in metadata.
-- [ ] R9. Documented surface: ADR-051 consent recorded in `docs/design/harness-surface-governance.md`; `--from` /
+- [x] R9. Documented surface: ADR-051 consent recorded in `docs/design/harness-surface-governance.md`; `--from` /
   `--from-run` semantics, the `startable` opt-in rule, var precedence, and a worked publish-tail example in
   `spur workflow run --help` and `docs/design/cli-contracts.md`.
 
@@ -165,31 +167,78 @@ retire. ADR-051 placement resolved in Q&A Q1.
 
 ### Plan
 
-- [ ] 0. **Upstream (blocking):** file + land the ts-libs engine task (`startState` option, `startable` schema field,
+- [x] 0. **Upstream (blocking):** file + land the ts-libs engine task (`startState` option, `startable` schema field,
       refusals, driver tests for state-machine and transition-flow), release ≥ 0.5.16, bump spur-new `catalog`
       pins (currently `^0.5.14`, installed 0.5.14) and run `bun install`.
-- [ ] 1. Record ADR-051 operator consent in `docs/design/harness-surface-governance.md` (Q&A Q1).
-- [ ] 2. Write the failure list first (R3 cases, var-precedence edge cases, async/dry-run threading), then implement
+- [x] 1. Record ADR-051 operator consent in `docs/design/harness-surface-governance.md` (Q&A Q1).
+- [x] 2. Write the failure list first (R3 cases, var-precedence edge cases, async/dry-run threading), then implement
       `WorkflowAppService.run` start/continue handling and metadata stamping.
-- [ ] 3. CLI flags, flag-combination validation, async worker threading, plan rendering of pre-start states.
-- [ ] 4. Lineage in `workflow trace` (list + single, human + `--json`) and the `.state.json` projection.
-- [ ] 5. E2E: fixtures for AC1/AC4 under `apps/cli/tests/fixtures/`, isolated project dir, driven through the real
+- [x] 3. CLI flags, flag-combination validation, async worker threading, plan rendering of pre-start states.
+- [x] 4. Lineage in `workflow trace` (list + single, human + `--json`) and the `.state.json` projection.
+- [x] 5. E2E: fixtures for AC1/AC4 under `apps/cli/tests/fixtures/`, isolated project dir, driven through the real
       CLI; keep the receipt directory as the repeatable artifact. Re-run the existing workflow suites for AC7.
-- [ ] 6. Docs: `--help`, `docs/design/cli-contracts.md` worked example (re-drive the publish tail of a completed daily
+- [x] 6. Docs: `--help`, `docs/design/cli-contracts.md` worked example (re-drive the publish tail of a completed daily
       run with `--from-run`), note that KIT's completeness report remains complementary.
-- [ ] 7. Gate: `bun run spur-check` + `bun run build`; file the knowledge-kit follow-up for Q&A Q6.
+- [x] 7. Gate: `bun run spur-check` + `bun run build`; file the knowledge-kit follow-up for Q&A Q6.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| File:line | Change |
+| --- | --- |
+| `packages/app/src/services/workflow-service.ts:330` | `WorkflowRunOptions` gains `startState` and `continuedFrom` — the single authority for both (Q&A Q1); the CLI flags are thin adapters. |
+| `packages/app/src/services/workflow-service.ts:746` | Validation runs before any side effect, so a refused start point creates no run row, run record, plan artifact or worker (R3). |
+| `packages/app/src/services/workflow-service.ts:749` | Lineage is read up front through `readContinuedFrom`, before the engine service exists, so a missing source run refuses with no side effect. |
+| `packages/app/src/services/workflow-service.ts:838` | Metadata stamp `{startState, continuedFrom, continuedFromDigest}` plus the differing-definition warning (R4, Q&A Q5). |
+| `packages/app/src/services/workflow-service.ts:819` | `startState` is threaded into the engine run options (fresh-run semantics, R1). |
+| `packages/app/src/services/workflow-service.ts:2503` | `rowToTraceEntry` surfaces the lineage so `workflow trace` reports it in list and single, human and `--json` (R7). |
+| `packages/app/src/workflow/start-state.ts:41` | `assertStartStateStartable` — the five refusal classes, with the undeclared case listing the valid `startable` ids. |
+| `packages/app/src/workflow/start-state.ts:90` | `readContinuedFrom` — source effective vars without `__*` keys, source digest from metadata, never mutating the source run. |
+| `packages/app/src/workflow/step-reporter.ts:339` | `preStartStepIds` — forward reachability from the start point, so "precedes" is graph-derived rather than declaration order. |
+| `packages/app/src/workflow/step-reporter.ts:402` | `renderRunPlan(def, startState)` renders pre-start steps `unattempted` with note `before start state` — no new outcome value (R4). |
+| `packages/app/src/observability/workflow-run-log-sink.ts:248` | The `lineage` fields are projected into the state file additively (R7); a run without `--from` gains neither key. |
+| `apps/cli/src/commands/workflow.ts:588` | `--from <state-id>` and `--from-run <run-id>` are declared on the existing `run` verb. |
+| `apps/cli/src/commands/workflow.ts:301` | `refuseIllegalStartState` writes the refusal and exits 2 before the launcher plan artifact or worker exists. |
+| `apps/cli/src/commands/workflow.ts:374` | `preStartStepIds` marks the pre-start steps `unattempted` in the plan artifact with note `before start state`. |
+| `apps/cli/src/commands/workflow.ts:732` | `cmd.push('--from', ...)` threads both flags into the worker argv, so a detached run keeps its start point and lineage (R6). |
+| `apps/cli/tests/commands/workflow-run-from.test.ts:156` | E2E AC1–AC7 through the real CLI against fixtures: marker files, refusal matrix, var inheritance, the KIT-shaped publish tail, dry-run, async, and the no-`--from` regression. |
+| `packages/app/tests/workflow/start-state.test.ts:109` | Lineage unit tests: effective vars excluding engine-internal keys, unknown source run, absent snapshot. |
+| `packages/app/tests/workflow/step-reporter.test.ts:684` | `preStartStepIds` unit coverage across the transition-flow and DAG edge shapes. |
+| `docs/design/harness-surface-governance.md:140` | Consent row records the granted `--from` surface, the per-state `startable: true` marker and the 2026-10-05 operator grant. |
+| `docs/design/cli-contracts.md:742` | Surface contract: flags, refusal set, var precedence and the worked publish-tail example (R9). |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+`bun run spur-check` — PASS (exit 0): Biome clean, per-package `tsc --noEmit` clean across all 8 workspaces, `10172 pass / 0 fail` across 595 files, and `spur rule run` clean on both presets (`All 50 rules passed`, `All 2 rules passed`).
+
+`bun run build` — PASS (exit 0): every workspace built, including the CLI bundle and the desktop pack.
+
+`bun test tests/commands/workflow-run-from.test.ts` (apps/cli) — 10 pass / 0 fail. E2E through the real CLI in an isolated project directory:
+- AC1 — `--from s2` leaves marker `s2, s3` on the state-machine fixture and `n2, n3` on the transition-flow fixture; `workflow trace --json` reports `startState: "s2"` in both the single and list forms.
+- AC2 — undeclared (message lists `Startable ids: s2, s3`), terminal, failure, non-startable, DAG and `--from-run`-without-`--from` and unknown-source-run each exit 2, and `.spur/memory/runs` + `.spur/run` are byte-for-byte unchanged afterwards.
+- AC3 — the continued run sees `publish_enabled: "true"` from `--vars`, inherits the source's `declared` var, does not inherit `__*` keys, records `continuedFrom`, and the source run-record file is byte-identical with no lineage keys of its own.
+- AC4 — the KIT-shaped tail writes every channel receipt when the safety stamp is present, and with no stamp fails at `publish-prep` with `status: "failed"` and no later receipt.
+- AC5 — `--dry-run --from` writes no marker while the trace carries both `isDryRun: true` and `startState`; `--async --from` writes the plan artifact with `startState` plus `"outcome": "unattempted"` / `before start state`, and the detached worker records the same `startState` with the expected marker.
+- AC6/AC7 — lineage is visible in trace list and single forms; a run without `--from` produces no `startState`/`continuedFrom` in trace or `.state.json`.
+
+`bun test tests/workflow/start-state.test.ts` (packages/app) — 10 pass / 0 fail; `bun test tests/workflow/step-reporter.test.ts` — 39 pass / 0 fail.
+
+Coverage: per-measured-file thresholds (90/90) hold — `packages/app/src/workflow/start-state.ts` 100/100, `packages/app/src/workflow/step-reporter.ts` 100% functions, `packages/app/src/observability/workflow-run-log-sink.ts` 100/100. No test was skipped and no suppression was added.
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+Self-review of the change diff against the task's Design, R1–R9 and the AC set.
+
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P3 | Duplication / drift | `packages/app/src/workflow/start-state.ts:41` | `assertStartStateStartable` restates the engine's refusal rule so the CLI can refuse before writing a plan artifact or spawning a worker. The engine re-validates at run time, so a drift between the two shows up as exit 1 + `FSMError` instead of exit 2 — loud, but a different code path. Accepted deliberately (documented in the module header); the engine remains the contract of record. |
+| P3 | Two reads of the source run | `apps/cli/src/commands/workflow.ts:301` | The CLI pre-checks `--from-run` with the existing `trace`-based lookup while the app service re-reads the run for var inheritance. A source that changes between the two reads (paused to running) yields a lineage snapshot taken at the second read — no mutation and no correctness loss, but the two reads are not one transaction. |
+| P4 | Structural runtime check | `packages/app/src/workflow/start-state.ts:90` | `readContinuedFrom` discriminates `DbAdapter | WorkflowPersistenceAdapter` with an `'loadRun' in source` test rather than two overloads; the ergonomics are better for callers but the check is invisible to the type system. |
+| P4 | Warning visibility | `packages/app/src/services/workflow-service.ts:838` | The differing-definition-digest warning travels on the run result's `warnings` array, so a `--silent` or `--quiet` invocation can miss it even though the difference is recorded in metadata. |
+| P4 | Test timing | `apps/cli/tests/commands/workflow-run-from.test.ts:277` | The async case polls the run row with a bounded 30x500 ms loop. The plan-artifact assertions before it are deterministic; the poll could flake on a heavily loaded host. |
+
+Residual risk: none blocking. Every refusal path was exercised for side-effect absence (no run row, no run-record file, no plan artifact), the source run is provably untouched (byte-identical record), and the no-`--from` path is asserted to add neither trace nor state-projection key.
+
+Disposition: PASS — no P1/P2 findings; the P3/P4 rows are recorded with no action required in this task. Engine-side duplication is tracked by the module header, and the async poll bound is deliberate.
 
 ### References
 
@@ -211,3 +260,9 @@ retire. ADR-051 placement resolved in Q&A Q1.
 - Related upstream: ts-libs 0092 (fork/join `type: parallel`) and 0101 (DAG resume replay fix, released 0.5.15).
 
 ### History
+
+- 2026-10-05T18:31:25.546Z backlog → todo (system)
+- 2026-10-05T19:11:46.795Z todo → wip (system)
+- 2026-10-05T19:11:47.797Z wip → testing (system)
+- 2026-10-05T19:12:38.499Z testing → done (system)
+

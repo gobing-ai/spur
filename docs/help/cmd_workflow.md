@@ -92,6 +92,8 @@ spur workflow run [options] <file>
 |---|---|
 | `--run-id <id>` | Persisted run id for the workflow run |
 | `--vars <json>` | Per-run variable overrides as a JSON object, e.g. `'{"taskId":"0042"}'` |
+| `--from <state-id>` | Start a **fresh** run at this state/node (which must be declared `startable: true`) instead of the entry point |
+| `--from-run <run-id>` | With `--from`: inherit the source run's effective vars (engine-internal `__*` keys excluded) and record lineage |
 | `--dry-run` | Validate and walk transitions without executing actions |
 | `--async` | Start the run in a detached background process; return the run id immediately |
 | `--no-plan` | Suppress the run-start plan preview (synchronous human runs only) |
