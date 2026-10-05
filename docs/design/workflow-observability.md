@@ -239,6 +239,8 @@ interface WorkflowProgressDiagnostic {
         | 'definition-digest-missing'
         | 'definition-drift'
         | 'orphan-row'
+        | 'orphan-action-row'
+        | 'unvisited-state-row'
         | 'ambiguous-action';
     message: string;
 }
@@ -249,8 +251,8 @@ The projection maps existing sources as follows:
 | Projection field | Persisted/definition source |
 |---|---|
 | workflow, terminal status, launch definition digest | `runs` + merged `runs.metadata_json.definitionDigest` |
-| state visits | resolved definition plus ordered `phase_runs`/transition history |
-| taken edges and current state | ordered `transition_runs` plus run status |
+| state visits | resolved definition plus ordered `phase_runs`/transition history; a run with **no** transition history derives them from its ordered `action_runs` rows (1085) |
+| taken edges and current state | ordered `transition_runs` plus run status; with no transition history, the last derived visit (1085) |
 | action attempts | ordered `action_runs` (`node`, `kind`, attempt id, timing, outcome) |
 | action effect and pending actions | resolved definition plus the composition baseline |
 | artifacts | existing run-linked artifact metadata; path and kind only |
@@ -260,6 +262,25 @@ Definition actions use `<state>:<onEnter|onExit>:<ordinal>` after extensions res
 action rows do not carry that definition key, so the projector matches ordered rows by node/kind
 within a state visit. Zero matches leave the definition action pending; more than one valid mapping
 emits `ambiguous-action` and marks the action `ambiguous`. It never guesses or mutates stored rows.
+
+### Visit derivation for transition-less runs (1085 / E72 R10)
+
+Inline-driven runs write `action_runs` rows and no state or transition rows — the engine's
+`DbWorkflowPersistenceAdapter` is not part of the inline path — so with `transitions: []` the
+recorded rows are the only visit evidence. `deriveInlineStateVisits` groups rows whose `node` names
+a declared state into contiguous same-node runs in recorded order (`ORDER BY action_runs.created_at`);
+each group is one visit, numbered per state, so a re-entered `loopBack` state reads as visit 1 then
+visit 2. A visit maps **its own** rows, so a repeated visit is not a replay of the first. Visits keep
+row order, declared states with no recorded row are appended as `visit: 1, pending` as before, and a
+non-terminal (`running`/`pending`) run's `currentState` is its last derived visit. A terminal
+(`completed`/`failed`/`cancelled`) transition-less run keeps today's null `currentState`.
+
+With transition rows present nothing changes: `transition_runs` stays the visit source and the
+engine's projections and diagnostics are byte-identical. Unclaimed rows are reported by cause
+(0868 #7, extended by 1085 R4): `orphan-action-row` when the `node` matches no declared state action,
+`unvisited-state-row` when the row's `node` is a declared state the run did not visit. Each unclaimed
+row yields exactly one diagnostic naming it; rows a visited state consumes keep the
+mapping/`ambiguous-action` behaviour above.
 
 ### Definition digest persistence
 

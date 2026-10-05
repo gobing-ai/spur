@@ -2,11 +2,11 @@
 schema_version: 1
 id: "E72"
 name: "Observability Trace tab for workflow run inspection"
-status: active
+status: done
 priority: P2
 tags: []
 created_at: "2026-10-04T02:33:42.928Z"
-updated_at: "2026-10-04T22:56:32.288Z"
+updated_at: "2026-10-05T02:00:00.876Z"
 ---
 
 # E72: Observability Trace tab for workflow run inspection
@@ -129,7 +129,7 @@ Feature: Observability Trace tab for workflow run inspection
 | 1069 | Serve the run progress projection and run list filters | done |
 | 1070 | Stamp inline action provenance and project it | done |
 | 1071 | Build the Observability Trace tab | done |
-| 1085 | Project inline state visits and surface unmapped action rows in the progress projection | backlog |
+| 1085 | Project inline state visits and surface unmapped action rows in the progress projection | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -141,4 +141,6 @@ Feature: Observability Trace tab for workflow run inspection
 - 2026-10-04T21:13:09.771Z active → verifying (system)
 - 2026-10-04T21:13:10.554Z verifying → done (system)
 - 2026-10-04T22:55:58.480Z done → active (system)
+- 2026-10-05T01:59:58.735Z active → verifying (system)
+- 2026-10-05T02:00:00.876Z verifying → done (system)
 
