@@ -5,9 +5,11 @@ import type { DbAdapter } from '@gobing-ai/ts-db';
 /**
  * Claim slot vocabulary. `'orchestrator'` is this task's slot; `'write'` is the
  * per-worktree write slot 0837 claims on the same rows (no second migration —
- * the columns `owner_epoch`/`strategy_version` ship from the start).
+ * the columns `owner_epoch`/`strategy_version` ship from the start). `guest:<id>`
+ * is a joined guest occupant's heartbeat lease (G73 R5, task 1081), so the write
+ * slot's TTL/heartbeat semantics apply to guests without a new table.
  */
-export type ClaimSlot = 'orchestrator' | 'write';
+export type ClaimSlot = 'orchestrator' | 'write' | `guest:${string}`;
 
 /**
  * Claim time-to-live (0836 Q&A — CLOSED): a module constant, not config. Nothing

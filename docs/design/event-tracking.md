@@ -3,8 +3,8 @@ kind: design
 title: "Event tracking — System Event 5W1H SSOT"
 status: implemented
 created_at: 2026-08-18
-updated_at: 2026-09-16
-related: [I6, J9, "0597", "0601", "0602", "0605", "0806", "0807"]
+updated_at: 2026-10-05
+related: [I6, J9, "0597", "0601", "0602", "0605", "0806", "0807", "1080"]
 tags: [contract, I6, J9, observability]
 ---
 
@@ -304,6 +304,7 @@ The following matrix fixes summary behavior, retained facts, and outcome support
 | `agent.started` | `agentId`, `agentType`, `pid` | `[agent] {agentId} started` | — |
 | `agent.stopped` | `agentId`, `exitCode` | `[agent] {agentId} stopped` | `exitCode` |
 | `agent.message.sent` | `agentId`, `ok` | `[agent] message -> {agentId}` | `ok` |
+| `agent.lifecycle.changed` | `member`, `state`, `seq` | `[agent] {member} · {state}` | `state` |
 | `strategy.changed` | `projectPath`, `strategy`, `version` | `[strategy] {strategy} (v{version})` | — |
 | `fleet.capacity.changed` | `projectPath`, `change`, `holderId` | `[fleet] write slot {change} — {holderId}` | — |
 | `task.assigned` | member/type/task, `outcome` | `[task] {taskId} assigned to {memberId}` | `outcome` |

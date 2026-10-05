@@ -223,6 +223,7 @@ function pureCtx(overrides?: Partial<StrategyContext>): StrategyContext {
         idleInstances: [],
         dependencyBlocked: () => null,
         dispatchAttempts: new Map(),
+        memberLifecycle: new Map(),
         ...overrides,
     };
 }
@@ -314,6 +315,78 @@ describe('gtdStrategy.select (0838 R3/R4)', () => {
             requiresWrite: true,
             taskId: '0804',
         });
+    });
+
+    test('G73 R3: a blocked member is unavailable, and the hold names it (task 1080)', () => {
+        const result = gtdStrategy.select(
+            pureCtx({
+                candidates: [task('0801', { tags: [FLEET_AUTO_TAG] })],
+                idleInstances: [
+                    {
+                        instanceId: 'proj-blocked',
+                        executor: 'writer',
+                        enabled: true,
+                        writeCapable: true,
+                        capabilityState: 'available',
+                    },
+                ],
+                // The reported lifecycle, not the process state: the member's process is
+                // alive and would otherwise be dispatched to.
+                memberLifecycle: new Map([['proj-blocked', 'blocked' as const]]),
+            }),
+        );
+        expect(result.decisions).toEqual([]);
+        expect(result.holds).toEqual([
+            { wbs: '0801', reason: 'member-blocked', detail: 'proj-blocked reported blocked (waiting on a human)' },
+        ]);
+    });
+
+    test('G73 R3: only the blocked member is held — an idle sibling still receives work', () => {
+        const result = gtdStrategy.select(
+            pureCtx({
+                candidates: [task('0801', { tags: [FLEET_AUTO_TAG] })],
+                idleInstances: [
+                    {
+                        instanceId: 'proj-blocked',
+                        executor: 'writer',
+                        enabled: true,
+                        writeCapable: true,
+                        capabilityState: 'available',
+                    },
+                    {
+                        instanceId: 'proj-idle',
+                        executor: 'writer',
+                        enabled: true,
+                        writeCapable: true,
+                        capabilityState: 'available',
+                    },
+                ],
+                memberLifecycle: new Map([
+                    ['proj-blocked', 'blocked' as const],
+                    ['proj-idle', 'idle' as const],
+                ]),
+            }),
+        );
+        expect(result.decisions.map((decision) => decision.instanceId)).toEqual(['proj-idle']);
+        expect(result.holds).toEqual([]);
+    });
+
+    test('G73 R3: a member with no reported lifecycle stays available (absent never blocks)', () => {
+        const result = gtdStrategy.select(
+            pureCtx({
+                candidates: [task('0801', { tags: [FLEET_AUTO_TAG] })],
+                idleInstances: [
+                    {
+                        instanceId: 'proj-quiet',
+                        executor: 'writer',
+                        enabled: true,
+                        writeCapable: true,
+                        capabilityState: 'available',
+                    },
+                ],
+            }),
+        );
+        expect(result.decisions.map((decision) => decision.instanceId)).toEqual(['proj-quiet']);
     });
 
     test('G71 R1: a wip fleet:auto candidate is dispatchable (interrupted work is still work)', () => {

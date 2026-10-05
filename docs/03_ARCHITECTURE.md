@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.68.0
+version: 1.69.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-10-02
+updated_at: 2026-10-05
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -713,7 +713,7 @@ Human cells omit opaque IDs; remediation commands stay separate from Action; mis
 identity is omitted. Actor data is not persisted as envelope context. Data contracts:
 [human table projection](design/system-events-human-table.md). UI rules: root DESIGN.md.
 
-## 17. Inter-Agent Control Plane (ADR-057 — waves 1–2 landed; wave 3 follow helper landed)
+## 17. Inter-Agent Control Plane (ADR-057 — waves 1–3 landed; lifecycle and guest occupancy in 1080/1081)
 
 Current shipped coordination is two independent channels (`03` §14.1): durable `inbox_messages`
 consumed through the loop/dispatch policy in §14.1, and a supervised process pipe (stdin POST + bounded SSE ring).
@@ -729,15 +729,29 @@ pin in the same process). Wave 3 (task 0531) replaced the 100 ms `system_events`
 `followSystemEventsAfter` (snapshot sequence, then follow `sequence > snapshot`; identity /
 stall / timeout still heartbeat at 100 ms). Lifecycle is derived by a pure projector
 (`working` = latest `agent.invoke.start`; `idle` = latest `agent.invoke.exit` + empty queued
-inbox; `blocked` requires a first-class signal, none yet). First-class `blocked` remains
-accepted design.
+inbox). Member `blocked` is now first-class (task 1080): a host hook calls
+`spur agent report --state working|idle|blocked --seq <ns>` only when `SPUR_SPEC_ID` is set, which
+`AgentService` now stamps on every spec-id-addressed run; the newest accepted
+`agent.lifecycle.changed` ledger row is the member's state, the strategy holds a blocked member
+with the `member-blocked` reason, and the Board shows `needs human`. The occupancy wait projector
+still reads `agent.invoke.*` only, so `--until blocked` remains unsupported.
 Task 0685 adds an exact-one selector above this unchanged pin layer: `--role` resolves a configured
-Layer-1 role or executor name through `AgentInstanceStore.byRole` / `byExecutor`; zero or multiple
+Layer-1 role or executor name over the declared roster (`FleetService.resolve` members; the
+`AgentInstanceStore` over spec files is gone — G72 R1 / 1079); zero or multiple
 matches fail with count + candidates. `agent wait` and `message send --wait` snapshot the resolved
 spec's occupant; an unwaited send queues to the resolved `specId` without requiring an occupant.
 The retired Board Inbox `mergeTimeline` no longer exists (0849 removed it with the Inbox module);
 durable messages and process frames are presented in their own Projects panes, so there is no
 display merge left to un-merge.
+
+Guest occupancy (task 1081, ADR-121 A2) rides the same plane without a new table: `spur agent join`
+registers a live session as a guest occupant (a `coordination_runs` row plus a
+`.spur/run/guests/<id>.json` record) and holds a `ProjectClaimDao` lease on `guest:<id>` that only
+that guest's heartbeat renews. Work is pulled through `spur agent wait --inbox <id>` and a
+session-matched Stop hook — never written to the guest's terminal. Guests stay outside the
+declaration: role resolution counts declared members only and a guest is refused as a stage target;
+`spur agent leave` or lease expiry releases the claim and returns claimed messages to `queued`.
+Shapes: [inter-agent control plane](design/inter-agent-control-plane.md) §12.
 
 ### 17.1 Target topology
 
@@ -771,8 +785,9 @@ The process pipe stays the operator attach path. It is not the agent-to-agent co
    on the CLI or connection side and follow `system_events` / EventBus after a snapshot sequence.
 7. New coordination verbs land on `agent` or `message` only (ADR-051). A new noun is a new ADR.
 8. Semantic wait targets (`idle`, `working`, `blocked`) are derived only from cataloged events
-   or an explicit report API. Presentation fields (titles, tokens, Board timeline rows) never
-   satisfy a wait.
+   or an explicit report API — `spur agent report` is that API for member `blocked` (the occupancy
+   wait projector stays `agent.invoke.*`-derived). Presentation fields (titles, tokens, Board
+   timeline rows) never satisfy a wait.
 9. Coordination-run rows store artifact **paths**, not stdout/stderr bodies. Redaction runs
    before persist.
 

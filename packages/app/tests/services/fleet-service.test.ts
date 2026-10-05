@@ -3,7 +3,13 @@ import { mkdir, mkdtemp, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { type SpurConfig, spurConfigSchema } from '@gobing-ai/spur-config';
-import { createMigratedDb, type DbAdapter, ProjectClaimDao, recordMemberSession } from '@gobing-ai/spur-domain';
+import {
+    createMigratedDb,
+    type DbAdapter,
+    ProjectClaimDao,
+    recordLifecycle,
+    recordMemberSession,
+} from '@gobing-ai/spur-domain';
 import { type AgentSpec, loadAgentSpecs, saveAgentSpec } from '@gobing-ai/ts-ai-runner';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { parse as yamlParse } from 'yaml';
@@ -486,6 +492,37 @@ describe('FleetService session join (0897)', () => {
             const fleet = await svc.resolve(project);
             expect(fleet.members).toHaveLength(1);
             expect(fleet.members[0]?.session).toBeUndefined();
+        } finally {
+            await cleanup();
+        }
+    });
+});
+
+describe('FleetService lifecycle join (1080 R3)', () => {
+    test('members carry their reported lifecycle state; members without a report omit the field', async () => {
+        const { project, slug, cleanup } = await makeProject();
+        try {
+            const adapter = await createMigratedDb({ url: ':memory:' });
+            await recordLifecycle(adapter, `${slug}-lead`, { state: 'blocked', seq: 4 });
+            const svc = new FleetService({
+                spurConfig: configFor(parseConfig(EXECUTORS_YAML), project),
+                reloadAgentConfig: async () => configFor(parseConfig(EXECUTORS_YAML), project),
+                roles: ROLES,
+                fs: createNodeFileSystem(project),
+                registry: new ProjectRegistry(join(project, '.spur', 'registry.json')),
+                openDb: async () => adapter,
+            });
+            await writeFleet(project, {
+                members: [
+                    { id: 'lead', role: 'coder', executor: 'writer', purpose: 'orchestrator' },
+                    { role: 'reviewer', executor: 'readonly' },
+                ],
+            });
+            const fleet = await svc.resolve(project);
+            const lead = fleet.members.find((m) => m.instanceId.endsWith('-lead'));
+            const reviewer = fleet.members.find((m) => m.instanceId.endsWith('-readonly'));
+            expect(lead?.lifecycle).toMatchObject({ state: 'blocked', seq: 4 });
+            expect(reviewer?.lifecycle).toBeUndefined();
         } finally {
             await cleanup();
         }

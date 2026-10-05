@@ -5088,3 +5088,60 @@ Named limits (do not read this HIGH as covering them):
 - `L4.dogfood-missing` (feature-check) fires when a linked task's `## Solution` text matches `/plugins\/sp\//` — for G72 it was tripped by the *generated* `plugins/sp/lib/*.generated.mjs` regenerating from a domain source edit, so a derived artifact alone can demand dogfood evidence before the feature may be marked done.
 - `wrapup-steps.ts resolve` writes its refusal to `<runId>-route-reason.txt` (not a `-wrapup-reason` path) and its verdict to `<runId>-wrapup-resolve.status`; a feature preflight refusal aborts the wrap before doc-sync, learnings and metrics.
 
+Added a `## Verification — confidence level` section (**HIGH**) with a claim→command→result table, the "why not MEDIUM / why not broader" rationale, and four named limits. Shape gate re-verified: PASS.
+
+# Wrap-up learnings — G73 cooperative fleet participation (2026-10-05)
+
+## 1080 — Report agent lifecycle from host hooks through spur agent report
+- Host hook vocabularies are weaker than the state model. `SessionStart` / `UserPromptSubmit` / `Stop` can only express idle/working, so `blocked` needed a *different* Claude event (`Notification` with the documented `permission_prompt` matcher). Pi has no permission event at all: defer `blocked` for that host instead of inferring it from idle/working, or the strategy will hold a member that is actually waiting.
+- Audit which dispatch paths actually stamp an identity env var before a new consumer reads it: `SPUR_SPEC_ID` was set only by the supervisor for persistent members, so a drained `svc.run` member had no fleet identity. The fix was one seam (`setSpecIdEnv` on the role-propagation executor) applied for every spec-id-addressed run — not a second variable.
+- Reusing the `system_events` ledger as the state store removed a table: the newest accepted `agent.lifecycle.changed` row for an actor *is* the state. That keeps ADR-086's "runtime state is derived" posture and avoids a second writer for the same fact.
+- The monotonic guard is a strict `>` on a nanosecond sequence built as `BigInt(Date.now()) * 1_000_000n + process.hrtime.bigint() % 1_000_000n`; equal timestamps therefore drop, which is the intended stale-report behavior. A read-then-insert guard is TOCTOU (two concurrent reporters can interleave); a `UNIQUE(actor, seq)` index or a conditional INSERT is the upgrade path, not a lock.
+- Adding a public verb touches more than help text: the `--json-envelope` census inventory moved 70 → 71. Grep for the inventory test when a verb is registered, or the task-local gate fails late.
+- Hook tests must read env through `lib/env` (env-var-hygiene rule), and `plugins/sp/lib/inline-run.generated.mjs` is a tracked artifact the test suite rewrites. Never hand-edit a generated twin — regenerate it, and treat a write after the proof digest as potential post-capture drift.
+- UI placement under concurrency: put a badge in the member-row component a sibling task leaves, not in the file another session has uncommitted. Clean-checkout edits to a shared file are cheapest before the gate, not after.
+
+## 1081 — Let a live session join the fleet as a guest occupant after a Codex parity spike
+- Guest join cannot be pid-based (TIOCSTI is disabled on Linux 6.2+ and restricted on macOS) and ADR-057 forbids writing an agent's terminal, so participation must be *pull*: `spur agent wait --inbox <id>` plus a session-matched Stop hook. `spur message watch` never exits and cannot be a wait primitive; the new flag returns 0 on pending work and exits 1 on timeout or a not-joined guest — never a hang.
+- Three facts, no new table: identity in `coordination_runs`, lease as a `ProjectClaimDao` claim on slot `guest:<id>`, and a `.spur/run/guests/<id>.json` record so a host hook can find the joined session without a CLI call. Record-file discovery is what makes a per-turn hook cheap.
+- Retire order is the crash contract: release the lease, return claimed messages to `queued`, mark the row `exited`, then delete the record. Any other order leaves a half-released guest; this order leaves a leaseless guest that the next sweep retires.
+- "No claim row" was treated as expired, which is right for the single-process CLI but breaks an in-memory-DB test: each invocation looks expired. Guest E2E coverage needs a file-backed DB to model real behavior — the lease *is* the authority.
+- `ProjectClaimDao.claim` only admits an EXPIRED row on conflict, so a same-id rejoin inside a live lease is refused instead of renewed. Accepting that with an explicit exit-2 message is cheaper than a DAO owner-epoch change; renew-on-rejoin belongs to whoever next touches the claim statement.
+- Counting only `queued` for the wait predicate means claimed-but-undelivered work keeps the loop waiting. Returning on it would re-dispatch the same message, so the wait is correct and the tradeoff is documented rather than "fixed".
+- Parity spikes must answer with a fired event, not a doc: Codex documented the Stop-block contract and implements it in source, but a live `codex exec` turn on 0.160.0 fired `SessionStart`/`UserPromptSubmit` and **not** `Stop`. That made the hook opportunistic and kept delivery on the `wait --inbox` loop; `codex app-server generate-json-schema` containing `TurnCompleted` was enough to record a go for a receipt-based mode without building it.
+- Guests stay outside the declaration by construction: role/executor selectors resolve declared members only (so `--role` can never become ambiguous), a guest id colliding with a declared member exits 2, and `spur agent run --spec <guest>` is refused because a guest carries no `requiresCapabilities` attestation.
+- The T3/T4 same-change obligation was met for help/matrix/CLI-reference surfaces but missed the owning design satellites and the 04 index: `cli-contracts.md`, `inter-agent-control-plane.md` `§5/§9`, `project-switcher.md` dispatch boundaries and the `04` signature rows were repaired at wrapup. New verbs and DTO fields should be checked against `docs/design/*` in the same commit, not only `docs/help*`.
+
+## Cross-cutting (batch)
+- Two tasks, one plane: hook → CLI → ledger → strategy/Board. Neither task introduced a new noun, a new ADR or a new table — the ADRs were recorded before implementation (057 A1, 121 A2) and the decisions held.
+- Gates used: `bun run plugin-smoke` PASS, `bun run spur-check` PASS (10119 → 10142 tests), `bun run test-cf` PASS, per-workspace typechecks and `tsc -p plugins/sp/tsconfig.json` clean. The wrapup's own verification was `bun run test-repo-wide` (10 pass), the CLI consistency test (3 pass), `link-check`, and `rule run` with 50 rules / 0 findings.
+- Named limits, not hidden: no real Claude Code session fired a `Notification` permission prompt in this environment, so the first `blocked` delivery rests on the documented matcher plus the unit seam; a blocked member with no further reports stays blocked (no TTL, bounded in practice by the next hook); Codex Stop delivery is unverified on that host by live evidence.
+
+## Verification — confidence level
+
+**Confidence: HIGH** (doc-sync drift repair for batch 1080–1081).
+
+Basis — each claim is backed by a re-runnable command; results reproduced below:
+
+| Claim | Evidence command | Result |
+|-------|------------------|--------|
+| Repair is bounded to the owning docs | `git diff --numstat -- docs/03_ARCHITECTURE.md docs/04_DESIGN.md docs/design/` | 6 files — 03 23/8, 04 7/3, cli-contracts 47/5, inter-agent 42/7, project-switcher 10/2, event-tracking 3/2; `docs/00_ADR.md` 0 lines; no other doc path touched |
+| Corpus writes stayed out of the wrap | `stat -f '%Sm %N' docs/tasks5/1080*.md docs/tasks5/1081*.md docs/features/G73*.md docs/features/INDEX.md` | mtimes 07:45–10:01, all before the doc-sync edits (10:09–10:22) — pre-existing pipeline state, not wrap edits |
+| Every new surface has an owner | `rg -c '^#### \`spur agent (report\|join\|leave)' docs/design/cli-contracts.md`; `rg -n '\-\-inbox' docs/04_DESIGN.md docs/design/cli-contracts.md` | one combined contract section; `--inbox` present in both the index row and the satellite |
+| Stale claims removed | `rg -n 'remain accepted design\|requires a first-class signal, none yet\|AgentInstanceStore.byRole' docs/03_ARCHITECTURE.md docs/design/inter-agent-control-plane.md` | no matches |
+| Documented DTO matches the wire schema | `rg -c 'lifecycle\?' packages/contracts/src/fleet.ts` vs `rg -c 'lifecycle' docs/design/project-switcher.md docs/design/inter-agent-control-plane.md` | `memberLifecycleSchema` + `lifecycle?` in the contract; 9 and 8 mentions in the owner docs |
+| No new architectural decision (T1) | `bun test repo-wide-tests/adr-supersession.test.ts` | 10 pass / 0 fail; ADR-057 A1, ADR-121 A2, ADR-126 A4 and ADR-132 already own the choices — no append warranted |
+| Doc references resolve | anchor resolver over `docs/**/*.md` (explicit `<a id>` ∪ heading slugs) | 3 dangling, all pre-existing (2 historical task files, 1 pre-existing 04→cli-contracts workflow row); 0 introduced |
+| Constraint gate clean on the repaired tree | `bun run apps/cli/src/index.ts rule run --json` | `ruleCount: 50, findings: []` |
+| Repo-wide tripwires (doc-tripwire parity) | `bun run test-repo-wide` | 10 pass / 0 fail |
+| CLI surface ↔ doc parity | `bun test tests/consistency.test.ts` in apps/cli; `bun test apps/cli/tests/init-templates.test.ts` | 3 pass / 24 pass, 0 fail |
+| Package link graph intact | `bun scripts/spur-dev.ts link-check` | `link-check OK — no linked @gobing-ai package is serving a stale dist/` |
+
+Why not MEDIUM: every finding was detected mechanically (source registrations vs doc headings, contract schema vs satellite shape, `rg` for stale strings, numstat/mtime for scope) and each repair is a state or description correction with no invented policy — no judgment call is left unverified. Why not over-claiming a broader result: this is a focused §7.1/§7.3 check over the batch's affected owners, not a repository-wide audit.
+
+Named limits (do not read this HIGH as covering them):
+
+- `docs/features/INDEX.md` still shows G73 `[active]` with 1080 `testing` / 1081 `todo` while both tasks are `done`; the feature transition is a wrap/feature-tool action and was **reported, not repaired** (instruction: no task/feature corpus writes).
+- The pre-existing `docs/04_DESIGN.md` workflow row anchors `cli-contracts.md#spur-workflow-show-…` against a truncated `<a id>` (missing `--force`, `--answer-text`, `--timeout <ms>`); confirmed against `apps/cli/src/commands/workflow.ts:1064-1072`, left to the H1/0433 owner's wrapup.
+- The tasks' own host-delivery limits are unchanged by this repair: no live Claude `Notification` permission prompt fired, `blocked` has no TTL, and Codex `Stop` was not observed on 0.160.0. The doc-sync recorded these; it did not test them.
+- `docs/01_PRD.md`, `02_ROADMAP.md`, `05_FEATURES.md`, root `DESIGN.md` and `AGENTS.md` were not edited because no fact they own changed; that is an in-scope non-change, not an audited-clean claim.

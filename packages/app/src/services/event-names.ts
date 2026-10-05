@@ -299,6 +299,10 @@ const BASE_CATALOG = [
     baseEvent('agent.started', 'agent', 'agent'),
     baseEvent('agent.stopped', 'agent', 'agent'),
     baseEvent('agent.message.sent', 'agent', 'agent'),
+    // G73 R2 (task 1080): a fleet member's host hooks report working/idle/blocked.
+    // The newest accepted row for the actor IS the member's state (no state table),
+    // so this name is also the state store the strategy and the Board read.
+    baseEvent('agent.lifecycle.changed', 'agent', 'agent'),
 
     // ── fleet.* / strategy (G62 task 0839 R1) ─────────────────────────────
     // Wake sources for the orchestrator loop (0839): a persisted strategy
@@ -837,6 +841,17 @@ export const SYSTEM_EVENT_PRESENTERS: Record<SystemEventName, SystemEventPresent
             return `[fleet] write slot ${change ?? 'changed'}${holder !== undefined ? ` — ${holder}` : ''}`;
         },
         outcome: unsupported,
+    },
+    'agent.lifecycle.changed': {
+        description:
+            'A fleet member reported its lifecycle state through a host hook (G73): working, idle, or blocked on a human (a permission prompt).',
+        fields: [field('member', 'Member'), field('state', 'State'), field('seq', 'Sequence')],
+        summary: ({ data }) => {
+            const member = s(data, 'member');
+            const state = s(data, 'state');
+            return member !== undefined ? `[agent] ${member} \u00b7 ${state ?? 'state'}` : '[agent] lifecycle changed';
+        },
+        outcome: { support: 'derived', derive: ({ data }) => s(data, 'state') },
     },
     'agent.message.sent': {
         description: 'A message was sent to an agent, reporting delivery success.',

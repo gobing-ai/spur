@@ -22,6 +22,16 @@ export {
 export { InboxRecentDao, type InboxRecentRow } from './inbox-recent-dao';
 export { InboxUnfinishedDao, type InboxUnfinishedRow } from './inbox-unfinished-dao';
 export {
+    AGENT_LIFECYCLE_EVENT,
+    MEMBER_LIFECYCLE_STATES,
+    type MemberLifecycleObservation,
+    type MemberLifecycleState,
+    type RecordLifecycleInput,
+    type RecordLifecycleResult,
+    readLifecycle,
+    recordLifecycle,
+} from './member-lifecycle';
+export {
     MEMBER_SESSION_EVENT,
     MEMBER_SESSION_MODES,
     MEMBER_SESSION_RESET_EVENT,

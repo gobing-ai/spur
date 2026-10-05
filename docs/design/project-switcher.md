@@ -2,7 +2,7 @@
 kind: design
 title: "Project switcher — system design (feature K1)"
 created_at: 2026-07-29
-updated_at: 2026-10-04
+updated_at: 2026-10-05
 related: [K1]
 tags: [system, K1, web, server]
 doc: design/project-switcher
@@ -215,7 +215,9 @@ GET /api/project/fleet   (0840)
 → { "path": string|null, "enabled": boolean,
     "strategy": { "name": "rest"|"gtd", "version": number }|null,
     "orchestrator": { "state": "bound-online"|"bound-offline"|"missing"|"unresolvable", "instanceId"?, "holderId"?, "reason"? },
-    "members": [{ "instanceId", "role"?, "executor", "model"?, "enabled", "writeCapable", "capabilityState" }],
+    "members": [{ "instanceId", "role"?, "executor", "model"?, "enabled", "writeCapable", "capabilityState",
+                  "session"?: { "mode": "persistent"|"resume"|"one-shot", "id"? },
+                  "lifecycle"?: { "state": "working"|"idle"|"blocked", "seq", "at" } }],
     "capacity": { "total", "enabled", "writeCapable", "missing": string[] } }
 ```
 
@@ -275,6 +277,12 @@ Optional later: `POST /api/projects/stop` (CLI covers stop for v1).
   exits. CLI senders persist metadata-only events; managed invocations flush the existing ledger.
   `--poll` remains the backstop, idle holds are recorded on change, and undeclared projects retain
   legacy queue consumption. Idle wakes make no model call.
+- A member whose newest accepted lifecycle row is `blocked` (`spur agent report`, 1080) is
+  unavailable: selection skips it with the `member-blocked` hold reason while its siblings stay
+  eligible. The fleet snapshot carries `lifecycle`, which the Board renders as `needs human`.
+- Guest occupants (1081, ADR-121 A2) live outside the declaration: role/executor resolution counts
+  declared members only, a guest is refused as a stage target, and its `guest:<id>` write claim is
+  held only by its own heartbeat (released by `spur agent leave` or the shared lease TTL).
 
 ### Request envelope (0841)
 

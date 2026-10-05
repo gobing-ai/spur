@@ -386,14 +386,28 @@ export class PidObservingProcessExecutor extends NodeProcessExecutor {
  */
 export class RolePropagatingProcessExecutor extends PidObservingProcessExecutor {
     private roleEnv = '';
+    private specIdEnv = '';
 
     /** Set the role stamped into subsequent spawns; undefined strips. */
     setRoleEnv(role: string | undefined): void {
         this.roleEnv = role ?? '';
     }
 
+    /**
+     * Set the occupant spec id stamped into subsequent spawns (G73 R4, task 1080);
+     * undefined strips. A drained `svc.run` member otherwise carries no fleet identity —
+     * the supervisor path stamps persistent members, and this is the same stamp for a
+     * member dispatched through `spur agent run --spec <id>`.
+     */
+    setSpecIdEnv(specId: string | undefined): void {
+        this.specIdEnv = specId ?? '';
+    }
+
     override async run(options: ProcessOptions): Promise<ProcessResult> {
-        return super.run({ ...options, env: { ...options.env, SPUR_ROLE: this.roleEnv } });
+        return super.run({
+            ...options,
+            env: { ...options.env, SPUR_ROLE: this.roleEnv, SPUR_SPEC_ID: this.specIdEnv },
+        });
     }
 }
 
@@ -1295,6 +1309,11 @@ export class AgentService {
         // supervisor-process-shared-generation refinement is handoff 0530; Wave 1
         // only needs an addressable, monotonic pin (ponytail: one source of truth).
         const specId = stringFlag(flags, 'spec-id', '');
+        // G73 R4 (1080): the report hooks read SPUR_SPEC_ID from the child env, so a
+        // spec-id-addressed run stamps it here — the same seam as SPUR_ROLE above, and the
+        // only place a drained `svc.run` member learns its fleet identity (the supervisor
+        // path stamps persistent members; this covers everyone else).
+        dispatchExecutor.setSpecIdEnv(specId);
         const coordinationRunId = runCorrelation.runId;
         // 1076 R3 (ADR-132): the lineage edge. A workflow dispatch names its parent in the
         // request key (`<runId>/<state>`, set by `drainIntoPrompt`); a nested agent run inherits

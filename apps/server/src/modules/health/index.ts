@@ -2,6 +2,7 @@ import { homedir } from 'node:os';
 import { basename, join, relative, resolve } from 'node:path';
 import {
     DeliveryReconciler,
+    FleetGuestService,
     FleetService,
     isPortLive,
     normalizeProjectPath,
@@ -475,6 +476,18 @@ export const healthModule: ServerModule = {
 
             const db = await openDb();
             const unresolved = await new DeliveryReconciler({ getDb: openDb }).classify(instanceId);
+            // G73 R2 (1081): the same reconciler pass retires expired guest occupants — their
+            // claimed messages return to `queued` and their rows are marked exited, so nothing
+            // stays stranded behind a session that stopped pulling.
+            try {
+                await new FleetGuestService({
+                    cwd: ctx.cwd,
+                    fs: ctx.fs ?? createNodeFileSystem(ctx.cwd),
+                    getDb: openDb,
+                }).expire();
+            } catch {
+                // Guest expiry is housekeeping — never fail the requests view over it.
+            }
             const reasonByMessage = new Map(unresolved.map((u) => [u.messageId, u.reason]));
             const runs = new CoordinationRunDao(db);
             // Strategy holds, keyed by wbs, joined onto the request's task id

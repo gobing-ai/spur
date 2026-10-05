@@ -2,10 +2,10 @@
 doc: 04_DESIGN
 owns: SURFACE — index of non-UI CLI, API, config, schema and boundary contracts
 authority: derived
-version: 1.90.0
+version: 1.91.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
-updated_at: 2026-10-04
+updated_at: 2026-10-05
 read_before: changing a command, flag, env var, or schema
 edit_rules: 99 §6.5
 sync: [T3, T9]
@@ -141,7 +141,11 @@ See [contract detail](design/cli-contracts.md#spur-agent-doctor-agent---json---p
 
 See [contract detail](design/cli-contracts.md#spur-agent-usage---dry-run---source-name---json---json-envelope).
 
-#### `spur agent wait [<specId>] [--role <name>] [--run <runId>] [--until <state>...] [--timeout <ms>] [--json]` · `spur message send (--to <id>|--role <name>) <body> [--from <id>] [--wait] [--until injected|invoke-exit] [--timeout <ms>] [--json]`
+#### `spur agent report --state <working|idle|blocked> --seq <ns> [--spec <id>] [--json]` · `spur agent join --role <name> [--id <id>] [--session-id <sid>] [--pid <n>] [--executor <name>] [--json]` · `spur agent leave [<id>] [--session-id <sid>] [--json]`
+
+See [contract detail](design/cli-contracts.md#spur-agent-report---state-workingidleblocked---seq-ns---spec-id---json--spur-agent-join---role-name---id-id---session-id-sid---pid-n---executor-name---json--spur-agent-leave-id---session-id-sid---json).
+
+#### `spur agent wait [<specId>] [--role <name>] [--run <runId>] [--until <state>...] [--inbox <id>] [--timeout <ms>] [--json]` · `spur message send (--to <id>|--role <name>) <body> [--from <id>] [--wait] [--until injected|invoke-exit] [--timeout <ms>] [--json]`
 
 See [contract detail](design/cli-contracts.md#spur-agent-wait-specid---role-name---run-runid---until-state---timeout-ms---json--spur-message-send---to-id--role-name-body---from-id---wait---until-injectedinvoke-exit---timeout-ms---json).
 

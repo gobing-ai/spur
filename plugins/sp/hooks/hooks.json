@@ -1,5 +1,5 @@
 {
-    "description": "Spur (sp) plugin hooks — task corpus write protection + indexed-context token-ledger tracking.",
+    "description": "Spur (sp) plugin hooks — task corpus write protection + indexed-context token-ledger tracking + fleet lifecycle reporting.",
     "hooks": {
         "PreToolUse": [
             {
@@ -32,6 +32,50 @@
                         "type": "command",
                         "command": "superskill hook run sp context-session-start",
                         "timeout": 15
+                    },
+                    {
+                        "type": "command",
+                        "command": "superskill hook run sp agent-lifecycle",
+                        "timeout": 5
+                    }
+                ]
+            }
+        ],
+        "UserPromptSubmit": [
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "superskill hook run sp agent-lifecycle",
+                        "timeout": 5
+                    }
+                ]
+            }
+        ],
+        "Notification": [
+            {
+                "matcher": "permission_prompt",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "superskill hook run sp agent-lifecycle",
+                        "timeout": 5
+                    }
+                ]
+            }
+        ],
+        "Stop": [
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "superskill hook run sp agent-lifecycle",
+                        "timeout": 5
+                    },
+                    {
+                        "type": "command",
+                        "command": "superskill hook run sp fleet-guest-stop",
+                        "timeout": 10
                     }
                 ]
             }

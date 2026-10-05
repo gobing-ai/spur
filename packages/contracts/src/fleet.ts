@@ -19,6 +19,20 @@ export const memberSessionSchema = z.object({
 /** Member session DTO inferred from the public schema. */
 export type MemberSession = z.infer<typeof memberSessionSchema>;
 
+/**
+ * A fleet member's reported lifecycle state (G73 / task 1080): `blocked` means the
+ * member is waiting on a human (a permission prompt), which makes it unavailable to
+ * the dispatch strategy. `seq` is the hook's monotonic report sequence.
+ */
+export const memberLifecycleSchema = z.object({
+    state: z.enum(['working', 'idle', 'blocked']),
+    seq: z.number(),
+    at: z.string(),
+});
+
+/** Member lifecycle DTO inferred from the public schema. */
+export type MemberLifecycle = z.infer<typeof memberLifecycleSchema>;
+
 /** One fleet member row in the project fleet snapshot. */
 export const fleetMemberSchema = z.object({
     instanceId: z.string(),
@@ -29,6 +43,7 @@ export const fleetMemberSchema = z.object({
     writeCapable: z.boolean(),
     capabilityState: z.string(),
     session: memberSessionSchema.optional(),
+    lifecycle: memberLifecycleSchema.optional(),
 });
 
 /** Project fleet snapshot (the wire shape of GET /project/fleet, 0840 + 0897). */

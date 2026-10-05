@@ -119,9 +119,29 @@ afterAll(() => {
 // ─── Registration ────────────────────────────────────────────────────────
 
 describe('guard-extension — registration', () => {
-    test('registers all four event handlers', () => {
-        for (const event of ['tool_call', 'tool_result', 'session_start', 'session_shutdown']) {
+    test('registers all six event handlers', () => {
+        for (const event of [
+            'tool_call',
+            'tool_result',
+            'session_start',
+            'session_shutdown',
+            'agent_start',
+            'agent_settled',
+        ]) {
             expect(handlers[event]).toBeDefined();
+        }
+    });
+
+    test('agent_start / agent_settled are no-ops outside a fleet (G73 R4)', async () => {
+        // No SPUR_SPEC_ID in this process → the shared core makes no CLI call, and the
+        // handler must still resolve without throwing.
+        const prev = getEnvVar('SPUR_SPEC_ID');
+        removeEnvVar('SPUR_SPEC_ID');
+        try {
+            await handlers.agent_start?.({}, makeCtx());
+            await handlers.agent_settled?.({}, makeCtx());
+        } finally {
+            if (prev !== undefined) setEnvVar('SPUR_SPEC_ID', prev);
         }
     });
 });
