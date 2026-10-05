@@ -1,0 +1,94 @@
+{
+    "schemaVersion": 1,
+    "generatedAt": "2026-10-05T22:19:46.549Z",
+    "projectPath": "/private/var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/spur-fleet-e2e-1791238237220",
+    "ids": {
+        "planner": "spur-fleet-e2e-1791238237220-planner-1",
+        "coder": "spur-fleet-e2e-1791238237220-coder-1",
+        "feature": "A",
+        "wbs": "0001",
+        "replyMessage": "66f120eb-93b1-432b-90f2-e36fe8eced9e"
+    },
+    "steps": [
+        {
+            "step": "scaffold",
+            "command": "git init + spur self init + agent.fleet + PATH stub + strategy reconcile",
+            "exitCode": 0,
+            "status": "passed",
+            "assertion": "a scratch project scaffolds with a declared agent.fleet (gtd, planner-1 orchestrator, coder-1 member), the project strategy row reconciled to gtd, and a PATH stub named after the member agent type",
+            "evidence": "scratch=/private/var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/spur-fleet-e2e-1791238237220 | fleet=spur-fleet-e2e-1791238237220-planner-1, spur-fleet-e2e-1791238237220-coder-1 | strategy=gtd v1 | stub=/private/var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/spur-fleet-e2e-1791238237220/bin/claude (PATH first)"
+        },
+        {
+            "step": "create-task",
+            "command": "spur task create + task update (0001, tags fleet:auto)",
+            "exitCode": 0,
+            "status": "passed",
+            "assertion": "a fleet:auto task is created through the source-local CLI and promoted to todo with a passing `task check --as wip` readiness gate",
+            "evidence": "wbs=0001 status=todo tags=fleet:auto feature=A readiness=task check --as wip PASS"
+        },
+        {
+            "step": "start-loops",
+            "command": "spur agent loop --spec spur-fleet-e2e-1791238237220-planner-1 | --spec spur-fleet-e2e-1791238237220-coder-1",
+            "exitCode": 0,
+            "status": "passed",
+            "assertion": "the planner and coder loops attach: a live orchestrator claim and a recorded fleet member session, with the stub first on PATH",
+            "evidence": "pids=37303,37304 (stub first on PATH) orchestrator claim live member session recorded"
+        },
+        {
+            "step": "dispatch-to-done",
+            "command": "spur task show 0001 --json (poll)",
+            "exitCode": 1,
+            "status": "failed",
+            "assertion": "one keyed dispatch fleet:task:<wbs>:1 reaches the coder member, the member process runs the turn, and the task ends done",
+            "evidence": "error: timed out after 120000ms waiting for task 0001 to reach done"
+        },
+        {
+            "step": "orchestrator-reply",
+            "command": "spur message send --to planner \"status?\"",
+            "exitCode": 1,
+            "status": "failed",
+            "assertion": "an operator 'status?' message to the orchestrator is drained by the orchestrator loop and answered in the operator inbox",
+            "evidence": "error: timed out after 180000ms waiting for the orchestrator reply in the operator inbox"
+        },
+        {
+            "step": "kill-redispatch",
+            "command": "kill coder loop; spur message send --continue",
+            "exitCode": 1,
+            "status": "failed",
+            "assertion": "a coder loop killed mid-turn (run errored, message delivered) is restarted and the task is resumed through the real `spur message send <...> --continue` CLI path, with the stub's next directive for the wbs carrying --continue. NOT proven: strategy auto-retry of a drained turn (residual risk strategy-retry-unreachable)",
+            "evidence": "error: timed out after 240000ms waiting for the hung first turn"
+        },
+        {
+            "step": "guest-join",
+            "command": "spur agent join --role reviewer --id reviewer-g → agent wait --inbox → message reply → agent leave",
+            "exitCode": 0,
+            "status": "passed",
+            "assertion": "a joined guest occupant (agent join --role) pulls a dispatched review request through agent wait --inbox and its reply lands in the operator inbox",
+            "evidence": "guest=reviewer-g request=7f42cdbf-1901-4584-8f50-69c730711ea9 pending=1 reply=b0f8b05e-b09d-4e97-93c4-8343fb96b0b3 left=reviewer-g"
+        },
+        {
+            "step": "trace",
+            "command": "spur agent trace null --json",
+            "exitCode": 0,
+            "status": "passed",
+            "assertion": "spur agent trace resolves the execution record of the dispatched turn: an agent node whose durable stream exists with content, over a loop-free lineage",
+            "evidence": "root=778abc5c-f1fb-4f2b-8290-515cb1cf40ae nodes=1 node=agent/errored stream=/private/var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/spur-fleet-e2e-1791238237220/.spur/memory/runs/778abc5c-f1fb-4f2b-8290-515cb1cf40ae.md lines=11 sessionIds=[] parentRunId=null"
+        },
+        {
+            "step": "teardown",
+            "command": "kill loop pids + spur agent leave + rm -rf $TMPDIR/<scratch>",
+            "exitCode": 0,
+            "status": "passed",
+            "assertion": "loop pids are killed, the guest leaves, and the scratch dir under $TMPDIR is removed",
+            "evidence": "killed pids=37303,37304 | scratch kept at /private/var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/spur-fleet-e2e-1791238237220 (--keep) | problems=none"
+        }
+    ],
+    "residualRisks": [
+        {
+            "id": "strategy-dispatch-has-no-lineage-parent",
+            "summary": "A strategy dispatch records no parent run edge, so its execution record is a single-node lineage: the dispatch → member-turn depth of 2 requires the workflow dispatcher.",
+            "rootCause": "drainIntoPrompt sets parentRunId only from a workflow request key of the shape `<runId>/<state>` (apps/cli/src/commands/agent.ts:1391-1394); the strategy's `fleet:task:<wbs>:<n>` key is deliberately excluded, so the member turn is a lineage root (packages/app/src/services/agent-service.ts:1322-1326).",
+            "evidence": "the traced dispatch run reports parentRunId=null and nodes.length=1; its stream and status are still readable, which is what the step asserts."
+        }
+    ]
+}
