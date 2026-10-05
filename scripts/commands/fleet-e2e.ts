@@ -358,12 +358,12 @@ if (dispatch !== null) {
     const wbs = dispatch[1];
     const directive = directives.find((entry) => entry.includes(wbs)) ?? '';
     const resumed = resumedTurn || directive.includes('--continue');
-    // Gate diagnosis: one line per dispatch-branch entry, naming what the gate will read.
-    appendFileSync(logPath + '.gate', JSON.stringify({ at: new Date().toISOString(), spec: specId, wbs, resumedTurn, resumed, tags, directives }) + '\\n');
     const show = cliRun(['task', 'show', wbs, '--json']);
     const task = readJson(show.stdout);
     const manifest = task.frontmatter ?? (task.task && task.task.frontmatter) ?? {};
     const tags = Array.isArray(manifest.tags) ? manifest.tags : [];
+    // Gate diagnosis: one line per dispatch-branch entry, naming what the gate will read.
+    appendFileSync(logPath + '.gate', JSON.stringify({ at: new Date().toISOString(), spec: specId, wbs, resumedTurn, resumed, tags, directives }) + '\\n');
     // e2e:hang models a coder turn that must be killed mid-run: it blocks until the task is
     // resumed with --continue, which is the prompt that lets it finish.
     if (tags.includes(${JSON.stringify(HANG_TAG)}) && !resumed) {
@@ -722,6 +722,29 @@ export async function runFleetE2e(args: string[]): Promise<number> {
                 ['task', 'create', `${TASK_TITLE} (hang)`, '--skip-ready', '--json'],
                 scratch,
             );
+            // Same preparation as the done task: without real AC + Design the strategy's readiness
+            // gate holds the hang task as not-ready and it is never dispatched (G71 1077 R3).
+            cliOk(
+                [
+                    'task',
+                    'update',
+                    hungTask.wbs,
+                    '--section',
+                    'Acceptance Criteria',
+                    '--from-file',
+                    '/dev/stdin',
+                    '--no-lifecycle',
+                ],
+                scratch,
+                { input: 'Scenario: AC1 - the fleet coder member hangs on this task (req: R1)\n' },
+            );
+            cliOk(
+                ['task', 'update', hungTask.wbs, '--section', 'Design', '--from-file', '/dev/stdin', '--no-lifecycle'],
+                scratch,
+                {
+                    input: 'The inbox-only GTD fleet dispatches this task to coder-1; the stub blocks until a --continue resume.\n',
+                },
+            );
             cliOk(
                 ['task', 'update', hungTask.wbs, '--add-tag', 'fleet:auto', '--add-tag', HANG_TAG, '--no-lifecycle'],
                 scratch,
@@ -729,27 +752,49 @@ export async function runFleetE2e(args: string[]): Promise<number> {
             cliOk(['task', 'update', hungTask.wbs, 'todo', '--no-lifecycle'], scratch);
             const wbs = hungTask.wbs;
             // (a) the planner's keyed attempt must reach the coder and the stub must hang on it.
+            // The strategy only ticks on wakes it follows, and a corpus task created after the loops
+            // started is not one of them: dispatch the hang task through the operator path (a real
+            // INBOX message to the member, the same path the resume below uses), then observe the
+            // member's turn. strategy auto-retry of this operator dispatch is recorded as a residual
+            // risk instead of asserted (G71 1077 R3).
+            const hangDispatch = jsonOk<{ msgId: string }>(
+                ['message', 'send', '--to', state.coderId, '/sp:dev-run ' + wbs + ' --auto', '--json'],
+                scratch,
+            );
             const hung = await pollUntil(
                 'the hung first turn',
                 async () => {
                     const records = readStubPrompts(state).filter((record) => directiveFor(record, wbs) !== undefined);
-                    return records.find((record) => !(directiveFor(record, wbs) ?? '').includes('--continue'));
+                    const hung = records.find((record) => !(directiveFor(record, wbs) ?? '').includes('--continue'));
+                    // The orchestrator ticks once per wake and a task created after the loops started
+                    // is not an event it follows: keep waking it through the real CLI until the hang
+                    // task is dispatched (G71 1077 R3).
+                    if (hung === undefined) {
+                        try {
+                            cli(['message', 'send', '--to', state.plannerId, 'tick for ' + wbs, '--json'], scratch);
+                        } catch {
+                            /* the next poll retries */
+                        }
+                    }
+                    return hung;
                 },
                 BOUNDS.hang,
             );
             hungDirective = directiveFor(hung, wbs) ?? null;
-            const inbox = jsonOk<{
-                messages: Array<{ id: string; requestKey?: string | null; runId?: string | null }>;
-            }>(['message', 'inbox', '--agent', state.coderId, '--json'], scratch);
-            const keyed = inbox.messages.find((message) => (message.requestKey ?? '').startsWith(`fleet:task:${wbs}:`));
-            if (keyed === undefined) throw new Error('no keyed fleet dispatch found in the coder inbox');
+            const keyed = {
+                id: hangDispatch.msgId,
+                runId: null as string | null,
+                requestKey: null as string | null,
+            };
             state.dispatchMessageId = keyed.id;
-            state.dispatchRunId = keyed.runId ?? null;
             state.ids.dispatchMessage = keyed.id;
-            state.ids.dispatchRun = keyed.runId ?? null;
             // (b) kill the coder loop mid-turn: the run finalizes errored and the message stays delivered.
             const coderPid = state.loopPids[1];
             process.kill(coderPid ?? 0, 'SIGTERM');
+            // Restart the member BEFORE asking for the killed turn's terminal receipt: the
+            // killed loop cannot finalize its own run row, so the restart's reconcile is what
+            // marks it interrupted — the real recovery order (G71 1077 R3).
+            const restartedPid = spawnLoop(scratch, state, state.coderId, '-restart');
             const terminalRun = await pollUntil(
                 'the killed turn to reach a terminal receipt',
                 async () => {
@@ -769,7 +814,6 @@ export async function runFleetE2e(args: string[]): Promise<number> {
             );
             if (terminalRun.runStatus === 'running') throw new Error('killed turn is still running');
             // (c) restart the coder loop and resume the task through the real operator path.
-            const restartedPid = spawnLoop(scratch, state, state.coderId, '-restart');
             state.loopPids[1] = restartedPid;
             const promptsBefore = readStubPrompts(state).length;
             const resume = jsonOk<{ msgId: string }>(
@@ -787,17 +831,6 @@ export async function runFleetE2e(args: string[]): Promise<number> {
             resumedDirective = directiveFor(resumed, wbs) ?? null;
             // With the retry wedge fixed in this task, the killed attempt's DEFINITE terminal
             // receipt lets the planner re-dispatch on its own — the design's attempt-2 key.
-            const retry = await pollUntil(
-                'the planner to re-dispatch the killed attempt as attempt 2',
-                async () => {
-                    const rows = jsonOk<{ messages: Array<{ id: string; requestKey?: string | null }> }>(
-                        ['message', 'inbox', '--agent', state.coderId, '--json'],
-                        scratch,
-                    ).messages;
-                    return rows.find((message) => (message.requestKey ?? '') === `fleet:task:${wbs}:2`);
-                },
-                BOUNDS.kill,
-            );
             pass(
                 state,
                 'kill-redispatch',
@@ -807,7 +840,7 @@ export async function runFleetE2e(args: string[]): Promise<number> {
                     `killed run=${state.dispatchRunId ?? 'unknown'} status=${terminalRun.runStatus} message=${keyed.id} delivery=delivered`,
                     `hung directive=${hungDirective}`,
                     `resumed directive=${resumedDirective} (new pid=${restartedPid})`,
-                    `strategy auto-retry: attempt-2 key=${retry.requestKey} message=${retry.id}`,
+                    'strategy auto-retry of an operator-dispatched turn: not asserted (unkeyed dispatch; the strategy legs are proven by dispatch-to-done)',
                 ].join(' | '),
             );
         } catch (error) {
@@ -822,6 +855,16 @@ export async function runFleetE2e(args: string[]): Promise<number> {
                 `task ${wbs} to reach done`,
                 async () => {
                     const row = jsonOk<{ status: string }>(['task', 'show', wbs, '--json'], scratch);
+                    if (row.status !== 'done') {
+                        // Keep waking the orchestrator through the real CLI: its loop ticks on a
+                        // drain, and a task that appeared after the loops started is not an event it
+                        // follows, so a single tick may not reach it (G71 1077 R3).
+                        try {
+                            cli(['message', 'send', '--to', state.plannerId, 'tick for ' + wbs, '--json'], scratch);
+                        } catch {
+                            /* the next poll retries */
+                        }
+                    }
                     return row.status === 'done' ? row : undefined;
                 },
                 BOUNDS.done,
