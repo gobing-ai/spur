@@ -4,11 +4,11 @@ name: Start or resume a workflow run from a chosen state
 status: done
 template: feature-impl
 created_at: 2026-10-04T06:57:19.805Z
-updated_at: "2026-10-05T22:23:18.805Z"
+updated_at: "2026-10-05T22:47:23.594Z"
 feature_id: D6
 
 done_forced: "false"
-done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new/.spur/memory/evidence/1072-verdict.json
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1072-verdict.json
 ---
 
 ## 1072. Start or resume a workflow run from a chosen state
