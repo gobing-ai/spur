@@ -322,7 +322,7 @@ END`;var MEASURE_COLS="messages, tool_calls, skill_calls, fresh_input_tokens, ca
         ''
     )
     ELSE ''
-END`;var POST_WATERMARK_TABLES=[...KEYED_ROLLUP_TABLES,...GLOBAL_RANKED_ROLLUP_TABLES,"history_daily_stats","history_board_source_daily"];var HISTORY_IMPORT_SCHEMA_VERSION="0.5.14",HISTORY_IMPORT_SCHEMA_SQL=`
+END`;var POST_WATERMARK_TABLES=[...KEYED_ROLLUP_TABLES,...GLOBAL_RANKED_ROLLUP_TABLES,"history_daily_stats","history_board_source_daily"];var HISTORY_IMPORT_SCHEMA_VERSION="0.5.15",HISTORY_IMPORT_SCHEMA_SQL=`
 CREATE TABLE IF NOT EXISTS history_import_checkpoint (
     source TEXT NOT NULL,
     source_file TEXT NOT NULL,
@@ -528,6 +528,26 @@ CREATE TABLE IF NOT EXISTS action_runs (
     updated_at INTEGER NOT NULL DEFAULT 0,
     FOREIGN KEY (run_id) REFERENCES runs(id)
 );
+
+CREATE TABLE IF NOT EXISTS workflow_branches (
+    id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL,
+    parallel_node TEXT NOT NULL,
+    branch_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    node TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    completed_at TEXT,
+    duration_ms INTEGER,
+    output_vars_json TEXT,
+    error TEXT,
+    created_at INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (run_id) REFERENCES runs(id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_workflow_branches_run_branch
+    ON workflow_branches (run_id, parallel_node, branch_id);
 `.trim(),WORKFLOW_ENGINE_MIGRATIONS_SQL=`
 ALTER TABLE runs ADD COLUMN owner_attempt TEXT;
 ALTER TABLE runs ADD COLUMN owner_pid INTEGER;
