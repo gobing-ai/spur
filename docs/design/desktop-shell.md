@@ -86,3 +86,9 @@ The same binary directories carry the CLI package manifest and `schemas/` so pac
 references validate without a node_modules tree. Existing embedded-schema resolution keeps precedence.
 
 History-refresh child launches carry executable and leading arguments as an argv array, preserving spaces in app installation paths. On Windows, inherited database overrides and controlled HOST/PORT variants are removed case-insensitively. Headless smoke always stops its child before removing the temporary project, including failed health assertions.
+
+**Manual smoke runs must isolate the project registry.** `apps/desktop/scripts/smoke-serve.ts` sets `SPUR_PROJECTS_FILE` itself, but an ad-hoc native or packaged launch (`dist/desktop/*.app`, a staged `spur-server`) on a scratch project root has nothing to do it: the server upserts that root into the operator's `~/.config/spur/projects.json`, and `refreshProjects` can never prune it afterwards because the directory still exists. Export a disposable registry before launching:
+
+```bash
+SPUR_PROJECTS_FILE="$(mktemp -d)/projects.json" bun run --filter @gobing-ai/spur-desktop dev
+```

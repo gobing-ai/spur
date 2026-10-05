@@ -1,0 +1,7 @@
+# Workspace-local test config (task 1089 R5, mirroring apps/cli/bunfig.toml's 0699 R3
+# precedent): the shared preload is reachable only from the root bunfig, so
+# `cd apps/server && bun test` — the run AGENTS.md prescribes — resolved the operator's
+# real ~/.config/spur and appended every throwaway serve root to projects.json.
+# Coverage stays gated by the root bunfig (bun run test).
+[test]
+preload = ["../../tests/setup.ts"]

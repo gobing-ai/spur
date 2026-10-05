@@ -21,7 +21,9 @@
  *      where a same-status `done → done` is a no-op result and a forced
  *      non-PASS override is remembered for the audit-trail write,
  *   4. `updateStatus`,
- *   5. best-effort `done_forced`/`done_reason` frontmatter audit fields.
+ *   5. best-effort `done_forced`/`done_reason` frontmatter audit fields (the unforced
+ *      close reason records the accepted artifact **relative to the project root**
+ *      — 1089 R2).
  *
  * The CLI remains responsible for its operator-facing transport concerns
  * (adapter availability decision, stderr warnings, history-refresh trigger,
@@ -30,6 +32,7 @@
  * `tasks.show`/`updateStatus` (0966 Q&A) rather than a guard denial.
  */
 
+import { dirname, isAbsolute, relative } from 'node:path';
 import { normalizeTaskStatus } from '@gobing-ai/spur-domain';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { GuardDeniedError } from '../errors';
@@ -194,6 +197,26 @@ export async function reconcileDoneCloseAudit(
 }
 
 /**
+ * Record the accepted verdict artifact relative to the project root (1089 R2).
+ *
+ * `done_reason` is tracked corpus, so an absolute path commits one machine's home
+ * directory into the tracked task files and stops resolving the moment that tree is
+ * removed (a `--worktree` close wrote `PASS artifact at /Users/<someone>/<worktree>/
+ * .spur/memory/evidence/<wbs>-verdict.json`, and the worktree is deleted on the
+ * success path). The project root is the tree
+ * that owns `.spur/run` — `dirname(dirname(runDir))`, the same derivation
+ * `done-transition-guard.ts` uses for the evidence dir. An artifact outside that
+ * root (a foreign evidence dir) is recorded as-is rather than mangled into a
+ * `../..` walk.
+ */
+export function projectRelativeArtifactPath(runDir: string, artifactPath: string): string {
+    const root = dirname(dirname(runDir));
+    const rel = relative(root, artifactPath);
+    if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) return artifactPath;
+    return rel;
+}
+
+/**
  * Run one guarded task-status transition: structural check gate (testing/done)
  * → verify-verdict gate (done) → status write → close-audit reconciliation.
  *
@@ -285,7 +308,9 @@ export async function transitionTaskGuarded(
         closeAuditError = await reconcileDoneCloseAudit(deps.tasks, wbs, {
             forced: forced !== undefined,
             ...(forced !== undefined ? { reason: input.reason } : {}),
-            ...(forced === undefined && doneArtifactPath !== undefined ? { passArtifactPath: doneArtifactPath } : {}),
+            ...(forced === undefined && doneArtifactPath !== undefined
+                ? { passArtifactPath: projectRelativeArtifactPath(deps.runDir, doneArtifactPath) }
+                : {}),
         });
     }
 

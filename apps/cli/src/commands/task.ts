@@ -1024,9 +1024,19 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                         const ws = new PlanningWriteService({ fs: context.fs, emitter: makePlanningEmitter(context) });
                         await ws.updateSection(ref, section, newBody);
                     },
+                    // 1089 R3: the `done_reason` rule writes frontmatter, not a body
+                    // section, so it needs the sibling write path.
+                    writeField: async (filePath, wbs, key, value) => {
+                        const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder: dirname(filePath) };
+                        const ws = new PlanningWriteService({ fs: context.fs, emitter: makePlanningEmitter(context) });
+                        await ws.updateFrontmatter(ref, key, value);
+                    },
                 });
                 const qualified = report.fileReports.flatMap((r) =>
                     r.qualified.map((q) => `${r.wbs}: \`${q.raw}\` → \`${q.newPath}:${q.lineSpec}\``),
+                );
+                const reasons = report.fileReports.flatMap((r) =>
+                    r.doneReasons.map((d) => `${r.wbs}: "${d.from}" → "${d.to}"`),
                 );
                 const ambiguous = report.fileReports.flatMap((r) =>
                     r.ambiguous.map((a) => `${r.wbs}: ${a.cited} → candidates: ${a.candidates.join(', ')}`),
@@ -1037,7 +1047,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                 if (options.json) {
                     context.output.write(
                         toEnvelopeJson(
-                            { ok: true, dryRun, qualified, ambiguous, skipped, ...report },
+                            { ok: true, dryRun, qualified, reasons, ambiguous, skipped, ...report },
                             { enveloped: options.jsonEnvelope },
                         ),
                     );
@@ -1051,6 +1061,9 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                         'Rewrites:',
                         ...(qualified.length ? qualified : ['  none']),
                         '',
+                        'Done-reason rewrites (absolute → repo-relative):',
+                        ...(reasons.length ? reasons : ['  none']),
+                        '',
                         'Ambiguous (reported, not rewritten):',
                         ...(ambiguous.length ? ambiguous : ['  none']),
                         '',
@@ -1061,6 +1074,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                 } else {
                     context.output.write(
                         `Anchor qualification apply complete — ${report.filesModified} file(s) modified` +
+                            (reasons.length ? `, ${reasons.length} done_reason rewrite(s)` : '') +
                             (skipped.length
                                 ? `, ${skipped.length} skipped (unwritable):\n  ${skipped.join('\n  ')}`
                                 : '.'),
