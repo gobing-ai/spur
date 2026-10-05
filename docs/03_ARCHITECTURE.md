@@ -53,7 +53,7 @@ Runtime ownership (manifests also include build and test dependencies):
 apps/cli ────► packages/{app, config, contracts, domain} + engine/runtime facades
 apps/server ─► packages/{app, config, contracts, domain} + engine/runtime facades
 apps/web ────► packages/contracts (oRPC) + domain status vocabulary
-apps/desktop ► child `spur serve` + config gateway + type-only process DTOs — no server, domain, or SQLite import
+apps/desktop ► verified project server or child `spur serve` + config gateway + type-only process DTOs — no server, domain, or SQLite import
 packages/app ───► packages/{config, contracts, domain} + engine packages
 packages/domain ► @gobing-ai/ts-db (persistence owner — §8.1)
 ```
@@ -164,11 +164,11 @@ root; `src/worker-app.ts` is the Worker-safe HTTP root. The Worker graph must no
 ### Desktop shell (`apps/desktop`)
 
 The Electron app is a window around the existing Board. It does not import the server, open
-SQLite, or ship a second UI build. In development it takes a free loopback port and spawns
+SQLite, or ship a second UI build. It first discovers a live project owner’s loopback listener and verifies Spur health, the canonical project path and the unchanged ownership claim. Shared servers and their agents remain alive on desktop quit. With no live owner, in development it takes a free loopback port and spawns
 `bun apps/cli/src/index.ts serve --host 127.0.0.1 --port <port> --no-open --cwd <projectRoot>`.
 Packaged builds spawn the compiled `spur` binary the same way, or `dist/server/spur-server` with
 `PORT` and `HOST` when that CLI binary is absent. Web assets stay on the server's
-`resolveWebDistPath` search (a sibling `web/` directory next to the shipped binary). The child is
+`resolveWebDistPath` search (a sibling `web/` directory next to the shipped binary). The selected server is
 the only SQLite owner (`<projectRoot>/.spur/spur.db`). Renderer IPC goes through the preload
 bridge; the page has Node integration disabled. A desktop drag strip turns on only when the
 preload sets `html[data-spur-desktop]`, so the browser and Cloudflare boards are unchanged.

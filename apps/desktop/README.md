@@ -1,6 +1,6 @@
 # Spur desktop
 
-Thin Electron shell around the existing Board. The window loads `http://127.0.0.1:<port>/board` from a **child** Spur server. This process does not import `@gobing-ai/spur-server`, does not call `startServer`, and does not open SQLite. The child is the only database owner, at `<projectRoot>/.spur/spur.db` (`DATABASE_URL` is stripped from the child environment so a parent shell cannot point it elsewhere).
+Thin Electron shell around the existing Board. The window loads `/board` from a verified existing project server, or starts a child Spur server when the project has no live owner. This process does not import `@gobing-ai/spur-server`, does not call `startServer`, and does not open SQLite. The server is the only database owner, at `<projectRoot>/.spur/spur.db` (`DATABASE_URL` is stripped from the child environment so a parent shell cannot point it elsewhere).
 
 Renderer IPC goes through `src/preload.ts` (`contextIsolation`, no Node in the page). A frameless drag strip in the Board sidebar activates only when the preload sets `html[data-spur-desktop]`, so the browser and Cloudflare boards stay unchanged.
 
@@ -15,7 +15,7 @@ bun run --filter @gobing-ai/spur-web build
 bun run desktop:dev
 ```
 
-`desktop:dev` compiles the shell and runs Electron. The child command is:
+`desktop:dev` compiles the shell and runs Electron. When no live project owner exists, the child command is:
 
 ```text
 bun apps/cli/src/index.ts serve --host 127.0.0.1 --port <free> --no-open --cwd <projectRoot>
@@ -27,7 +27,7 @@ The default project root is this checkout. Point it at another project with `SPU
 SPUR_PROJECT_ROOT=/path/to/project bun run desktop:dev
 ```
 
-`bun` must be on `PATH`, or set `BUN_PATH` (relative paths resolve from the launch directory). Quit kills the child (SIGTERM, then SIGKILL), including a quit during the health wait before the child handle is published. A second launch focuses the existing window instead of opening another database.
+`bun` must be on `PATH`, or set `BUN_PATH` (relative paths resolve from the launch directory). Quit leaves a shared server and its agents running. For a server started by the desktop, quit kills the child (SIGTERM, then SIGKILL), including a quit during the health wait before the child handle is published. A second launch focuses the existing window instead of opening another database.
 
 ## Prod
 
@@ -45,8 +45,8 @@ SPUR_DESKTOP_MODE=prod SPUR_PROJECT_ROOT=/path/to/project bun run desktop:start
 On Windows and Linux the frameless window uses `titleBarOverlay` (36px). The Board reserves `env(titlebar-area-height)` across the whole layout and limits the drag region to `env(titlebar-area-width)`. macOS keeps the sidebar drag strip for the hidden title bar.
 
 Opening the packaged app from Finder prompts for a project folder when no `--project` or
-`SPUR_PROJECT_ROOT` is supplied. Cancelling exits without starting a server. Unexpected server
-exits show an error and close the shell; reopen it to restart.
+`SPUR_PROJECT_ROOT` is supplied. Cancelling exits without starting a server. Unexpected owned-child
+exits show an error and close the shell; reopen it to restart. A shared server remains managed by its original launcher.
 
 ## Smoke
 
@@ -64,4 +64,4 @@ bun run --filter @gobing-ai/spur-desktop smoke:serve
 
 Electron itself needs a display. On Linux without one, `xvfb-run -a bun run desktop:dev` is the manual check; CI for this package is the headless smoke above.
 
-The installed builder is pinned in the lockfile. A selected project with an existing live registered server is refused before database boot. Windows quit uses the private parent JSON IPC channel for graceful drain/deregistration; forced termination remains the timeout fallback.
+The installed builder is pinned in the lockfile. A live project owner is discovered through its process listeners and verified through `/api/health` and `/api/project`, including IPv6 loopback and symlink project paths. This does not depend on the registry port. Redirects or mismatched identities are refused; discovery errors leave the owner running. macOS uses its system `lsof`; Linux requires `lsof` on PATH; Windows uses `netstat`. Windows quit uses the private parent JSON IPC channel for graceful drain/deregistration; forced termination remains the timeout fallback.

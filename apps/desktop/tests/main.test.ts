@@ -50,6 +50,7 @@ function stubSpawn(implementation?: typeof processes.startDesktopServer): void {
                     port: 1234,
                     url: 'http://127.0.0.1:1234',
                     kind: 'dev-cli',
+                    ownership: 'owned',
                     pid: 4242,
                     stop: async () => {
                         stops += 1;
@@ -154,6 +155,7 @@ test('a child returned after abort is stopped before quit', async () => {
             port: 1234,
             url: 'http://127.0.0.1:1234',
             kind: 'dev-cli',
+            ownership: 'owned',
             pid: 4242,
             stop: async () => {
                 stops += 1;

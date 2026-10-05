@@ -1,13 +1,27 @@
 import { describe, expect, test } from 'bun:test';
 import { getEventListeners } from 'node:events';
+import {
+    mkdirSync,
+    mkdtempSync,
+    readdirSync,
+    realpathSync,
+    rmdirSync,
+    rmSync,
+    symlinkSync,
+    unlinkSync,
+    writeFileSync,
+} from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { getEnvVars } from '@gobing-ai/spur-config';
 import type { DesktopLayout } from '../src/layout';
 import {
     DesktopStartupAborted,
     findFreePort,
+    findSharedServer,
+    listenerOrigins,
     nodeSpawner,
     type SpawnedChild,
     startDesktopServer,
@@ -237,7 +251,6 @@ describe('server process', () => {
 
     test('start kills the child when health never arrives or the binary is missing', async () => {
         const exited = fakeChild({ exitOnKill: false });
-        queueMicrotask(() => exited.emitExit(1, null));
         await expect(
             startDesktopServer({
                 layout: devLayout,
@@ -245,14 +258,18 @@ describe('server process', () => {
                 healthTimeoutMs: 500,
                 healthIntervalMs: 5,
                 killGraceMs: 10,
-                spawn: { spawn: () => exited },
+                spawn: {
+                    spawn: () => {
+                        queueMicrotask(() => exited.emitExit(1, null));
+                        return exited;
+                    },
+                },
             }),
         ).rejects.toThrow(/exited before/);
         expect(exited.exitCode).toBe(1);
 
         const missing = fakeChild({ exitOnKill: false });
         const error = Object.assign(new Error('spawn bun ENOENT'), { code: 'ENOENT' });
-        queueMicrotask(() => missing.emitError(error));
         await expect(
             startDesktopServer({
                 layout: devLayout,
@@ -260,12 +277,16 @@ describe('server process', () => {
                 healthTimeoutMs: 500,
                 healthIntervalMs: 5,
                 killGraceMs: 10,
-                spawn: { spawn: () => missing },
+                spawn: {
+                    spawn: () => {
+                        queueMicrotask(() => missing.emitError(error));
+                        return missing;
+                    },
+                },
             }),
         ).rejects.toThrow(/Install Bun/);
 
         const broken = fakeChild({ exitOnKill: false });
-        queueMicrotask(() => broken.emitError(new Error('boom')));
         await expect(
             startDesktopServer({
                 layout: devLayout,
@@ -273,7 +294,12 @@ describe('server process', () => {
                 healthTimeoutMs: 500,
                 healthIntervalMs: 5,
                 killGraceMs: 10,
-                spawn: { spawn: () => broken },
+                spawn: {
+                    spawn: () => {
+                        queueMicrotask(() => broken.emitError(new Error('boom')));
+                        return broken;
+                    },
+                },
             }),
         ).rejects.toThrow(/boom/);
     });
@@ -317,6 +343,228 @@ describe('server process', () => {
         controller.abort();
         await expect(pending).rejects.toBeInstanceOf(DesktopStartupAborted);
         expect(child.signals[0]).toBe('SIGTERM');
+    });
+});
+
+function sharedFixture(): { root: string; directory: string; marker: string; cleanup: () => void } {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), 'spur-desktop-share-')));
+    const directory = join(root, '.spur', 'server-owner.lock');
+    mkdirSync(directory, { recursive: true });
+    const marker = `${process.pid}-${crypto.randomUUID()}`;
+    writeFileSync(join(directory, marker), '');
+    return { root, directory, marker, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+}
+
+describe('shared project server', () => {
+    test('native listener parsing confines IPv4/IPv6 and wildcard probes to loopback and the owner PID', () => {
+        expect(
+            listenerOrigins(
+                'p42\nf1\ntIPv6\nn[::1]:3000\nf2\ntIPv4\nn127.0.0.1:4000\nf3\ntIPv6\nn*:5000\nf4\ntIPv4\nn*:6000\nf5\nn*:7000\nn10.0.0.1:8000\nn*:99999',
+                42,
+                'darwin',
+            ),
+        ).toEqual(['http://[::1]:3000', 'http://127.0.0.1:4000', 'http://[::1]:5000', 'http://127.0.0.1:6000']);
+        expect(
+            listenerOrigins(
+                'TCP [::]:3000 [::]:0 LISTENING 42\nTCP 127.0.0.1:3000 0.0.0.0:0 LISTENING 43\nTCP 0.0.0.0:4000 0.0.0.0:0 LISTENING 42',
+                42,
+                'win32',
+            ),
+        ).toEqual(['http://[::1]:3000', 'http://127.0.0.1:4000']);
+    });
+
+    test('IPv6 attachment through a symlink selects the same project and stop preserves the owner', async () => {
+        const fixture = sharedFixture();
+        const server = createServer((req, res) => {
+            res.setHeader('Content-Type', 'application/json');
+            res.end(
+                JSON.stringify(req.url === '/api/health' ? { status: 'ok', service: 'spur' } : { path: fixture.root }),
+            );
+        });
+        await new Promise<void>((resolve, reject) => {
+            server.once('error', reject);
+            server.listen(0, '::1', resolve);
+        });
+        const origin = `http://[::1]:${(server.address() as AddressInfo).port}`;
+        const link = join(fixture.root, 'alias');
+        symlinkSync(fixture.root, link, 'dir');
+        try {
+            const running = await startDesktopServer({
+                layout: { ...devLayout, projectRoot: link },
+                healthTimeoutMs: 1000,
+                inspectOwner: async () => [origin],
+                spawn: {
+                    spawn: () => {
+                        throw new Error('must not spawn');
+                    },
+                },
+            });
+            expect(running.ownership).toBe('shared');
+            expect(running.url).toBe(origin);
+            expect(running.pid).toBe(process.pid);
+            await running.stop();
+            await running.stop();
+            expect(readdirSync(fixture.directory)).toEqual([fixture.marker]);
+            expect((await fetch(`${origin}/api/health`)).status).toBe(200);
+        } finally {
+            await close(server);
+            fixture.cleanup();
+        }
+    });
+
+    test('wrong service, project, redirects and inspection failures never spawn a second owner', async () => {
+        const fixture = sharedFixture();
+        try {
+            for (const problem of ['service', 'project', 'redirect', 'inspection', 'remote']) {
+                let spawned = false;
+                await expect(
+                    startDesktopServer({
+                        layout: { ...devLayout, projectRoot: fixture.root },
+                        healthTimeoutMs: 10,
+                        inspectOwner: async () => {
+                            if (problem === 'inspection') throw new Error('cannot inspect');
+                            return [problem === 'remote' ? 'http://example.com:3000' : 'http://127.0.0.1:3000'];
+                        },
+                        fetchImpl: async (url, init) => {
+                            expect(init?.redirect).toBe('error');
+                            if (problem === 'redirect') throw new TypeError('redirect rejected');
+                            return Response.json(
+                                String(url).endsWith('/api/health')
+                                    ? { status: 'ok', service: problem === 'service' ? 'other' : 'spur' }
+                                    : { path: problem === 'project' ? '/other' : fixture.root },
+                            );
+                        },
+                        spawn: {
+                            spawn: () => {
+                                spawned = true;
+                                return fakeChild();
+                            },
+                        },
+                    }),
+                ).rejects.toThrow();
+                expect(spawned).toBe(false);
+                expect(readdirSync(fixture.directory)).toEqual([fixture.marker]);
+            }
+        } finally {
+            fixture.cleanup();
+        }
+    });
+
+    test('owner claim changes during the identity handshake refuse attachment', async () => {
+        const fixture = sharedFixture();
+        try {
+            await expect(
+                findSharedServer({
+                    projectRoot: fixture.root,
+                    timeoutMs: 30,
+                    inspect: async () => ['http://127.0.0.1:3000'],
+                    fetchImpl: async (url) => {
+                        if (String(url).endsWith('/api/health'))
+                            return Response.json({ status: 'ok', service: 'spur' });
+                        unlinkSync(join(fixture.directory, fixture.marker));
+                        writeFileSync(join(fixture.directory, `${process.pid}-${crypto.randomUUID()}`), '');
+                        return Response.json({ path: fixture.root });
+                    },
+                }),
+            ).rejects.toThrow(/ownership changed/);
+        } finally {
+            fixture.cleanup();
+        }
+    });
+
+    test('claim before bind retries discovery and cancellation preserves its claim', async () => {
+        const fixture = sharedFixture();
+        try {
+            let attempts = 0;
+            const found = await findSharedServer({
+                projectRoot: fixture.root,
+                timeoutMs: 1000,
+                inspect: async () => (++attempts === 1 ? [] : ['http://127.0.0.1:3000']),
+                fetchImpl: async (url) =>
+                    Response.json(
+                        String(url).endsWith('/api/health')
+                            ? { status: 'ok', service: 'spur' }
+                            : { path: fixture.root },
+                    ),
+            });
+            expect(found?.pid).toBe(process.pid);
+            expect(attempts).toBe(2);
+            const controller = new AbortController();
+            const pending = startDesktopServer({
+                layout: { ...devLayout, projectRoot: fixture.root },
+                signal: controller.signal,
+                inspectOwner: async () => {
+                    controller.abort();
+                    return [];
+                },
+                spawn: {
+                    spawn: () => {
+                        throw new Error('must not spawn');
+                    },
+                },
+            });
+            await expect(pending).rejects.toBeInstanceOf(DesktopStartupAborted);
+            expect(readdirSync(fixture.directory)).toEqual([fixture.marker]);
+        } finally {
+            fixture.cleanup();
+        }
+    });
+
+    test('malformed claims fail closed; dead claims remain untouched for server-owned recovery', async () => {
+        const fixture = sharedFixture();
+        try {
+            unlinkSync(join(fixture.directory, fixture.marker));
+            writeFileSync(join(fixture.directory, 'unknown'), '');
+            await expect(findSharedServer({ projectRoot: fixture.root, timeoutMs: 10 })).rejects.toThrow(/incomplete/);
+            unlinkSync(join(fixture.directory, 'unknown'));
+            const dead = `2147483647-${crypto.randomUUID()}`;
+            writeFileSync(join(fixture.directory, dead), '');
+            expect(await findSharedServer({ projectRoot: fixture.root, timeoutMs: 10 })).toBeUndefined();
+            expect(readdirSync(fixture.directory)).toEqual([dead]);
+        } finally {
+            fixture.cleanup();
+        }
+    });
+
+    test('a concurrent owner is attached only after the failed owned child is cleaned up', async () => {
+        const fixture = sharedFixture();
+        unlinkSync(join(fixture.directory, fixture.marker));
+        rmdirSync(fixture.directory);
+        const child = fakeChild();
+        try {
+            const running = await startDesktopServer({
+                layout: { ...devLayout, projectRoot: fixture.root },
+                port: 1234,
+                healthTimeoutMs: 500,
+                killGraceMs: 10,
+                spawn: {
+                    spawn: () => {
+                        mkdirSync(fixture.directory);
+                        writeFileSync(join(fixture.directory, fixture.marker), '');
+                        queueMicrotask(() => child.emitError(new Error('another owner won')));
+                        return child;
+                    },
+                },
+                inspectOwner: async () => {
+                    expect(child.signals).toEqual(['SIGTERM']);
+                    return ['http://127.0.0.1:3000'];
+                },
+                fetchImpl: async (url) => {
+                    if (String(url).includes(':1234')) throw new Error('not listening');
+                    return Response.json(
+                        String(url).endsWith('/api/health')
+                            ? { status: 'ok', service: 'spur' }
+                            : { path: fixture.root },
+                    );
+                },
+            });
+            expect(running.ownership).toBe('shared');
+            await running.stop();
+            expect(child.signals).toEqual(['SIGTERM']);
+            expect(readdirSync(fixture.directory)).toEqual([fixture.marker]);
+        } finally {
+            fixture.cleanup();
+        }
     });
 });
 
