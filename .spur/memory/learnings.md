@@ -5145,3 +5145,50 @@ Named limits (do not read this HIGH as covering them):
 - The pre-existing `docs/04_DESIGN.md` workflow row anchors `cli-contracts.md#spur-workflow-show-…` against a truncated `<a id>` (missing `--force`, `--answer-text`, `--timeout <ms>`); confirmed against `apps/cli/src/commands/workflow.ts:1064-1072`, left to the H1/0433 owner's wrapup.
 - The tasks' own host-delivery limits are unchanged by this repair: no live Claude `Notification` permission prompt fired, `blocked` has no TTL, and Codex `Stop` was not observed on 0.160.0. The doc-sync recorded these; it did not test them.
 - `docs/01_PRD.md`, `02_ROADMAP.md`, `05_FEATURES.md`, root `DESIGN.md` and `AGENTS.md` were not edited because no fact they own changed; that is an in-scope non-change, not an audited-clean claim.
+Confidence verification added, and it is **derived from fresh evidence, not asserted**.
+
+## Drift report — confidence (added)
+
+Verification: **HIGH** — all checks passed (Coverage / Mapping / Header / Citations); no deviation, no uncited claim.
+
+- **Coverage** — fresh executions this run: `packages/app/tests/services/{anchor-qualifier,task-transition}.test.ts` 48 pass / 0 fail · `apps/server/tests/workspace-test-isolation.test.ts` 1 pass · `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts` 47 pass · `repo-wide-tests/adr-supersession.test.ts` 10 pass · `plugins/sp/tests/wrapup-drift-probe.test.ts` 10 pass. Every §7 item the drift probe flagged was audited.
+- **Mapping** — each finding mapped to owner + trigger (`04` satellite → T3; stale frontmatter → §4.3); the out-of-named-scope finding reported, not silently edited.
+- **Header** — frontmatter re-read against §4.1/§4.3 for `00`–`05`,`99`; the two stale blocks in the named set repaired.
+- **Citations** — every non-obvious claim carries a `path:line` verified this run.
+- **First condition denying a higher level:** none. **Residual named, not hidden:** `reasons[]` has no `apps/cli/tests/` assertion — its emitter is source-read (`apps/cli/src/commands/task.ts:1036-1052`) and its runtime shape comes from the task's recorded `--dry-run --json → reasons: 0` run, not from a CLI test.
+
+New evidence that upgraded two items from MEDIUM-to-HIGH after re-execution:
+- Corpus repair end state: `rg -l 'PASS artifact at /' docs/tasks*/` → only task 1089's own Background prose, **zero** `done_reason` fields (R3 holds).
+- R5 isolation end-to-end: `HOME=$(mktemp -d) (cd apps/server && bun test tests/serve.test.ts)` → 71 pass / 0 fail and **zero** files under the throwaway `HOME` — no `projects.json`, no `slash_commands.json`.
+
+Artifact updated: `.spur/run/a2d6f735-638b-4613-ad6c-2be56e87719d-wrapup-learnings.md` (now carries a `Verification:` line with the four ladders plus a per-learning `(HIGH)`/`(MEDIUM)` tag).
+
+# Working learnings — wrapup a2d6f735 (task 1089)
+
+## Verification — confidence level
+
+Verification: HIGH — all checks passed (Coverage / Mapping / Header / Citations); no deviation, no uncited claim.
+
+- **Coverage** — every §7 item the wrapup drift probe flagged was audited (surface-match reasons consumed from `.spur/run/a2d6f735-638b-4613-ad6c-2be56e87719d-drift-probe.json`), and every learning below is backed by either an executed command this run or a `path:line` re-read this run. Fresh execution: `packages/app/tests/services/{anchor-qualifier,task-transition}.test.ts` 48 pass / 0 fail; `apps/server/tests/workspace-test-isolation.test.ts` 1 pass; `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts` 47 pass; `repo-wide-tests/adr-supersession.test.ts` 10 pass; `plugins/sp/tests/wrapup-drift-probe.test.ts` 10 pass.
+- **Mapping** — each finding mapped to owner + trigger per the constitution: satellite rows → `04`/T3, frontmatter staleness → §4.3, and the one out-of-named-scope finding (`docs/01_PRD.md`) reported rather than silently edited.
+- **Header** — frontmatter contracts re-read and compared against §4.1/§4.3 for `00`,`01`,`02`,`03`,`04`,`05`,`99`; the two stale metadata blocks in the named set repaired.
+- **Citations** — every non-obvious claim carries a local `path:line` verified this run; no API/library/version claim is uncited.
+- **Residual (named, does not deny HIGH)** — the `reasons[]` key documented in the `migrate-anchors` row is verified by reading its emitter (`apps/cli/src/commands/task.ts:1036-1052`) plus the task's recorded verify run (`spur task migrate-anchors --dry-run --json` → `reasons: 0`, `docs/tasks5/1089_keep-worktree-batch-evidence-references-and-prior-task-evide.md:232`); no test in `apps/cli/tests/` asserts that CLI-level key, so its shape rests on source read + the service-level pins, not on a CLI test. That test gap belongs to the implementing task, not to this doc sync.
+
+## 2026-10-05 — [1089] Keep worktree-batch evidence references resolvable after teardown
+
+Conventions
+- **(HIGH)** `done_reason` is tracked corpus, so it records the accepted verdict artifact **relative to the project root** (`dirname(dirname(runDir))`) with POSIX separators; an artifact outside that root is recorded as-is. Evidence: `packages/app/src/services/task-transition.ts:200-221`, `packages/app/src/services/task-transition.ts:311-316`; pinned by the R2 assertions in `packages/app/tests/services/task-transition.test.ts` (fresh run: part of 48 pass).
+- **(HIGH)** Two sibling write seams, not one generic one: body sections go through `PlanningWriteService.updateSection`, scalar frontmatter through `PlanningWriteService.updateFrontmatter`. The anchor-qualification pass needed both (`apps/cli/src/commands/task.ts:1024-1035`), and a new frontmatter rule must be wired as `writeField`, not smuggled into the section writer (fresh run: `done_reason normalization in the qualification pass` cases pass).
+- **(MEDIUM)** Repair shape for a corpus-wide stale reference: fix the single shared writer, then normalize the existing corpus through the owning CLI verb with `--dry-run` reporting first (`task migrate-anchors`, R3), then pin every repair site with a named test in the same change. Confidence is MEDIUM because the CLI apply over the live corpus was not re-executed this run — only its end state was re-grepped.
+
+Errors fixed / gotchas
+- **(HIGH)** `.spur/run/` and `.spur/memory/evidence/` are untracked **per-tree** planes, so a `--worktree` batch starts with none of the invoking tree's verdicts while `preflightFeature` and `runMetrics` resolve evidence relative to their own cwd. Result: an already-`done` linked task reads as missing (`L4.evidence-not-recoverable`, `L4.scenario-unverified`) and its metrics row degrades to `UNKNOWN`. Fix: stage `*-verdict.json` into the worktree with `cp -n` before the FIRST task; only that artifact family travels, so WT-4a identity classification is untouched (`plugins/sp/skills/spur-dev/references/execution-batch.md` § WT-2; fresh run: 47 contract pins pass).
+- **(HIGH)** Do not bundle a finding into a fix on the strength of its label alone: `L4.dogfood-missing` is not tree-local — it reads the tracked `docs/dogfood/` directory (`packages/app/src/services/feature-check.ts:288-302`, re-read this run) — so it is a separate gap, not worktree-evidence drift.
+- **(HIGH)** Bun applies `[test].preload` from the **nearest** bunfig only — a root `bunfig.toml` does not cover `cd apps/server && bun test`, the command AGENTS.md prescribes. The leak was silent: throwaway serve roots appended to the operator's real `~/.config/spur/projects.json` (unprunable while the directories exist; the 34-root/56-entry counts are task-recorded figures) plus a real `~/.config/spur/slash_commands.json`. Fix: `apps/server/bunfig.toml` mirroring `apps/cli/bunfig.toml`, `SPUR_SLASH_COMMANDS_FILE` isolated beside `SPUR_PROJECTS_FILE` in `tests/setup.ts:79-101`, and a wiring pin (`apps/server/tests/workspace-test-isolation.test.ts`) because nothing else observes the link.
+- **(HIGH)** An absolute artifact path in `done_reason` commits one machine's home directory into tracked task files and stops resolving the moment its worktree is deleted. Corpus-wide repairs belong in a CLI verb, never a one-off script: `spur task migrate-anchors --dry-run` must report old→new before any write, and an unwritable file must report `skipped` rather than attempt a second gate-failing write. Verified clean this run — `rg -l 'PASS artifact at /' docs/tasks*/` returns only task 1089's own Background prose, no `done_reason` field.
+
+Verification patterns
+- **(HIGH)** Reproduce global-config leaks with the path where it breaks: this run re-executed `HOME=$(mktemp -d) (cd apps/server && bun test tests/serve.test.ts)` → 71 pass / 0 fail and **zero** files written under the throwaway `HOME` (no `.config/spur/projects.json`, no `slash_commands.json`); the same suite run from the repo root writes neither, and `cd apps/desktop && bun test` writes nothing.
+- **(HIGH)** A new CLI-visible output key obligates its owning design satellite in the same change (T3): `reasons[]` landed in `apps/cli/src/commands/task.ts` and the plugin reference, but `docs/design/planning-record-contracts.md` was missed. The wrapup drift probe (`plugins/sp/scripts/wrapup-drift-probe.ts`, surface match on `apps/cli/src/commands/**`) is the deterministic catch (10 pins pass fresh); the repair is the two-row satellite sync (verb row + `done_reason` schema row).
+- **(MEDIUM)** A design satellite's frontmatter `updated_at`/`version` can drift silently from another task's substantive edit: `docs/00_ADR.md` and `docs/01_PRD.md` were both edited in `600dda990` (2026-10-05) while still carrying `updated_at: 2026-10-04`. Confidence is MEDIUM because only `00_ADR` was repaired in the named scope; `01_PRD` is reported unresolved.
