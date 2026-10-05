@@ -2,11 +2,11 @@
 schema_version: 1
 id: "D1"
 name: "workflow run observability — enriched step lines, FSM transitions, async follow"
-status: active
+status: done
 priority: P2
 tags: ["wayfinder-map"]
 created_at: "2026-07-21T20:46:29.481Z"
-updated_at: "2026-10-05T02:58:04.466Z"
+updated_at: "2026-10-05T03:25:42.519Z"
 ---
 
 # P: workflow run observability — enriched step lines, FSM transitions, async follow
@@ -137,7 +137,6 @@ Feature: observable and steerable workflow execution
 | 0310 | Decide the verbosity model for spur workflow run output | done |
 | 0311 | Attach real token cost and cache-hit ratio to workflow agent.run steps via history join | done |
 | 0365 | Implement workflow run observability, live output, and steering foundations | done |
-| 1090 | spur workflow trace --json exposes the run's terminal reason | backlog |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -236,4 +235,6 @@ than direct-writing the corpus. Read the scope from `### Background`.
 - 2026-07-28T00:31:37.075Z moved P → D1 (system)
 - 2026-07-30T20:03:20.156Z verifying → done (system)
 - 2026-10-05T02:58:04.466Z done → active (system)
+- 2026-10-05T03:14:10.531Z active → verifying (system)
+- 2026-10-05T03:25:42.519Z verifying → done (system)
 

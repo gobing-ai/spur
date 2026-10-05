@@ -2,11 +2,11 @@
 schema_version: 1
 id: "D61"
 name: "Essential workflow checks and observable execution"
-status: active
+status: done
 priority: P1
 tags: []
 created_at: "2026-09-05T05:08:34.650Z"
-updated_at: "2026-10-05T02:58:02.233Z"
+updated_at: "2026-10-05T03:13:49.189Z"
 ---
 
 # D61: Essential workflow checks and observable execution
@@ -163,7 +163,6 @@ Feature: Essential workflow checks and observable execution
 | 0775 | Delete corpus/composition baselines and snapshot tests | done |
 | 0776 | Fix D61 pipeline execution blockers: stale executor doc and 0765 L4 preflight evidence | done |
 | 0777 | D61 batch execution findings register — consolidated fixes for pipeline, env leak, evidence, and watcher reliability | done |
-| 1088 | Calibrate subprocess-bound test budgets so the repo-wide gate survives host load | backlog |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -199,4 +198,6 @@ Next command: `/sp:dev-runall --feature D61 --auto` (the decomposition resolves 
 - 2026-09-06T17:09:36.434Z active → verifying (system)
 - 2026-09-06T17:09:36.755Z verifying → done (system)
 - 2026-10-05T02:58:02.233Z done → active (system)
+- 2026-10-05T03:13:47.413Z active → verifying (system)
+- 2026-10-05T03:13:49.189Z verifying → done (system)
 
