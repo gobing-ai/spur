@@ -32,7 +32,7 @@
  * `tasks.show`/`updateStatus` (0966 Q&A) rather than a guard denial.
  */
 
-import { dirname, isAbsolute, relative } from 'node:path';
+import { dirname, isAbsolute, relative, sep } from 'node:path';
 import { normalizeTaskStatus } from '@gobing-ai/spur-domain';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { GuardDeniedError } from '../errors';
@@ -213,7 +213,10 @@ export function projectRelativeArtifactPath(runDir: string, artifactPath: string
     const root = dirname(dirname(runDir));
     const rel = relative(root, artifactPath);
     if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) return artifactPath;
-    return rel;
+    // POSIX separators in the recorded value: `relative` yields `\` on Windows, and the
+    // corpus form (`.spur/memory/evidence/<wbs>-verdict.json`) plus the `done_reason`
+    // normalization rule in `anchor-qualifier.ts` both read it as POSIX.
+    return rel.split(sep).join('/');
 }
 
 /**
