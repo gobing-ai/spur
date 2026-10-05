@@ -79,6 +79,14 @@ process.env.SPUR_SKIP_PROJECT_CONFIG = 'true';
 const testRegistryDir = mkdtempSync(join(tmpdir(), 'spur-test-projects-'));
 const testRegistryFile = join(testRegistryDir, 'projects.json');
 process.env.SPUR_PROJECTS_FILE = testRegistryFile;
+// 1089 R5: the same hermeticity for the second global file a mounted server writes.
+// `apps/server/src/modules/commands` generates the slash-command catalog through
+// `getSlashCommandsFilePath()`, which honours `SPUR_SLASH_COMMANDS_FILE`
+// (`packages/config/src/slash-commands.ts`). Without this the isolated registry above
+// was still accompanied by a real `~/.config/spur/slash_commands.json`, so
+// `HOME=$(mktemp -d) cd apps/server && bun test` left a `.config/spur/` directory behind.
+const testSlashCommandsFile = join(testRegistryDir, 'slash_commands.json');
+process.env.SPUR_SLASH_COMMANDS_FILE = testSlashCommandsFile;
 // Re-assert before every test. Suites that own a registry (apps/cli projects,
 // health.test, project-registry.test) call `removeEnvVar('SPUR_PROJECTS_FILE')` in
 // `afterEach` and never restore it; because Bun runs test files in one process, that
@@ -86,6 +94,7 @@ process.env.SPUR_PROJECTS_FILE = testRegistryFile;
 // after this one, so an explicit per-suite path still wins.
 beforeEach(() => {
     process.env.SPUR_PROJECTS_FILE = testRegistryFile;
+    process.env.SPUR_SLASH_COMMANDS_FILE = testSlashCommandsFile;
 });
 afterAll(() => {
     rmSync(testRegistryDir, { recursive: true, force: true });

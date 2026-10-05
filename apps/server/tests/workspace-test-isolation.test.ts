@@ -27,6 +27,10 @@ describe('apps/server workspace test isolation (1089 R5)', () => {
         expect(entries).toEqual(['../../tests/setup.ts']);
         const setupPath = resolve(workspaceDir, entries[0] ?? '');
         expect(setupPath).toBe(join(resolve(workspaceDir, '..', '..'), 'tests', 'setup.ts'));
-        expect(readFileSync(setupPath, 'utf8')).toContain('SPUR_PROJECTS_FILE');
+        const setupSource = readFileSync(setupPath, 'utf8');
+        expect(setupSource).toContain('SPUR_PROJECTS_FILE');
+        // 1089 R5: the registry alone was not enough — the same run also wrote the
+        // slash-command catalog into the operator's global config dir.
+        expect(setupSource).toContain('SPUR_SLASH_COMMANDS_FILE');
     });
 });
