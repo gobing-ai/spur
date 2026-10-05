@@ -4,7 +4,7 @@ name: Keep worktree-batch evidence references and prior-task evidence resolvable
 status: backlog
 template: feature-impl
 created_at: 2026-10-05T13:36:08.395Z
-updated_at: "2026-10-05T13:51:51.907Z"
+updated_at: "2026-10-05T14:01:03.534Z"
 feature_id: E71
 
 ---
@@ -40,6 +40,20 @@ the invoking tree holds every earlier task's verdict. Observed in `dev-runall --
    `PASS artifact at /Users/robin/xprojects/spur-new-runall-g72-f14c/.spur/memory/evidence/1079-verdict.json`.
    This is corpus-wide, not one task: 35 task files carry `PASS artifact at /…`, 32 of them under
    since-removed worktree directories, and all of them commit a machine-specific home path to tracked docs.
+4. **Test and smoke runs leak scratch roots into the operator's project registry.** `~/.config/spur/projects.json`
+   held 56 entries on 2026-10-05; 45 are throwaway roots — 34 `$TMPDIR/spur-serve-root-*` (the `HERMETIC_ROOT`
+   of `apps/server/tests/serve.test.ts:170`), 5 `spur-packaged-*`, 5 `/private/tmp/spur-*-native.*` /
+   `spur-desktop-main.*` manual desktop smoke roots, plus `spur-new/apps/server`. All still exist on disk, so
+   `refreshProjects` cannot prune them. The isolation fix `f00f47d42` (`tests/setup.ts:70-91` points
+   `SPUR_PROJECTS_FILE` at a disposable file) works only when the preload runs, and the preload is wired from
+   the root `bunfig.toml` and `apps/cli/bunfig.toml` only. `apps/server` has no `bunfig.toml`, so the
+   workspace-local run AGENTS.md prescribes (`cd apps/server && bun test`) skips `tests/setup.ts`.
+   Reproduced on `main` with a throwaway `HOME`: `cd apps/server && bun test` (520 pass) leaves
+   `spur-serve-root-<rand>` in `$HOME/.config/spur/projects.json` and also writes
+   `$HOME/.config/spur/slash_commands.json`; the same file run from the repo root (`bun test
+   ./apps/server/tests/serve.test.ts`) writes neither. `cd apps/desktop && bun test` writes nothing.
+   The desktop-era entries come from ad-hoc native/packaged smoke runs started outside the preload (their
+   prefixes appear in no tracked script); `apps/desktop/scripts/smoke-serve.ts` is already isolated.
 
 Existing behavior to respect: WT-4a persist-out (`packages/app/src/services/inline-run-setup.ts:353-397`)
 copies the worktree's whole `.spur/memory/evidence/` back, treating a byte-identical target as a no-op and
@@ -59,6 +73,11 @@ a divergent one as a hard conflict; scratch `<wbs>-*` evidence travels only for 
       35 existing absolute references are repaired through the CLI.
 - [ ] R4. `plugins/sp/skills/spur-dev/references/execution-batch.md` § WT-2 states the staging step in the
       same change (T3).
+- [ ] R5. Every workspace whose tests start a server runs `tests/setup.ts`: add `apps/server/bunfig.toml`
+      with `preload = ["../../tests/setup.ts"]` (mirroring `apps/cli/bunfig.toml`), so a workspace-local
+      `bun test` never writes the operator's `~/.config/spur/projects.json` or `slash_commands.json`.
+      Manual desktop native/packaged smoke runs export `SPUR_PROJECTS_FILE` to a disposable path, stated
+      where the desktop smoke procedure is documented (`docs/design/desktop-shell.md`).
 
 ### Acceptance Criteria
 
@@ -66,13 +85,15 @@ a divergent one as a hard conflict; scratch `<wbs>-*` evidence travels only for 
 - [ ] AC2 — Retained run inspection and artifact references survive scratch removal
 - [ ] AC3 — Existing lasting data is preserved before its scratch dependency is retired
 
-The three titles are E71's scenarios verbatim (DD-09 subset rule): AC1 ↔ R1, AC2 ↔ R2, AC3 ↔ R3.
+The three titles are E71's scenarios verbatim (DD-09 subset rule): AC1 ↔ R1, AC2 ↔ R2 + R5 (scratch
+roots must not outlive their run in the operator registry), AC3 ↔ R3.
 
 Verification: re-run a worktree batch over a feature whose earlier task is already `done` with only a
 scratch verdict in the invoking tree, and confirm (a) the wrap preflight carries no
 `L4.evidence-not-recoverable`/`L4.scenario-unverified` for that task, (b) its metrics row carries the real
 verdict, (c) the batch task's `done_reason` is `.spur/…`-relative and resolves after WT-4 removes the
-worktree, and (d) `spur task migrate-anchors --dry-run --json` lists no remaining absolute `done_reason`.
+worktree, and (d) `spur task migrate-anchors --dry-run --json` lists no remaining absolute `done_reason`, and (e) `HOME=$(mktemp -d) sh -c 'cd apps/server && bun test'`
+leaves no `.config/spur/` directory under that `HOME`.
 
 ### Q&A
 
@@ -96,6 +117,18 @@ worktree, and (d) `spur task migrate-anchors --dry-run --json` lists no remainin
   so persist-out's identity classification is unaffected.
 - **Q: Fix `L4.dogfood-missing` here?** A: No — it is corpus-real (tracked `docs/dogfood/INDEX.md`), owned
   by G72's own done gate.
+
+#### Q&A entry — 2026-10-05T14:00:56.462Z
+
+- **Q: Fix `L4.dogfood-missing` here?** A: No — it is corpus-real (tracked `docs/dogfood/INDEX.md`), owned
+  by G72's own done gate.
+- **Q: Isolate the registry inside `serve.test.ts` instead of adding a bunfig?** A: No. The leak class is
+  "a workspace-local run skips the shared preload"; it also leaks `slash_commands.json`, which serve.test
+  does not own. One `bunfig.toml` (the 0699 R3 precedent in `apps/cli`) closes every file in the workspace.
+- **Q: Does this belong in an E71 task?** A: It shares the defect class — scratch run roots outliving their
+  run in durable operator state — and the fix is one config file plus a doc line, below a task's floor.
+- **Q: Clean the 45 existing leftovers here?** A: No. `~/.config/spur/projects.json` is operator state
+  outside the repository; the operator prunes it once by hand (or `spur projects remove`), not the task.
 
 ### Design
 
@@ -121,6 +154,19 @@ root as `dirname(dirname(deps.runDir))` (the tree that owns `.spur/run`, same de
 with one rule over the `done_reason` frontmatter: `/^(unforced close; PASS artifact at )\/.*?\/(\.spur\/.*)$/`
 → `$1$2`. Writes go through its existing task-write path and dry-run report. No new noun/verb/flag.
 
+**Registry hermeticity (R5).** New `apps/server/bunfig.toml`:
+
+```toml
+# Workspace-local test config: tests/setup.ts isolates SPUR_PROJECTS_FILE and global config;
+# without it `cd apps/server && bun test` writes the operator's ~/.config/spur. Coverage thresholds stay
+# enforced by the root bunfig (bun run test).
+[test]
+preload = ["../../tests/setup.ts"]
+```
+
+Desktop manual smoke guidance in `docs/design/desktop-shell.md` gains one line: export
+`SPUR_PROJECTS_FILE="$(mktemp -d)/projects.json"` before launching a native or packaged build on a scratch root.
+
 **Constraints.** No new public CLI surface. Per-tree lifecycle DB rows still do not travel. Plain runs keep
 today's `UNKNOWN`-for-absent-evidence behavior.
 
@@ -131,7 +177,10 @@ today's `UNKNOWN`-for-absent-evidence behavior.
    a worktree-absolute `done_reason` and leaves a non-`.spur` reason untouched; (c)
    `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts` asserts § WT-2 carries the
    no-clobber verdict staging step.
-2. R2 in `task-transition.ts`; R3 in the `migrate-anchors` service.
+   (d) failure first for R5: `HOME=$(mktemp -d) sh -c 'cd apps/server && bun test'` creates
+   `.config/spur/projects.json` under that `HOME` today.
+2. R5: add `apps/server/bunfig.toml`; re-run (d) and confirm no `.config/spur/`; add the desktop-shell smoke line.
+   R2 in `task-transition.ts`; R3 in the `migrate-anchors` service.
 3. R1 + R4: § WT-2 staging text in `plugins/sp/skills/spur-dev/references/execution-batch.md`; regenerate the
    bundled copy (`bun run --filter @gobing-ai/spur build:bundle`).
 4. Run `spur task migrate-anchors --dry-run --json`, review the 35 rewrites, then apply; commit the corpus
