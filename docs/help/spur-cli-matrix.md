@@ -34,6 +34,8 @@
 | **import** |  |  |  | ✅ |  |  |  |  |  |  |
 | **inbox** |  |  |  |  | ✅ |  |  |  |  |  |
 | **init** |  |  |  |  |  |  |  | ✅ |  |  |
+| **join** | ✅ |  |  |  |  |  |  |  |  |  |
+| **leave** | ✅ |  |  |  |  |  |  |  |  |  |
 | **list** | ✅ |  | ✅ |  |  | ✅ | ✅ |  | ✅ | ✅ |
 | **maintain** |  |  |  |  |  |  |  | ✅ |  |  |
 | **migrate** |  |  |  |  |  |  |  | ✅ | ✅ |  |
@@ -46,7 +48,7 @@
 | **refresh-roster** |  |  |  |  |  |  |  |  | ✅ |  |
 | **remove** |  |  |  |  |  | ✅ |  |  |  |  |
 | **reply** |  |  |  |  | ✅ |  |  |  |  |  |
-| **report** |  |  |  | ✅ |  |  |  |  |  |  |
+| **report** | ✅ |  |  | ✅ |  |  |  |  |  |  |
 | **reset** |  |  |  | ✅ |  |  |  |  |  |  |
 | **resolve** |  |  |  |  |  |  |  |  | ✅ |  |
 | **run** | ✅ |  |  |  |  |  | ✅ |  |  | ✅ |
@@ -68,7 +70,7 @@
 | **verifyall-aggregate** |  |  |  |  |  |  |  |  | ✅ |  |
 | **wait** | ✅ |  |  |  |  |  |  |  |  |  |
 | **watch** |  |  |  |  | ✅ |  |  |  |  |  |
-| **Verb count** | **9** | **2** | **9** | **5** | **4** | **6** | **4** | **5** | **19** | **9** |
+| **Verb count** | **12** | **2** | **9** | **5** | **4** | **6** | **4** | **5** | **19** | **9** |
 
 ## Hidden Legacy Aliases
 
@@ -90,8 +92,8 @@ from the top-level help listing, still fully functional for scripts and workflow
 | Total nouns | **15** |
 | Compound nouns (with verbs) | **10** |
 | Hidden legacy aliases | **5** |
-| Unique verbs | **51** |
-| Total noun×verb cells | **72** |
+| Unique verbs | **53** |
+| Total noun×verb cells | **75** |
 
 > [!NOTE]
-> `task` has the richest surface at 19 verbs, followed by `feature` and `workflow` (9 each) and `agent` (9). `builder` (2 verbs: `bump-ver`, `drop-tags`) hosts the release plumbing promoted from `spur-dev`. Several verbs are shared across nouns — e.g., `list` (6 nouns), `run`/`show` (3 nouns each), `check`/`clean`/`create`/`migrate`/`refresh`/`start`/`status`/`stop`/`trace`/`update`/`validate` (2 nouns each). `self` (5 verbs) hosts every self-management operation.
+> `task` has the richest surface at 19 verbs, followed by `agent` (12), then `feature` and `workflow` (9 each). `builder` (2 verbs: `bump-ver`, `drop-tags`) hosts the release plumbing promoted from `spur-dev`. Several verbs are shared across nouns — e.g., `list` (6 nouns), `run`/`show` (3 nouns each), `check`/`clean`/`create`/`migrate`/`refresh`/`start`/`status`/`stop`/`trace`/`update`/`validate` (2 nouns each). `self` (5 verbs) hosts every self-management operation.

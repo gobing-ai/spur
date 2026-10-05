@@ -11,6 +11,8 @@
 |---|---|
 | `run <prompt>` | Execute a prompt or slash command via a coding agent |
 | `list` | List detected coding agents; with `--specs`, list agent specs |
+| `report` | Report a fleet member lifecycle state (`working`/`idle`/`blocked`) from a host hook |
+| `join` / `leave` | Join or leave the fleet as a guest occupant (a live session that pulls its own work) |
 | `doctor [agent]` | Check agent readiness (usable, authenticated, version) |
 | `wait <specId>` | Identity-pinned wait for an occupant run to reach a lifecycle state |
 | `loop` | Supervisor-internal self-draining loop for an agent spec (hidden from `--help`) |
@@ -116,6 +118,67 @@ Healthy providers whose windows are exhausted disable their executors (owner
 `quota`); recovered headroom re-enables them. Providers matching no configured
 executor are listed as unmapped, never guessed. A missing or failing codexbar
 run is fail-closed: nothing is written and the command exits non-zero.
+
+## spur agent report
+
+```
+spur agent report [options]
+```
+
+Reports a fleet member's lifecycle state, so the dispatch strategy knows the member is
+unavailable while it waits on a human, and the Board can show `needs human` on it. The `sp`
+plugin's host hooks call it in the background whenever `SPUR_SPEC_ID` is set; outside a fleet
+they make no call at all.
+
+| Flag | Description |
+|---|---|
+| `--state <state>` | Lifecycle state: `working`, `idle`, or `blocked` (required) |
+| `--seq <ns>` | Monotonic report sequence in nanoseconds; a value not greater than the last accepted one is ignored (required) |
+| `--spec <id>` | Member spec id (defaults to `SPUR_SPEC_ID`) |
+| `--json` | Output machine-readable JSON |
+
+Exit `2` when `--state`/`--seq` is missing or malformed, or when no member id resolves (set
+`SPUR_SPEC_ID` or pass `--spec`). An accepted report writes the `agent.lifecycle.changed`
+ledger row; a stale report is ignored and prints `ignored stale report`.
+
+## spur agent join
+
+```
+spur agent join --role <name> [--id <id>] [--session-id <sid>] [--pid <n>] [--executor <name>]
+```
+
+A **guest occupant** is a live interactive session that joins the fleet to pull work instead of
+being driven by it: it is never supervised, never restarted, and never a stage target.
+
+| Flag | Description |
+|---|---|
+| `--role <name>` | Layer-1 role the guest occupies (`scribe` \| `coder` \| `reviewer` \| `planner`) |
+| `--id <id>` | Guest id (defaults to `<role>-g<n>`); a collision with a declared member or a joined guest exits 2 |
+| `--session-id <sid>` | Host session id (defaults to `CLAUDE_CODE_SESSION_ID`); the Stop hook matches on it |
+| `--pid <n>` | Process id to record (defaults to this process) |
+| `--executor <name>` | Executor name to record (informational — a guest is never dispatched to) |
+| `--json` | Output machine-readable JSON |
+| `--json-envelope` | Wrap the JSON in the standard output envelope |
+
+`join` writes an occupant row in `coordination_runs`, claims a `guest:<id>` lease, and writes
+`.spur/run/guests/<id>.json`.
+
+## spur agent leave
+
+```
+spur agent leave [id] [--session-id <sid>]
+```
+
+| Flag | Description |
+|---|---|
+| `[id]` | Guest id (defaults to the guest joined by this host session) |
+| `--session-id <sid>` | Host session id (defaults to `CLAUDE_CODE_SESSION_ID`) |
+| `--json` | Output machine-readable JSON |
+| `--json-envelope` | Wrap the JSON in the standard output envelope |
+
+`leave` (or lease expiry) releases the lease, marks the occupant exited, returns its claimed
+messages to `pending`, and removes the record. Exit `2` on an unknown role, an id collision, or
+`leave` without an id when this host session never joined.
 
 ## spur agent status
 
@@ -227,6 +290,7 @@ spur agent wait [options] <specId>
 | Flag | Description |
 |---|---|
 | `--run <runId>` | Pin a specific run id (default: the spec's latest run) |
+| `--inbox <id>` | Wait until queued inbox work exists for a **guest** id (heartbeating that guest's lease on every poll); exclusive with `specId`/`--role`. Exit `0` when work is pending, `1` on timeout or when the id is not a joined guest |
 | `--role <name>` | Address by Layer-1 role or executor name; must resolve to exactly one materialized instance |
 | `--until <state>` | Lifecycle state to wait for (repeatable OR): `idle` \| `working` \| `invoke-exit` \| `blocked`. Default `idle` |
 | `--timeout <ms>` | Caller deadline in milliseconds. Omit = no deadline (stall budget still applies) |

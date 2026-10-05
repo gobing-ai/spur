@@ -38,12 +38,24 @@ export interface ResolvedFleetMember {
     capabilityState: string;
     /** Current agent session (0897): mode + resume id; absent when the member never ran. */
     session?: MemberSession;
+    /**
+     * Reported lifecycle state (G73 R3, task 1080); absent when the member never
+     * reported. `blocked` means it is waiting on a human.
+     */
+    lifecycle?: MemberLifecycle;
 }
 
 /** Member agent session on the wire (0897). `id` rides only `resume` mode. */
 export interface MemberSession {
     mode: 'persistent' | 'resume' | 'one-shot';
     id?: string;
+}
+
+/** Member lifecycle on the wire (G73): the hook-reported state and its sequence. */
+export interface MemberLifecycle {
+    state: 'working' | 'idle' | 'blocked';
+    seq: number;
+    at: string;
 }
 
 /** Configured agent role from agent.roles. */

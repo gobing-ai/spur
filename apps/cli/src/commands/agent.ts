@@ -13,6 +13,7 @@ import {
     DeliveryReconciler,
     FINDING_CODES,
     FleetDispatcher,
+    FleetGuestService,
     FleetService,
     followSystemEventsAfter,
     loopSleep,
@@ -44,6 +45,8 @@ import { ExecutorDisabledError, resolveExecutor } from '@gobing-ai/spur-config';
 import {
     CoordinationRunDao,
     InboxMessageDao,
+    MEMBER_LIFECYCLE_STATES,
+    type MemberLifecycleState,
     type MemberSessionObservation,
     SystemEventDao,
     type SystemEventRow,
@@ -291,6 +294,25 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
         });
 
     agent
+        .command('report')
+        .description('Report a fleet member lifecycle state (working|idle|blocked) from a host hook.')
+        .requiredOption('--state <state>', 'Lifecycle state: working, idle, or blocked')
+        .requiredOption('--seq <ns>', 'Monotonic report sequence (wall-clock nanoseconds); must increase')
+        .option('--spec <id>', 'Member spec id (defaults to SPUR_SPEC_ID)')
+        .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
+        .action(async (options) => {
+            const code = await runAgentReport(context, {
+                state: options.state,
+                seq: options.seq,
+                ...(options.spec !== undefined ? { spec: options.spec } : {}),
+                json: options.json === true,
+                enveloped: options.jsonEnvelope,
+            });
+            context.setExitCode(code);
+        });
+
+    agent
         .command('run')
         .description('Execute a prompt or slash command via a coding agent.')
         .option(
@@ -308,6 +330,18 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
         .argument('<prompt>', 'The prompt or slash command to execute')
         .action(async (prompt, options) => {
             const flags = commanderOptionsToFlags(options);
+            // G73 R3 (1081): a guest occupant is a message recipient, never a stage target —
+            // refuse it here, before any dispatch, with the reason.
+            if (typeof flags.spec === 'string' && flags.spec !== '') {
+                const refused = await refuseGuestStageTarget(context, flags.spec, {
+                    json: options.json === true,
+                    ...(options.jsonEnvelope !== undefined ? { jsonEnvelope: options.jsonEnvelope } : {}),
+                });
+                if (refused !== null) {
+                    context.setExitCode(refused);
+                    return;
+                }
+            }
             // ADR-091: `--json-envelope` is tri-state on the run path — thread the
             // explicit value under the camelCase key the service reads (the kebab-case
             // conversion above would drop it); absent stays undefined so the service
@@ -339,6 +373,46 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
         });
 
     agent
+        .command('join')
+        .description('Join the fleet as a guest occupant (a live session that pulls its own work).')
+        .requiredOption('--role <name>', 'Layer-1 role the guest occupies (scribe | coder | reviewer | planner)')
+        .option('--id <id>', 'Guest id (defaults to <role>-g<n>)')
+        .option('--session-id <sid>', 'Host session id (defaults to CLAUDE_CODE_SESSION_ID)')
+        .option('--pid <n>', 'Process id to record (defaults to this process)')
+        .option('--executor <name>', 'Executor name to record (informational; a guest is never dispatched to)')
+        .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
+        .action(async (options) => {
+            const code = await runAgentJoin(context, {
+                role: options.role,
+                ...(options.id !== undefined ? { id: options.id } : {}),
+                ...(options.sessionId !== undefined ? { sessionId: options.sessionId } : {}),
+                ...(options.pid !== undefined ? { pid: Number(options.pid) } : {}),
+                ...(options.executor !== undefined ? { executor: options.executor } : {}),
+                json: options.json === true,
+                enveloped: options.jsonEnvelope,
+            });
+            context.setExitCode(code);
+        });
+
+    agent
+        .command('leave')
+        .description('Leave the fleet: release a guest occupant lease and retire its record.')
+        .argument('[id]', 'Guest id (defaults to the guest joined by this session)')
+        .option('--session-id <sid>', 'Host session id (defaults to CLAUDE_CODE_SESSION_ID)')
+        .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
+        .action(async (id, options) => {
+            const code = await runAgentLeave(context, {
+                ...(id !== undefined ? { id } : {}),
+                ...(options.sessionId !== undefined ? { sessionId: options.sessionId } : {}),
+                json: options.json === true,
+                enveloped: options.jsonEnvelope,
+            });
+            context.setExitCode(code);
+        });
+
+    agent
         .command('wait')
         .description('Wait for a pinned occupant run to reach a lifecycle state. Address by spec id or --role.')
         .argument('[specId]', 'Agent spec id whose occupant to wait on (mutually exclusive with --role)')
@@ -349,9 +423,33 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
         .option(...SHARED_OPTIONS.runAgentPin)
         .option(...SHARED_OPTIONS.untilAgent, collectUntil, [])
         .option(...SHARED_OPTIONS.timeout, parseTimeout)
+        .option('--inbox <id>', 'Guest id to wait on for pending inbox work (pulls; exclusive with a spec id/--role)')
         .option(...SHARED_OPTIONS.json)
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (specId, options) => {
+            // G73 R4 (1081): `--inbox <id>` is the guest pull primitive — return when work
+            // is pending for a joined guest, heartbeating its lease while it waits. It is
+            // exclusive with the occupant-wait addressing (spec id / --role).
+            if (options.inbox !== undefined) {
+                if (specId !== undefined || options.role !== undefined) {
+                    context.setExitCode(
+                        waitUsageError(
+                            context,
+                            options,
+                            'agent wait --inbox takes a guest id, not a spec id or --role',
+                        ),
+                    );
+                    return;
+                }
+                const code = await runAgentWaitInbox(context, {
+                    id: options.inbox,
+                    timeoutMs: options.timeout ?? DEFAULT_TRACE_FOLLOW_TIMEOUT_MS,
+                    json: options.json === true,
+                    enveloped: options.jsonEnvelope,
+                });
+                context.setExitCode(code);
+                return;
+            }
             // 0685 R6: --role resolves to exactly one materialized instance spec id;
             // the wait itself stays identity-pinned on the resolved id.
             if (options.role !== undefined && specId !== undefined) {
@@ -481,6 +579,311 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
             );
             context.setExitCode(code);
         });
+}
+
+/**
+ * Run `spur agent report` (G73 R1, task 1080) — the host hooks' only CLI call.
+ *
+ * Thin by design: validation, the member-id default (`--spec`, else `SPUR_SPEC_ID`)
+ * and the monotonic guard all resolve here or in the domain; the service call is one
+ * hop. A missing member id is a usage error (exit 2), never a silent no-op, so a
+ * misconfigured hook surfaces instead of dropping reports.
+ */
+export async function runAgentReport(
+    context: CliContext,
+    flags: {
+        state?: string;
+        seq?: string;
+        spec?: string;
+        json: boolean;
+        enveloped?: boolean;
+    },
+): Promise<number> {
+    const state = flags.state;
+    if (state === undefined || !MEMBER_LIFECYCLE_STATES.includes(state as MemberLifecycleState)) {
+        return agentReportUsageError(
+            context,
+            flags,
+            `--state must be one of ${MEMBER_LIFECYCLE_STATES.join('|')} (got ${state ?? 'nothing'})`,
+        );
+    }
+    const seq = flags.seq === undefined || flags.seq.trim() === '' ? Number.NaN : Number(flags.seq);
+    if (!Number.isFinite(seq)) {
+        return agentReportUsageError(
+            context,
+            flags,
+            `--seq must be a number in nanoseconds (got ${flags.seq ?? 'nothing'})`,
+        );
+    }
+    const memberId = flags.spec !== undefined && flags.spec !== '' ? flags.spec : context.env.SPUR_SPEC_ID;
+    if (memberId === undefined || memberId === '') {
+        return agentReportUsageError(context, flags, 'no member id (set SPUR_SPEC_ID or --spec)');
+    }
+    const result = await new AgentCoordinationService(context).reportLifecycle(
+        memberId,
+        state as MemberLifecycleState,
+        seq,
+    );
+    if (flags.json) {
+        context.output.write(
+            toEnvelopeJson(
+                { member: memberId, state, seq, accepted: result.accepted, observation: result.observation ?? null },
+                { enveloped: flags.enveloped },
+            ),
+        );
+    } else {
+        context.output.write(
+            result.accepted
+                ? `agent ${memberId}: ${state} (seq ${seq})`
+                : `agent ${memberId}: ignored stale report (seq ${seq} <= ${result.observation?.seq ?? 'last'})`,
+        );
+    }
+    return 0;
+}
+
+/** Shared usage-error shape for `agent report` — exit 2, JSON or plain. */
+function agentReportUsageError(
+    context: CliContext,
+    options: { json?: boolean; jsonEnvelope?: boolean },
+    message: string,
+): number {
+    if (options.json) {
+        context.output.write(
+            toEnvelopeJson(
+                { error: { code: 'usage', message } },
+                {
+                    enveloped: options.jsonEnvelope,
+                    error: { code: 'VALIDATION_FAILED', message, details: { cliCode: 'usage' } },
+                },
+            ),
+        );
+    } else {
+        context.output.error(message);
+    }
+    return 2;
+}
+
+/**
+ * Build the guest service over this CLI context (G73, task 1081). Declared member ids come
+ * from the same fleet listing `--role` resolves against, so a guest can never shadow a
+ * declared member and role lookup never sees a guest.
+ */
+function guestService(context: CliContext): FleetGuestService {
+    return new FleetGuestService({
+        cwd: context.cwd,
+        fs: context.fs,
+        getDb: () => context.getDb(),
+        declaredMemberIds: async () =>
+            (await new AgentCoordinationService(context).listFleetMembers()).map((m) => m.instanceId),
+    });
+}
+
+/** Host session id this process belongs to, when the host exports one (Claude Code does). */
+function hostSessionId(context: CliContext, explicit?: string): string | undefined {
+    if (explicit !== undefined && explicit !== '') return explicit;
+    const fromEnv = context.env.CLAUDE_CODE_SESSION_ID;
+    return fromEnv !== undefined && fromEnv !== '' ? fromEnv : undefined;
+}
+
+/** Shared guest usage-error shape: exit 2, JSON or plain. */
+function guestUsageError(
+    context: CliContext,
+    options: { json?: boolean; jsonEnvelope?: boolean },
+    message: string,
+): number {
+    if (options.json) {
+        context.output.write(
+            toEnvelopeJson(
+                { error: { code: 'usage', message } },
+                {
+                    enveloped: options.jsonEnvelope,
+                    error: { code: 'VALIDATION_FAILED', message, details: { cliCode: 'usage' } },
+                },
+            ),
+        );
+    } else {
+        context.output.error(message);
+    }
+    return 2;
+}
+
+/**
+ * `spur agent join` (G73 R2/R3, task 1081). Registers a guest occupant with a heartbeat
+ * lease; the guest is never supervised and never a stage target. Expired guests are
+ * retired first, so a stale record can never block a re-join with the same id.
+ */
+export async function runAgentJoin(
+    context: CliContext,
+    flags: {
+        role: string;
+        id?: string;
+        sessionId?: string;
+        pid?: number;
+        executor?: string;
+        json: boolean;
+        enveloped?: boolean;
+    },
+): Promise<number> {
+    const service = guestService(context);
+    await service.expire();
+    const result = await service.join({
+        role: flags.role,
+        ...(flags.id !== undefined ? { id: flags.id } : {}),
+        ...(hostSessionId(context, flags.sessionId) !== undefined
+            ? { sessionId: hostSessionId(context, flags.sessionId) }
+            : {}),
+        pid: flags.pid ?? process.pid,
+        ...(flags.executor !== undefined ? { executor: flags.executor } : {}),
+    });
+    if (!result.ok) {
+        return guestUsageError(context, flags, result.message);
+    }
+    const { guest } = result;
+    if (flags.json) {
+        context.output.write(toEnvelopeJson({ guest }, { enveloped: flags.enveloped }));
+    } else {
+        context.output.write(
+            `guest ${guest.id} joined as ${guest.role}${guest.sessionId !== null ? ` (session ${guest.sessionId})` : ''}`,
+        );
+    }
+    return 0;
+}
+
+/**
+ * `spur agent leave [id]` (G73 R2). Defaults to the guest joined by this host session,
+ * so a host Stop hook (or the operator) can leave without knowing the generated id.
+ */
+export async function runAgentLeave(
+    context: CliContext,
+    flags: { id?: string; sessionId?: string; json: boolean; enveloped?: boolean },
+): Promise<number> {
+    const service = guestService(context);
+    let id = flags.id;
+    if (id === undefined || id === '') {
+        const sessionId = hostSessionId(context, flags.sessionId);
+        if (sessionId === undefined) {
+            return guestUsageError(
+                context,
+                flags,
+                'no guest id (pass one, or set CLAUDE_CODE_SESSION_ID / --session-id)',
+            );
+        }
+        const joined = (await service.list()).find((guest) => guest.sessionId === sessionId);
+        if (joined === undefined) {
+            return guestUsageError(context, flags, `no guest joined by session ${sessionId}`);
+        }
+        id = joined.id;
+    }
+    const left = await service.leave(id);
+    if (!left) {
+        return guestUsageError(context, flags, `no joined guest "${id}"`);
+    }
+    if (flags.json) {
+        context.output.write(toEnvelopeJson({ left: id }, { enveloped: flags.enveloped }));
+    } else {
+        context.output.write(`guest ${id} left the fleet`);
+    }
+    return 0;
+}
+
+/**
+ * `spur agent wait --inbox <id>` (G73 R4). The guest pull primitive: return 0 as soon as
+ * queued work exists for the guest, heartbeating the lease on every tick and retiring
+ * expired guests. Exit 1 on timeout or a guest that is gone — never a silent hang.
+ */
+export async function runAgentWaitInbox(
+    context: CliContext,
+    flags: { id: string; timeoutMs: number; json: boolean; enveloped?: boolean; pollMs?: number },
+): Promise<number> {
+    const service = guestService(context);
+    const pollMs = flags.pollMs ?? 1000;
+    const deadline = Date.now() + flags.timeoutMs;
+    for (;;) {
+        const guest = await service.read(flags.id);
+        if (guest === null) {
+            const message = `guest "${flags.id}" is not joined (spur agent join --role <role>)`;
+            if (flags.json) {
+                context.output.write(
+                    toEnvelopeJson(
+                        { error: { code: 'not-joined', message } },
+                        { enveloped: flags.enveloped, error: { code: 'NOT_FOUND', message } },
+                    ),
+                );
+            } else {
+                context.output.error(message);
+            }
+            return 1;
+        }
+        const alive = await service.heartbeat(flags.id);
+        if (!alive) {
+            const message = `guest "${flags.id}" lease was released — re-join before waiting`;
+            if (flags.json) {
+                context.output.write(
+                    toEnvelopeJson(
+                        { error: { code: 'lease-released', message } },
+                        { enveloped: flags.enveloped, error: { code: 'CONFLICT', message } },
+                    ),
+                );
+            } else {
+                context.output.error(message);
+            }
+            return 1;
+        }
+        const pending = await service.pendingCount(flags.id);
+        if (pending > 0) {
+            if (flags.json) {
+                context.output.write(toEnvelopeJson({ id: flags.id, pending }, { enveloped: flags.enveloped }));
+            } else {
+                context.output.write(`guest ${flags.id}: ${pending} pending message(s)`);
+            }
+            return 0;
+        }
+        if (Date.now() >= deadline) {
+            const message = `no inbox work for guest "${flags.id}" within ${flags.timeoutMs}ms`;
+            if (flags.json) {
+                context.output.write(
+                    toEnvelopeJson(
+                        { error: { code: 'timeout', message } },
+                        { enveloped: flags.enveloped, error: { code: 'LOCK_TIMEOUT', message } },
+                    ),
+                );
+            } else {
+                context.output.error(message);
+            }
+            return 1;
+        }
+        await new Promise((resolve) => setTimeout(resolve, Math.min(pollMs, Math.max(1, deadline - Date.now()))));
+    }
+}
+
+/**
+ * Refuse a guest id as a stage target (G73 R3, task 1081). A guest carries no executor
+ * attestation, so a `requiresCapabilities` stage could never be satisfied by one; the
+ * refusal is explicit rather than a silent downgrade to "no attestation, allow anyway".
+ * Returns the refusal code, or null when the spec id is not a guest.
+ */
+export async function refuseGuestStageTarget(
+    context: CliContext,
+    specId: string,
+    options: { json?: boolean; jsonEnvelope?: boolean } = {},
+): Promise<number | null> {
+    const guest = await guestService(context).read(specId);
+    if (guest === null) return null;
+    const message = `"${specId}" is a guest occupant (joined ${guest.joinedAt}) — guests are addressed by message, never dispatched a stage: they carry no executor attestation for requiresCapabilities`;
+    if (options.json) {
+        context.output.write(
+            toEnvelopeJson(
+                { error: { code: 'guest-stage-refused', message } },
+                {
+                    enveloped: options.jsonEnvelope,
+                    error: { code: 'GUARD_DENIED', message, details: { specId } },
+                },
+            ),
+        );
+    } else {
+        context.output.error(message);
+    }
+    return 2;
 }
 
 /** Map commander-style camelCase option keys to kebab-case flags internal handlers expect. */

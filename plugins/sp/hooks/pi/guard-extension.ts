@@ -10,6 +10,7 @@
  *   - context-post-tool (tool_result → shared recordToolUseEvent)
  *   - context-session-start (session_start → shared recordSessionStart)
  *   - context-session-stop  (session_shutdown → shared recordSessionEnd)
+ *   - agent-lifecycle       (agent_start/agent_settled → shared reportLifecycleHook, G73 R4)
  *
  * The ledger and session cores are shared with the Claude hooks (task 0969): this
  * extension only normalizes Pi event shapes and adapts them to those cores.
@@ -27,6 +28,7 @@ import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { getEnvVar, getEnvVars } from '../../lib/env';
+import { reportLifecycleHook } from '../agent-lifecycle';
 import { recordToolUseEvent, type ToolPayload } from '../context-post-tool';
 import { recordSessionStart } from '../context-session-start';
 import { recordSessionEnd } from '../context-session-stop';
@@ -262,6 +264,25 @@ export default function (pi: ExtensionAPI): void {
     pi.on('session_shutdown', async () => {
         try {
             recordSessionEnd(spurContextDir());
+        } catch {
+            // fail-open
+        }
+    });
+
+    // ── agent-lifecycle: fleet lifecycle reporting (G73 R4, task 1080) ──
+    // Pi has no native `blocked` signal (herdr finding P2), so only working/idle are
+    // reported here; a no-op outside a fleet, like every other hook path.
+    pi.on('agent_start', async () => {
+        try {
+            reportLifecycleHook({ hook_event_name: 'agent_start' });
+        } catch {
+            // fail-open
+        }
+    });
+
+    pi.on('agent_settled', async () => {
+        try {
+            reportLifecycleHook({ hook_event_name: 'agent_settled' });
         } catch {
             // fail-open
         }

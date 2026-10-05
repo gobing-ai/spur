@@ -5,8 +5,10 @@ import {
     type DbAdapter,
     InboxUnfinishedDao,
     type InboxUnfinishedRow,
+    type MemberLifecycleState,
     ProjectClaimDao,
     ProjectStrategyDao,
+    readLifecycle,
     SystemEventDao,
 } from '@gobing-ai/spur-domain';
 import { DeliveryReconciler, type UnresolvedDelivery } from './delivery-reconciler';
@@ -75,6 +77,11 @@ export type DispatchHoldReason =
     | 'unmet-dependency'
     | 'no-idle-instance'
     | 'executor-unavailable'
+    /**
+     * The member reported `blocked` through its host hooks (G73 R3, task 1080): it is
+     * waiting on a human, so dispatch would queue work behind an operator prompt.
+     */
+    | 'member-blocked'
     | 'rest-after-drain'
     /**
      * A keyed dispatch has no definite receipt yet (G71 R1): the member may still be
@@ -106,6 +113,13 @@ export interface StrategyContext {
     strategyVersion: number;
     /** From the live orchestrator claim (0836); 0 when none is live (fences every claim). */
     ownerEpoch: number;
+    /**
+     * Latest accepted lifecycle state per member instanceId (G73 R3, task 1080) —
+     * assembled by {@link StrategyRuntime} from the `agent.lifecycle.changed`
+     * ledger (the same rows the Board renders). A `blocked` member is never
+     * allocated; the strategy stays pure and does no I/O for this map.
+     */
+    memberLifecycle: ReadonlyMap<string, MemberLifecycleState>;
     /** `TaskService.list` todo + wip candidates — G71 R1: a wip task carries resumed work. */
     candidates: TaskSummary[];
     /** Enabled fleet members (0835) not currently holding a run (the live write-slot holder). */
@@ -169,7 +183,8 @@ export const restStrategy: Strategy = {
  * gates. Per candidate, evaluated in this order, first failure recorded as the
  * hold and the candidate skipped: (1) no `fleet:auto` tag → `unauthorized`;
  * (2) status ≠ todo → `not-ready`; (3) injected dependency gate →
- * `unmet-dependency`; (4) no idle instance → `no-idle-instance`; (5) the chosen
+ * `unmet-dependency`; (4) the only member that could take it is `blocked` →
+ * `member-blocked`; (5) no idle instance → `no-idle-instance`; (6) the chosen
  * instance's executor unresolved → `executor-unavailable`. Candidates sort by
  * `priority` ascending as a string (the existing P0<P1<… vocabulary; a missing
  * priority sorts last under the sentinel `'P9'`) then by wbs ascending before
@@ -182,7 +197,20 @@ export const gtdStrategy: Strategy = {
     select: (ctx) => {
         const decisions: DispatchDecision[] = [];
         const holds: DispatchHold[] = [];
-        const idle = [...ctx.idleInstances];
+        // G73 R3 (1080): a member blocked on a human is unavailable — its process is
+        // alive, so only the reported lifecycle can say so. Blocked members stay in the
+        // context (never silently dropped) so the miss reports `member-blocked`, not a
+        // generic `no-idle-instance`.
+        const blockedIdle = ctx.idleInstances.filter(
+            (member) => ctx.memberLifecycle.get(member.instanceId) === 'blocked',
+        );
+        const idle = ctx.idleInstances.filter((member) => ctx.memberLifecycle.get(member.instanceId) !== 'blocked');
+        const accepts = (member: ResolvedFleetMember, candidate: TaskSummary): boolean => {
+            const assignee = candidate.frontmatter.assignee;
+            return typeof assignee === 'string' && assignee !== ''
+                ? member.instanceId === assignee
+                : member.role === undefined || member.role === 'coder';
+        };
         // G71 R1: one in-flight keyed dispatch blocks every NEW write dispatch — the
         // single write slot is held by that member until a definite receipt lands.
         const inFlight = [...ctx.dispatchAttempts.entries()]
@@ -240,6 +268,11 @@ export const gtdStrategy: Strategy = {
             );
             const member = memberIndex < 0 ? undefined : idle.splice(memberIndex, 1)[0];
             if (member === undefined) {
+                const blocked = blockedIdle.find((candidateMember) => accepts(candidateMember, candidate));
+                if (blocked !== undefined) {
+                    hold('member-blocked', `${blocked.instanceId} reported blocked (waiting on a human)`);
+                    continue;
+                }
                 hold('no-idle-instance');
                 continue;
             }
@@ -643,6 +676,22 @@ export class StrategyRuntime {
             }
         }
         const inbox = new InboxUnfinishedDao(db);
+        // G73 R3 (1080): the members' reported lifecycle rides the same snapshot. A read
+        // failure degrades to "no state" (nobody is blocked) rather than failing the tick —
+        // the deterministic guards still apply.
+        const memberLifecycle = new Map<string, MemberLifecycleState>();
+        if (idleInstances.length > 0) {
+            try {
+                for (const [instanceId, observation] of await readLifecycle(
+                    db,
+                    idleInstances.map((member) => member.instanceId),
+                )) {
+                    memberLifecycle.set(instanceId, observation.state);
+                }
+            } catch {
+                // Degrade: unreadable ledger — no member is treated as blocked.
+            }
+        }
         const dispatchAttempts = new Map<string, DispatchAttemptState>();
         const ready = new Map<string, boolean>();
         const blocked = new Map<string, string | null>();
@@ -689,6 +738,7 @@ export class StrategyRuntime {
             ownerEpoch,
             candidates,
             idleInstances,
+            memberLifecycle,
             dependencyBlocked: (wbs) => blocked.get(wbs) ?? null,
             ready: (wbs) => ready.get(wbs) === true,
             dispatchAttempts,

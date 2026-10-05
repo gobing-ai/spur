@@ -25,6 +25,9 @@ that before using `run` for fan-out dispatch.
 | `wait [<specId>]` | Identity-pinned wait for an occupant run to reach a lifecycle state (G4 wave 2; `--role` selector per 0685) | `--role <name>` `--run <runId>` `--until <state>...` `--timeout <ms>` `--json` |
 | `trace <runId>` | Print one execution record's lineage — the run, its dispatch parents, agent session ids and streams (1076 R4, ADR-132) | `--follow` `--timeout <ms>` `--json` |
 | `list` | List detected coding agents, or agent specs with `--specs` (live run status + member session merged from `spur self serve`) | `--specs` `--server <url>` `--json` |
+| `report` | Report a fleet member lifecycle state (`working`/`idle`/`blocked`) from a host hook (G73 R1/R2, task 1080) | `--state <state>` `--seq <ns>` `--spec <id>` `--json` |
+| `join` | Join the fleet as a guest occupant — a live session that pulls its own work (G73 R2, task 1081) | `--role <name>` `--id <id>` `--session-id <sid>` `--pid <n>` `--executor <name>` `--json` |
+| `leave` | Leave the fleet: release the guest lease, retire the occupant, return claimed messages to pending | `[id]` `--session-id <sid>` `--json` |
 | `status` | Agent specs with live process status and member session (requires `spur self serve`) | `--server <url>` `--json` |
 | `doctor [agent]` | Check agent readiness | `--json` `--probe-health` `--force-refresh` |
 | `usage` | Run-once provider usage capture (codexbar) → quota-owned availability refresh; scheduled externally | `--dry-run` `--source <name>` `--json` |
@@ -167,6 +170,72 @@ Reads the same supervisor feed as `list --specs` (liveness **and** session come 
 `GET /api/processes`; the served project's ledger is the source of the session state). An
 unreachable server reports every spec `stopped` with no session. See
 [Member sessions](#member-sessions-g66) for what the modes mean.
+
+## `report` - fleet lifecycle state from a host hook (G73, task 1080)
+
+```bash
+spur agent report --state working --seq 1759665600000000000
+spur agent report --state blocked --seq 1759665600000000000 --spec proj-worker-1 --json
+```
+
+| Flag | Description |
+| --- | --- |
+| `--state <state>` | Lifecycle state: `working` \| `idle` \| `blocked` (required) |
+| `--seq <ns>` | Monotonic report sequence in nanoseconds (required); not greater than the last accepted one → ignored |
+| `--spec <id>` | Member spec id; defaults to `SPUR_SPEC_ID` |
+| `--json` | Machine-readable result (`accepted`, `observation`) |
+| `--json-envelope` | Wrap the JSON in the standard output envelope |
+
+An accepted report writes the cataloged `agent.lifecycle.changed` ledger row — the newest
+accepted row for the member is its current state, so there is no separate state store. The
+dispatch strategy treats `blocked` as unavailable (hold reason `member-blocked`), and the Board
+shows `needs human` on that member.
+
+Exit `2` when `--state`/`--seq` is missing or malformed, or when no member id resolves
+(`SPUR_SPEC_ID` unset and no `--spec`). The `sp` plugin's `agent-lifecycle` host hook calls this
+in the background on `SessionStart` (idle), `UserPromptSubmit` (working), `Notification`
+(`permission_prompt` → blocked) and `Stop` (idle); outside a fleet it makes no call at all.
+
+## `join` / `leave` - guest occupancy (G73 R2/R5, task 1081)
+
+```bash
+spur agent join --role reviewer --json          # id defaults to <role>-g<n>
+spur agent join --role coder --id my-session --json
+spur agent leave --json                          # the guest joined by this session
+```
+
+A guest is a live session that **pulls** work: never supervised, never restarted, addressable by
+concrete id only (role/executor selectors count declared members, so a guest is invisible to them).
+`join` writes an occupant row in `coordination_runs`, claims a `guest:<id>` lease on the shared
+claim table (same TTL/heartbeat semantics as the write slot — R5) and writes
+`.spur/run/guests/<id>.json` so a host Stop hook can recognize its own session without a CLI call.
+`leave`, or lease expiry in the reconciler pass, releases the lease, marks the occupant exited,
+returns its claimed messages to `pending` and removes the record.
+
+| Flag | Description |
+| --- | --- |
+| `--role <name>` | Layer-1 role (`scribe` \| `coder` \| `reviewer` \| `planner`); required for `join` |
+| `--id <id>` | Guest id (defaults to `<role>-g<n>`); colliding with a declared member or a joined guest exits 2 |
+| `--session-id <sid>` | Host session id (defaults to `CLAUDE_CODE_SESSION_ID`) |
+| `--pid <n>` | Process id to record |
+| `--executor <name>` | Executor name to record (informational — a guest is never dispatched to) |
+| `--json` | Machine-readable result |
+
+A guest carrying no executor attestation is never a stage target: `spur agent run --spec <guest-id>`
+is refused (R3), and `requiresCapabilities` stages therefore can never reach one.
+
+## `wait --inbox <id>` - the guest pull primitive (G73 R4)
+
+```bash
+spur agent wait --inbox reviewer-g1 --timeout 540000 --json
+```
+
+Returns `0` as soon as queued inbox work exists for the guest and `1` on timeout or when the id is
+not a joined guest — never a silent hang. Every call heartbeats the guest's lease, so a session that
+keeps looping stays joined; the timeout stays under the Bash tool's ~10-minute limit. The
+`fleet-join` skill loops it (wait → `spur message inbox --agent <id>` → work → `spur message reply`),
+and the `fleet-guest-stop` plugin hook delivers the same messages at a turn boundary on hosts that
+support a blocking Stop hook.
 
 ## `doctor` - readiness check
 

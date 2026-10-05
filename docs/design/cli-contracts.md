@@ -3,8 +3,8 @@ kind: design
 title: "CLI grammar, initialization, agents, teams and rules"
 status: implemented
 created_at: 2026-09-09
-updated_at: 2026-10-04
-related: ["0822", "0850", "0856", "0857", "0860", "0861", "1064"]
+updated_at: 2026-10-05
+related: ["0822", "0850", "0856", "0857", "0860", "0861", "1064", "1080", "1081"]
 tags: [contract, cli, agent]
 ---
 
@@ -561,9 +561,44 @@ through `spur agent list --specs`. Spec ids are validated (`[a-z][a-z0-9_-]{1,63
   `<role>-<n>` by declaration order among same-role role-only members (frozen index — a shifting
   id would break inbox addressing, 0543 R3).
 
+<a id="spur-agent-report---state-workingidleblocked---seq-ns---spec-id---json--spur-agent-join---role-name---id-id---session-id-sid---pid-n---executor-name---json--spur-agent-leave-id---session-id-sid---json"></a>
+
+#### `spur agent report --state <working|idle|blocked> --seq <ns> [--spec <id>] [--json]` · `spur agent join --role <name> [--id <id>] [--session-id <sid>] [--pid <n>] [--executor <name>] [--json]` · `spur agent leave [<id>] [--session-id <sid>] [--json]`
+
+Member lifecycle reporting and guest occupancy (1080/1081; ADR-057 A1, ADR-121 A2).
+
+`agent report` is the host hooks' only CLI call. The `sp` plugin's Claude hooks call it in the
+background **only when `SPUR_SPEC_ID` is set** (outside a fleet they make no call), so the strategy
+sees a member waiting on a human and the Board can show `needs human`.
+
+- `--state` is required and restricted to `working | idle | blocked`; `--seq` is a required
+  nanosecond sequence. A report whose `seq` is not strictly greater than the last accepted one is
+  ignored (prints `ignored stale report`); either way the verb exits 0.
+- The member id is `--spec` or `SPUR_SPEC_ID`; neither → exit 2 (`no member id (set SPUR_SPEC_ID or --spec)`).
+  An unknown `--state` or a non-numeric `--seq` is also exit 2.
+- An accepted report writes the `agent.lifecycle.changed` ledger row (`system_events`, no new table);
+  the newest accepted row for the actor is the member's current state. `--json` returns
+  `{ member, state, seq, accepted, observation }`.
+
+`agent join` makes a live interactive session a **guest occupant** that pulls its own work instead of
+being dispatched to; `agent leave` retires it. Identity is a `coordination_runs` row plus a
+`.spur/run/guests/<id>.json` record; the lease is a `ProjectClaimDao` claim on slot `guest:<id>` with
+the shared claim TTL.
+
+- `join` validates a known Layer-1 role (`scribe | coder | reviewer | planner`), allocates
+  `<role>-g<n>` when `--id` is absent, and runs an expiry sweep first. An id colliding with a declared
+  member or a live guest, or an unknown role, exits 2. Output: `guest <id> joined as <role>`.
+- `leave` defaults to the guest whose record matches `CLAUDE_CODE_SESSION_ID` / `--session-id`; no
+  match or an unknown id exits 2. Leaving releases the lease, returns claimed messages to `queued`,
+  marks the occupant `exited`, then deletes the record.
+- A guest is never supervised and never a stage target: role resolution counts declared members only,
+  and `spur agent run --spec <guest>` is refused (no executor attestation for a `requiresCapabilities`
+  stage). Guests are addressed by message (`--to <guest-id>`); the `fleet-join` skill loops
+  `spur agent wait --inbox <id>`.
+
 <a id="spur-agent-wait-specid---role-name---run-runid---until-state---timeout-ms---json--spur-message-send---to-id--role-name-body---from-id---wait---until-injectedinvoke-exit---timeout-ms---json"></a>
 
-#### `spur agent wait [<specId>] [--role <name>] [--run <runId>] [--until <state>...] [--timeout <ms>] [--json]` · `spur message send (--to <id>|--role <name>) <body> [--from <id>] [--wait] [--until injected|invoke-exit] [--timeout <ms>] [--json]`
+#### `spur agent wait [<specId>] [--role <name>] [--run <runId>] [--until <state>...] [--inbox <id>] [--timeout <ms>] [--json]` · `spur message send (--to <id>|--role <name>) <body> [--from <id>] [--wait] [--until injected|invoke-exit] [--timeout <ms>] [--json]`
 
 Identity-pinned wait on an occupant run (ADR-057 wave 2 / G4 R4–R5; role-addressed selector per the
 ADR-075 amendment, 0685). Addressing is by spec id **or** `--role` — never both: `--role` resolves
@@ -583,9 +618,16 @@ replaced the 100 ms poll with `followSystemEventsAfter` over the shared ledger �
 `sequence`, then follow `sequence > snapshot` (global monotonic cursor auto-assigned at persist
 in `SystemEventDao.insert`).
 
+`--inbox <id>` (1081) is the **guest pull** primitive instead of an occupant wait: it returns 0 as
+soon as queued inbox work exists for the joined guest, heartbeating the guest lease on every tick
+and retiring an expired guest; exit 1 when the guest is not joined, its lease was released, or
+`--timeout` elapses — it never hangs. It is exclusive with a spec id / `--role`.
+
 `--json` errors: `{ error: { code, message } }` with codes `occupant_gone | run_replaced |
-wait_stalled | timeout` (exit 1). `--until blocked` has no first-class signal in wave 2 → exit 2.
-No oRPC wait path in this wave.
+wait_stalled | timeout` (exit 1); `--inbox` adds `not-joined | lease-released | timeout`. Member
+`blocked` is first-class since 1080 (`agent.lifecycle.changed` via `spur agent report`), but this
+projector derives from `agent.invoke.*` only, so `--until blocked` still exits 2 (wave-2 contract
+unchanged). No oRPC wait path.
 
 <a id="spur-message-send---to-id-body---from-id---wait---until-injectedinvoke-exit---timeout-ms---json--spur-message-inbox---agent-id---json--spur-message-reply-msg-id-body---json--spur-message-watch---agent-id---interval-ms---json"></a>
 

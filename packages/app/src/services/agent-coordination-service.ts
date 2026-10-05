@@ -1,6 +1,14 @@
 import { join } from 'node:path';
 import type { SpurConfig } from '@gobing-ai/spur-config';
-import { type DbAdapter, InboxMessageDao, InboxRecentDao, SystemEventDao } from '@gobing-ai/spur-domain';
+import {
+    type DbAdapter,
+    InboxMessageDao,
+    InboxRecentDao,
+    type MemberLifecycleState,
+    type RecordLifecycleResult,
+    recordLifecycle,
+    SystemEventDao,
+} from '@gobing-ai/spur-domain';
 import {
     type AgentEvents,
     type AgentSpec,
@@ -540,6 +548,20 @@ export class AgentCoordinationService {
      */
     async listFleetMembers(): Promise<ResolvedFleetMember[]> {
         return (await this.fleetService().resolve(this.ctx.cwd)).members;
+    }
+
+    /**
+     * Record a fleet member's reported lifecycle state (G73 R1/R2, task 1080).
+     *
+     * Thin by design: the monotonic guard and the ledger write both live in the
+     * domain (`recordLifecycle`), so the CLI verb, the host hooks and any future
+     * caller share one definition of "stale". An accepted report writes the
+     * cataloged `agent.lifecycle.changed` row — that row IS the emitted event
+     * (ADR-066 presenter renders it) and the state the strategy reads back, so
+     * there is no second state store and no duplicate bus write.
+     */
+    async reportLifecycle(specId: string, state: MemberLifecycleState, seq: number): Promise<RecordLifecycleResult> {
+        return recordLifecycle(await this.ctx.getDb(), specId, { state, seq });
     }
 
     /** Build the identity preamble for an agent + its workspace peers. */

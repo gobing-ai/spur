@@ -277,6 +277,15 @@ export {
     RECEIPT_POLL_INTERVAL_MS,
 } from './services/fleet-dispatcher';
 export {
+    FleetGuestService,
+    GUEST_LEASE_TTL_MS,
+    GUEST_RECORD_DIR,
+    GUEST_ROLES,
+    type GuestJoinInput,
+    type GuestJoinResult,
+    type GuestRecord,
+} from './services/fleet-guest-service';
+export {
     type FleetMemberLister,
     type RoleTargetResolution,
     resolveAgentSelector,

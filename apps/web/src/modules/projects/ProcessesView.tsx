@@ -450,6 +450,15 @@ export default function ProcessesView({ pollMs = STATUS_POLL_MS }: { pollMs?: nu
                                                 lead
                                             </span>
                                         )}
+                                        {member?.lifecycle?.state === 'blocked' && (
+                                            <span
+                                                data-member-needs-human={agentId}
+                                                title="This member reported blocked — it is waiting on a human (a permission prompt), so the strategy holds its work"
+                                                className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-spur-warning/15 text-spur-warning tracking-wide uppercase"
+                                            >
+                                                needs human
+                                            </span>
+                                        )}
                                     </div>
                                 </td>
                                 <td>

@@ -3,8 +3,8 @@ kind: design
 title: "Inter-agent control plane"
 status: accepted
 created_at: 2026-08-12
-updated_at: 2026-09-15
-related: [G4, "0529", "0530", "0531", "0599", "0685", "0820"]
+updated_at: 2026-10-05
+related: [G4, "0529", "0530", "0531", "0599", "0685", "0820", "1080", "1081"]
 tags: [system, G4, agent]
 ---
 
@@ -14,14 +14,15 @@ tags: [system, G4, agent]
 **Status:** Waves 1–2 **landed** (tasks 0529/0530, 2026-08-13). Wave 3's snapshot-then-follow
 helper **landed** (task 0531). Spec addressing extended 0537/0542: `--spec <id>` is the canonical
 carrier; drain rewrites to the spec's executor binding (feature B2). Task 0685 adds exact-one
-`--role` resolution above the existing occupant pin. First-class `blocked` /
-`agent report-state` remain accepted design.
+`--role` resolution above the existing occupant pin. First-class member `blocked` **landed** as the
+`agent.lifecycle.changed` ledger row (`spur agent report`, 1080); guest occupancy **landed**
+(1081, §12).
 **Decision:** ADR-057 (retained by ADR-116; its former companion ADR-052 is superseded).
 **Feature:** G4.
 
 Shapes + Wave-1/2 implementation notes. Rationale: `00` ADR-057 and `03` §17. Wave-2 verbs
 (`agent wait`, `send --wait`) **shipped** in task 0530; Wave-3 follow helper (`followSystemEventsAfter`)
-**shipped** in task 0531. First-class `blocked` remains accepted design.
+**shipped** in task 0531. First-class `blocked` **shipped** in task 1080.
 
 ## 1. Existing surfaces this design extends
 
@@ -85,6 +86,11 @@ Every `spur agent loop` / supervised `agent run` process receives, in addition t
 
 `SPUR_AGENT` remains the **host** coding-agent hint (`04` §1.1). It is not a spec id.
 
+**1080:** `SPUR_SPEC_ID` is stamped for **every spec-id-addressed run** (drained `svc.run` members
+included, not only supervised spawns) through the role-propagation executor's env seam in
+`AgentService`, so a member's host hooks can report without a supervisor. A local CLI invocation
+that sees `SPUR_SPEC_ID` therefore always speaks for a fleet member.
+
 **Wave-1 implementation (task 0529):** `SupervisorService.start` merges the four env vars into
 `pipeOpts.env`. `SPUR_RUN_ID` is a UUID minted at spawn (the process-generation id); the
 per-invoke `runId` (correlation.runId in `executeRun`) is minted separately by `AgentService`.
@@ -137,7 +143,7 @@ Another agent “reads output” by reading `artifactRefs[].path` (or a bounded 
 | --- | --- |
 | `working` | latest `agent.invoke.start` for this `runId` |
 | `idle` | latest `agent.invoke.exit` for this `runId` **and** `countPending(specId)===0` |
-| `blocked` | First-class blocked signal only (HITL / future `agent report-state`). Absent signal ⇒ state is not `blocked` |
+| `blocked` | First-class signal only: the newest accepted `agent.lifecycle.changed` row for this member (`spur agent report --state blocked`, 1080). Absent signal ⇒ state is not `blocked` |
 | `done` | Out of v1. Herdr `done` is unseen-idle UI; do not invent an unseen bit here |
 
 No screen-manifest detector. No OSC/spinner matching.
@@ -145,6 +151,11 @@ No screen-manifest detector. No OSC/spinner matching.
 > **Wave 2 (0530):** `projectLifecycle` in `packages/app/src/services/occupant-wait.ts` implements
 > this table as a pure function. `exit` + a non-empty queued inbox is `unknown` (will re-invoke), not
 > `idle`; `idle` requires exit **and** `countPending===0`.
+
+> **Blocked (1080):** the ledger row is first-class for dispatch and Board — `gtdStrategy` holds the
+> member with the `member-blocked` reason and the snapshot carries `lifecycle` to the `needs human`
+> badge. The occupancy wait projector above still reads `agent.invoke.*` only, so
+> `spur agent wait --until blocked` remains unsupported (exit 2).
 
 ## 6. Wait / send-wait surface
 
@@ -217,7 +228,7 @@ Board SSE (roadmap S6/W6) is **not** a prerequisite. CLI wait may poll the ledge
 | --- | --- | --- |
 | 1 | `OccupantRef`, drain rewrite keeps `specId`, env injection, `CoordinationRun` persist + read — **LANDED (task 0529)** | wait verb, lifecycle enum as a public wait target, new noun |
 | 2 | `agent wait`, `message send --wait`, lifecycle table §5, error codes §7, skill + `04` signatures (T3, ADR-051 consent) — **LANDED (task 0530)** | Board SSE, `blocked` without a first-class signal, protocol ping |
-| 3 | Snapshot/seq helper reused by wait — `followSystemEventsAfter` **LANDED (task 0531)**; first-class `blocked` (and optional `agent report-state` only if it cannot be derived) **deferred — 0530 Testing contains no `BLOCKED_UNREACHABLE` signal** | G3 Board un-merge (feature G3 / ADR-052 — landed via retirement: 0849 deleted the merge with the Inbox module; ADR-116 supersedes ADR-052), live handoff, screen detection, `blocked` |
+| 3 | Snapshot/seq helper reused by wait — `followSystemEventsAfter` **LANDED (task 0531)**; first-class member `blocked` via `agent.lifecycle.changed` / `spur agent report` **LANDED (task 1080)**; guest occupancy **LANDED (task 1081, §12)** | G3 Board un-merge (feature G3 / ADR-052 — landed via retirement: 0849 deleted the merge with the Inbox module; ADR-116 supersedes ADR-052), live handoff, screen detection |
 
 ## 10. Files likely to change (implementers)
 
@@ -253,3 +264,27 @@ runtime instance is derived from the declaration plus occupancy (ADR-086 A3, G72
 team daemon, no stored instance row, and no generated spec file under `.spur/agents/` to correlate
 against. `.spur/agents/` holds hand-authored specs only, and those are merged with the declared
 members for addressing, with the declaration winning an id clash.
+
+## 12. Guest occupancy (task 1081, ADR-121 A2)
+
+A live interactive session may join as a **guest occupant** (`spur agent join`) to *pull* work
+instead of being driven by Spur. Three facts, no new table:
+
+| Fact | Carrier |
+| --- | --- |
+| Identity | `coordination_runs` row (`spec_id` = guest id, `agent_kind` = executor, status `running`, generation `max+1`), so ADR-075 occupant pins and `hasRunning` are unchanged |
+| Lease | `ProjectClaimDao` claim on slot `guest:<id>` with the shared `CLAIM_TTL_MS`; only the record's own owner epoch can heartbeat it (R5) |
+| Discovery | `.spur/run/guests/<id>.json` (`{ id, role, sessionId, pid, executor }`) so a host hook finds the joined session without a CLI call |
+
+`spur agent join` registers; `spur agent leave` or lease expiry releases. Expiry is applied on every
+guest-touching operation and by the server's reconciler pass. `retire` releases the lease first,
+returns claimed messages to `queued`, marks the row `exited`, and only then deletes the record — a
+crash mid-retire leaves a leaseless guest (retired by the next pass) rather than a half-release.
+
+Guests sit structurally outside the fleet declaration: role/executor selectors resolve over declared
+members only, so a guest never makes `--role` ambiguous, and `spur agent run --spec <guest>` is
+refused because a guest carries no executor attestation for a `requiresCapabilities` stage. The pull
+loop is `spur agent wait --inbox <id>` (heartbeating the lease) → work → `spur message reply`,
+re-armed inside the Bash ~10-minute budget by the `fleet-join` skill; a joined session's Stop hook
+may also deliver pending messages through `decision: block`, which converts the block into the next
+inbox item, never into a terminal write (ADR-057 A1).

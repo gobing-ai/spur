@@ -17,9 +17,11 @@ import {
     CoordinationRunDao,
     type DbAdapter,
     isTierEligible,
+    type MemberLifecycleObservation,
     type MemberSessionObservation,
     type ProjectClaim,
     ProjectClaimDao,
+    readLifecycle,
     readMemberSessions,
 } from '@gobing-ai/spur-domain';
 import { type AgentSpec, validateAgentId } from '@gobing-ai/ts-ai-runner';
@@ -88,6 +90,14 @@ export interface ResolvedFleetMember {
      * degrades, it never fails the resolution.
      */
     session?: MemberSessionObservation;
+    /**
+     * The member's current lifecycle state (G73 R3, task 1080): the newest
+     * `agent.lifecycle.changed` ledger row for the instance — reported by the
+     * member's own host hooks. Absent when the member never reported, when no
+     * `openDb` seam is provided, or when the ledger is unreadable; observability
+     * degrades, it never fails the resolution.
+     */
+    lifecycle?: MemberLifecycleObservation;
 }
 
 /** A resolved project fleet (0835). `missing` names what a caller must fix (R7 — a value, not an exception). */
@@ -511,6 +521,20 @@ export class FleetService {
                 }
             } catch {
                 // Degrade: no db, unreadable ledger — members keep no session field.
+            }
+            // G73 R3 (1080): join the reported lifecycle state the same way. Same
+            // degradation contract — a member with no report carries no field.
+            try {
+                const lifecycles = await readLifecycle(
+                    await this.ctx.openDb(normalized),
+                    resolvedMembers.map((m) => m.instanceId),
+                );
+                for (const member of resolvedMembers) {
+                    const lifecycle = lifecycles.get(member.instanceId);
+                    if (lifecycle !== undefined) member.lifecycle = lifecycle;
+                }
+            } catch {
+                // Degrade: no db, unreadable ledger — members keep no lifecycle field.
             }
         }
 
