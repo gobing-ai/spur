@@ -4,7 +4,7 @@ name: Keep worktree-batch evidence references and prior-task evidence resolvable
 status: backlog
 template: feature-impl
 created_at: 2026-10-05T13:36:08.395Z
-updated_at: "2026-10-05T13:36:47.546Z"
+updated_at: "2026-10-05T13:38:09.718Z"
 feature_id: E71
 
 ---
@@ -13,9 +13,9 @@ feature_id: E71
 
 ### Background
 
-A `--worktree` batch runs in a fresh tree whose `.spur/run/` is empty, while the invoking tree holds every earlier task's per-tree evidence. Nothing carries prior evidence into the worktree, and the references a batch writes point back into the tree WT-4 deletes. Three symptoms were observed in one batch (`dev-runall --feature G72 --worktree`, worktree `spur-new-runall-g72-f14c`, merged `600dda990`):
+A `--worktree` batch runs in a fresh tree whose `.spur/run/` is empty, while the invoking tree holds every earlier task's per-tree evidence. Nothing carries prior evidence into the worktree, and the references a batch writes point back into the tree WT-4 deletes. Three symptoms were observed in one batch (`dev-runall --feature G72 --worktree`, worktree `spur-new-runall-g72-f14c`, landed on the base ref as `600dda990`):
 
-1. **The wrap's feature preflight refuses on evidence it cannot see.** Wrap run `a24ac55c-cbe0-4d54-b521-ef86401a348f` failed at `task-resolve` with `failed:preflight:done-gate L4.dogfood-missing,L4.evidence-not-recoverable,L4.scenario-unverified` (`plugins/sp/scripts/wrapup-steps.ts`, `preflightFeature`; reason at `.spur/run/<runId>-route-reason.txt`) even though the frozen plan's earlier task 1078 was `done` with its verdict artifact present the whole time at `.spur/run/1078-verdict.json` in the invoking tree. After the FF-merge, `spur feature check G72 --json` in the invoking tree reported **no** findings of that kind, so the finding was tree-local, not corpus-real.
+1. **The wrap's feature preflight refuses on evidence it cannot see.** Wrap run `a24ac55c-cbe0-4d54-b521-ef86401a348f` failed at `task-resolve` with `failed:preflight:done-gate L4.dogfood-missing,L4.evidence-not-recoverable,L4.scenario-unverified` (`plugins/sp/scripts/wrapup-steps.ts`, `preflightFeature`; reason at `.spur/run/<runId>-route-reason.txt`) even though the frozen plan's earlier task 1078 was `done` with its verdict artifact present the whole time at `.spur/run/1078-verdict.json` in the invoking tree. After the batch landed on the base ref, `spur feature check G72 --json` in the invoking tree reported **no** findings of that kind, so the finding was tree-local, not corpus-real.
 
 2. **Telemetry degrades resolvable evidence to `UNKNOWN`.** The same batch's wrap metrics recorded `{"wbs":"1078","status":"done","verdict":"UNKNOWN"}` after logging `task 1078 has no certifying verdict — .spur/run/1078-verdict.json: missing or carries none, tracked Testing: no Verdict: line — recording UNKNOWN telemetry`.
 
@@ -25,37 +25,20 @@ Existing behavior the change must respect: WT-4a already persists run rows and c
 
 ### Requirements
 
-<!-- One R-item per line, exactly `- [ ] R1. <text>` (checkbox + `R<n>.`); `spur task check` flags any other form. Derive from the linked feature or refined task scope. -->
+- [ ] R1. Prior completed tasks' per-tree evidence resolves inside a worktree batch — either staged into the worktree from the invoking tree at WT-2, or read from the invoking tree by `preflightFeature`/`runMetrics` — so a tree-local absence never produces a false missing-evidence finding.
+- [ ] R2. A task closed inside a batch worktree records a `done_reason` artifact path that still resolves after WT-4 removes the worktree: rewrite it at `--persist-out` to the durable invoking-tree artifact, and report an unresolvable path instead of fabricating one.
+- [ ] R3. Wrap metrics record the real verdict for a frozen-plan task whose evidence resolves in the invoking tree; `UNKNOWN` stays reserved for genuinely absent evidence.
+- [ ] R4. Tests pin R1–R3, and `plugins/sp/skills/spur-dev/references/execution-batch.md` states the staging and reference-rewrite rule in the same change (T3).
 
 ### Acceptance Criteria
 
-- [ ] R1. A worktree batch's feature-level preflight and gates evaluate a frozen-plan task's already-`done` evidence from a tree where it resolves — either staged into the worktree before the preflight or evaluated against the merged invoking tree — so a tree-local absence is never reported as a missing artifact.
-- [ ] R2. A task closed inside a batch worktree records a `done_reason` artifact path that still resolves after WT-4 removes the worktree.
-- [ ] R3. Wrap metrics (and any telemetry reading task evidence) record the real verdict for a task whose evidence resolves in the invoking tree, instead of `UNKNOWN`.
-- [ ] R4. Tests pin all three behaviors, and `plugins/sp/skills/spur-dev/references/execution-batch.md` states the staging/reference-rewrite rule in the same change (T3).
+- [ ] AC1 — Task and feature evidence remains valid without completed scratch
+- [ ] AC2 — Retained run inspection and artifact references survive scratch removal
+- [ ] AC3 — Existing lasting data is preserved before its scratch dependency is retired
 
-```gherkin
-Feature: worktree-batch evidence references
+The three titles are E71's scenarios verbatim (DD-09 subset rule); this task delivers their worktree-batch half, and Requirements R1–R4 carry the specifics.
 
-  @core
-  # covers: R2, R3
-  Scenario: R1 — A worktree batch sees a prior completed task's evidence
-    Given a feature whose earlier task is done and whose verdict artifact lives in the invoking tree
-    When a worktree batch runs the wrap's feature preflight and metrics
-    Then the preflight reports no tree-local missing-evidence finding
-    And the metrics row carries the task's real verdict rather than UNKNOWN
-
-  Scenario: R2 — A batch-local done_reason names a surviving artifact
-    Given a task closed inside a batch worktree
-    When the batch merges and removes its worktree
-    Then the task's done_reason names an artifact path that still resolves in the invoking tree
-
-  Scenario: R3 — Staging and reference rewriting stay confined
-    Given a worktree batch that stages prior evidence or rewrites a recorded path
-    When the batch completes
-    Then every staged or rewritten path stays inside the invoking tree's `.spur/` scratch
-    And plain (non-worktree) runs are unchanged
-```
+Verification: re-run a worktree batch over a feature whose earlier task is already `done` and confirm (a) the wrap preflight logs no tree-local missing-evidence finding, (b) the metrics row carries the task's real verdict, and (c) the wrapped task's `done_reason` resolves after WT-4 removes the worktree.
 
 ### Q&A
 
