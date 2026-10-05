@@ -1803,6 +1803,13 @@ posture); [workflow composition](design/workflow-composition-contract.md#composi
 > `AgentCoordinationService` plus the fleet service's roster projection. Detail:
 > [fleet declaration system design](design/fleet-config-declaration.md) (Accepted 2026-09-15).
 
+**Current reading:** the 2026-09-15 amendment is the current carrier. A project's roster is the
+`agent.fleet` section of its merged config; `enabled` gates fleet resolution and autostart; the
+fleet's agent instances are **derived** from that declaration plus occupancy and are never stored —
+`.spur/agents/` holds hand-authored specs only, and the retired team-mode design is superseded and
+delinked from `04_DESIGN` (ADR-086 A3, G72 R2 2026-10-05). The `.spur/fleet.json` and `agent.team`
+descriptions above record earlier stages, not supported configuration.
+
 ## ADR-117: Trace Emission Is an Obligation of Every Execution Surface, Not of the Engine
 
 - **Status:** Accepted · **Date:** 2026-09-16 · **Feature:** D62 · **Amends:** ADR-047

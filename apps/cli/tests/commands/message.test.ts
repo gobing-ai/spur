@@ -16,10 +16,15 @@ async function makeCtx(): Promise<{
     dbUrl: string;
     cleanup: () => Promise<void>;
 }> {
-    const cwd = await mkdtemp(join(tmpdir(), 'spur-msg-'));
+    // mkdtemp's random suffix is mixed-case; agent ids are lowercase-only, so the
+    // project is a fixed lowercase dir inside the temp parent. The fleet slug falls
+    // back to that basename, which is what the role-resolution assertions expect.
+    const root = await mkdtemp(join(tmpdir(), 'spur-msg-'));
+    const cwd = join(root, 'alpha');
+    await mkdir(cwd, { recursive: true });
     const out = createCapturedOutput();
     const dbUrl = join(cwd, 'test.db');
-    return { cwd, out, dbUrl, cleanup: async () => rm(cwd, { recursive: true, force: true }) };
+    return { cwd, out, dbUrl, cleanup: async () => rm(root, { recursive: true, force: true }) };
 }
 
 describe('spur message send', () => {
@@ -720,29 +725,31 @@ async function seedSendOccupant(opts: {
     db.close();
 }
 
-describe('spur message send --role (0685 R6)', () => {
-    /** Seed materialized spec files the role/executor store can project. */
-    async function seedSpecs(
-        cwd: string,
-        specs: { id: string; type: string; executor: string; role?: string }[],
-    ): Promise<void> {
-        const dir = join(cwd, '.spur', 'agents');
+describe('spur message send --role (G72 R1)', () => {
+    /**
+     * Seed the `agent.fleet` declaration role/executor addressing resolves over
+     * (G72 R1). Members are derived from the declaration — a spec file on disk is no
+     * longer a roster carrier, so it must not be addressable.
+     */
+    async function seedFleet(cwd: string, members: { id: string; executor: string; role?: string }[]): Promise<void> {
+        const dir = join(cwd, '.spur');
         await mkdir(dir, { recursive: true });
-        for (const s of specs) {
-            const yaml = [
-                `id: ${s.id}`,
-                `name: ${s.id}`,
-                `type: ${s.type}`,
-                `executor: ${s.executor}`,
-                `workspace: ${cwd}`,
-                `purpose: role fixture`,
-                'tags:',
-                '  - spur:test-fixture',
-                'config:',
-                ...(s.role ? [`  role: ${s.role}`] : []),
-            ].join('\n');
-            await writeFile(join(dir, `${s.id}.yaml`), `${yaml}\n`, 'utf8');
-        }
+        const executors = [...new Set(members.map((m) => m.executor))];
+        const yaml = [
+            'agent:',
+            '  executors:',
+            ...executors.flatMap((name) => [`    - name: ${name}`, '      agent: claude']),
+            '  fleet:',
+            '    enabled: true',
+            '    members:',
+            ...members.flatMap((m) => [
+                `      - id: ${m.id}`,
+                ...(m.role ? [`        role: ${m.role}`] : []),
+                `        executor: ${m.executor}`,
+            ]),
+            '',
+        ].join('\n');
+        await writeFile(join(dir, 'config.yaml'), yaml, 'utf8');
     }
 
     test('--to and --role together is a usage error (exit 2)', async () => {
@@ -797,9 +804,9 @@ describe('spur message send --role (0685 R6)', () => {
 
     test('--role matching multiple instances exits 1 naming count and candidates', async () => {
         const { cwd, out, dbUrl, cleanup } = await makeCtx();
-        await seedSpecs(cwd, [
-            { id: 'rev-a', type: 'claude', executor: 'claude', role: 'reviewer' },
-            { id: 'rev-b', type: 'claude', executor: 'claude', role: 'reviewer' },
+        await seedFleet(cwd, [
+            { id: 'rev-a', executor: 'claude', role: 'reviewer' },
+            { id: 'rev-b', executor: 'claude', role: 'reviewer' },
         ]);
         try {
             const code = await main(['message', 'send', '--json', '--role', 'reviewer', 'hi'], {
@@ -819,10 +826,10 @@ describe('spur message send --role (0685 R6)', () => {
 
     test('--role exact-one resolves to the same pinned send-wait path as --to', async () => {
         const { cwd, out, dbUrl, cleanup } = await makeCtx();
-        await seedSpecs(cwd, [{ id: 'rev-one', type: 'claude', executor: 'claude', role: 'reviewer' }]);
+        await seedFleet(cwd, [{ id: 'rev-one', executor: 'claude', role: 'reviewer' }]);
         await seedSendOccupant({
             dbUrl,
-            specId: 'rev-one',
+            specId: 'alpha-rev-one',
             runId: 'R-role',
             events: [{ eventName: 'agent.invoke.exit', sequence: 2 }],
         });
@@ -833,7 +840,7 @@ describe('spur message send --role (0685 R6)', () => {
             );
             expect(code).toBe(0);
             const payload = JSON.parse(out.messages[0] ?? '{}');
-            expect(payload.toId).toBe('rev-one');
+            expect(payload.toId).toBe('alpha-rev-one');
             expect(payload.wait.satisfied).toBe('invoke-exit');
         } finally {
             await cleanup();

@@ -70,7 +70,7 @@ export function registerMessageCommand(program: Command, context: CliContext): v
             }
             if (options.role !== undefined) {
                 const resolution = await resolveAgentSelector(
-                    () => svc.listAgentSpecs(),
+                    () => svc.listFleetMembers(),
                     context.agentConfig,
                     options.role,
                 );

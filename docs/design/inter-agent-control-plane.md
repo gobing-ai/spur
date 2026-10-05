@@ -41,7 +41,7 @@ A live occupant is this record (app/domain type; Wave 1 shipped — not a transp
 
 ```ts
 interface OccupantRef {
-    specId: string; // `.spur/agents/<id>.yaml` id
+    specId: string; // agent.fleet member id — `<projectSlug>-<memberLocalId>` (G72 R2: derived, not a spec file)
     agentKind: string; // coding-agent type, e.g. `codex`
     processId: string | null; // supervisor registry id when supervised
     runId: string; // this invoke / loop iteration
@@ -247,3 +247,9 @@ ID, status, task ID, and artifact references. No ambiguous request is automatica
 Only an explicit verified receipt clears the corresponding hold. Exhausted attempts remain
 `attempts-exhausted` on subsequent reads; reconciliation and read-only classification share one
 classifier.
+
+Dispatch is **inbox-only**: a fleet member is addressed by its declared `agent.fleet` id, and its
+runtime instance is derived from the declaration plus occupancy (ADR-086 A3, G72 R2) — there is no
+team daemon, no stored instance row, and no generated spec file under `.spur/agents/` to correlate
+against. `.spur/agents/` holds hand-authored specs only, and those are merged with the declared
+members for addressing, with the declaration winning an id clash.

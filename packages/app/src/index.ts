@@ -64,12 +64,6 @@ export type {
 } from './services/agent-coordination-service';
 export { AgentCoordinationService } from './services/agent-coordination-service';
 export {
-    createFileAgentInstanceStore,
-    type RoleTargetResolution,
-    resolveAgentSelector,
-    resolveRoleTarget,
-} from './services/agent-instance-store';
-export {
     type AgentLoopDeps,
     type AgentLoopRunInput,
     type AgentLoopRuntime,
@@ -282,9 +276,15 @@ export {
     type FleetReceiptStatus,
     RECEIPT_POLL_INTERVAL_MS,
 } from './services/fleet-dispatcher';
+export {
+    type FleetMemberLister,
+    type RoleTargetResolution,
+    resolveAgentSelector,
+    resolveRoleTarget,
+} from './services/fleet-selector';
 export type {
+    AgentSpecMergeResult,
     FleetServiceContext,
-    MaterializeResult,
     MaterializeRosterParams,
     OrchestratorBinding,
     OrchestratorState,
@@ -295,7 +295,7 @@ export type {
     RosterProjection,
 } from './services/fleet-service';
 // Project fleet declaration (0835) + orchestrator binding (0836)
-export { FleetService, materializeRoster, resolveMemberExecutor } from './services/fleet-service';
+export { FleetService, materializeRoster, mergeAgentSpecs, resolveMemberExecutor } from './services/fleet-service';
 export {
     type HistoryRollupRefreshResult,
     refreshHistoryRollups,

@@ -12,9 +12,14 @@ async function makeCtx(): Promise<{
     out: ReturnType<typeof createCapturedOutput>;
     cleanup: () => Promise<void>;
 }> {
-    const cwd = await mkdtemp(join(tmpdir(), 'spur-wait-'));
+    // mkdtemp's random suffix is mixed-case; agent ids are lowercase-only, so the project
+    // is a fixed lowercase dir inside the temp parent (the fleet slug falls back to its
+    // basename for the unregistered project).
+    const root = await mkdtemp(join(tmpdir(), 'spur-wait-'));
+    const cwd = join(root, 'alpha');
+    await mkdir(cwd, { recursive: true });
     const out = createCapturedOutput();
-    return { cwd, out, cleanup: async () => rm(cwd, { recursive: true, force: true }) };
+    return { cwd, out, cleanup: async () => rm(root, { recursive: true, force: true }) };
 }
 
 /** Seed an occupant + invoke events into the CLI's file DB, then close it. */
@@ -48,23 +53,23 @@ async function seedOccupant(opts: {
     db.close();
 }
 
-/** Seed one file-backed materialized instance for role resolution. */
+/** Seed the `agent.fleet` declaration role resolution reads (G72 R1: derived, not a spec file). */
 async function seedRoleSpec(cwd: string, id: string, role: string): Promise<void> {
-    const dir = join(cwd, '.spur', 'agents');
+    const dir = join(cwd, '.spur');
     await mkdir(dir, { recursive: true });
     await writeFile(
-        join(dir, `${id}.yaml`),
+        join(dir, 'config.yaml'),
         [
-            `id: ${id}`,
-            `name: ${id}`,
-            'type: claude',
-            'executor: claude',
-            `workspace: ${cwd}`,
-            'purpose: wait role fixture',
-            'tags:',
-            '  - spur:test-fixture',
-            'config:',
-            `  role: ${role}`,
+            'agent:',
+            '  executors:',
+            '    - name: claude',
+            '      agent: claude',
+            '  fleet:',
+            '    enabled: true',
+            '    members:',
+            `      - id: ${id}`,
+            `        role: ${role}`,
+            '        executor: claude',
             '',
         ].join('\n'),
         'utf8',
@@ -184,7 +189,7 @@ describe('spur agent wait — seeded occupant resolves', () => {
         await seedRoleSpec(cwd, 'demo-reviewer', 'reviewer');
         await seedOccupant({
             dbUrl,
-            specId: 'demo-reviewer',
+            specId: 'alpha-demo-reviewer',
             runId: 'R-role',
             events: [{ eventName: 'agent.invoke.exit', sequence: 2 }],
         });
@@ -196,7 +201,7 @@ describe('spur agent wait — seeded occupant resolves', () => {
             });
             expect(code).toBe(0);
             const parsed = JSON.parse(out.messages.join(''));
-            expect(parsed.pin).toMatchObject({ specId: 'demo-reviewer', runId: 'R-role', generation: 1 });
+            expect(parsed.pin).toMatchObject({ specId: 'alpha-demo-reviewer', runId: 'R-role', generation: 1 });
         } finally {
             await cleanup();
         }

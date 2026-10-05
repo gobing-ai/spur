@@ -96,9 +96,11 @@ No converter: no registered project carries a fleet declaration. `misplacedGloba
 `apps/server/src/serve.ts`, replacing the `fs.exists(.spur/fleet.json)` gate and the `resolveAutostartSet` block:
 
 1. Config load (the §2 guard fails the start on a retired source).
-2. `agent.fleet` absent or `enabled: false` → no materialization, no autostart; log the disabled state once.
-3. `enabled: true` → `FleetService.materialize(projectRoot)` (ground-truth guard unchanged) →
-   `supervisor.startAutostart(result.upserted)`: every materialized (enabled) member starts.
+2. `agent.fleet` absent or `enabled: false` → no fleet resolution, no autostart; log the disabled state once.
+3. `enabled: true` → `FleetService.specs(projectRoot)` (ground-truth guard unchanged) →
+   `supervisor.registerAgentSpecs(specs)` → `supervisor.startAutostart(specs.map((s) => s.id))`: every
+   enabled member starts. Since G72 R2 the specs are DERIVED from `agent.fleet` (ADR-086 A3) and
+   nothing is written to `.spur/agents/`, so the supervisor is handed the roster instead of reading it.
 4. Strategy reconcile (R4): `current = getStrategy(path)`; `if (current.name !== fleet.strategy) setStrategy(path, fleet.strategy)`.
    `setStrategy` already bumps `strategy_version` and emits `strategy.changed`; the compare keeps restarts silent.
    Runs whenever `agent.fleet` is present, enabled or not.
@@ -161,12 +163,18 @@ Payloads drop `teamId`. Persisted `system_events` rows keep their old names (his
 | Today | After |
 | --- | --- |
 | `TeamService` messaging (`getInbox`, `drainPending`, `releasePending`, `settleDelivered`, `settleFailed`, `countPending`, `listRecent`, `replyToMessage`), `assignTask`, `listAgentSpecs`, `createAgentSpec`, `buildIdentity` | `AgentCoordinationService` (`agent-coordination-service.ts`) |
-| `materializeRoster`, `resolveMemberExecutor`, `MaterializeResult` | `fleet-service.ts` (sole consumer; `teamId` field dropped) |
+| `materializeRoster`, `resolveMemberExecutor`, `FleetService.specs`, `mergeAgentSpecs` | `fleet-service.ts` (sole consumer; `teamId` field dropped) |
 | `listTeams`, `materializeTeam`, `teardownTeam`, team `getStatus`, `resolveAutostartSet` | deleted |
 | supervisor `team:` tag → `teamId`, `SPUR_TEAM_ID` env | deleted (no producer tags `team:` any more) |
 
-Kept: the `agent_instances.team_id` column and index stay nullable and unwritten — a rename is a schema
-migration and is out of scope.
+Kept: hand-authored specs under `.spur/agents/` — they are merged with the declared fleet members by
+`mergeAgentSpecs`, with the declaration winning an id clash, and a stale `fleet:generated` file left
+behind by the retired materialization path is ignored.
+
+Retired since (G72 R2 / ADR-086 A3): `FleetService.materialize` and its write/prune half, the
+`MaterializeResult` shape, `AgentInstanceStore` / `createFileAgentInstanceStore`, and the
+never-registered `AGENT_INSTANCES_DDL_DRAFT` / `AGENT_INSTANCES_MIGRATION_ID_DRAFT` constants. The
+table was never created, so there is no drop migration — the draft DDL is simply gone.
 
 ### Member sessions (G66 / task 0897)
 

@@ -302,7 +302,7 @@ describe('startServer', () => {
         expect(typeof startServer).toBe('function');
     });
 
-    test('0848: materializes the fleet before serving and preserves its registered mailbox prefix', async () => {
+    test('0848 + G72 R2: derives the fleet roster before serving and preserves its registered mailbox prefix', async () => {
         const { sigHandlers, exitCalled } = installProcessMocks();
         const originalCwd = process.cwd();
         const originalRegistry = getEnvVar('SPUR_PROJECTS_FILE');
@@ -315,8 +315,9 @@ describe('startServer', () => {
         const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
         await applyCliMigrations(db);
         const bus = new EventBus<Record<string, (event: unknown) => void>>();
-        // 0858 R4/AC3: every upserted id reaches startAutostart — captured, not inferred.
+        // 0858 R4/AC3: every enabled member id reaches startAutostart — captured, not inferred.
         const autostarted: string[] = [];
+        const registered: string[] = [];
         try {
             process.chdir(project);
             await new ProjectRegistry().upsert({ path: project, name: 'legacy' });
@@ -324,6 +325,8 @@ describe('startServer', () => {
                 join(project, '.spur', 'config.yaml'),
                 'agent:\n  executors:\n    - name: worker\n      agent: claude\n      tier: standard\n  fleet:\n    enabled: true\n    members:\n      - id: coder\n        role: coder\n',
             );
+            // G72 R2 (ADR-086 A3): the roster is DERIVED from agent.fleet — nothing is
+            // materialized into `.spur/agents/` — so the supervisor is handed the specs.
             const specPath = join(project, '.spur', 'agents', 'legacy-coder.yaml');
             const deps = makeDeps({
                 createNodeFileSystem,
@@ -336,13 +339,16 @@ describe('startServer', () => {
                     taskService: () => ({ list: async () => [] }),
                     supervisor: () => ({
                         stopAll: async () => {},
+                        registerAgentSpecs: (specs: readonly { id: string }[]) => {
+                            registered.push(...specs.map((s) => s.id));
+                        },
                         startAutostart: async (ids: readonly string[]) => {
                             autostarted.push(...ids);
                         },
                     }),
                 })) as unknown as StartServerDeps['createServerContext'],
                 createApp: (() => {
-                    expect(existsSync(specPath)).toBe(true);
+                    expect(registered).toEqual(['legacy-coder']);
                     return fakeApp();
                 }) as unknown as StartServerDeps['createApp'],
             });
@@ -350,7 +356,8 @@ describe('startServer', () => {
                 { port: 5009, host: '127.0.0.1', openBrowser: false, keepAlive: false, cwd: project },
                 deps,
             );
-            expect(readFileSync(specPath, 'utf8')).toContain('legacy-coder');
+            expect(existsSync(specPath)).toBe(false);
+            expect(registered).toEqual(['legacy-coder']);
             expect(autostarted).toEqual(['legacy-coder']);
             expect((await new ProjectRegistry().getByPath(project))?.name).toBe('legacy');
             sigHandlers.SIGINT?.();

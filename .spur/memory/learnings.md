@@ -5072,3 +5072,19 @@ Named limits (do not read this HIGH as covering them):
 - `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md` was verified to carry the
   `--estimated` contract (lines 345, 348-350, 635-656) but is a plugin reference, outside the
   `docs/` doc-map, so its own metadata was not swept.
+# Wrap-up learnings — G72 fleet team-residue cleanup (2026-10-05)
+
+## 1078 — Remove team-era residue from fleet code, contracts and the Board
+- A roster that is *declared* (`agent.fleet`) and *derived* has no second carrier to reconcile: deleting the materialization write path removed the only place where a member id could disagree with its declaration.
+- Removing an exported shape (`MaterializeResult`, `AgentInstanceStore`) is safest in one pass: delete the type, every call site and its test in the same change, then let the type checker enumerate the survivors.
+- Tests that assert *on-disk generated state* are the ones that must be rewritten, not merely re-pointed: they encode the behavior being deleted, so re-deriving them over the new seam is the work, not a fixture fix.
+
+## 1079 — Derive agent instances from agent.fleet, drop the instance store and sync fleet docs
+- Precedence is the whole contract of a merge seam: `mergeAgentSpecs` keeps hand-authored specs, lets the declaration win an id clash, and *ignores* a stale `fleet:generated` file — the last rule is what stops an upgraded project's leftover scratch from shadowing config.
+- Validating ids at the *read* boundary (`FleetService.specs` → `validateAgentId`) makes the project slug load-bearing in every fixture: `mkdtemp`'s mixed-case suffix is not a valid agent-id prefix, so a fixture must use a fixed lowercase project dir inside the temp parent (four test files needed this).
+- A `--worktree` batch cannot see per-tree `.spur/run/` evidence from the invoking tree. The wrap's feature preflight reported 1078's verdict artifact as missing purely because it lives in the invoking tree; the same check run there reported only the genuine scenario gaps. Batch gates that read *prior* tasks' evidence need it carried into the worktree, or they must run after the merge.
+- `spur task verdict --from-answer` has a strict answer lint: one `Verdict:` line, one `Confidence:` line, the Req cell must be the bare id (`R1`, never `R1 — text`), and the AC table must be exactly four columns with a single evidence-type token in cell 3.
+- The proof digest is captured at quality-gate entry, so any tracked-file change afterwards invalidates it: two post-gate corrections (a doc wording fix and a stale code comment) each cost a `test-recheck` re-entry plus a full `bun run spur-check`. Batch-review cleanups are cheapest *before* the gate.
+- `L4.dogfood-missing` (feature-check) fires when a linked task's `## Solution` text matches `/plugins\/sp\//` — for G72 it was tripped by the *generated* `plugins/sp/lib/*.generated.mjs` regenerating from a domain source edit, so a derived artifact alone can demand dogfood evidence before the feature may be marked done.
+- `wrapup-steps.ts resolve` writes its refusal to `<runId>-route-reason.txt` (not a `-wrapup-reason` path) and its verdict to `<runId>-wrapup-resolve.status`; a feature preflight refusal aborts the wrap before doc-sync, learnings and metrics.
+

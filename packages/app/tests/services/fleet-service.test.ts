@@ -12,6 +12,7 @@ import {
     type AgentRoleDefinition,
     FleetService,
     type FleetServiceContext,
+    mergeAgentSpecs,
     normalizeProjectPath,
     ProjectRegistry,
 } from '../../src/index';
@@ -491,10 +492,9 @@ describe('FleetService session join (0897)', () => {
     });
 });
 
-describe('FleetService materialize (0835 R2/R3/R6)', () => {
-    test('writes one generated spec per enabled member; disabled members are not materialized', async () => {
+describe('FleetService.specs (G72 R2/R3)', () => {
+    test('projects one spec per enabled member and writes nothing to .spur/agents/', async () => {
         const { project, slug, cleanup } = await makeProject();
-        const prevCwd = process.cwd();
         try {
             await writeFleet(project, {
                 members: [
@@ -502,186 +502,123 @@ describe('FleetService materialize (0835 R2/R3/R6)', () => {
                     { role: 'reviewer', executor: 'readonly', enabled: false },
                 ],
             });
-            process.chdir(project);
             const svc = makeService(parseConfig(EXECUTORS_YAML), project);
-            const result = await svc.materialize(project);
-            expect(result.written).toBe(true);
-            expect(result.upserted).toEqual([`${slug}-lead`]);
-            const specs = await loadAgentSpecs(join(project, '.spur', 'agents'));
-            const byId = new Map(specs.map((s) => [s.id, s]));
-            expect(byId.has(`${slug}-lead`)).toBe(true);
-            expect(byId.has(`${slug}-reviewer-1`)).toBe(false);
-            const lead = byId.get(`${slug}-lead`);
-            expect(lead?.tags).toContain('spur:generated');
+            const specs = await svc.specs(project);
+            expect(specs.map((s) => s.id)).toEqual([`${slug}-lead`]);
+            const lead = specs[0];
+            expect(lead?.tags).toEqual([`fleet:${slug}`, 'spur:generated', 'fleet:generated']);
             expect(lead?.executor).toBe('writer');
             expect(lead?.type).toBe('claude');
             expect(lead?.workspace).toBe(normalizeProjectPath(project));
+            // G72 R2: derivation replaced materialization — the config dir stays empty.
+            expect(await loadAgentSpecs(join(project, '.spur', 'agents'))).toEqual([]);
         } finally {
-            process.chdir(prevCwd);
+            fleetSections.delete(project);
             await cleanup();
         }
     });
 
-    test('R6: cwd/storage-root mismatch is a loud error naming both paths', async () => {
+    test('returns [] — never an exception — with no declaration, a disabled fleet, or no enabled member', async () => {
+        const { project, cleanup } = await makeProject();
+        try {
+            const svc = makeService(parseConfig(EXECUTORS_YAML), project);
+            expect(await svc.specs(project)).toEqual([]);
+            await writeFleet(project, { enabled: false, members: [{ id: 'lead', executor: 'writer' }] });
+            expect(await svc.specs(project)).toEqual([]);
+            await writeFleet(project, { members: [{ id: 'lead', executor: 'writer', enabled: false }] });
+            expect(await svc.specs(project)).toEqual([]);
+        } finally {
+            fleetSections.delete(project);
+            await cleanup();
+        }
+    });
+
+    test('keeps the launch-boundary ground-truth guard (R6)', async () => {
         const { project, cleanup } = await makeProject();
         try {
             await writeFleet(project, { members: [{ executor: 'writer' }] });
             const svc = makeService(parseConfig(EXECUTORS_YAML), project);
             // Test process stays in the repo — NOT the project.
-            await expect(svc.materialize(project)).rejects.toThrow(/Ground-truth mismatch/);
-            await expect(svc.materialize(project)).rejects.toThrow(
+            await expect(svc.assertLaunchGroundTruth(project)).rejects.toThrow(/Ground-truth mismatch/);
+            await expect(svc.assertLaunchGroundTruth(project)).rejects.toThrow(
                 new RegExp(process.cwd().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
             );
         } finally {
-            await cleanup();
-        }
-    });
-
-    test('R2: hand-authored specs with a desired id are never touched', async () => {
-        const { project, slug, cleanup } = await makeProject();
-        const prevCwd = process.cwd();
-        try {
-            await writeFleet(project, { members: [{ executor: 'writer', purpose: 'authored' }] });
-            const configDir = join(project, '.spur', 'agents');
-            await mkdir(configDir, { recursive: true });
-            await seedSpec(configDir, `${slug}-writer`, [], 'handwritten-kind');
-            process.chdir(project);
-            const svc = makeService(parseConfig(EXECUTORS_YAML), project);
-            const result = await svc.materialize(project);
-            // The id is desired, but the hand-authored spec is skipped, not overwritten.
-            expect(result.upserted).toEqual([]);
-            const specs = await loadAgentSpecs(configDir);
-            expect(specs).toHaveLength(1);
-            expect(specs[0]?.type).toBe('handwritten-kind');
-            expect(specs[0]?.tags ?? []).not.toContain('spur:generated');
-        } finally {
-            process.chdir(prevCwd);
-            await cleanup();
-        }
-    });
-
-    test('disabling a previously materialized member prunes its generated spec (desired-state projection)', async () => {
-        const { project, slug, cleanup } = await makeProject();
-        const prevCwd = process.cwd();
-        try {
-            await writeFleet(project, { members: [{ executor: 'writer' }, { executor: 'readonly' }] });
-            process.chdir(project);
-            const svc = makeService(parseConfig(EXECUTORS_YAML), project);
-            const first = await svc.materialize(project);
-            expect(first.upserted.sort()).toEqual([`${slug}-readonly`, `${slug}-writer`].sort());
-
-            await writeFleet(project, {
-                members: [{ executor: 'writer' }, { executor: 'readonly', enabled: false }],
-            });
-            const second = await svc.materialize(project);
-            expect(second.upserted).toEqual([`${slug}-writer`]);
-            expect(second.orphaned).toEqual([`${slug}-readonly`]);
-            const specs = await loadAgentSpecs(join(project, '.spur', 'agents'));
-            expect(specs.map((s) => s.id)).toEqual([`${slug}-writer`]);
-        } finally {
-            process.chdir(prevCwd);
-            await cleanup();
-        }
-    });
-
-    test('check=true returns the diff and writes nothing; missing declaration fails loudly', async () => {
-        const { project, slug, cleanup } = await makeProject();
-        const prevCwd = process.cwd();
-        try {
-            await writeFleet(project, { members: [{ executor: 'writer' }] });
-            process.chdir(project);
-            const svc = makeService(parseConfig(EXECUTORS_YAML), project);
-            const result = await svc.materialize(project, { check: true });
-            expect(result.written).toBe(false);
-            expect(result.upserted).toEqual([`${slug}-writer`]);
-            expect(await loadAgentSpecs(join(project, '.spur', 'agents'))).toEqual([]);
-
             fleetSections.delete(project);
-            await expect(svc.materialize(project)).rejects.toThrow(/No agent\.fleet declaration/);
-        } finally {
-            process.chdir(prevCwd);
             await cleanup();
         }
     });
 
-    test('a fleet spec pruned by materialization never takes a hand-authored spec with it (R2 teardown contract)', async () => {
+    test('a disabled member with an unresolvable executor never blocks the projection (review P3)', async () => {
         const { project, slug, cleanup } = await makeProject();
-        const prevCwd = process.cwd();
-        try {
-            await writeFleet(project, { members: [{ executor: 'writer' }] });
-            const configDir = join(project, '.spur', 'agents');
-            await mkdir(configDir, { recursive: true });
-            // A hand-authored spec id that will NOT be desired (different member).
-            await seedSpec(configDir, `${slug}-reviewer-1`, [`team:${slug}`], 'claude');
-            process.chdir(project);
-            const svc = makeService(parseConfig(EXECUTORS_YAML), project);
-            const result = await svc.materialize(project);
-            expect(result.orphaned).toEqual([]);
-            const specs = await loadAgentSpecs(configDir);
-            expect(specs.map((s) => s.id).sort()).toEqual([`${slug}-reviewer-1`, `${slug}-writer`].sort());
-        } finally {
-            process.chdir(prevCwd);
-            await cleanup();
-        }
-    });
-
-    test('a disabled member with an unresolvable executor does not block materialization (review P3)', async () => {
-        const { project, slug, cleanup } = await makeProject();
-        const prevCwd = process.cwd();
         try {
             await writeFleet(project, {
                 members: [
                     { id: 'lead', executor: 'writer' },
-                    // Pins an executor that does not exist — but the member is
-                    // disabled, so no executor resolution may happen for it.
+                    // Pins an executor that does not exist — but the member is disabled,
+                    // so no executor resolution may happen for it.
                     { id: 'ghost', executor: 'nonexistent', enabled: false },
                 ],
             });
             const configDir = join(project, '.spur', 'agents');
             await mkdir(configDir, { recursive: true });
-            // Stale generated spec from when ghost was enabled — desired-state
-            // projection must retire it without ever resolving its executor.
+            // Stale generated spec from when ghost was enabled: derivation ignores it.
             await seedSpec(configDir, `${slug}-ghost`, [`fleet:${slug}`, 'spur:generated', 'fleet:generated']);
-            process.chdir(project);
             const svc = makeService(parseConfig(EXECUTORS_YAML), project);
-            const result = await svc.materialize(project);
-            expect(result.upserted).toEqual([`${slug}-lead`]);
-            expect(result.orphaned).toEqual([`${slug}-ghost`]);
-            const specs = await loadAgentSpecs(configDir);
-            expect(specs.map((s) => s.id)).toEqual([`${slug}-lead`]);
+            expect((await svc.specs(project)).map((s) => s.id)).toEqual([`${slug}-lead`]);
         } finally {
-            process.chdir(prevCwd);
+            fleetSections.delete(project);
             await cleanup();
         }
     });
 
-    test('0857: re-materializing the same fleet is idempotent and never orphans its own specs', async () => {
+    test('0857: repeated reads keep the same derived instance ids', async () => {
         const { project, cleanup } = await makeProject();
-        const prevCwd = process.cwd();
         try {
             // Registry display name == the fleet slug: the derived instance id is what
-            // must stay stable across passes, never a second group's namespace.
+            // must stay stable, never a second group's namespace.
             const slug = 'shared';
             await new ProjectRegistry(join(project, '.spur', 'registry.json')).upsert({
                 name: slug,
                 path: project,
             });
             await writeFleet(project, { members: [{ id: 'lead', executor: 'writer' }] });
-            process.chdir(project);
-            const fleetSvc = makeService(parseConfig(EXECUTORS_YAML), project);
-
-            const fleet1 = await fleetSvc.materialize(project);
-            expect(fleet1.upserted).toEqual([`${slug}-lead`]);
-
-            // A second pass over the same declaration must not retire what it wrote.
-            const fleet2 = await fleetSvc.materialize(project);
-            expect(fleet2.orphaned).toEqual([]);
-            const specs = await loadAgentSpecs(join(project, '.spur', 'agents'));
-            expect(specs.map((s) => s.id).sort()).toEqual([`${slug}-lead`]);
+            const svc = makeService(parseConfig(EXECUTORS_YAML), project);
+            expect((await svc.specs(project)).map((s) => s.id)).toEqual([`${slug}-lead`]);
+            expect((await svc.specs(project)).map((s) => s.id)).toEqual([`${slug}-lead`]);
         } finally {
-            process.chdir(prevCwd);
+            fleetSections.delete(project);
             await cleanup();
         }
+    });
+});
+
+describe('mergeAgentSpecs (G72 R2)', () => {
+    function disk(id: string, tags: string[] = [], name = id): AgentSpec {
+        return { id, name, type: 'claude', workspace: '/w', purpose: 'fixture', tags, config: {} } as AgentSpec;
+    }
+
+    test('hand-authored specs survive and declared fleet specs are appended', () => {
+        const { specs, shadowed } = mergeAgentSpecs([disk('manual')], [disk('proj-lead', ['fleet:generated'])]);
+        expect(specs.map((s) => s.id)).toEqual(['manual', 'proj-lead']);
+        expect(shadowed).toEqual([]);
+    });
+
+    test('a stale fleet-generated file on disk never shadows the declaration', () => {
+        const { specs, shadowed } = mergeAgentSpecs(
+            [disk('proj-lead', ['fleet:proj', 'spur:generated', 'fleet:generated'], 'stale-on-disk')],
+            [disk('proj-lead', ['fleet:proj', 'spur:generated', 'fleet:generated'], 'declared')],
+        );
+        expect(specs).toHaveLength(1);
+        expect(specs[0]?.name).toBe('declared');
+        expect(shadowed).toEqual([]);
+    });
+
+    test('the declared fleet spec wins an id clash and is reported as shadowing', () => {
+        const { specs, shadowed } = mergeAgentSpecs([disk('proj-lead')], [disk('proj-lead', ['fleet:generated'])]);
+        expect(shadowed).toEqual(['proj-lead']);
+        expect(specs).toHaveLength(1);
+        expect(specs[0]?.tags).toContain('fleet:generated');
     });
 });
 

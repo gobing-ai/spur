@@ -299,6 +299,34 @@ describe('SupervisorService', () => {
 
             await expect(svc.startAutostart(['alpha', 'gamma'])).rejects.toThrow('Autostart agent "gamma" not found');
         });
+
+        test('G72 R2: config-derived specs autostart with no spec file on disk', async () => {
+            const { executor, calls } = createMockExecutor();
+            const { bus } = createMockBus();
+            // Nothing under configDir: the fleet's members are derived from `agent.fleet`
+            // (G72 R2), so without registration autostart has nothing to resolve — the
+            // pre-fix failure mode (serve started nothing).
+            const svc = new SupervisorService({
+                processExecutor: executor,
+                eventBus: bus,
+                configDir: '/nonexistent-agents-dir',
+            });
+            await expect(svc.startAutostart(['alpha-lead'])).rejects.toThrow('not found');
+
+            svc.registerAgentSpecs([
+                makeSpec({ id: 'alpha-lead', tags: ['spur:generated'], config: { command: ['echo'] } }),
+            ]);
+            const entries = await svc.startAutostart(['alpha-lead']);
+            expect(entries).toHaveLength(1);
+            expect(entries[0]?.agentId).toBe('alpha-lead');
+            expect(calls).toHaveLength(1);
+
+            // Idempotent: a second registration does not duplicate the roster.
+            svc.registerAgentSpecs([
+                makeSpec({ id: 'alpha-lead', tags: ['spur:generated'], config: { command: ['echo'] } }),
+            ]);
+            expect(await svc.startAutostart(['alpha-lead'])).toHaveLength(1);
+        });
     });
 
     describe('stopAll', () => {

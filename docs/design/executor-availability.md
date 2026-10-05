@@ -48,7 +48,7 @@ false overrides it. Code reads availability only through the single normalizer
 Keep disabled entries in configuration and reference validation. Exclude them at the shared
 `cheapestEligibleExecutors` funnel and the independent escalation filters. Guard explicit names
 in both `resolveExecutor` and `AgentAppService.resolveExecutorSelector` before canonical-binary
-fallback. Team/spec materialization must retain executor attribution until the final launch
+fallback. Roster/spec derivation must retain executor attribution until the final launch
 check; a previously materialized agent/model pair cannot bypass a later disable.
 
 Run a final enabled check immediately before each subprocess launch. An explicit disabled pin

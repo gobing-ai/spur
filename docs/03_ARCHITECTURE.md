@@ -319,7 +319,7 @@ Execution/lease ownership: §26.
 
 | Location | Purpose |
 | ---------- | --------- |
-| `.spur/` | Project config `config.yaml` (ADR-017), local rule/workflow definitions, materialized agent specs (`agents/`) |
+| `.spur/` | Project config `config.yaml` (ADR-017), local rule/workflow definitions, hand-authored agent specs (`agents/`) |
 | `~/.config/spur/` | Global config layer, seeded from bundled assets; later layers override earlier ones: bundled → global → local (ADR-015). Its seeded `workflows/` copy is not a workflow layer (§6.4) |
 | SQLite DB (`DATABASE_URL` or `.spur/spur.db`) | CLI domain tables + history ETL/ledger/checkpoint + workflow/rule run history + inbox |
 | Agent JSONL files | Canonical raw history (never copied into the DB) |
@@ -578,8 +578,10 @@ capability record (`persistentStdin` → `resumeById` → one-shot) and each del
 reason-named `fleet.member-session-reset` ledger row (ADR-121, G66). Boundary details:
 [project fleet dispatch](design/project-switcher.md#fleet-ownership-and-dispatch-boundaries-g62).
 
-Server startup materializes declared fleet specs after the quota-update drain and before autostart
-or request admission. CLI and server use the same role resolver; registration retains the project
+Server startup derives the declared fleet specs from `agent.fleet` after the quota-update drain and
+before autostart or request admission (G72 R2 / ADR-086 A3: instances are derived, not stored, so
+nothing is materialized into `.spur/agents/` — that directory holds hand-authored specs only). CLI
+and server use the same role resolver and the same derived roster; registration retains the project
 name used as the mailbox prefix. Invalid fleet declarations fail startup before serving requests.
 
 The merge is retired: `apps/web/src/modules/inbox/timeline.ts` and its `mergeTimeline(messages,

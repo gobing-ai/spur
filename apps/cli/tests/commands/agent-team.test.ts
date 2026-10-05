@@ -2,8 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { AgentCoordinationService, DeliveryReconciler, FleetService, ProjectRegistry } from '@gobing-ai/spur-app';
-import { loadSpurConfig } from '@gobing-ai/spur-config/loader';
+import { AgentCoordinationService, DeliveryReconciler } from '@gobing-ai/spur-app';
 import type { AgentProcessOptions, DoctorResult } from '@gobing-ai/ts-ai-runner';
 import { RequestKeyConflictError } from '@gobing-ai/ts-db';
 import { EventBus } from '@gobing-ai/ts-infra';
@@ -19,10 +18,15 @@ async function makeCtx(env: Record<string, string | undefined> = {}): Promise<{
     out: ReturnType<typeof createCapturedOutput>;
     cleanup: () => Promise<void>;
 }> {
-    const cwd = await mkdtemp(join(tmpdir(), 'spur-agent-team-'));
+    // mkdtemp's random suffix is mixed-case; agent ids are lowercase-only, so the
+    // project itself is a fixed lowercase dir inside the temp parent (the fleet
+    // slug falls back to the directory basename when the project is unregistered).
+    const root = await mkdtemp(join(tmpdir(), 'spur-agent-team-'));
+    const cwd = join(root, 'alpha');
+    await mkdir(cwd, { recursive: true });
     const out = createCapturedOutput();
     const ctx = createCliContext({ cwd, output: out, env, dbUrl: ':memory:' });
-    return { ctx, cwd, out, cleanup: async () => rm(cwd, { recursive: true, force: true }) };
+    return { ctx, cwd, out, cleanup: async () => rm(root, { recursive: true, force: true }) };
 }
 
 /**
@@ -112,25 +116,10 @@ describe('spur agent list --specs', () => {
                 ].join('\n'),
                 'utf8',
             );
-            const fresh = createCliContext({ cwd, output: out, dbUrl: ':memory:' });
-            // The instance id derives from the project's registry display name, so the
-            // fixture registers one explicitly (a temp-dir basename is not a valid
-            // agent-id prefix). FleetService.materialize also asserts launch ground
-            // truth: the process cwd must BE the project it materializes (0835 R6).
-            const registry = new ProjectRegistry(join(cwd, '.spur', 'registry.json'));
-            await registry.upsert({ name: 'alpha', path: cwd });
-            const previousCwd = process.cwd();
-            process.chdir(cwd);
-            try {
-                await new FleetService({
-                    ...fresh,
-                    roles: fresh.agentRoles,
-                    registry,
-                    reloadAgentConfig: () => loadSpurConfig(cwd),
-                }).materialize(cwd);
-            } finally {
-                process.chdir(previousCwd);
-            }
+            // G72 R2: fleet specs are DERIVED from `agent.fleet` — nothing is written to
+            // `.spur/agents/`, so the declared roster is enough for the spec listing. The
+            // project dir is named `alpha`, which is the slug the unregistered project
+            // falls back to (the temp-dir basename was mixed-case and invalid as an id prefix).
 
             // Human: distinct role and executor columns; undeclared role renders `unset`.
             out.messages.length = 0;

@@ -40,7 +40,7 @@ Two top-level concerns:
   `roles` (ADR-061 / 0572 — optional closed-vocabulary per-role tier/stage overrides merged per-field
   over the `DEFAULT_AGENT_ROLES` constant; unknown role ids fail config load). `agent.fleet`
   (G65 / 0858) is the project fleet — the ONLY composition carrier and the project-layer-only
-  section: `enabled` (default `false`, the single switch `spur serve` gates materialization and
+  section: `enabled` (default `false`, the single switch `spur serve` gates fleet resolution and
   autostart on), `strategy` (`rest` | `gtd`, default `rest`; the `FLEET_STRATEGIES` tuple is the
   vocabulary SSOT), `orchestrator` (member local id), `members` (each declaring a role or an
   executor; `enabled: false` preserves its derived id index). It replaced `.spur/fleet.json` (0835)

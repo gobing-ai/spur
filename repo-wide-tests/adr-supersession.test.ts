@@ -168,3 +168,35 @@ describe('ADR identity survives editorial maintenance (constitution §6.1)', () 
         }
     });
 });
+
+/**
+ * G72 R4: the fleet docs describe the inbox-only fleet, and the already-superseded team-mode
+ * design is delinked from the design index while staying on disk as history.
+ */
+describe('G72 R4 — inbox-only fleet docs; the team-mode design stays superseded and delinked', () => {
+    const DESIGN_INDEX = join(REPO_ROOT, 'docs', '04_DESIGN.md');
+    const TEAM_MODE = join(REPO_ROOT, 'docs', 'design', 'spur-team-mode-design.md');
+    const ARCHITECTURE = join(REPO_ROOT, 'docs', '03_ARCHITECTURE.md');
+
+    test('(g1) ADR-116 carries a current-reading note naming the derived, inbox-only fleet', () => {
+        const text = adr116?.lines.join('\n') ?? '';
+        const start = text.indexOf('**Current reading:**');
+        expect(start, 'ADR-116 must carry a **Current reading:** line').toBeGreaterThan(-1);
+        const note = text.slice(start, start + 700);
+        expect(note).toContain('agent.fleet');
+        expect(note).toContain('derived');
+    });
+
+    test('(g2) the superseded team-mode design stays as history but is delinked from the design index', () => {
+        expect(readFileSync(DESIGN_INDEX, 'utf-8')).not.toContain('spur-team-mode-design.md');
+        // History is preserved: the document survives with its supersession status.
+        const design = readFileSync(TEAM_MODE, 'utf-8');
+        expect(design).toContain('superseded');
+    });
+
+    test('(g3) the architecture doc describes the derived fleet, not a materialization step', () => {
+        const arch = readFileSync(ARCHITECTURE, 'utf-8');
+        expect(arch).not.toContain('materialized fleet specs');
+        expect(arch).toContain('hand-authored agent specs');
+    });
+});

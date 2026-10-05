@@ -108,7 +108,7 @@ and `AGENTS.md`. Workflows and natural-path templates remain bundled; init creat
 `.spur/workflows/` nor `.spur/templates/`.
 The set of scaffolded files is an explicit reviewed manifest (`scaffold-manifest.ts`) — adding a default
 is a one-line manifest edit, not new control flow. Files are read from the resolved config source, not
-embedded as string literals. Always creates `.spur/agents/` (with a `.gitkeep`) for team-mode agent
+embedded as string literals. Always creates `.spur/agents/` (with a `.gitkeep`) for hand-authored agent
 specs, regardless of `--minimal`. On first run it seeds `~/.config/spur/` from the bundled package-root `config/`
 assets (existing files are never overwritten), so `spur rule run` resolves a real ruleset from any
 project. Re-running fills missing assets and preserves existing configuration/customized docs;
@@ -312,7 +312,7 @@ table; enforced by `plugins/sp/tests/roles.test.ts`, which fails on a command wi
 and the command dispatcher threads it into `--agent` so subprocess dispatch routes by the declared
 role; workflow `agent.run` steps declare `role:` beside their `agent:` pin; and
 `.spur/config.yaml`'s `agent.fleet` members declare an optional `role` — the **primary axis** since 0543: a
-member may name the role alone (executor optional) and materialization resolves an executor through
+member may name the role alone (executor optional) and the roster projection resolves an executor through
 the tier ladder; a member declaring at least one of role/executor is the load rule (R4). (Both retired
 carriers are gone: `agent.team` was removed with the roster runtime in 0857 and `.spur/fleet.json`
 with the fleet-in-config move in 0858; a leftover of either now fails the config load.)
@@ -328,7 +328,9 @@ profiles are never silently substituted. Collision precedence: when an executor 
 agent binary share a name, **the executor wins** (to reach the bare binary, remove or rename the
 executor entry). An explicit selector never consults phase / `default-by-phase` config (R8).
 **Spec-id addressing (feature G4 / 0537 / 0542).** Under `--drain`, `--spec <id>` (canonical since
-0542 R1) is matched against agent spec ids (`.spur/agents/<id>.yaml`); a match rewrites the
+0542 R1) is matched against the project's addressable agent spec ids — the declared `agent.fleet`
+members plus hand-authored `.spur/agents/<id>.yaml` specs (G72 R2: fleet members are DERIVED from
+the declaration and are no longer materialized as files); a match rewrites the
 selector to the spec's executor name before the executor-first lookup above runs, and the occupant
 pin `spec-id` is set before the rewrite so the ADR-057 wave 1 record persists. The legacy
 `--agent <spec-id>` is still accepted as fallback addressing; task 0849 retired its `agent-flag-spec-id`
@@ -381,14 +383,14 @@ project-relative files, never stdout/stderr bodies. A bare `spur agent run --age
 (no spec) creates no occupant and emits neither key. Slash commands like
 `/plugin:command` are translated per-agent (claude pass-through, codex `$`, pi/omp `/skill:…`,
 others including grok/hermes/opencode → `/plugin-command`).
-Team identity (purpose, tags, system prompt) is sourced from the agent **spec** (materialized from
+Team identity (purpose, tags, system prompt) is sourced from the agent **spec** (derived from
 the fleet declaration, below), not from `run` flags. `--drain` resolves the addressed `--spec <id>` (or the legacy
 `--agent <spec-id>` fallback, whose warn-once notice was retired by task 0849) as an **agent
 spec id** (a different namespace from the coding-agent type), folds that spec's pending inbox
 messages into the prompt, and rewrites `--agent` to the spec's **executor name** before dispatch
-(Phase 1-3 has no live stdin, so prepending is how deferred messages reach the agent). A
-team-materialized spec records the executor name beside the coding-agent kind (task 0537):
-`.spur/agents/<slug>-<localId>.yaml` carries `type: <kind>` **and** `executor: <name>`, so the
+(Phase 1-3 has no live stdin, so prepending is how deferred messages reach the agent). A derived
+fleet spec records the executor name beside the coding-agent kind (task 0537): the projected spec
+carries `type: <kind>` **and** `executor: <name>`, so the
 rewrite resolves back through `resolveExecutor`'s executor-first lookup and restores the
 operator's `{ agent, model }` with the executor's declared tier — a spec bound to `codex-sol`
 runs on `gpt-5.6-sol` at `capable-3`, not bare `codex` on the default model. For a **role-only**
@@ -433,7 +435,8 @@ Exit 0 on success, 1 on agent-not-found, 2 on invalid arguments, 3 on agent exec
 Detect installed agents; prints `ok|missing <name> [version]`. Backed by `ts-ai-runner`
 `AgentDetector` / `DISPLAY_ORDER`. Canonical agents (0.4.8+): `claude`, `codex`, `gemini`, `pi`,
 `omp`, `opencode`, `antigravity-cli`, `openclaw`, `hermes`, `grok` (`antigravity` is a deprecated
-alias of `antigravity-cli`). With `--specs`, lists the team agent specs under `.spur/agents/` instead
+alias of `antigravity-cli`). With `--specs`, lists the project's addressable agent specs — the
+declared `agent.fleet` members plus hand-authored `.spur/agents/` files (G72 R2) — instead
 (`<id> <type> <role> <executor> <purpose>` — role and executor are distinct columns; an undeclared
 role renders `unset`, 0544 R2/R4; `--json` includes the spec path plus `role`/`executor` fields,
 omitted when unset). Since 0848 `--specs` also merges live run status from the `spur serve`
@@ -531,15 +534,17 @@ recorded rejected shape (`spur agent doctor --refresh-usage`) live in
 
 <a id="agent-specs"></a>
 
-#### Agent specs (`.spur/agents/<id>.yaml`)
+#### Agent specs (declared `agent.fleet` members + hand-authored `.spur/agents/<id>.yaml`)
 
 Agent specs are backed by `ts-ai-runner` agent-spec helpers and the app-layer `AgentCoordinationService` /
 `FleetService`. There is no CLI authoring verb (`agent create|edit|delete` were removed at the G64
-cutover, 2026-09-14): specs are materialized from the fleet declaration at `spur serve` start and read
+cutover, 2026-09-14): the fleet's specs are DERIVED from the `agent.fleet` declaration whenever they
+are resolved (G72 R2 / ADR-086 A3 — instances are derived, not stored, so nothing is written to
+`.spur/agents/`), hand-authored files there are merged in, and both are read
 through `spur agent list --specs`. Spec ids are validated (`[a-z][a-z0-9_-]{1,63}`).
 
-- **Materialized specs record the executor binding (0537).** Materialization writes
-  `.spur/agents/<slug>-<localId>.yaml` with the coding-agent kind (`type`, required for the
+- **Derived specs record the executor binding (0537).** The projection writes no file: it yields
+  `<slug>-<localId>` with the coding-agent kind (`type`, required for the
   runner) **and** the configured executor name (`executor: <name>` beside `type`, e.g. `codex-sol`),
   so `--drain --spec <specId>` can resolve back to the operator's model + tier. `executor` is
   optional on disk — pre-existing specs carrying only `type` still load and drain via the fallback
@@ -547,7 +552,7 @@ through `spur agent list --specs`. Spec ids are validated (`[a-z][a-z0-9_-]{1,63
   may declare `role: <scribe|coder|reviewer|planner>` (the Layer-1 role vocabulary —
   `DEFAULT_AGENT_ROLES` in `packages/config`, task 0535) with or without an executor; `purpose` stays human
   annotation. A member declaring a role **and** an executor pins the executor (R2, pin beats policy);
-  a member declaring a role **alone** resolves at materialization through the shared tier ladder —
+  a member declaring a role **alone** resolves at projection time through the shared tier ladder —
   cheapest executor eligible for the role's tier, the same funnel `--agent <role>` uses (0543 R1) —
   and the spec records **both** the role (`config.role`) and the resolved executor (`executor`), so
   the resolution is inspectable. A member declaring neither role nor executor fails config load
@@ -562,8 +567,9 @@ through `spur agent list --specs`. Spec ids are validated (`[a-z][a-z0-9_-]{1,63
 
 Identity-pinned wait on an occupant run (ADR-057 wave 2 / G4 R4–R5; role-addressed selector per the
 ADR-075 amendment, 0685). Addressing is by spec id **or** `--role` — never both: `--role` resolves
-against materialized instances (`AgentInstanceStore`, vocabulary = `AGENT_ROLE_NAMES` ∪ configured
-executor names) and MUST match exactly one instance. Zero matches → exit 1
+against the declared fleet's members (`FleetService.resolve`; vocabulary = `AGENT_ROLE_NAMES` ∪ configured
+executor names — the retired `AgentInstanceStore` over spec files is gone, G72 R1) and MUST match
+exactly one enabled member. Zero matches → exit 1
 (`selector_unmatched`, `count=0`, candidates `none`); multiple → exit 1
 (`selector_ambiguous`) naming `count=N` + candidates;
 unknown name → exit 2 naming the accepted vocabulary. The resolution collapses onto the SAME
@@ -601,7 +607,7 @@ Durable inter-agent messaging over the SQLite `inbox_messages` table (backed by 
 
 Supervised process lifecycle (backed by `SupervisorService` via `spur serve`). The `spur team` noun was
 removed at the G64 cutover (2026-09-14): `assign` → `spur task update --assignee`, `status` →
-`spur agent list --specs`, `up` → fleet materialization at serve start. There is no attach verb:
+`spur agent list --specs`, `up` → fleet roster derivation at serve start. There is no attach verb:
 attach is `GET /api/processes/:id/stream` (SSE) plus Board/HTTP clients.
 
 - POST to `<server>/agents/<id>/(start|stop)` (default server `http://localhost:3000/api`; `--server` overrides). `--json` returns the raw server payload; otherwise `start` prints `started <id> (pid=<pid>, status=<status>)`, `stop` prints `stopped <id>`. Exit 1 on transport failure or server-side error. `start` launches `spur agent loop` under the supervisor and injects caller-identity env into that process: `SPUR_SPEC_ID` (spec id), `SPUR_RUN_ID` (process-generation UUID), and `SPUR_SERVE_URL` from the supervisor constructor or env (ADR-057 wave 1). `SPUR_AGENT` remains the host coding-agent hint, not a spec id. Process-pipe stdin (`POST /api/processes/:id/stdin`) is operator attach, not durable inbox delivery.

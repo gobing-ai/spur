@@ -1,4 +1,3 @@
-export * from './agent-instance';
 export * from './analytics';
 export * from './bdd';
 export * from './dao';
@@ -36,8 +35,6 @@ export {
 export * from './envelope';
 export * from './maintenance';
 export {
-    AGENT_INSTANCES_DDL_DRAFT,
-    AGENT_INSTANCES_MIGRATION_ID_DRAFT,
     applyCliMigrations,
     CLI_MIGRATION_FILE_MARKER,
     CLI_MIGRATIONS,

@@ -4503,7 +4503,11 @@ test('the final dispatch guard runs after resolution and prevents a revoked laun
 });
 
 test('fleet spec execution validates the actual launch context and no longer requires a managed dispatch guard', async () => {
-    const project = mkdtempSync(join(tmpdir(), 'spur-fleet-launch-'));
+    // mkdtemp's random suffix is mixed-case and agent ids are lowercase-only: the project
+    // is a fixed lowercase dir inside the temp parent, so the derived member id is valid.
+    const root = mkdtempSync(join(tmpdir(), 'spur-fleet-launch-'));
+    const project = join(root, 'alpha');
+    mkdirSync(project, { recursive: true });
     const previous = process.cwd();
     const { deps, runner } = mockDeps();
     const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
@@ -4512,10 +4516,17 @@ test('fleet spec execution validates the actual launch context and no longer req
         mkdirSync(join(project, '.spur/agents'), { recursive: true });
         // 0858: the declaration rides the project config, read through the same seam
         // the CLI wires (`reloadAgentConfig`) — the fleet.json file is retired.
-        const fleetConfig: SpurConfig = { agent: { fleet: { enabled: true, strategy: 'rest', members: [] } } };
+        // G72 R2: the member is DERIVED from that declaration; a stale generated spec file
+        // left in `.spur/agents/` is ignored rather than shadowing the config.
+        const fleetConfig: SpurConfig = {
+            agent: {
+                executors: [{ name: 'worker', agent: 'pi', disabled: false }],
+                fleet: { enabled: true, strategy: 'rest', members: [{ id: 'worker', executor: 'worker' }] },
+            },
+        };
         await saveAgentSpec(
             {
-                id: 'fleet-worker',
+                id: 'alpha-worker',
                 name: 'Worker',
                 type: 'pi',
                 workspace: project,
@@ -4532,7 +4543,7 @@ test('fleet spec execution validates the actual launch context and no longer req
             getDb: async () => db,
             reloadAgentConfig: async () => fleetConfig,
         });
-        const flags = { agent: 'pi', 'spec-id': 'fleet-worker' };
+        const flags = { agent: 'pi', 'spec-id': 'alpha-worker' };
         await expect(service.runTraced('work', flags, deps)).rejects.toThrow('Ground-truth mismatch');
         process.chdir(project);
         // G71 R2: the `beforeDispatch` refusal is DELETED. The launch safety that remains is the
@@ -4548,7 +4559,7 @@ test('fleet spec execution validates the actual launch context and no longer req
     } finally {
         process.chdir(previous);
         await db.close();
-        rmSync(project, { recursive: true, force: true });
+        rmSync(root, { recursive: true, force: true });
     }
 });
 

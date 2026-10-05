@@ -22,13 +22,7 @@ import {
     ProjectClaimDao,
     readMemberSessions,
 } from '@gobing-ai/spur-domain';
-import {
-    type AgentSpec,
-    deleteAgentSpec as deleteAgentSpecFile,
-    loadAgentSpecs,
-    saveAgentSpec,
-    validateAgentId,
-} from '@gobing-ai/ts-ai-runner';
+import { type AgentSpec, validateAgentId } from '@gobing-ai/ts-ai-runner';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { resolveAgentRoles } from './agent-roles';
 import type { AgentRoleDefinition } from './agent-service';
@@ -155,13 +149,6 @@ export interface RosterMember extends MemberIdentity {
     enabled?: boolean;
 }
 
-/** Result of materializing a roster: the project fleet's generated spec set (R2). */
-export interface MaterializeResult {
-    upserted: string[];
-    orphaned: string[];
-    written: boolean;
-}
-
 // ---------------------------------------------------------------------------
 // Shared roster projection (0835)
 // ---------------------------------------------------------------------------
@@ -268,8 +255,6 @@ export interface MaterializeRosterParams {
     agentConfig: AgentConfig | undefined;
     /** Layer-1 role → tier map; role-only members resolve through it (0543 R1). */
     roles?: ReadonlyMap<string, AgentRoleDefinition>;
-    /** Existing specs on disk — hand-authored ones are never overwritten (R2). */
-    specs: readonly AgentSpec[];
     /**
      * The full roster, for error texts that name a member by its frozen-index
      * local id (0835 review P4). Optional: without it, executor-pinned error
@@ -279,17 +264,15 @@ export interface MaterializeRosterParams {
 }
 
 /**
- * Project one roster into the `spur:generated` agent specs materialization
- * would write — WITHOUT writing (0835). Extracted verbatim from the
- * pre-0835 materializeTeam loop so config teams and project fleets share one
- * implementation: id derivation delegates to `memberLocalId` (0543 R3 / 0835
- * R3 — the frozen-index allocator config-load uses, so a converted roster
- * produces byte-identical ids), executor resolution delegates to
- * {@link resolveMemberExecutor}, and a pre-existing hand-authored spec under a
- * desired id is skipped untouched (the existing skip contract).
+ * Project one roster into the `spur:generated` agent specs the fleet declares — the
+ * declaration is the ONLY authoring surface (G72 R2), so the projection is
+ * declaration-only and nothing is written. Id derivation delegates to
+ * `memberLocalId` (0543 R3 / 0835 R3 — the frozen-index allocator config-load
+ * uses, so a converted roster produces byte-identical ids) and executor
+ * resolution delegates to {@link resolveMemberExecutor}.
  */
 export function materializeRoster(params: MaterializeRosterParams): RosterProjection {
-    const { slug, label, members, defaultWorkspace, agentConfig, roles, specs } = params;
+    const { slug, label, members, defaultWorkspace, agentConfig, roles } = params;
     const desiredIds = new Set<string>();
     const toUpsert: AgentSpec[] = [];
 
@@ -303,13 +286,9 @@ export function materializeRoster(params: MaterializeRosterParams): RosterProjec
         // 0835 review P3: a disabled member (fleet declarations) keeps its id
         // in the desired set but is NOT resolved against executors — an
         // unresolvable executor on a disabled member must not block launch.
-        // (The id stays desired here; FleetService narrows desiredIds to the
-        // enabled subset so a disabled member's stale spec is still pruned.)
+        // (G72 R2: nothing is pruned any more — `FleetService.specs` filters the
+        // projection to the enabled subset, so the id simply stays undeclared.)
         if (member.enabled === false) continue;
-
-        // Skip hand-authored specs — they are not generated (R2)
-        const existing = specs.find((s) => s.id === composedId);
-        if (existing && !existing.tags?.includes('spur:generated')) continue;
 
         const { resolved, executorName } = resolveMemberExecutor({
             member,
@@ -353,13 +332,44 @@ export function materializeRoster(params: MaterializeRosterParams): RosterProjec
 // FleetService
 // ---------------------------------------------------------------------------
 
+/** Result of merging hand-authored on-disk specs with the declared fleet specs (G72 R2). */
+export interface AgentSpecMergeResult {
+    /** Hand-authored specs first, then declared fleet specs (declaration wins an id clash). */
+    specs: AgentSpec[];
+    /** Ids where the declared fleet spec replaced a hand-authored on-disk spec. */
+    shadowed: string[];
+}
+
 /**
- * Application-layer read/resolve/materialize for a project's fleet
- * (`agent.fleet` in the project's `.spur/config.yaml`, 0835 carrier moved by
- * 0858 R3). The declaration is the ONLY
- * authoring surface for a project fleet; the specs this service writes into
- * `.spur/agents/` are a projection of it, never a second editable roster, and
- * hand-authored specs are never touched. Ids derive through the shared
+ * Merge the project's addressable agent specs (G72 R2): hand-authored specs on disk
+ * plus the declared `agent.fleet` specs, which win on an id clash. A stale
+ * fleet-generated file left in `.spur/agents/` from before the derivation change is
+ * ignored — the declaration is the source of truth, so a leftover file can never
+ * shadow the config. Pure and order-stable; the caller owns the warning.
+ */
+export function mergeAgentSpecs(
+    diskSpecs: readonly AgentSpec[],
+    fleetSpecs: readonly AgentSpec[],
+): AgentSpecMergeResult {
+    const byId = new Map<string, AgentSpec>();
+    for (const spec of diskSpecs) {
+        if (spec.tags?.includes('fleet:generated')) continue;
+        byId.set(spec.id, spec);
+    }
+    const shadowed: string[] = [];
+    for (const spec of fleetSpecs) {
+        if (byId.has(spec.id)) shadowed.push(spec.id);
+        byId.set(spec.id, spec);
+    }
+    return { specs: [...byId.values()], shadowed };
+}
+
+/**
+ * Application-layer read/resolve for a project's fleet (`agent.fleet` in the
+ * project's `.spur/config.yaml`, 0835 carrier moved by 0858 R3). The declaration
+ * is the ONLY authoring surface for a project fleet: {@link FleetService.specs}
+ * derives the member specs from it and nothing is written into `.spur/agents/`
+ * (G72 R2 — instances are derived, not stored). Ids derive through the shared
  * `memberLocalId` allocator (R3) and write capability reads the executor's
  * `fsWrite` attestation, never the role name (R4).
  */
@@ -586,47 +596,34 @@ export class FleetService {
     }
 
     /**
-     * Materialize the declaration into `.spur/agents/` specs: one
-     * `spur:generated` spec per ENABLED member (ids derived over the full
-     * roster so disabled members preserve everyone's index), pruning generated
-     * fleet specs that are no longer desired. Hand-authored specs are never
-     * touched (R2). When `check` is true, returns the diff and writes nothing.
+     * The fleet's declared specs: one `spur:generated` spec per ENABLED member (ids
+     * derived over the full roster so disabled members preserve everyone's index).
      *
-     * 0858 R4: `spur serve` calls this only for an ENABLED fleet; the switch
-     * itself is the serve gate (this method keeps materializing a declared
-     * roster so `--check` previews and tests stay usable).
+     * Derived, never written (G72 R2 / ADR-086 A3): `.spur/agents/` holds
+     * hand-authored specs only, and a member's runtime instance comes from
+     * `agent.fleet` plus occupancy. Ids are validated here so a registry display
+     * name that cannot form an agent id fails loudly at the read boundary.
      *
-     * This is the launch boundary, so it validates its own ground truth (R6):
-     * `process.cwd()` and the storage root (`.spur/` parent) must both resolve
-     * to the project — `SPUR_*` env values are context, not proof.
+     * Returns `[]` — never an exception — when the project declares no
+     * `agent.fleet`, the fleet is disabled, or no member is enabled: this is a read
+     * projection consumed by role/addressee resolution on projects that may have no
+     * fleet at all. A launch boundary asserts its own ground truth
+     * ({@link FleetService.assertLaunchGroundTruth}, R6) before starting anything.
      */
-    async materialize(projectPath: string, opts?: { check?: boolean }): Promise<MaterializeResult> {
+    async specs(projectPath: string): Promise<AgentSpec[]> {
         const normalized = normalizeProjectPath(projectPath);
-        await this.assertLaunchGroundTruth(normalized);
-
         const declaration = await this.load(normalized);
-        if (declaration === null) {
-            throw new Error(
-                `No agent.fleet declaration for ${normalized} — nothing to materialize (FleetService.resolve reports this as missing: ['no-declaration'])`,
-            );
-        }
+        if (declaration === null) return [];
 
         const resolved = await this.resolve(normalized);
         const enabled = resolved.members.filter((m) => m.enabled);
-        if (enabled.length === 0) {
-            throw new Error(
-                `Fleet at ${normalized} has no enabled members — set enabled: true on at least one agent.fleet member`,
-            );
-        }
+        if (!resolved.enabled || enabled.length === 0) return [];
+
         const slug = await this.projectSlug(normalized);
-
         const config = await this.effectiveConfig();
-        const configDir = join(normalized, '.spur', 'agents');
-        const specs = await loadAgentSpecs(configDir);
 
-        // Shared roster projection (0835): ids over the FULL roster, then the
-        // enabled subset is what gets written/pruned — disabling a member
-        // retires its generated spec without freeing its id index.
+        // Shared roster projection (0835): ids over the FULL roster — disabling a
+        // member retires its spec without freeing its id index.
         const projection = materializeRoster({
             slug,
             label: `Fleet "${slug}"`,
@@ -634,22 +631,19 @@ export class FleetService {
             defaultWorkspace: normalized,
             agentConfig: config?.agent,
             roles: this.ctx.roles ?? resolveAgentRoles(config?.agent),
-            specs,
         });
         // Generated-spec namespace (0835 review P2; 0860 R3): fleet specs carry
-        // the `fleet:generated` marker plus a `fleet:<slug>` group tag, and the
-        // projection emits the same namespace. No other roster materializer
-        // exists any more, so a generated spec is unambiguously a fleet spec.
+        // the `fleet:generated` marker plus a `fleet:<slug>` group tag, so a stale
+        // generated file left on disk stays identifiable and never shadows config
+        // (G72 R2).
         for (const spec of projection.toUpsert) {
             spec.tags = [`fleet:${slug}`, 'spur:generated', 'fleet:generated'];
         }
         const enabledIds = new Set(enabled.map((m) => m.instanceId));
-        const toUpsert = projection.toUpsert.filter((s) => enabledIds.has(s.id));
-        const desiredIds = new Set([...projection.desiredIds].filter((id) => enabledIds.has(id)));
+        const specs = projection.toUpsert.filter((s) => enabledIds.has(s.id));
         // The registry display name is the id prefix; a name that cannot form a
-        // valid agent id fails here, naming the fix, before anything writes.
-        for (const spec of toUpsert) {
-            await this.assertLaunchGroundTruth(spec.workspace);
+        // valid agent id fails here, naming the fix, before anything resolves it.
+        for (const spec of specs) {
             try {
                 validateAgentId(spec.id);
             } catch (error) {
@@ -658,35 +652,7 @@ export class FleetService {
                 );
             }
         }
-
-        // Prune orphaned generated specs: ONLY fleet-generated specs (both
-        // `spur:generated` + `fleet:generated`) not in the desired set (0835
-        // review P2). Hand-authored specs (no generator tag) are never deleted
-        // (R2).
-        const orphaned = specs.filter(
-            (s) => s.tags?.includes('spur:generated') && s.tags?.includes('fleet:generated') && !desiredIds.has(s.id),
-        );
-
-        if (opts?.check) {
-            return {
-                upserted: toUpsert.map((s) => s.id),
-                orphaned: orphaned.map((s) => s.id),
-                written: false,
-            };
-        }
-
-        for (const spec of toUpsert) {
-            await saveAgentSpec(spec, configDir);
-        }
-        for (const spec of orphaned) {
-            await deleteAgentSpecFile(spec.id, configDir);
-        }
-
-        return {
-            upserted: toUpsert.map((s) => s.id),
-            orphaned: orphaned.map((s) => s.id),
-            written: true,
-        };
+        return specs;
     }
 
     // -------------------------------------------------------------------------

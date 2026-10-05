@@ -870,9 +870,19 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
                 expect(runHop(cwd)).toBe('PASS\n');
                 // Exercise the real ADR tripwire against a clean snapshot, then a historical decision edit.
                 mkdirSync(join(cwd, 'docs'));
+                mkdirSync(join(cwd, 'docs/design'));
                 mkdirSync(join(cwd, 'repo-wide-tests'));
                 const adr = readFileSync(join(REPO_ROOT, 'docs/00_ADR.md'), 'utf8');
                 writeFileSync(join(cwd, 'docs/00_ADR.md'), adr);
+                // The G72 R4 doc-surface assertions read these satellites too, so the fixture
+                // copies them exactly as it copies the ADR corpus.
+                for (const rel of [
+                    'docs/03_ARCHITECTURE.md',
+                    'docs/04_DESIGN.md',
+                    'docs/design/spur-team-mode-design.md',
+                ]) {
+                    writeFileSync(join(cwd, rel), readFileSync(join(REPO_ROOT, rel)));
+                }
                 writeFileSync(
                     join(cwd, 'repo-wide-tests/adr-supersession.test.ts'),
                     readFileSync(join(REPO_ROOT, 'repo-wide-tests/adr-supersession.test.ts')),

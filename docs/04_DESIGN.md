@@ -42,7 +42,6 @@ Root [DESIGN.md](../DESIGN.md) owns visual and interaction design;
 | rd3 Migration — System Design | [rd3-migration-design.md](design/rd3-migration-design.md) |
 | Server-Side Adjustment — Design | [server-side-adjustment-design.md](design/server-side-adjustment-design.md) |
 | Server-Side Adjustment — Finalized Feature List | [server-side-adjustment-feature-finalized.md](design/server-side-adjustment-feature-finalized.md) |
-| Spur Team Mode — Design Document — **superseded by ADR-116** (the team-scoped composition proposal it describes was replaced by project-scoped fleets; current surface in [project-switcher.md](design/project-switcher.md)) | [spur-team-mode-design.md](design/spur-team-mode-design.md) |
 | Workflow run observability | [workflow-observability.md](design/workflow-observability.md) |
 | Workflow composition contract | [workflow-composition-contract.md](design/workflow-composition-contract.md) |
 | Workflow reading surface — server workflows endpoint + settings workflows tab (2026-09-22) | [workflows-reading-surface.md](design/workflows-reading-surface.md) |
@@ -413,7 +412,7 @@ with a derivable `startedAt` (null for exited/not-started, unparseable, or
 future timestamps); it is presentation, not a third fact. Retired Teams facets
 not reinstated: live last-activity (successor — MemberDetail history,
 read-on-open) and team up/down controls (successor — serve-start fleet
-materialization + `spur agent stop`; the orphaned `/api/team/:team/up|down`
+resolution + `spur agent stop`; the orphaned `/api/team/:team/up|down`
 routes and their contract rows are removed by 0855).
 
 See [contract detail](design/project-switcher.md#agents-roster-two-fact-card-0842).

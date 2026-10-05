@@ -8,7 +8,7 @@ import {
     type PipeProcessOptions,
     type ProcessExecutor,
 } from '@gobing-ai/ts-runtime';
-import { FleetService } from './fleet-service';
+import { FleetService, mergeAgentSpecs } from './fleet-service';
 
 // ── Types ──
 
@@ -365,6 +365,18 @@ export class SupervisorService {
         });
     }
 
+    /**
+     * Register specs resolved outside the config dir (G72 R2): fleet members are
+     * derived from `agent.fleet`, not written to `.spur/agents/`, so `spur serve`
+     * hands them over before autostart. Additive and idempotent — the declared
+     * fleet spec wins an id clash with a hand-authored file.
+     */
+    registerAgentSpecs(specs: AgentSpec[]): void {
+        this.specsPromise = (this.specsPromise ?? this.loadSpecs()).then(
+            (current) => mergeAgentSpecs(current, specs).specs,
+        );
+    }
+
     /** Start every agent in the autostart list. */
     async startAutostart(ids: string[]): Promise<ProcessEntry[]> {
         const results: ProcessEntry[] = [];
@@ -374,7 +386,7 @@ export class SupervisorService {
         for (const id of ids) {
             if (!specIds.has(id)) {
                 throw new Error(
-                    `Autostart agent "${id}" not found — check .spur/agents/ and the agent.fleet declaration`,
+                    `Autostart agent "${id}" not found — check the agent.fleet declaration and .spur/agents/`,
                 );
             }
         }

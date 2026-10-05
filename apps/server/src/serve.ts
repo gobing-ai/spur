@@ -902,9 +902,10 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                     }
 
                     // `agent.fleet` replaces `team up` and the retired `.spur/fleet.json`
-                    // declaration: project specs must exist before autostart reads them.
-                    // Resolve after the quota drain so disabled executors are honored on the
-                    // first launch; retain the fleet's ground-truth guard.
+                    // declaration, and it is the ONLY carrier of project fleet specs (G72 R2:
+                    // nothing is materialized into `.spur/agents/`). Resolve after the quota drain
+                    // so disabled executors are honored on the first launch; retain the fleet's
+                    // ground-truth guard.
                     //
                     // 0858 R4: `agent.fleet.enabled` is the single fleet switch — absent or
                     // disabled means neither materialization nor autostart. This load is
@@ -924,12 +925,17 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                     });
                     if (fleetSection?.enabled === true) {
                         try {
-                            const materialized = await fleetService.materialize(projectRoot);
+                            await fleetService.assertLaunchGroundTruth(projectRoot);
                             await checkBootCancellation();
-                            // Operator decision (2026-09-14): every materialized member starts;
-                            // `materialize` already skipped disabled members, so the upserted ids
-                            // are exactly the autostart set — no second resolution.
-                            await ctx.supervisor().startAutostart(materialized.upserted);
+                            const specs = await fleetService.specs(projectRoot);
+                            await checkBootCancellation();
+                            // Operator decision (2026-09-14): every enabled member starts;
+                            // `specs` already skipped disabled members, so the ids are exactly the
+                            // autostart set — no second resolution. The specs are registered with
+                            // the supervisor first because they are derived from config, not
+                            // read from the config dir.
+                            ctx.supervisor().registerAgentSpecs(specs);
+                            await ctx.supervisor().startAutostart(specs.map((s) => s.id));
                             await checkBootCancellation();
                         } catch (error) {
                             await quotaConsumer?.stop();

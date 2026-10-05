@@ -363,7 +363,7 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
             let targetId = specId;
             if (options.role !== undefined) {
                 const resolution = await resolveAgentSelector(
-                    () => new AgentCoordinationService(context).listAgentSpecs(),
+                    () => new AgentCoordinationService(context).listFleetMembers(),
                     context.agentConfig,
                     options.role,
                 );

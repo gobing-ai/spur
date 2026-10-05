@@ -1127,7 +1127,7 @@ FROM history_message;
 DROP TABLE history_message;
 ALTER TABLE history_message_rebuild RENAME TO history_message;
 CREATE INDEX IF NOT EXISTS idx_history_message_provenance_run ON history_message (provenance, run_id);
-`;var SCHEDULER_CUSTOM_ACTIVE_UNIQUE_SCHEMA_SQL=`
+`,SCHEDULER_CUSTOM_ACTIVE_UNIQUE_SCHEMA_SQL=`
 UPDATE queue_jobs
 SET status = 'failed',
     last_error = 'retired by migration 0047_spur_cli_scheduler_custom_active_unique: superseded duplicate active scheduler.custom job name',

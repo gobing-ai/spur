@@ -92,7 +92,7 @@ SQLite lock cause. Delivery depends on compatible released upstream capabilities
 | Agent detection / health                                   | `spur agent list\|doctor`                          | `ts-ai-runner`                             |
 | Agent run execution                                        | `spur agent run`                                   | `ts-ai-runner` (`AiRunner`)                |
 | Executor availability and quota-driven project updates      | Existing executor config, routing, and `spur agent doctor` | B5/B6 (ownership-scoped recovery; account-wide fan-out deferred) |
-| Agent spec management                                      | `spur agent list --specs` (fleet-materialized)      | `ts-ai-runner` spec helpers                |
+| Agent spec management                                      | `spur agent list --specs` (fleet-derived)           | `ts-ai-runner` spec helpers                |
 | Inter-agent durable messages                               | `spur message send\|inbox\|reply`                  | `AgentCoordinationService` + ts-db                   |
 | Team coordination                                          | `spur task update --assignee`, `spur agent list --specs\|start\|stop` | `AgentCoordinationService` + `SupervisorService` (`spur self serve`) |
 | Inter-agent control plane (occupant identity, coordination artifacts, pinned wait) | existing `spur agent` / `spur message` (no new noun) | ADR-057; feature G4 |

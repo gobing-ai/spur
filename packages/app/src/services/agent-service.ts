@@ -76,7 +76,7 @@ import {
     getExecutorTier,
 } from './executor-tier';
 import { classifyDispatch } from './failure-classification';
-import { FleetService } from './fleet-service';
+import { FleetService, mergeAgentSpecs } from './fleet-service';
 import { RunSessionObserver, type RunSessionOverlapRegistry } from './run-session-observer';
 import { resolveRunRecordDir } from './run-storage';
 
@@ -1042,7 +1042,15 @@ export class AgentService {
             });
             if ((await fleet.load(this.ctx.cwd)) !== null) {
                 await fleet.assertLaunchGroundTruth(this.ctx.cwd);
-                const spec = (await loadAgentSpecs(fs.resolve('.spur/agents'))).find((s) => s.id === launchSpecId);
+                // G72 R2: the declared fleet members come from `agent.fleet` (nothing is written
+                // to `.spur/agents/` any more), so the launch lookup is the same merged list the
+                // rest of the runtime addresses — hand-authored specs plus declared members.
+                const spec = (
+                    await mergeAgentSpecs(
+                        await loadAgentSpecs(fs.resolve('.spur/agents')),
+                        await fleet.specs(this.ctx.cwd),
+                    ).specs
+                ).find((s) => s.id === launchSpecId);
                 if (spec === undefined)
                     return { ok: false, exitCode: 2, message: `Missing fleet spec: ${launchSpecId}` };
                 await fleet.assertLaunchGroundTruth(spec.workspace);

@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { SpurConfig } from '@gobing-ai/spur-config';
+import { spurConfigSchema } from '@gobing-ai/spur-config';
 import { createMigratedDb, type DbAdapter, InboxMessageDao } from '@gobing-ai/spur-domain';
 import {
     type AgentEvents,
@@ -43,7 +44,12 @@ async function makeService(
     spurConfig?: SpurConfig | null,
     tasks?: Pick<TaskService, 'assign'>,
 ): Promise<{ svc: AgentCoordinationService; cwd: string; db: DbAdapter; cleanup: () => Promise<void> }> {
-    const cwd = await mkdtemp(join(tmpdir(), 'spur-team-'));
+    // mkdtemp's random suffix is mixed-case and agent ids are lowercase-only, so the
+    // project is a fixed lowercase dir inside the temp parent (the fleet slug falls
+    // back to the directory basename).
+    const root = await mkdtemp(join(tmpdir(), 'spur-team-'));
+    const cwd = join(root, 'alpha');
+    await mkdir(cwd, { recursive: true });
     const db = await createMigratedDb({ url: ':memory:' });
     const ctx: AgentCoordinationServiceContext = {
         ...(tasks !== undefined ? { tasks } : {}),
@@ -63,7 +69,7 @@ async function makeService(
         db,
         cleanup: async () => {
             db.close();
-            await rm(cwd, { recursive: true, force: true });
+            await rm(root, { recursive: true, force: true });
         },
     };
 }
@@ -421,6 +427,59 @@ describe('AgentCoordinationService agent specs', () => {
             await svc.createAgentSpec({ id: 'coder', type: 'codex', purpose: 'write code' });
             const specs = (await svc.listAgentSpecs()).map((s) => s.id).sort();
             expect(specs).toEqual(['coder', 'planner']);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('G72 R2: listAgentSpecs merges hand-authored specs with the declared fleet and ignores stale generated files', async () => {
+        const fleetConfig = spurConfigSchema.parse({
+            agent: {
+                executors: [{ name: 'claude', agent: 'claude' }],
+                fleet: { enabled: true, members: [{ id: 'lead', executor: 'claude' }] },
+            },
+        });
+        const { svc, cwd, cleanup } = await makeService(undefined, undefined, undefined, fleetConfig);
+        try {
+            // Hand-authored spec on disk: it stays addressable alongside the declaration.
+            const configDir = join(cwd, '.spur', 'agents');
+            await mkdir(configDir, { recursive: true });
+            await saveAgentSpec(
+                {
+                    id: 'manual',
+                    name: 'manual',
+                    type: 'claude-code',
+                    workspace: cwd,
+                    purpose: 'hand-authored',
+                    tags: [],
+                    config: {},
+                },
+                configDir,
+            );
+            // A stale generated file from the materialization era: ignored, because the
+            // declaration — never a leftover file — is the source of truth (G72 R2).
+            await writeFile(
+                join(configDir, 'alpha-lead.yaml'),
+                [
+                    'id: alpha-lead',
+                    'name: stale',
+                    'type: codex',
+                    'executor: claude',
+                    `workspace: ${cwd}`,
+                    'purpose: role fixture',
+                    'tags:',
+                    '  - spur:generated',
+                    '  - fleet:generated',
+                    'config: {}',
+                    '',
+                ].join('\n'),
+                'utf8',
+            );
+
+            const specs = await svc.listAgentSpecs();
+            expect(specs.map((s) => s.id).sort()).toEqual(['alpha-lead', 'manual']);
+            // The declared member wins: the stale file's type does not survive.
+            expect(specs.find((s) => s.id === 'alpha-lead')?.type).toBe('claude');
         } finally {
             await cleanup();
         }

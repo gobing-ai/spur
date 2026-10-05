@@ -12,7 +12,7 @@ import {
 import type { EventBus } from '@gobing-ai/ts-infra';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import type { AgentRoleDefinition } from './agent-service';
-import { FleetService } from './fleet-service';
+import { FleetService, mergeAgentSpecs, type ResolvedFleetMember } from './fleet-service';
 import type { TaskService } from './task-service';
 
 // ---------------------------------------------------------------------------
@@ -519,9 +519,27 @@ export class AgentCoordinationService {
         return spec;
     }
 
-    /** List the agent specs currently defined under `.spur/agents/`. */
+    /**
+     * List the project's addressable agent specs: hand-authored specs under
+     * `.spur/agents/` plus the declared `agent.fleet` members (G72 R2). A stale
+     * fleet-generated file left on disk is ignored and the declaration wins an id
+     * clash, so generated state can never shadow the config.
+     */
     async listAgentSpecs(): Promise<AgentSpec[]> {
-        return loadAgentSpecs(this.configDir);
+        const disk = await loadAgentSpecs(this.configDir);
+        const { specs, shadowed } = mergeAgentSpecs(disk, await this.fleetService().specs(this.ctx.cwd));
+        for (const id of shadowed) {
+            this.ctx.output?.error(`agent spec "${id}" under .spur/agents/ is shadowed by the agent.fleet declaration`);
+        }
+        return specs;
+    }
+
+    /**
+     * The project's declared fleet members (G72 R1) — the roster role/executor
+     * addressing resolves over, so a stale spec file is never addressable.
+     */
+    async listFleetMembers(): Promise<ResolvedFleetMember[]> {
+        return (await this.fleetService().resolve(this.ctx.cwd)).members;
     }
 
     /** Build the identity preamble for an agent + its workspace peers. */
@@ -537,6 +555,17 @@ export class AgentCoordinationService {
             ...(taskId !== undefined ? { taskId } : {}),
             ...(taskTitle !== undefined ? { taskTitle } : {}),
             peers,
+        });
+    }
+
+    /** FleetService over this service's context slice (G72 R1/R2). */
+    private fleetService(): FleetService {
+        return new FleetService({
+            fs: this.ctx.fs,
+            ...(this.ctx.spurConfig !== undefined ? { spurConfig: this.ctx.spurConfig } : {}),
+            ...(this.ctx.reloadAgentConfig !== undefined ? { reloadAgentConfig: this.ctx.reloadAgentConfig } : {}),
+            ...(this.ctx.roles !== undefined ? { roles: this.ctx.roles } : {}),
+            openDb: () => this.ctx.getDb(),
         });
     }
 

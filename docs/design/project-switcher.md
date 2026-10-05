@@ -94,7 +94,7 @@ section in 0858; the retired file now fails the load, naming `agent.fleet` as th
 
 ```typescript
 interface AgentFleet {
-    enabled: boolean; // default false — the single fleet switch (serve materializes/autostarts only when true)
+    enabled: boolean; // default false — the single fleet switch (serve resolves/autostarts only when true)
     strategy: 'rest' | 'gtd'; // default rest; FLEET_STRATEGIES owns the tuple, the app derives StrategyName from it
     members: FleetMember[]; // default []
     /** memberLocalId of the planner-role member carrying purpose: 'orchestrator'; absent = none declared. */
@@ -106,7 +106,7 @@ interface FleetMember {
     role?: string; // closed Layer-1 role vocabulary, shared with team members
     executor?: string; // agent.executors name
     purpose?: string;
-    enabled?: boolean; // default true; false keeps the derived `<role>-<n>` index but is not materialized
+    enabled?: boolean; // default true; false keeps the derived `<role>-<n>` index but excludes it from the roster
 }
 ```
 
@@ -121,8 +121,8 @@ A declaration with no enabled members is valid and resolves to a fleet whose `mi
 the
 resolved fleet plus `capacity.missing` (`no-declaration` | `fleet-disabled` | `no-enabled-members`),
 `resolveOrchestrator(projectPath)` returns the bound
-orchestrator (absent ⇒ `missing`, never inferred by search), `materialize(projectPath, { check })`
-reconciles specs (the `spur projects list --fleet` preview is the `check` path), and
+orchestrator (absent ⇒ `missing`, never inferred by search), `specs(projectPath)`
+derives the enabled members' specs (G72 R2: nothing is written to `.spur/agents/`), and
 `assertLaunchGroundTruth(projectPath)` is the serve-start gate. Delivery and capacity receipts are
 [§7 fleet ownership and dispatch boundaries](#fleet-ownership-and-dispatch-boundaries-g62).
 
@@ -166,8 +166,9 @@ Extend `startServer` / `registerServeCommand` (no new server process type):
 
 Before server database/runtime boot, `acquireProjectServerOwner` acquires an atomic directory claim at `<canonical-project>/.spur/server-owner.lock` with a unique PID/token marker. Concurrent startup refuses an existing live owner; no TTL can steal a live runtime. A dead-PID claim is recovered only by successfully removing that exact owner marker before removing its directory; incomplete or malformed claims fail closed. Release follows `appRt.stop` and the separately owned context’s `closeDb`, including startup-error plugin cleanup. `closeDb` blocks new opens and awaits any pending first-touch open before closing it. CLI `serve` / `self serve` bypasses the outer CLI database adapter. Then `assertProjectServerAvailable` reads the selected registry entry without healing or mutating other projects. A live registered port causes startup refusal; stale or stopped entries permit startup. This applies to direct CLI, standalone and desktop server launches, so a desktop child cannot overwrite an existing live project server registration.
 
-When `agent.fleet.enabled` is `true` in the project config, startup materializes its enabled members
-after the quota-update drain and before autostart or HTTP admission; an absent or disabled fleet
+When `agent.fleet.enabled` is `true` in the project config, startup derives its enabled members'
+specs after the quota-update drain and hands them to the supervisor before autostart or HTTP
+admission (G72 R2); an absent or disabled fleet
 starts nothing and logs the state once. CLI and server share `resolveAgentRoles`, including configured
 role overrides and stage-floor validation. Invalid declarations, retired sources and ground-truth
 mismatches stop startup.
@@ -247,7 +248,7 @@ Optional later: `POST /api/projects/stop` (CLI covers stop for v1).
   `rest` leaves queued input unstarted and permits running work to finish and reconcile.
 - The declared strategy is the source of truth at **serve start** (0859): when `agent.fleet` is
   present — enabled or not — `spur serve` reconciles `agent.fleet.strategy` into the
-  `project_strategy` row after config load and fleet materialization. The reconcile reads first and
+  `project_strategy` row after config load and fleet resolution. The reconcile reads first and
   writes only on a real difference, so a restart with an unchanged declaration neither bumps
   `strategy_version` nor emits `strategy.changed`, and a project without the section is never
   written to. A reconcile failure fails the start rather than serving under an undeclared strategy.
@@ -266,7 +267,7 @@ Optional later: `POST /api/projects/stop` (CLI covers stop for v1).
   generation. Result validation requires both to match their live owners. Missing receipt
   evidence fails closed; replaced owners produce a diagnostic without a task transition.
   Executor resolution is followed by another owner/strategy/lease check before each launch.
-- Registration, materialization, supervision, and spec-addressed execution validate real process
+- Registration, roster derivation, supervision, and spec-addressed execution validate real process
   cwd, spec workspace, filesystem storage root, and (when opened) SQLite's backing file.
   Project path aliases are accepted; foreign storage roots and storage symlinks are rejected.
   Environment identity hints are not proof of project ownership.
