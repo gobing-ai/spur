@@ -221,6 +221,7 @@ Feature: Workflow execution economy: contract-first stages, inline traceability,
 | 1054 | Report closeAuditError from the server task transition handler | done |
 | 1055 | Emit external-evidence citations from solution-from-diff backfill | done |
 | 1056 | Classify nested .spur/run citations in persist-out instead of truncating to directory name | done |
+| 1062 | Sweep D62 residual doc-drift findings from 2026-10-02 force re-verify | cancelled |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

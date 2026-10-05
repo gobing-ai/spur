@@ -163,6 +163,7 @@ Feature: Essential workflow checks and observable execution
 | 0775 | Delete corpus/composition baselines and snapshot tests | done |
 | 0776 | Fix D61 pipeline execution blockers: stale executor doc and 0765 L4 preflight evidence | done |
 | 0777 | D61 batch execution findings register — consolidated fixes for pipeline, env leak, evidence, and watcher reliability | done |
+| 1088 | Calibrate subprocess-bound test budgets so the repo-wide gate survives host load | backlog |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

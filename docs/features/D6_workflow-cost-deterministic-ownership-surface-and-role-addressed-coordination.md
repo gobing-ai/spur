@@ -196,6 +196,7 @@ Feature: Workflow cost, deterministic ownership surface, and role-addressed coor
 | 0817 | Fix test hermeticity and dogfood-harness findings from run 20260908-2330-devrun-0815 | done |
 | 0818 | Fix harness reliability findings from 0815 session review | done |
 | 0862 | Harden batch execution against the G65 failure modes | done |
+| 1072 | Start or resume a workflow run from a chosen state | backlog |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

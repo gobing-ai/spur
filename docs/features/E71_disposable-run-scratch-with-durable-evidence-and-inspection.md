@@ -108,7 +108,7 @@ Feature: Disposable run scratch with durable evidence and inspection
 | 1043 | Persist-out must be fail-closed and replay-repairable before row transfer | done |
 | 1045 | Add missing persist-out branch tests for non-ENOENT abort and external-key-conflict exclusion | done |
 | 1046 | Emit inline pipeline action rows so run close needs no post-hoc backfill | done |
-| 1049 | Block automatic worktree teardown when provenance is skipped for an external-key conflict | todo |
+| 1049 | Block automatic worktree teardown when provenance is skipped for an external-key conflict | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

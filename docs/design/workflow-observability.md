@@ -275,8 +275,10 @@ row order, declared states with no recorded row are appended as `visit: 1, pendi
 non-terminal (`running`/`pending`) run's `currentState` is its last derived visit. A terminal
 (`completed`/`failed`/`cancelled`) transition-less run keeps today's null `currentState`.
 
-With transition rows present nothing changes: `transition_runs` stays the visit source and the
-engine's projections and diagnostics are byte-identical. Unclaimed rows are reported by cause
+With transition rows present `transition_runs` stays the visit source and the engine's visits, attempts
+and statuses are unchanged; the diagnostic split below also applies, so a row recorded for a declared
+state the run did not visit is now named (`unvisited-state-row`) where the older projection claimed it
+silently. Unclaimed rows are reported by cause
 (0868 #7, extended by 1085 R4): `orphan-action-row` when the `node` matches no declared state action,
 `unvisited-state-row` when the row's `node` is a declared state the run did not visit. Each unclaimed
 row yields exactly one diagnostic naming it; rows a visited state consumes keep the

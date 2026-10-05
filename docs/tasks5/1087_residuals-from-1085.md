@@ -4,7 +4,7 @@ name: Residuals from 1085
 status: backlog
 template: standard
 created_at: 2026-10-05T02:00:47.839Z
-updated_at: "2026-10-05T02:00:57.216Z"
+updated_at: "2026-10-05T02:55:55.003Z"
 
 feature_id: O
 ---
@@ -21,13 +21,32 @@ Source task: 1085 (feature E72) — deferred residuals filed by residual-scan se
 
 Re-homed from the transient 1086 in this worktree: WBS 1086 was allocated independently by a concurrent session (`1086_include-desktop-packaging-in-the-root-build.md` in the invoking tree), so this residual task takes the next free WBS to avoid a duplicate id in the merged corpus.
 
+
+**Resolution note (2026-10-04 session triage):** the documentation-wording half of the second finding is
+fixed inline — `docs/design/workflow-observability.md` and `docs/design/run-record-contract.md` no
+longer claim byte-identical engine diagnostics and now state that the `unvisited-state-row` split
+applies to transition-present runs too (both files re-checked with biome; E72's receipt re-run after
+the change). What remains here is the retry-row visibility gap; the engine-diagnostic behaviour itself
+is accepted as the documented split.
+
 ### Requirements
 
-<!-- One R-item per line, exactly `- [ ] R1. <text>` (checkbox + `R<n>.`); `spur task check` flags any other form. Keep empty until requirements are known. -->
+- [ ] R1. A visited state's same-kind rows beyond the first match are surfaced as attempts, or named by a diagnostic that identifies the row.
+- [ ] R2. No assertion about engine-run behaviour changes (accepted, documented split).
+- [ ] R3. A regression test covers the retry-row case.
 
 ### Acceptance Criteria
 
-<!-- Number items AC1, AC2, … (never R<n> — that is the Requirements namespace). Preferred: `Scenario: AC1 — <concrete outcome> (req: R1)` blocks with Given/When/Then, declaring both `ac_altitude: task-local` and `ac_numbering: task-local` for task-local regression criteria (altitude skips only the feature-subset check; numbering makes `(req: R<n>)` count toward requirement coverage). Parsed checkbox rows `- [ ] AC1 — <title>` are supported but never bind requirements — only `Scenario:` titles read `(req: R<n>)`. Bare `- AC1` bullets are legacy unparsed records, not a traceability bypass. Requirements use `- [ ] R1. <text>`, checked at close. Keep empty if this task has no objective AC yet. -->
+```gherkin
+Feature: Observability run-detail refinements
+
+  @core
+  Scenario: R1 — Every recorded action row is visible or diagnosed
+    # covers: I1
+    Given a run whose state was visited and whose action rows include repeats of the same kind
+    When its progress is projected
+    Then each recorded row appears as an attempt or is named by a diagnostic
+```
 
 ### Q&A
 
@@ -37,11 +56,17 @@ Re-homed from the transient 1086 in this worktree: WBS 1086 was allocated indepe
 
 ### Design
 
-<!-- Chosen approach, key tradeoffs, invariants, and impacted surfaces. Keep snippets short. -->
+- Chosen: extend the per-visit row consumption so extra same-kind rows become attempts (keeping the first as the action's primary attempt) or emit a named diagnostic (`repeated-action-row`) naming the row id and location; decide during implementation and record it here.
+- Rejected: changing engine-run consumption (the accepted split keeps that path stable).
+- Invariants: visits, statuses and the `slowest` emphasis unchanged; no schema change beyond an additive diagnostic code.
+- Anchors: `packages/app/src/workflow/progress-projection.ts:494, :588-605`.
 
 ### Plan
 
-<!-- Ordered implementation checklist. Fill before moving to todo/wip. -->
+- [ ] 1. Test first: a fixture with two same-kind rows inside one visit asserting both are surfaced (attempt or diagnostic).
+- [ ] 2. Implement the consumption/naming change in `progress-projection.ts`.
+- [ ] 3. Gates: `(cd packages/app && bun test tests/workflow/progress-projection.test.ts)`, `bun run typecheck`, `bun run spur-check`.
+- [ ] 4. Docs: the diagnostic list in `docs/design/workflow-observability.md` + `docs/design/run-record-contract.md`.
 
 ### Solution
 

@@ -105,6 +105,7 @@ Feature: Residual sweep for task execution
 | 0987 | Order the standalone verify surfaces' residual-scan fold after record flips | done |
 | 1061 | Align task AC template with done-gate scenario keying (checkbox ACs key L4.uncovered-task-scenario) | done |
 | 1063 | Residuals from 1061 | done |
+| 1091 | Residual-settle follow-ups must not block the feature they came from | backlog |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

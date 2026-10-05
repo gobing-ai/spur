@@ -86,6 +86,7 @@ Feature: Consistent task creation and default implementation readiness
 | --- | ---- | ------ |
 | 0787 | Make task creation and checking agree on valid persisted content | done |
 | 0788 | Deliver ready-by-default task creation across CLI and planning | done |
+| 1089 | Make task-WBS allocation collision-safe across concurrent worktrees | backlog |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
