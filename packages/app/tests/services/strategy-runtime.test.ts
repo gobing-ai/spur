@@ -267,7 +267,10 @@ describe('gtdStrategy.select (0838 R3/R4)', () => {
             pureCtx({
                 candidates: [
                     task('0801'), // no tags → unauthorized
-                    task('0802', { tags: [FLEET_AUTO_TAG], status: 'wip' }), // not-ready
+                    // G71 R1: a WIP task is a candidate now (it is resumed work), so this
+                    // step is exercised through the runtime's readiness gate instead — the
+                    // same input the real selectNext hands the strategy.
+                    task('0802', { tags: [FLEET_AUTO_TAG] }), // not-ready (ready() false)
                     task('0803', { tags: [FLEET_AUTO_TAG] }), // unmet-dependency (below)
                     task('0804', { tags: [FLEET_AUTO_TAG] }), // dispatches
                     task('0805', { tags: [FLEET_AUTO_TAG] }), // no idle instance left
@@ -291,6 +294,7 @@ describe('gtdStrategy.select (0838 R3/R4)', () => {
                     },
                 ],
                 dependencyBlocked: (wbs) => (wbs === '0803' ? '0802' : null),
+                ready: (wbs) => wbs !== '0802',
             }),
         );
         expect(result.holds).toEqual([
@@ -310,6 +314,25 @@ describe('gtdStrategy.select (0838 R3/R4)', () => {
             requiresWrite: true,
             taskId: '0804',
         });
+    });
+
+    test('G71 R1: a wip fleet:auto candidate is dispatchable (interrupted work is still work)', () => {
+        const result = gtdStrategy.select(
+            pureCtx({
+                candidates: [task('0801', { tags: [FLEET_AUTO_TAG], status: 'wip' })],
+                idleInstances: [
+                    {
+                        instanceId: 'writer',
+                        executor: 'writer',
+                        enabled: true,
+                        writeCapable: true,
+                        capabilityState: 'available',
+                    },
+                ],
+            }),
+        );
+        expect(result.decisions.map((decision) => decision.taskId)).toEqual(['0801']);
+        expect(result.holds).toEqual([]);
     });
 
     test('survivors order by priority ascending then wbs; a missing priority sorts last (P9 sentinel)', () => {
@@ -747,6 +770,54 @@ describe('managed GTD dispatch and reconciliation (G62)', () => {
                 },
             ]);
             expect((await rig.claims.get(rig.project, 'write'))?.holderId).toBe('proj-coder');
+            rig.runtime.stop();
+        } finally {
+            await rig.cleanup();
+        }
+    });
+
+    test('G71 R1: a wip task is dispatched with --continue', async () => {
+        const rig = await makeRig({ strategy: 'gtd' });
+        try {
+            await rig.claims.claim(rig.project, 'orchestrator', 'proj-orch', 30_000);
+            const target = rig.candidates.find((candidate) => candidate.wbs === '0841');
+            if (target !== undefined) target.status = 'wip';
+            const ticked = await rig.runtime.tick(rig.project, { ownerEpoch: 1, orchestratorId: 'proj-orch' });
+            // 0841 is the first P0 candidate by wbs; 0843 follows on the second idle member.
+            expect(ticked.dispatched.map((d) => d.taskId)).toContain('0841');
+            expect(rig.enqueued[0]?.body).toBe('/sp:dev-run 0841 --auto --continue');
+            rig.runtime.stop();
+        } finally {
+            await rig.cleanup();
+        }
+    });
+
+    test('G71 R1: a todo task whose prior keyed attempt failed is retried with --continue', async () => {
+        const rig = await makeRig({ strategy: 'gtd' });
+        try {
+            await rig.claims.claim(rig.project, 'orchestrator', 'proj-orch', 30_000);
+            const runs = new CoordinationRunDao(rig.db);
+            const inbox = new InboxMessageDao(rig.db);
+            const { id } = await inbox.enqueueIdempotent('proj-orch', 'proj-coder', 'attempt 1', 'fleet:task:0841:1');
+            await runs.insertStart({
+                specId: 'proj-coder',
+                agentKind: 'pi',
+                processId: null,
+                runId: 'prior-failed',
+                generation: 1,
+                startedAt: new Date().toISOString(),
+                messageIds: [id],
+                taskId: '0841',
+            });
+            await runs.updateExit('prior-failed', 'errored', new Date().toISOString(), '[]', {
+                messageIds: [id],
+                taskId: '0841',
+                outcome: 'errored',
+            });
+            const ticked = await rig.runtime.tick(rig.project, { ownerEpoch: 1, orchestratorId: 'proj-orch' });
+            expect(ticked.dispatched.map((d) => d.taskId)).toContain('0841');
+            expect(rig.enqueued[0]?.requestKey).toBe('fleet:task:0841:2');
+            expect(rig.enqueued[0]?.body).toBe('/sp:dev-run 0841 --auto --continue');
             rig.runtime.stop();
         } finally {
             await rig.cleanup();

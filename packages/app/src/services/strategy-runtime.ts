@@ -106,7 +106,7 @@ export interface StrategyContext {
     strategyVersion: number;
     /** From the live orchestrator claim (0836); 0 when none is live (fences every claim). */
     ownerEpoch: number;
-    /** `TaskService.list({ status: 'todo' })` — candidates are TaskSummary values, no second backlog. */
+    /** `TaskService.list` todo + wip candidates — G71 R1: a wip task carries resumed work. */
     candidates: TaskSummary[];
     /** Enabled fleet members (0835) not currently holding a run (the live write-slot holder). */
     idleInstances: ResolvedFleetMember[];
@@ -206,8 +206,9 @@ export const gtdStrategy: Strategy = {
                 hold('unauthorized');
                 continue;
             }
-            // 2. readiness — dispatch readiness, not refine-readiness.
-            if (candidate.status !== 'todo' || ctx.ready?.(candidate.wbs) === false) {
+            // 2. readiness — dispatch readiness, not refine-readiness. G71 R1: wip is a
+            //    candidate too (the work was interrupted), everything else is not.
+            if ((candidate.status !== 'todo' && candidate.status !== 'wip') || ctx.ready?.(candidate.wbs) === false) {
                 hold('not-ready');
                 continue;
             }
@@ -423,7 +424,7 @@ export class StrategyRuntime {
         // Reconcile once, then work from one snapshot: a second selectNext per decision
         // (the pre-G71 shape) re-reconciled twice per tick for no new information.
         const resumed = await this.resume(normalized);
-        const { result } = await this.selectFrom(normalized, resumed);
+        const { result, statusByWbs } = await this.selectFrom(normalized, resumed);
         const holds: DispatchHold[] = [...result.holds];
         const dispatcher = this.ctx.dispatcher;
         if (dispatcher === undefined) {
@@ -447,17 +448,24 @@ export class StrategyRuntime {
             if (decision.ownerEpoch !== opts.ownerEpoch) break;
             const wbs = decision.taskId;
             if (wbs === undefined) continue;
+            // A prior keyed attempt means the earlier run never landed a terminal receipt.
+            const priorAttempts = (await this.readAttempts(inbox, wbs)).count;
+            const resumeHint = statusByWbs.get(wbs) === 'wip' || priorAttempts > 0;
             const claim = await slots.claim(decision);
             if (!claim.ok) {
                 holds.push({ wbs, reason: 'no-idle-instance', detail: claim.refusal });
                 continue;
             }
             try {
-                const attempt = (await this.readAttempts(inbox, wbs)).count + 1;
+                const attempts = await this.readAttempts(inbox, wbs);
+                const attempt = attempts.count + 1;
                 await dispatcher.enqueue({
                     member: decision.instanceId,
                     fromId: opts.orchestratorId,
-                    body: `/sp:dev-run ${wbs} --auto`,
+                    // G71 R1: interrupted work resumes. A wip task, or one that already has a
+                    // keyed attempt, is re-entered with `--continue` so the pipeline picks the
+                    // partial work up instead of starting over.
+                    body: `/sp:dev-run ${wbs} --auto${resumeHint ? ' --continue' : ''}`,
                     requestKey: `${fleetTaskKeyPrefix(wbs)}${attempt}`,
                 });
                 dispatched.push(decision);
@@ -585,7 +593,7 @@ export class StrategyRuntime {
     private async selectFrom(
         normalized: string,
         resumed: ResumeReport,
-    ): Promise<{ name: StrategyName; result: StrategyResult }> {
+    ): Promise<{ name: StrategyName; result: StrategyResult; statusByWbs: Map<string, string> }> {
         const { strategy: name, version } = resumed;
         const db = await this.ctx.openDb(normalized);
         const claims = new ProjectClaimDao(db);
@@ -593,7 +601,16 @@ export class StrategyRuntime {
         const orchestrator = await claims.get(normalized, 'orchestrator');
         const ownerEpoch = orchestrator !== null && orchestrator.expiresAt > Date.now() ? orchestrator.ownerEpoch : 0;
 
-        const candidates = await this.ctx.tasks.list({ status: 'todo' });
+        // G71 R1: candidates are todo UNION wip — an interrupted task is still dispatchable
+        // work, and its status is what tells the tick to re-enter with `--continue`.
+        const [todoCandidates, wipCandidates] = await Promise.all([
+            this.ctx.tasks.list({ status: 'todo' }),
+            this.ctx.tasks.list({ status: 'wip' }),
+        ]);
+        // Dedupe by wbs: the two reads are disjoint in the real service, but a repeated
+        // candidate would be dispatched twice in one tick — never worth assuming.
+        const candidates = [...new Map([...todoCandidates, ...wipCandidates].map((c) => [c.wbs, c])).values()];
+        const statusByWbs = new Map(candidates.map((candidate) => [candidate.wbs, candidate.status]));
         if (name === 'gtd') {
             if (!resumed.reconciled || resumed.unresolved.length > 0) {
                 const detail = !resumed.reconciled
@@ -601,6 +618,7 @@ export class StrategyRuntime {
                     : 'unresolved-deliveries; reconcile prior results before dispatch';
                 return {
                     name,
+                    statusByWbs,
                     result: {
                         decisions: [],
                         holds: candidates.map((candidate) => ({
@@ -675,7 +693,7 @@ export class StrategyRuntime {
             ready: (wbs) => ready.get(wbs) === true,
             dispatchAttempts,
         });
-        return { name, result };
+        return { name, result, statusByWbs };
     }
 
     /**

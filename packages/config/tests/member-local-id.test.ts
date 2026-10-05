@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import {
     type AgentConfig,
     AgentConfigSchema,
+    legacyMemberLocalId,
     type MemberIdentity,
     memberLocalId,
     resolveExecutor,
@@ -181,5 +182,38 @@ describe('backward-compat (no agent.team)', () => {
 
     test('an empty config still parses', () => {
         expect(spurConfigSchema.safeParse({}).success).toBe(true);
+    });
+});
+
+// ---- G71 R3 / ADR-126 A4: role outranks executor ----
+describe('memberLocalId role precedence (1075 R3)', () => {
+    test('a role member keeps its role-derived id no matter which executor is pinned', () => {
+        const withWriter: MemberIdentity[] = [{ role: 'coder', executor: 'writer' }];
+        const withPi: MemberIdentity[] = [{ role: 'coder', executor: 'pi' }];
+        expect(memberLocalId(withWriter[0] as MemberIdentity, withWriter, 0)).toBe('coder-1');
+        // The executor is configuration, not address: swapping it must not rename the member.
+        expect(memberLocalId(withPi[0] as MemberIdentity, withPi, 0)).toBe('coder-1');
+    });
+
+    test('a member with no role still derives from its executor, unchanged', () => {
+        const roster: MemberIdentity[] = [{ executor: 'pi-k3' }, { executor: 'pi-k3' }];
+        expect(memberLocalId(roster[0] as MemberIdentity, roster, 0)).toBe('pi-k3');
+        expect(memberLocalId(roster[1] as MemberIdentity, roster, 1)).toBe('pi-k3-2');
+    });
+
+    test('an explicit id still wins over the role derivation', () => {
+        const roster: MemberIdentity[] = [{ id: 'lead', role: 'coder', executor: 'writer' }];
+        expect(memberLocalId(roster[0] as MemberIdentity, roster, 0)).toBe('lead');
+    });
+
+    test('a role-derived id never collides with an explicit id already in the roster', () => {
+        const roster: MemberIdentity[] = [{ id: 'coder-1' }, { role: 'coder', executor: 'writer' }];
+        expect(memberLocalId(roster[1] as MemberIdentity, roster, 1)).toBe('coder-2');
+    });
+
+    test('the frozen legacy derivation still yields the old executor-derived id', () => {
+        const roster: MemberIdentity[] = [{ role: 'coder', executor: 'writer' }];
+        expect(legacyMemberLocalId(roster[0] as MemberIdentity, roster, 0)).toBe('writer');
+        expect(memberLocalId(roster[0] as MemberIdentity, roster, 0)).toBe('coder-1');
     });
 });

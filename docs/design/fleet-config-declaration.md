@@ -57,6 +57,27 @@ agent:
 - `apps/cli/schemas/spur-config.schema.json` replaces `agent.team` with `agent.fleet`; `config/config.example.yaml`
   carries the demo roster as an `agent.fleet` block.
 
+### Member id rule (1075 R3/R4, ADR-126 A4)
+
+The member id IS the member's address: `ResolvedFleetMember.instanceId` is `<slug>-<memberLocalId>`, it is what
+`spur message send --to` targets, and occupancy (`fleet.member-session` rows, `coordination_runs.spec_id`) is
+recorded against it. `memberLocalId` derives, in order:
+
+1. `id` — wins outright.
+2. `<role>-<n>` when `role` is set — `n` is the 1-based declaration-order index among peers sharing that role.
+3. the executor-derived id when there is no role, with the existing `-<position>` dedup.
+
+**This is a breaking change** for a member declaring BOTH `role` and `executor` with no `id`: the old order
+derived from the executor, so pinning an executor silently renamed the member and moved its inbox. `FleetService
+.resolve` refuses to rename a member that already has occupancy, and names both ids and both pins:
+
+```
+Add `id: writer` to keep the old address, or `id: coder-1` to adopt the new one.
+```
+
+A project with no recorded occupancy adopts the new ids silently. Role-only and role-less members are
+byte-identical to before, so only the `role` + `executor` + no-`id` shape is affected.
+
 ### Retired sources — hard errors (R2)
 
 One loader guard (`packages/config/src/loader.ts`) runs before schema parse, so nothing is stripped silently and

@@ -456,16 +456,72 @@ export interface MemberIdentity {
  * The neither-role-nor-executor case yields `''` — R4 validation rejects that
  * member before it reaches materialization; callers treat `''` as invalid.
  */
+/**
+ * Local member id (0251 + 0543 R3 + 1075 R3). `id` wins, then ROLE — a member
+ * declaring a role derives `<role>-<n>` over its role peers in declaration
+ * order, and only a role-less member derives from its executor (with the
+ * existing `-<position>` dedup). Role and executor no longer compete: pinning an
+ * executor on a role member used to rename it (ADR-126 A4), so the executor
+ * became part of the member's ADDRESS and an executor swap silently moved
+ * occupancy. Derived ids are append-stable; arbitrary roster reordering is
+ * intentionally not stable. The neither-role-nor-executor case yields `''` — R4
+ * validation rejects that member before it reaches materialization; callers
+ * treat `''` as invalid.
+ */
 export function memberLocalId(member: MemberIdentity, roster: readonly MemberIdentity[], index: number): string {
     if (member.id !== undefined) return member.id;
-    // 0685 R4: one allocator covers every shape. Duplicate-executor members
-    // disambiguate deterministically — first occurrence keeps the bare executor
-    // name, later ones append `-<position>` (2, 3, …); a derived id never
-    // collides with an explicit id or another executor base. Role-only members
-    // derive `<role>-<n>` over their role-only peers exactly as in 0543 R3.
-    // Rosters without duplicates are byte-identical to the pre-0685 derivation.
+    // 0685 R4: one allocator covers every shape. Every derived id is checked
+    // against the ids already allocated, so a derived id never collides with an
+    // explicit id or another derived base — role ids included, which is new in
+    // 1075 and why the role branch now runs the same collision guard as the
+    // executor branch. Rosters without duplicates are byte-identical to the
+    // pre-0685 derivation.
     // ponytail: prefix scan keeps append stability without persisted ids;
     // index allocations only if team rosters ever become large.
+    const used = new Set<string>();
+    const executorSeen = new Map<string, number>();
+    const roleSeen = new Map<string, number>();
+    for (let i = 0; i <= index; i++) {
+        const current = i === index ? member : roster[i];
+        if (current === undefined) continue;
+        let localId: string;
+        if (current.id !== undefined) {
+            localId = current.id;
+        } else if (current.role !== undefined) {
+            let n = (roleSeen.get(current.role) ?? 0) + 1;
+            localId = `${current.role}-${n}`;
+            while (used.has(localId)) {
+                n += 1;
+                localId = `${current.role}-${n}`;
+            }
+            roleSeen.set(current.role, n);
+        } else if (current.executor !== undefined) {
+            const base = current.executor;
+            let suffix = (executorSeen.get(base) ?? 0) + 1;
+            executorSeen.set(base, suffix);
+            localId = suffix === 1 ? base : `${base}-${suffix}`;
+            while (used.has(localId)) {
+                suffix += 1;
+                localId = `${base}-${suffix}`;
+            }
+            executorSeen.set(base, suffix);
+        } else {
+            localId = '';
+        }
+        if (i === index) return localId;
+        used.add(localId);
+    }
+    return '';
+}
+
+/**
+ * The FROZEN pre-1075 member-id derivation (`id` → executor → role). It exists only so the
+ * migration check in `FleetService.resolve` can name a member's OLD address: under the
+ * current order role outranks executor, so a role member with a pinned executor was
+ * renamed and its inbox moved. Never use this to allocate a live id.
+ */
+export function legacyMemberLocalId(member: MemberIdentity, roster: readonly MemberIdentity[], index: number): string {
+    if (member.id !== undefined) return member.id;
     const used = new Set<string>();
     const executorSeen = new Map<string, number>();
     const roleSeen = new Map<string, number>();

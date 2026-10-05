@@ -1046,13 +1046,12 @@ export class AgentService {
                     return { ok: false, exitCode: 2, message: `Missing fleet spec: ${launchSpecId}` };
                 await fleet.assertLaunchGroundTruth(spec.workspace);
                 await fleet.assertLaunchGroundTruth(stringFlag(flags, 'cwd', this.ctx.cwd));
-                // G71 R1: the refusal is an ORCHESTRATOR-boundary rule, not a spec-id rule. A
-                // member's DRAINED run carries the claimed message ids (and writes the receipt
-                // the dispatcher waits on), so it is admitted; only a dispatch with no
-                // originating request still needs the owning orchestrator loop (1075 deletes it).
-                if (options.execution?.beforeDispatch === undefined && requestMessageIds.length === 0) {
-                    return { ok: false, exitCode: 2, message: 'Fleet dispatch requires the owning orchestrator loop' };
-                }
+                // G71 R2: the `beforeDispatch` refusal is GONE. Operator resume is an inbox
+                // message to the member (`spur message send --to <member> "/sp:dev-run <wbs>
+                // --continue"`), and a drained run physically cannot carry `beforeDispatch` — the
+                // guard made every fleet member unaddressable by the operator. The spec lookup
+                // and the ground-truth assertions above stay: they are the launch safety, not the
+                // dispatch-authorization rule.
             }
         }
 

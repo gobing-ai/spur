@@ -5,6 +5,7 @@ import {
     type AgentRoleName,
     type ExecutionCapabilityState,
     ExecutorDisabledError,
+    legacyMemberLocalId,
     type MemberIdentity,
     memberLocalId,
     normalizeExecutorAvailability,
@@ -13,6 +14,7 @@ import {
     type SpurConfig,
 } from '@gobing-ai/spur-config';
 import {
+    CoordinationRunDao,
     type DbAdapter,
     isTierEligible,
     type MemberSessionObservation,
@@ -423,6 +425,32 @@ export class FleetService {
         const slug = await this.projectSlug(normalized);
 
         const resolvedMembers: ResolvedFleetMember[] = [];
+        // G71 R4 (ADR-126 A4): the id order changed — role now outranks executor — so a role
+        // member with a pinned executor is RENAMED, and its instance id IS its inbox address.
+        // A member that already has occupancy under its old id must not be silently re-addressed:
+        // fail closed, name both ids, and offer the `id:` pin that resolves it. Only a member
+        // whose id actually changes AND whose old id has recorded occupancy trips this, so a
+        // fresh project (no ledger rows, no runs) adopts the new ids silently.
+        if (declaration.members.some((m) => m.id === undefined && m.role !== undefined && m.executor !== undefined)) {
+            const db = await this.ctx.openDb?.(normalized);
+            if (db !== undefined) {
+                for (const [index, member] of members.entries()) {
+                    if (member.id !== undefined || member.role === undefined || member.executor === undefined) continue;
+                    const legacyLocal = legacyMemberLocalId(member, members, index);
+                    const currentLocal = memberLocalId(member, members, index);
+                    if (legacyLocal === currentLocal) continue;
+                    const legacyId = `${slug}-${legacyLocal}`;
+                    const currentId = `${slug}-${currentLocal}`;
+                    const observed = await readMemberSessions(db, [legacyId]);
+                    const run = await new CoordinationRunDao(db).getLatestBySpecId(legacyId);
+                    if (observed.size > 0 || run !== null) {
+                        throw new Error(
+                            `agent.fleet member #${index} (role ${member.role}, executor ${member.executor}): its id changes from "${legacyId}" to "${currentId}" (ADR-126 A4) and "${legacyId}" has recorded runs. Add \`id: ${legacyLocal}\` to keep the old address, or \`id: ${currentLocal}\` to adopt the new one.`,
+                        );
+                    }
+                }
+            }
+        }
         for (const [index, member] of members.entries()) {
             // R3: ids derive over the FULL roster (disabled members preserve
             // their index) via the shared allocator — never re-derived here.

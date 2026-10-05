@@ -1,15 +1,17 @@
 ---
 schema_version: 1
 name: Resume wip fleet work with --continue and stop deriving member ids from executors
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-10-04T20:30:37.131Z
-updated_at: "2026-10-04T20:57:41.489Z"
+updated_at: "2026-10-05T04:31:35.014Z"
 feature_id: G71
 
 dependencies: ["1073"]
 priority: P1
 estimate_hours: 4
+done_forced: "false"
+done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-runall-g71-302b/.spur/memory/evidence/1075-verdict.json
 ---
 
 ## 1075. Resume wip fleet work with --continue and stop deriving member ids from executors
@@ -32,15 +34,15 @@ Verified state (2026-10-04):
 
 ### Requirements
 
-- [ ] R1. GTD candidates are `todo ∪ wip` carrying `fleet:auto`; a wip task, or one whose prior run is not done, is dispatched with `--continue`.
-- [ ] R2. Delete the `beforeDispatch` guard branch at `agent-service.ts:1039`; operator resume is `spur message send --to <member> "/sp:dev-run <wbs> --continue"`.
-- [ ] R3. `memberLocalId` order becomes `id` → `<role>-<n>` (role set) → executor-derived (no role); a pinned executor never changes a role member's id.
-- [ ] R4. A member whose id changes under the new order and whose old id has recorded occupancy (`fleet.member-session` ledger rows or `coordination_runs.spec_id`) fails `FleetService.resolve` with a fix-it error naming both ids and `id:` as the pin; the commit carries a `BREAKING CHANGE:` footer (CHANGELOG is generated from commits).
+- [x] R1. GTD candidates are `todo ∪ wip` carrying `fleet:auto`; a wip task, or one whose prior run is not done, is dispatched with `--continue`.
+- [x] R2. Delete the `beforeDispatch` guard branch at `agent-service.ts:1039`; operator resume is `spur message send --to <member> "/sp:dev-run <wbs> --continue"`.
+- [x] R3. `memberLocalId` order becomes `id` → `<role>-<n>` (role set) → executor-derived (no role); a pinned executor never changes a role member's id.
+- [x] R4. A member whose id changes under the new order and whose old id has recorded occupancy (`fleet.member-session` ledger rows or `coordination_runs.spec_id`) fails `FleetService.resolve` with a fix-it error naming both ids and `id:` as the pin; the commit carries a `BREAKING CHANGE:` footer (CHANGELOG is generated from commits).
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Interrupted fleet work resumes
-- [ ] AC2 — Member identity does not follow the executor
+- [x] AC1 — Interrupted fleet work resumes
+- [x] AC2 — Member identity does not follow the executor
 
 Task-local verification:
 
@@ -109,15 +111,121 @@ Docs: `docs/design/fleet-config-declaration.md` §2 (member id rule).
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Interrupted fleet work resumes, and a member's id no longer follows its executor (R1–R4).
+
+**Resume (R1).** GTD candidates are `todo` ∪ `wip` — the two reads are merged and deduped by wbs, so a
+repeated candidate can never be dispatched twice in one tick. `gtdStrategy.select` accepts both statuses
+and `not-ready` is reserved for everything else, including the runtime's own readiness gate. The tick's
+dispatch body gains `--continue` when the task is `wip` or when it already carries a keyed
+`fleet:task:<wbs>:<n>` attempt whose receipt is not in flight — the Q&A's "prior run is not done"
+condition, taken from the attempt rows 1073 introduced. A wip task cannot be re-dispatched while its
+attempt is still running: 1073's `dispatch-in-flight` hold covers any attempt without a terminal receipt.
+
+**Operator resume (R2).** The `beforeDispatch` refusal is deleted outright. It made every fleet member
+unaddressable: a drained run physically cannot carry the orchestrator's `beforeDispatch`, and neither can
+`spur agent run --spec-id <member>`, so the guard blocked exactly the resume path it was never meant to
+cover. The fleet spec lookup and both `assertLaunchGroundTruth` calls stay — those are the launch safety,
+not the dispatch-authorization rule. Resume is now
+`spur message send --to <member> "/sp:dev-run <wbs> --continue"`.
+
+**Identity (R3).** `memberLocalId` derives `id` → `<role>-<n>` (role set) → executor-derived (no role), so
+pinning an executor on a role member no longer renames it. Every derived id now passes the same
+collision guard, which the role branch previously lacked: a role-derived id can no longer collide with an
+explicit id already allocated. Role-only and role-less members are byte-identical to before, so only the
+`role` + `executor` + no-`id` shape changes — and that shape is precisely the one whose address used to
+move when an executor was swapped.
+
+**The rename fails closed (R4).** The member id IS the address occupancy is recorded against, so
+`FleetService.resolve` refuses to rename a member that already has occupancy under its old id.
+`legacyMemberLocalId` freezes the pre-1075 derivation for exactly this comparison; the check runs only for
+a member with `role`, `executor` and no `id` whose id actually changes, and only when
+`readMemberSessions` or `CoordinationRunDao.getLatestBySpecId` reports occupancy for the old instance id.
+The error names both ids, the member's index/role/executor, and the two `id:` pins that resolve it. A
+project with no recorded occupancy adopts the new ids silently. The commit carries a `BREAKING CHANGE:`
+footer, which is what generates the release note (CHANGELOG is derived from conventional commits).
+
+| Change | Anchor |
+| --- | --- |
+| `memberLocalId` order: id → role → executor, every derived id collision-checked | `packages/config/src/index.ts:471` |
+| The pre-1075 derivation frozen for the migration comparison | `packages/config/src/index.ts:523` |
+| `resolve` refuses to rename a member with recorded occupancy, naming both ids and both pins | `packages/app/src/services/fleet-service.ts:448` |
+| Candidates are todo ∪ wip, deduped by wbs | `packages/app/src/services/strategy-runtime.ts:604` |
+| gtd accepts todo and wip; `not-ready` reserved for other statuses | `packages/app/src/services/strategy-runtime.ts:211` |
+| `--continue` when the task is wip or has a prior keyed attempt | `packages/app/src/services/strategy-runtime.ts:453` |
+| Dispatch body carries `--continue` | `packages/app/src/services/strategy-runtime.ts:468` |
+| `beforeDispatch` refusal deleted (spec lookup and ground-truth stay) | `packages/app/src/services/agent-service.ts:1049` |
+| Member id rule documented, including the boundary and the fix-it error | `docs/design/fleet-config-declaration.md:60` |
+
+Tests: `packages/config/tests/member-local-id.test.ts` (role precedence, executor swap keeps the id,
+role-less derivation unchanged, explicit id wins, collision guard, frozen legacy derivation);
+`packages/app/tests/services/fleet-service.test.ts` (rename refused with occupancy, silent adoption
+without it, explicit id untouched); `packages/app/tests/services/strategy-runtime.test.ts` (wip is
+dispatchable, `--continue` for wip and for a failed prior attempt, plain dispatch without it);
+`packages/app/tests/services/agent-service.test.ts` (a spec-id run is admitted, the orchestrator's guard
+still runs); and the `#sp:dev-run` prompt contract in `apps/cli/tests/commands/agent-loop-wake.test.ts`.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Candidates are `todo` ∪ `wip`, deduped by wbs (`packages/app/src/services/strategy-runtime.ts:604`); gtd accepts both statuses with `not-ready` reserved for other ones (`packages/app/src/services/strategy-runtime.ts:211`); the dispatch body gains `--continue` for a wip task or a prior keyed attempt (`packages/app/src/services/strategy-runtime.ts:453`, body at `:468`). Tests: "G71 R1: a wip task is dispatched with --continue", "G71 R1: a todo task whose prior keyed attempt failed is retried with --continue", "G71 R1: a wip fleet:auto candidate is dispatchable (interrupted work is still work)", plus the existing tick test asserting a fresh task gets no `--continue` |
+| R2 | MET | The `beforeDispatch` refusal branch is deleted while the spec lookup and both ground-truth assertions stay (`packages/app/src/services/agent-service.ts:1049`). Test "fleet spec execution validates the actual launch context and no longer requires a managed dispatch guard" asserts a bare spec-id run is admitted with a clean message, and that an orchestrator-supplied guard still runs |
+| R3 | MET | `memberLocalId` derives id → `<role>-<n>` (role set) → executor-derived (no role), with every derived id collision-checked (`packages/config/src/index.ts:471`). Tests: "a role member keeps its role-derived id no matter which executor is pinned", "a member with no role still derives from its executor, unchanged", "an explicit id still wins over the role derivation", "a role-derived id never collides with an explicit id already in the roster" |
+| R4 | MET | `FleetService.resolve` refuses to rename a member with recorded occupancy, naming both ids and both `id:` pins (`packages/app/src/services/fleet-service.ts:448`), using the frozen pre-1075 derivation (`packages/config/src/index.ts:523`). Tests: "a member whose OLD executor-derived id already has runs is refused, naming both ids and both pins", "a project with no occupancy adopts the new role id silently", "an explicit id is never touched by the migration check". The task's commit carries the `BREAKING CHANGE:` footer, which is what generates the release note |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Interrupted fleet work resumes | MET | test | `packages/app/tests/services/strategy-runtime.test.ts` dispatches a wip task and a task whose prior keyed attempt errored, both with the exact body `/sp:dev-run 0841 --auto --continue`, and the retry carries the new attempt key `fleet:task:0841:2` |
+| AC2 — Member identity does not follow the executor | MET | test | `packages/config/tests/member-local-id.test.ts` proves a role member derives `coder-1` with `executor: writer` and with `executor: pi`; `packages/app/tests/services/fleet-service.test.ts` proves the resolution and the migration refusal that keeps an already-occupied address |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+Review of the 1075 diff (7 files: the member-id order and its frozen legacy twin, the occupancy check in
+`resolve`, the candidate set, the `--continue` hint, the deleted guard branch, and the design satellite).
+Dimensions: functional traceability (R1–R4), SECUA, architecture depth.
+
+## Findings
+
+| Severity | Finding | Disposition |
+| --- | --- | --- |
+| P2 (major) | `memberLocalId`'s role branch had no collision guard, so making role outrank executor would have let a role-derived id (`coder-1`) collide with an explicit id of the same spelling declared earlier in the roster — two members sharing one address, i.e. one inbox. Latent before (role ids only raced other role ids) and reachable once role moved ahead of executor. Recognized while making the reorder and fixed before verify. | Fixed inside the reviewed diff: every derived id now runs the same `used`-set collision guard, role branch included, with the regression test "a role-derived id never collides with an explicit id already in the roster". |
+| P3 (minor) | The snapshot reads the corpus twice (`tasks.list({status:'todo'})` + `wip`) because `TaskListFilters.status` accepts one value. At corpus scale that doubles per-tick file reads over a ~1k-file task folder. | Accepted: correctness-neutral, and the alternative (widening the domain filter to an array) is a bigger change than 1075's budget. Recorded as the upgrade path. Added a defensive dedupe by wbs so a repeated candidate can never be dispatched twice in one tick. |
+| P3 (minor) | `legacyMemberLocalId` duplicates the pre-1075 allocator (~40 lines) and exists only for the migration comparison. | Accepted deliberately: a frozen reference must not drift, so it is a copy with a comment forbidding reuse as a live allocator rather than a parameterised "old mode" of the live one. |
+| P3 (minor) | The occupancy check costs two reads per affected member on every `resolve()` (session ledger + latest coordination run). | Accepted: it fires only for members declaring `role` + `executor` with no `id`, and `resolve` is not a hot path. |
+| P4 (advisory) | The `--continue` affordance is a string contract with `/sp:dev-run`; renaming that flag would silently drop resume. | Mitigated: the tick test asserts the exact body `/sp:dev-run <wbs> --auto --continue`, so a rename fails the suite rather than silently degrading. |
+| P4 (advisory) | Deleting the `beforeDispatch` branch removes a defence-in-depth check for a spec-id run launched outside a loop. | Intended (R2): the branch blocked exactly the operator-resume path, and it could not distinguish "unauthorized dispatch" from "drained work". The spec lookup and both `assertLaunchGroundTruth` calls remain as the launch safety. |
+
+No open P1; the single P2 was repaired inside the reviewed diff.
+
+## Functional traceability
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 candidates are todo ∪ wip with `fleet:auto`; a wip task or one whose prior run is not done is dispatched with `--continue` | MET | candidate set `packages/app/src/services/strategy-runtime.ts:604`; status gate `:211`; resume hint `:453`; body `:468`; tests "a wip task is dispatched with --continue", "a todo task whose prior keyed attempt failed is retried with --continue", "a wip fleet:auto candidate is dispatchable", and the unchanged "a fresh todo task … WITHOUT --continue" path asserted by the existing tick test |
+| R2 the `beforeDispatch` guard branch is deleted; operator resume is an inbox message | MET | `packages/app/src/services/agent-service.ts:1049`; test "fleet spec execution validates the actual launch context and no longer requires a managed dispatch guard" asserts a bare spec-id run is admitted while an orchestrator-supplied guard still runs |
+| R3 `memberLocalId` order is id → `<role>-<n>` → executor-derived; a pinned executor never renames a role member | MET | `packages/config/src/index.ts:471`; tests "a role member keeps its role-derived id no matter which executor is pinned", "a member with no role still derives from its executor, unchanged", "an explicit id still wins", "a role-derived id never collides with an explicit id" |
+| R4 a member whose id changes under the new order and whose old id has recorded occupancy fails `resolve` with a fix-it error; the commit carries a BREAKING CHANGE footer | MET | `packages/app/src/services/fleet-service.ts:448` with the frozen legacy derivation at `packages/config/src/index.ts:523`; tests "a member whose OLD executor-derived id already has runs is refused, naming both ids and both pins", "a project with no occupancy adopts the new role id silently", "an explicit id is never touched by the migration check"; the commit footer is part of this task's commit |
+
+## Architecture depth
+
+The identity change is one reordering plus one frozen reference, not a new identity system: the live
+allocator stays the single place an id is born, and the legacy copy exists only so the refusal can name
+what the member used to be called. The resume hint is likewise derived, not stored — it reads the attempt
+rows 1073 already writes, so no new state is introduced. Deleting the guard *removes* a branch rather than
+adding a flag, which is the shape this redesign has taken throughout: fewer paths, one owner per decision.
+
+## Residual risk
+
+- A wip task is dispatched whenever it is ready and no attempt is in flight; the correctness of "not in
+  flight" rests on 1073's receipt semantics rather than on a second lock.
+- The migration refusal only covers the instance-id derivation. A deployment that renames the project
+  slug changes every member's address and is out of this check's scope.
 
 ### References
 
@@ -128,4 +236,7 @@ Docs: `docs/design/fleet-config-declaration.md` §2 (member id rule).
 ### History
 
 - 2026-10-04T20:57:41.489Z backlog → todo (system)
+- 2026-10-05T04:25:55.608Z todo → wip (system)
+- 2026-10-05T04:31:33.751Z wip → testing (system)
+- 2026-10-05T04:31:35.010Z testing → done (system)
 

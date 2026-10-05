@@ -4499,7 +4499,7 @@ test('the final dispatch guard runs after resolution and prevents a revoked laun
     expect(runner.runPromptCommand).not.toHaveBeenCalled();
 });
 
-test('fleet spec execution validates actual launch context and requires the managed dispatch guard', async () => {
+test('fleet spec execution validates the actual launch context and no longer requires a managed dispatch guard', async () => {
     const project = mkdtempSync(join(tmpdir(), 'spur-fleet-launch-'));
     const previous = process.cwd();
     const { deps, runner } = mockDeps();
@@ -4532,16 +4532,15 @@ test('fleet spec execution validates actual launch context and requires the mana
         const flags = { agent: 'pi', 'spec-id': 'fleet-worker' };
         await expect(service.runTraced('work', flags, deps)).rejects.toThrow('Ground-truth mismatch');
         process.chdir(project);
-        expect((await service.runTraced('work', flags, deps)).message).toContain('owning orchestrator');
-        expect(runner.runPromptCommand).not.toHaveBeenCalled();
-        expect((await service.runTraced('work', flags, deps, { beforeDispatch: async () => {} })).exitCode).toBe(0);
+        // G71 R2: the `beforeDispatch` refusal is DELETED. The launch safety that remains is the
+        // spec lookup plus the ground-truth assertions above — an operator (or a drained member)
+        // can address a fleet member directly, which is how resume works.
+        const addressed = await service.runTraced('work', flags, deps);
+        expect(addressed.exitCode).toBe(0);
+        expect(addressed.message ?? '').not.toContain('owning orchestrator');
         expect(runner.runPromptCommand).toHaveBeenCalledTimes(1);
-        // G71 R1: a DRAINED run carries the claimed message ids, so the orchestrator boundary
-        // does not apply to it — a member's drain is admitted without `beforeDispatch`. Only a
-        // bare `--spec-id` dispatch (no originating request) still needs the owning loop.
-        expect(
-            (await service.runTraced('work', { ...flags, requestMessage: 'msg-1' }, deps)).message ?? '',
-        ).not.toContain('owning orchestrator');
+        // A guard supplied by the orchestrator still runs (it is a lifecycle hook, not a gate).
+        expect((await service.runTraced('work', flags, deps, { beforeDispatch: async () => {} })).exitCode).toBe(0);
         expect(runner.runPromptCommand).toHaveBeenCalledTimes(2);
     } finally {
         process.chdir(previous);
