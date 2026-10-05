@@ -296,3 +296,15 @@ excluded as blocked (out-of-set deps 1080, 1081). WT-4 FF-merge refused because 
 batch: the worktree and branch are RETAINED for a merge-commit integration. Evidence:
 `.spur/memory/runs/runall-g71-302b-t1073*.md` + `-t1074..-t1076.md`, verdict artifacts under
 `.spur/run/`, and the two commits per task on the branch.
+
+## 2026-10-05 — merge of the G71 batch + 1078 (G72 head)
+
+The merge commit `ec7e8ccc0` integrated `sp/runall-g71-302b` (tasks 1073-1076) with main, conflicts
+resolved by `spur feature refresh --all` (doc projections) and `bun run build:plugin-lib` (bundle), plus
+`bun install --frozen-lockfile --ignore-scripts` for the new desktop workspace; gate green on the merge
+(10107/0). Both worktrees were removed and the branch deleted; the scratch base-check tree held no
+commits of its own (detached at the batch base) so it was only removed. Marker: .spur/run/worktree-302b.json (merged).
+
+Task 1078 (G72) is done at `5fb883e72` with a PASS verdict artifact (gate 10095/0, test-cf 0).
+
+Chain state for the remaining work to 1077: 1079 (G72) -> 1080 (G73) -> 1081 (G73) -> 1077.
