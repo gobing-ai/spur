@@ -1016,8 +1016,10 @@ if [ -n "$FINAL" ]; then
 fi                                           #   NO prune/remove/branch delete
 # Pre-removal evidence assertion (task 1067 R1, E71 enforcement): refuse to remove the
 # worktree while it still owns evidence absent from (or divergent from) the invoking tree —
-# the D63 landing skipped persist-out and silently lost verdicts + receipts. Task-file
-# WBSes / run ids ride the same TASK_FILE_ARGS resolved for WT-4a (run ids: --run-id <id>).
+# the D63 landing skipped persist-out and silently lost verdicts + receipts. WBSes ride the
+# same TASK_FILE_ARGS resolved for WT-4a; run ids are a separate `--run-id <id>` per run and
+# belong to THIS check only — `inline-run-setup.ts --persist-out` accepts `--from` and
+# `--task-file` alone and exits 2 on `--run-id` (1089 driver note).
 CHECK_SCRIPT=plugins/sp/scripts/persist-out-check.ts; [ -f config/plugin-scripts.json -a -f "$CHECK_SCRIPT" ] || CHECK_SCRIPT="$(superskill script path sp persist-out-check.mjs 2>/dev/null)"
 bun "$CHECK_SCRIPT" --from "$WT_PATH" "${TASK_FILE_ARGS[@]}" \
   || { echo "WT-4 halt: worktree evidence would be abandoned - persist-out missing or stale (WT-5)" >&2; write_marker retained; exit 1; }
