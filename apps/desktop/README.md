@@ -31,11 +31,10 @@ SPUR_PROJECT_ROOT=/path/to/project bun run desktop:dev
 
 ## Prod
 
-Root `bun run build` produces `dist/server/spur-server` and `dist/web`. Cross-compiled CLI binaries (`dist/cli/spur-<os>-<arch>`, including `spur-windows-*.exe`) come from `bun run --filter @gobing-ai/spur build:binaries`.
+Root `bun run build` produces `dist/cli/spur`, `dist/server/spur-server` and `dist/web`, then stages and packages the desktop for the current host platform into `dist/desktop`. On macOS this includes the `.app` and `.dmg`. To repackage existing CLI/server/web output, run `bun run --filter @gobing-ai/spur-desktop pack`. Cross-compiled CLI binaries (`dist/cli/spur-<os>-<arch>`, including `spur-windows-*.exe`) come from `bun run --filter @gobing-ai/spur build:binaries`.
 
 ```bash
 bun run build
-bun run desktop:stage
 SPUR_DESKTOP_MODE=prod SPUR_PROJECT_ROOT=/path/to/project bun run desktop:start
 ```
 
