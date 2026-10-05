@@ -10,11 +10,15 @@ import {
     ProjectStrategyDao,
     SystemEventDao,
 } from '@gobing-ai/spur-domain';
+import { InboxMessageDao } from '@gobing-ai/ts-db';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { parse as yamlParse } from 'yaml';
 import {
     DEFAULT_STRATEGY,
     FLEET_AUTO_TAG,
+    FleetDispatcher,
+    type FleetDispatchRequest,
+    type FleetReceipt,
     FleetService,
     gtdStrategy,
     normalizeProjectPath,
@@ -26,6 +30,40 @@ import {
     type StrategyRuntimeContext,
 } from '../../src/index';
 import { createMigratedDb } from '../helpers';
+
+/**
+ * The two {@link AgentCoordinationService} methods the dispatcher uses, over the real
+ * inbox DAO: keyed idempotent enqueue and one row read. Faithful to the app service's
+ * signatures and behaviour, so the REAL FleetDispatcher drives the rig.
+ */
+function coordinationOver(db: DbAdapter) {
+    return {
+        sendMessage: async (
+            fromId: string | null,
+            toId: string,
+            body: string,
+            replyTo?: string,
+            requestKey?: string,
+        ) => {
+            const dao = new InboxMessageDao(db);
+            const keyed =
+                requestKey !== undefined ? await dao.enqueueIdempotent(fromId, toId, body, requestKey, replyTo) : null;
+            const msgId = keyed?.id ?? (await dao.enqueue(fromId, toId, body, replyTo));
+            return {
+                msgId,
+                toId,
+                status: 'queued' as const,
+                injected: false,
+                ...(keyed !== null ? { replayed: keyed.replayed, requestKey } : {}),
+            };
+        },
+        getMessage: async (msgId: string) => {
+            const row = await new InboxMessageDao(db).getById(msgId);
+            if (row === undefined) return null;
+            return { id: row.id, toId: row.toId, status: row.status, requestKey: row.requestKey ?? null };
+        },
+    };
+}
 
 // ---------------------------------------------------------------------------
 // Harness (mirrors write-slot-service.test.ts conventions)
@@ -109,6 +147,8 @@ interface Rig {
     dao: ProjectStrategyDao;
     claims: ProjectClaimDao;
     runtime: StrategyRuntime;
+    /** Every request the runtime enqueued through the real dispatcher. */
+    enqueued: FleetDispatchRequest[];
     candidates: ReturnType<typeof task>[];
     blocked: Record<string, string | null>;
     cleanup: () => Promise<void>;
@@ -139,12 +179,23 @@ async function makeRig(opts?: { strategy?: string; noFleet?: boolean }): Promise
         registry: new ProjectRegistry(join(project, '.spur', 'registry.json')),
         openDb: async () => db,
     });
+    // G71 R1: the REAL dispatcher over the rig's db, wrapped only to record requests.
+    const enqueued: FleetDispatchRequest[] = [];
+    const inner = new FleetDispatcher({ coordination: coordinationOver(db), runs: new CoordinationRunDao(db) });
+    const dispatcher = {
+        enqueue: async (req: FleetDispatchRequest) => {
+            enqueued.push(req);
+            return inner.enqueue(req);
+        },
+        receipt: (messageId: string, member: string): Promise<FleetReceipt | null> => inner.receipt(messageId, member),
+    };
     const ctx: StrategyRuntimeContext = {
         openDb: async () => db,
         tasks: { list: async () => candidates },
         ready: async () => true,
         fleet,
         dependencyBlocked: async (_projectPath, wbs) => blocked[wbs] ?? null,
+        dispatcher,
     };
     return {
         project,
@@ -152,6 +203,7 @@ async function makeRig(opts?: { strategy?: string; noFleet?: boolean }): Promise
         dao: new ProjectStrategyDao(db),
         claims: new ProjectClaimDao(db),
         runtime: new StrategyRuntime(ctx),
+        enqueued,
         candidates,
         blocked,
         cleanup,
@@ -170,6 +222,7 @@ function pureCtx(overrides?: Partial<StrategyContext>): StrategyContext {
         candidates: [],
         idleInstances: [],
         dependencyBlocked: () => null,
+        dispatchAttempts: new Map(),
         ...overrides,
     };
 }
@@ -328,6 +381,84 @@ describe('gtdStrategy.select (0838 R3/R4)', () => {
             }),
         );
         expect(result.decisions[0]?.requiresWrite).toBe(false);
+    });
+
+    test('G71 R1: an in-flight attempt holds its own task specifically and blocks every other write dispatch', () => {
+        const result = gtdStrategy.select(
+            pureCtx({
+                candidates: [
+                    task('0801', { tags: [FLEET_AUTO_TAG], priority: 'P0' }),
+                    task('0802', { tags: [FLEET_AUTO_TAG], priority: 'P0' }),
+                ],
+                idleInstances: [
+                    {
+                        instanceId: 'writer',
+                        executor: 'writer',
+                        enabled: true,
+                        writeCapable: true,
+                        capabilityState: 'available',
+                    },
+                ],
+                // 0801 has an attempt with no definite receipt; 0801's readiness stays
+                // true (the runtime only folds completed/exhausted into `ready`).
+                dispatchAttempts: new Map([['0801', { attempt: 2 }]]),
+            }),
+        );
+        expect(result.decisions).toEqual([]);
+        expect(result.holds).toContainEqual({
+            wbs: '0801',
+            reason: 'dispatch-in-flight',
+            detail: 'attempt 2 has no terminal receipt yet',
+        });
+        expect(result.holds).toContainEqual({
+            wbs: '0802',
+            reason: 'dispatch-in-flight',
+            detail: 'waiting on in-flight dispatch 0801 (attempt 2)',
+        });
+    });
+
+    test('G71 R1: a definite receipt no longer holds the pipeline — the task dispatches again', () => {
+        const result = gtdStrategy.select(
+            pureCtx({
+                candidates: [task('0801', { tags: [FLEET_AUTO_TAG], priority: 'P0' })],
+                idleInstances: [
+                    {
+                        instanceId: 'writer',
+                        executor: 'writer',
+                        enabled: true,
+                        writeCapable: true,
+                        capabilityState: 'available',
+                    },
+                ],
+                dispatchAttempts: new Map([['0801', { attempt: 1, receipt: 'failed' as const }]]),
+            }),
+        );
+        expect(result.decisions.map((decision) => decision.taskId)).toEqual(['0801']);
+        expect(result.holds).toEqual([]);
+    });
+
+    test('G71 R1: an unauthorized candidate keeps its own reason while another dispatch is in flight', () => {
+        const result = gtdStrategy.select(
+            pureCtx({
+                candidates: [task('0801', { tags: [FLEET_AUTO_TAG] }), task('0802')],
+                idleInstances: [
+                    {
+                        instanceId: 'writer',
+                        executor: 'writer',
+                        enabled: true,
+                        writeCapable: true,
+                        capabilityState: 'available',
+                    },
+                ],
+                dispatchAttempts: new Map([['0801', { attempt: 1 }]]),
+            }),
+        );
+        expect(result.holds).toContainEqual({ wbs: '0802', reason: 'unauthorized' });
+        expect(result.holds).toContainEqual({
+            wbs: '0801',
+            reason: 'dispatch-in-flight',
+            detail: 'attempt 1 has no terminal receipt yet',
+        });
     });
 });
 
@@ -593,84 +724,152 @@ describe('StrategyRuntime wake emits (0839 R1)', () => {
 });
 
 describe('managed GTD dispatch and reconciliation (G62)', () => {
-    test('only ready work starts; rest during work retains the slot through reconciliation and holds the next task', async () => {
+    test('R1: tick enqueues one keyed dispatch per idle writer, claims the write slot, and never runs member work in-process', async () => {
         const rig = await makeRig({ strategy: 'gtd' });
         try {
             await rig.claims.claim(rig.project, 'orchestrator', 'proj-orch', 30_000);
-            const started: string[] = [];
-            const result = await rig.runtime.dispatchNext(rig.project, 1, async (decision, _signal, beforeDispatch) => {
-                await beforeDispatch();
-                started.push(decision.taskId ?? '');
-                expect((await rig.claims.get(rig.project, 'write'))?.holderId).toBe(decision.instanceId);
-                await rig.runtime.setStrategy(rig.project, 'rest');
-                expect((await rig.claims.get(rig.project, 'write'))?.holderId).toBe(decision.instanceId);
-                expect((await rig.runtime.selectNext(rig.project)).decisions).toEqual([]);
+            const ticked = await rig.runtime.tick(rig.project, { ownerEpoch: 1, orchestratorId: 'proj-orch' });
+            // Both P0 tasks go out: the write-capable coder takes the single write slot,
+            // the proven read-only reader needs none (0837 R5).
+            expect(ticked.dispatched.map((d) => d.taskId)).toEqual(['0841', '0843']);
+            expect(rig.enqueued).toEqual([
+                {
+                    member: 'proj-coder',
+                    fromId: 'proj-orch',
+                    body: '/sp:dev-run 0841 --auto',
+                    requestKey: 'fleet:task:0841:1',
+                },
+                {
+                    member: 'proj-reader',
+                    fromId: 'proj-orch',
+                    body: '/sp:dev-run 0843 --auto',
+                    requestKey: 'fleet:task:0843:1',
+                },
+            ]);
+            expect((await rig.claims.get(rig.project, 'write'))?.holderId).toBe('proj-coder');
+            rig.runtime.stop();
+        } finally {
+            await rig.cleanup();
+        }
+    });
+
+    test('R1: a stale owner epoch fences the whole tick — nothing is claimed or enqueued', async () => {
+        const rig = await makeRig({ strategy: 'gtd' });
+        try {
+            await rig.claims.claim(rig.project, 'orchestrator', 'proj-orch', 30_000);
+            const ticked = await rig.runtime.tick(rig.project, { ownerEpoch: 99, orchestratorId: 'proj-orch' });
+            expect(ticked.dispatched).toEqual([]);
+            expect(rig.enqueued).toEqual([]);
+            expect(await rig.claims.get(rig.project, 'write')).toBeNull();
+        } finally {
+            await rig.cleanup();
+        }
+    });
+
+    test('R1: an in-flight keyed dispatch blocks every new dispatch until a definite receipt lands', async () => {
+        const rig = await makeRig({ strategy: 'gtd' });
+        try {
+            await rig.claims.claim(rig.project, 'orchestrator', 'proj-orch', 30_000);
+            await rig.runtime.tick(rig.project, { ownerEpoch: 1, orchestratorId: 'proj-orch' });
+            const second = await rig.runtime.tick(rig.project, { ownerEpoch: 1, orchestratorId: 'proj-orch' });
+            expect(second.dispatched).toEqual([]);
+            expect(rig.enqueued).toHaveLength(2);
+            // Each in-flight task names its OWN open attempt; nothing new goes out.
+            expect(second.holds).toContainEqual({
+                wbs: '0841',
+                reason: 'dispatch-in-flight',
+                detail: 'attempt 1 has no terminal receipt yet',
             });
-            expect(started).toEqual(['0841']);
-            expect(result.decisions).toHaveLength(1);
-            expect(await rig.claims.get(rig.project, 'write')).toBeNull();
-            expect((await rig.runtime.getStrategy(rig.project)).name).toBe('rest');
+            expect(second.holds).toContainEqual({
+                wbs: '0843',
+                reason: 'dispatch-in-flight',
+                detail: 'attempt 1 has no terminal receipt yet',
+            });
+            rig.runtime.stop();
         } finally {
             await rig.cleanup();
         }
     });
 
-    test('a strategy switch during executor resolution is refused at the final launch boundary', async () => {
-        const rig = await makeRig({ strategy: 'gtd' });
-        try {
-            await rig.claims.claim(rig.project, 'orchestrator', 'proj-orch', 30_000);
-            let started = false;
-            await expect(
-                rig.runtime.dispatchNext(rig.project, 1, async (_decision, _signal, beforeDispatch) => {
-                    await rig.runtime.setStrategy(rig.project, 'rest');
-                    await beforeDispatch();
-                    started = true;
-                }),
-            ).rejects.toThrow('stale-strategy');
-            expect(started).toBe(false);
-            expect(await rig.claims.get(rig.project, 'write')).toBeNull();
-        } finally {
-            await rig.cleanup();
-        }
-    });
-
-    test('an errored dispatch of a still-todo task is retried, up to the attempt cap', async () => {
+    test('R2: an outcome-unknown wait is not re-dispatched — absence of a receipt is not a failure', async () => {
         const rig = await makeRig({ strategy: 'gtd' });
         try {
             await rig.claims.claim(rig.project, 'orchestrator', 'proj-orch', 30_000);
             const runs = new CoordinationRunDao(rig.db);
-            const errored = async (runId: string) => {
-                await runs.insertStart({
-                    specId: 'proj-coder',
-                    agentKind: 'pi',
-                    processId: null,
-                    runId,
-                    generation: 1,
-                    startedAt: new Date().toISOString(),
-                    taskId: '0841',
-                });
-                // e.g. the provider rejected the prompt (429 quota) before any work began.
-                await runs.updateExit(runId, 'errored', new Date().toISOString(), '[]', {
-                    messageIds: [],
-                    taskId: '0841',
-                    outcome: 'errored',
-                });
-            };
-            await errored('attempt-1');
-            const retry = await rig.runtime.selectNext(rig.project);
-            expect(retry.holds).not.toContainEqual({ wbs: '0841', reason: 'not-ready' });
-            expect(retry.decisions.some((d) => d.taskId === '0841')).toBe(true);
-
-            await errored('attempt-2');
-            await errored('attempt-3');
-            const capped = await rig.runtime.selectNext(rig.project);
-            expect(capped.holds).toContainEqual({ wbs: '0841', reason: 'not-ready' });
+            const inbox = new InboxMessageDao(rig.db);
+            const { id } = await inbox.enqueueIdempotent('proj-orch', 'proj-coder', 'attempt 1', 'fleet:task:0841:1');
+            await runs.insertStart({
+                specId: 'proj-coder',
+                agentKind: 'pi',
+                processId: null,
+                runId: 'still-running',
+                generation: 1,
+                startedAt: new Date().toISOString(),
+                messageIds: [id],
+                taskId: '0841',
+            });
+            const selected = await rig.runtime.selectNext(rig.project);
+            expect(selected.decisions.some((d) => d.taskId === '0841')).toBe(false);
+            expect(selected.holds).toContainEqual({
+                wbs: '0841',
+                reason: 'dispatch-in-flight',
+                detail: 'attempt 1 has no terminal receipt yet',
+            });
         } finally {
             await rig.cleanup();
         }
     });
 
-    test('running readers consume instance capacity and prior task receipts prevent duplicate dispatch after restart', async () => {
+    test('R1: a failed receipt retries under the attempt cap; a completed attempt is not a candidate', async () => {
+        const rig = await makeRig({ strategy: 'gtd' });
+        try {
+            await rig.claims.claim(rig.project, 'orchestrator', 'proj-orch', 30_000);
+            const runs = new CoordinationRunDao(rig.db);
+            const inbox = new InboxMessageDao(rig.db);
+            const settle = async (wbs: string, n: number, status: 'exited' | 'errored') => {
+                const { id } = await inbox.enqueueIdempotent(
+                    'proj-orch',
+                    'proj-coder',
+                    `attempt ${n}`,
+                    `fleet:task:${wbs}:${n}`,
+                );
+                await runs.insertStart({
+                    specId: 'proj-coder',
+                    agentKind: 'pi',
+                    processId: null,
+                    runId: `${wbs}-try-${n}`,
+                    generation: n,
+                    startedAt: new Date().toISOString(),
+                    messageIds: [id],
+                    taskId: wbs,
+                });
+                await runs.updateExit(`${wbs}-try-${n}`, status, new Date().toISOString(), '[]', {
+                    messageIds: [id],
+                    taskId: wbs,
+                    outcome: status === 'exited' ? 'run-exit-only' : 'errored',
+                });
+            };
+            await settle('0841', 1, 'errored');
+            const retry = await rig.runtime.selectNext(rig.project);
+            expect(retry.decisions.some((d) => d.taskId === '0841')).toBe(true);
+            expect(retry.holds.some((h) => h.wbs === '0841' && h.reason === 'dispatch-in-flight')).toBe(false);
+
+            await settle('0841', 2, 'errored');
+            await settle('0841', 3, 'errored');
+            const capped = await rig.runtime.selectNext(rig.project);
+            expect(capped.decisions.some((d) => d.taskId === '0841')).toBe(false);
+            expect(capped.holds).toContainEqual({ wbs: '0841', reason: 'not-ready' });
+
+            await settle('0843', 1, 'exited');
+            const completed = await rig.runtime.selectNext(rig.project);
+            expect(completed.decisions.some((d) => d.taskId === '0843')).toBe(false);
+            expect(completed.holds).toContainEqual({ wbs: '0843', reason: 'not-ready' });
+        } finally {
+            await rig.cleanup();
+        }
+    });
+
+    test('running members consume instance capacity and a definite receipt frees the slot', async () => {
         const rig = await makeRig({ strategy: 'gtd' });
         try {
             await rig.claims.claim(rig.project, 'orchestrator', 'proj-orch', 30_000);
@@ -682,47 +881,75 @@ describe('managed GTD dispatch and reconciliation (G62)', () => {
                 runId: 'reader-running',
                 generation: 1,
                 startedAt: new Date().toISOString(),
-                taskId: '0841',
+                taskId: '0843',
             });
             const result = await rig.runtime.selectNext(rig.project);
             expect(result.decisions.map((d) => d.instanceId)).toEqual(['proj-coder']);
-            expect(result.decisions.map((d) => d.taskId)).toEqual(['0843']);
-            expect(result.holds).toContainEqual({ wbs: '0841', reason: 'not-ready' });
-            await runs.updateExit('reader-running', 'exited', new Date().toISOString(), '[]', {
-                messageIds: [],
-                taskId: '0841',
-                outcome: 'run-exit-only',
-            });
-            const restarted = await rig.runtime.selectNext(rig.project);
-            expect(restarted.decisions.some((d) => d.taskId === '0841')).toBe(false);
+            expect(result.decisions.map((d) => d.taskId)).toEqual(['0841']);
         } finally {
             await rig.cleanup();
         }
     });
 
-    test('the running writer renews its generation beyond the original TTL', async () => {
+    test('R1/R4: observe releases the write slot once the receipt settles, and retry is freshness only', async () => {
+        const rig = await makeRig({ strategy: 'gtd' });
+        try {
+            await rig.claims.claim(rig.project, 'orchestrator', 'proj-orch', 30_000);
+            await rig.runtime.tick(rig.project, { ownerEpoch: 1, orchestratorId: 'proj-orch' });
+            // Still pending: the slot stays claimed so nothing else can start.
+            expect(await rig.runtime.observe(rig.project, { ownerEpoch: 1 })).toEqual({ released: [] });
+            expect((await rig.claims.get(rig.project, 'write'))?.holderId).toBe('proj-coder');
+
+            // The member's run lands an errored receipt for the dispatched message.
+            const inbox = new InboxMessageDao(rig.db);
+            const [row] = await inbox.inbox('proj-coder');
+            expect(row).toBeDefined();
+            const runs = new CoordinationRunDao(rig.db);
+            await runs.insertStart({
+                specId: 'proj-coder',
+                agentKind: 'pi',
+                processId: null,
+                runId: 'failed-once',
+                generation: 1,
+                startedAt: new Date().toISOString(),
+                messageIds: [row?.id ?? ''],
+                taskId: '0841',
+            });
+            await runs.updateExit('failed-once', 'errored', new Date().toISOString(), '[]', {
+                messageIds: [row?.id ?? ''],
+                taskId: '0841',
+                outcome: 'errored',
+            });
+
+            expect(await rig.runtime.observe(rig.project, { ownerEpoch: 1 })).toEqual({ released: ['proj-coder'] });
+            expect(await rig.claims.get(rig.project, 'write')).toBeNull();
+            rig.runtime.stop();
+        } finally {
+            await rig.cleanup();
+        }
+    });
+
+    test('R1: the standby heartbeat keeps the slot alive until the member claims it', async () => {
         const rig = await makeRig({ strategy: 'gtd' });
         vi.useFakeTimers();
         const clock = spyOn(Date, 'now');
         try {
             const start = Date.now();
             await rig.claims.claim(rig.project, 'orchestrator', 'proj-orch', 120_000);
-            await rig.runtime.dispatchNext(rig.project, 1, async (_decision, _signal, beforeDispatch) => {
-                await beforeDispatch();
-                const original = await rig.claims.get(rig.project, 'write');
-                for (let i = 0; i < 4; i++) {
-                    clock.mockReturnValue(start + (i + 1) * 10_000);
-                    vi.advanceTimersByTime(10_000);
-                    // Drain the async DAO heartbeat work scheduled by the interval.
-                    for (let j = 0; j < 20; j++) await Promise.resolve();
-                }
-                const renewed = await rig.claims.get(rig.project, 'write');
-                expect(renewed?.expiresAt).toBeGreaterThan(original?.expiresAt ?? 0);
-                expect(renewed?.expiresAt).toBeGreaterThan(Date.now());
-                expect(await rig.claims.claim(rig.project, 'write', 'competing-writer', 30_000)).toBeNull();
-                await rig.runtime.setStrategy(rig.project, 'rest');
-            });
-            expect(await rig.claims.get(rig.project, 'write')).toBeNull();
+            const ticked = await rig.runtime.tick(rig.project, { ownerEpoch: 1, orchestratorId: 'proj-orch' });
+            expect(ticked.dispatched.map((d) => d.taskId)).toEqual(['0841', '0843']);
+            const original = await rig.claims.get(rig.project, 'write');
+            for (let i = 0; i < 4; i++) {
+                clock.mockReturnValue(start + (i + 1) * 10_000);
+                vi.advanceTimersByTime(10_000);
+                // Drain the async DAO heartbeat work scheduled by the interval.
+                for (let j = 0; j < 20; j++) await Promise.resolve();
+            }
+            const renewed = await rig.claims.get(rig.project, 'write');
+            expect(renewed?.expiresAt).toBeGreaterThan(original?.expiresAt ?? 0);
+            expect(renewed?.expiresAt).toBeGreaterThan(Date.now());
+            expect(await rig.claims.claim(rig.project, 'write', 'competing-writer', 30_000)).toBeNull();
+            rig.runtime.stop();
         } finally {
             clock.mockRestore();
             vi.useRealTimers();

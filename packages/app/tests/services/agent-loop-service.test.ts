@@ -101,7 +101,14 @@ function memberDeps(db: DbAdapter, overrides: Partial<AgentLoopDeps>): AgentLoop
             resolveOrchestrator: async () => null,
             assertLaunchGroundTruth: async () => {},
         } as unknown as FleetService,
-        makeStrategyRuntime: async () => ({ selectNext: async () => ({ holds: [] }) }) as unknown as StrategyRuntime,
+        makeStrategyRuntime: async () =>
+            ({
+                selectNext: async () => ({ holds: [] }),
+                observe: async () => ({ released: [] }),
+                tick: async () => ({ dispatched: [], holds: [] }),
+                resume: async () => {},
+                stop: () => {},
+            }) as unknown as StrategyRuntime,
         listAgentSpecs: async () => [{ id: 'member-1' }],
         reconciler: { reconcile: async () => ({ unresolved: [], exhausted: [], scanned: 0 }) },
         drain: async () => ({ prompt: 'do work', flags: {}, claimed: ['m1'] }),
@@ -181,7 +188,12 @@ describe('0968 runAgentLoopCore', () => {
                     assertLaunchGroundTruth: async () => {},
                 } as unknown as FleetService,
                 makeStrategyRuntime: async () =>
-                    ({ dispatchNext: async () => {}, resume: async () => {} }) as unknown as StrategyRuntime,
+                    ({
+                        observe: async () => ({ released: [] }),
+                        tick: async () => ({ dispatched: [], holds: [] }),
+                        resume: async () => {},
+                        stop: () => {},
+                    }) as unknown as StrategyRuntime,
             });
             const code = await runAgentLoopCore(deps, {
                 recipient: 'orch-1',

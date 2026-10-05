@@ -303,6 +303,10 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
     // shutdown path can name the operator reset on the way out. The session
     // service (task 0967) owns the mode, resume id, live process, and
     // failed-drain budget; the loop only drives it.
+    // G71 R1: ONE strategy-runtime instance for the loop's lifetime. It owns the
+    // standby write-slot heartbeat, so re-creating it per wake would leak a timer per
+    // iteration and leave the lease unheartbeated between them.
+    let strategyRuntime: StrategyRuntime | undefined;
     const memberSession = new MemberSession(
         {
             ...deps.memberSession,
@@ -318,7 +322,10 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
         // list does NOT gate the loop (blocking dispatch is G62's 0838 decision).
         const report = await deps.reconciler.reconcile(recipient);
         deps.write(formatReconcileReport(report));
-        if (owner) await (await deps.makeStrategyRuntime()).resume(projectPath);
+        if (owner) {
+            strategyRuntime = await deps.makeStrategyRuntime();
+            await strategyRuntime.resume(projectPath);
+        }
 
         let invocationStarted = false;
         bus.on('agent.invoke.start', (event) => {
@@ -370,47 +377,29 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
             if (runtime.signal?.aborted) break;
             if ((await fleet.load(deps.cwd)) !== null) {
                 if (owner !== null) {
-                    const strategy = await deps.makeStrategyRuntime();
+                    strategyRuntime ??= await deps.makeStrategyRuntime();
                     const ledger = await deps.attachLedger(bus);
                     try {
-                        await strategy.dispatchNext(
-                            projectPath,
-                            owner.ownerEpoch,
-                            async (decision, signal, beforeDispatch) => {
-                                await fleet.assertLaunchGroundTruth(projectPath);
-                                const member = (await fleet.resolve(projectPath)).members.find(
-                                    (m) => m.instanceId === decision.instanceId,
-                                );
-                                if (!member) throw new Error(`Fleet member disappeared: ${decision.instanceId}`);
-                                const result = await svc.runTraced(
-                                    `/sp:dev-run ${decision.taskId} --auto`,
-                                    {
-                                        'spec-id': decision.instanceId,
-                                        agent: member.executor,
-                                        task: decision.taskId ?? '',
-                                        cwd: projectPath,
-                                    },
-                                    runDeps,
-                                    { signal, beforeDispatch },
-                                );
-                                if (result.message) {
-                                    deps.error(result.message);
-                                } else if (result.exitCode !== 0) {
-                                    // An agent exit carries no `message`; without the tail of its
-                                    // output a provider rejection (e.g. 429 quota) is invisible.
-                                    const tail = (result.stderr || result.stdout).trim().slice(-2000);
-                                    deps.error(
-                                        `dispatch ${decision.taskId} → ${member.executor} exited ${result.exitCode}${tail ? `: ${tail}` : ''}`,
-                                    );
-                                }
-                            },
-                        );
+                        // G71 R1/R3: settle, then dispatch — both non-blocking. Member work
+                        // never runs in the orchestrator process; the receipt is completion.
+                        await strategyRuntime.observe(projectPath, { ownerEpoch: owner.ownerEpoch });
+                        const ticked = await strategyRuntime.tick(projectPath, {
+                            ownerEpoch: owner.ownerEpoch,
+                            orchestratorId: recipient,
+                        });
+                        // Only a wake that dispatched nothing is an idle hold; a dispatch is
+                        // work, and the next idle stretch records its own hold row.
+                        lastHoldKey =
+                            ticked.dispatched.length === 0
+                                ? await recordIdleHold(deps, recipient, wake.source, lastHoldKey)
+                                : '';
                     } finally {
                         await ledger.flush();
                         ledger.unsubscribe();
                     }
+                } else {
+                    lastHoldKey = await recordIdleHold(deps, recipient, wake.source, lastHoldKey);
                 }
-                lastHoldKey = await recordIdleHold(deps, recipient, wake.source, lastHoldKey);
                 iteration++;
                 continue;
             }
@@ -484,6 +473,8 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
         if (memberSession.hasLiveState()) {
             await memberSession.reset('operator').catch(() => undefined);
         }
+        // G71 R1: no orphan standby heartbeat outlives the loop that owns the lease.
+        strategyRuntime?.stop();
         if (ownerTimer !== undefined) clearInterval(ownerTimer);
         await renewal;
         if (owner) await claims.release(projectPath, 'orchestrator', recipient, owner.ownerEpoch);

@@ -64,6 +64,11 @@ export function classifyTerminalReason({
     if (status === 'done') return 'done';
     if (engineReason === 'no-passing-transition' || engineReason === 'no-passing-edge') return 'failed-guard';
     if (engineReason === 'iteration-bound-exceeded') return 'retry-exhausted';
+    // G71 R2 (ADR-126 A4): a fleet wait that stopped without a definite receipt is
+    // outcome-unknown — the member may still be working, so the run closes `interrupted`
+    // (resumable) rather than a `failed-*` reason. Checked BEFORE the /timeout/i rule,
+    // which would otherwise claim any error text that happened to mention a timeout.
+    if (errorText !== undefined && errorText !== null && /outcome[-_ ]?unknown/i.test(errorText)) return 'interrupted';
     if (errorText !== undefined && errorText !== null && /timeout/i.test(errorText)) return 'failed-timeout';
     if (actionKind === 'agent.run') return 'failed-agent';
     return 'failed-check';

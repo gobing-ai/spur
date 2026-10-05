@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Route all fleet dispatch through one inbox dispatcher with receipt waits and a non-blocking GTD tick
-status: todo
+status: wip
 template: feature-impl
 created_at: 2026-10-04T20:30:28.484Z
-updated_at: "2026-10-04T20:58:03.560Z"
+updated_at: "2026-10-05T00:23:33.597Z"
 feature_id: G71
 
 priority: P1
@@ -200,7 +200,88 @@ Add `AgentCoordinationService.getMessage(msgId)` only if absent. It reads the in
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+One inbox dispatcher now owns fleet dispatch, and completion is the `coordination_runs` receipt
+(R1, R2, R5). `FleetDispatcher` is the single primitive: `enqueue` sends one keyed idempotent inbox
+message and returns its `messageId`; `receipt` reads the newest run row for that message whose
+`spec_id` IS the pinned occupant and maps `exited` → `completed`, `errored` → `failed`, a
+settled-`failed` inbox row with no run row → `not-started`, anything else → null; `awaitReceipt`
+polls that read and a stop without a definite receipt — deadline OR abort — is `outcome-unknown`,
+never `failed` and never `not-started`, because the member may still be working (R2). The workflow
+stage (`packages/app/src/workflow/fleet-dispatch.ts`) keeps its role resolution, prompt artifact and
+optional `expectFile`, but the wait is the receipt: `expectFile` is now a post-condition checked only
+after `completed`, and a missing artifact is `failed` with reason `missing-artifact`. The
+`FleetDispatchResult` union drops `dispatched`/`timeout` for
+`completed | failed | not-started | outcome-unknown | unavailable`, and the action maps the last of
+those to `ok:false` with an error text that deliberately avoids `/timeout/i` so
+`classifyTerminalReason` closes the run `interrupted` — the resumable reason — instead of
+`failed-timeout`.
+
+The GTD orchestrator no longer runs member work (R3, R4). `StrategyRuntime.tick` reconciles once,
+asks the pure strategy over one snapshot, then per decision claims the write slot and enqueues one
+keyed message with `requestKey: fleet:task:<wbs>:<n>`; it never awaits a run. `observe` is the other
+half: it reads the receipt for the member holding the write slot, and on a definite receipt validates
+the holder generation and releases the slot, so retry needs no code — freshness picks the task up on
+the next tick. Freshness itself is derived from the keyed dispatch rows in the database (the inbox
+rows, which carry `request_key`, plus their receipts), so a restarted orchestrator rebuilds its
+outstanding-work state on its first tick with no in-memory map; the attempt number is
+`1 + count(fleet:task:<wbs>:* rows)`. A newest attempt with no definite receipt yields the new
+`dispatch-in-flight` hold and blocks every other write dispatch, while a `completed` attempt or one
+that exhausted `MAX_DISPATCH_ATTEMPTS` is simply no longer a candidate. `dispatchNext`, its second
+`selectNext` per decision, the in-process `runTraced` dispatch and the `beforeDispatch` plumbing are
+deleted; the loop's owner branch is now `observe` → `tick` → `recordIdleHold` only when nothing was
+dispatched. While a dispatch waits to be claimed the orchestrator keeps the write slot alive with one
+standby heartbeat timer per project (`WRITE_SLOT_TTL_MS / 3`), stopped when the member's own
+`running` row appears, when the receipt settles, or on loop exit.
+
+Two seams carried the metadata the design needs. `InboxUnfinishedDao.listByRequestKeyPrefix` reads
+keyed rows at any status (raw SQL stays in domain), `AgentCoordinationService.getMessage` exposes one
+inbox row's status for the `not-started` branch, and `drainPending`/`getInbox` now surface
+`requestKey` on `InboxEntry`; `drainIntoPrompt` uses it to set `flags.task` from a
+`fleet:task:<wbs>:<n>` key, so a drained fleet dispatch fills `coordination_runs.task_id` and the
+receipt is attributable. `WorkflowService` and the CLI's `makeFleetRuntime` both build the dispatcher,
+so no caller can reach fleet dispatch except through it (R5); a host that wires no dispatcher makes
+`tick` refuse loudly with a `no-idle-instance` hold rather than silently believing it dispatched.
+
+The stage adapter deliberately consumes the dispatcher's **two seams separately** — `enqueue` and
+`awaitReceipt` — instead of the one-call `dispatch`. A failed send and a failed wait are not the same
+fact: only the first means nothing was queued, so only the first may resolve to `unavailable` and
+unlock a declared `executorFallback: traditional`. Once the message has landed the member may already
+be working, so a receipt-read failure resolves to `outcome-unknown` and the stage is never re-run. A
+regression test pins this (`fleet-dispatch.test.ts`, "a receipt wait that throws AFTER a landed send
+is outcome-unknown"); before the split, an enqueue that landed followed by a failed wait reported
+`unavailable` and could execute the same member request twice.
+
+| Change | Anchor |
+| --- | --- |
+| One `FleetDispatcher`: keyed enqueue, occupant-pinned receipt read, bounded receipt wait | `packages/app/src/services/fleet-dispatcher.ts:60` |
+| Receipt mapping — `exited` → completed, `errored` → failed, settled-`failed` inbox row → not-started | `packages/app/src/services/fleet-dispatcher.ts:92` |
+| A stop without a definite receipt is `outcome-unknown` (deadline and abort alike) | `packages/app/src/services/fleet-dispatcher.ts:113` |
+| `outcome-unknown` text closes the run `interrupted`, checked before the `/timeout/i` rule | `packages/app/src/workflow/terminal-reason.ts:71` |
+| Workflow fleet dispatch adapted onto the shared dispatcher; `expectFile` is a post-condition | `packages/app/src/workflow/fleet-dispatch.ts:134` |
+| Action mapping: completed → done, failed/not-started → failed-agent, outcome-unknown → resumable | `packages/app/src/workflow/actions/agent-run.ts:400` |
+| `tick` — resume once, claim, enqueue one keyed dispatch, never await a run | `packages/app/src/services/strategy-runtime.ts:418` |
+| `observe` — read the receipt, validate the holder, release the slot | `packages/app/src/services/strategy-runtime.ts:486` |
+| Attempt key + ordinal parse for `fleet:task:<wbs>:<n>` | `packages/app/src/services/strategy-runtime.ts:42` |
+| Keyed freshness and the `dispatch-in-flight` hold reason | `packages/app/src/services/strategy-runtime.ts:80` |
+| Standby write-slot heartbeat while a dispatch waits to be claimed | `packages/app/src/services/strategy-runtime.ts:532` |
+| Keyed-prefix inbox read (raw SQL stays in domain) | `packages/domain/src/dao/inbox-unfinished-dao.ts:69` |
+| `getMessage` — one inbox row for the `not-started` branch | `packages/app/src/services/agent-coordination-service.ts:328` |
+| `requestKey` exposed on `InboxEntry` | `packages/app/src/services/agent-coordination-service.ts:149` |
+| Loop owner branch: `observe` → `tick`, no in-process member run, heartbeat stopped on exit | `packages/app/src/services/agent-loop-service.ts:385` |
+| A drained dispatch key names the task on the run receipt | `apps/cli/src/commands/agent.ts:916` |
+| CLI wires the dispatcher into the strategy runtime | `apps/cli/src/commands/agent.ts:1021` |
+| WorkflowService composes the dispatcher for the engine host | `packages/app/src/services/workflow-service.ts:1968` |
+| `InboxEntry.requestKey` populated on the drain path | `packages/app/src/services/agent-coordination-service.ts:344` |
+
+Test evidence: `packages/app/tests/services/fleet-dispatcher.test.ts` (new, 15 cases — replay,
+errored, settled-failed inbox row, running, foreign occupant, deadline, arriving receipt, abort, the
+real poll cadence, and `dispatch` composition), plus updated
+`packages/app/tests/services/strategy-runtime.test.ts` (tick/observe/in-flight hold/keyed freshness/
+attempt cap/standby heartbeat), `packages/app/tests/workflow/fleet-dispatch.test.ts`,
+`packages/app/tests/workflow/agent-run-fleet.test.ts`,
+`packages/app/tests/services/agent-loop-service.test.ts` and
+`apps/cli/tests/commands/agent-loop-wake.test.ts` (the two G62 loop traces now assert the inbox
+dispatch and the receipt-driven retry instead of an in-process executor).
 
 ### Testing
 
@@ -219,4 +300,5 @@ Add `AgentCoordinationService.getMessage(msgId)` only if absent. It reads the in
 ### History
 
 - 2026-10-04T20:57:37.679Z backlog → todo (system)
+- 2026-10-04T23:52:35.749Z todo → wip (system)
 

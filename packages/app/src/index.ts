@@ -268,6 +268,15 @@ export {
     type FindingCode,
     isFindingCode,
 } from './services/finding-codes';
+// One fleet dispatch primitive (G71 R1/R2, ADR-126 A4) — the single inbox enqueue + receipt wait
+export {
+    FleetDispatcher,
+    type FleetDispatcherDeps,
+    type FleetDispatchRequest,
+    type FleetReceipt,
+    type FleetReceiptStatus,
+    RECEIPT_POLL_INTERVAL_MS,
+} from './services/fleet-dispatcher';
 export type {
     FleetServiceContext,
     MaterializeResult,

@@ -1,16 +1,11 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AgentFleet } from '@gobing-ai/spur-config';
-import type { AgentCoordinationService, SendResult } from '../../src/services/agent-coordination-service';
+import type { FleetDispatcher, FleetDispatchRequest, FleetReceipt } from '../../src/services/fleet-dispatcher';
 import type { FleetService, ResolvedFleet, ResolvedFleetMember } from '../../src/services/fleet-service';
-import {
-    dispatchToFleet,
-    type FleetDispatchDeps,
-    fleetUnavailableOutcome,
-    waitForFileExists,
-} from '../../src/workflow/fleet-dispatch';
+import { dispatchToFleet, type FleetDispatchDeps, fleetUnavailableOutcome } from '../../src/workflow/fleet-dispatch';
 
 /** Enabled coder/reviewer member fixture — desired state only, no liveness (R5). */
 function member(overrides: Partial<ResolvedFleetMember> = {}): ResolvedFleetMember {
@@ -43,47 +38,40 @@ function fleetSvc(
     } as unknown as FleetService;
 }
 
-interface RecordedSend {
-    fromId: string | null;
-    toId: string;
-    body: string;
-    requestKey: string | undefined;
-}
-
-function coordination(opts: { throws?: Error } = {}) {
-    const sends: RecordedSend[] = [];
-    const svc = {
-        sendMessage: async (
-            fromId: string | null,
-            toId: string,
-            body: string,
-            _replyTo?: string,
-            requestKey?: string,
-        ): Promise<SendResult> => {
-            if (opts.throws !== undefined) throw opts.throws;
-            sends.push({ fromId, toId, body, requestKey });
-            return { msgId: `msg-${sends.length}`, toId, status: 'queued', injected: false };
+/**
+ * Recording fake for the two dispatch seams the adapter uses. `sendFails` throws from the
+ * enqueue; `failWait` throws from the receipt wait AFTER a successful enqueue — the
+ * double-execution regression case (a landed message whose wait failed).
+ */
+function dispatcher(receipt: FleetReceipt | Error, opts: { failWait?: boolean } = {}) {
+    const calls: { request: FleetDispatchRequest; timeoutMs: number }[] = [];
+    let queued: FleetDispatchRequest | undefined;
+    const fake = {
+        enqueue: async (request: FleetDispatchRequest): Promise<{ messageId: string; replayed: boolean }> => {
+            if (receipt instanceof Error) throw receipt;
+            queued = request;
+            return { messageId: 'msg-1', replayed: false };
+        },
+        awaitReceipt: async (
+            _messageId: string,
+            _member: string,
+            waitOpts: { timeoutMs: number },
+        ): Promise<FleetReceipt> => {
+            if (opts.failWait === true) throw new Error('coordination receipt read failed');
+            if (queued !== undefined) calls.push({ request: queued, timeoutMs: waitOpts.timeoutMs });
+            if (receipt instanceof Error) throw receipt;
+            return receipt;
         },
     };
-    return { svc: svc as unknown as AgentCoordinationService, sends };
+    return { dispatcher: fake as unknown as Pick<FleetDispatcher, 'enqueue' | 'awaitReceipt'>, calls };
 }
 
-function deps(
-    fleet: FleetService,
-    coordination: AgentCoordinationService,
-    opts: { fileAppears?: boolean; waitForFileCalls?: number[] } = {},
-): FleetDispatchDeps {
+function deps(fleet: FleetService, dispatch: Pick<FleetDispatcher, 'enqueue' | 'awaitReceipt'>): FleetDispatchDeps {
     let tick = 0;
-    return {
-        fleet,
-        coordination,
-        waitForFile: async () => {
-            opts.waitForFileCalls?.push(1);
-            return opts.fileAppears !== false;
-        },
-        now: () => (tick += 10),
-    };
+    return { fleet, dispatcher: dispatch, now: () => (tick += 10) };
 }
+
+const completed: FleetReceipt = { status: 'completed', messageId: 'msg-1', runId: 'run-1' };
 
 /** Writable project dir for dispatches that reach the prompt-artifact write. */
 const tempDirs: string[] = [];
@@ -97,121 +85,128 @@ afterEach(() => {
 });
 
 describe('dispatchToFleet', () => {
-    test('R1/R2: dispatches to the first enabled role-matching member and persists the prompt artifact', async () => {
-        const project = mkdtempSync(join(tmpdir(), 'fleet-'));
-        try {
-            const { svc: coord, sends } = coordination();
-            const result = await dispatchToFleet(
-                {
-                    role: 'coder',
-                    prompt: 'implement task 0942',
-                    projectPath: project,
-                    expectFile: 'out/verdict.md',
-                    runId: 'run-1',
-                    state: 'impl',
-                },
-                deps(
-                    fleetSvc(declaration(), [
-                        member({ instanceId: 'p-coder', role: 'coder' }),
-                        member({ role: 'reviewer', instanceId: 'p-rev' }),
-                    ]),
-                    coord,
-                ),
-            );
-            expect(result.status).toBe('dispatched');
-            if (result.status !== 'dispatched') return;
-            expect(result.memberId).toBe('p-coder');
-            expect(result.messageId).toBe('msg-1');
-            expect(result.durationMs).toBeGreaterThan(0);
-            // The durable artifact carries the step prompt itself (ADR-057).
-            expect(readFileSync(result.promptPath, 'utf8')).toBe('implement task 0942');
-            expect(sends.length).toBe(1);
-            const body = sends[0]?.body ?? '';
-            expect(body).toContain('run: run-1');
-            expect(body).toContain('state: impl');
-            expect(body).toContain('role: coder');
-            expect(body).toContain(result.promptPath);
-            expect(body).toContain('out/verdict.md');
-            expect(sends[0]?.fromId).toBeNull();
-            expect(sends[0]?.toId).toBe('p-coder');
-            // Keyed send (0832): run+state pins the submission identity so a stage
-            // retry replays the original submission instead of double-sending.
-            expect(sends[0]?.requestKey).toBe('run-1/impl');
-        } finally {
-            rmSync(project, { recursive: true, force: true });
-        }
+    test('R1/R2: resolves the role-matching member, persists the prompt artifact and sends one keyed dispatch', async () => {
+        const project = tempProject();
+        const { dispatcher: dispatch, calls } = dispatcher(completed);
+        const result = await dispatchToFleet(
+            { role: 'coder', prompt: 'implement task 0942', projectPath: project, runId: 'run-1', state: 'impl' },
+            deps(
+                fleetSvc(declaration(), [
+                    member({ instanceId: 'p-coder', role: 'coder' }),
+                    member({ role: 'reviewer', instanceId: 'p-rev' }),
+                ]),
+                dispatch,
+            ),
+        );
+        expect(result.status).toBe('completed');
+        if (result.status !== 'completed') return;
+        expect(result.memberId).toBe('p-coder');
+        expect(result.messageId).toBe('msg-1');
+        expect(result.runId).toBe('run-1');
+        expect(result.durationMs).toBeGreaterThan(0);
+        // The durable artifact carries the step prompt itself (ADR-057).
+        expect(readFileSync(result.promptPath, 'utf8')).toBe('implement task 0942');
+        expect(calls.length).toBe(1);
+        // The sender is the dispatching RUN, never null: a member's reply needs a real fromId.
+        expect(calls[0]?.request.fromId).toBe('workflow:run-1');
+        expect(calls[0]?.request.member).toBe('p-coder');
+        expect(calls[0]?.request.requestKey).toBe('run-1/impl');
+        expect(calls[0]?.request.body).toContain('state: impl');
+        expect(calls[0]?.request.body).toContain('role: coder');
+        expect(calls[0]?.request.body).toContain(result.promptPath);
+    });
+
+    test('R1: an undeclared timeout waits unbounded rather than inventing a budget', async () => {
+        const { dispatcher: dispatch, calls } = dispatcher(completed);
+        await dispatchToFleet(
+            { role: 'coder', prompt: 'x', projectPath: tempProject(), runId: 'r', state: 's' },
+            deps(fleetSvc(declaration(), [member()]), dispatch),
+        );
+        expect(calls[0]?.timeoutMs).toBe(Number.POSITIVE_INFINITY);
+    });
+
+    test('R2: a declared expectFile that never appeared after completion is failed(missing-artifact)', async () => {
+        const project = tempProject();
+        const { dispatcher: dispatch } = dispatcher(completed);
+        const result = await dispatchToFleet(
+            { role: 'coder', prompt: 'x', projectPath: project, expectFile: 'out/verdict.md', runId: 'r', state: 's' },
+            deps(fleetSvc(declaration(), [member()]), dispatch),
+        );
+        expect(result).toEqual({
+            status: 'failed',
+            memberId: 'proj-m1',
+            messageId: 'msg-1',
+            reason: 'missing-artifact',
+            runId: 'run-1',
+        });
+    });
+
+    test('R2: an errored receipt is failed(errored)', async () => {
+        const { dispatcher: dispatch } = dispatcher({ status: 'failed', messageId: 'msg-1', runId: 'run-2' });
+        const result = await dispatchToFleet(
+            { role: 'coder', prompt: 'x', projectPath: tempProject(), runId: 'r', state: 's' },
+            deps(fleetSvc(declaration(), [member()]), dispatch),
+        );
+        expect(result).toEqual({
+            status: 'failed',
+            memberId: 'proj-m1',
+            messageId: 'msg-1',
+            reason: 'errored',
+            runId: 'run-2',
+        });
+    });
+
+    test('R2: a not-started receipt is reported as such, never as a failure', async () => {
+        const { dispatcher: dispatch } = dispatcher({ status: 'not-started', messageId: 'msg-1' });
+        const result = await dispatchToFleet(
+            { role: 'coder', prompt: 'x', projectPath: tempProject(), runId: 'r', state: 's' },
+            deps(fleetSvc(declaration(), [member()]), dispatch),
+        );
+        expect(result).toEqual({ status: 'not-started', memberId: 'proj-m1', messageId: 'msg-1' });
+    });
+
+    test('R2: an outcome-unknown wait is neither failed nor re-dispatched', async () => {
+        const { dispatcher: dispatch, calls } = dispatcher({ status: 'outcome-unknown', messageId: 'msg-1' });
+        const result = await dispatchToFleet(
+            { role: 'coder', prompt: 'x', projectPath: tempProject(), runId: 'r', state: 's' },
+            deps(fleetSvc(declaration(), [member()]), dispatch),
+        );
+        expect(result).toEqual({ status: 'outcome-unknown', memberId: 'proj-m1', messageId: 'msg-1' });
+        expect(calls.length).toBe(1);
     });
 
     test('R1: no enabled member for the role is an unavailable value naming the role, not an exception', async () => {
-        const { svc: coord, sends } = coordination();
+        const { dispatcher: dispatch, calls } = dispatcher(completed);
         const result = await dispatchToFleet(
             { role: 'reviewer', prompt: 'review', projectPath: '/proj', runId: 'r', state: 's' },
-            deps(fleetSvc(declaration(), [member({ role: 'coder' })], ['no-enabled-members']), coord),
+            deps(fleetSvc(declaration(), [member({ role: 'coder' })], ['no-enabled-members']), dispatch),
         );
         expect(result).toEqual({ status: 'unavailable', reason: expect.stringContaining("role 'reviewer'") });
-        expect(sends.length).toBe(0);
+        expect(calls.length).toBe(0);
     });
 
     test('R1: a disabled fleet is unavailable before any send', async () => {
-        const { svc: coord, sends } = coordination();
+        const { dispatcher: dispatch, calls } = dispatcher(completed);
         const result = await dispatchToFleet(
             { role: 'coder', prompt: 'x', projectPath: '/proj', runId: 'r', state: 's' },
-            deps(fleetSvc(declaration(false), [member()]), coord),
+            deps(fleetSvc(declaration(false), [member()]), dispatch),
         );
         expect(result).toEqual({ status: 'unavailable', reason: expect.stringContaining('disabled') });
-        expect(sends.length).toBe(0);
+        expect(calls.length).toBe(0);
     });
 
     test('R1: no agent.fleet declaration is unavailable with the fix named', async () => {
-        const { svc: coord, sends } = coordination();
+        const { dispatcher: dispatch, calls } = dispatcher(completed);
         const result = await dispatchToFleet(
             { role: 'coder', prompt: 'x', projectPath: '/proj', runId: 'r', state: 's' },
-            deps(fleetSvc(null, [], ['no-declaration']), coord),
+            deps(fleetSvc(null, [], ['no-declaration']), dispatch),
         );
         expect(result).toEqual({ status: 'unavailable', reason: expect.stringContaining('agent.fleet') });
-        expect(sends.length).toBe(0);
-    });
-
-    test('R2: expectFile never appearing within the timeout is a timeout carrying the identity pair', async () => {
-        const project = mkdtempSync(join(tmpdir(), 'fleet-'));
-        try {
-            const { svc: coord, sends } = coordination();
-            const result = await dispatchToFleet(
-                {
-                    role: 'coder',
-                    prompt: 'x',
-                    projectPath: project,
-                    expectFile: 'out/v.md',
-                    timeoutMs: 50,
-                    runId: 'r',
-                    state: 's',
-                },
-                deps(fleetSvc(declaration(), [member()]), coord, { fileAppears: false }),
-            );
-            expect(result.status).toBe('timeout');
-            if (result.status !== 'timeout') return;
-            expect(result.memberId).toBe('proj-m1');
-            expect(result.messageId).toBe('msg-1');
-            expect(result.expectFile).toBe(join(project, 'out/v.md'));
-            expect(sends.length).toBe(1);
-        } finally {
-            rmSync(project, { recursive: true, force: true });
-        }
-    });
-
-    test('R2: no declared expectFile completes at send without waiting', async () => {
-        const calls: number[] = [];
-        const { svc: coord } = coordination();
-        const result = await dispatchToFleet(
-            { role: 'coder', prompt: 'x', projectPath: tempProject(), runId: 'r', state: 's' },
-            deps(fleetSvc(declaration(), [member()]), coord, { waitForFileCalls: calls }),
-        );
-        expect(result.status).toBe('dispatched');
         expect(calls.length).toBe(0);
     });
 
     test('ADR-121: a reviewer dispatch rejects every member carrying a reusable session BEFORE send', async () => {
-        const { svc: coord, sends } = coordination();
+        const { dispatcher: dispatch, calls } = dispatcher(completed);
         const result = await dispatchToFleet(
             { role: 'reviewer', prompt: 'review', projectPath: '/proj', runId: 'r', state: 's' },
             deps(
@@ -219,77 +214,59 @@ describe('dispatchToFleet', () => {
                     member({ instanceId: 'p-rev', role: 'reviewer', session: { mode: 'persistent' } }),
                     member({ instanceId: 'p-rev2', role: 'reviewer', session: { mode: 'resume' } }),
                 ]),
-                coord,
+                dispatch,
             ),
         );
         expect(result).toEqual({ status: 'unavailable', reason: expect.stringContaining('ADR-121') });
-        expect(sends.length).toBe(0);
+        expect(calls.length).toBe(0);
     });
 
     test('ADR-121: a one-shot member counts as fresh for a reviewer dispatch', async () => {
-        const { svc: coord, sends } = coordination();
+        const { dispatcher: dispatch, calls } = dispatcher(completed);
         const result = await dispatchToFleet(
             { role: 'reviewer', prompt: 'review', projectPath: tempProject(), runId: 'r', state: 's' },
-            deps(fleetSvc(declaration(), [member({ role: 'reviewer', session: { mode: 'one-shot' } })]), coord),
+            deps(fleetSvc(declaration(), [member({ role: 'reviewer', session: { mode: 'one-shot' } })]), dispatch),
         );
-        expect(result.status).toBe('dispatched');
-        expect(sends.length).toBe(1);
+        expect(result.status).toBe('completed');
+        expect(calls.length).toBe(1);
     });
 
     test('R1: gtd prefers the member without a session in flight; rest keeps declaration order', async () => {
-        const fresh = member({ instanceId: 'p-idle' });
         const busy = member({ instanceId: 'p-busy', session: { mode: 'persistent' } });
-        const { svc: coordA } = coordination();
-        const gtd = await dispatchToFleet(
+        const fresh = member({ instanceId: 'p-idle' });
+        const a = dispatcher(completed);
+        await dispatchToFleet(
             { role: 'coder', prompt: 'x', projectPath: tempProject(), runId: 'r', state: 's' },
-            deps(fleetSvc(declaration(true, 'gtd'), [busy, fresh]), coordA),
+            deps(fleetSvc(declaration(true, 'gtd'), [busy, fresh]), a.dispatcher),
         );
-        expect(gtd).toEqual({
-            status: 'dispatched',
-            memberId: 'p-idle',
-            messageId: expect.any(String),
-            durationMs: expect.any(Number),
-            promptPath: expect.any(String),
-        });
-        const { svc: coordB } = coordination();
-        const rest = await dispatchToFleet(
+        expect(a.calls[0]?.request.member).toBe('p-idle');
+        const b = dispatcher(completed);
+        await dispatchToFleet(
             { role: 'coder', prompt: 'x', projectPath: tempProject(), runId: 'r', state: 's' },
-            deps(fleetSvc(declaration(true, 'rest'), [busy, fresh]), coordB),
+            deps(fleetSvc(declaration(true, 'rest'), [busy, fresh]), b.dispatcher),
         );
-        expect(rest).toEqual({
-            status: 'dispatched',
-            memberId: 'p-busy',
-            messageId: expect.any(String),
-            durationMs: expect.any(Number),
-            promptPath: expect.any(String),
-        });
+        expect(b.calls[0]?.request.member).toBe('p-busy');
+    });
+
+    test('R2: a receipt wait that throws AFTER a landed send is outcome-unknown — never a fallback-eligible unavailable', async () => {
+        const { dispatcher: dispatch } = dispatcher(completed, { failWait: true });
+        const result = await dispatchToFleet(
+            { role: 'coder', prompt: 'x', projectPath: tempProject(), runId: 'r', state: 's' },
+            deps(fleetSvc(declaration(), [member()]), dispatch),
+        );
+        // The message is queued and the member may already be working: reporting
+        // `unavailable` here would let `executorFallback: traditional` re-run the stage
+        // and execute the same request twice.
+        expect(result).toEqual({ status: 'outcome-unknown', memberId: 'proj-m1', messageId: 'msg-1' });
     });
 
     test('R3: a failing send reads as an unavailable value naming the member, never a throw', async () => {
-        const { svc: coord } = coordination({ throws: new Error('inbox db locked') });
+        const { dispatcher: dispatch } = dispatcher(new Error('inbox db locked'));
         const result = await dispatchToFleet(
             { role: 'coder', prompt: 'x', projectPath: tempProject(), runId: 'r', state: 's' },
-            deps(fleetSvc(declaration(), [member()]), coord),
+            deps(fleetSvc(declaration(), [member()]), dispatch),
         );
         expect(result).toEqual({ status: 'unavailable', reason: expect.stringContaining('inbox db locked') });
-    });
-});
-
-describe('waitForFileExists', () => {
-    test('returns true once the artifact exists', async () => {
-        const dir = mkdtempSync(join(tmpdir(), 'fleet-wait-'));
-        try {
-            writeFileSync(join(dir, 'present.md'), 'verdict');
-            expect(await waitForFileExists(join(dir, 'present.md'), 1000)).toBe(true);
-        } finally {
-            rmSync(dir, { recursive: true, force: true });
-        }
-    });
-
-    test('returns false when the deadline passes', async () => {
-        const started = Date.now();
-        expect(await waitForFileExists(join(tmpdir(), `absent-${crypto.randomUUID()}.md`), 80)).toBe(false);
-        expect(Date.now() - started).toBeGreaterThanOrEqual(70);
     });
 });
 

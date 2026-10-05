@@ -355,7 +355,7 @@ export class AgentRunActionRunner implements ActionRunner {
             },
             this.fleetDeps,
         );
-        if (dispatch.status === 'dispatched') {
+        if (dispatch.status === 'completed') {
             return {
                 result: {
                     ok: true,
@@ -376,24 +376,45 @@ export class AgentRunActionRunner implements ActionRunner {
                 },
             };
         }
-        if (dispatch.status === 'timeout') {
-            // The member accepted the work — a fallback here would double-execute
-            // the stage. Fail explicitly; classifyTerminalReason maps the timeout
-            // error text to `failed-timeout` at run closure (0937).
+        if (dispatch.status === 'failed' || dispatch.status === 'not-started') {
+            // A definite receipt ran short of completion: the work did not happen
+            // (not-started) or the run errored. Both are safe to report as a failed
+            // stage — never silently retried by a fallback that would double-execute.
+            const detail = dispatch.status === 'failed' ? `: ${dispatch.reason}` : '';
             return {
                 result: {
                     ok: false,
                     data: {
                         agent: dispatch.memberId,
                         usage: unavailableAgentUsage('fleet members report no token usage'),
-                        expectFile: dispatch.expectFile,
-                        durationMs: dispatch.durationMs,
-                        reason: 'failed-timeout',
+                        ...(expectFile !== undefined ? { expectFile } : {}),
+                        reason: 'failed-agent',
                         surface: 'fleet',
                         memberId: dispatch.memberId,
                         messageId: dispatch.messageId,
                     },
-                    error: `agent.run (${dispatch.memberId}) accepted the fleet dispatch but expectFile never appeared within the declared timeout: ${dispatch.expectFile}`,
+                    error: `agent.run (${dispatch.memberId}) fleet dispatch ${dispatch.status}${detail}`,
+                },
+            };
+        }
+        if (dispatch.status === 'outcome-unknown') {
+            // G71 R2: the member may still be working, so this is NOT a failure and
+            // never a fallback. The error text deliberately avoids /timeout/i — the
+            // 0937 classifier reads the text, and `outcome-unknown` must map to the
+            // resumable `interrupted` reason, not `failed-timeout`.
+            return {
+                result: {
+                    ok: false,
+                    data: {
+                        agent: dispatch.memberId,
+                        usage: unavailableAgentUsage('fleet members report no token usage'),
+                        ...(expectFile !== undefined ? { expectFile } : {}),
+                        reason: 'outcome-unknown',
+                        surface: 'fleet',
+                        memberId: dispatch.memberId,
+                        messageId: dispatch.messageId,
+                    },
+                    error: `fleet dispatch outcome unknown (member ${dispatch.memberId}, message ${dispatch.messageId})`,
                 },
             };
         }

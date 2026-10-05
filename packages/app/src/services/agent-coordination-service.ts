@@ -141,6 +141,20 @@ export interface InboxEntry {
     injectAttempts?: number;
     /** Last delivery error, when the drain recorded one (0834 R6). */
     injectError?: string | null;
+    /**
+     * Keyed-submission identity from the ts-db row (G71 R1). A `fleet:task:<wbs>:<n>`
+     * value lets the drain name the dispatched task on the run receipt; null/absent
+     * for a keyless send.
+     */
+    requestKey?: string | null;
+}
+
+/** Inbox row as read for dispatch-receipt work — the fields {@link FleetDispatcher} needs. */
+export interface InboxMessageView {
+    id: string;
+    toId: string;
+    status: string;
+    requestKey: string | null;
 }
 
 /** Result of listing an agent's inbox. */
@@ -300,9 +314,22 @@ export class AgentCoordinationService {
                 inReplyTo: row.inReplyTo,
                 injectAttempts: row.injectAttempts,
                 injectError: row.injectError,
+                requestKey: row.requestKey,
             })),
             count: rows.length,
         };
+    }
+
+    /**
+     * One inbox row by id, or null when absent (G71 R1). The fleet dispatcher reads
+     * THIS row's status to distinguish a `not-started` dispatch (settled `failed` with
+     * no run receipt) from one still pending/claimed/running.
+     */
+    async getMessage(msgId: string): Promise<InboxMessageView | null> {
+        const dao = await this.inboxDao();
+        const row = await dao.getById(msgId);
+        if (row === undefined) return null;
+        return { id: row.id, toId: row.toId, status: row.status, requestKey: row.requestKey ?? null };
     }
 
     /**
@@ -322,6 +349,7 @@ export class AgentCoordinationService {
                 status: row.status,
                 createdAt: new Date(row.createdAt).toISOString(),
                 inReplyTo: row.inReplyTo,
+                requestKey: row.requestKey,
             })),
             count: rows.length,
         };

@@ -4,8 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AgentFleet } from '@gobing-ai/spur-config';
 import type { ActionRunContext } from '@gobing-ai/ts-dual-workflow-engine';
-import type { AgentCoordinationService, SendResult } from '../../src/services/agent-coordination-service';
 import type { AgentRunInvocation, AgentRunTracedResult, AgentService } from '../../src/services/agent-service';
+import type { FleetDispatchRequest, FleetReceipt } from '../../src/services/fleet-dispatcher';
 import type { FleetService, ResolvedFleetMember } from '../../src/services/fleet-service';
 import { AgentRunActionRunner } from '../../src/workflow/actions/agent-run';
 import type { FleetDispatchDeps } from '../../src/workflow/fleet-dispatch';
@@ -59,16 +59,27 @@ function member(overrides: Partial<ResolvedFleetMember> = {}): ResolvedFleetMemb
     };
 }
 
+/** Fleet deps plus the recorded dispatch requests, so a test can assert what was sent. */
+type FleetDepsHandle = FleetDispatchDeps & { dispatchCalls: FleetDispatchRequest[] };
+
 /**
- * Fleet deps over fakes, driving the REAL dispatchToFleet — the prompt artifact
- * lands in the temp workdir, the wait never blocks, and the send is a value.
+ * Fleet deps over fakes, driving the REAL dispatchToFleet: the prompt artifact
+ * lands in the temp workdir, the receipt is a value, and nothing blocks.
+ *
+ * `writeArtifact` mimics the member producing its declared result artifact on a
+ * `completed` receipt (the post-condition check reads the filesystem, not the receipt).
  */
 function fleetDeps(
     workdir: string,
-    opts: { fileAppears?: boolean; members?: ResolvedFleetMember[]; declaration?: AgentFleet | null } = {},
-): FleetDispatchDeps {
+    opts: {
+        receipt?: FleetReceipt;
+        members?: ResolvedFleetMember[];
+        declaration?: AgentFleet | null;
+        writeArtifact?: string;
+    } = {},
+): FleetDepsHandle {
     let tick = 0;
-    const waitForCalls: number[] = [];
+    const dispatchCalls: FleetDispatchRequest[] = [];
     return {
         fleet: {
             load: async () =>
@@ -82,19 +93,23 @@ function fleetDeps(
                 missing: [],
             }),
         } as unknown as FleetService,
-        coordination: {
-            sendMessage: async (): Promise<SendResult> => ({
-                msgId: 'msg-fleet-1',
-                toId: 'proj-coder',
-                status: 'queued',
-                injected: false,
-            }),
-        } as unknown as AgentCoordinationService,
-        waitForFile: async () => {
-            waitForCalls.push(1);
-            return opts.fileAppears !== false;
+        dispatcher: {
+            enqueue: async (request: FleetDispatchRequest): Promise<{ messageId: string; replayed: boolean }> => {
+                dispatchCalls.push(request);
+                return { messageId: 'msg-fleet-1', replayed: false };
+            },
+            awaitReceipt: async (): Promise<FleetReceipt> => {
+                const receipt = opts.receipt ?? { status: 'completed', messageId: 'msg-fleet-1', runId: 'run-1' };
+                if (receipt.status === 'completed' && opts.writeArtifact !== undefined) {
+                    const target = join(workdir, opts.writeArtifact);
+                    mkdirSync(join(target, '..'), { recursive: true });
+                    writeFileSync(target, 'verdict: pass');
+                }
+                return receipt;
+            },
         },
         now: () => (tick += 5),
+        dispatchCalls,
     };
 }
 
@@ -104,7 +119,7 @@ function newRunner(svc: AgentService, deps?: FleetDispatchDeps): AgentRunActionR
         : new AgentRunActionRunner(svc, undefined, undefined, {}, deps);
 }
 
-describe('agent.run fleet executor surface (0942/ADR-126)', () => {
+describe('agent.run fleet executor surface (0942/ADR-126, G71 R2/R5)', () => {
     test('R4: a fleet success row carries the shared subprocess evidence keys plus fleet-only identity ids', async () => {
         const workdir = mkdtempSync(join(tmpdir(), 'agent-run-fleet-'));
         try {
@@ -126,17 +141,17 @@ describe('agent.run fleet executor surface (0942/ADR-126)', () => {
             const baseData = baseline.data as Record<string, unknown>;
             expect(baseData.exitCode).toBe(0);
 
-            const fleet = await newRunner(svcWithRunTraced({ invocation: invocation() }), fleetDeps(workdir)).execute(
+            const fleet = await newRunner(
+                svcWithRunTraced({ invocation: invocation() }),
+                fleetDeps(workdir, { writeArtifact: 'out/verdict.md' }),
+            ).execute(
                 { role: 'coder', input: 'hello', expectFile: 'out/verdict.md' },
                 makeCtx({ workdir, vars: { executor: 'fleet' } }),
             );
             expect(fleet.ok).toBe(true);
             const data = fleet.data as Record<string, unknown>;
             // Shared evidence keys — who ran and usage availability are recorded by
-            // BOTH surfaces for the same declared contract. The subprocess row
-            // proves expectFile through its post-exit contract check (ok:true with
-            // the artifact present), while the fleet row names it as a column; the
-            // fleet row additionally records its duration and terminal reason (R4).
+            // BOTH surfaces for the same declared contract.
             for (const key of ['agent', 'usage']) {
                 expect(baseData[key]).toBeDefined();
                 expect(data[key]).toBeDefined();
@@ -240,12 +255,11 @@ describe('agent.run fleet executor surface (0942/ADR-126)', () => {
         const workdir = mkdtempSync(join(tmpdir(), 'agent-run-fleet-'));
         try {
             const { svc, calls } = subprocessSpy();
-            const result = await newRunner(svc, fleetDeps(workdir)).execute(
-                { role: 'coder', input: 'hello' },
-                makeCtx({ workdir }),
-            );
+            const deps = fleetDeps(workdir);
+            const result = await newRunner(svc, deps).execute({ role: 'coder', input: 'hello' }, makeCtx({ workdir }));
             expect(result.ok).toBe(true);
             expect(calls()).toBe(1);
+            expect(deps.dispatchCalls.length).toBe(0);
             expect((result.data as Record<string, unknown>).surface).toBeUndefined();
         } finally {
             rmSync(workdir, { recursive: true, force: true });
@@ -255,13 +269,7 @@ describe('agent.run fleet executor surface (0942/ADR-126)', () => {
     test('subprocess-only options fail loud on the fleet surface instead of dropping guarantees', async () => {
         const workdir = mkdtempSync(join(tmpdir(), 'agent-run-fleet-'));
         try {
-            const waits: number[] = [];
             const deps = fleetDeps(workdir);
-            const original = deps.waitForFile;
-            deps.waitForFile = async (path, timeoutMs) => {
-                waits.push(1);
-                return original(path, timeoutMs);
-            };
             const { svc, calls } = subprocessSpy();
             const result = await newRunner(svc, deps).execute(
                 { role: 'coder', input: 'hello', requireDiff: true },
@@ -269,44 +277,79 @@ describe('agent.run fleet executor surface (0942/ADR-126)', () => {
             );
             expect(result.ok).toBe(false);
             expect(result.error).toContain('subprocess-surface only');
-            expect(waits.length).toBe(0);
+            expect(deps.dispatchCalls.length).toBe(0);
             expect(calls()).toBe(0);
         } finally {
             rmSync(workdir, { recursive: true, force: true });
         }
     });
 
-    test('a member that accepted work but never wrote expectFile times out — no double execution', async () => {
+    test('R2: a wait that stops without a definite receipt is outcome-unknown — never a timeout, never re-dispatched', async () => {
         const workdir = mkdtempSync(join(tmpdir(), 'agent-run-fleet-'));
         try {
             const { svc, calls } = subprocessSpy();
-            const result = await newRunner(svc, fleetDeps(workdir, { fileAppears: false })).execute(
+            const deps = fleetDeps(workdir, { receipt: { status: 'outcome-unknown', messageId: 'msg-fleet-1' } });
+            const result = await newRunner(svc, deps).execute(
                 { role: 'coder', input: 'hello', expectFile: 'out/verdict.md' },
                 makeCtx({ workdir, vars: { executor: 'fleet' } }),
             );
             expect(result.ok).toBe(false);
             const data = result.data as Record<string, unknown>;
-            expect(data.reason).toBe('failed-timeout');
-            expect(result.error).toContain('expectFile');
+            expect(data.reason).toBe('outcome-unknown');
+            expect(result.error).toContain('outcome unknown');
+            // The member may still be working: no fallback reran the stage.
+            expect(calls()).toBe(0);
+            expect(deps.dispatchCalls.length).toBe(1);
+        } finally {
+            rmSync(workdir, { recursive: true, force: true });
+        }
+    });
+
+    test('R2: a completed receipt whose declared artifact is missing is failed(missing-artifact)', async () => {
+        const workdir = mkdtempSync(join(tmpdir(), 'agent-run-fleet-'));
+        try {
+            const { svc, calls } = subprocessSpy();
+            const result = await newRunner(svc, fleetDeps(workdir)).execute(
+                { role: 'coder', input: 'hello', expectFile: 'out/verdict.md' },
+                makeCtx({ workdir, vars: { executor: 'fleet' } }),
+            );
+            expect(result.ok).toBe(false);
+            expect(result.error).toContain('missing-artifact');
             expect(calls()).toBe(0);
         } finally {
             rmSync(workdir, { recursive: true, force: true });
         }
     });
 
-    test('delete-before-invoke: a stale expectFile from a prior run cannot satisfy the wait', async () => {
+    test('delete-before-invoke: a stale expectFile from a prior run cannot satisfy the post-condition', async () => {
         const workdir = mkdtempSync(join(tmpdir(), 'agent-run-fleet-'));
         try {
             mkdirSync(join(workdir, 'out'), { recursive: true });
             writeFileSync(join(workdir, 'out', 'verdict.md'), 'stale');
-            const result = await newRunner(svcWithRunTraced({}), fleetDeps(workdir, { fileAppears: false })).execute(
+            const result = await newRunner(svcWithRunTraced({}), fleetDeps(workdir)).execute(
                 { role: 'coder', input: 'hello', expectFile: 'out/verdict.md' },
                 makeCtx({ workdir, vars: { executor: 'fleet' } }),
             );
-            // The stale file was deleted before dispatch, so the (fake) wait that
-            // never sees a fresh artifact reports a timeout instead of a fake pass.
+            // The stale file was deleted before dispatch, so a completed receipt
+            // without a fresh artifact is a missing-artifact failure, not a fake pass.
             expect(result.ok).toBe(false);
             expect(existsSync(join(workdir, 'out', 'verdict.md'))).toBe(false);
+        } finally {
+            rmSync(workdir, { recursive: true, force: true });
+        }
+    });
+
+    test('R1: the dispatched request names the member occupant, the dispatching run and the state key', async () => {
+        const workdir = mkdtempSync(join(tmpdir(), 'agent-run-fleet-'));
+        try {
+            const deps = fleetDeps(workdir);
+            await newRunner(svcWithRunTraced({}), deps).execute(
+                { role: 'coder', input: 'hello' },
+                makeCtx({ workdir, vars: { executor: 'fleet' } }),
+            );
+            expect(deps.dispatchCalls[0]?.member).toBe('proj-coder');
+            expect(deps.dispatchCalls[0]?.fromId).toBe('workflow:test-1');
+            expect(deps.dispatchCalls[0]?.requestKey).toBe('test-1/s1');
         } finally {
             rmSync(workdir, { recursive: true, force: true });
         }

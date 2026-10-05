@@ -8,6 +8,7 @@ import {
     ActionRunDao,
     ArtifactDao,
     attributeActionCost,
+    CoordinationRunDao,
     createId,
     normalizePersistedWorkflowLayer,
     PhaseRunDao,
@@ -68,7 +69,7 @@ import {
 } from '../workflow/composition-lint';
 import type { SummaryResolver } from '../workflow/decision-evidence';
 import { type DecisionEvaluator, evaluateDecision } from '../workflow/decision-hitl-responder';
-import { type FleetDispatchDeps, waitForFileExists } from '../workflow/fleet-dispatch';
+import type { FleetDispatchDeps } from '../workflow/fleet-dispatch';
 import { ObservableWorkflowAdapter, type WorkflowObservabilityBus } from '../workflow/observability';
 import { projectWorkflowProgress } from '../workflow/progress-projection';
 import {
@@ -92,6 +93,7 @@ import {
 import { AgentCoordinationService, type CoordinationEventBus } from './agent-coordination-service';
 import type { AgentService } from './agent-service';
 import { bridgeEventBus, dropRetiredActionBoundaryAliases, withWorkflowIdentity } from './event-bridge';
+import { FleetDispatcher } from './fleet-dispatcher';
 import { FleetService } from './fleet-service';
 import type { RuleService } from './rule-service';
 import {
@@ -1945,23 +1947,33 @@ export class WorkflowAppService {
         // opens on first use); selecting the surface still requires the run var, so an
         // engine host that never opts in keeps today's dispatch behavior byte-for-byte.
         const fleetFs = createNodeFileSystem(this.ctx.cwd);
+        const fleetCoordination = new AgentCoordinationService({
+            cwd: this.ctx.cwd,
+            env: getEnvVars(),
+            ...(this.ctx.spurConfig !== undefined ? { spurConfig: this.ctx.spurConfig } : {}),
+            ...(this.ctx.reloadAgentConfig !== undefined ? { reloadAgentConfig: this.ctx.reloadAgentConfig } : {}),
+            getDb: () => this.ctx.getDb(),
+            fs: fleetFs,
+            ...(bus !== undefined ? { eventBus: bus as unknown as CoordinationEventBus } : {}),
+        });
         const fleetDispatchDeps: FleetDispatchDeps = {
-            coordination: new AgentCoordinationService({
-                cwd: this.ctx.cwd,
-                env: getEnvVars(),
-                ...(this.ctx.spurConfig !== undefined ? { spurConfig: this.ctx.spurConfig } : {}),
-                ...(this.ctx.reloadAgentConfig !== undefined ? { reloadAgentConfig: this.ctx.reloadAgentConfig } : {}),
-                getDb: () => this.ctx.getDb(),
-                fs: fleetFs,
-                ...(bus !== undefined ? { eventBus: bus as unknown as CoordinationEventBus } : {}),
-            }),
             fleet: new FleetService({
                 fs: fleetFs,
                 ...(this.ctx.spurConfig !== undefined ? { spurConfig: this.ctx.spurConfig } : {}),
                 ...(this.ctx.reloadAgentConfig !== undefined ? { reloadAgentConfig: this.ctx.reloadAgentConfig } : {}),
                 openDb: () => this.ctx.getDb(),
             }),
-            waitForFile: waitForFileExists,
+            // G71 R1/R5: the one fleet dispatch primitive — the stage adapter resolves
+            // the role + prompt and hands the enqueue and receipt wait to this.
+            dispatcher: new FleetDispatcher({
+                coordination: fleetCoordination,
+                // Lazy: the workflow ctx opens its DB asynchronously, so resolve the
+                // adapter per receipt read rather than at composition time.
+                runs: {
+                    listByMessageId: async (messageId: string) =>
+                        new CoordinationRunDao(await this.ctx.getDb()).listByMessageId(messageId),
+                },
+            }),
             now: () => Date.now(),
         };
         registerSpurBuiltins(host, {

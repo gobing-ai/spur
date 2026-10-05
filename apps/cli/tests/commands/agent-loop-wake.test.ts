@@ -368,7 +368,7 @@ test('G62 GTD without an orchestrator never drains arbitrary queued work', async
     }
 });
 
-test('G62 production loop claims ownership, dispatches gated tasks, reconciles and does not redispatch on restart', async () => {
+test('G71 production loop claims ownership, dispatches gated tasks through the inbox and does not redispatch a settled attempt', async () => {
     const base = mkdtempSync(join(tmpdir(), 'spur-gtd-'));
     const project = join(base, 'proj');
     mkdirSync(join(project, '.spur'), { recursive: true });
@@ -402,7 +402,6 @@ test('G62 production loop claims ownership, dispatches gated tasks, reconciles a
         },
     });
     const ctx = createCliContext({ cwd: project, output, db, spurConfig: config });
-    const started: string[] = [];
     const claims = new ProjectClaimDao(db);
     const runs = new CoordinationRunDao(db);
     try {
@@ -434,46 +433,49 @@ test('G62 production loop claims ownership, dispatches gated tasks, reconciles a
         );
         expect(readiness.findings).toEqual([]);
         await new ProjectStrategyDao(db).set(path, 'gtd');
+        // G71 R5: the orchestrator must not need a working agentService at all — it
+        // enqueues a keyed dispatch and never runs member work in its own process.
         const managed: CliContext = {
             ...ctx,
             agentService: () =>
                 ({
-                    runTraced: async (
-                        _prompt: string,
-                        flags: Record<string, string | boolean>,
-                        _deps: unknown,
-                        execution: { beforeDispatch: () => Promise<void> },
-                    ) => {
-                        await execution.beforeDispatch();
-                        expect((await claims.get(path, 'orchestrator'))?.holderId).toBe('proj-lead');
-                        expect((await claims.get(path, 'write'))?.holderId).toBe('proj-coder');
-                        expect(await runAgentLoop(ctx, { spec: 'proj-lead', poll: '1' }, { maxIterations: 1 })).toBe(2);
-                        const task = String(flags.task);
-                        started.push(task);
-                        await runs.insertStart({
-                            specId: 'proj-coder',
-                            agentKind: 'pi',
-                            processId: null,
-                            runId: 'gtd-run',
-                            generation: 1,
-                            startedAt: new Date().toISOString(),
-                            taskId: task,
-                        });
-                        await runs.updateExit('gtd-run', 'exited', new Date().toISOString(), '[]', {
-                            messageIds: [],
-                            taskId: task,
-                            outcome: 'run-exit-only',
-                        });
-                        return { exitCode: 0, stdout: '' };
+                    run: async () => 0,
+                    runTraced: async () => {
+                        throw new Error('the orchestrator must never run member work in-process (G71 R1)');
                     },
                 }) as unknown as ReturnType<CliContext['agentService']>,
         };
-        expect(await runAgentLoop(managed, { spec: 'proj-lead', poll: '1' }, { maxIterations: 2 })).toBe(0);
-        expect(started).toEqual(['0841']);
-        expect(await claims.get(path, 'orchestrator')).toBeNull();
-        expect(await claims.get(path, 'write')).toBeNull();
+        const inbox = new InboxMessageDao(db);
         expect(await runAgentLoop(managed, { spec: 'proj-lead', poll: '1' }, { maxIterations: 1 })).toBe(0);
-        expect(started).toEqual(['0841']);
+        const sent = await inbox.inbox('proj-coder');
+        expect(sent.map((message) => message.requestKey)).toEqual(['fleet:task:0841:1']);
+        expect((await claims.get(path, 'write'))?.holderId).toBe('proj-coder');
+
+        // The member ran and its completion receipt is the run row linked to the message.
+        const messageId = sent[0]?.id ?? '';
+        await runs.insertStart({
+            specId: 'proj-coder',
+            agentKind: 'pi',
+            processId: null,
+            runId: 'gtd-run',
+            generation: 1,
+            startedAt: new Date().toISOString(),
+            messageIds: [messageId],
+            taskId: '0841',
+        });
+        await runs.updateExit('gtd-run', 'exited', new Date().toISOString(), '[]', {
+            messageIds: [messageId],
+            taskId: '0841',
+            outcome: 'run-exit-only',
+        });
+
+        // A later loop settles the dispatch and — because the attempt is definite and
+        // completed — never re-dispatches it, even across a restart.
+        expect(await runAgentLoop(managed, { spec: 'proj-lead', poll: '1' }, { maxIterations: 1 })).toBe(0);
+        expect(await claims.get(path, 'write')).toBeNull();
+        expect((await inbox.inbox('proj-coder')).map((message) => message.requestKey)).toEqual(['fleet:task:0841:1']);
+        expect(await runAgentLoop(managed, { spec: 'proj-lead', poll: '1' }, { maxIterations: 1 })).toBe(0);
+        expect((await inbox.inbox('proj-coder')).length).toBe(1);
         const holds = await new SystemEventDao(db).query({ names: ['fleet.idle-hold'], limit: 1 });
         expect(holds[0]?.payload_json).toContain('unauthorized');
         expect(holds[0]?.payload_json).toContain('not-ready');
@@ -485,7 +487,7 @@ test('G62 production loop claims ownership, dispatches gated tasks, reconciles a
     }
 });
 
-test('G62 dispatch failure surfaces the agent stderr instead of exiting silently', async () => {
+test('G71 a member failure is read from the receipt: definite failed retries under the cap, never silently', async () => {
     const base = mkdtempSync(join(tmpdir(), 'spur-gtd-fail-'));
     const project = join(base, 'proj');
     mkdirSync(join(project, '.spur'), { recursive: true });
@@ -518,6 +520,8 @@ test('G62 dispatch failure surfaces the agent stderr instead of exiting silently
         },
     });
     const ctx = createCliContext({ cwd: project, output, db, spurConfig: config });
+    const claims = new ProjectClaimDao(db);
+    const runs = new CoordinationRunDao(db);
     try {
         process.chdir(project);
         const path = realpathSync(project);
@@ -533,21 +537,38 @@ test('G62 dispatch failure surfaces the agent stderr instead of exiting silently
             ...ctx,
             agentService: () =>
                 ({
-                    runTraced: async (
-                        _prompt: string,
-                        _flags: Record<string, string | boolean>,
-                        _deps: unknown,
-                        execution: { beforeDispatch: () => Promise<void> },
-                    ) => {
-                        await execution.beforeDispatch();
-                        // The provider rejected the prompt: agent exit, no `message`.
-                        return { exitCode: 3, stdout: '', stderr: '429 {"error":{"code":"AccountQuotaExceeded"}}' };
+                    run: async () => 0,
+                    runTraced: async () => {
+                        throw new Error('the orchestrator must never run member work in-process (G71 R1)');
                     },
                 }) as unknown as ReturnType<CliContext['agentService']>,
         };
+        const inbox = new InboxMessageDao(db);
         await runAgentLoop(managed, { spec: 'proj-lead', poll: '1' }, { maxIterations: 1 });
-        expect(output.stderr.join('\n')).toContain('AccountQuotaExceeded');
-        expect(output.stderr.join('\n')).toContain('0841');
+        const [first] = await inbox.inbox('proj-coder');
+        expect(first?.requestKey).toBe('fleet:task:0841:1');
+        expect((await claims.get(path, 'write'))?.holderId).toBe('proj-coder');
+        // The member's run errored (e.g. a provider rejection). That is a DEFINITE
+        // receipt, so a retry is authorized — the next attempt is a new key.
+        const messageId = first?.id ?? '';
+        await runs.insertStart({
+            specId: 'proj-coder',
+            agentKind: 'pi',
+            processId: null,
+            runId: 'gtd-fail-1',
+            generation: 1,
+            startedAt: new Date().toISOString(),
+            messageIds: [messageId],
+            taskId: '0841',
+        });
+        await runs.updateExit('gtd-fail-1', 'errored', new Date().toISOString(), '[]', {
+            messageIds: [messageId],
+            taskId: '0841',
+            outcome: 'errored',
+        });
+        await runAgentLoop(managed, { spec: 'proj-lead', poll: '1' }, { maxIterations: 2 });
+        const keys = (await inbox.inbox('proj-coder')).map((message) => message.requestKey);
+        expect(keys).toContain('fleet:task:0841:2');
     } finally {
         process.chdir(previous);
         await db.close();

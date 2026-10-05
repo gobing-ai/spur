@@ -11,6 +11,7 @@ import {
     DEFAULT_LOOP_POLL_MS,
     DeliveryReconciler,
     FINDING_CODES,
+    FleetDispatcher,
     FleetService,
     followSystemEventsAfter,
     loopSleep,
@@ -34,6 +35,7 @@ export type { AgentLoopRuntime };
 
 import { ExecutorDisabledError, resolveExecutor } from '@gobing-ai/spur-config';
 import {
+    CoordinationRunDao,
     InboxMessageDao,
     type MemberSessionObservation,
     SystemEventDao,
@@ -908,15 +910,24 @@ async function drainIntoPrompt(
     const block = `Pending messages:\n${header}`;
     const merged = prompt === undefined ? block : `${block}\n\n${prompt}`;
     const claimed = inbox.messages.map((m) => m.id);
-    // Claimed ids (0831): the caller must settle these rows once it knows whether
-    // the invocation started — spawned-but-settled-later is the whole 0831 contract.
+    // G71 R1: a claimed fleet dispatch names its task, so the run's completion receipt
+    // (`coordination_runs.task_id`) is attributable and the strategy's freshness read
+    // sees the attempt. A keyless drain leaves `task` untouched.
+    const fleetTask = inbox.messages
+        .map((message) => /^fleet:task:([^:]+):[1-9][0-9]*$/.exec(message.requestKey ?? '')?.[1])
+        .find((wbs) => wbs !== undefined);
     // 0833: the same ids ride into executeRun as the requestMessage flag (comma-
     // joined, dual spelling per the sessionDir convention) so the exit sink can
     // persist the run↔message receipt.
     const requestMessage = claimed.join(',');
     return {
         prompt: merged,
-        flags: { ...flagsOut, requestMessage, 'request-message': requestMessage },
+        flags: {
+            ...flagsOut,
+            requestMessage,
+            'request-message': requestMessage,
+            ...(fleetTask !== undefined ? { task: fleetTask } : {}),
+        },
         claimed,
     };
 }
@@ -995,6 +1006,7 @@ function parseTimeout(raw: string | boolean | undefined): number | undefined {
 }
 
 async function makeFleetRuntime(context: CliContext): Promise<StrategyRuntime> {
+    const coordination = new AgentCoordinationService(context);
     return new StrategyRuntime({
         openDb: () => context.getDb(),
         tasks: await makeService(context, undefined, true),
@@ -1003,6 +1015,15 @@ async function makeFleetRuntime(context: CliContext): Promise<StrategyRuntime> {
             roles: context.agentRoles,
             fs: context.fs,
             openDb: () => context.getDb(),
+        }),
+        // G71 R1: the one fleet dispatch primitive the strategy enqueues through —
+        // without it a tick has decisions but no dispatch path, so it refuses loudly.
+        dispatcher: new FleetDispatcher({
+            coordination,
+            runs: {
+                listByMessageId: async (messageId: string) =>
+                    new CoordinationRunDao(await context.getDb()).listByMessageId(messageId),
+            },
         }),
         ready: async (candidate) => {
             const check = await makeCheckService(context);
