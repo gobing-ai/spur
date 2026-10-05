@@ -52,7 +52,7 @@ describe('agent command (main)', () => {
         expect(exitCode).toBe(1);
     });
 
-    test('list renders detected agent state through the CLI JSON action', async () => {
+    test('list renders detected agent state through the CLI JSON action', { timeout: 30_000 }, async () => {
         // Installation probes have separate detector coverage. This command
         // fixture must not depend on every coding agent installed on the host.
         const agents = [{ name: 'claude' as const, installed: true, version: '1.0.0', channels: [], error: null }];
@@ -212,7 +212,7 @@ describe('agent list --specs', () => {
 });
 
 describe('agent doctor', () => {
-    test('doctor command invokes doctor on AgentService with args', async () => {
+    test('doctor command invokes doctor on AgentService with args', { timeout: 30_000 }, async () => {
         const output = captureOutput();
         const exitCode = await main(['agent', 'doctor', 'claude-code', '--json'], {
             output,
@@ -313,7 +313,9 @@ describe('member session rendering (0897)', () => {
         expect(parsed.specs.find((sp) => sp.id === 'worker')?.session).toBeUndefined();
     });
 
-    test('status renders live status and session per spec; unreachable server reports stopped', async () => {
+    test('status renders live status and session per spec; unreachable server reports stopped', {
+        timeout: 30_000,
+    }, async () => {
         await seedSpecs();
         stubProcessesFeed();
         const output = captureOutput();

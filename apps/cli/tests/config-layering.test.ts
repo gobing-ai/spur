@@ -105,7 +105,11 @@ afterEach(async () => {
 
 // Case names mirror the design-doc test table (R2/R3/R12/R13/R1-R5).
 describe('config layering — composition-root merged-config (A5)', () => {
-    test('R2: a global-only executor is honored by every CLI command (reversion tripwire)', async () => {
+    // The doctor tests below shell out to the CLI; a contended host measures 7-8s per spawn
+    // against bun's 5000ms default (2026-10-04 session), so each declares an explicit budget.
+    test('R2: a global-only executor is honored by every CLI command (reversion tripwire)', {
+        timeout: 30_000,
+    }, async () => {
         const dirs = await makeLayerDirs(GLOBAL_EXECUTOR, 'version: "1"\nname: proj\n');
         dirsToClean.push(dirs);
         // Project config has no agent section — the merged config must supply the
@@ -120,7 +124,7 @@ describe('config layering — composition-root merged-config (A5)', () => {
         expect(json.agents?.find((a) => a.agent === 'coder-exec')?.capabilityTier).toBe('capable-1');
     });
 
-    test('R3: a project config value overrides the same global key', async () => {
+    test('R3: a project config value overrides the same global key', { timeout: 30_000 }, async () => {
         // Global defines coder-exec as claude; project re-declares it as codex.
         const projectYaml = [
             'version: "1"',
@@ -195,7 +199,9 @@ describe('config layering — composition-root merged-config (A5)', () => {
         if (sharedIdx !== -1) expect(sharedIdx).toBeGreaterThan(registeredIdx);
     });
 
-    test('R7: no config layer defines agent.roles → doctor reports rolesSource: fallback (explicit fallback proven)', async () => {
+    test('R7: no config layer defines agent.roles → doctor reports rolesSource: fallback (explicit fallback proven)', {
+        timeout: 30_000,
+    }, async () => {
         // Neither layer supplies an `agent.roles` table; a `coder` role selector
         // resolves via DEFAULT_AGENT_ROLES. The doctor --json payload must carry
         // top-level `rolesSource: 'fallback'` (whole-table provenance).
@@ -212,7 +218,9 @@ describe('config layering — composition-root merged-config (A5)', () => {
         expect(Array.isArray(json.agents)).toBe(true);
     });
 
-    test('R7: text-mode doctor prints the explicit-fallback note when no layer defines agent.roles', async () => {
+    test('R7: text-mode doctor prints the explicit-fallback note when no layer defines agent.roles', {
+        timeout: 30_000,
+    }, async () => {
         const dirs = await makeLayerDirs(
             'version: "1"\nname: global\nagent:\n  executors:\n    - name: coder-exec\n      agent: claude\n      tier: standard\n',
             'version: "1"\nname: proj\n',
@@ -222,7 +230,9 @@ describe('config layering — composition-root merged-config (A5)', () => {
         expect(res.stderr.trim()).toBe(`${FALLBACK_NOTE}\n${CAPABILITY_STALE_WARNING}`);
     });
 
-    test('0898 R3: text-mode doctor table carries the runner-declared CAPS cell with the staleness marker', async () => {
+    test('0898 R3: text-mode doctor table carries the runner-declared CAPS cell with the staleness marker', {
+        timeout: 30_000,
+    }, async () => {
         const dirs = await makeLayerDirs(GLOBAL_EXECUTOR, 'version: "1"\nname: proj\n');
         dirsToClean.push(dirs);
         // The capability surface under test is the doctor TABLE cell (CAPS header);
@@ -246,7 +256,9 @@ describe('config layering — composition-root merged-config (A5)', () => {
         expect(capsCell.endsWith('⚠')).toBe(true);
     });
 
-    test('0898 R3: doctor --json carries capabilities (verifiedAgainst) and capabilityStale with clean stderr', async () => {
+    test('0898 R3: doctor --json carries capabilities (verifiedAgainst) and capabilityStale with clean stderr', {
+        timeout: 30_000,
+    }, async () => {
         const dirs = await makeLayerDirs(GLOBAL_EXECUTOR, 'version: "1"\nname: proj\n');
         dirsToClean.push(dirs);
         const res = await runCli(['agent', 'doctor', 'coder', '--json'], dirs.projectDir, dirs.env);

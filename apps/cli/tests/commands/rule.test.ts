@@ -37,7 +37,7 @@ describe('runRuleCommand dispatch', () => {
         expect(exitCode).toBe(1);
     });
 
-    test('list subcommand returns a number', async () => {
+    test('list subcommand returns a number', { timeout: 30_000 }, async () => {
         const exitCode = await main(['rule', 'list'], { output: nullOutput() });
         expect(typeof exitCode).toBe('number');
     });

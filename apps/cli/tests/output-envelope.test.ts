@@ -217,7 +217,8 @@ describe('service-emitting verbs honor --json-envelope end-to-end (0697 AC2)', (
             } finally {
                 removeEnvVar(ENVELOPE_ENV);
             }
-        }, 30000);
+            // Two in-process service verbs per test; each costs 4-8s of CPU under host load.
+        }, 60_000);
     }
 });
 

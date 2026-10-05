@@ -35,7 +35,7 @@ describe('proof.fingerprint action', () => {
         expect(runner.kind).toBe('proof.fingerprint');
     });
 
-    test('captures the digest into the declared var', async () => {
+    test('captures the digest into the declared var', { timeout: 30_000 }, async () => {
         const result = await runner.execute({ var: 'proofDigest' }, ctx);
         expect(result.ok).toBeTrue();
         expect(digestFor(result, 'proofDigest')).toMatch(/^sha256:[a-f0-9]{64}$/);
