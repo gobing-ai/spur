@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: []
 created_at: "2026-08-20T00:08:14.252Z"
-updated_at: "2026-10-05T19:13:12.209Z"
+updated_at: "2026-10-05T22:22:25.557Z"
 ---
 
 # D6: Workflow cost, deterministic ownership surface, and role-addressed coordination
@@ -211,4 +211,7 @@ Feature: Workflow cost, deterministic ownership surface, and role-addressed coor
 - 2026-09-10T00:34:13.173Z verifying → active (system)
 - 2026-10-05T19:13:11.716Z active → verifying (system)
 - 2026-10-05T19:13:12.209Z verifying → done (system)
+- 2026-10-05T22:07:43.759Z done → active (system)
+- 2026-10-05T22:22:24.990Z active → verifying (system)
+- 2026-10-05T22:22:25.557Z verifying → done (system)
 

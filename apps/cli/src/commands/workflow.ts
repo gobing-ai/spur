@@ -16,6 +16,7 @@ import {
     preStartStepIds,
     projectWorkflowProgress,
     type ResolvedWorkflowDefinition,
+    readContinuedFrom,
     readWorkflowRunRecord,
     redactAndBound,
     registeredWorkflowPaths,
@@ -294,14 +295,16 @@ export function existingRunRefusal(runId: string): string {
  * record, run row or async worker exists. Returns `true` when the run may proceed;
  * otherwise it writes the refusal, sets exit 2, and returns `false`.
  *
+ * The source-run read goes through the SAME `readContinuedFrom` seam the app service
+ * uses for var inheritance, so the pre-check exercises exactly the read the run will
+ * take (same existence and readability rule), instead of a second, divergent lookup.
  * The app service re-validates on `run()` (and would refuse before the run row); this
- * earlier gate exists because the async launcher resolves the definition and writes the
- * plan artifact itself, so the engine never gets the chance to refuse first.
+ * earlier gate exists because the async launcher resolves the definition and writes
+ * the plan artifact itself, so the engine never gets the chance to refuse first.
  */
 async function refuseIllegalStartState(
     context: CliContext,
     options: Record<string, unknown>,
-    service: Pick<WorkflowAppService, 'trace'>,
     workflow: ResolvedWorkflowDefinition['workflow'],
     fromState: string | undefined,
     fromRun: string | undefined,
@@ -319,15 +322,19 @@ async function refuseIllegalStartState(
         context.setExitCode(2);
         return false;
     }
-    if (fromRun !== undefined && !(await existingWorkflowRun(service, fromRun))) {
-        writeJsonError(
-            context.output,
-            options,
-            `--from-run ${fromRun}: no such run — lineage needs an existing source run.`,
-            'VALIDATION_FAILED',
-        );
-        context.setExitCode(2);
-        return false;
+    if (fromRun !== undefined) {
+        try {
+            await readContinuedFrom(await context.getDb(), fromRun);
+        } catch (error) {
+            writeJsonError(
+                context.output,
+                options,
+                error instanceof Error ? error.message : String(error),
+                'VALIDATION_FAILED',
+            );
+            context.setExitCode(2);
+            return false;
+        }
     }
     return true;
 }
@@ -750,7 +757,6 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                         !(await refuseIllegalStartState(
                             context,
                             options,
-                            makeSvc(options.json),
                             resolvedDefinition.workflow,
                             options.from,
                             options.fromRun,
@@ -964,7 +970,6 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                     !(await refuseIllegalStartState(
                         context,
                         options,
-                        makeSvc(json, bus),
                         resolvedDefinition.workflow,
                         options.from,
                         options.fromRun,
