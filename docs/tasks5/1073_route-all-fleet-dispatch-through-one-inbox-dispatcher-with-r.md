@@ -1,14 +1,16 @@
 ---
 schema_version: 1
 name: Route all fleet dispatch through one inbox dispatcher with receipt waits and a non-blocking GTD tick
-status: wip
+status: done
 template: feature-impl
 created_at: 2026-10-04T20:30:28.484Z
-updated_at: "2026-10-05T00:23:33.597Z"
+updated_at: "2026-10-05T03:50:10.139Z"
 feature_id: G71
 
 priority: P1
 estimate_hours: 8
+done_forced: "false"
+done_reason: unforced close; PASS artifact at /Users/robin/xprojects/spur-new-runall-g71-302b/.spur/memory/evidence/1073-verdict.json
 ---
 
 ## 1073. Route all fleet dispatch through one inbox dispatcher with receipt waits and a non-blocking GTD tick
@@ -35,16 +37,16 @@ Verified state (2026-10-04, main @ 8b7e94dd2):
 
 ### Requirements
 
-- [ ] R1. One `FleetDispatcher` in `packages/app` (extracted from `fleet-dispatch.ts`) enqueues a keyed inbox message plus prompt artifact and waits on the `coordination_runs` receipt linked by `requestMessage`, as one call, pinned to the member occupant; `expectFile` stays a post-condition only.
-- [ ] R2. A wait timeout returns `outcome-unknown`; it is never mapped to failed or not-sent.
-- [ ] R3. `strategy.tick()` runs `reconcile()` once, then a pure `select()`, claims the write slot for the member, and calls `FleetDispatcher.enqueue` without waiting; `runTraced` is removed from the loop.
-- [ ] R4. `strategy.observe()` on `agent.invoke.exit` reads the receipt: done, retry with a new attempt key bounded by `MAX_DISPATCH_ATTEMPTS` only on a definite failed/not-started receipt, or hold on outcome-unknown; it releases the slot.
-- [ ] R5. Workflow `agent.run --agent fleet` and the strategy share the dispatcher; no other fleet dispatch path remains.
+- [x] R1. One `FleetDispatcher` in `packages/app` (extracted from `fleet-dispatch.ts`) enqueues a keyed inbox message plus prompt artifact and waits on the `coordination_runs` receipt linked by `requestMessage`, as one call, pinned to the member occupant; `expectFile` stays a post-condition only.
+- [x] R2. A wait timeout returns `outcome-unknown`; it is never mapped to failed or not-sent.
+- [x] R3. `strategy.tick()` runs `reconcile()` once, then a pure `select()`, claims the write slot for the member, and calls `FleetDispatcher.enqueue` without waiting; `runTraced` is removed from the loop.
+- [x] R4. `strategy.observe()` on `agent.invoke.exit` reads the receipt: done, retry with a new attempt key bounded by `MAX_DISPATCH_ATTEMPTS` only on a definite failed/not-started receipt, or hold on outcome-unknown; it releases the slot.
+- [x] R5. Workflow `agent.run --agent fleet` and the strategy share the dispatcher; no other fleet dispatch path remains.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Fleet work is dispatched only through the inbox
-- [ ] AC2 — Completion is the coordination receipt
+- [x] AC1 — Fleet work is dispatched only through the inbox
+- [x] AC2 — Completion is the coordination receipt
 
 Task-local verification:
 
@@ -285,11 +287,72 @@ dispatch and the receipt-driven retry instead of an in-process executor).
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/services/fleet-dispatcher.ts:60` (`enqueue` :74, receipt read :92); both callers share it — `packages/app/src/services/workflow-service.ts:1968` and `apps/cli/src/commands/agent.ts:1021`; tests in `packages/app/tests/services/fleet-dispatcher.test.ts` ("sends through the member occupant with the caller sender and the dispatch key", "a replayed key returns the original message id and is reported as a replay") |
+| R2 | MET | `packages/app/src/services/fleet-dispatcher.ts:113`; `packages/app/src/workflow/terminal-reason.ts:71` maps the text to `interrupted`; tests "a deadline that passes with no receipt is outcome-unknown", "a timeout is outcome-unknown — never failed, never not-started (R2)", "an aborted wait stops immediately as outcome-unknown" |
+| R3 | MET | `packages/app/src/services/strategy-runtime.ts:418`; tests "R1: tick enqueues one keyed dispatch per idle writer, claims the write slot, and never runs member work in-process" and "R1: a stale owner epoch fences the whole tick — nothing is claimed or enqueued"; `rg -n "dispatchNext" packages apps plugins scripts` is empty |
+| R4 | MET | `packages/app/src/services/strategy-runtime.ts:486`; the `dispatch-in-flight` hold is `packages/app/src/services/strategy-runtime.ts:80`; tests "R1: a failed receipt retries under the attempt cap; a completed attempt is not a candidate", "R2: an outcome-unknown wait is not re-dispatched — absence of a receipt is not a failure", "R1/R4: observe releases the write slot once the receipt settles, and retry is freshness only" |
+| R5 | MET | `packages/app/src/workflow/fleet-dispatch.ts:134` (adapter over the shared dispatcher) and `packages/app/src/workflow/actions/agent-run.ts:400`; `rg -n "\.runTraced\(" packages/app/src/services/agent-loop-service.ts` is empty (only the injected-service TYPE names it at `packages/app/src/services/agent-loop-service.ts:52`, no call site); `apps/cli/tests/commands/agent-loop-wake.test.ts` injects a throwing `runTraced` and the loop still dispatches through the inbox |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Fleet work is dispatched only through the inbox | MET | test | `apps/cli/tests/commands/agent-loop-wake.test.ts:449` asserts the orchestrator's only effect is the keyed row `fleet:task:0841:1` plus the write slot, with `runTraced` replaced by a throwing stub; `packages/app/tests/services/strategy-runtime.test.ts` asserts tick enqueues and no member work runs in-process |
+| AC2 — Completion is the coordination receipt | MET | test | `packages/app/tests/services/fleet-dispatcher.test.ts` maps an `exited` run row linked to the message to `completed`, `errored` to `failed`, and a settled-failed inbox row with no run row to `not-started`; `packages/app/tests/services/strategy-runtime.test.ts` releases the write slot from that receipt and never re-dispatches an `outcome-unknown` wait |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+Review of the 1073 diff (21 files: the new `fleet-dispatcher.ts` plus its callers and the adapted
+suites). Dimensions: functional traceability (R1–R5), SECUA, architecture depth.
+
+## Findings
+
+| Severity | Finding | Disposition |
+| --- | --- | --- |
+| P2 (major) | `dispatchToFleet` drove the dispatcher's one-call `dispatch` inside a single `try`, so a receipt-read failure AFTER a successful enqueue resolved to `unavailable` — the exact value that authorizes a declared `executorFallback: traditional` re-run while the member already held the same request. Double execution of member work. Found during this review pass, before verify. | Fixed in the reviewed diff: the adapter consumes the two seams separately (`packages/app/src/workflow/fleet-dispatch.ts:31`) — only a failed `enqueue` is `unavailable`, a failed `awaitReceipt` is `outcome-unknown`. Pinned by `tests/workflow/fleet-dispatch.test.ts` "a receipt wait that throws AFTER a landed send is outcome-unknown — never a fallback-eligible unavailable". |
+| P2 (pre-existing, repaired to unblock the repo gate) | `apps/web/src/modules/projects/conversation.ts` measured 92.31% functions / 7.98% lines, failing `bunfig.toml`'s per-file 90/90 threshold with zero failing tests — identical at base `a23da10e3`, so unrelated to G71. | Repaired by appending 4 cases to the existing `conversation.test.ts` (its original 13 cases preserved verbatim); the module now measures 100%/100%. Landed as its own commit `83cad96bb`. |
+| P3 (minor) | `awaitReceipt` with no declared `timeoutMs` waits unbounded (`Number.POSITIVE_INFINITY`), mirroring subprocess semantics — a stage that omits `timeoutMs` on the fleet surface hangs instead of failing. | Accepted: every fleet `agent.run` in `task-pipeline.yaml` declares `${vars.stepTimeoutMs}`. Residual risk only for a future caller that omits it. |
+| P3 (minor) | `tick` reads the keyed attempts twice per dispatched task (once in `selectFrom` for the snapshot, once in `tick` for the next attempt ordinal). | Accepted: one extra indexed read per dispatch, no correctness impact; deliberately not shared state. |
+| P3 (minor) | `readAttempts` computes `count` over every prefix-matching row but derives `latest` only from well-formed ordinals, so a malformed key inflates the next attempt number by one. | Accepted: the ordinal only bounds `MAX_DISPATCH_ATTEMPTS`, and a malformed key is skipped rather than read as attempt 1 — the safe direction. |
+| P4 (advisory) | `observe` releases the write slot on any definite receipt for the holder without correlating the receipt's `task_id` to the decision. | Accepted: one write slot plus an occupant-pinned read already make the holder/receipt pairing exact; a task check would be redundant state. |
+| P4 (advisory) | `classifyTerminalReason`'s new `/outcome[-_ ]?unknown/i` rule is substring-based, so unrelated error text containing "outcome unknown" now maps to `interrupted`. | Accepted and intentional: the phrase is the fleet waiter's own vocabulary, and `interrupted` is the recoverable reason. |
+
+No open P1; the single P2 in the authored code was repaired inside the reviewed diff.
+
+## Functional traceability
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 one `FleetDispatcher` (keyed enqueue + receipt wait, occupant-pinned) | MET | `packages/app/src/services/fleet-dispatcher.ts:60`; 15 cases in `tests/services/fleet-dispatcher.test.ts`; both callers share it (`workflow-service.ts:1968`, `agent.ts:1021`) |
+| R2 a wait timeout is `outcome-unknown`, never failed/not-sent | MET | `fleet-dispatcher.ts:113`; terminal mapping `terminal-reason.ts:71`; tests "a deadline that passes…", "a timeout is outcome-unknown…", "an aborted wait…" |
+| R3 `tick` resumes once, selects purely, claims, enqueues, never awaits | MET | `strategy-runtime.ts:418`; tests "tick enqueues one keyed dispatch…", "a stale owner epoch fences the whole tick…"; `rg dispatchNext` empty |
+| R4 `observe` reads the receipt, retries only on a definite receipt, releases the slot | MET | `strategy-runtime.ts:486`; `dispatch-in-flight` hold `packages/app/src/services/strategy-runtime.ts:80`; tests "a failed receipt retries under the attempt cap…", "observe releases the write slot…" |
+| R5 workflow and strategy share the dispatcher; no other fleet dispatch path | MET | `fleet-dispatch.ts:134`; no `runTraced` call site in the loop; the CLI loop test injects a throwing one and still dispatches through the inbox |
+
+## Architecture depth
+
+The change deepens rather than widens: one new module (`fleet-dispatcher.ts`, 125 lines) replaces two
+independent dispatch paths; the strategy keeps an I/O-free `select` with the snapshot assembled by the
+runtime; and the loop's owner branch loses its in-process executor plumbing entirely. No new
+abstraction with a single implementation, no configuration surface added, and the fresh/one-shot role
+rules plus the ADR-121 reviewer check are preserved unchanged. The one deliberate seam split
+(`enqueue` vs `awaitReceipt`) is called out above and exists because the two failures are different
+facts, not for reuse.
+
+## Residual risk
+
+- Task 1074 (member drain) is what actually settles a queued dispatch. Until it lands, an enqueued
+  message waits in the member inbox — 1073's own Q&A records that as the expected intermediate state,
+  and the batch's receipt-driven retry test exercises the receipt side rather than a full drain.
+- The repo-wide gate's pass depends on host CPU availability: this run needed a quiet host after
+  competing agent sessions starved every earlier attempt (recorded in the run log and `## Testing`).
+  Same command, same tree, same tests: FAIL under load, PASS at 9960/0 on a quiet host.
 
 ### References
 
@@ -301,4 +364,6 @@ dispatch and the receipt-driven retry instead of an in-process executor).
 
 - 2026-10-04T20:57:37.679Z backlog → todo (system)
 - 2026-10-04T23:52:35.749Z todo → wip (system)
+- 2026-10-05T03:49:41.036Z wip → testing (system)
+- 2026-10-05T03:50:10.135Z testing → done (system)
 
