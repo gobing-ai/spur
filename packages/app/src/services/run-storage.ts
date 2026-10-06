@@ -76,17 +76,18 @@ export function runStoragePaths(cwd: string): RunStoragePaths {
 
 /**
  * Nearest ancestor of `cwd` with a `.spur` dir or `package.json`; `cwd` itself is the fallback.
- * The shared OS temp dir is never a candidate: a stray `<tmpdir>/.spur` (left by any tool run
+ * The shared OS temp dirs (tmpdir(), `/tmp`) are never candidates: a stray `<tmpdir>/.spur` (left by any tool run
  * with a bare-tmp cwd; on Linux CI `tmpdir()` is `/tmp`, the parent of every temp project)
  * would re-root all unmarked temp projects beneath it and misdirect their durable writes.
  */
 function resolveRunStorageRoot(cwd: string): string {
     const start = resolve(cwd);
-    const sharedTmp = resolve(tmpdir());
+    // `/tmp` too: a nested TMPDIR (`/tmp/claude-501`) puts the walk through `/tmp` after tmpdir().
+    const sharedTmp = new Set([resolve(tmpdir()), '/tmp', '/private/tmp']);
     let current = start;
     for (;;) {
         if (
-            current !== sharedTmp &&
+            !sharedTmp.has(current) &&
             (existsSync(join(current, '.spur')) || existsSync(join(current, 'package.json')))
         ) {
             return current;
