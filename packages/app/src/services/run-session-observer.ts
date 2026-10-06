@@ -1,5 +1,5 @@
 import { homedir } from 'node:os';
-import { basename, isAbsolute, resolve } from 'node:path';
+import { basename, isAbsolute, relative, resolve, sep } from 'node:path';
 import { type DbAdapter, type InsertRunSessionInput, RunSessionDao } from '@gobing-ai/spur-domain';
 import type { AgentName } from '@gobing-ai/ts-ai-runner';
 import { type LlmJsonlSource, SOURCE_DEFINITIONS, sessionIdFromSourcePath } from '@gobing-ai/ts-llm-jsonl-importer';
@@ -73,6 +73,17 @@ export interface RunSessionWatermark {
     root: string;
     /** Epoch ms captured before dispatch; files touched at/after it are candidates. */
     at: number;
+    /**
+     * Claude only: the cwd-encoded `projects/<dir>` names the run may write under. A fresh
+     * file in any other project dir is another session (e.g. the operator's host session),
+     * never this run's. Undefined = no project scoping (other sources, custom `sessionDir`).
+     */
+    projectDirs?: ReadonlySet<string>;
+}
+
+/** Claude Code's project-dir name for a cwd: every non-alphanumeric character becomes `-`. */
+function claudeProjectDir(cwd: string): string {
+    return cwd.replace(/[^a-zA-Z0-9]/g, '-');
 }
 
 /**
@@ -129,6 +140,18 @@ export class RunSessionObserver {
         this.options.registry.active.set(root, active + 1);
         if (active > 0) this.options.registry.overlapped.add(root);
         this.watermark_ = { source, root, at: this.now() - MTIME_SKEW_TOLERANCE_MS };
+        if (source === 'claude' && (sessionDir === undefined || sessionDir === '')) {
+            // Claude names the dir from the realpath of its cwd (`/tmp` → `-private-tmp-…`),
+            // so accept both spellings.
+            const dirs = new Set([claudeProjectDir(this.cwd)]);
+            try {
+                const real = createNodeFileSystem().realPath?.(this.cwd);
+                if (real !== undefined) dirs.add(claudeProjectDir(real));
+            } catch {
+                // A cwd that does not exist yet keeps its literal spelling only.
+            }
+            this.watermark_.projectDirs = dirs;
+        }
         return this.watermark_;
     }
 
@@ -215,6 +238,9 @@ export class RunSessionObserver {
         let newest = 0;
         for (const rel of files) {
             const full = resolve(wm.root, rel);
+            if (wm.projectDirs !== undefined && !wm.projectDirs.has(relative(wm.root, full).split(sep, 1)[0] ?? '')) {
+                continue;
+            }
             const st = await fs.stat(full);
             if (st === null || !st.isFile()) continue;
             if (st.mtimeMs > newest) newest = st.mtimeMs;

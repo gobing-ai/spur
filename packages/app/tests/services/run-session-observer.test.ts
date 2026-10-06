@@ -98,7 +98,7 @@ describe('RunSessionObserver (feature E6 / task 0557)', () => {
     test('R1 — claude sessions live under a per-project subdir; the walk recurses', async () => {
         const fx = await makeFixture();
         try {
-            const obs = fx.observer('run-2');
+            const obs = fx.observer('run-2', undefined, '/Users/robin');
             await obs.watermark('claude');
             await writeSessionFile(
                 join(fx.home, '.claude', 'projects', '-Users-robin', 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.jsonl'),
@@ -113,6 +113,28 @@ describe('RunSessionObserver (feature E6 / task 0557)', () => {
                 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
             );
             expect(rows[0]?.exactness).toBe('exact');
+        } finally {
+            rmSync(fx.home, { recursive: true, force: true });
+        }
+    });
+
+    test('a claude session written during the run by ANOTHER project is never claimed as exact', async () => {
+        // The fleet E2E (1077) recorded the operator's own host session as a stubbed run's
+        // session: the lone fresh file under ~/.claude/projects belonged to a different cwd.
+        const fx = await makeFixture();
+        try {
+            const obs = fx.observer('run-other-project', undefined, '/scratch/fleet-e2e');
+            await obs.watermark('claude');
+            await writeSessionFile(
+                join(fx.home, '.claude', 'projects', '-Users-robin-host', 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.jsonl'),
+                '{"sessionId":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee","type":"user"}\n',
+            );
+            await obs.resolve();
+
+            const rows = await new RunSessionDao(await fx.getDb()).getByRunId('run-other-project');
+            expect(rows).toHaveLength(1);
+            expect(rows[0]?.exactness).toBe('unresolved');
+            expect(rows[0]?.session_id).toBeNull();
         } finally {
             rmSync(fx.home, { recursive: true, force: true });
         }
