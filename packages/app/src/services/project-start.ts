@@ -162,8 +162,10 @@ export const defaultDetachedServeSpawn: DetachedServeSpawn = async (cmd, options
         command: '/bin/sh',
         args: [
             '-c',
+            // `;`, never `&&`: `a && b &` backgrounds the whole list in a subshell that keeps our
+            // stdout pipe open for the daemon's lifetime, so this run (and /api/projects/start) hangs.
             logFile !== undefined
-                ? `mkdir -p ${shQuote(join(options.cwd ?? '', '.spur', 'run'))} && nohup ${cmd.map(shQuote).join(' ')} </dev/null >>${shQuote(logFile)} 2>&1 &`
+                ? `mkdir -p ${shQuote(join(options.cwd ?? '', '.spur', 'run'))}; nohup ${cmd.map(shQuote).join(' ')} </dev/null >>${shQuote(logFile)} 2>&1 &`
                 : `nohup ${cmd.map(shQuote).join(' ')} </dev/null >/dev/null 2>&1 &`,
         ],
     };

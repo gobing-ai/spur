@@ -558,6 +558,21 @@ describe('project-start', () => {
             }
             throw new Error(`daemon stderr never landed in ${logPath}`);
         });
+
+        it('defaultDetachedServeSpawn returns while a long-lived daemon is still running', async () => {
+            if (process.platform === 'win32') return;
+            // Regression (2026-10-06): `mkdir … && nohup … &` backgrounded the whole AND list, whose
+            // subshell held the launcher's stdout pipe for the daemon's lifetime — the spawn (and
+            // the Board's /api/projects/start) never returned, so the switcher aborted.
+            const started = Date.now();
+            const child = await defaultDetachedServeSpawn(['sleep', '5'], {
+                cwd: tempDir,
+                detached: true,
+                stdio: ['ignore', 'ignore', 'ignore'],
+            });
+            child.unref();
+            expect(Date.now() - started).toBeLessThan(2000);
+        });
     });
 
     // 0964: the win32 branch of defaultDetachedServeSpawn delegates to the builder below;
