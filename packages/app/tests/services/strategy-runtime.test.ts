@@ -772,6 +772,28 @@ describe('StrategyRuntime.resume (0838 R6)', () => {
         }
     });
 
+    test('the GTD hold detail names at most 5 ambiguous ids and counts the rest', async () => {
+        const rig = await makeRig({ strategy: 'gtd' });
+        try {
+            await rig.claims.claim(rig.project, 'orchestrator', 'proj-orch', 30_000);
+            const inbox = new (await import('@gobing-ai/spur-domain')).InboxMessageDao(rig.db);
+            const ids: string[] = [];
+            for (let n = 1; n <= 7; n++) {
+                ids.push((await inbox.enqueueIdempotent('operator', 'proj-coder', 'work', `fleet:task:090${n}:1`)).id);
+            }
+            await inbox.drainPending('proj-coder');
+
+            await rig.runtime.resume(rig.project);
+            const selected = await rig.runtime.selectNext(rig.project);
+            const detail = selected.holds[0]?.detail ?? '';
+            expect(detail).toContain('7 ambiguous');
+            expect(detail).toContain('+2 more');
+            expect(ids.filter((id) => detail.includes(id))).toHaveLength(5);
+        } finally {
+            await rig.cleanup();
+        }
+    });
+
     test('F1: an unkeyed delivery with no receipt does NOT hold GTD dispatch (G71 R1)', async () => {
         const rig = await makeRig({ strategy: 'gtd' });
         try {

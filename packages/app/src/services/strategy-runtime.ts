@@ -37,6 +37,9 @@ export const FLEET_AUTO_TAG = 'fleet:auto';
 /** Definitive dispatches of a still-todo task before GTD stops retrying it. */
 export const MAX_DISPATCH_ATTEMPTS = 3;
 
+/** Ambiguous message ids named in one `fleet.idle-hold` detail; the rest are counted (bounded payload). */
+const MAX_HOLD_DETAIL_IDS = 5;
+
 /**
  * The keyed-dispatch prefix a task's attempts live under (G71 R1). The attempt number
  * is the trailing segment, so the prefix is an exact filter and the suffix an ordinal.
@@ -671,8 +674,13 @@ export class StrategyRuntime {
                 const detail = !resumed.reconciled
                     ? `orchestrator:${resumed.orchestrator.state}; restore its live claim before dispatch`
                     : `unresolved-deliveries; reconcile prior results before dispatch (${ambiguous.length} ambiguous: ${ambiguous
+                          .slice(0, MAX_HOLD_DETAIL_IDS)
                           .map((delivery) => delivery.messageId)
-                          .join(', ')})`;
+                          .join(', ')}${
+                          ambiguous.length > MAX_HOLD_DETAIL_IDS
+                              ? ` +${ambiguous.length - MAX_HOLD_DETAIL_IDS} more`
+                              : ''
+                      })`;
                 return {
                     name,
                     statusByWbs,

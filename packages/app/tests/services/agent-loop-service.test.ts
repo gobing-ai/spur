@@ -441,6 +441,8 @@ describe('G71 R1/R2/R3 — member drain, keyed run path, slot heartbeat, resume 
         // F6: the reap wakes the orchestrator instead of waiting for the backstop poll.
         const exits = await new SystemEventDao(db).query({ names: ['agent.invoke.exit'] });
         expect(exits.map((row) => row.actor)).toEqual(['member-1']);
+        // The reap is visible to run-scoped ledger queries, not only inside the payload.
+        expect(exits.map((row) => row.run_id)).toEqual(['run-killed']);
         // F5: a concurrently running loop's spec is never reaped.
         expect((await runs.getByRunId('run-live-other'))?.status).toBe('running');
         // The instance is idle for the strategy again.

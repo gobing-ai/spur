@@ -382,6 +382,7 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
                     event_name: 'agent.invoke.exit',
                     occurred_at: new Date().toISOString(),
                     actor: recipient,
+                    run_id: row.run_id,
                     payload_json: JSON.stringify({
                         agent: recipient,
                         operation: 'orphan-reap',
