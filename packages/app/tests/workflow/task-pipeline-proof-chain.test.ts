@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getEnvVars } from '@gobing-ai/spur-config';
@@ -24,6 +24,7 @@ interface Guard {
 interface Transition {
     from: string;
     to: string;
+    terminalReason?: string;
     guard?: Guard;
 }
 interface WorkflowDef {
@@ -276,8 +277,8 @@ describe('task-pipeline proof-input completeness and honest review evidence (tas
             .map((a) => String((a.options as Record<string, unknown> | undefined)?.command ?? ''))
             .map((c) => c.replace(/\n/g, ' '));
 
-    test('the workflow identity is bumped to version 3 (0785)', () => {
-        expect((DEF as unknown as { version: string }).version).toBe('3');
+    test('the workflow identity carries the current contract version (0785; v4 for the confidence gate + review routing)', () => {
+        expect((DEF as unknown as { version: string }).version).toBe('4');
     });
 
     test('a featureSpecPath var exists and defaults to empty (orphan tasks stay compatible)', () => {
@@ -334,7 +335,10 @@ describe('task-pipeline proof-input completeness and honest review evidence (tas
     });
 
     test('the verify stamp marks review completed only on a matching marker (R4)', () => {
-        const stamp = shellCommandsOf('verify').find((c) => c.includes('-verdict.json'));
+        // Located by `capturePoint`: since the session finding after 1088 the verify state has a
+        // second shell that also writes `.spur/run/<wbs>-verdict.json` (the confidence check row),
+        // and only the stamp carries the proof block.
+        const stamp = shellCommandsOf('verify').find((c) => c.includes('capturePoint'));
         expect(stamp).toBeDefined();
         // Default is skipped — an unexecuted review is never reported completed. 0823 moved the
         // marker compare into the jq program itself (`--arg rp` + inline if), same semantics.
@@ -417,11 +421,13 @@ describe('task-pipeline busy-retry classifiers, done guard projection, route-id 
     test('the record→done guard checks the done target with --as done and keeps verdict/proof backstops (R6)', () => {
         const guard = cmdOf('record', 'done');
         expect(guard).toContain('task check $wbs --as done');
-        // The pre-existing backstops stay: PASS verdict + digest match on the proof block.
-        // 0874 names the reads for legibility — the predicate is unchanged.
-        expect(guard).toContain('verdict="$(jq -r .verdict .spur/run/$wbs-verdict.json 2>/dev/null)"');
-        expect(guard).toContain('test "$verdict" = PASS');
-        expect(guard).toContain('.proof.digest');
+        // The backstops stay: PASS verdict + digest match on the proof block + the confidence rule
+        // (session finding after 1088). 0874's named reads became ONE `jq -e` predicate, which is
+        // also what the ADR-115 guard budget asks for — same semantics, fewer logical commands.
+        expect(guard).toContain('jq -e --arg p "$proofDigest"');
+        expect(guard).toContain('.verdict == "PASS"');
+        expect(guard).toContain('((.proof.digest // "") == $p)');
+        expect(guard).toContain('(.confidence // "LOW") != "LOW" or $ack == "true"');
         // No unprojected plain check remains.
         expect(guard.includes('task check $wbs &&')).toBe(false);
     });
@@ -474,6 +480,183 @@ describe('task-pipeline busy-retry classifiers, done guard projection, route-id 
             expect(log.includes('$spurBin')).toBe(false);
         } finally {
             cleanup();
+        }
+    });
+});
+
+// Session finding after 1088 (task 1068 follow-up): the verify answer's `Confidence:` line was
+// captured, linted and recorded, and then ignored — a PASS at LOW confidence certified exactly
+// like HIGH. These pin the gate that now reads it, and the operator acknowledgement that is the
+// only way to certify a verdict the verifier would not stand behind.
+describe('task-pipeline confidence gate (session finding after 1088)', () => {
+    const runSh = (script: string, cwd: string, env?: Record<string, string>): { code: number } => {
+        const proc = Bun.spawnSync(['sh', '-c', script], {
+            cwd,
+            env: env === undefined ? { ...getEnvVars() } : { ...getEnvVars(), ...env },
+            stdout: 'pipe',
+            stderr: 'pipe',
+        });
+        return { code: proc.exitCode };
+    };
+
+    /** Render the verify → record guard with the run's vars substituted for literals. */
+    const renderVerifyGuard = (cwd: string, ack: string): string =>
+        cmdOf('verify', 'record')
+            .replaceAll('$proofDigest', 'sha256:test-digest')
+            .replaceAll('$__runId', 'run-t-confidence')
+            .replaceAll('$__definitionDigest', 'sha256:def-digest')
+            .replaceAll('$ackLowConfidence', ack)
+            .replaceAll('$wbs', 't9002')
+            .replaceAll('../..', cwd);
+
+    function makeFixture(dir: string, confidence: string | undefined): void {
+        mkdirSync(join(dir, '.spur', 'run'), { recursive: true });
+        const digest = 'sha256:test-digest';
+        const artifact = {
+            wbs: 't9002',
+            verdict: 'PASS',
+            ...(confidence === undefined ? {} : { confidence }),
+            requirements: [],
+            acceptanceCriteria: [],
+            checks: [],
+            proof: {
+                digest,
+                runId: 'run-t-confidence',
+                definitionDigest: 'sha256:def-digest',
+                capturePoint: 'quality-gate-entry',
+                stages: {
+                    qualityGate: { status: 'PASS', digest },
+                    review: { status: 'completed', digest },
+                    verification: { status: 'PASS', digest },
+                },
+            },
+        };
+        writeFileSync(join(dir, '.spur', 'run', 't9002-verdict.json'), JSON.stringify(artifact));
+    }
+
+    test('the acknowledgement var exists and defaults empty (HIGH/MEDIUM need no ack)', () => {
+        const vars = (DEF as unknown as { vars: Record<string, unknown> }).vars;
+        expect(vars.ackLowConfidence).toBe('');
+    });
+
+    test('both completion guards read the confidence level (R: verify → record, record → done)', () => {
+        for (const [from, to] of [
+            ['verify', 'record'],
+            ['record', 'done'],
+        ] as const) {
+            const guard = cmdOf(from, to);
+            expect(guard, `${from}→${to}`).toContain('--arg ack "$ackLowConfidence"');
+            // LOW (and an ABSENT level — fail closed) clears only with the operator's ack.
+            expect(guard, `${from}→${to}`).toContain('(.confidence // "LOW") != "LOW" or $ack == "true"');
+        }
+    });
+
+    test('the verify state records a confidence check row before its proof-binding stamp', () => {
+        const verify = DEF.states.find((s) => s.id === 'verify');
+        const actions = verify?.onEnter ?? [];
+        const confidenceAction = actions.findIndex((a) => String(a.options?.command ?? '').includes('"confidence"'));
+        const stampIndex = actions.findIndex((a) => String(a.options?.command ?? '').includes('capturePoint'));
+        expect(confidenceAction).toBeGreaterThan(-1);
+        expect(actions[confidenceAction]?.kind).toBe('shell');
+        expect(String(actions[confidenceAction]?.options?.command)).toContain('map(select(.name != "confidence"))');
+        // The stamp stays last: the proof-chain bracket assertion depends on it.
+        expect(stampIndex).toBe(actions.length - 1);
+    });
+
+    test('behavioral: LOW is refused without the ack and admitted with it', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-conf-gate-'));
+        try {
+            makeFixture(dir, 'LOW');
+            expect(runSh(renderVerifyGuard(dir, ''), dir).code).not.toBe(0);
+            expect(runSh(renderVerifyGuard(dir, 'true'), dir).code).toBe(0);
+            // HIGH and MEDIUM certify without an acknowledgement.
+            makeFixture(dir, 'HIGH');
+            expect(runSh(renderVerifyGuard(dir, ''), dir).code).toBe(0);
+            makeFixture(dir, 'MEDIUM');
+            expect(runSh(renderVerifyGuard(dir, ''), dir).code).toBe(0);
+            // An absent level is fail-closed: a pre-1068 artifact is not silently trusted.
+            makeFixture(dir, undefined);
+            expect(runSh(renderVerifyGuard(dir, ''), dir).code).not.toBe(0);
+            expect(runSh(renderVerifyGuard(dir, 'true'), dir).code).toBe(0);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+});
+
+// Session finding after 1088: a FAIL review had no outgoing edge at all, so remediating one meant
+// driving the graph by hand. The router below is the review-side twin of 0943's failure-class router.
+describe('task-pipeline review-failure routing (session finding after 1088)', () => {
+    const runSh = (script: string, cwd: string): { code: number } => {
+        const proc = Bun.spawnSync(['sh', '-c', script], { cwd, stdout: 'pipe', stderr: 'pipe' });
+        return { code: proc.exitCode };
+    };
+
+    test('the router state classifies the failure like the quality-gate twin', () => {
+        const state = DEF.states.find((s) => s.id === 'review-fail-triage');
+        expect(state).toBeDefined();
+        const decide = state?.onEnter?.find((a) => a.kind === 'decide');
+        const options = decide?.options as Record<string, unknown> | undefined;
+        expect(options?.id).toBe('review-failure-class');
+        expect(options?.choices).toEqual(['fix', 'stop']);
+        // Bounded by the SAME counter the quality-gate loop uses: no extra attempts.
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: asserting the literal YAML template, not interpolating
+        expect(String(options?.resultFile)).toBe('.spur/run/${vars.wbs}-review-failure-class.decision');
+    });
+
+    test('the router is bounded and fail-closed: stop, cap, fix, then a catch-all', () => {
+        const edges = DEF.transitions.filter((t) => t.from === 'review-fail-triage');
+        expect(edges.map((e) => `${e.to}:${e.terminalReason ?? e.guard?.kind}`)).toEqual([
+            'failed:failed-check',
+            'failed:retry-exhausted',
+            'test-fix:shell',
+            'failed:failed-check',
+        ]);
+        const cap = edges.find((e) => e.terminalReason === 'retry-exhausted');
+        expect(String(cap?.guard?.options?.command)).toContain('$wbs-test-fix-attempt');
+        expect(String(cap?.guard?.options?.command)).toContain('qualityGateMaxFixAttempts');
+        // The last edge is `always` — a missing/corrupt decision can never fall through to a fix.
+        expect(edges.at(-1)?.guard?.kind).toBe('always');
+    });
+
+    test('a FAIL or missing review answer cannot reach verify (fail-closed PASS edges)', () => {
+        const autoSkip = cmdOf('review', 'verify');
+        const interactive = cmdOf('review', 'approve');
+        for (const guard of [autoSkip, interactive]) {
+            expect(guard).toContain('Verdict:');
+            expect(guard).toContain('PASS');
+        }
+        expect(autoSkip).toContain('test "$profile" = auto');
+        // The PASS edges are declared before the catch-all, so a PASS still takes them.
+        const order = DEF.transitions.filter((t) => t.from === 'review').map((t) => t.to);
+        expect(order).toEqual(['verify', 'approve', 'review-fail-triage']);
+    });
+
+    test('behavioral: the PASS edge accepts PASS (plain or bold) and refuses FAIL/absent', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-review-gate-'));
+        try {
+            mkdirSync(join(dir, '.spur', 'run'), { recursive: true });
+            const answer = join(dir, '.spur', 'run', 'run-t-review-review-answer.txt');
+            const guard = cmdOf('review', 'verify')
+                .replaceAll('$profile', 'auto')
+                .replaceAll('$__runId', 'run-t-review')
+                .replaceAll('../..', dir);
+            for (const [body, expected] of [
+                ['Verdict: PASS\n', 0],
+                ['**Verdict: PASS**\n', 0],
+                ['Verdict: FAIL\n', 1],
+                ['PASS without the token\n', 1],
+            ] as const) {
+                writeFileSync(answer, body);
+                expect(runSh(guard, dir).code, body).toBe(expected);
+            }
+            const missing = cmdOf('review', 'verify')
+                .replaceAll('$profile', 'auto')
+                .replaceAll('$__runId', 'run-t-absent')
+                .replaceAll('../..', dir);
+            expect(runSh(missing, dir).code).not.toBe(0);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
         }
     });
 });

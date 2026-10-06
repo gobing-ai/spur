@@ -183,11 +183,9 @@ shallower.
 
 ```markdown
 #### Review Report — <wbs|path>
-
 **Scope:** <wbs diff | path glob>
 **Dimensions:** functional, security, efficiency, correctness, usability, architecture
 **Verdict:** PASS | PARTIAL | FAIL
-
 ##### Findings (ranked)
 
 | # | Priority | Dimension | Finding | Location | Disposition |
@@ -206,6 +204,12 @@ shallower.
 
 **Next:** <one-line action>
 ```
+
+The **Verdict line is machine-read** by the task pipeline (session finding after 1088): `review →
+verify|approve` requires a line matching `Verdict: PASS` (plain or bold), and ANYTHING ELSE —
+FAIL, PARTIAL, a missing line, a line split across two lines — routes the run into
+`review-fail-triage` and its bounded repair hop. Keep it on one line, in that shape, in every
+review answer; never restate it as prose only.
 
 **No findings.** Never invent a defect to populate the table. Emit one substantive `P4 (advisory)`
 row that states what was reviewed and what was found — placeholder cells (empty, `—`, `n/a`) are

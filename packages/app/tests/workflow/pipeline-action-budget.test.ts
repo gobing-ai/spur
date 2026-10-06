@@ -12,7 +12,11 @@ import { parse as parseYaml } from 'yaml';
  * recommendation-derivation shell action to idea-pipeline on main.
  */
 const IDEA_ACTION_BUDGET = 31;
-const TASK_ACTION_BUDGET = 48;
+// 50 at the session finding after 1088: the completion gate needs its own confidence action
+// (the proof-binding stamp must stay the state's last action and under the 800-char shell cap),
+// and `review-fail-triage` adds one decide action — the review-side twin of 0943's failure-class
+// router. Raising a budget here IS the change record; both additions are named in the commit.
+const TASK_ACTION_BUDGET = 50;
 
 const WORKFLOWS_DIR = join(import.meta.dir, '../../../../config', 'workflows');
 

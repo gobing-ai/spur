@@ -111,11 +111,15 @@ function verdictVariants(): string[] {
         },
     });
     return [
+        JSON.stringify({ verdict: 'PASS', confidence: 'HIGH', proof: proof(PROOF_DIGEST_A, 'completed') }),
+        JSON.stringify({ verdict: 'PASS', confidence: 'MEDIUM', proof: proof(PROOF_DIGEST_A, 'completed') }),
+        JSON.stringify({ verdict: 'PASS', confidence: 'LOW', proof: proof(PROOF_DIGEST_A, 'completed') }),
+        // Absent confidence (a pre-1068 artifact) is fail-closed, so it is a boundary too.
         JSON.stringify({ verdict: 'PASS', proof: proof(PROOF_DIGEST_A, 'completed') }),
-        JSON.stringify({ verdict: 'PASS', proof: proof('digest-B', 'completed') }),
-        JSON.stringify({ verdict: 'PASS', proof: proof(PROOF_DIGEST_A, 'skipped') }),
-        JSON.stringify({ verdict: 'FAIL', proof: proof(PROOF_DIGEST_A, 'completed') }),
-        JSON.stringify({ verdict: 'PARTIAL', proof: proof(PROOF_DIGEST_A, 'completed') }),
+        JSON.stringify({ verdict: 'PASS', confidence: 'HIGH', proof: proof('digest-B', 'completed') }),
+        JSON.stringify({ verdict: 'PASS', confidence: 'HIGH', proof: proof(PROOF_DIGEST_A, 'skipped') }),
+        JSON.stringify({ verdict: 'FAIL', confidence: 'HIGH', proof: proof(PROOF_DIGEST_A, 'completed') }),
+        JSON.stringify({ verdict: 'PARTIAL', confidence: 'HIGH', proof: proof(PROOF_DIGEST_A, 'completed') }),
         'not-json',
     ];
 }
@@ -131,6 +135,8 @@ const VARS: Array<{ name: string; values: string[] }> = [
     { name: 'qualityGateMaxFixAttempts', values: ['2', '0'] },
     { name: 'proofDigest', values: [PROOF_DIGEST_A, 'digest-B'] },
     { name: '__definitionDigest', values: [DEFINITION_DIGEST_A, 'dd-B'] },
+    // The operator acknowledgement for a LOW-confidence certification (session finding after 1088).
+    { name: 'ackLowConfidence', values: ['true', ''] },
 ];
 
 const FIXED_VARS: Record<string, string> = {

@@ -121,14 +121,44 @@
             "command": null
         },
         {
+            "from": "review-fail-triage",
+            "to": "failed",
+            "kind": "shell",
+            "command": "jq -e '.value == \"stop\"' \".spur/run/$wbs-review-failure-class.decision\" >/dev/null 2>&1"
+        },
+        {
+            "from": "review-fail-triage",
+            "to": "failed",
+            "kind": "shell",
+            "command": "fix_attempts=\"$(cat .spur/run/$wbs-test-fix-attempt 2>/dev/null || echo 0)\"; test \"$fix_attempts\" -ge \"$qualityGateMaxFixAttempts\""
+        },
+        {
+            "from": "review-fail-triage",
+            "to": "test-fix",
+            "kind": "shell",
+            "command": "jq -e '.value == \"fix\"' \".spur/run/$wbs-review-failure-class.decision\" >/dev/null 2>&1"
+        },
+        {
+            "from": "review-fail-triage",
+            "to": "failed",
+            "kind": "always",
+            "command": null
+        },
+        {
             "from": "review",
             "to": "verify",
             "kind": "shell",
-            "command": "test \"$profile\" = auto"
+            "command": "test \"$profile\" = auto && grep -qiE '^[[:space:]]*\\**Verdict:\\** *PASS' \".spur/run/$__runId-review-answer.txt\""
         },
         {
             "from": "review",
             "to": "approve",
+            "kind": "shell",
+            "command": "grep -qiE '^[[:space:]]*\\**Verdict:\\** *PASS' \".spur/run/$__runId-review-answer.txt\""
+        },
+        {
+            "from": "review",
+            "to": "review-fail-triage",
             "kind": "always",
             "command": null
         },
@@ -154,7 +184,7 @@
             "from": "verify",
             "to": "record",
             "kind": "shell",
-            "command": "jq -e --arg d \"$proofDigest\" --arg r \"$__runId\" --arg dd \"$__definitionDigest\" ' .verdict == \"PASS\" and (.proof.digest // \"\") == $d and (.proof.stages.qualityGate.digest // \"\") == $d and (.proof.stages.review.digest // \"\") == $d and (.proof.stages.review.status // \"\") == \"completed\" and (.proof.stages.verification.digest // \"\") == $d and (.proof.runId // \"\") == $r and (.proof.definitionDigest // \"\") == $dd ' \".spur/run/$wbs-verdict.json\" >/dev/null 2>&1"
+            "command": "jq -e --arg d \"$proofDigest\" --arg r \"$__runId\" --arg dd \"$__definitionDigest\" --arg ack \"$ackLowConfidence\" ' .verdict == \"PASS\" and (.proof.digest // \"\") == $d and (.proof.stages.qualityGate.digest // \"\") == $d and (.proof.stages.review.digest // \"\") == $d and (.proof.stages.review.status // \"\") == \"completed\" and (.proof.stages.verification.digest // \"\") == $d and (.proof.runId // \"\") == $r and (.proof.definitionDigest // \"\") == $dd and ((.confidence // \"LOW\") != \"LOW\" or $ack == \"true\") ' \".spur/run/$wbs-verdict.json\" >/dev/null 2>&1"
         },
         {
             "from": "verify",
@@ -172,7 +202,7 @@
             "from": "record",
             "to": "done",
             "kind": "shell",
-            "command": "$spurBin task check $wbs --as done && verdict=\"$(jq -r .verdict .spur/run/$wbs-verdict.json 2>/dev/null)\" && proof_digest=\"$(jq -r '.proof.digest // \"\"' .spur/run/$wbs-verdict.json 2>/dev/null)\" && test \"$verdict\" = PASS && test \"$proof_digest\" = \"$proofDigest\""
+            "command": "$spurBin task check $wbs --as done && jq -e --arg p \"$proofDigest\" --arg ack \"$ackLowConfidence\" ' .verdict == \"PASS\" and ((.proof.digest // \"\") == $p) and ((.confidence // \"LOW\") != \"LOW\" or $ack == \"true\") ' \".spur/run/$wbs-verdict.json\" >/dev/null 2>&1"
         },
         {
             "from": "record",

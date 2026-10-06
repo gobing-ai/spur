@@ -88,7 +88,7 @@ case "$1:$2" in
     if [ -n "$FAIL_CHECK_AT" ] && [ "$n" -ge "$FAIL_CHECK_AT" ]; then exit 1; fi ;;
   task:verdict)
     mkdir -p .spur/run
-    printf '{"wbs":"%s","verdict":"%s","requirements":[],"checks":[]}\n' "$3" "\${VERDICT:-PASS}" > ".spur/run/$3-verdict.json" ;;
+    printf '{"wbs":"%s","verdict":"%s","confidence":"%s","requirements":[],"checks":[]}\n' "$3" "\${VERDICT:-PASS}" "\${CONFIDENCE:-HIGH}" > ".spur/run/$3-verdict.json" ;;
   task:show)
     printf '%s\n' '{"content":"ordinary implementation task","frontmatter":{"feature_id":null}}' ;;
   task:path)
@@ -187,7 +187,13 @@ function runInlineSmoke(
                 if (answerSpec !== undefined) {
                     const answerPath = join(cwd, expand(answerSpec, vars));
                     mkdirSync(dirname(answerPath), { recursive: true });
-                    writeFileSync(answerPath, `Verdict: ${options.verdict ?? 'PASS'}\n`);
+                    // Only `verify` carries the verdict under test; every other stage answers PASS,
+                    // because the review routing reads `Verdict: PASS` from the reviewer's own
+                    // answer (session finding after 1088) and a non-PASS review would divert the
+                    // run before verify ever runs. `Confidence: HIGH` mirrors the answer contract
+                    // (task 1068) that the completion guards read.
+                    const stageVerdict = state.id === 'verify' ? (options.verdict ?? 'PASS') : 'PASS';
+                    writeFileSync(answerPath, `Verdict: ${stageVerdict}\nConfidence: HIGH\n`);
                 }
                 appendFileSync(logPath, `${isoStamp()}stage ${state.id} executed inline in session ${sessionId}\n`);
                 continue;

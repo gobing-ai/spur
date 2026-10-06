@@ -19,6 +19,21 @@
 # done guard closed, and re-records Testing before the failed edge); done settles
 # deferrals; failed renders the recovery report. No new state, edge, or model query.
 #
+# Confidence gate (session finding after 1088, task 1068 follow-up): the verify answer has
+# carried a `Confidence: HIGH|MEDIUM|LOW` line since 1068, and nothing read it — a PASS at
+# LOW confidence certified exactly like HIGH. The verify stamp now records a `confidence`
+# check row, and BOTH completion guards (verify → record, record → done) refuse a LOW (or
+# absent) level unless the run was launched with `--vars '{"ackLowConfidence":"true"}'`.
+# The acknowledgement is an operator decision, not a model one: it is the only way to
+# certify a verdict the verifier itself would not stand behind.
+#
+# Review-failure routing (session finding after 1088): `review` had no outgoing edge for a
+# FAIL verdict, so a failing review could only be remediated by driving the graph by hand
+# (re-entering `test` and hand-emitting rows). The review stage now derives
+# `.spur/run/<wbs>-review.status` from its own answer file (fail-closed to FAIL), and a FAIL
+# routes through `review-fail-triage` — the review-side twin of `test-fail-triage` (0943) —
+# into the SAME bounded fix budget, so remediation stays on-graph and bounded.
+#
 # Vars (passed as a JSON object via `--vars`):
 #   wbs                       — task WBS (required)
 #   profile                   — "auto" skips HITL approve (R4)
@@ -36,7 +51,10 @@ kind: state-machine
 name: task-pipeline
 # 0772 R2: explicit identity tag. Set only after the proof failure-path tests
 # passed; the engine treats unversioned external definitions as supported.
-version: "3"
+# v4 (session finding after 1088): the completion gate reads the verifier's confidence level and
+# the graph routes a non-PASS review into bounded remediation — both are contract changes, so the
+# identity moves with them.
+version: "4"
 description: "Standard task pipeline: precheck → implement → quality-gate (test/fix/recheck) → review → approve → verify → record → done"
 # Task entity lifecycle (owned by task-lifecycle.yaml):
 #   normal: backlog → todo → wip → testing → done
@@ -149,6 +167,14 @@ vars:
     # Escalation counter: .spur/run/<wbs>-escalation-count. Default 2 = two answered
     # questions; a third pause routes to failed with a report note.
     maxEscalations: "2"
+    # Operator acknowledgement of a LOW-confidence certification (session finding after 1088).
+    # The verify answer's `Confidence:` line is captured into the verdict artifact; a LOW (or
+    # absent) level fails the completion guards unless this is "true", because a PASS the
+    # verifier would not stand behind is an operator risk decision, not a mechanical one.
+    # Set per run: `--vars '{"ackLowConfidence":"true"}'` (and export it on the inline path).
+    # Deliberately NOT settable from the task file or the verifier's own answer: the point is
+    # that a second party, not the producer, accepts the residual uncertainty.
+    ackLowConfidence: ""
     # Runtime-written, 0933: the escalate hop's file.read.into-var fills this from
     # .spur/run/<wbs>-question.md; the hitl.input prompt below references it. Declared
     # here (empty) so the static var-reference validator sees the template source.
@@ -611,9 +637,42 @@ states:
           # verify stamp marks review `completed` only when this marker equals the current digest;
           # otherwise `skipped` (an honest downgrade, never a fake completed), and the bound
           # `record` registration refuses a skipped review.
+          # Session finding after 1088: the review VERDICT is read straight out of the reviewer's
+          # own answer file by the review → * guards below, so this stage needs no extra artifact
+          # and no extra action (ADR-115 legibility cap).
           - kind: shell
             options:
                 command: 'mkdir -p .spur/run; printf "%s" "$proofDigest" > ".spur/run/$__runId-review-proof.digest"; exit 0'
+
+    # ── review-fail-triage (session finding after 1088) ────────────────────────
+    # A review that reports FAIL used to have no outgoing edge: the graph could not see the
+    # verdict and nothing consumed it, so remediating a failing review meant driving the
+    # states by hand. This state is the review-side twin of `test-fail-triage` (0943 R3):
+    # the deterministic classifier routes the failure into the SAME bounded fix budget
+    # (`.spur/run/<wbs>-test-fix-attempt` against `qualityGateMaxFixAttempts`), and the fix
+    # re-enters quality → review → verify on a freshly captured digest. The `decide` action
+    # itself always runs (the engine has no onEnter conditionals); with
+    # `workflow.decideDecisionMaker` off it degrades to its declared default.
+    - id: review-fail-triage
+      description: >-
+          Deterministic router for a review that did NOT certify PASS (session finding after 1088).
+          `decide review-failure-class` reads the reviewer's answer and the task spec and routes:
+          fix → the shared test-fix hop, stop → failed with terminalReason failed-check. A
+          missing/corrupt decision fails closed to failed-check.
+      onEnter:
+          - kind: decide
+            options:
+                id: review-failure-class
+                method: choice
+                question: >-
+                    The review did not certify PASS (FAIL or PARTIAL). Is the finding fixable by the
+                    repair agent, or should the run stop here for the operator?
+                choices: [fix, stop]
+                default: fix
+                evidence:
+                    - .spur/run/${vars.__runId}-review-answer.txt
+                    - ${vars.taskSpecPath}
+                resultFile: .spur/run/${vars.wbs}-review-failure-class.decision
 
     - id: approve
       description: >
@@ -677,6 +736,18 @@ states:
           - kind: shell
             options:
                 command: "$spurBin task verdict $wbs --from-answer .spur/run/$wbs-verify-answer.txt"
+          # Session finding after 1088: the verifier's confidence level becomes a `confidence` check
+          # row (warn unless HIGH) and a gate-log line, so the level the completion guards enforce is
+          # visible in the artifact and the log — not only in the answer file. This is its own action
+          # because the proof-binding stamp below must stay the state's LAST action AND under the
+          # ADR-115 800-char shell cap.
+          - kind: shell
+            options:
+                command: >-
+                    V=".spur/run/$wbs-verdict.json"; [ -f "$V" ] || exit 0;
+                    jq --arg ack "$ackLowConfidence" '. + {checks: ((.checks // []) | map(select(.name != "confidence"))) + [{name: "confidence", status: (if (.confidence // "LOW") == "HIGH" then "pass" else "warn" end), evidence: ((.confidence // "LOW (absent from artifact)") + (if $ack == "true" then " (operator-acknowledged)" else "" end))}]}' "$V" > "$V.tmp" && mv "$V.tmp" "$V";
+                    printf 'confidence: %s (ack=%s)\n' "$(jq -r '.confidence // "LOW (absent)"' "$V")" "$ackLowConfidence" >> ".spur/run/$wbs-test-gate.log";
+                    exit 0
           # (e) one jq mutation binds the verdict to the proof digest (0703 R3; runId 0730 §B.2 /
           # 0757 R4; definitionDigest 0759 R5; honest review stamp 0785 R4; soft action + hard guard).
           - kind: shell
@@ -1018,21 +1089,73 @@ transitions:
       description: Failure-class decision missing/corrupt — stop at failed.
       guard:
           kind: always
-    # ── review → approve, OR skip the HITL gate entirely when profile=auto (R4) ──
-    # Declaration order matters: the auto-skip guard is tried FIRST, so under
-    # profile=auto the run routes straight to verify and never ENTERS approve
-    # (whose onEnter hitl.confirm would otherwise block). Otherwise fall through
-    # to approve for the human gate.
-    - from: review
-      to: verify
-      description: profile=auto — skip the human approval gate, go straight to verify.
+    # ── review-failure routing (session finding after 1088): the review-side twin of the
+    # failure-class router above — stop first, then the shared attempt cap, then the fix lane,
+    # then the fail-closed defense. The counter is the SAME one the quality-gate loop uses, so a
+    # review FAIL cannot buy extra attempts and the iteration bound stays finite.
+    - from: review-fail-triage
+      to: failed
+      terminalReason: failed-check
+      description: Review failure class stop — the run terminates at failed, never bypassed.
       guard:
           kind: shell
           options:
-              command: 'test "$profile" = auto'
+              command: >-
+                  jq -e '.value == "stop"' ".spur/run/$wbs-review-failure-class.decision" >/dev/null 2>&1
+    - from: review-fail-triage
+      to: failed
+      terminalReason: retry-exhausted
+      description: Attempt cap reached — qualityGateMaxFixAttempts bounds the review repair lane.
+      guard:
+          kind: shell
+          options:
+              command: >-
+                  fix_attempts="$(cat .spur/run/$wbs-test-fix-attempt 2>/dev/null || echo 0)";
+                  test "$fix_attempts" -ge "$qualityGateMaxFixAttempts"
+    - from: review-fail-triage
+      to: test-fix
+      description: Review failure class fix and under the cap — the shared bounded repair hop.
+      guard:
+          kind: shell
+          options:
+              command: >-
+                  jq -e '.value == "fix"' ".spur/run/$wbs-review-failure-class.decision" >/dev/null 2>&1
+    # Defense: missing/corrupt review-failure decision — fail closed instead of silently repairing.
+    - from: review-fail-triage
+      to: failed
+      terminalReason: failed-check
+      description: Review-failure decision missing/corrupt — stop at failed.
+      guard:
+          kind: always
+    # ── review routing: FAIL → bounded remediation; PASS → approve or the auto-skip (R4) ──
+    # Declaration order matters and is FAIL-CLOSED: the two PASS edges each demand the reviewer's
+    # own `Verdict: PASS` line, and the catch-all sends EVERYTHING ELSE (FAIL, a missing answer, an
+    # unparseable one) into `review-fail-triage`. Before this, a FAIL review had no outgoing edge at
+    # all — the graph could not see the verdict, so remediation meant driving states by hand
+    # (session finding after 1088). The reviewer writes `Verdict: PASS|FAIL` in its answer; both
+    # plain and bold forms are accepted. Under `profile=auto` the approve gate is skipped, so the
+    # PASS+auto edge is tried first and the interactive PASS edge second.
+    - from: review
+      to: verify
+      description: profile=auto and the review certified PASS — skip the human approval gate.
+      guard:
+          kind: shell
+          options:
+              command: >-
+                  test "$profile" = auto &&
+                  grep -qiE '^[[:space:]]*\**Verdict:\** *PASS' ".spur/run/$__runId-review-answer.txt"
     - from: review
       to: approve
-      description: Review done — gate on human approval.
+      description: Review certified PASS — gate on human approval before verification.
+      guard:
+          kind: shell
+          options:
+              command: grep -qiE '^[[:space:]]*\**Verdict:\** *PASS' ".spur/run/$__runId-review-answer.txt"
+    - from: review
+      to: review-fail-triage
+      description: >-
+          No PASS in the reviewer's answer (FAIL, PARTIAL, missing, or unparseable — fail closed) —
+          classify the failure and route it into the bounded repair hop instead of dead-ending the run.
       guard:
           kind: always
 
@@ -1069,19 +1192,23 @@ transitions:
     # The verify step emits .spur/run/<wbs>-verdict.json with a required proof block (task 0703 R3/R5).
     # Only `verdict: PASS` PLUS a proof block whose digest — top level and every named stage — equals
     # the captured `proofDigest` clears the gate to `record`; any non-PASS, a missing file, malformed
-    # JSON, or missing/mismatched proof evidence does not. Declaration order: PASS+proof guard FIRST,
+    # JSON, or missing/mismatched proof evidence does not. The verifier's confidence level is part of
+    # that certification (session finding after 1088): a PASS the verifier itself marked LOW — or left
+    # unstated — clears the gate only when the operator accepted it with
+    # `--vars '{"ackLowConfidence":"true"}'`. Declaration order: PASS+proof guard FIRST,
     # then the bounded remediation route (R4), then the always catch-all so a PASS verdict with a
     # missing/malformed proof block still terminates at `failed` instead of hanging the state.
     - from: verify
       to: record
-      description: Verification verdict is PASS and its proof block names the captured digest on every stage — record results and proceed to done.
+      description: Verification verdict is PASS, its proof block names the captured digest on every stage, and any LOW confidence was operator-acknowledged — record results and proceed to done.
       guard:
           # (one jq -e predicate) PASS verdict; proof, quality-gate, review and verification digests
-          # equal to proofDigest; review completed; matching run id and definition digest (0703 R5, 0785 R4).
+          # equal to proofDigest; review completed; matching run id and definition digest (0703 R5, 0785 R4);
+          # confidence HIGH/MEDIUM, or LOW/absent with the operator's ack (session finding after 1088).
           kind: shell
           options:
               command: >-
-                  jq -e --arg d "$proofDigest" --arg r "$__runId" --arg dd "$__definitionDigest" '
+                  jq -e --arg d "$proofDigest" --arg r "$__runId" --arg dd "$__definitionDigest" --arg ack "$ackLowConfidence" '
                   .verdict == "PASS"
                   and (.proof.digest // "") == $d
                   and (.proof.stages.qualityGate.digest // "") == $d
@@ -1090,6 +1217,7 @@ transitions:
                   and (.proof.stages.verification.digest // "") == $d
                   and (.proof.runId // "") == $r
                   and (.proof.definitionDigest // "") == $dd
+                  and ((.confidence // "LOW") != "LOW" or $ack == "true")
                   ' ".spur/run/$wbs-verdict.json" >/dev/null 2>&1
     - from: verify
       to: test-fix
@@ -1117,11 +1245,12 @@ transitions:
     # ── done gate: record → done/failed gated on `spur task check` (ADR-026 amendment 2026-06-23)
     # PLUS the proof-block re-assertion (task 0703 R5): the verdict artifact must still be PASS and
     # still name the captured digest — a forged or mutated completion artifact fails closed here.
+    # PLUS the confidence re-assertion (session finding after 1088): the same ack rule as verify →
+    # record, re-read from the artifact so a mutation between the two boundaries cannot slip through.
     # Declaration order: pass guard first.
     - from: record
       to: done
-      description: Task check passed and the verdict proof block still names the captured digest — certify done.
-      # (warn) 5 commands: named verdict + proof digest reads after the task check (legibility, 0874).
+      description: Task check passed, the verdict proof block still names the captured digest, and any LOW confidence was acknowledged — certify done.
       guard:
           kind: shell
           options:
@@ -1130,11 +1259,16 @@ transitions:
               # the CLI's own target-aware `--no-lifecycle` backstop (F92 R3). No `#`
               # comments inside the folded scalar: `>-` joins same-indent lines into
               # one shell line.
+              # Two logical commands, deliberately (ADR-115): the `task check` projection plus
+              # ONE jq predicate re-asserting the whole completion contract — PASS verdict, the
+              # captured proof digest, and the confidence rule (session finding after 1088).
               command: >-
                   $spurBin task check $wbs --as done &&
-                  verdict="$(jq -r .verdict .spur/run/$wbs-verdict.json 2>/dev/null)" &&
-                  proof_digest="$(jq -r '.proof.digest // ""' .spur/run/$wbs-verdict.json 2>/dev/null)" &&
-                  test "$verdict" = PASS && test "$proof_digest" = "$proofDigest"
+                  jq -e --arg p "$proofDigest" --arg ack "$ackLowConfidence" '
+                  .verdict == "PASS"
+                  and ((.proof.digest // "") == $p)
+                  and ((.confidence // "LOW") != "LOW" or $ack == "true")
+                  ' ".spur/run/$wbs-verdict.json" >/dev/null 2>&1
     - from: record
       to: failed
       terminalReason: failed-check
