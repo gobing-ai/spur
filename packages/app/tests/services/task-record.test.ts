@@ -24,11 +24,20 @@ import {
     escapeTablePipe,
     flipVerifiedCheckboxes,
     gitDiffU0,
+    isEmptyRecordSolution,
+    isExcludedSolutionPath,
+    isRecordAuthoredSolution,
+    listUntrackedFiles,
     parseTesting,
     parseVerdict,
+    RECORD_SOLUTION_HEADER,
     renderReview,
     renderSolutionFromDiff,
     renderTesting,
+    resolveDiffBase,
+    SOLUTION_EXCLUDE_PATHSPECS,
+    SOLUTION_EXCLUDED_PATHSPECS,
+    SOLUTION_NO_ROWS_ROW,
 } from '../../src/services/task-record';
 import { sectionIsBare, TaskService } from '../../src/services/task-service';
 import type { TransitionCheckGate } from '../../src/services/task-transition';
@@ -1043,6 +1052,27 @@ Feature: Disposal
         expect(MarkdownDocument.parse(await fs.readFile(taskPath), 'task').getSection('Solution')).toBe(before);
     });
 
+    test('1090 P3a: record REPLACES its own stale empty change-map (self-heal)', async () => {
+        // A map the pre-fix code wrote is never bare, so before the widened gate it was permanent
+        // and every re-record re-emitted the L3 denial — the state run 9e8af77d left task 1089 in.
+        const wbs = await createTask(svc);
+        const root = tasksDir.replace('/tasks', '');
+        const fs = createNodeFileSystem(root);
+        const taskPath = `${tasksDir}/${wbs}_record-test-task.md`;
+        const ref: EntityRef = { kind: 'task', id: wbs, filePath: taskPath, folder: tasksDir };
+        const poisoned = renderSolutionFromDiff('');
+        expect(poisoned).toContain('(no changes detected)');
+        await new PlanningWriteService({ fs }).updateSection(ref, 'Solution', poisoned);
+
+        const result = await svc.record(wbs, { solutionFromDiff: true });
+
+        // The contrast with the R4 case above IS the widened gate: authored prose returns
+        // `false` and is preserved, while record's OWN body returns `true` and is rewritten.
+        // (This fixture is not a git repo, so the regenerated body is legitimately empty again
+        // — the point is that record now OWNS it and re-derives it from the current diff.)
+        expect(result.solutionBackfilled).toBe(true);
+    });
+
     test('applies transition when requested', async () => {
         const wbs = await createTask(svc);
 
@@ -1738,6 +1768,175 @@ describe('Solution backfill diff base + pathspec (task 1090)', () => {
     test('R2: the pure renderer filters excluded planes from a raw diff too', () => {
         const raw = ['+++ b/.spur/run/state.json', '@@ -1 +2 @@', '+++ b/bun.lock', '@@ -1 +4 @@'].join('\n');
         expect(renderSolutionFromDiff(raw)).toContain('(no changes detected)');
+    });
+});
+
+// ─── 1090 review follow-ups: the 3 deferred P3s and the 5 advisories ────
+
+describe('1090 follow-ups — deferred P3s', () => {
+    test('P3a: isRecordAuthoredSolution recognises record\u2019s own map, so a poisoned one can self-heal', () => {
+        // The gate widened from `sectionIsBare` alone to `|| isRecordAuthoredSolution(...)`.
+        // A pre-fix `(no changes detected)` body is never bare, so before this it was permanent.
+        const stale = renderSolutionFromDiff('');
+        expect(isRecordAuthoredSolution(stale)).toBe(true);
+        expect(isRecordAuthoredSolution('Authored by the implement step at `src/app.ts:12`.')).toBe(false);
+        expect(isRecordAuthoredSolution(null)).toBe(false);
+    });
+
+    test('P3a (record level): a re-record REPLACES a record-authored map with the current diff', async () => {
+        const { root, base } = seedCommittedRepo(
+            [['app.ts', 'export const a = 1;\n']],
+            [['app.ts', 'export const a = 1;\nexport const b = 2;\n']],
+        );
+        try {
+            // Simulate the poisoned state the pre-fix code left behind.
+            writeRepoFile(root, 'app.ts', 'export const a = 1;\nexport const b = 2;\nexport const c = 3;\n');
+            const poisoned = renderSolutionFromDiff('');
+            expect(poisoned).toContain('(no changes detected)');
+            // With the widened gate the same call now produces real rows.
+            const healed = renderSolutionFromDiff(await gitDiffU0({ cwd: root, base }));
+            // base has one line; line 1 is unchanged, so the first changed line is 2.
+            expect(healed).toContain('| `app.ts:2` |');
+            expect(healed).not.toContain('(no changes detected)');
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('P3b: the diff base honours an explicit cwd (the context root, not process.cwd)', async () => {
+        // `resolveDiffBase` reads `<cwd>/.spur/run/<wbs>-base.sha`; without cwd it would read the
+        // runner's repo under the programmatic main(argv, {cwd}) seam. Uses a wbs that exists in
+        // NO other tree, so the fallback assertion cannot depend on the real repo's contents.
+        const { root, base } = seedCommittedRepo(
+            [['app.ts', 'export const a = 1;\n']],
+            [['app.ts', 'export const a = 1;\nexport const b = 2;\n']],
+        );
+        try {
+            writeRepoFile(root, '.spur/run/7777-base.sha', `${base}\n`);
+            expect(await resolveDiffBase({ cwd: root, wbs: '7777' })).toBe(base);
+            // Same wbs, no cwd: the capture is not in this process's cwd, so HEAD wins.
+            expect(await resolveDiffBase({ wbs: '7777' })).toBe('HEAD');
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('P3c: one edit point — the git pathspecs are derived from the excluded-path list', () => {
+        // Drift used to be possible between SOLUTION_EXCLUDE_PATHSPECS and the renderer's Set.
+        for (const p of SOLUTION_EXCLUDED_PATHSPECS) {
+            expect(SOLUTION_EXCLUDE_PATHSPECS).toContain(`:(exclude)${p}`);
+            expect(isExcludedSolutionPath(p)).toBe(true);
+        }
+        expect(SOLUTION_EXCLUDE_PATHSPECS).toHaveLength(SOLUTION_EXCLUDED_PATHSPECS.length);
+    });
+});
+
+describe('1090 follow-ups — advisories', () => {
+    test('P4a: a malformed run-base capture falls back to HEAD instead of an empty change-map', async () => {
+        // Uses wbs 8888, absent from every real tree, so the fallback branch is deterministic
+        // regardless of what the repository's own .spur/run/ happens to contain.
+        const { root, base } = seedCommittedRepo(
+            [['app.ts', 'export const a = 1;\n']],
+            [['app.ts', 'export const a = 1;\nexport const b = 2;\n']],
+        );
+        try {
+            writeRepoFile(root, '.spur/run/8888-base.sha', 'not-a-sha\n');
+            expect(await resolveDiffBase({ cwd: root, wbs: '8888' })).toBe('HEAD');
+            // …and a green-format capture is still honoured.
+            writeRepoFile(root, '.spur/run/8888-base.sha', `${base}\n`);
+            expect(await resolveDiffBase({ cwd: root, wbs: '8888' })).toBe(base);
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('P4b: an explicit solutionDiffBase reaches the diff (record-level plumbing)', async () => {
+        const { root, base, tip } = seedCommittedRepo(
+            [['app.ts', 'export const a = 1;\n']],
+            [['app.ts', 'export const a = 1;\nexport const b = 2;\n']],
+        );
+        try {
+            writeRepoFile(root, '.spur/run/1090-base.sha', `${base}\n`);
+            // The explicit base outranks the run-base capture — the precedence `record` forwards.
+            const atTip = renderSolutionFromDiff(await gitDiffU0({ cwd: root, wbs: '1090', base: tip }));
+            expect(atTip).toContain('(no changes detected)');
+            const atBase = renderSolutionFromDiff(await gitDiffU0({ cwd: root, wbs: '1090' }));
+            expect(atBase).toContain('| `app.ts:2` |');
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('P4c: a pure rename produces a row (--no-renames is load-bearing)', async () => {
+        // A 100%-similarity rename emits only `rename from/to` — no `---`/`+++` lines — so a
+        // rename-only change set used to fall through to the no-rows row. `--no-renames` splits
+        // it into a delete + an add, restoring the `+++ b/<new>` line. The follow commit touches
+        // a DIFFERENT file, so the rename below is genuinely content-free.
+        const { root, base } = seedCommittedRepo(
+            [['old-name.ts', 'export const a = 1;\n']],
+            [['other.ts', 'export const z = 0;\n']],
+        );
+        try {
+            git(root, ['mv', 'old-name.ts', 'new-name.ts']);
+            commitAll(root, 'rename');
+            const out = renderSolutionFromDiff(await gitDiffU0({ cwd: root, base }));
+            expect(out).toContain('| `new-name.ts:1` |');
+            expect(out).not.toContain('(no changes detected)');
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('P4c: an untracked new file is named (git diff never sees it)', async () => {
+        const { root, base } = seedCommittedRepo(
+            [['app.ts', 'export const a = 1;\n']],
+            [['app.ts', 'export const a = 1;\nexport const b = 2;\n']],
+        );
+        try {
+            writeRepoFile(root, 'docs/design/fresh.md', '# fresh\n');
+            const files = listUntrackedFiles({ cwd: root });
+            expect(files).toContain('docs/design/fresh.md');
+            const out = renderSolutionFromDiff(await gitDiffU0({ cwd: root, base }), files);
+            expect(out).toContain('| `docs/design/fresh.md:1` |');
+            expect(out).toContain('| `app.ts:2` |');
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('P4d: isEmptyRecordSolution is structural, not substring-based', () => {
+        expect(isEmptyRecordSolution(renderSolutionFromDiff(''))).toBe(true);
+        // An authored body that merely QUOTES the marker and the no-rows row is not record output.
+        const quoted = `${RECORD_SOLUTION_HEADER}\n\nSee \`${SOLUTION_NO_ROWS_ROW}\` for the old behaviour.\n`;
+        expect(isEmptyRecordSolution(quoted)).toBe(false);
+        // A record-authored map WITH rows is not "empty" either.
+        const withRows = renderSolutionFromDiff('+++ b/app.ts\n@@ -1 +2 @@');
+        expect(isEmptyRecordSolution(withRows)).toBe(false);
+        expect(isEmptyRecordSolution(null)).toBe(false);
+    });
+
+    test('P4e: the recording task\u2019s own file is excluded from its change-map', async () => {
+        const { root, base } = seedCommittedRepo(
+            [
+                ['app.ts', 'export const a = 1;\n'],
+                ['docs/tasks5/0001_self.md', 'a\n'],
+            ],
+            [
+                ['app.ts', 'export const a = 1;\nexport const b = 2;\n'],
+                ['docs/tasks5/0001_self.md', 'b\n'],
+            ],
+        );
+        try {
+            const filter = { excludePaths: ['docs/tasks5/0001_self.md'] };
+            const out = renderSolutionFromDiff(await gitDiffU0({ cwd: root, base, ...filter }), [], filter);
+            expect(out).toContain('| `app.ts:2` |');
+            expect(out).not.toContain('0001_self.md');
+            // Another corpus file in the same tree is still named — R2 requires corpus rows.
+            const all = renderSolutionFromDiff(await gitDiffU0({ cwd: root, base }));
+            expect(all).toContain('0001_self.md');
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
     });
 });
 

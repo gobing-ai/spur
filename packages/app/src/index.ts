@@ -710,12 +710,16 @@ export type {
     VerifyVerdict,
 } from './services/task-record';
 export {
+    isEmptyRecordSolution,
     isRecordAuthoredReview,
+    isRecordAuthoredSolution,
+    listUntrackedFiles,
     parseVerdict,
     readVerdict,
     renderReview,
     renderSolutionFromDiff,
     renderTesting,
+    resolveDiffBase,
 } from './services/task-record';
 export type {
     TaskScaffoldContext,

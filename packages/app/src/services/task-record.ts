@@ -739,18 +739,38 @@ const SOLUTION_EXCLUDED_LOCKFILES = new Set([
  * task must produce rows too), and hardcoding a planning folder would additionally trip the
  * `no-hardcoded-planning-folder` rule.
  */
-export const SOLUTION_EXCLUDE_PATHSPECS = [
-    ':(exclude).spur/**',
-    ':(exclude)bun.lock',
-    ':(exclude)bun.lockb',
-    ':(exclude)package-lock.json',
-    ':(exclude)yarn.lock',
-    ':(exclude)pnpm-lock.yaml',
-] as const;
+/**
+ * Generated planes the auto change-map must not advertise: `.spur/` runtime state and
+ * lockfiles. {@link SOLUTION_EXCLUDE_PATHSPECS} is DERIVED from this list, so the git layer
+ * and the pure renderer cannot drift apart (the 1090 review's P3 on two hand-maintained
+ * copies — one edit point now).
+ *
+ * Design (task 1090 R2): the former `*.ts`/`*.tsx`/`*.js` allowlist made a docs, YAML or
+ * corpus-only task produce an empty change-map by construction — R2 requires those changes
+ * to be named, so the task corpus is deliberately NOT excluded here (a corpus-only task must
+ * produce rows too), and hardcoding a planning folder would additionally trip the
+ * `no-hardcoded-planning-folder` rule.
+ */
+export const SOLUTION_EXCLUDED_PATHSPECS = ['.spur/**', ...SOLUTION_EXCLUDED_LOCKFILES] as const;
 
-/** True when a changed path belongs to a generated plane the change-map must not cite. */
-export function isExcludedSolutionPath(path: string): boolean {
+/** The same excludes in git pathspec form — derived, never hand-maintained. */
+export const SOLUTION_EXCLUDE_PATHSPECS = SOLUTION_EXCLUDED_PATHSPECS.map((p) => `:(exclude)${p}`);
+
+/**
+ * Per-call exclusions. `excludePaths` carries the recording task's own file: its post-record
+ * Testing/Review/Solution writes are record's own bookkeeping, not the implementation the
+ * change-map describes, and advertising the map's own host file was pure noise (the 1090
+ * review's P4).
+ */
+export interface SolutionPathFilter {
+    /** Extra repo-relative paths to omit, in addition to the generated planes. */
+    excludePaths?: readonly string[];
+}
+
+/** True when a changed path belongs to a generated plane, or a per-call exclusion. */
+export function isExcludedSolutionPath(path: string, filter: SolutionPathFilter = {}): boolean {
     if (path.startsWith('.spur/')) return true;
+    if (filter.excludePaths?.includes(path) === true) return true;
     const base = path.split('/').pop() ?? path;
     return SOLUTION_EXCLUDED_LOCKFILES.has(base);
 }
@@ -765,9 +785,14 @@ export function isRecordAuthoredSolution(body: string | null): boolean {
  * True when record's own backfill ran and reported no rows — the run diff named no
  * changed file. The `L3.solution-file-line` denial reads this to name the empty
  * backfill instead of misattributing the cause to an unauthored Solution (task 1090 R3).
+ *
+ * Structural, not substring-based (the 1090 review's P4): the body must equal what the
+ * renderer emits for a zero-citation diff, so an authored body that merely QUOTES the marker
+ * and the no-rows row is not misclassified.
  */
 export function isEmptyRecordSolution(body: string | null): boolean {
-    return body !== null && isRecordAuthoredSolution(body) && body.includes(SOLUTION_NO_ROWS_ROW);
+    if (body === null || !isRecordAuthoredSolution(body)) return false;
+    return body.trim() === renderSolutionFromDiff('').trim();
 }
 
 /**
@@ -780,9 +805,16 @@ export function isEmptyRecordSolution(body: string | null): boolean {
  * When the diff produces no hunk lines (e.g. only deletions), falls back to
  * `git diff --name-only` citing each changed file at `:1`.
  *
+ * `extraFiles` carries paths the diff cannot express — currently the untracked-file list,
+ * which `git diff <base>` never sees — cited at `:1` (the 1090 review's P4).
+ *
  * Design: section-matrix §Solution — change-map of `file:line` citations.
  */
-export function renderSolutionFromDiff(diffText: string): string {
+export function renderSolutionFromDiff(
+    diffText: string,
+    extraFiles: readonly string[] = [],
+    filter: SolutionPathFilter = {},
+): string {
     const lines: string[] = [];
     lines.push(RECORD_SOLUTION_HEADER);
     lines.push('Each entry cites the first changed line per file (`file:line`).');
@@ -790,11 +822,12 @@ export function renderSolutionFromDiff(diffText: string): string {
     lines.push('| Change (`file:line`) |');
     lines.push('|----------------------|');
 
-    const citations = extractFileLineCitations(diffText);
+    const citations = extractFileLineCitations(diffText, filter);
+    const untracked = [...new Set(extraFiles)].filter((f) => !isExcludedSolutionPath(f, filter)).sort();
 
     if (citations.length === 0) {
         // Fallback: cite each changed file at :1.
-        const files = extractChangedFiles(diffText);
+        const files = [...extractChangedFiles(diffText, filter), ...untracked].sort();
         if (files.length === 0) {
             lines.push(`| \`${SOLUTION_NO_ROWS_ROW}\` |`);
         } else {
@@ -805,6 +838,9 @@ export function renderSolutionFromDiff(diffText: string): string {
     } else {
         for (const citation of citations) {
             lines.push(`| \`${citation}\` |`);
+        }
+        for (const f of untracked) {
+            lines.push(`| \`${f}:1\` |`);
         }
     }
 
@@ -818,7 +854,7 @@ export function renderSolutionFromDiff(diffText: string): string {
  * Matches `+++ b/<path>` lines to extract file names, then pairs them with
  * `@@ … +new,N @@` hunk headers. Returns sorted, unique `file:line` strings.
  */
-function extractFileLineCitations(diffText: string): string[] {
+function extractFileLineCitations(diffText: string, filter: SolutionPathFilter = {}): string[] {
     const citations = new Set<string>();
     let currentFile: string | null = null;
 
@@ -828,7 +864,7 @@ function extractFileLineCitations(diffText: string): string[] {
             const path = fileMatch[1] ?? null;
             // An excluded file's hunks are skipped too: `-U0` keeps each file's hunks
             // directly under its own `+++` line (task 1090 R2).
-            currentFile = path !== null && !isExcludedSolutionPath(path) ? path : null;
+            currentFile = path !== null && !isExcludedSolutionPath(path, filter) ? path : null;
             continue;
         }
 
@@ -847,13 +883,13 @@ function extractFileLineCitations(diffText: string): string[] {
 }
 
 /** Extract unique file paths from `+++ b/<path>` lines in a diff. */
-function extractChangedFiles(diffText: string): string[] {
+function extractChangedFiles(diffText: string, filter: SolutionPathFilter = {}): string[] {
     const files = new Set<string>();
     for (const line of diffText.split('\n')) {
         const match = /^\+\+\+ b\/(.+)$/.exec(line);
         if (match) {
             const filePath = match[1];
-            if (filePath !== undefined && !isExcludedSolutionPath(filePath)) files.add(filePath);
+            if (filePath !== undefined && !isExcludedSolutionPath(filePath, filter)) files.add(filePath);
         }
     }
     return [...files].sort();
@@ -862,7 +898,7 @@ function extractChangedFiles(diffText: string): string[] {
 // ─── Git helpers (sync shell — used by record method, not the pure generators) ──
 
 /** Options for {@link gitDiffU0} / {@link resolveDiffBase}. */
-export interface GitDiffU0Options {
+export interface GitDiffU0Options extends SolutionPathFilter {
     /** Working directory the diff runs in (the project root by default). */
     cwd?: string;
     /** Explicit diff base (commit-ish). Highest precedence when non-empty. */
@@ -870,6 +906,14 @@ export interface GitDiffU0Options {
     /** Task WBS — resolves the pipeline's `.spur/run/<wbs>-base.sha` run-base capture. */
     wbs?: string;
 }
+
+/**
+ * A run-base capture must look like a commit-ish. Mirrors `task-diffstat.ts`'s shape check,
+ * so a truncated or hand-mangled `.spur/run/<wbs>-base.sha` falls back to `HEAD` instead of
+ * making `git diff` exit non-zero — which the caller's `catch`-to-`''` would otherwise
+ * surface as a silent "no changes detected" (the 1090 review's P4).
+ */
+const DIFF_BASE_RE = /^[0-9a-f]{7,40}$/i;
 
 /**
  * Resolve the change-map's diff base, first non-empty of: an explicit option →
@@ -891,7 +935,8 @@ export async function resolveDiffBase(options: GitDiffU0Options = {}): Promise<s
         const baseFile = join(options.cwd ?? process.cwd(), '.spur', 'run', `${wbs}-base.sha`);
         try {
             const sha = (await createNodeFileSystem().readFile(baseFile)).trim();
-            if (sha !== '') return sha;
+            if (DIFF_BASE_RE.test(sha)) return sha;
+            // Present but not a commit-ish — fall through rather than hand git a bad revision.
         } catch {
             // No run-base capture — fall through to HEAD.
         }
@@ -900,12 +945,41 @@ export async function resolveDiffBase(options: GitDiffU0Options = {}): Promise<s
 }
 
 /**
+ * List untracked, non-ignored paths — changes `git diff <base>` can never see, because they
+ * have no index entry to compare against (the 1090 review's P4). Best-effort: a failure
+ * returns an empty list rather than failing the safety net.
+ */
+export function listUntrackedFiles(options: GitDiffU0Options = {}): string[] {
+    try {
+        const result = new BunSyncProcessExecutor().runSync({
+            command: 'git',
+            args: ['ls-files', '--others', '--exclude-standard'],
+            ...(options.cwd !== undefined ? { cwd: options.cwd } : {}),
+            rejectOnError: false,
+        });
+        if (result.exitCode !== 0) return [];
+        return result.stdout
+            .split('\n')
+            .map((line) => line.trim())
+            .filter((line) => line !== '' && !isExcludedSolutionPath(line, options));
+    } catch {
+        return [];
+    }
+}
+
+/**
  * Run `git diff -U0 <base>` for the working tree.
  *
  * The base is the run base, not the working tree, so committed work is named too
- * (task 1090 R1). Generated planes are excluded by pathspec rather than by an
- * extension allowlist, so a non-JS change set produces rows (task 1090 R2).
- * Returns empty string on any failure — the Solution safety-net is best-effort.
+ * (task 1090 R1). Generated planes are excluded by pathspec rather than by an extension
+ * allowlist, so a non-JS change set produces rows (task 1090 R2).
+ *
+ * `--no-renames` is load-bearing, not stylistic: a 100%-similarity rename emits only
+ * `diff --git a/old b/new` + `rename from/to` — NO `--- a/` / `+++ b/` lines — so the renderer
+ * saw nothing and a rename-only change set fell through to the no-rows row. Splitting it into
+ * a delete + an add restores the `+++ b/<new>` line the `:1` fallback cites (the 1090
+ * review's P4). `excludePaths` carries the per-call exclusions. Returns empty string on any
+ * failure — the safety net is best-effort.
  */
 export async function gitDiffU0(options: GitDiffU0Options = {}): Promise<string> {
     try {
@@ -914,7 +988,16 @@ export async function gitDiffU0(options: GitDiffU0Options = {}): Promise<string>
         // and the excludes need `-- .` as their positive pathspec.
         const result = new BunSyncProcessExecutor().runSync({
             command: 'git',
-            args: ['diff', '-U0', base, '--', '.', ...SOLUTION_EXCLUDE_PATHSPECS],
+            args: [
+                'diff',
+                '--no-renames',
+                '-U0',
+                base,
+                '--',
+                '.',
+                ...SOLUTION_EXCLUDE_PATHSPECS,
+                ...(options.excludePaths ?? []).map((p) => `:(exclude)${p}`),
+            ],
             ...(options.cwd !== undefined ? { cwd: options.cwd } : {}),
             rejectOnError: false,
         });

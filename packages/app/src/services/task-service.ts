@@ -5,7 +5,7 @@
  * PlanningWriteService. WBS allocation is race-safe under the create-lock.
  */
 
-import { dirname, isAbsolute, join, relative } from 'node:path';
+import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 import type { TaskFolderEntry, TaskFoldersConfig } from '@gobing-ai/spur-config/loader';
 import {
     atomicWriteAsync,
@@ -50,6 +50,8 @@ import {
     flipVerifiedCheckboxes,
     gitDiffU0,
     isRecordAuthoredReview,
+    isRecordAuthoredSolution,
+    listUntrackedFiles,
     parseTesting,
     type RecordOptions,
     type RecordResult,
@@ -1519,12 +1521,28 @@ export class TaskService {
         }
 
         // ── Solution safety-net (R3) ──
-        if (opts.solutionFromDiff && sectionIsBare(doc, 'Solution')) {
-            const diffText = await gitDiffU0({
+        // 1090 follow-up: the gate covers record's OWN output, not just a bare section. A map
+        // the pre-fix code wrote (`(no changes detected)`) is never bare, so a re-record left the
+        // poisoned body and re-emitted the denial — the exact state run 9e8af77d left task 1089
+        // in. Mirrors the Review precedent one block up (`isRecordAuthoredReview`).
+        if (
+            opts.solutionFromDiff &&
+            (sectionIsBare(doc, 'Solution') || isRecordAuthoredSolution(doc.getSection('Solution')))
+        ) {
+            // The context root, not `process.cwd()`: under the programmatic `main(argv, {cwd})`
+            // seam the base file must be read from — and `git diff` run in — the target project.
+            const projectRoot = this.ctx.fs.resolve('.');
+            // The recording task's own file is excluded: its post-record Testing/Review/Solution
+            // writes are record's bookkeeping, not the implementation being described.
+            const selfPath = relative(projectRoot, filePath).split(sep).join('/');
+            const diffOptions = {
+                cwd: projectRoot,
                 ...(opts.solutionDiffBase !== undefined ? { base: opts.solutionDiffBase } : {}),
+                excludePaths: [selfPath],
                 wbs,
-            });
-            const solutionBody = renderSolutionFromDiff(diffText);
+            };
+            const diffText = await gitDiffU0(diffOptions);
+            const solutionBody = renderSolutionFromDiff(diffText, listUntrackedFiles(diffOptions), diffOptions);
             await this.writeService.updateSection(ref, 'Solution', solutionBody);
             result.solutionBackfilled = true;
         }
