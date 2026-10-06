@@ -6,6 +6,7 @@ import { atomicWriteAsync } from '@gobing-ai/spur-domain';
 import { getAgentSessionCapability, resolveAgentName } from '@gobing-ai/ts-ai-runner';
 import type { ActionResult, ActionRunContext, ActionRunner } from '@gobing-ai/ts-dual-workflow-engine';
 import { createNodeFileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
+import { resolvePlanningFolders } from '../../config/planning-folders';
 import { type AgentExecutionObserver, redactAndBound } from '../../observability/agent-execution';
 import type { AgentRunInvocation, AgentRunTracedResult, AgentService } from '../../services/agent-service';
 import {
@@ -1954,16 +1955,29 @@ function isInScope(change: ChangedPath, allowlist: readonly TaskScopeRule[]): bo
  * empty allowlist would reject every change, converting a missing task body into
  * a blanket pipeline halt. The guard exists to catch a diff that reaches into
  * another task's surface, not to police tasks that describe their scope in prose.
+ *
+ * The locator searches the project's CONFIGURED task folders (`.spur/config.yaml`
+ * `tasks.folders`, active folder first) plus the legacy `docs/tasks{,2,3}` trio. It previously
+ * searched only that hard-coded trio, so in this repo — whose active folder is `docs/tasks5` —
+ * the lookup missed and the guard failed open on exactly the tasks it exists to police (session
+ * finding after 1088: a rework dispatch changed files far outside the task body's declared
+ * surface and nothing reported it). A miss stays fail-open, but it is now a genuine miss.
  */
 async function findOutOfScopeChanges(cwd: string, wbs: string, changed: readonly ChangedPath[]): Promise<string[]> {
     if (!wbs) return [];
     try {
         const fs = createNodeFileSystem(cwd);
-        const locator = TaskLocator.forDirs(fs, [
-            join(cwd, 'docs', 'tasks3'),
-            join(cwd, 'docs', 'tasks2'),
-            join(cwd, 'docs', 'tasks'),
-        ]);
+        const legacy = [join(cwd, 'docs', 'tasks3'), join(cwd, 'docs', 'tasks2'), join(cwd, 'docs', 'tasks')];
+        const configured: string[] = [];
+        try {
+            const { foldersConfig, tasksDir } = await resolvePlanningFolders(fs);
+            for (const folder of [tasksDir, ...Object.keys(foldersConfig.folders)]) {
+                configured.push(isAbsolute(folder) ? folder : join(cwd, folder));
+            }
+        } catch {
+            // Unreadable/invalid config: the legacy trio still covers a pre-config layout.
+        }
+        const locator = TaskLocator.forDirs(fs, [...new Set([...configured, ...legacy])]);
         const hit = await locator.findByWbs(wbs);
         if (!hit) return [];
         const allowlist = extractTaskScopeAllowlist(await fs.readFile(hit.filePath));

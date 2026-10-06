@@ -1152,12 +1152,13 @@ describe('AgentRunActionRunner diff-scope guard (R1, task 0487)', () => {
     });
 
     /** Seed a git repo with task <wbs> whose body names `plugins/sp` surfaces only. */
-    function seedConflationRepo(prefix: string, taskBody: string): string {
+    function seedConflationRepo(prefix: string, taskBody: string, folder = 'docs/tasks3'): string {
         const repo = mkdtempSync(join(tmpdir(), prefix));
         gitInit(repo);
-        const taskFile = join(repo, 'docs/tasks3/0486_dev-find-conflict.md');
+        const taskFile = join(repo, folder, '0486_dev-find-conflict.md');
         mkdirSync(dirname(taskFile), { recursive: true });
         writeFileSync(taskFile, taskBody);
+        mkdirSync(join(repo, '.spur'), { recursive: true });
         const owned = join(repo, 'plugins/sp/commands/dev-find-conflict.md');
         mkdirSync(dirname(owned), { recursive: true });
         writeFileSync(owned, 'base');
@@ -1173,6 +1174,31 @@ describe('AgentRunActionRunner diff-scope guard (R1, task 0487)', () => {
         'Author `plugins/sp/commands/dev-find-conflict.md` and the `plugins/sp/skills/conflict-finding/SKILL.md` runbook.',
         '',
     ].join('\n');
+
+    test('the guard is live for a task in a CONFIGURED task folder, not only the legacy trio', async () => {
+        // Session finding after 1088: the locator searched a hard-coded docs/tasks{,2,3} trio, so a
+        // repo whose active folder is docs/tasks5 (this one) silently failed open — the lookup
+        // missed and no out-of-scope change was ever reported.
+        dir = seedConflationRepo('agent-run-scope-configured-', TASK_0486, 'docs/tasks5');
+        writeFileSync(
+            join(dir, '.spur', 'config.yaml'),
+            'tasks:\n  active: docs/tasks5\n  folders:\n    docs/tasks5:\n      baseCounter: 855\n      label: Phase 5\n',
+        );
+        const rogue = join(dir, 'apps/cli/src/commands/agent.ts');
+        const svc = svcWithEffect(() => {
+            writeFileSync(join(dir, 'plugins/sp/commands/dev-find-conflict.md'), 'implemented');
+            mkdirSync(dirname(rogue), { recursive: true });
+            writeFileSync(rogue, 'export function resolveAgentServer() {}');
+        });
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute(
+            { role: 'coder', input: 'implement', requireDiff: true, cwd: dir },
+            makeCtx({ vars: { wbs: '0486' } }),
+        );
+
+        expect(result.ok).toBe(false);
+        expect(result.error).toContain('apps/cli/src/commands/agent.ts');
+    });
 
     test('a sibling task’s surfaces in the diff → ok:false naming the rogue file', async () => {
         dir = seedConflationRepo('agent-run-scope-rogue-', TASK_0486);
