@@ -327,6 +327,12 @@ const FINDING_CATEGORIES = [
 ] as const;
 
 /**
+ * Closed per-finding confidence vocabulary (report contract): high/medium/low, never one blanket
+ * report-level score. Compared case-insensitively so HIGH/MEDIUM/LOW pass.
+ */
+const FINDING_CONFIDENCES = ['high', 'medium', 'low'] as const;
+
+/**
  * Check a candidate report against the frozen report contract — the twelve sections in order,
  * the nine per-finding fields, no placeholders/TODOs/empty bodies, and evidence-ledger anchors.
  */
@@ -386,6 +392,16 @@ export function checkReportStructure(reportMarkdown: string): { ok: boolean; pro
             // Severity vocabulary is closed (0680 R1): P1/P2/P3 only (symbolic placeholders allowed).
             if (!/(^|[\s`])P[123]([\s`.]|$)/.test(block) && !block.includes('symbolic-severity')) {
                 problems.push('finding-invalid-severity');
+            }
+            // Confidence vocabulary is closed too: a per-finding high/medium/low. An explicit
+            // level outside it fails by name rather than passing as free text.
+            const confValue = block.match(/`confidence`\s*[:=]\s*`?([^`\n]*?)`?\s*(?:\n|$)/)?.[1]?.trim();
+            if (
+                confValue !== undefined &&
+                confValue !== '' &&
+                !(FINDING_CONFIDENCES as readonly string[]).includes(confValue.toLowerCase())
+            ) {
+                problems.push(`finding-invalid-confidence:${confValue}`);
             }
             // 0686/I9 closed-category enforcement on bullet findings.
             const catValue = block.match(/`category`\s*[:=]\s*`?([^`\n]+?)`?\s*(?:\n|$)/)?.[1];

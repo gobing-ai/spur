@@ -261,6 +261,7 @@ var FINDING_CATEGORIES = [
   "telemetry",
   "positive"
 ];
+var FINDING_CONFIDENCES = ["high", "medium", "low"];
 function checkReportStructure(reportMarkdown) {
   const problems = [];
   if (/TODO|PLACEHOLDER|FIXME|^\|\s*\|/im.test(reportMarkdown))
@@ -304,6 +305,10 @@ function checkReportStructure(reportMarkdown) {
       }
       if (!/(^|[\s`])P[123]([\s`.]|$)/.test(block) && !block.includes("symbolic-severity")) {
         problems.push("finding-invalid-severity");
+      }
+      const confValue = block.match(/`confidence`\s*[:=]\s*`?([^`\n]*?)`?\s*(?:\n|$)/)?.[1]?.trim();
+      if (confValue !== undefined && confValue !== "" && !FINDING_CONFIDENCES.includes(confValue.toLowerCase())) {
+        problems.push(`finding-invalid-confidence:${confValue}`);
       }
       const catValue = block.match(/`category`\s*[:=]\s*`?([^`\n]+?)`?\s*(?:\n|$)/)?.[1];
       if (catValue && !FINDING_CATEGORIES.includes(catValue.trim())) {

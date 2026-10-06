@@ -605,6 +605,35 @@ describe('checkReportStructure triage fields + advisory section (0680)', () => {
         expect(r.problems).toContain('finding-invalid-severity');
     });
 
+    // The confidence vocabulary is also closed (report contract): per-finding high/medium/low,
+    // case-insensitive so HIGH/MEDIUM/LOW pass. An out-of-vocabulary level fails by name.
+    test('an out-of-vocabulary confidence fails the gate; high/medium/low pass in any case', () => {
+        const conf = (value: string) =>
+            [
+                '- `key`: `coverage:analytics:pairs`',
+                '- `category`: `coverage`',
+                '- `impact`: i',
+                '- `trend`: `new`',
+                '- `observation`: o',
+                '- `inference`: inf',
+                `- \`confidence\`: ${value}`,
+                '- `contradictions`: none',
+                '- `evidenceAnchor`: `a.md`',
+                '- `severity`: `P2`',
+                '- `reproCommand`: `bun run x`',
+                '- `ownerSurface`: `packages/domain/src/analytics/pairings.ts`',
+            ].join('\n');
+        for (const level of ['high', 'medium', 'low', 'HIGH', 'Medium', '`low`']) {
+            expect(
+                checkReportStructure(findingBlock(conf(level))).problems.filter((p) =>
+                    p.startsWith('finding-invalid-confidence'),
+                ),
+            ).toEqual([]);
+        }
+        const r = checkReportStructure(findingBlock(conf('`certain`')));
+        expect(r.problems).toContain('finding-invalid-confidence:certain');
+    });
+
     test('non-finding blocks under Findings are not policed (positive-patterns style prose)', () => {
         expect(checkReportStructure(head).ok).toBe(true);
     });

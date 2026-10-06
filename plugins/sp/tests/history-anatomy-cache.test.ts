@@ -93,6 +93,50 @@ describe('semanticArtifactDigest twin parity (0669 R2, bare node)', () => {
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+    // Confidence-vocabulary gate must also hold under bare node: the production helper runs the
+    // generated twin, so a level outside high/medium/low must fail there by name too.
+    test('.mjs twin check fails an out-of-vocabulary confidence under bare node', () => {
+        const twin = join(import.meta.dir, '../scripts/history-anatomy-cache.mjs');
+        const dir = mkdtempSync(join(tmpdir(), 'ha-twin-conf-'));
+        const sections = [
+            'Scope and provenance',
+            'Executive summary',
+            'Baseline comparison',
+            'Findings',
+            'Recurrence ledger',
+            'Telemetry gaps',
+            'Remediation options',
+            'Performance analysis',
+            'Workflow and process improvements',
+            'Report-only advisories',
+            'Positive patterns',
+            'Evidence ledger',
+        ];
+        const finding = (conf: string) =>
+            '- `key`: `coverage:analytics:pairs`\n- `category`: `coverage`\n- `impact`: i\n- `trend`: `new`\n' +
+            '- `observation`: o\n- `inference`: inf\n' +
+            `- \`confidence\`: ${conf}\n` +
+            '- `contradictions`: none\n- `evidenceAnchor`: `a.md`\n- `severity`: `P2`\n' +
+            '- `reproCommand`: `bun run x`\n- `ownerSurface`: `s.ts`';
+        const report = (conf: string) =>
+            sections
+                .map((s) => `## ${s}\n\nbody`)
+                .join('\n\n')
+                .replace('## Findings\n\nbody', `## Findings\n\n### f\n\n${finding(conf)}\n`);
+        const goodPath = join(dir, 'good.md');
+        const badPath = join(dir, 'bad.md');
+        writeFileSync(goodPath, report('high'));
+        writeFileSync(badPath, report('`certain`'));
+        try {
+            expect(Bun.spawnSync(['node', twin, 'check', goodPath]).exitCode).toBe(0);
+            const proc = Bun.spawnSync(['node', twin, 'check', badPath]);
+            expect(proc.exitCode).toBe(1);
+            expect(proc.stdout.toString()).toContain('finding-invalid-confidence:certain');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
 });
 describe('CLI entry (runCacheCli)', () => {
     test('digest command computes, check validates, publish is atomic, usage errors return 1', () => {
