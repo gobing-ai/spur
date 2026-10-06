@@ -4,10 +4,10 @@ name: Prove the inbox-only fleet end to end with a repeatable receipt
 status: todo
 template: feature-impl
 created_at: 2026-10-04T20:30:37.927Z
-updated_at: "2026-10-05T23:56:50.170Z"
+updated_at: "2026-10-06T00:15:34.800Z"
 feature_id: G71
 
-dependencies: ["1073", "1074", "1075", "1076", "1080", "1081"]
+dependencies: ["1073", "1074", "1075", "1076", "1080", "1081", "1091"]
 priority: P1
 estimate_hours: 6
 ---
@@ -83,6 +83,13 @@ Exit code 1 if any step `failed`.
 **Determinism.** No wall-clock assertions, polling only, fixed task ids from a fresh corpus. The stub output is fixed text.
 
 **Blocker (2026-10-05, session review).** The harness reaches 8 of 9 steps; the `kill-redispatch` leg is refuted, not flaky: see `docs/reports/2026-10-05-fleet-e2e-kill-leg-findings.md` for the two reproducible findings (K1 orchestrator does not dispatch a task created after its loops started; K2 an operator-dispatched/ unkeyed turn never finalizes when the member is killed) and `docs/reports/fleet-e2e-receipt.json` for the failing row. Task **1091** (feature G71) owns both product fixes and restoring the strategy attempt-2 assertion. This task stays open until the harness reports 9 of 9.
+
+**Blocker refined (2026-10-05, re-verification).** Task 1091 re-verified the original findings and dropped both. K1 was a misread: the late task is ticked on every pass but held by a GTD-global `outcome-unknown` gate. K2 was also a misread: the unkeyed persistent-stdin path never writes a run row, by design. 1091 now owns three fixes:
+- N1: unkeyed deliveries wedge GTD.
+- N2: ungraceful member death leaves `running` rows forever.
+- H: the kill leg must dispatch through the strategy, with SIGKILL and the attempt-2 assertion.
+
+1091 is a declared dependency; start 1077 only after 1091 is `done` and the harness reports 9 of 9.
 
 ### Plan
 
