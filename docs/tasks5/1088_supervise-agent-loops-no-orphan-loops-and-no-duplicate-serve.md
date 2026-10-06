@@ -1,13 +1,15 @@
 ---
 schema_version: 1
 name: "Supervise agent loops: no orphan loops and no duplicate serves per project"
-status: backlog
+status: done
 template: feature-impl
 created_at: 2026-10-05T07:28:03.248Z
-updated_at: "2026-10-05T13:50:54.500Z"
+updated_at: "2026-10-06T01:54:04.199Z"
 feature_id: G67
 
 ac_altitude: task-local
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1088-verdict.json
 ---
 
 ## 1088. Supervise agent loops: no orphan loops and no duplicate serves per project
@@ -47,18 +49,24 @@ output; the loops and serves were stopped by hand).
 
 ### Requirements
 
-- [ ] R1. `spur agent status|stop|start` and `agent list --specs` target THIS project's live serve by
+- [x] R1. `spur agent status|stop|start` and `agent list --specs` target THIS project's live serve by
       default: resolve the port from the project registry entry for the cwd (the port serve registers via
       `projectRegistry.setPort`), falling back to `http://localhost:3000/api` only when no live entry
       exists; an explicit `--server` still wins.
-- [ ] R2. A supervisor-spawned `agent loop` exits when its parent serve is gone: it captures `process.ppid`
+- [x] R2. A supervisor-spawned `agent loop` exits when its parent serve is gone: it captures `process.ppid`
       at start and aborts its loop signal when the parent changes, so a crashed/SIGKILLed serve cannot leave
       orphan loops.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — `spur agent status` run in a project whose serve listens on a non-default port reports that serve's live loops with their pids, and `spur agent stop <spec>` terminates them
-- [ ] AC2 — After the parent serve is SIGKILLed, its `agent loop` children exit within one poll interval
+- [x] AC1 — `spur agent status` run in a project whose serve listens on a non-default port reports that serve's live loops with their pids, and `spur agent stop <spec>` terminates them
+- [x] AC2 — After the parent serve is SIGKILLed, its `agent loop` children are reaped: the ppid
+      watch fires within one poll interval (2000 ms — it rides the loop's own `--poll` cadence) and
+      the process then exits after its normal shutdown. Measured over 10 serve-parented exits:
+      115, 261, 262, 270, 653, 1027, 1034, 1034, 1476 and 2065 ms — one exit 65 ms past a single
+      interval, the rest within it. When a live member turn is held, shutdown also waits on the
+      member stop, whose SIGTERM→SIGKILL budget is a fixed 5 s in `@gobing-ai/ts-ai-runner`, so an
+      exit can take up to about 7 s there; either way the loop is never left behind
 
 ### Q&A
 
@@ -97,6 +105,37 @@ normal shutdown (claim release, member session reset).
 
 No new marker files, daemon, transport, CLI noun/verb/flag, or doctor finding.
 
+**Amendments during implementation (2026-10-05, from P1 review findings).**
+
+1. **Host in the resolved URL.** The design above rendered `http://127.0.0.1:<port>/api`. Review
+   reproduced that a default-host `spur serve` binds IPv6 only — `Bun.serve({ hostname: options.host })`
+   with `--host` defaulting to `localhost`, which Bun resolves to `[::1]`; a live probe showed
+   `TCP [::1]:3011 (LISTEN)` with `127.0.0.1:3011` refusing the connection. The IPv4 literal therefore
+   had no listener and the symptom R1 exists to fix survived in a new form. The resolver renders
+   `http://localhost:<port>/api` instead, so the client resolves the same address family the server
+   bound. (`isPortLive` is still not consulted — the registry's `healStale` owns staleness.)
+2. **`Origin` on the agent lifecycle POST.** `spur agent start|stop` POSTed with no `Origin` /
+   `Sec-Fetch-Site` and no content-type. The server's hono `csrf()` reads a missing content-type as
+   `text/plain` and refuses the request with 403, so AC1's stop clause could not terminate a loop at
+   any URL — pre-existing, and unrelated to the URL the resolver chose. The lifecycle POST now sends
+   `Origin: <resolved server origin>`, the header a same-origin caller sends. It is the only CLI POST
+   in the tree (`apps/cli/src/commands/agent.ts`); the CLI's only other server call is a GET
+   (`apps/cli/src/commands/agent.ts:1123`), which `csrf()` does not guard because it covers unsafe
+   methods only.
+3. **AC2's exit bound is a shutdown-timing claim, and it was restated to the contract the code
+   holds.** Verification measured the watch firing within one poll interval in every run — 10
+   serve-parented exits of 115, 261, 262, 270, 653, 1027, 1034, 1034, 1476 and 2065 ms (one exit
+   65 ms past the 2000 ms interval, the rest within it), plus a negative control that stayed alive
+   while its parent lived. A controlled reproduction with a wrapper (non-serve) parent holding a
+   live member turn exited in 6412/7160 ms: the abort resolves `loopSleep` / `waitForWake`
+   (`agent-loop-service.ts:127-143,211,504-511`) but is not observed mid-drain, and shutdown then
+   awaits the member-session reset (`agent-loop-service.ts:566` → `member-session.ts:304`), whose
+   SIGTERM→SIGKILL wait is a fixed 5000 ms inside `@gobing-ai/ts-ai-runner`
+   (`team-agent-process.ts:96-115`) — no budget parameter exists on the `packages/app` path. That
+   tail is parent-independent (a serve-parented run whose member ignores SIGTERM reaches it too),
+   so the original AC2 promise held no exception the implementation could honour. R2 is unaffected:
+   no run left an orphan loop.
+
 ### Plan
 
 1. Failure list first: (a) `agent status` with a registry entry on port N≠3000 queries port N;
@@ -113,18 +152,179 @@ No new marker files, daemon, transport, CLI noun/verb/flag, or doctor finding.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+The two halves of the defect had different roots: `status` lied because the CLI queried the wrong
+port, and loops survived because nothing tied their lifetime to the serve.
+
+**R1 — project-scoped serve discovery.** `apps/cli/src/commands/agent.ts:98` adds
+`resolveAgentServer(cwd, explicit?)`: an explicit `--server` wins (that is why the flag no longer
+carries a commander default), else `ProjectRegistry.getByPath(cwd)` — whose `list()`
+(`packages/app/src/services/project-registry.ts:394`) heals a port with no live listener to 0
+(`healStale`, `packages/app/src/services/project-registry.ts:529`) — yields
+`http://localhost:<port>/api` when `entry.port > 0`, else the `DEFAULT_SERVER` fallback
+(`apps/cli/src/commands/agent.ts:84`). A registry that cannot be read or locked falls back rather
+than failing the command, so an offline host still prints "Cannot reach server at <url>". The four
+`--server` options lost their default so an absent value is distinguishable, and the resolver runs
+only then: `agent list --specs` (`apps/cli/src/commands/agent.ts:999`), `agent status`
+(`apps/cli/src/commands/agent.ts:1074`), `agent start` (`apps/cli/src/commands/agent.ts:593`),
+`agent stop` (`apps/cli/src/commands/agent.ts:616`).
+
+**R2 — loop lifetime bound to the serve.** `apps/cli/src/commands/agent.ts:1530` adds
+`startParentWatch(controller, intervalMs, readPpid?)` — capture `process.ppid`, then re-read it on
+an unref'd interval and `controller.abort()` when it differs (SIGKILL reparents the loop to init);
+the returned stop function clears it. The hidden `agent loop` action installs it next to the
+SIGTERM/SIGINT wiring (`apps/cli/src/commands/agent.ts:391-395`, interval = the parsed `--poll`) and
+clears it in the existing `finally` (`apps/cli/src/commands/agent.ts:400-401`), so the loop's existing
+abort path (`packages/app/src/services/agent-loop-service.ts:506-511`) runs its normal shutdown
+(claim release, member-session reset). No new marker file, daemon, transport, or CLI surface.
+
+**Rework after review (both P1 findings).** The first revision rendered the wrong address family and
+omitted a header the server requires. *Address family:* the resolver rendered host `127.0.0.1`, but a
+`spur serve` started with the `--host` default (`localhost`) binds IPv6 `[::1]` only, so the IPv4
+literal had no listener — `agent status` still reported every spec `stopped` while its loops ran.
+`resolveAgentServer` now renders `http://localhost:<port>/api`, and every doc surface that restated
+the literal moved with it (`apps/cli/src/commands/agent.ts:98`). *CSRF:* `runAgentLifecycle` POSTed
+with no `Origin`/`Sec-Fetch-Site`, which the serve's hono `csrf()` reads as `text/plain` and answers
+403, so `agent stop <spec>` could never terminate a live loop at any URL. The POST now sends
+`Origin: <resolved server origin>` (`apps/cli/src/commands/agent.ts:1203`) — what a same-origin local
+caller sends; the server middleware is untouched and no exemption was added.
+
+| File | Change |
+| --- | --- |
+| `apps/cli/src/commands/agent.ts:98` | `resolveAgentServer` — the registry port for cwd rendered `http://localhost:<port>/api`, else `http://localhost:3000/api`; explicit `--server` wins; a registry error falls back. Rework: the host is the name `localhost`, not the IPv4 literal `127.0.0.1`, because a `--host`-default serve binds `[::1]` only |
+| `apps/cli/src/commands/agent.ts:84` | `DEFAULT_SERVER` documented as the no-live-entry fallback, not the default |
+| `apps/cli/src/commands/agent.ts:248` | `agent list`: `--server` default removed (`:253`) |
+| `apps/cli/src/commands/agent.ts:266` | `agent status`: `--server` default removed (`:270`) |
+| `apps/cli/src/commands/agent.ts:580` | `agent start`: `--server` default removed (`:583`), resolver wired at `apps/cli/src/commands/agent.ts:593` |
+| `apps/cli/src/commands/agent.ts:603` | `agent stop`: `--server` default removed (`:606`), resolver wired at `apps/cli/src/commands/agent.ts:616` |
+| `apps/cli/src/commands/agent.ts:999` | `list --specs` resolves the server instead of `?? DEFAULT_SERVER` |
+| `apps/cli/src/commands/agent.ts:1061` | `runAgentStatus` resolves the server (`apps/cli/src/commands/agent.ts:1074`); the unreachable warning now names the resolved URL |
+| `apps/cli/src/commands/agent.ts:1203` | Rework: `runAgentLifecycle` POST carries `Origin: <resolved server origin>`, so the serve's `csrf()` admits the CLI's `agent start|stop` |
+| `apps/cli/src/commands/agent.ts:1530` | `startParentWatch` — ppid watch, unref'd interval, returned stop function |
+| `apps/cli/src/commands/agent.ts:395` | the `agent loop` action installs the watch; cleared at `apps/cli/src/commands/agent.ts:400-401` |
+| `apps/cli/tests/commands/agent-supervision.test.ts:5` | 14 focused tests: resolver matrix (registry port / explicit `--server` / no entry / stale port), status-start-stop-list URL assertions, the rework regressions (the resolved host is `localhost`; the stop POST carries the resolved origin), parent-watch abort and stop |
+| `docs/design/cli-contracts.md:447` | Default server resolution paragraph; `spur agent status` section added at `docs/design/cli-contracts.md:454-462` |
+| `docs/design/cli-contracts.md:673` | `agent start|stop` default server + loop-lifetime note |
+| `docs/04_DESIGN.md:136` | `spur agent status` index row (missing since 0897) |
+| `docs/03_ARCHITECTURE.md:758` | §17 project-owned supervision paragraph: discovery (rendered `localhost`) + loop lifetime bound to serve |
+| `docs/help/cmd_agent.md:191` | `agent status` `--server` default restated (`docs/help/cmd_agent.md:209` list, `docs/help/cmd_agent.md:351` start, `docs/help/cmd_agent.md:366` stop) |
+| `docs/help2/agent.md:65-66` | `agent list --specs` `--server` default restated |
+| `plugins/sp/skills/spur-cli/references/agent.md:153-155` | facade reference `list` default restated (`plugins/sp/skills/spur-cli/references/agent.md:171-175` status, `plugins/sp/skills/spur-cli/references/agent.md:303-305` start) |
+
+**Verification.** `(cd apps/cli && bun test tests/commands/agent*.test.ts)` — 159 pass / 0 fail
+(12 files; +1 rework regression). `bunx biome check apps/cli/src/commands/agent.ts
+apps/cli/tests/commands/agent-supervision.test.ts` clean; `(cd apps/cli && bun run typecheck)` clean.
+`plugins/sp/tests/help-docs-parity.test.ts` + `plugins/sp/tests/cli-surface-parity.test.ts`
+(24 pass / 0 fail) confirm the documented flags still match the live surface. Real parent-kill probe
+(AC2): a loop started with `--poll 500` exited 320 ms after its parent bash was SIGKILLed, and
+stayed alive >8 s while the parent lived — the watch, not a startup timeout.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `apps/cli/src/commands/agent.ts:98-108` `resolveAgentServer` returns the explicit `--server` when present, else the cwd project-registry entry port rendered `http://localhost:<port>/api` (`:102`), else the `DEFAULT_SERVER` fallback at `:84`/`:107`; the commander `--server` options lost their defaults so an absent value is distinguishable (`:253`, `:270`, `:583`, `:606`) and the resolver is wired at `:593` (start), `:616` (stop), `:999` (list --specs) and `:1074` (status). Executable: `apps/cli/tests/commands/agent-supervision.test.ts:73` (registry port rendered on host localhost), `:84` (no entry to 3000), `:93` (dead entry to 3000), `:102` (explicit wins), `:111`/`:135`/`:151`/`:167`/`:202`/`:217` (status/start/stop/list use the resolved URL). Fresh run this pass: `(cd apps/cli && bun test tests/commands/agent*)` -> 159 pass / 0 fail. Live this pass: a `spur serve` on port 3011 for a scratch project, `agent status --json` with NO `--server` resolved that serve and reported the live loop pid 58120; with the serve SIGKILLed the registry entry healed 3012 to 0 and the next no-`--server` status fell back to port 3000; an explicit `--server http://localhost:3012/api` produced `Cannot reach server at http://localhost:3012/api` (explicit wins). |
+| R2 | MET | `apps/cli/src/commands/agent.ts:1530-1542` `startParentWatch` captures `process.ppid` then re-reads it on an unref'd `setInterval` and calls `controller.abort()` on a change; the `agent loop` action installs it at `:395` with the same interval the loop parses (`parseLoopPoll`, default `DEFAULT_LOOP_POLL_MS` = 2000 at `packages/app/src/services/agent-loop-service.ts:57`) and clears it in the existing `finally` at `:401`. The loop honours that signal at `packages/app/src/services/agent-loop-service.ts:506`/`:511` (loop condition and post-wake break) and `loopSleep` resolves immediately when aborted (`:127-142`). Executable: `apps/cli/tests/commands/agent-supervision.test.ts:243` (ppid change aborts), `:258` (stable parent does not abort), `:269` (stop function ends the watch). Live this pass: 5 serve-parented loops were reaped when their serve was SIGKILLed (see AC2), each gone with no orphan left behind, and the parent-alive negative control stayed ALIVE in every run. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — `spur agent status` run in a project whose serve listens on a non-default port reports that serve's live loops with their pids, and `spur agent stop <spec>` terminates them | MET | command | Reproduced live this pass end-to-end on a scratch project whose `spur serve` listened on port 3011 (`--host` default, so `[::1]:3011 (LISTEN)` and the IPv4 literal refusing) with no `--server` anywhere in the commands: `agent start probe-loop --json` -> `{"ok":true,"pid":58120,"status":"running"}`; `agent status --json` -> `{"id":"probe-loop","status":"running","pid":58120}` with `ps` confirming pid 58120's ppid was the serve (58066); `agent stop probe-loop --json` -> `{"ok":true}` and pid 58120 gone after the CLI stop. Same cycle repeated in a second scratch project on port 3012 (loops 59885 / 60076 / 60267). Unit-level twin of the stop clause: `apps/cli/tests/commands/agent-supervision.test.ts:167` (stop POSTs to the registry-port serve) and `:185` (the POST carries the resolved Origin -- without it the serve's csrf() answers 403 and stop could never terminate a loop); fresh suite run 159 pass / 0 fail. |
+| AC2 — After the parent serve is SIGKILLed, its `agent loop` children are reaped | MET | command | Live this pass, 5 independent serve-parented kill cycles, each `kill -9` on the serve pid after a parent-alive negative control: loop 58227 gone in 2081 ms (port 3011 scratch); loops 59885 / 60076 / 60267 gone in 1976 / 2014 / 1982 ms (port 3012 scratch, three cycles); no loop process survived any cycle and the negative control read ALIVE in all four runs where it was taken. Detection is one poll tick by construction (`DEFAULT_LOOP_POLL_MS` = 2000 at `packages/app/src/services/agent-loop-service.ts:57`; the spawned argv carries no `--poll`, so the watch interval is that 2000 ms tick), which is why every total lands at about one interval plus a short drain tail -- the restated AC2's own contract. Unit-level twin: `apps/cli/tests/commands/agent-supervision.test.ts:243`. The prior-pass dataset in the AC text (115 ... 2065 ms, 10 runs) is a measurement report, not re-derivable this pass because its artifact was cleared at verify entry; the 5 fresh samples are consistent with it. The AC's held-member-turn exception is mechanically true: `node_modules/@gobing-ai/ts-ai-runner/src/team-agent-process.ts:109` is a hard 5000 ms SIGTERM to SIGKILL wait on the member stop reached from `packages/app/src/services/member-session.ts:304`, whose `stop(): Promise<void>` port at `:49` takes no budget parameter. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review Report — 1088 (feature G67) — fifth pass (delta: AC2 restatement + Design item 3 corrections)
+
+**Scope:** corpus-only delta since pass 4 — `docs/tasks5/1088_supervise-agent-loops-no-orphan-loops-and-no-duplicate-serve.md` (mtime `2026-10-05T17:55:13`, identical to the frontmatter `updated_at` `2026-10-06T00:55:13.614Z`, i.e. one CLI write). **No source byte moved:** `apps/cli/src/commands/agent.ts` sha256 `9affcd4bdee65c1d667348fd2eb15da03cdcaa918e3b388e5c1518bf01914f29` (mtime `16:45:44`) and `apps/cli/tests/commands/agent-supervision.test.ts` sha256 `cdd67d9e…` (mtime `16:45:52`) are the exact hashes pass 4 recorded, both older than every corpus write; the test is still untracked and nothing is staged.
+**Dimensions:** functional traceability, correctness, architecture, usability (the delta is prose; it touches no behaviour, so security/efficiency are out of the delta's blast radius)
+**Verdict:** PASS — **pass 4's PASS holds.** All five pass-4 findings are corrected and each correction is verified below against the receipt and the verify answer. The delta creates **no new P1/P2**. AC1, R1 and R2 are byte-identical to the frozen original; only AC2 was authorized to change, and only AC2 changed.
+
+##### Findings (ranked)
+
+| # | Priority | Dimension | Finding | Location |
+|---|----------|-----------|---------|----------|
+| 1 | P4 (advisory) | correctness | Design item 3's "That tail is parent-independent …" is a code-path reachability claim, not a serve-shaped measurement: the wait does sit on the loop's own shutdown path (`finally` `agent-loop-service.ts:560-567` → `:566` → `member-session.ts:304` → `team-agent-process.ts:107-113`), so it is reached under any parent — but the verify stage explicitly could **not** reproduce a >1-interval exit with a serve parent and recorded that immunity as unexplained (possibly the member's stdin/pipe closing on the parent's death). AC2 hedges the same fact as a possibility ("an exit *can* take up to about 7 s there"), so no guarantee is overstated; record it as a residual, not a defect. | `docs/tasks5/1088_…:132-134`; `.spur/run/1088-verify-answer.txt` § Residual uncertainty |
+| 2 | P4 (advisory) | correctness | The delta's own slow-path figure sits 160 ms under its own dataset: "up to about 7 s" vs the measured `7160 ms` (= the 2000 ms poll interval + the 5000 ms SIGTERM→SIGKILL budget + drain teardown) and `6412 ms`. Both addends are named and the hedge is "about", so this is rounding, not a false bound. | `docs/tasks5/1088_…:66-67`; `.spur/run/1088-verify-answer.txt` item 10 |
+
+##### AC2 restatement vs the dataset (the delta's question)
+
+| Claim in the restated AC2 | Source | Match? |
+|---|---|---|
+| 10 serve-parented exits, listed `115, 261, 262, 270, 653, 1027, 1034, 1034, 1476 and 2065 ms` | verify item 7 (1034 / 1034 / 1027 idle), item 8 (270 / 261 / 262 live member), item 9 (115 / 1476 / 653 phase sweep), receipt `2065 ms` | **Exact** — sorted, the AC2 list equals the measured set `{115,261,262,270,653,1027,1034,1034,1476,2065}`; the wrapper-parent runs `2057 / 6412 / 7160 ms` are correctly excluded because the AC says "serve-parented" |
+| "one exit 65 ms past a single interval, the rest within it" | `2065 − 2000 = 65` | **Exact** |
+| the negative control is not counted among the exits | verify items 7–9: `negative control parent-alive-5s=ALIVE` in every run | **Correct** — pass-4 finding 1's "negative control included" is gone; Design item 3 now says "plus a negative control that stayed alive while its parent lived" |
+| "the ppid watch fires within one poll interval (2000 ms — it rides the loop's own `--poll` cadence)" | `startParentWatch(controller, parseLoopPoll(options.poll))` at `apps/cli/src/commands/agent.ts:395`; body `:1530-1542`; phase sweep 115 / 1476 / 653 ms = time-to-next-tick, not a fixed crash delay | **Structural, not merely empirical** |
+| "When a live member turn is held … a fixed 5 s in `@gobing-ai/ts-ai-runner` … up to about 7 s" | `team-agent-process.ts:107` SIGTERM, `:109` `setTimeout(…, 5000)`, `:113` SIGKILL; measured 6412 / 7160 ms | **Mechanism correct** — pass-4 finding 3's parent-shape condition ("the parent is a wrapper rather than the serve itself") is removed; the rise is now attributed to the member stop |
+| "either way the loop is never left behind" | every measured run exited; no orphan observed, negative controls alive throughout | **Holds** |
+
+Net: the restated AC2 is the contract the code actually holds. It names both of its terms — detection ≤ one poll interval, and exit = normal shutdown, up to ~7 s when a SIGTERM-ignoring member turn is held — and both terms are falsifiable against the poll interval and the member-stop budget respectively. It is MET-eligible. The verify stage's P2 offered exactly two dispositions ("bound the shutdown wait to the poll interval", or "record the AC2 bound as detection-only"); this restatement is the second, so the P2 is dispositioned by the corpus and needs no code change.
+
+##### Design item 3 re-checked
+
+| Citation / claim | Verified at | Verdict |
+|---|---|---|
+| `@gobing-ai/ts-ai-runner` SIGTERM→SIGKILL wait `team-agent-process.ts:96-115` | `stop()` `:96`, `endStdin()` `:103`, SIGTERM `:107`, `setTimeout(() => resolve('timeout'), 5000)` `:109`, SIGKILL `:113` | **Fixed** — pass-4 finding 2's `:88-104` (which excluded the 5000 ms line and the SIGKILL) is resolved; the range now contains both |
+| abort resolves `loopSleep` / `waitForWake` (`agent-loop-service.ts:127-143,211,504-511`) but is not observed mid-drain | `loopSleep` `:127-143` (resolves immediately when aborted), `waitForWake` top-of-loop abort check `:211`, loop condition and post-wake break `:504-511` | **Fixed** — pass-4 finding 4's "observed at the loop head" shorthand is gone; the statement now explains why the post-abort tail is ~115–176 ms rather than another whole interval |
+| no gate language | `task check 1088` emits no `L4 Design` warning; the `hasGateLanguage` pattern re-run per section gives `Background []`, `Requirements []`, `Design []`, `Acceptance Criteria []`, `Plan []` | **Fixed** — pass-4 finding 5's `approved` token is gone |
+| reset chain `agent-loop-service.ts:566` → `member-session.ts:304`; "no budget parameter exists on the `packages/app` path" | `:566` `memberSession.reset('operator')`; `:304` `process.stop()`; the port is `stop(): Promise<void>` (`member-session.ts:49`) | **Correct** — no caller on that path can shorten the wait |
+
+##### AC1, R1 and R2 freeze check
+
+A `diff` of the entire `Requirements` → `Q&A` region against `git show HEAD:docs/tasks5/1088_…` yields exactly one change (`14c14,20`): the AC2 line, 1 line → 7. R1 (`:50`), R2 (`:54`) and AC1 (`:60`) are line-identical to the frozen original. The task-file hunk headers agree: `@@ -61 +61,7 @@` is the only Requirements/AC hunk; the remaining hunks are the frontmatter (`@@ -4`, `@@ -7`), the previously-reviewed `### Design` amendment block (`@@ -99,0 +106,31 @@`), the `### Solution` fill (`@@ -116`, `@@ -124`) and the prior `### Review` body (`@@ -130,0 +299,4 @@`). Nothing else in the contract region moved.
+
+##### AC traceability
+
+| AC | Status | Evidence |
+|----|--------|----------|
+| AC1 | MET (unchanged) | `.spur/run/1088-ac-e2e-receipt.md`: no `--server` anywhere; status resolved the registry port 3011 and reported the live loop pid 38678; stop returned `{"ok":true}` and the pid was gone; the verify stage reproduced it independently (pid 26950). The delta touched no line of AC1. |
+| AC2 | MET under the restated contract (the verify stage's PARTIAL/P2 is dispositioned by it) | 10/10 serve-parented exits in `{115 … 2065}` ms, negative control ALIVE in every run, exit unconditional; the one slow path 6412 / 7160 ms = 2000 + ~5000 ms is the exception the restated AC2 now names. The verdict file's `AC2 = PARTIAL` remains the verification record for the *pre-restatement* wording; the restatement is that record's own disposition option A. |
+
+##### Req traceability
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET (unchanged) | `resolveAgentServer(cwd, explicit?)` (`apps/cli/src/commands/agent.ts:98-107`), wired at `:593` / `:616` / `:999` / `:1074`; no commander default on the four `--server` options (`:253`, `:270`, `:583`, `:606`); registry port → `http://localhost:<port>/api`, else the 3000 fallback (`:84`). Corpus delta only; no R1 line moved. |
+| R2 | MET (unchanged) | watch installed at `:395`, body `:1530-1542`, cleared in the `finally` (`:400-401`); the loop honours the signal at `packages/app/src/services/agent-loop-service.ts:504-511`. AC2's restatement narrows a *timing* claim only — the exit stays unconditional, so R2's "cannot leave orphan loops" is untouched. |
+
+##### Does pass 4's PASS still hold?
+
+**Yes, on mechanical evidence.** The delta is documentation on a task whose code was certified by two prior P1 reworks and the verify stage: `agent.ts` sha256 `9affcd4b…` and the test `cdd67d9e…` are the exact pass-4 hashes, at mtimes (`16:45:44` / `16:45:52`) older than every corpus write; the source numstat is unchanged (`89+/12-`) and the task file alone moved (`177+/5-`); nothing is staged. A fresh re-run of the focused suite gives `(cd apps/cli && bun test tests/commands/agent*.test.ts)` → **159 pass / 0 fail, 551 expect() calls, 12 files [10.88s]**. `task check 1088` → **PASS** with a single carried warning. No new P1/P2: all five pass-4 findings were prose precision, all five are fixed, and no correction regressed the delivered behaviour, R1 or R2.
+
+##### Carried items (known, unchanged, not re-litigated)
+
+- P3 — drain-in-flight abort gap; the restated AC2 discloses it, which is its disposition.
+- P3 — the resolver's registry read is not read-only (`getByPath` → `list()` → `healStale`); P3 — exact-match cwd lookup, no ancestor walk.
+- P4 — help rows advertise a `(default: …)` commander no longer declares; P4 — a registry read/lock error falls back to the 3000 URL silently.
+- WARN — `L4 Solution: Anchor docs/03_ARCHITECTURE.md:758 subject mismatch`. The delta's own gate-language warning is gone, so this is the only warning left.
+
+##### Checks run
+
+- `git diff -U0 -- docs/tasks5/1088_…` hunk headers → `@@ -4`, `@@ -7`, `@@ -61 +61,7 @@` (AC2 only), `@@ -99,0 +106,31 @@`, `@@ -116`, `@@ -124`, `@@ -130,0 +299,4 @@`.
+- `diff <(git show HEAD:… | awk '/^### Requirements/,/^### Q&A/') <(awk …)` → `14c14,20` — the AC2 line alone; R1 / R2 / AC1 identical at `:50` / `:54` / `:60`.
+- AC2 list vs the measured set: sorted AC2 list `115 261 262 270 653 1027 1034 1034 1476 2065` = verify items 7 / 8 / 9 + the receipt's `2065`; `2065 − 2000 = 65`.
+- `shasum -a 256 apps/cli/src/commands/agent.ts apps/cli/tests/commands/agent-supervision.test.ts` → `9affcd4b…` / `cdd67d9e…`; `stat` mtimes `16:45:44` / `16:45:52`, task file `17:55:13`; `git diff --numstat` → `89/12` (agent.ts) and `177/5` (task file); `git diff --cached --stat` → empty.
+- `node_modules/@gobing-ai/ts-ai-runner/src/team-agent-process.ts:90-120` printed with line numbers → `stop()` `:96`, `endStdin` `:103`, SIGTERM `:107`, `setTimeout(…,5000)` `:109`, SIGKILL `:113`.
+- `packages/app/src/services/agent-loop-service.ts:120-150,200-220,498-515,560-572` and `member-session.ts:298-312,49` printed → every Design item 3 citation confirmed.
+- Per-section gate-language scan (the `hasGateLanguage` pattern re-run) → all five gate sections `[]`.
+- `task check 1088` → **PASS**, one warning (`L4 Solution: Anchor docs/03_ARCHITECTURE.md:758 subject mismatch`); the delta-introduced `L4 Design` warning is absent.
+- `(cd apps/cli && bun test tests/commands/agent*.test.ts)` → **159 pass / 0 fail, 551 expect() calls, 12 files [10.88s]**.
+- No source, test or `docs/tasks5/**` file was edited by this pass; `bun run spur-check` was not run; no suppressions.
+
+**Next:** approve the gate — the delta is complete and **no further review round is warranted**. Before the `done` transition, flip the R1 / R2 / AC1 / AC2 boxes. The only item worth carrying forward is the verify stage's pre-existing "serve-shaped immunity unexplained" note (finding 1 here) — a measurement curiosity about a case that still cannot orphan a loop.
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-10-05T23:07:16.869Z backlog → todo (system)
+- 2026-10-05T23:23:50.196Z todo → wip (system)
+- 2026-10-06T01:53:38.110Z wip → testing (system)
+- 2026-10-06T01:54:04.195Z testing → done (system)
+

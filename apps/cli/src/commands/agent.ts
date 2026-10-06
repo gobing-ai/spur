@@ -18,6 +18,7 @@ import {
     followSystemEventsAfter,
     loopSleep,
     MAX_INJECT_ATTEMPTS,
+    ProjectRegistry,
     type RunAgentUsageOptions,
     resolveAgentSelector,
     resolvePlanningFolders,
@@ -76,8 +77,35 @@ export function resetAgentServerFetchForTesting(): void {
     _testFetch = undefined;
 }
 
-/** Default server API URL for agent start/stop and live `list --specs` status (requires spur serve). */
+/**
+ * Fallback server API URL for agent start/stop and live `list --specs` status (requires spur
+ * serve) — used only when this project has no live registry entry (1088 R1).
+ */
 const DEFAULT_SERVER = 'http://localhost:3000/api';
+
+/**
+ * This project's `spur serve` API URL (1088 R1). `spur serve` records its port in the project
+ * registry (`ProjectRegistry.setPort`), so an entry with `port > 0` names the serve that owns
+ * THIS project; the hard-coded 3000 default pointed `agent status|stop|start` at a different
+ * project's serve (or nothing at all) and reported every spec `stopped` while loops ran.
+ * The port is rendered on host `localhost`, never the IPv4 literal `127.0.0.1`: the server binds
+ * `Bun.serve({ hostname: options.host })` with `--host` defaulting to `localhost`, which Bun
+ * resolves to IPv6 `[::1]` only, so a `127.0.0.1` client has no listener (ECONNREFUSED). The
+ * name form resolves the same address family the server bound.
+ * An explicit `--server` always wins, which is why the commander options declare no default.
+ * A stale entry self-heals to 0 inside `getByPath` (`healStale`), so a dead serve falls back.
+ */
+export async function resolveAgentServer(cwd: string, explicit?: string): Promise<string> {
+    if (explicit !== undefined && explicit !== '') return explicit;
+    try {
+        const entry = await new ProjectRegistry().getByPath(cwd);
+        if (entry !== undefined && entry.port > 0) return `http://localhost:${entry.port}/api`;
+    } catch {
+        // An unreadable/unlockable registry means "no live entry", not a failed command: fall
+        // back to the default port so the existing unreachable-server warning still fires.
+    }
+    return DEFAULT_SERVER;
+}
 
 /** Injectable seams for `runAgentUsage` tests (source stub, snapshot override). */
 export interface AgentUsageDeps {
@@ -222,7 +250,7 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
         .option(...SHARED_OPTIONS.json)
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .option('--specs', 'List agent specs instead of detected agents')
-        .option('--server <url>', 'Server API URL for live run status (with --specs)', DEFAULT_SERVER)
+        .option('--server <url>', 'Server API URL for live run status (with --specs)')
         .action(async (options) => {
             const svc = new AgentService({ cwd: context.cwd, env: context.env, output: context.output });
             const code = await runAgentList(svc, context, {
@@ -239,7 +267,7 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
         .description('Show agent specs with live process status and member session (requires spur serve).')
         .option(...SHARED_OPTIONS.json)
         .option(...SHARED_OPTIONS.jsonEnvelope)
-        .option('--server <url>', 'Server API URL for live run status and member session', DEFAULT_SERVER)
+        .option('--server <url>', 'Server API URL for live run status and member session')
         .action(async (options) => {
             const code = await runAgentStatus(context, {
                 json: options.json,
@@ -362,11 +390,15 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
             const onSignal = () => controller.abort();
             process.on('SIGINT', onSignal);
             process.on('SIGTERM', onSignal);
+            // 1088 R2: the parent watch bounds the loop's lifetime to its parent serve. A plain
+            // SIGKILLed serve can send no signal at all, so the loop would outlive it forever.
+            const stopParentWatch = startParentWatch(controller, parseLoopPoll(options.poll));
             try {
                 const flags = commanderOptionsToFlags(options);
                 const code = await runAgentLoop(context, flags, { signal: controller.signal });
                 context.setExitCode(code);
             } finally {
+                stopParentWatch();
                 process.off('SIGINT', onSignal);
                 process.off('SIGTERM', onSignal);
             }
@@ -548,15 +580,20 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
         .command('start')
         .description('Start a supervised agent process (requires spur serve).')
         .argument('<spec-id>', 'Agent spec id')
-        .option('--server <url>', 'Server API URL', DEFAULT_SERVER)
+        .option('--server <url>', 'Server API URL')
         .option(...SHARED_OPTIONS.json)
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (specId, options) => {
             // 0697 AC4: the advertised flag's decision rides visibly on the delegated options.
+            // 1088 R1: the default server is resolved from this project's registry entry.
             const code = await runAgentLifecycle(
                 'start',
                 specId,
-                { server: options.server, json: options.json, jsonEnvelope: options.jsonEnvelope },
+                {
+                    server: await resolveAgentServer(context.cwd, options.server),
+                    json: options.json,
+                    jsonEnvelope: options.jsonEnvelope,
+                },
                 context,
             );
             context.setExitCode(code);
@@ -566,15 +603,20 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
         .command('stop')
         .description('Stop a supervised agent process (requires spur serve).')
         .argument('<spec-id>', 'Agent spec id')
-        .option('--server <url>', 'Server API URL', DEFAULT_SERVER)
+        .option('--server <url>', 'Server API URL')
         .option(...SHARED_OPTIONS.json)
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (specId, options) => {
-            // Same threading contract as `agent start` (0697 AC4).
+            // Same threading contract as `agent start` (0697 AC4); same default-server
+            // resolution (1088 R1).
             const code = await runAgentLifecycle(
                 'stop',
                 specId,
-                { server: options.server, json: options.json, jsonEnvelope: options.jsonEnvelope },
+                {
+                    server: await resolveAgentServer(context.cwd, options.server),
+                    json: options.json,
+                    jsonEnvelope: options.jsonEnvelope,
+                },
                 context,
             );
             context.setExitCode(code);
@@ -954,7 +996,7 @@ async function runAgentList(
     // so the local listing is only the desired state until the server's process table
     // overrides it. Unreachable server ⇒ every spec `stopped` plus a stderr warning,
     // so offline listing still works.
-    const server = opts.server ?? DEFAULT_SERVER;
+    const server = await resolveAgentServer(context.cwd, opts.server);
     const live = await fetchServerProcesses(server);
     if (live === null) {
         context.output.error(
@@ -1029,10 +1071,11 @@ async function runAgentStatus(
         context.output.write('No agent specs found in .spur/agents/');
         return 0;
     }
-    const live = await fetchServerProcesses(opts.server ?? DEFAULT_SERVER);
+    const server = await resolveAgentServer(context.cwd, opts.server);
+    const live = await fetchServerProcesses(server);
     if (live === null) {
         context.output.error(
-            `Cannot reach server at ${opts.server ?? DEFAULT_SERVER} — showing local specs as stopped. Is spur serve running?`,
+            `Cannot reach server at ${server} — showing local specs as stopped. Is spur serve running?`,
         );
     }
     const rows = specs.map((spec) => {
@@ -1150,7 +1193,16 @@ async function runAgentLifecycle(
     let body: { ok?: boolean; error?: unknown; pid?: number; status?: string };
     try {
         const url = `${options.server}/agents/${encodeURIComponent(agentId)}/${action}`;
-        res = await (_testFetch ?? fetch)(url, { method: 'POST', signal: AbortSignal.timeout(3000) });
+        res = await (_testFetch ?? fetch)(url, {
+            method: 'POST',
+            // The server's hono `csrf()` middleware admits only a same-origin request: a bare
+            // Bun fetch sends no `Origin`/`Sec-Fetch-Site`, is read as `text/plain`, and is
+            // answered 403 — so `agent start|stop` could never reach the supervisor, no matter
+            // how the server URL was resolved. The CLI is a same-origin local client, so it
+            // sends the `Origin` such a caller would send.
+            headers: { Origin: new URL(options.server).origin },
+            signal: AbortSignal.timeout(3000),
+        });
         body = (await res.json()) as typeof body;
     } catch (err) {
         writeJsonError(
@@ -1462,6 +1514,31 @@ function parseLoopPoll(raw: string | boolean | undefined): number {
     if (typeof raw !== 'string') return DEFAULT_LOOP_POLL_MS;
     const n = Number.parseInt(raw, 10);
     return Number.isFinite(n) && n > 0 ? n : DEFAULT_LOOP_POLL_MS;
+}
+
+/**
+ * Bound a supervised `agent loop`'s lifetime to its parent serve (1088 R2).
+ *
+ * Graceful shutdown already reaps loops (`supervisor().stopAll()`), but a SIGKILLed or crashed
+ * serve sends its children nothing, so the loop kept draining against a dead serve forever.
+ * `process.ppid` is re-read live (Bun reports `N` → `1` after a SIGKILL), so the loop can detect
+ * the reparent alone: no daemon, no marker file, and no signal from the dying parent. The abort
+ * ends the loop through its normal shutdown (claim release, member-session reset).
+ *
+ * The returned stop function clears the watch — the caller's `finally`. `readPpid` is a test seam.
+ */
+export function startParentWatch(
+    controller: AbortController,
+    intervalMs: number,
+    readPpid: () => number = () => process.ppid,
+): () => void {
+    const parent = readPpid();
+    const timer = setInterval(() => {
+        if (readPpid() !== parent) controller.abort();
+    }, intervalMs);
+    // Never hold the loop process open on this watch alone.
+    (timer as { unref?: () => void }).unref?.();
+    return () => clearInterval(timer);
 }
 
 /** Valid `agent wait --until` states. */

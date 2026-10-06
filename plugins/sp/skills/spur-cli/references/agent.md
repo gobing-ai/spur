@@ -95,7 +95,9 @@ It waits for a wake on the `system_events` ledger — a human request (`message.
 change (`strategy.changed`), a capacity change (`fleet.capacity.changed`), or a completion receipt
 (`agent.invoke.exit`) — then drains the inbox into an `agent run` invocation. An idle wake records
 the hold reason instead of dispatching; with no wake event it still drains every `--poll` ms
-(default `2000`). It runs until `SIGINT` / `SIGTERM`.
+(default `2000`). It runs until `SIGINT` / `SIGTERM`, or until its parent `spur serve` disappears —
+the parent is re-read each poll and a change aborts the loop, so a `SIGKILL`ed serve leaves no
+orphan loop (1088 R2).
 
 ## `wait` - identity-pinned occupant wait (G4 wave 2)
 
@@ -150,8 +152,9 @@ supervisor**: each row carries a trailing status column
 (`running` / `stopped` / `errored` / `unknown`), `pid=<n>` where a process exists, and the member
 session (0897): the session mode plus a shortened resume id (`resume id=3f9c2a1d`), or `-` when the
 member has no recorded session. When `spur self serve` is unreachable, the listing falls back to all
-`stopped` with a stderr warning. `--server <url>`
-(default `http://localhost:3000/api`) targets the supervisor API.
+`stopped` with a stderr warning. `--server <url>` targets the supervisor API; without it the URL is
+this project's serve — the port in the cwd's project-registry entry (`http://localhost:<port>/api`),
+falling back to `http://localhost:3000/api` only when the project has no live entry (1088 R1).
 
 ```bash
 spur agent list --specs
@@ -168,7 +171,9 @@ spur agent status --json     # full objects, session carried whole ({ mode, id }
 
 Reads the same supervisor feed as `list --specs` (liveness **and** session come from
 `GET /api/processes`; the served project's ledger is the source of the session state). An
-unreachable server reports every spec `stopped` with no session. See
+unreachable server reports every spec `stopped` with no session. `--server <url>`
+(default: this project's registry serve port, `http://localhost:<port>/api`; else
+`http://localhost:3000/api` — 1088 R1) targets it. See
 [Member sessions](#member-sessions-g66) for what the modes mean.
 
 ## `report` - fleet lifecycle state from a host hook (G73, task 1080)
@@ -297,7 +302,9 @@ spur agent start worker-1 --json
 
 Posts to the `spur self serve` supervisor API
 (`POST /api/agents/:id/start`) and prints `started <id> (pid=<n>, status=<s>)`. Requires a
-reachable `spur self serve`; `--server <url>` (default `http://localhost:3000/api`) targets it. Exit `1`
+reachable `spur self serve`; `--server <url>` targets it, defaulting to this project's registry
+serve port (`http://localhost:<port>/api`, else `http://localhost:3000/api` when the project has no
+live entry — 1088 R1). Exit `1`
 when the server is unreachable or the start fails.
 
 ## `stop` - stop a supervised process

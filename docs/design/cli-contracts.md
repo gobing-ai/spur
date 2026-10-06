@@ -440,9 +440,27 @@ declared `agent.fleet` members plus hand-authored `.spur/agents/` files (G72 R2)
 (`<id> <type> <role> <executor> <purpose>` — role and executor are distinct columns; an undeclared
 role renders `unset`, 0544 R2/R4; `--json` includes the spec path plus `role`/`executor` fields,
 omitted when unset). Since 0848 `--specs` also merges live run status from the `spur serve`
-supervisor through `--server <url>` (default `http://localhost:3000/api`), each row gaining a
+supervisor through `--server <url>`, each row gaining a
 `running`/`stopped`/`errored`/`unknown` column and `pid=<n>` where a process exists; an unreachable
 server falls back to all `stopped` with a stderr warning.
+
+**Default server resolution (1088 R1).** With no `--server`, the URL is THIS project's serve: the
+port in the cwd's project-registry entry — the port `spur serve` records via
+`ProjectRegistry.setPort` — rendered `http://localhost:<port>/api`. A project with no live entry
+(a port cleared by the registry's stale heal included) falls back to `http://localhost:3000/api`.
+An explicit `--server` always wins, so the flag declares no default. Same resolution for
+`spur agent status`, `spur agent start`, and `spur agent stop`.
+
+<a id="spur-agent-status---server-url---json"></a>
+
+#### `spur agent status [--server <url>] [--json]`
+
+One row per agent spec: `id`, `type`, live `status`, `pid=<n>` where a process exists, and the
+member session (`<mode>` plus `id=<8-char short>` in resume mode; `-` when none). The CLI never
+owns the supervisor: liveness and session come from `GET /api/processes` on the resolved server
+(default resolution above, 1088 R1); an unreachable server reports every spec `stopped` with a
+stderr warning naming the URL it tried. `--json` carries the full session object plus the spec
+`path`. Read-only — the state lives in the serve it queries.
 
 <a id="spur-agent-doctor-agent---json---probe-health---force-refresh"></a>
 
@@ -652,7 +670,7 @@ removed at the G64 cutover (2026-09-14): `assign` → `spur task update --assign
 `spur agent list --specs`, `up` → fleet roster derivation at serve start. There is no attach verb:
 attach is `GET /api/processes/:id/stream` (SSE) plus Board/HTTP clients.
 
-- POST to `<server>/agents/<id>/(start|stop)` (default server `http://localhost:3000/api`; `--server` overrides). `--json` returns the raw server payload; otherwise `start` prints `started <id> (pid=<pid>, status=<status>)`, `stop` prints `stopped <id>`. Exit 1 on transport failure or server-side error. `start` launches `spur agent loop` under the supervisor and injects caller-identity env into that process: `SPUR_SPEC_ID` (spec id), `SPUR_RUN_ID` (process-generation UUID), and `SPUR_SERVE_URL` from the supervisor constructor or env (ADR-057 wave 1). `SPUR_AGENT` remains the host coding-agent hint, not a spec id. Process-pipe stdin (`POST /api/processes/:id/stdin`) is operator attach, not durable inbox delivery.
+- POST to `<server>/agents/<id>/(start|stop)`. The server defaults to this project's registry entry port (`http://localhost:<port>/api`, the port `spur serve` records via `ProjectRegistry.setPort`) and falls back to `http://localhost:3000/api` when the project has no live entry (1088 R1); `--server` overrides. `--json` returns the raw server payload; otherwise `start` prints `started <id> (pid=<pid>, status=<status>)`, `stop` prints `stopped <id>`. Exit 1 on transport failure or server-side error. `start` launches `spur agent loop` under the supervisor and injects caller-identity env into that process: `SPUR_SPEC_ID` (spec id), `SPUR_RUN_ID` (process-generation UUID), and `SPUR_SERVE_URL` from the supervisor constructor or env (ADR-057 wave 1). `SPUR_AGENT` remains the host coding-agent hint, not a spec id. Process-pipe stdin (`POST /api/processes/:id/stdin`) is operator attach, not durable inbox delivery. The spawned loop's lifetime is bound to its serve (1088 R2 — §17 of `docs/03_ARCHITECTURE.md`).
 
 <a id="spur-rule-run---preset-name---file-path---rule-id---fail-on-severity---stop-on-first-severity---fix-mode-mode---dry-run---verbose---json"></a>
 

@@ -105,7 +105,7 @@
         ├── [done] **G64**: Retire Workspace, Inbox, Teams, and spur team ([G64_retire-workspace-inbox-teams-and-spur-team.md](./G64_retire-workspace-inbox-teams-and-spur-team.md))
         ├── [verifying] **G65**: Fleet declaration in spur config ([G65_fleet-declaration-in-spur-config.md](./G65_fleet-declaration-in-spur-config.md))
         ├── [done] **G66**: Persistent fleet member: one agent session per member across inbox drains ([G66_persistent-fleet-member-one-agent-session-per-member-across-inbox-drains.md](./G66_persistent-fleet-member-one-agent-session-per-member-across-inbox-drains.md))
-        └── [backlog] **G67**: Agent loop and member session in the application layer ([G67_agent-loop-and-member-session-in-the-application-layer.md](./G67_agent-loop-and-member-session-in-the-application-layer.md))
+        └── [active] **G67**: Agent loop and member session in the application layer ([G67_agent-loop-and-member-session-in-the-application-layer.md](./G67_agent-loop-and-member-session-in-the-application-layer.md))
     └── [backlog] **G7**: Inbox-only agent fleet and execution record ([G7_inbox-only-agent-fleet-and-execution-record.md](./G7_inbox-only-agent-fleet-and-execution-record.md))
         ├── [backlog] **G71**: Core inbox fleet: one dispatcher, member execution, execution record ([G71_core-inbox-fleet-one-dispatcher-member-execution-execution-record.md](./G71_core-inbox-fleet-one-dispatcher-member-execution-execution-record.md))
         ├── [verifying] **G72**: Fleet team-residue cleanup ([G72_fleet-team-residue-cleanup.md](./G72_fleet-team-residue-cleanup.md))

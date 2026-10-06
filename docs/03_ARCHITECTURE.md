@@ -753,6 +753,19 @@ declaration: role resolution counts declared members only and a guest is refused
 `spur agent leave` or lease expiry releases the claim and returns claimed messages to `queued`.
 Shapes: [inter-agent control plane](design/inter-agent-control-plane.md) §12.
 
+**Project-owned supervision (task 1088, feature G67).** A project's loops are reached through the
+serve that owns the project, and a loop never outlives that serve. *Discovery:* the
+`agent status|stop|start` and `agent list --specs` default server URL comes from the cwd's project
+registry entry — the port `spur serve` records via `ProjectRegistry.setPort`, rendered
+`http://localhost:<port>/api` — and falls back to `http://localhost:3000/api` only when the project
+has no live entry; `--server` still overrides. A hard-coded 3000 default queried another project's
+serve (or nothing) and reported every spec `stopped` while its loops ran. *Lifetime:* a supervised
+`agent loop` is bound to its parent serve. Graceful shutdown reaps it (`supervisor().stopAll()`); a
+SIGKILLed or crashed serve sends its children no signal at all, so the loop re-reads
+`process.ppid` at the `--poll` cadence and aborts its own loop signal when the parent changes
+(reparented to init), running the normal shutdown (claim release, member-session reset). No daemon,
+marker file, or extra transport. Surfaces: [CLI contracts](design/cli-contracts.md#spur-agent-status---server-url---json).
+
 ### 17.1 Target topology
 
 ```text

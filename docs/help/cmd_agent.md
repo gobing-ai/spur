@@ -188,7 +188,7 @@ spur agent status [options]
 
 | Flag | Description |
 |---|---|
-| `--server <url>` | Supervisor API URL for live run status and member session (default `http://localhost:3000/api`) |
+| `--server <url>` | Supervisor API URL for live run status and member session (default: this project's registry serve port, `http://localhost:<port>/api`; `http://localhost:3000/api` only when the project has no live entry) |
 | `--json` | Output machine-readable JSON |
 
 One row per agent spec: `id`, `type`, live `status`, `pid=<n>` where a process exists, and the
@@ -206,7 +206,7 @@ spur agent list [options]
 | Flag | Description |
 |---|---|
 | `--specs` | List agent specs under `.spur/agents/` instead of detected agents |
-| `--server <url>` | With `--specs`: supervisor API for live run status (default `http://localhost:3000/api`) |
+| `--server <url>` | With `--specs`: supervisor API for live run status (default: this project's registry serve port, `http://localhost:<port>/api`; `http://localhost:3000/api` only when the project has no live entry) |
 | `--json` | Output machine-readable JSON |
 
 With `--specs`, each row carries live run status merged from the server's supervisor: trailing `status` column plus `pid=<n>` where a process exists, then the member session (`<mode>` + `id=<8-char short>`; `-` when none).
@@ -331,7 +331,7 @@ spur agent loop [options]
 
 Supervisor-internal: `spur self serve` spawns one loop per started spec (`spur agent start`); not run by hand.
 Each iteration: check the agent inbox → drain pending messages into a prompt → run the agent
-→ wakes on ledger events (message sent, strategy/capacity change, completion receipt); `--poll` is the no-event backstop. Runs until `SIGINT` / `SIGTERM`.
+→ wakes on ledger events (message sent, strategy/capacity change, completion receipt); `--poll` is the no-event backstop. Runs until `SIGINT` / `SIGTERM`, or until its parent `spur serve` disappears: the loop re-reads `process.ppid` every poll and shuts down when it changes, so a `SIGKILL`ed serve cannot leave an orphan loop (1088 R2).
 
 ```bash
 spur agent loop --spec worker-1
@@ -348,7 +348,7 @@ Starts a supervised agent process via `spur self serve`.
 
 | Flag | Description |
 |---|---|
-| `--server <url>` | Server API URL (default `http://localhost:3000/api`) |
+| `--server <url>` | Server API URL (default: this project's registry serve port, `http://localhost:<port>/api`; `http://localhost:3000/api` only when the project has no live entry) |
 | `--json` | Output machine-readable JSON |
 
 Exit `1` when the server is unreachable or the start fails.
@@ -363,7 +363,7 @@ Stops a supervised agent process via `spur self serve`.
 
 | Flag | Description |
 |---|---|
-| `--server <url>` | Server API URL (default `http://localhost:3000/api`) |
+| `--server <url>` | Server API URL (default: this project's registry serve port, `http://localhost:<port>/api`; `http://localhost:3000/api` only when the project has no live entry) |
 | `--json` | Output machine-readable JSON |
 
 ## See Also
