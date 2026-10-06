@@ -5,6 +5,7 @@ import type { PipeProcess, PipeProcessOptions, ProcessExecutor } from '@gobing-a
 import {
     type ProcessEventBus,
     type ProcessEventPayload,
+    SUPERVISOR_RUN_MARKER,
     SupervisorService,
 } from '../../src/services/supervisor-service';
 
@@ -442,6 +443,51 @@ describe('SupervisorService', () => {
             expect(buffer.some((f) => f.stream === 'stdout' && f.line === 'hello')).toBe(true);
             expect(buffer.some((f) => f.stream === 'stdout' && f.line === 'world')).toBe(true);
             expect(buffer.some((f) => f.stream === 'stderr' && f.line === 'warn')).toBe(true);
+        });
+
+        test('1076 R2: the loop child names its live run on stdout, and the frames between carry that runId', async () => {
+            const stdout = new ReadableStream<Uint8Array>({
+                start(controller) {
+                    controller.enqueue(
+                        new TextEncoder().encode(
+                            `before\n${SUPERVISOR_RUN_MARKER}run-1\nduring\n${SUPERVISOR_RUN_MARKER}\nafter\nnot ${SUPERVISOR_RUN_MARKER}run-2\n`,
+                        ),
+                    );
+                    controller.close();
+                },
+            });
+            const { promise: exited, resolve: resolveExit } = Promise.withResolvers<number | null>();
+            const proc = {
+                pid: 20001,
+                stdout,
+                stderr: null,
+                exited,
+                writeStdin: () => {},
+                endStdin: () => {},
+                kill: () => resolveExit(0),
+            } as unknown as PipeProcess;
+            const executor = { runStreaming: (): PipeProcess => proc } as unknown as ProcessExecutor;
+            const { bus } = createMockBus();
+            const svc = new SupervisorService({
+                processExecutor: executor,
+                eventBus: bus,
+                configDir: '/tmp',
+                agentSpecs: [makeSpec({ id: 'alpha', command: ['echo'] })],
+            });
+
+            await svc.start('alpha');
+            for (let i = 0; i < 30; i++) {
+                if (svc.getRingBuffer('alpha').length >= 4) break;
+                await Promise.resolve();
+            }
+
+            // The marker lines are control, not output: they set/clear the tag and never become frames.
+            expect(svc.getRingBuffer('alpha').map((f) => [f.line, f.runId])).toEqual([
+                ['before', undefined],
+                ['during', 'run-1'],
+                ['after', undefined],
+                [`not ${SUPERVISOR_RUN_MARKER}run-2`, undefined],
+            ]);
         });
 
         test('trims ring buffer to configured size (pushFrame eviction)', async () => {

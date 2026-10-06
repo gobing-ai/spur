@@ -28,6 +28,7 @@ import {
     runAgentLoopCore,
     runAgentUsageProducer,
     StrategyRuntime,
+    SUPERVISOR_RUN_MARKER,
     type SystemEventBus,
     type TraceTree,
     type UsageSource,
@@ -1704,6 +1705,8 @@ export async function runAgentLoop(
         error: (text) => context.output.error(text),
         agentService: (bus) => context.agentService({ events: bus }),
         fleet,
+        // 1076 R2: a supervised loop is a child process, so the run tag crosses as a stdout control line.
+        setSupervisorRun: (_agentId, runId) => context.output.write(`${SUPERVISOR_RUN_MARKER}${runId ?? ''}`),
         makeStrategyRuntime: () => makeFleetRuntime(context),
         listAgentSpecs: () => new AgentCoordinationService(context).listAgentSpecs(),
         reconciler: new DeliveryReconciler(context),

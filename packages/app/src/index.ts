@@ -625,7 +625,7 @@ export type {
     ProcessFrame,
     SupervisorOptions,
 } from './services/supervisor-service';
-export { SupervisorService } from './services/supervisor-service';
+export { SUPERVISOR_RUN_MARKER, SupervisorService } from './services/supervisor-service';
 export type {
     SystemEventCatchAll,
     SystemEventCatchAllSinkOptions,

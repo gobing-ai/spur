@@ -112,6 +112,12 @@ const MAX_RESTART_BACKOFF = 30_000;
  * so a single successful drain does not end the member. Crash-restart stays with the
  * supervisor's exit handler (R7).
  */
+/**
+ * 1076 R2: stdout control line a supervised `spur agent loop` child writes when a keyed run
+ * starts (`<marker><runId>`) and ends (`<marker>` alone); the supervisor tags frames between.
+ */
+export const SUPERVISOR_RUN_MARKER = '[spur:run] ';
+
 function defaultWrapperArgv(agentId: string): { command: string; args: string[] } {
     return {
         command: process.execPath,
@@ -454,6 +460,12 @@ export class SupervisorService {
                     const lines = partial.split('\n');
                     partial = lines.pop() ?? '';
                     for (const line of lines) {
+                        // 1076 R2: the loop child runs in its own process, so it names its live run
+                        // with a control line on stdout; that line sets the tag and is not a frame.
+                        if (name === 'stdout' && line.startsWith(SUPERVISOR_RUN_MARKER)) {
+                            this.setCurrentRun(agentId, line.slice(SUPERVISOR_RUN_MARKER.length) || undefined);
+                            continue;
+                        }
                         this.pushFrame(frames, { stream: name, ts: new Date().toISOString(), line }, agentId);
                     }
                     pump();
