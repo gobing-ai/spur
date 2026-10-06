@@ -2,12 +2,17 @@
  * fleet-e2e — prove the inbox-only agent fleet end to end and leave a repeatable receipt
  * (task 1077, feature G71 R8; plan `docs/plans/2026-10-04-agent-fleet-inbox-redesign.md` §1).
  *
- * Usage: bun scripts/spur-dev.ts fleet-e2e [--inject-failure <step>]
+ * Usage: bun scripts/spur-dev.ts fleet-e2e [--inject-failure <step>] [--guest-join-fixture] [--keep]
  *
  * One scratch project under `$TMPDIR` is scaffolded, driven through the source-local CLI
  * (`bun run apps/cli/src/index.ts`), and torn down; the run writes
  * `docs/reports/fleet-e2e-receipt.json` (stable name, overwritten each run). Every step row
  * records its command, exit code, observed evidence and the assertion it proves.
+ *
+ * `--guest-join-fixture` points the guest-join step's predicate at a generated pre-1081 fixture
+ * CLI (a tree that does not register `join`), so the R4 skip arm is EXECUTED rather than merely
+ * reachable; that run writes its own receipt, `docs/reports/fleet-e2e-receipt-skip-arm.json`,
+ * leaving the default land-arm receipt a truthful 9/9.
  *
  * Only the MODEL is stubbed (R3): a scratch `bin/` holding a stub binary named after the
  * declared member's agent type is prepended to `PATH`, so the member loop's real spawn path
@@ -50,6 +55,12 @@ const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const CLI_ENTRY = join(REPO_ROOT, 'apps/cli/src/index.ts');
 /** Stable receipt name — overwritten each run (1077 Q&A). */
 const RECEIPT_PATH = join(REPO_ROOT, 'docs/reports/fleet-e2e-receipt.json');
+/**
+ * R4 skip-arm receipt (task 1077): the same harness with the guest-join leg's interrogated CLI
+ * swapped for the generated pre-1081 fixture (`--guest-join-fixture`). A separate file so the
+ * default land-arm receipt stays the truthful 9/9 it has always been.
+ */
+const SKIP_ARM_RECEIPT_PATH = join(REPO_ROOT, 'docs/reports/fleet-e2e-receipt-skip-arm.json');
 
 /** The step list (§Design). Row order is the design's; see {@link runFleetE2e} for execution order. */
 export const RECEIPT_STEPS = [
@@ -110,6 +121,8 @@ interface Receipt {
     schemaVersion: number;
     generatedAt: string;
     projectPath: string;
+    /** Which CLI the guest-join step interrogated: the source-local transport or the pre-1081 fixture. */
+    guestJoinCli: 'source-local' | 'pre-1081-fixture';
     /** Volatile: message/run ids are real but differ per run; only {step,status,assertion} is compared. */
     ids: Record<string, string | null>;
     steps: StepRow[];
@@ -136,6 +149,9 @@ interface RunState {
     dispatchRunId: string | null;
     replyMessageId: string | null;
     guestId: string | null;
+    /** The CLI the guest-join step interrogates: the source-local transport, or the pre-1081 fixture. */
+    guestJoinCliEntry: string;
+    guestJoinCliLabel: string;
     loopPids: Array<number>;
     rows: Map<StepName, StepRow>;
     ids: Record<string, string | null>;
@@ -151,7 +167,16 @@ function errorMessage(error: unknown): string {
 
 /** Run the source-local CLI in the scratch project and capture its streams. */
 function cli(args: string[], cwd: string, options: { input?: string } = {}): CliResult {
-    const proc = Bun.spawnSync(['bun', 'run', CLI_ENTRY, ...args], {
+    return cliAs(CLI_ENTRY, 'spur', args, cwd, options);
+}
+
+/**
+ * Run any CLI entry and capture its streams; `label` names it in the receipt's `command` column.
+ * The guest-join step's predicate and the `--guest-join-fixture` skip arm (R4) both go through here,
+ * so one code path serves the source-local transport and the generated pre-1081 fixture alike.
+ */
+function cliAs(entry: string, label: string, args: string[], cwd: string, options: { input?: string } = {}): CliResult {
+    const proc = Bun.spawnSync(['bun', 'run', entry, ...args], {
         cwd,
         env: getEnvVars(),
         stdin: options.input === undefined ? 'ignore' : Buffer.from(options.input),
@@ -162,13 +187,24 @@ function cli(args: string[], cwd: string, options: { input?: string } = {}): Cli
         exitCode: proc.exitCode ?? 1,
         stdout: proc.stdout.toString(),
         stderr: proc.stderr.toString(),
-        command: `spur ${args.join(' ')}`,
+        command: `${label} ${args.join(' ')}`,
     };
 }
 
 /** Same, but a non-zero exit is a harness failure (the step's assertion depends on it). */
 function cliOk(args: string[], cwd: string, options: { input?: string } = {}): CliResult {
-    const result = cli(args, cwd, options);
+    return cliOkAs(CLI_ENTRY, 'spur', args, cwd, options);
+}
+
+/** {@link cliOk} for a non-source-local entry (the pre-1081 fixture, `--guest-join-fixture`). */
+function cliOkAs(
+    entry: string,
+    label: string,
+    args: string[],
+    cwd: string,
+    options: { input?: string } = {},
+): CliResult {
+    const result = cliAs(entry, label, args, cwd, options);
     if (result.exitCode !== 0) {
         throw new Error(`${result.command} exited ${result.exitCode}: ${trimmed(result.stderr || result.stdout)}`);
     }
@@ -417,6 +453,54 @@ process.exit(0);
 `;
 }
 
+/**
+ * The pre-1081 `spur agent --help` command set, reconstructed from this repo's own history — the
+ * parent of `0411c912b` ("hook-reported agent lifecycle and guest fleet occupancy (1080, 1081)"),
+ * which added `report|join|leave`. A frozen historical snapshot: the visible command column is
+ * `list, status, usage, doctor, run, wait, trace, start, stop, help` and, crucially, no `join`.
+ * The wrapped descriptions are flattened to one line each — the probe reads the command column, not
+ * commander's terminal-width wrapping, and a fixture must not depend on the reader's COLUMNS.
+ */
+const PRE_1081_AGENT_HELP = [
+    'Usage: spur agent [options] [command]',
+    '',
+    'Options:',
+    '  -h, --help                 display help for command',
+    '',
+    'Commands:',
+    '  list [options]             List detected coding agents, or agent specs with --specs.',
+    '  status [options]           Show agent specs with live process status and member session (requires spur serve).',
+    '  usage [options]            Run-once provider usage capture (codexbar) that refreshes quota-owned executor availability.',
+    '  doctor [options] [agent]   Check agent readiness.',
+    '  run [options] <prompt>     Execute a prompt or slash command via a coding agent.',
+    '  wait [options] [specId]    Wait for a pinned occupant run to reach a lifecycle state. Address by spec id or --role.',
+    '  trace [options] <runId>    Print one execution record: the run, its dispatch lineage, session ids and streams.',
+    '  start [options] <spec-id>  Start a supervised agent process (requires spur serve).',
+    '  stop [options] <spec-id>   Stop a supervised agent process (requires spur serve).',
+    '  help [command]             display help for command',
+    '',
+].join('\n');
+
+/**
+ * The generated pre-1081 fixture CLI (`--guest-join-fixture`, R4). Its one job is to answer
+ * `agent --help` with the pre-1081 command set above, so the guest-join predicate can be driven
+ * against a CLI that does NOT register `join`. Hermetic: no machine path, no dependency on the
+ * published bundle — a scratch file the harness writes and removes like the stub.
+ */
+function pre1081FixtureSource(): string {
+    return `#!/usr/bin/env bun
+// Generated by scripts/commands/fleet-e2e.ts — the pre-1081 fixture CLI (task 1077 R4).
+const HELP = ${JSON.stringify(PRE_1081_AGENT_HELP)};
+const argv = process.argv.slice(2);
+if (argv[0] === 'agent' && (argv.includes('--help') || argv.includes('-h'))) {
+    process.stdout.write(HELP + '\\n');
+    process.exit(0);
+}
+process.stderr.write('fleet-e2e pre-1081 fixture: only agent --help is implemented\\n');
+process.exit(1);
+`;
+}
+
 /** `agent.fleet` for the scratch project: a planner orchestrator and one stub-executor coder. */
 function fleetConfigSection(): string {
     return [
@@ -472,6 +556,9 @@ const STEP_SIX_ASSERTION =
     'an unkeyed stdin delivery with no run row never holds dispatch; the hang task is dispatched as fleet:task:<wbs>:1 by the strategy alone (no operator message, no planner nudge); the coder loop is SIGKILLed mid-turn; the restarted loop finalizes the orphaned run errored before its first drain; and the strategy re-dispatches fleet:task:<wbs>:2 on its own';
 const STEP_SEVEN_ASSERTION =
     'a joined guest occupant (agent join --role) pulls a dispatched review request through agent wait --inbox and its reply lands in the operator inbox';
+// The pre-1081 row asserts the skip itself: no guest ran, so it must not carry the leg's assertion.
+const STEP_SEVEN_SKIP_ASSERTION =
+    'task 1081 has not landed on this tree, so the guest-join leg does not run: the row records the reason and no guest is joined';
 const STEP_EIGHT_ASSERTION =
     'spur agent trace resolves the execution record of the dispatched turn: an agent node whose durable stream exists with content, over a loop-free lineage';
 const STEP_NINE_ASSERTION = 'loop pids are killed, the guest leaves, and the scratch dir under $TMPDIR is removed';
@@ -488,7 +575,7 @@ const RESIDUAL_RISKS: ResidualRisk[] = [
     },
 ];
 
-function writeReceipt(state: RunState, scratch: string): void {
+function writeReceipt(state: RunState, scratch: string, path: string, guestJoinCli: Receipt['guestJoinCli']): void {
     const steps = RECEIPT_STEPS.map(
         (name) =>
             state.rows.get(name) ?? {
@@ -504,20 +591,27 @@ function writeReceipt(state: RunState, scratch: string): void {
         schemaVersion: 1,
         generatedAt: nowLabel(),
         projectPath: scratch,
+        guestJoinCli,
         ids: state.ids,
         steps,
         residualRisks: RESIDUAL_RISKS,
     };
     mkdirSync(join(REPO_ROOT, 'docs/reports'), { recursive: true });
-    writeFileSync(RECEIPT_PATH, `${JSON.stringify(receipt, null, 4)}\n`);
+    writeFileSync(path, `${JSON.stringify(receipt, null, 4)}\n`);
 }
 
 /** Parse `fleet-e2e` args. Unknown flags fail loudly rather than being ignored. */
-function parseArgs(args: string[]): { injectFailure: StepName | null; keep: boolean } {
+function parseArgs(args: string[]): { injectFailure: StepName | null; keep: boolean; guestJoinFixture: boolean } {
     let injectFailure: StepName | null = null;
     let keep = false;
+    let guestJoinFixture = false;
     for (let index = 0; index < args.length; index++) {
         const arg = args[index];
+        if (arg === '--guest-join-fixture') {
+            // R4 skip arm: point the guest-join predicate at the generated pre-1081 fixture CLI.
+            guestJoinFixture = true;
+            continue;
+        }
         if (arg === '--keep') {
             // Diagnostics keep the scratch project after the run: teardown normally removes it,
             // which used to destroy the only evidence a failed step had (stub prompts, DB rows).
@@ -533,9 +627,47 @@ function parseArgs(args: string[]): { injectFailure: StepName | null; keep: bool
             index++;
             continue;
         }
-        throw new Error(`unknown argument "${arg}" (usage: fleet-e2e [--inject-failure <step>] [--keep])`);
+        throw new Error(
+            `unknown argument "${arg}" (usage: fleet-e2e [--inject-failure <step>] [--guest-join-fixture] [--keep])`,
+        );
     }
-    return { injectFailure, keep };
+    return { injectFailure, keep, guestJoinFixture };
+}
+
+interface AgentCommandProbe {
+    verb: string;
+    /** The interrogated CLI's `agent --help` command column contains `verb`. */
+    listed: boolean;
+    /** The probe invocation itself: recorded as the guest-join row's command/exitCode (R2). */
+    help: CliResult;
+}
+
+/**
+ * R4 (task 1081): `agent join|leave|wait --inbox` land with 1081, so the guest-join leg may run
+ * only on a tree that registers them. `spur agent join --help` cannot answer that question:
+ * commander falls through to the PARENT command for an unknown verb, so pre-1081
+ * `agent join --help` exited 0 and printed the same `spur agent [options] [command]` help that
+ * `agent bogus --help` prints today — verified on this tree, both exit 0. The parent help's
+ * command list is the observable that differs: the `join [options]` line is listed only once
+ * 1081 has landed. `cliEntry`/`cliLabel` are parameters so the SAME predicate can be driven against
+ * the source-local transport AND the generated pre-1081 fixture (`--guest-join-fixture`); only ever
+ * exercising the landed direction is how the exit-code probe passed review as a no-op.
+ */
+export function probeAgentCommand(
+    scratch: string,
+    verb: string,
+    cliEntry: string = CLI_ENTRY,
+    cliLabel = 'spur',
+): AgentCommandProbe {
+    const help = cliOkAs(cliEntry, cliLabel, ['agent', '--help'], scratch);
+    // The command column is indented exactly two spaces; wrapped description lines are not.
+    const listed = help.stdout.split('\n').some((line) => /^ {2}(\S+)/.exec(line)?.[1] === verb);
+    return { verb, listed, help };
+}
+
+/** The guest-join predicate in boolean form (the observable the skip arm branches on). */
+export function agentCommandListed(scratch: string, verb: string): boolean {
+    return probeAgentCommand(scratch, verb).listed;
 }
 
 /**
@@ -545,11 +677,16 @@ function parseArgs(args: string[]): { injectFailure: StepName | null; keep: bool
  * task closing. Rows are still reported in the design's order.
  */
 export async function runFleetE2e(args: string[]): Promise<number> {
-    const { injectFailure, keep } = parseArgs(args);
+    const { injectFailure, keep, guestJoinFixture } = parseArgs(args);
     // Canonical scratch root: on macOS `os.tmpdir()` is a symlinked path, and the fleet
     // normalizes project paths (`normalizeProjectPath`), so a raw `/var/...` path would never
     // match the claim/session rows the loops write under `/private/var/...`.
     const scratch = join(realpathSync(tmpdir()), `spur-fleet-e2e-${Date.now()}`);
+    // R4 skip arm: the guest-join leg interrogates a generated pre-1081 fixture instead of the
+    // source-local transport, and the run writes its own receipt so the land-arm one stays 9/9.
+    const fixturePath = join(scratch, 'pre1081-fixture.ts');
+    const receiptPath = guestJoinFixture ? SKIP_ARM_RECEIPT_PATH : RECEIPT_PATH;
+    const guestJoinCli: Receipt['guestJoinCli'] = guestJoinFixture ? 'pre-1081-fixture' : 'source-local';
     const state: RunState = {
         scratch,
         binDir: join(scratch, 'bin'),
@@ -563,6 +700,8 @@ export async function runFleetE2e(args: string[]): Promise<number> {
         dispatchRunId: null,
         replyMessageId: null,
         guestId: null,
+        guestJoinCliEntry: guestJoinFixture ? fixturePath : CLI_ENTRY,
+        guestJoinCliLabel: guestJoinFixture ? 'spur-pre1081' : 'spur',
         loopPids: [],
         rows: new Map(),
         ids: {},
@@ -583,6 +722,8 @@ export async function runFleetE2e(args: string[]): Promise<number> {
             );
             writeFileSync(state.stubPath, stubSource());
             chmodSync(state.stubPath, 0o755);
+            // R4 skip arm: lay down the pre-1081 fixture CLI the guest-join leg will interrogate.
+            if (guestJoinFixture) writeFileSync(fixturePath, pre1081FixtureSource());
             db = await createMigratedDb({ url: join(scratch, '.spur/spur.db') });
             // The same reconciliation `spur serve` runs at start (apps/server/src/serve.ts:959-975):
             // the declared strategy reaches the persisted row before any loop resumes on it.
@@ -1005,16 +1146,19 @@ export async function runFleetE2e(args: string[]): Promise<number> {
 
         // ── 7. guest-join — R4: run only when task 1081 has landed; otherwise record `skipped`
         //    with the reason. The `agent join|leave|wait --inbox` verbs land with 1081, so probe
-        //    its help (design §7) before running the leg instead of recording a spurious failure.
+        //    for the verb before running the leg instead of recording a spurious failure.
         try {
-            if (cli(['agent', 'join', '--help'], scratch).exitCode !== 0) {
+            const probe = probeAgentCommand(scratch, 'join', state.guestJoinCliEntry, state.guestJoinCliLabel);
+            if (!probe.listed) {
+                // The row carries the probe invocation itself, so the skipped arm's command,
+                // exit code and evidence are the real ones (R2), not a hand-written placeholder.
                 state.rows.set('guest-join', {
                     step: 'guest-join',
-                    command: 'spur agent join --help',
-                    exitCode: 0,
+                    command: probe.help.command,
+                    exitCode: probe.help.exitCode,
                     status: 'skipped',
-                    assertion: STEP_SEVEN_ASSERTION,
-                    evidence: 'skipped: 1081 not landed (spur agent join --help exited nonzero)',
+                    assertion: STEP_SEVEN_SKIP_ASSERTION,
+                    evidence: `skipped: 1081 not landed (${probe.help.command} does not list the join command)`,
                 });
             } else {
                 const joined = jsonOk<{ guest: { id: string } }>(
@@ -1240,12 +1384,12 @@ export async function runFleetE2e(args: string[]): Promise<number> {
                 });
             }
         }
-        writeReceipt(state, scratch);
+        writeReceipt(state, scratch, receiptPath, guestJoinCli);
     }
 
     const steps = RECEIPT_STEPS.map((name) => state.rows.get(name));
     const failed = steps.filter((row) => row?.status === 'failed');
-    console.log(`fleet-e2e receipt: ${RECEIPT_PATH}`);
+    console.log(`fleet-e2e receipt: ${receiptPath}`);
     for (const row of steps) {
         if (row === undefined) continue;
         console.log(

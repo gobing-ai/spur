@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Prove the inbox-only fleet end to end with a repeatable receipt
-status: todo
+status: wip
 template: feature-impl
 created_at: 2026-10-04T20:30:37.927Z
-updated_at: "2026-10-06T04:51:57.980Z"
+updated_at: "2026-10-06T05:56:17.778Z"
 feature_id: G71
 
 dependencies: ["1073", "1074", "1075", "1076", "1080", "1081", "1091"]
@@ -103,88 +103,98 @@ Exit code 1 if any step `failed`.
 
 ### Solution
 
-This pass closes the one requirement the committed harness left unfulfilled (R4) and re-proves the
-whole harness on HEAD, leaving the committed receipt reflecting the latest green run.
+This pass leaves no unexecuted contract in the harness: every receipt row's branch — including the
+R4 pre-1081 skip arm — is now driven by a real run of the harness, and the pipeline defect found by
+the first inline run is fixed at its root.
 
 | Change | Anchor |
 | --- | --- |
-| `guest-join` now probes `spur agent join --help` first, the observable the design §7 names: when the verb is absent (1081 not landed) it records the row `skipped` with reason `1081 not landed`, instead of letting `cliOk` throw into `fail` and recording `failed` | `scripts/commands/fleet-e2e.ts:1006` |
-| Regenerated receipt: the latest 9/9 green run, overwritten in place per the Q&A stable-name contract | `docs/reports/fleet-e2e-receipt.json:1` |
+| The guest-join leg's CLI under test became a parameter (`cliAs`/`cliOkAs` take entry + label), so one code path serves the source-local transport and a pre-1081 fixture alike | `scripts/commands/fleet-e2e.ts:178`, `scripts/commands/fleet-e2e.ts:200` |
+| `probeAgentCommand`/`agentCommandListed`: the skip predicate reads the `agent` command column of the interrogated CLI's `agent --help` — the observable that differs between pre/post 1081 | `scripts/commands/fleet-e2e.ts:656`, `scripts/commands/fleet-e2e.ts:669` |
+| `--guest-join-fixture`: the skip arm is EXECUTED — the harness generates a hermetic pre-1081 fixture CLI, drives the same predicate against it, and writes a separate skip-arm receipt so the land-arm receipt stays a truthful 9/9 | `scripts/commands/fleet-e2e.ts:610`, `scripts/commands/fleet-e2e.ts:1387` |
+| The generated pre-1081 fixture: `agent --help` frozen to the historical pre-1081 command set (reconstructed from this repo's own history, parent of `0411c912b` which added `report\|join\|leave`); no machine path, no published-bundle dependency | `scripts/commands/fleet-e2e.ts:464`, `scripts/commands/fleet-e2e.ts:490` |
+| The skip row carries the REAL probe invocation, exit code and evidence (R2), with a skip-specific assertion (no guest ran, so it must not carry the leg's join assertion) | `scripts/commands/fleet-e2e.ts:560`, `scripts/commands/fleet-e2e.ts:1151`, `scripts/commands/fleet-e2e.ts:1159` |
+| Receipts gain a `guestJoinCli` discriminator (`source-local` vs `pre-1081-fixture`); receipts refreshed from the current build in both arms | `docs/reports/fleet-e2e-receipt.json:1`, `docs/reports/fleet-e2e-receipt-skip-arm.json:1` |
+| Pipeline fix (operator-directed, same task): verify's `task verdict` action is `onError: continue` — it exits 1 on any non-PASS verdict by design (1003 R2), but the default 'fail' policy halted the state before the verify guards could run, making the declared `verify → test-fix` remediation lane unreachable; test-fix also gained the review-lane evidence projection; definition version 4 → 5 | `config/workflows/task-pipeline.yaml` (commit `c940a00cf`) |
 
-R1–R3 were already implemented by the committed harness: `scripts/commands/fleet-e2e.ts` scaffolds a
-`$TMPDIR` scratch project with a declared `agent.fleet`, drives every plan §1 step through the
-source-local CLI, and tears down; every step writes a `{ command, exitCode, evidence }` row into the
-receipt; the member's model is the only stub (`bin/claude`), while the fleet, inbox, `coordination_runs`
-receipt and `agent trace` paths are real. This pass adds the R4 skip branch and refreshes the receipt.
+**Why the probe reads the parent help's command column rather than `agent join --help`'s exit code
+(R4).** Commander falls through to the PARENT command for an unknown verb, so pre-1081
+`agent join --help` exited 0 and printed the same parent help that `agent bogus --help` prints on
+HEAD (both exit 0 — verified 2026-10-06). The exit code is identical in the two states and the skip
+branch would be dead code. The `join [options]` line in the parent help exists only once 1081 has
+landed; `agentCommandListed(scratch, 'join')` reads exactly that line.
 
-**Why probe `--help` rather than assume the verb exists (R4).** The requirement is conditional: run
-only when 1081 has landed, otherwise record `skipped` with the reason. `agent join|leave|wait --inbox`
-land with 1081, so their `--help` exit code is the one observable that distinguishes the two states
-without a corpus or environment override. On current HEAD 1081 is `done`, so the branch is the
-`passed` path; the `skipped` path is the recorded contract for the pre-1081 state.
+**Why the skip arm is now executed, not just reachable.** Run 1's verify verdict was PARTIAL on
+exactly this point: the `skipped` arm rested on code plus a guard probe because 1081 is `done` on
+this tree, so no run ever emitted a `skipped` row. The operator adjudicated: give R4 executed
+evidence. `--guest-join-fixture` runs the WHOLE harness with only the guest-join leg's interrogated
+CLI swapped for the generated pre-1081 fixture — the skip branch, its row and its receipt are
+produced by execution, deterministically, on any machine (the fixture is generated in the scratch
+dir from a frozen in-source constant, so the receipt is reproducible for everyone).
 
-**Why no assertion was weakened to force green.** Every step was already green before this change and
-stays green after it; the injected-failure run still records `failed` and exits nonzero.
+**Why no assertion was weakened to force green.** The land arm stays 9/9 (its `guest-join` row still
+asserts the joined-guest leg and still runs it); the skip arm's row asserts the skip itself;
+`--inject-failure` still records `failed` and exits nonzero.
 
 ### Testing
 
-Harness re-run on the final script (branch `sp/run-1077-726c`, HEAD `4e11b2cd0` + this change).
+Harness re-run on the final script (branch `sp/run-1077-726c`, HEAD `c940a00cf` + this change).
 The full project gate `bun run spur-check` is the pipeline's `test` hop, not implement
 (`sp-code-implementation` § "Implement scope: do not run the project quality gate"), so this pass ran
-the harness itself plus the affected-path checks.
+both harness arms plus the affected-path checks.
 
-**Determinism — two runs, `[.steps[] | {step, status, assertion}]` compared.**
+**R4 skip arm — EXECUTED (`--guest-join-fixture`), exit 0.**
 
 ```
-$ bun run fleet-e2e            # run A
-fleet-e2e receipt: .../docs/reports/fleet-e2e-receipt.json
-  ok   scaffold: scratch=/private/var/.../spur-fleet-e2e-1791262180890 | fleet=... planner-1, coder-1 ...
-  ok   create-task: wbs=0001 status=todo tags=fleet:auto feature=A readiness=task check --as wip PASS
-  ok   start-loops: pids=27219,27220 (stub first on PATH) orchestrator claim live member session recorded
-  ok   dispatch-to-done: status=done keyed message=82331c40-... requestKey=fleet:task:0001:1 run=8976efd8-... closure=the member's own turn
-  ok   orchestrator-reply: sent=501f8e04-... reply=d208c70f-... body=idle inReplyTo=501f8e04-...
-  ok   kill-redispatch: unkeyed delivered=7c06c3c7-... status=delivered (stdin, no run row) — named by 0 of 3 ... | attempt-1=fleet:task:0002:1 ... attempt-2=fleet:task:0002:2 ...
-  ok   guest-join: guest=reviewer-g request=05372c8b-... pending=1 reply=d537c80d-... left=reviewer-g
-  ok   trace: root=8976efd8-... nodes=1 node=agent/errored stream=... lines=... parentRunId=null
-  ok   teardown: killed pids=27219,27813 | scratch removed=true | problems=none
+$ bun scripts/spur-dev.ts fleet-e2e --guest-join-fixture
+  ok   scaffold: scratch=/private/var/.../spur-fleet-e2e-1791265874759 | fleet=... planner-1, coder-1
+  ok   create-task / start-loops / dispatch-to-done / orchestrator-reply / kill-redispatch  (all ok)
+  skip guest-join: skipped: 1081 not landed (spur-pre1081 agent --help does not list the join command)
+  ok   trace / teardown: killed pids=... | scratch removed=true | problems=none
 EXIT=0
+```
 
-$ bun run fleet-e2e            # run B
-  ok   scaffold ...  ok create-task ...  ok start-loops ...
-  ok   dispatch-to-done: run=23d723e9-...   ok orchestrator-reply   ok kill-redispatch
-  ok   guest-join: request=dc1d8ab4-... reply=a5892af8-... left=reviewer-g
-  ok   trace   ok teardown: killed pids=28467,28834 | scratch removed=true | problems=none
-EXIT=0
+Receipt row (`docs/reports/fleet-e2e-receipt-skip-arm.json`), produced by executing the branch:
 
-$ jq '[.steps[] | {step,status,assertion}]' .spur/run/1077-receipt-runA.json > .spur/run/1077-proj-runA.json
-$ jq '[.steps[] | {step,status,assertion}]' .spur/run/1077-receipt-runB.json > .spur/run/1077-proj-runB.json
-$ diff .spur/run/1077-proj-runA.json .spur/run/1077-proj-runB.json
-IDENTICAL
+```json
+{ "guestJoinCli": "pre-1081-fixture",
+  "row": { "step": "guest-join", "command": "spur-pre1081 agent --help", "exitCode": 0,
+           "status": "skipped",
+           "assertion": "task 1081 has not landed on this tree, so the guest-join leg does not run: the row records the reason and no guest is joined",
+           "evidence": "skipped: 1081 not landed (spur-pre1081 agent --help does not list the join command)" } }
+```
+
+**Land arm — still 9/9, determinism holds (two runs, `{step,status,assertion}` projections diffed).**
+
+```
+$ bun scripts/spur-dev.ts fleet-e2e   # runs A and B
+  ok   ... all 9 rows ... EXIT=0
+scaffold=passed create-task=passed start-loops=passed dispatch-to-done=passed orchestrator-reply=passed
+kill-redispatch=passed guest-join=passed trace=passed teardown=passed
+$ diff projections(runA) projections(runB)
+IDENTICAL (9 rows)
+$ jq -r '.guestJoinCli' docs/reports/fleet-e2e-receipt.json
+source-local
 ```
 
 **Failure injection — the harness must fail.**
 
 ```
-$ bun run fleet-e2e -- --inject-failure trace
-  ok   ... (8 rows passed) ...
-  FAIL trace: root=bdd50e8a-... nodes=1 node=agent/errored ...
-  ok   teardown: killed pids=29525,29831 | scratch removed=true | problems=none
-fleet-e2e: 1 step(s) failed: trace
-error: script "fleet-e2e" exited with code 1
-EXIT=1
+$ bun scripts/spur-dev.ts fleet-e2e --inject-failure guest-join
+  FAIL guest-join: ... | injected failure: --inject-failure guest-join
+fleet-e2e: 1 step(s) failed: guest-join
+EXIT=1  (receipt row: guest-join=failed)
 ```
 
-The injected receipt's `trace` row records `"status": "failed"`, `"exitCode": 1`, evidence ending in
-`| injected failure: --inject-failure trace`; the other eight steps remain `passed`.
-
-**Affected-path checks (dependency-aware matrix row: script + shared surface).**
+**Affected-path checks.**
 
 ```
-$ bunx biome check scripts/commands/fleet-e2e.ts
-Checked 1 file. No fixes applied.
-
+$ bunx biome check scripts/commands/fleet-e2e.ts scripts/spur-dev.ts
+Checked 2 files in 13ms. No fixes applied.
 $ bunx tsc -p scripts/tsconfig.json --noEmit
 exit 0
+$ bun apps/cli/src/index.ts task check 1077
+1077 (wip): PASS
 ```
 
 ### Review
@@ -200,4 +210,5 @@ exit 0
 ### History
 
 - 2026-10-04T20:57:55.158Z backlog → todo (system)
+- 2026-10-06T04:53:29.913Z todo → wip (system)
 
