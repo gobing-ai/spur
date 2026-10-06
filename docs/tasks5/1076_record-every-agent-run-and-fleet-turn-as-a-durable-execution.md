@@ -4,7 +4,7 @@ name: Record every agent run and fleet turn as a durable execution record with s
 status: done
 template: feature-impl
 created_at: 2026-10-04T20:30:37.507Z
-updated_at: "2026-10-06T16:40:47.518Z"
+updated_at: "2026-10-06T17:11:12.331Z"
 feature_id: G71
 
 dependencies: ["1073", "1074"]
@@ -201,20 +201,20 @@ covers the new verb's documentation parity.
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
 | R1 | MET | `packages/app/src/observability/agent-run-log.ts:41` AgentRunLog (redacted, byte-capped, `.spur/memory/runs/<runId>.md`); opened in `packages/app/src/services/agent-service.ts:1333`, fed from the output hook at `packages/app/src/services/agent-service.ts:1568`, closed at `packages/app/src/services/agent-service.ts:1715`. Tests (fresh): `packages/app/tests/observability/agent-run-log.test.ts:22`, `packages/app/tests/observability/agent-run-log.test.ts:39`, `packages/app/tests/observability/agent-run-log.test.ts:53`, `packages/app/tests/observability/agent-run-log.test.ts:71`, `packages/app/tests/observability/agent-run-log.test.ts:80`. |
-| R2 | MET | Fixed this pass. Marker `packages/app/src/services/supervisor-service.ts:119`; the line pump consumes it at `packages/app/src/services/supervisor-service.ts:465` and calls setCurrentRun (`packages/app/src/services/supervisor-service.ts:493`); pushFrame stamps the tag at `packages/app/src/services/supervisor-service.ts:500`. Producer wired at `apps/cli/src/commands/agent.ts:1709`, driven by the loop around a keyed run at `packages/app/src/services/agent-loop-service.ts:507` and `packages/app/src/services/agent-loop-service.ts:520`. Test (fresh, written first, failed before the fix): `packages/app/tests/services/supervisor-service.test.ts:448`. |
+| R2 | MET | Fixed this pass. Marker `packages/app/src/services/supervisor-service.ts:119`; the line pump consumes it at `packages/app/src/services/supervisor-service.ts:465` and calls setCurrentRun (`packages/app/src/services/supervisor-service.ts:493`); pushFrame stamps the tag at `packages/app/src/services/supervisor-service.ts:500`. Producer wired at `apps/cli/src/commands/agent.ts:1709`, driven by the loop around a keyed run at `packages/app/src/services/agent-loop-service.ts:508` and `packages/app/src/services/agent-loop-service.ts:521`. Test (fresh, written first, failed before the fix): `packages/app/tests/services/supervisor-service.test.ts:448`. |
 | R3 | MET | CHANGED, documented: the migration ships as 0051, not 0050 (0050 was already taken; recorded in commit 18350f75b and the task Solution). `drizzle/0051_spur_cli_coordination_runs_parent.sql` adds the column; schema at `packages/domain/src/migrations.ts:180`; DAO write `packages/domain/src/dao/coordination-run-dao.ts:113`, read `packages/domain/src/dao/coordination-run-dao.ts:177` listByParentRunId; parent resolution from the dispatch flag or the inherited SPUR_RUN_ID at `packages/app/src/services/agent-service.ts:1322-1328`. Test (fresh): `packages/app/tests/services/agent-trace-service.test.ts:23`. |
 | R4 | MET | `packages/app/src/services/agent-trace-service.ts:51` AgentTraceService, trace at `packages/app/src/services/agent-trace-service.ts:62`; thin CLI transport `apps/cli/src/commands/agent.ts:603`. Tests (fresh): `packages/app/tests/services/agent-trace-service.test.ts:98`, `packages/app/tests/services/agent-trace-service.test.ts:117`, `packages/app/tests/services/agent-trace-service.test.ts:129`, `packages/app/tests/services/agent-trace-service.test.ts:149`; CLI `apps/cli/tests/commands/agent-trace.test.ts:52`, `apps/cli/tests/commands/agent-trace.test.ts:68`, `apps/cli/tests/commands/agent-trace.test.ts:86`. |
 | R5 | MET | `docs/design/cli-contracts.md:255`, `plugins/sp/skills/spur-cli/references/agent.md:274`, `docs/03_ARCHITECTURE.md:1255` (lineage and the run-tagged live view). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Every execution has a durable record | MET | test | `packages/app/tests/observability/agent-run-log.test.ts:22` and `apps/cli/tests/commands/agent-trace.test.ts:52` (fresh). E2E this run: the fleet-e2e trace row resolves the done task's own run with its stream (`.spur/run/G71-verifyall-e2e-final.log`). |
+| AC1 — Every execution has a durable record | MET | test | `packages/app/tests/observability/agent-run-log.test.ts:22` and `apps/cli/tests/commands/agent-trace.test.ts:52` (fresh). E2E this run: the fleet-e2e trace row resolves the done task's own run 5f4cf2b9 with its stream and sessionIds=[] (receipt `docs/reports/fleet-e2e-receipt.json:78`) (`.spur/run/G71-verifyall-e2e-final-2.log`). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
 Review of the 1076 diff (13 files: the new run-log and trace services, the agent-service wiring, the
-`0050` migration and its DAO surface, supervisor frame tagging, the loop's run-id ownership, the new CLI
+`0051` migration and its DAO surface, supervisor frame tagging, the loop's run-id ownership, the new CLI
 verb, and the three surface docs). Dimensions: functional traceability (R1–R5), SECUA, architecture depth.
 
 ## Findings
@@ -222,23 +222,23 @@ verb, and the three surface docs). Dimensions: functional traceability (R1–R5)
 | Severity | Finding | Disposition |
 | --- | --- | --- |
 | P2 (major) | `AgentTraceService.trace` used ONE visited set for both the ascent and the descent, so starting from a child id marked that child as "seen" and the downward walk then skipped it: `trace <child>` returned the ancestors and silently omitted the run the operator asked about. Caught by the task's own child-id test before verify. | Fixed inside the reviewed diff: the ascent keeps an `ancestors` set, the descent keeps `visited`, and the descent's cycle guard is the only place that suppresses a node. Pinned by "traces from a CHILD id — the root is resolved by walking the parent edge up", which asserts the child appears. |
-| P3 (minor) | The supervisor tag is only reachable by a host that shares the process with the supervisor. `SupervisorService` is serve-owned while `agent loop` runs as its child, so a spawned member loop cannot call `setSupervisorRun` without new IPC; frames from spawned loops therefore stay untagged even during a keyed run. | Documented limitation, not silent: the frame field, the setter and the stamping are correct and tested, and the loop already owns its run id, so the remaining work is one serve-side producer (subscribe to `agent.invoke.start`/`exit` for the member, or run the loop in-process). Recorded as 1076's residual risk and named in `## Testing`; a ledger-driven producer is the natural follow-up. |
+| P2 (major) | R2 had no production producer: `SupervisorService` is serve-owned while `agent loop` runs as its child, so a spawned member loop could not call `setSupervisorRun` and its frames stayed untagged during a keyed run. Originally recorded here as a P3 limitation; the G71 verifyall re-audit raised it because R2 requires the tag. | Fixed in `eea11e8e6`: the loop prints a `SUPERVISOR_RUN_MARKER` control line on stdout around a keyed run (`apps/cli/src/commands/agent.ts:1709`, driven at `packages/app/src/services/agent-loop-service.ts:508` / `:521`); the supervisor's line pump consumes it (`packages/app/src/services/supervisor-service.ts:465`) and stamps subsequent frames (`:500`). Regression test written first: `packages/app/tests/services/supervisor-service.test.ts:448`. |
 | P3 (minor) | Every agent run now writes its durable record, so `resolveArtifactRefs` names the run's OWN `.spur/memory/runs/<runId>.md` for runs that previously resolved a scratch pair or a legacy `.log`. | Intended (R1 + ADR-131 durable-first) and asserted in the updated `agent-service` case, which now pins the invariant for all three shapes instead of the old ladder. The ladder still applies to runs that write no agent record. |
 | P3 (minor) | `DEFAULT_AGENT_RUN_LOG_MAX_BYTES` repeats the sink's 1 MiB value rather than importing it. | Deliberate decoupling: the two surfaces share a CONTRACT (redaction, cap, marker, best-effort) but must be free to diverge, and a shared constant would couple an agent-run concern to a workflow one. Pinned by a test asserting the current shared value, so a silent divergence fails. |
 | P4 (advisory) | `follow` re-reads the whole lineage each poll (one query per node per tick). | Accepted: fleet lineages are shallow and the poll interval is 250 ms; the alternative (incremental tail cursors) is unwarranted complexity at this scale. |
 | P4 (advisory) | An unknown run id is reported as a `workflow`/`unknown` node instead of erroring. | Chosen deliberately: a mistyped id still names itself in a lineage view, and the node's `status: unknown` plus absent session/log fields make the absence plain. |
 
-No open P1; the single P2 was repaired inside the reviewed diff.
+No open P1; both P2s are fixed — the trace one inside the reviewed diff, the R2 producer in `eea11e8e6`.
 
 ## Functional traceability
 
 | Req | Status | Evidence |
 | --- | --- | --- |
-| R1 every `spur agent run` and fleet turn appends redacted, byte-capped frames to `.spur/memory/runs/<runId>.md` under ADR-131 retention | MET | `packages/app/src/observability/agent-run-log.ts:40`; opened after the run row (`agent-service.ts:1306`), fed from `onOutput` (`:1541`), closed before the receipt (`:1688`); tests "appends ISO-stamped, stream-tagged frames", "a configured secret never reaches disk", "the byte bound writes ONE visible truncation marker and then stops", "an unwritable directory leaves the record inert" |
-| R2 the supervisor's ring buffer tags each frame with the current run id and stays a live view | MET | `ProcessFrame.runId` + `setCurrentRun` + stamping (`packages/app/src/services/supervisor-service.ts:469`) and the loop hook that sets it around a keyed run (`agent-loop-service.ts:473`), which is what the requirement names. The frames stay a live view: the durable stream is the file, and `untagged` is the legitimate state for persistent-stdin conversation. Caveat recorded as a finding: the serve-spawned topological path has no producer yet (P3 above). |
-| R3 migration `0050` adds `coordination_runs.parent_run_id`; the exit sink persists it from the dispatch key or `SPUR_RUN_ID` | MET | `packages/domain/src/migrations.ts:1559` + `drizzle/0050_spur_cli_coordination_runs_parent.sql`; DAO `parentRunId` (`coordination-run-dao.ts:86`) and `listByParentRunId` (`:177`); resolution in `agent-service` (flag → `SPUR_RUN_ID` → null) and the key extraction in `drainIntoPrompt`; tests "parentRunId round-trips and listByParentRunId returns the children oldest-first" |
-| R4 `spur agent trace <runId> [--follow] [--json]` prints the lineage, session ids and stream | MET | `packages/app/src/services/agent-trace-service.ts:42`; CLI `apps/cli/src/commands/agent.ts:407`; tests "traces from the ROOT down", "traces from a CHILD id", "an unknown run is a single unknown node", "follow returns immediately when every node is terminal, and times out on a live one"; `plugins/sp/tests/cli-surface-parity.test.ts` passes with the verb documented |
-| R5 surface docs record the execution record | MET | `docs/design/cli-contracts.md:255`, `plugins/sp/skills/spur-cli/references/agent.md` (verb map + section + flags), `docs/03_ARCHITECTURE.md:1195` |
+| R1 every `spur agent run` and fleet turn appends redacted, byte-capped frames to `.spur/memory/runs/<runId>.md` under ADR-131 retention | MET | `packages/app/src/observability/agent-run-log.ts:41`; opened after the run row (`agent-service.ts:1333`), fed from `onOutput` (`:1568`), closed before the receipt (`:1715`); tests "appends ISO-stamped, stream-tagged frames", "a configured secret never reaches disk", "the byte bound writes ONE visible truncation marker and then stops", "an unwritable directory leaves the record inert" |
+| R2 the supervisor's ring buffer tags each frame with the current run id and stays a live view | MET | `ProcessFrame.runId` + `setCurrentRun` + stamping in `packages/app/src/services/supervisor-service.ts:500`; production producer is the stdout control line (`SUPERVISOR_RUN_MARKER`, `supervisor-service.ts:119`) emitted by the loop around a keyed run (`agent-loop-service.ts:508`, `apps/cli/src/commands/agent.ts:1709`) and consumed by the line pump (`supervisor-service.ts:465`); test `supervisor-service.test.ts:448`. The frames stay a live view: the durable stream is the file, and `untagged` remains the legitimate state for persistent-stdin conversation. |
+| R3 migration `0051` (CHANGED from the planned `0050`, which was already taken) adds `coordination_runs.parent_run_id`; the exit sink persists it from the dispatch key or `SPUR_RUN_ID` | MET | `packages/domain/src/migrations.ts:180` + `drizzle/0051_spur_cli_coordination_runs_parent.sql`; DAO `parentRunId` write (`coordination-run-dao.ts:113`) and `listByParentRunId` (`:177`); resolution in `agent-service` (flag → `SPUR_RUN_ID` → null) and the key extraction in `drainIntoPrompt`; tests "parentRunId round-trips and listByParentRunId returns the children oldest-first" |
+| R4 `spur agent trace <runId> [--follow] [--json]` prints the lineage, session ids and stream | MET | `packages/app/src/services/agent-trace-service.ts:51`; CLI `apps/cli/src/commands/agent.ts:603`; tests "traces from the ROOT down", "traces from a CHILD id", "an unknown run is a single unknown node", "follow returns immediately when every node is terminal, and times out on a live one"; `plugins/sp/tests/cli-surface-parity.test.ts` passes with the verb documented |
+| R5 surface docs record the execution record | MET | `docs/design/cli-contracts.md:255`, `plugins/sp/skills/spur-cli/references/agent.md` (verb map + section + flags), `docs/03_ARCHITECTURE.md:1255` |
 
 ## Architecture depth
 
@@ -251,11 +251,13 @@ app-layer service, per ADR-130.
 
 ## Residual risk
 
-- R2's producer gap (above): a spawned member loop's frames are untagged until a serve-side producer
-  exists. The durable record — the thing a restart must not lose, and the thing `trace` reads — is
-  unaffected.
+- R2's producer gap is closed (`eea11e8e6`). The tag rides a stdout control line, so a loop whose stdout
+  is not piped through the supervisor (a hand-started `agent loop`) still produces untagged frames; the
+  durable record and `trace` do not depend on the tag.
 - `follow` observes the DB and the file system; it cannot detect a run whose process died without writing
   a terminal row (the reconciler owns that classification, not this reader).
+
+Refreshed 2026-10-06 after the G71 verifyall re-audit: anchors re-read, migration number corrected, R2 producer finding updated to fixed.
 
 ### References
 
