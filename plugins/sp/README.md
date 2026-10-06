@@ -273,6 +273,7 @@ plugins/sp/
 ├── commands/                        # Slash-command wrappers — the SSOT (hand-editable thin wrappers; see Commands below)
 ├── agents/                          # 4 specialist subagents (expert-spur, super-coder, super-planner, super-reviewer)
 ├── hooks/                           # hooks.json + task-write-guard.{ts,test.ts} + context-{session-start,post-tool,session-stop}.ts
+│                                    # + agent-lifecycle.{ts,test.ts} + fleet-guest-stop.{ts,test.ts} (fleet member/guest hooks)
 │                                    # + careful-guard.{ts,test.ts} + context-hooks.test.ts + token-estimate.test.ts
 │                                    # + shared policy modules: agent-hint.ts, destructive-policy.{ts,test.ts}, task-file-policy.{ts,test.ts}
 │                                    # + pi/guard-extension.{ts,test.ts} (plugin.json `extensions.pi` entry point)
@@ -474,13 +475,16 @@ the agent provides an isolated context window.
 #### 4. Hooks (`hooks/`)
 
 Event-driven enforcement that runs automatically without user invocation. `hooks.json` registers
-four handlers:
+six handlers across seven events:
 
 | Event          | Matcher                               | Handler                                        | Timeout |
 | -------------- | ------------------------------------- | ---------------------------------------------- | ------- |
 | `PreToolUse`   | `Write\|Edit`                         | `superskill hook run sp task-write-guard`      | 10s     |
 | `PostToolUse`  | `Bash\|Grep\|Glob\|Read\|Write\|Edit` | `superskill hook run sp context-post-tool`     | 10s     |
 | `SessionStart` | —                                     | `superskill hook run sp context-session-start` | 15s     |
+| `SessionStart`, `UserPromptSubmit`, `Stop` | —         | `superskill hook run sp agent-lifecycle`       | 5s      |
+| `Notification` | `permission_prompt`                   | `superskill hook run sp agent-lifecycle`       | 5s      |
+| `Stop`         | —                                     | `superskill hook run sp fleet-guest-stop`      | 10s     |
 | `SessionEnd`   | —                                     | `superskill hook run sp context-session-stop`  | 15s     |
 
 **Write guard.** The `PreToolUse` hook fires on every `Write`/`Edit` tool call and checks whether
@@ -493,6 +497,11 @@ and decides the exit code alone; it contains zero validation logic of its own.
 estimates the token cost of each matched tool call and appends it to `.spur/context/token-ledger.jsonl`
 (with redaction of sensitive argument fields), `context-session-start` seeds the indexed-context
 hint on first launch, and `context-session-stop` closes out the session record.
+
+**Fleet hooks (1080/1081).** `agent-lifecycle` reports member state in the background via
+`spur agent report --state working|idle|blocked` (a permission prompt is `blocked`) — only when
+`SPUR_SPEC_ID` is set, so outside a fleet it makes no call. `fleet-guest-stop` delivers pending
+inbox work to a session joined as a fleet guest at turn end; any other session passes through.
 
 **Available but unwired:** `careful-guard.ts` ships in `hooks/` (with tests) as an opt-in
 `PreToolUse` guard that asks before destructive shell commands (`rm -rf`, `DROP TABLE`,
@@ -512,6 +521,7 @@ hold `SKILL.md` and prompt-side companions only.
 | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `hooks/task-write-guard.ts`                          | Compatibility shim for older installs that still execute the script path directly. Forwards stdin to the stable PATH command `superskill hook run sp task-write-guard`, mirrors parseable PreToolUse decisions, and fails open if the runtime is unavailable. Performs no source-tree CLI lookup. |
 | `hooks/context-*.ts`                                 | Runtime for the three registered context hooks (session-start, post-tool, session-stop) — token-cost estimation + ledger append for `sp:indexed-context`                                                                                                                                          |
+| `hooks/{agent-lifecycle,fleet-guest-stop}.ts`       | Fleet hooks (1080/1081): member lifecycle reports via `spur agent report`; turn-end inbox delivery to joined guests |
 | `hooks/careful-guard.ts`                             | Opt-in destructive-command guard (unwired — see Hooks above)                                                                                                                                                                                                                                      |
 | `scripts/batch-preflight.ts`                         | Pure TABLE A STOP evaluation for `super-planner` — skip doomed pipeline launches without spawning a Skill subprocess; recovery hints map stuck statuses to a single `/sp:dev-*` hop                                                                                                               |
 | `scripts/workflow-step-profile.ts`                   | Thin glue over the generated lib bundle (`lib/step-profile.generated.mjs` from `packages/app/src/workflow/step-profile.ts`) — read-only step profile from `spur workflow trace`: per node and action-kind durations, idle gaps, session mode and `cacheHit` coverage, plus the ADR-115 cache-window flags `sp:spur-doctor` turns into workflow-optimization proposals |

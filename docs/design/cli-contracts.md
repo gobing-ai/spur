@@ -587,7 +587,7 @@ through `spur agent list --specs`. Spec ids are validated (`[a-z][a-z0-9_-]{1,63
 
 Member lifecycle reporting and guest occupancy (1080/1081; ADR-057 A1, ADR-121 A2).
 
-`agent report` is the host hooks' only CLI call. The `sp` plugin's Claude hooks call it in the
+`agent report` is the lifecycle hook's only CLI call. The `sp` plugin's Claude hooks call it in the
 background **only when `SPUR_SPEC_ID` is set** (outside a fleet they make no call), so the strategy
 sees a member waiting on a human and the Board can show `needs human`.
 
