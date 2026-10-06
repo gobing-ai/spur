@@ -177,6 +177,6 @@
     └── [cancelled] **M6**: Workspace Overview removal and Inbox/Teams supervisor-label split ([M6_workspace-overview-removal-and-inbox-teams-supervisor-label-split.md](./M6_workspace-overview-removal-and-inbox-teams-supervisor-label-split.md))
 [done] **N**: 0451 pipeline post-mortem: process and infrastructure hardening ([N_0451-pipeline-post-mortem-process-and-infrastructure-hardening.md](./N_0451-pipeline-post-mortem-process-and-infrastructure-hardening.md))
 [backlog] **O**: Observability run-detail refinements ([O_observability-run-detail-refinements.md](./O_observability-run-detail-refinements.md))
-[backlog] **P**: Decision catalogs and the spur decision noun ([P_decision-catalogs-and-the-spur-decision-noun.md](./P_decision-catalogs-and-the-spur-decision-noun.md))
+[active] **P**: Decision catalogs and the spur decision noun ([P_decision-catalogs-and-the-spur-decision-noun.md](./P_decision-catalogs-and-the-spur-decision-noun.md))
     └── [backlog] **P1**: Workflow decision points adopt spur decision catalogs ([P1_workflow-decision-points-adopt-spur-decision-catalogs.md](./P1_workflow-decision-points-adopt-spur-decision-catalogs.md))
 <!-- END AUTO-GENERATED -->

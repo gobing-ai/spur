@@ -149,3 +149,20 @@ agent:
 # extra workflow folders by concatenating them here (loader merge):
 workflows:
     paths: []
+
+# Decision catalogs (feature P / ADR-134): the project layer is always
+# `<cwd>/.spur/decisions` and the shared layer is the installed package's own
+# `config/decisions`, so no config entry is needed to discover the shipped
+# catalogs. `paths` registers extra catalog folders (absolute or
+# project-relative); the first layer wins per file basename (ADR-113 style).
+# `maker` selects the default DecisionMaker for every decision point, and
+# `makers` overrides it per decision id. Built-in makers: typesafe, fm-local,
+# laya-local (laya-local needs Apple Silicon). An unregistered name is a config
+# error, never a silent fallback. Inspect the effective choice with
+# `spur decision status`. `init` never overwrites this file — until you add the
+# keys, the shipped catalog's maker applies (see `status`).
+decisions:
+    paths: []
+    maker: typesafe
+    # makers:
+    #     task-triage: laya-local

@@ -49,6 +49,7 @@ const SCHEMA_PREFIX = '@gobing-ai/spur/schemas/';
 function schemaFor(relPath: string): string | null {
     if (basename(relPath) === 'config.global.yaml') return null; // already has $schema
     if (relPath.startsWith('workflows/')) return `${SCHEMA_PREFIX}state-machine-workflow.schema.json`;
+    if (relPath.startsWith('decisions/')) return `${SCHEMA_PREFIX}decision-catalog.schema.json`;
     // Presets are at the rules/ root; rule files live in category subdirs.
     if (dirname(relPath) === 'rules') return `${SCHEMA_PREFIX}preset.schema.json`;
     if (relPath.startsWith('rules/')) return `${SCHEMA_PREFIX}rule-file.schema.json`;

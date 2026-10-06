@@ -1,0 +1,54 @@
+# Decision catalogs for the task pipeline (feature P / task 1092, ADR-134).
+#
+# These entries mirror the inline decide actions that ship in
+# config/workflows/task-pipeline.yaml today — same questions, choices and
+# fallbacks — so their reliability can be measured with `spur decision run`
+# before feature P1 migrates the workflow actions onto them (design §3.5).
+# No workflow references this catalog yet.
+#
+# Resolution: this file ships in the shared layer (the installed package's
+# config/decisions/). A project can override it per basename through
+# .spur/decisions/ or decisions.paths (first layer wins, ADR-113 style).
+version: 1
+
+defaults:
+    # ADR-125 value, kept over the upstream 0.7 default.
+    minConfidence: 0.8
+
+decisions:
+    task-triage:
+        type: choice
+        description: Which verification lane does a green-gate diff deserve?
+        parameters:
+            wbs:
+                type: string
+                description: Task WBS the diff belongs to.
+        criteria:
+            low: Small, contained diff — the fast lane is enough.
+            standard: Ordinary diff — the standard verification lane applies.
+            high: Broad or risky diff — verify with high caution.
+        fallback: standard
+
+    failure-class:
+        type: choice
+        description: Is a failed quality gate fixable by the repair agent, or should the run stop?
+        parameters:
+            wbs:
+                type: string
+                description: Task WBS whose gate failed.
+        criteria:
+            fix: The failure looks fixable — send it to the repair agent.
+            stop: The failure is not mechanically fixable — stop the run for the operator.
+        fallback: fix
+
+    review-failure-class:
+        type: choice
+        description: Is a non-PASS review fixable by the repair agent, or should the run stop?
+        parameters:
+            wbs:
+                type: string
+                description: Task WBS whose review did not certify PASS.
+        criteria:
+            fix: The findings look fixable — send them to the repair agent.
+            stop: The findings are not mechanically fixable — stop the run for the operator.
+        fallback: fix

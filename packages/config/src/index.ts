@@ -815,6 +815,19 @@ export const WorkflowsConfigSchema = z.object({
 });
 
 /**
+ * Schema for the `decisions` section (feature P / task 1092, ADR-134): optional
+ * extra catalog folders for the registered decision layer, the default
+ * DecisionMaker for every decision point and per-decision-point overrides.
+ * An unregistered maker name is a config error, never a silent fallback
+ * (design §3.6).
+ */
+export const DecisionsConfigSchema = z.object({
+    paths: z.array(z.string()).optional(),
+    maker: z.string().optional(),
+    makers: z.record(z.string(), z.string()).optional(),
+});
+
+/**
  * Schema for the `workflow` section (feature D2 / task 0429).
  *
  * - `logRetentionDays` — how old a retained `.spur/memory/runs/<RUNID>.log` must be
@@ -985,6 +998,7 @@ export const spurConfigSchema = z.object({
     agent: AgentConfigSchema.optional(),
     rules: RulesConfigSchema.optional(),
     workflows: WorkflowsConfigSchema.optional(),
+    decisions: DecisionsConfigSchema.optional(),
     workflow: WorkflowConfigSchema.optional(),
     redaction: RedactionConfigSchema.optional(),
     history: HistoryConfigSchema.optional(),
@@ -1079,7 +1093,7 @@ export type HistoryRefreshConfig = z.infer<typeof HistoryRefreshConfigSchema>;
  */
 export type SpurAppConfig = Pick<
     SpurConfig,
-    'version' | 'name' | 'agent' | 'rules' | 'workflows' | 'workflow' | 'redaction'
+    'version' | 'name' | 'agent' | 'rules' | 'workflows' | 'decisions' | 'workflow' | 'redaction'
 >;
 
 // ---- App-layer (runtime) config ----

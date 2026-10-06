@@ -31,7 +31,8 @@
         "@gobing-ai/ts-rule-engine": "catalog:",
         "@gobing-ai/ts-runtime": "catalog:",
         "@gobing-ai/ts-utils": "catalog:",
-        "yaml": "catalog:"
+        "yaml": "catalog:",
+        "@gobing-ai/ts-ai-decision": "catalog:"
     },
     "devDependencies": {
         "@types/bun": "catalog:",

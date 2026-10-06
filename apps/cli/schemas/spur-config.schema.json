@@ -287,6 +287,31 @@
                 }
             }
         },
+        "decisions": {
+            "type": "object",
+            "description": "Decision-catalog resolution and DecisionMaker selection (feature P / ADR-134). The whole section is optional.",
+            "properties": {
+                "paths": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "Extra catalog folders for the registered decision layer (absolute, project-relative, or 'bundled:<sub>' against the installed package's config root)."
+                },
+                "maker": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9-]*$",
+                    "description": "Default DecisionMaker for every decision point (built-ins: typesafe | fm-local | laya-local). Must be registered; an unknown name is a config error, never a silent fallback."
+                },
+                "makers": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "description": "Per-decision-point maker overrides, keyed by decision id; outrank decisions.maker."
+                }
+            }
+        },
         "redaction": {
             "type": "object",
             "properties": {
