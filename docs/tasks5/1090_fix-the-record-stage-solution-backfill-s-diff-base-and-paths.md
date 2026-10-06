@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Fix the record-stage Solution backfill's diff base and pathspec
-status: backlog
+status: todo
 template: feature-impl
 created_at: 2026-10-05T22:51:56.246Z
-updated_at: "2026-10-05T22:52:40.058Z"
+updated_at: "2026-10-06T00:07:45.068Z"
 feature_id: H1
 
 ac_altitude: task-local
@@ -144,3 +144,6 @@ changed paths, so they fail against today's `git diff HEAD -- '*.ts'` base and p
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-10-06T00:07:45.068Z backlog → todo (system)
+
