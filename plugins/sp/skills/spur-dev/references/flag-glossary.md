@@ -301,10 +301,13 @@ tasks by `updated_at >= date`).
 
 **Anchor:** `#flag-fix`.
 
-Remediation policy on verify-family commands (`dev-verify`, `dev-verifyall`) and the refactor
-coordinator (`dev-refactor`):
+Remediation policy on verify-family commands (`dev-verify`, `dev-verifyall`), the refactor
+coordinator (`dev-refactor`) and the session review (`dev-review-session`):
 `none|blockers-first|all`. `none` reports findings without fixing; `blockers-first` fixes only P1/P2;
-`all` fixes everything found. Deprecated on `dev-review` (routes to `dev-verify --fix`).
+`all` fixes everything found. On `dev-review-session` the vocabulary is `none|auto|all`: `none`
+report-only, `auto` the `--triage` behavior (inline direct fixes, the rest filed as tasks), `all`
+fixes every actionable finding inline and files no task. Deprecated on `dev-review` (routes to
+`dev-verify --fix`).
 
 ### `--until <ref>` — upper bound on a range
 
@@ -453,7 +456,8 @@ Review commands (`dev-review`, `dev-review-session`): after the report, bucket e
 remainder through `spur task` — never fix straight from the raw findings list. Off by default
 (report-only). Both file one or more implement-ready tasks sized per cohesive unit, under existing
 features ([dev-operations.md § 2. review](dev-operations.md#2-review)); `dev-review-session` keeps
-the stricter direct-fix bar (pure docs / one-to-two-line fixes).
+the stricter direct-fix bar (pure docs / one-to-two-line fixes), and there `--triage` is an alias
+of `--fix auto` ([`--fix`](#flag-fix)).
 
 ### `--worktree [<name>]` — run the batch in an isolated git worktree (create or reuse)
 

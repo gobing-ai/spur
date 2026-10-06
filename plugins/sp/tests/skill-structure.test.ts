@@ -1185,12 +1185,19 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         const adr = readFileSync(join(PLUGIN_ROOT, '..', '..', 'docs', '00_ADR.md'), 'utf8');
 
         // Report-only default + the two-class triage exception, stated in skill and satellite.
-        expect(command).toContain('[--triage]');
+        expect(command).toContain('[--fix <none|auto|all>] [--triage]');
         expect(skill).toContain('Report-only stays the default.');
         expect(skill).toContain('one or more implement-ready tasks');
-        expect(design).toContain('/sp:dev-review-session [<focus>] [--triage]');
-        expect(design).toContain('bounded `--triage` exception');
+        expect(design).toContain('/sp:dev-review-session [<focus>] [--fix <none|auto|all>] [--triage]');
+        expect(design).toContain('bounded `--fix` exception');
         expect(design).toContain('one or more implement-ready triage tasks');
+
+        // `--fix all` defers nothing: every actionable finding is fixed inline, no task is filed.
+        for (const doc of [skill, command, design]) {
+            expect(doc).toContain('`--triage` is an alias of `--fix auto`');
+            expect(doc).toContain('`--fix all`');
+        }
+        expect(skill).toContain('creates no task');
 
         // ADR-089 keeps its decision history and carries a narrowly dated clarification.
         expect(adr).toContain(

@@ -1,8 +1,8 @@
 ---
 name: session-review
-description: "Review the active coding-agent session: separate resolved from open issues with evidence, propose bounded improvements. With --triage, apply pure-doc / 1–2-line fixes inline and file the rest as one or more tasks. Triggers: review this session, wrap-up, triage findings."
+description: "Review the active coding-agent session: separate resolved from open issues with evidence, propose bounded improvements. With --fix auto (alias --triage), apply pure-doc / 1–2-line fixes inline and file the rest as tasks; with --fix all, fix every actionable finding inline and file none. Triggers: review this session, wrap-up, triage findings."
 license: Apache-2.0
-version: 1.1.0
+version: 1.2.0
 metadata:
   author: spur
   platforms: "claude-code,codex,openclaw,opencode,antigravity,pi"
@@ -31,7 +31,8 @@ cross-agent windows, recurrence, trends, or quantitative performance forensics.
 | Argument | Description | Default |
 | --- | --- | --- |
 | `[focus]` | Question or operation to emphasize. It changes ordering, not evidence collection. | full active session |
-| `--triage` | Opt into bounded remediation after the report: apply direct fixes (pure docs / one-to-two-line fixes) inline, then file all remaining actionable findings as one or more implement-ready tasks via the CLI-gated corpus surface. | off (report-only) |
+| `--fix <none\|auto\|all>` | Remediation after the report. `none`: report-only. `auto`: apply direct fixes (pure docs / one-to-two-line fixes) inline, then file all remaining actionable findings as one or more implement-ready tasks via the CLI-gated corpus surface. `all`: fix every actionable finding inline and file no task. | `none` |
+| `--triage` | `--triage` is an alias of `--fix auto`; an explicit `--fix` wins when both are passed. | off |
 
 ## Evidence boundary
 
@@ -51,10 +52,11 @@ cross-agent windows, recurrence, trends, or quantitative performance forensics.
   stages whose durations sum to elapsed time; render a value as `n/a` only when the measurement
   reports `available: false` or omits it.
 
-## Triage mode (`--triage`)
+## Fix modes (`--fix auto|all`)
 
-Report-only stays the default. With `--triage`, run the same evidence pass, then remediate in
-three buckets — never skip triage and start fixing from the raw findings list.
+Report-only stays the default. With `--fix auto` or `--fix all`, run the same
+evidence pass, then remediate in three buckets — never skip triage and start fixing from the raw
+findings list. Steps 1–4 below are `--fix auto`; `--fix all` differs only as stated after them.
 
 1. **Triage every finding into exactly one bucket:**
    - **Direct fix** — pure documentation work, or a one-to-two-line fix with obvious, local,
@@ -74,6 +76,13 @@ three buckets — never skip triage and start fixing from the raw findings list.
    verifiable. Exclude what direct fixes already resolved — say so in the task Background.
 4. **Report** — add a Triage section: applied fixes (path + one-line what + verification) and
    each created task WBS. The Resolved/Open tables keep their evidence rules unchanged.
+
+**`--fix all` (defer nothing).** Triage still runs, but the Task bucket is fixed inline instead of
+filed, so the mode creates no task. Fix in dependency order with the same surgical-diff and
+per-fix re-verification rule as direct fixes, then run the project gate once at the end. A finding
+that needs a design or operator decision is asked through the host question tool, never deferred;
+one that still cannot be fixed (failed re-verification, blocked by the environment) stays in Open
+issues with its evidence. Notes stay report-only.
 
 ## Protocol
 
@@ -149,13 +158,13 @@ observation adopted from the 0912 workflow baseline cites its anchor
 (`docs/reports/i31/0912-workflow-baseline.md`) and owner handoff, and carries no unsupported
 performance claim.
 
-### Triage (only when `--triage` was passed)
+### Triage (only with `--fix auto|all`)
 
 | Applied fix / created task | Bucket | What + verification |
 | --- | --- | --- |
 
-One row per applied fix and one per created task (with its WBS). Omit the section entirely when
-`--triage` was not passed.
+One row per applied fix and one per created task (with its WBS; `--fix all` has none). Omit the
+section entirely under `--fix none`.
 
 ### Next actions
 
@@ -169,8 +178,9 @@ improvement. Use `None` when the session is complete and no follow-up is justifi
   comparison or recurrence classification, or emit a twelve-section forensic report; those belong
   to imported-history analysis.
 - Report-only by default: do not create or update corpus items or edit files. The single exception
-  is `--triage` mode, which permits exactly two mutation classes — direct fixes from the triage
-  bucket, and the triage tasks. Anything beyond that stays a proposal.
+  is `--fix auto|all`: `auto` permits exactly two mutation classes — direct fixes from the triage
+  bucket, and the triage tasks; `all` permits one — inline fixes of actionable findings. Anything
+  beyond that stays a proposal.
 - Do not turn a single low-impact observation into a new policy. Report it as a candidate until it
   recurs or demonstrates a high-impact contract violation.
 

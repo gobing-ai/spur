@@ -40,8 +40,9 @@ each would be scope creep for one-liner procedures.
 
 > **`dev-review-session`** is not in this table. It is a thin `Skill()` wrapper over
 > **`sp:session-review`** for an immediate, inline review of the active conversation. Report-only
-> is the default; `--triage` applies pure-doc / one-to-two-line fixes and files remaining actionable
-> findings as implement-ready tasks through the task CLI. It launches no workflow or agent and
+> is the default; `--fix auto` (alias `--triage`) applies pure-doc / one-to-two-line fixes and files
+> remaining actionable findings as implement-ready tasks through the task CLI; `--fix all` fixes
+> every actionable finding inline and files none. It launches no workflow or agent and
 > imports no history. Use it before the active session ends; use history-anatomy for ended sessions,
 > cross-agent windows, trends, or quantitative forensics.
 

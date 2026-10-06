@@ -1167,8 +1167,8 @@ describe('(i) task 0316 — dev-debug and dev-daily entry points', () => {
     test('dev-review-session stays an inline, read-only wrapper over sp:session-review (ADR-089)', () => {
         const raw = readFileSync(join(COMMANDS_DIR, 'dev-review-session.md'), 'utf8');
         expect(raw).toContain('description:');
-        // 0beb3be7c added the `--triage` mode; the hint pins focus first, then the optional flag.
-        expect(raw).toMatch(/^argument-hint:\s*"\[<focus>\](?: \[--triage\])?"/m);
+        // Focus first, then the remediation policy and its `--triage` alias (= `--fix auto`).
+        expect(raw).toMatch(/^argument-hint:\s*"\[<focus>\] \[--fix <none\|auto\|all>\] \[--triage\]"/m);
         expect(raw).toContain('role: reviewer');
         expect(raw).toContain('allowed-tools: ["Bash", "Read", "Grep", "Glob", "Skill"]');
         expect(raw).toContain('# Dev Review Session');
