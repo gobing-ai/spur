@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getEnvVar, removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
@@ -10,6 +10,7 @@ import {
     type DetachedServeChild,
     type DetachedServeSpawn,
     defaultDetachedServeSpawn,
+    defaultResolveOwnerPort,
     resolveSpurServeCommand,
     setDetachedServeSpawnForTests,
     startRegisteredProject,
@@ -381,6 +382,182 @@ describe('project-start', () => {
         });
         expect(optionHits).toBe(1);
         expect(globalHits).toBe(0);
+    });
+
+    // The registry can forget a live serve (a `healStale` probe miss under load rewrites a live
+    // entry's port to 0 while the owner keeps listening). The start path must ADOPT that owner
+    // instead of spawning a duplicate the owner claim then refuses — observed 2026-10-05: the
+    // switcher could not launch ts-libs / knowledge-kit while forgotten serves held 3004/3005.
+    describe('owner adoption', () => {
+        it('adopts the live owner instead of spawning when the registry says stopped', async () => {
+            let spawned = false;
+            setPortProbeForTests(async (p) => (p === 3999 ? 'in-use' : 'available'));
+            await registry.upsert({ name: 'Forgotten', path: tempDir, port: 0 });
+            const result = await startRegisteredProject(registry, 'Forgotten', {
+                resolveOwnerPort: async () => 3999,
+                spawn: fakeServeSpawn(null, () => {
+                    spawned = true;
+                }),
+            });
+            expect(result.alreadyRunning).toBe(true);
+            expect(result.port).toBe(3999);
+            expect(result.url).toContain('3999');
+            expect(spawned).toBe(false);
+            // The divergence is healed: the entry names the real port again.
+            expect((await registry.getByPath(tempDir))?.port).toBe(3999);
+        });
+
+        it('heals a stale recorded port to the one the owner actually serves', async () => {
+            setPortProbeForTests(async (p) => (p === 3998 ? 'in-use' : 'available'));
+            await registry.upsert({ name: 'StalePort', path: tempDir, port: 3111 });
+            const result = await startRegisteredProject(registry, 'StalePort', {
+                resolveOwnerPort: async () => 3998,
+                spawn: fakeServeSpawn(null),
+            });
+            expect(result.alreadyRunning).toBe(true);
+            expect(result.port).toBe(3998);
+            expect((await registry.getByPath(tempDir))?.port).toBe(3998);
+        });
+
+        it('falls through to spawn when no live owner serves the project', async () => {
+            let spawned = false;
+            const targetPort = 3502;
+            setPortProbeForTests(async (p) => (p === targetPort ? 'in-use' : 'available'));
+            const origAllocate = ProjectRegistry.prototype.allocatePort;
+            ProjectRegistry.prototype.allocatePort = async () => targetPort;
+            try {
+                await registry.upsert({ name: 'NoOwner', path: tempDir, port: 0 });
+                const result = await startRegisteredProject(registry, 'NoOwner', {
+                    pollAttempts: 5,
+                    pollIntervalMs: 10,
+                    resolveOwnerPort: async () => null,
+                    spawn: fakeServeSpawn(null, () => {
+                        spawned = true;
+                    }),
+                });
+                expect(result.alreadyRunning).toBe(false);
+                expect(result.port).toBe(targetPort);
+                expect(spawned).toBe(true);
+            } finally {
+                ProjectRegistry.prototype.allocatePort = origAllocate;
+            }
+        });
+
+        it('does not probe the owner when the registry port is already live', async () => {
+            let probed = false;
+            setPortProbeForTests(async (p) => (p === 3600 ? 'in-use' : 'available'));
+            await registry.upsert({ name: 'LiveKnown', path: tempDir, port: 3600 });
+            const result = await startRegisteredProject(registry, 'LiveKnown', {
+                resolveOwnerPort: async () => {
+                    probed = true;
+                    return null;
+                },
+            });
+            expect(result.alreadyRunning).toBe(true);
+            expect(probed).toBe(false);
+        });
+
+        it('default probe adopts a real listener owned by a claimed live pid', async () => {
+            if (process.platform === 'win32') return;
+            const lockDir = join(tempDir, '.spur', 'server-owner.lock');
+            mkdirSync(lockDir, { recursive: true });
+            writeFileSync(join(lockDir, `${process.pid}-${crypto.randomUUID()}`), '');
+            const server = Bun.serve({ port: 0, hostname: '127.0.0.1', fetch: () => new Response('ok') });
+            const realPort = server.port;
+            if (realPort === undefined) throw new Error('Bun.serve did not allocate an ephemeral port');
+            try {
+                setPortProbeForTests(async (p) => (p === realPort ? 'in-use' : 'available'));
+                expect(await defaultResolveOwnerPort(tempDir)).toBe(realPort);
+            } finally {
+                server.stop(true);
+            }
+        });
+
+        it('default probe returns null for a live owner that listens nowhere (boot-hung)', async () => {
+            if (process.platform === 'win32') return;
+            const sleeper = Bun.spawn(['sleep', '30'], { stdio: ['ignore', 'ignore', 'ignore'] });
+            try {
+                const lockDir = join(tempDir, '.spur', 'server-owner.lock');
+                mkdirSync(lockDir, { recursive: true });
+                writeFileSync(join(lockDir, `${sleeper.pid}-${crypto.randomUUID()}`), '');
+                expect(await defaultResolveOwnerPort(tempDir)).toBeNull();
+            } finally {
+                sleeper.kill();
+            }
+        });
+
+        it('default probe returns null for malformed, multiple, or dead-pid claims', async () => {
+            if (process.platform === 'win32') return;
+            const lockDir = join(tempDir, '.spur', 'server-owner.lock');
+            mkdirSync(lockDir, { recursive: true });
+            // Two entries — an ownership transition in flight; never guess.
+            writeFileSync(join(lockDir, `11111-${crypto.randomUUID()}`), '');
+            writeFileSync(join(lockDir, `22222-${crypto.randomUUID()}`), '');
+            expect(await defaultResolveOwnerPort(tempDir)).toBeNull();
+            // Unknown format fails closed.
+            rmSync(lockDir, { recursive: true, force: true });
+            mkdirSync(lockDir, { recursive: true });
+            writeFileSync(join(lockDir, 'not-a-claim'), '');
+            expect(await defaultResolveOwnerPort(tempDir)).toBeNull();
+            // A dead owner is reaped by the boot path's own stale sweep, not adopted.
+            rmSync(lockDir, { recursive: true, force: true });
+            mkdirSync(lockDir, { recursive: true });
+            writeFileSync(join(lockDir, `99999999-${crypto.randomUUID()}`), '');
+            expect(await defaultResolveOwnerPort(tempDir)).toBeNull();
+        });
+    });
+
+    describe('daemon log capture', () => {
+        it('a spawn failure names the daemon log lines written after the spawn', async () => {
+            setPortProbeForTests(async () => 'available');
+            const runDir = join(tempDir, '.spur', 'run');
+            mkdirSync(runDir, { recursive: true });
+            writeFileSync(join(runDir, 'serve-spawn.log'), 'stale failure from last week\n');
+            await registry.upsert({ name: 'Blocked', path: tempDir, port: 0 });
+            const spawn: DetachedServeSpawn = () => {
+                // The daemon gets as far as the owner claim, then refuses and dies.
+                writeFileSync(
+                    join(runDir, 'serve-spawn.log'),
+                    'Project already has a server owner (pid 12629). Close it before starting another one.\n',
+                    { flag: 'a' },
+                );
+                return { exitCode: null, unref: () => {} };
+            };
+            await expect(
+                startRegisteredProject(registry, 'Blocked', {
+                    pollAttempts: 2,
+                    pollIntervalMs: 10,
+                    resolveOwnerPort: async () => null,
+                    spawn,
+                }),
+            ).rejects.toThrow(/server owner \(pid 12629\)/);
+            // …and the stale lines from before this spawn are not reported as this run's cause.
+            await expect(
+                startRegisteredProject(registry, 'Blocked', {
+                    pollAttempts: 2,
+                    pollIntervalMs: 10,
+                    resolveOwnerPort: async () => null,
+                    spawn: fakeServeSpawn(null),
+                }),
+            ).rejects.toThrow(/^((?!stale failure)[\s\S])*$/);
+        });
+
+        it('defaultDetachedServeSpawn redirects daemon stderr into the project log when cwd is set', async () => {
+            if (process.platform === 'win32') return;
+            const child = await defaultDetachedServeSpawn(['/bin/sh', '-c', 'echo boom >&2'], {
+                cwd: tempDir,
+                detached: true,
+                stdio: ['ignore', 'ignore', 'ignore'],
+            });
+            child.unref();
+            const logPath = join(tempDir, '.spur', 'run', 'serve-spawn.log');
+            const deadline = Date.now() + 5000;
+            while (Date.now() < deadline) {
+                if (existsSync(logPath) && readFileSync(logPath, 'utf8').includes('boom')) return;
+                await new Promise((r) => setTimeout(r, 50));
+            }
+            throw new Error(`daemon stderr never landed in ${logPath}`);
+        });
     });
 
     // 0964: the win32 branch of defaultDetachedServeSpawn delegates to the builder below;

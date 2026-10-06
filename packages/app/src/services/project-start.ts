@@ -1,5 +1,5 @@
-import { existsSync } from 'node:fs';
-import { basename, resolve } from 'node:path';
+import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { basename, join, resolve } from 'node:path';
 import { getEnvVar, getEnvVars } from '@gobing-ai/spur-config';
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import { isPortLive, normalizeProjectPath, ProjectRegistry } from './project-registry';
@@ -58,6 +58,12 @@ export interface ProjectStartOptions {
      * Defaults to ProcessExecutor-backed detached daemon launch.
      */
     spawn?: DetachedServeSpawn;
+    /**
+     * Injectable owner-adoption probe for tests: the port the project's live owner-claim holder
+     * actually serves, or null when no live serving owner exists. Defaults to
+     * {@link defaultResolveOwnerPort} (owner-claim read + lsof + health probe).
+     */
+    resolveOwnerPort?: (projectRoot: string) => Promise<number | null>;
 }
 
 /** POSIX single-quote for embedding in `sh -c`. */
@@ -148,9 +154,18 @@ export const defaultDetachedServeSpawn: DetachedServeSpawn = async (cmd, options
     // nohup + background: PE waits only for the shell, which exits immediately.
     // macOS and Linux both ship nohup; Windows uses Start-Process (env handoff above).
     const windowsLaunch = process.platform === 'win32' ? buildWindowsDetachedServeLaunch(cmd) : undefined;
+    // POSIX daemons log to the project's `.spur/run/serve-spawn.log` (append) so a boot failure
+    // (e.g. an owner-claim refusal) is diagnosable — the launch's caller reads the fresh tail
+    // into its error. Windows keeps the /dev/null-equivalent isolation (no log capture there).
+    const logFile = options.cwd !== undefined ? join(options.cwd, '.spur', 'run', 'serve-spawn.log') : undefined;
     const shell = windowsLaunch ?? {
         command: '/bin/sh',
-        args: ['-c', `nohup ${cmd.map(shQuote).join(' ')} </dev/null >/dev/null 2>&1 &`],
+        args: [
+            '-c',
+            logFile !== undefined
+                ? `mkdir -p ${shQuote(join(options.cwd ?? '', '.spur', 'run'))} && nohup ${cmd.map(shQuote).join(' ')} </dev/null >>${shQuote(logFile)} 2>&1 &`
+                : `nohup ${cmd.map(shQuote).join(' ')} </dev/null >/dev/null 2>&1 &`,
+        ],
     };
     await executor.run({
         command: shell.command,
@@ -215,6 +230,92 @@ export function resolveSpurServeCommand(): string[] {
     throw new Error(
         'Could not resolve the spur CLI to spawn `spur serve`. Ensure `spur` is on PATH (or invoke start via the monorepo CLI).',
     );
+}
+
+/** Signal-0 existence probe; unknown failures (EPERM) fail closed as alive. */
+function isPidAlive(pid: number): boolean {
+    try {
+        process.kill(pid, 0);
+        return true;
+    } catch (error) {
+        return (error as NodeJS.ErrnoException).code !== 'ESRCH';
+    }
+}
+
+/**
+ * The live pid holding this project's `.spur/server-owner.lock` claim, or null when the claim is
+ * absent, ambiguous (a transition in flight — never guess), malformed, or held by a dead process
+ * (the boot path's own stale reaper owns that case). Read-only: a wrong null here only means the
+ * caller spawns and the daemon's own acquire arbitrates.
+ */
+function readOwnerClaimPid(projectRoot: string): number | null {
+    try {
+        const directory = join(realpathSync(projectRoot), '.spur', 'server-owner.lock');
+        const owners = readdirSync(directory);
+        if (owners.length !== 1) return null;
+        const pid = owners[0]?.match(/^(\d+)-[a-f0-9-]+$/)?.[1];
+        if (pid === undefined) return null;
+        const n = Number(pid);
+        return isPidAlive(n) ? n : null;
+    } catch {
+        return null;
+    }
+}
+
+/** First TCP port this pid listens on (lsof; null when lsof fails or there is no listener). */
+async function findPidListenPort(pid: number): Promise<number | null> {
+    try {
+        const res = await new NodeProcessExecutor().run({
+            command: 'lsof',
+            args: ['-nP', '-a', '-p', String(pid), '-iTCP', '-sTCP:LISTEN'],
+            forceBuffered: true,
+            rejectOnError: false,
+        });
+        if (res.exitCode !== 0) return null;
+        const port = res.stdout.match(/TCP [^ ]*:(\d+) \(LISTEN\)/)?.[1];
+        return port === undefined ? null : Number(port);
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * The port the project's live owner-claim holder actually serves, health-verified — or null.
+ *
+ * A live pid that listens nowhere is a serve hung mid-boot (the claim is taken before listen):
+ * null lets the caller spawn, and the daemon's own acquire + handoff wait arbitrates with the
+ * reason landing in the daemon log. A port that stops answering between lsof and the health
+ * probe (owner exited mid-adoption) is likewise null — never adopt an unverified port.
+ */
+export async function defaultResolveOwnerPort(projectRoot: string): Promise<number | null> {
+    const pid = readOwnerClaimPid(projectRoot);
+    if (pid === null) return null;
+    const port = await findPidListenPort(pid);
+    if (port === null || !(await isPortLive(port))) return null;
+    return port;
+}
+
+/** Current size of the daemon spawn log (0 when absent) — the byte offset fresh output starts at. */
+function daemonLogSize(projectRoot: string): number {
+    try {
+        return statSync(join(projectRoot, '.spur', 'run', 'serve-spawn.log')).size;
+    } catch {
+        return 0;
+    }
+}
+
+/**
+ * Error suffix carrying the daemon log lines written since `offset` (bounded, one line). Only
+ * fresh output is reported — a stale refusal from last week is not this launch's cause.
+ */
+function daemonLogSuffix(projectRoot: string, offset: number): string {
+    try {
+        const content = readFileSync(join(projectRoot, '.spur', 'run', 'serve-spawn.log'), 'utf8');
+        const tail = content.slice(offset).trim().slice(-2000).replace(/\n+/g, ' | ');
+        return tail === '' ? '' : ` Daemon log tail: ${tail}`;
+    } catch {
+        return '';
+    }
 }
 
 /** Refuse a second project server before opening its database or changing its registry entry. */
@@ -282,9 +383,30 @@ export async function startRegisteredProject(
         };
     }
 
+    // The registry can forget a live serve: a `healStale` liveness probe that misses under load
+    // rewrites the entry's port to 0 while the owner keeps listening (observed 2026-10-05 — the
+    // switcher could not launch ts-libs / knowledge-kit while forgotten serves held 3004/3005;
+    // every spawn was then refused by the owner claim, with the reason lost in the daemon's
+    // voided stderr). Adopt the claim's live serve instead of spawning a duplicate that must be
+    // refused, and heal the entry to the port the owner actually serves.
+    const ownerPort = await (options.resolveOwnerPort ?? defaultResolveOwnerPort)(projectPath);
+    if (ownerPort !== null) {
+        await registry.setPort(projectPath, ownerPort);
+        return {
+            name: entry.name,
+            path: projectPath,
+            port: ownerPort,
+            running: true,
+            url: `http://127.0.0.1:${ownerPort}`,
+            alreadyRunning: true,
+        };
+    }
+
     const allocatedPort = options.port && options.port > 0 ? options.port : await registry.allocatePort();
     const invocation = resolveSpurServeCommand();
     const spawn = options.spawn ?? testDetachedServeSpawn ?? defaultDetachedServeSpawn;
+    // Fresh-output offset for the failure suffix — captured before the daemon can write.
+    const logOffset = daemonLogSize(projectPath);
     const child = await Promise.resolve(
         spawn(
             [
@@ -320,7 +442,7 @@ export async function startRegisteredProject(
         if (child.exitCode !== null) {
             child.unref();
             throw new Error(
-                `Project "${entry.name}" serve process exited with code ${child.exitCode} before port ${allocatedPort} became ready (path: ${projectPath}).`,
+                `Project "${entry.name}" serve process exited with code ${child.exitCode} before port ${allocatedPort} became ready (path: ${projectPath}).${daemonLogSuffix(projectPath, logOffset)}`,
             );
         }
     }
@@ -328,7 +450,7 @@ export async function startRegisteredProject(
 
     if (!live) {
         throw new Error(
-            `Project "${entry.name}" failed to start on port ${allocatedPort} within ${(pollAttempts * pollIntervalMs) / 1000}s (path: ${projectPath}).`,
+            `Project "${entry.name}" failed to start on port ${allocatedPort} within ${(pollAttempts * pollIntervalMs) / 1000}s (path: ${projectPath}).${daemonLogSuffix(projectPath, logOffset)}`,
         );
     }
 

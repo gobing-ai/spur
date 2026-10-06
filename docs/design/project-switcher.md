@@ -55,6 +55,15 @@ interface ProjectEntry {
 
 1. **Start** — if matching entry has `port === 0` (or is missing), allocate a free port, write it,
    then listen. Prefer explicit `--port` when provided; still register that port.
+1a. **Adopt a forgotten owner** — before spawning, `startRegisteredProject` reads the project's
+   `.spur/server-owner.lock` claim: when a live pid holds it AND that pid serves a health-verified
+   port, the start adopts the running serve (`alreadyRunning`) and heals the entry to the real
+   port instead of spawning a duplicate the owner claim must refuse. This repairs the divergence
+   a rule-3 probe miss creates under load (port rewritten to 0 while the serve keeps listening;
+   observed 2026-10-05 on ts-libs / knowledge-kit). A live owner that listens nowhere (hung
+   mid-boot) is not adopted — the spawn proceeds and the daemon's own claim handoff arbitrates.
+   Spawned daemons log to `<project>/.spur/run/serve-spawn.log` (POSIX), and a failed start
+   reports the fresh log tail so a boot refusal names its own cause.
 2. **Stop (any exit path)** — set the entry’s `port` to `0` (SIGINT, SIGTERM, intentional stop,
    process death cleanup on next discovery when the claimed port is not live).
 3. **Stale reclaim** — when listing, if `port > 0` but nothing answers health on that port, treat as
