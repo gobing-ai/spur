@@ -4,7 +4,7 @@ name: Fix the record-stage Solution backfill's diff base and pathspec
 status: done
 template: feature-impl
 created_at: 2026-10-05T22:51:56.246Z
-updated_at: "2026-10-06T01:24:31.265Z"
+updated_at: "2026-10-06T02:36:11.484Z"
 feature_id: H1
 
 ac_altitude: task-local
@@ -133,22 +133,29 @@ changed paths, so they fail against today's `git diff HEAD -- '*.ts'` base and p
 
 | Change (`file:line`) | What changed |
 | --- | --- |
-| `packages/app/src/services/task-record.ts:886` | `resolveDiffBase` — the resolution order: an explicit base, then the precheck's `.spur/run/<wbs>-base.sha` run-base capture, then `HEAD` (R1) |
-| `packages/app/src/services/task-record.ts:910` | `gitDiffU0` diffs the resolved base against the working tree instead of `HEAD`, so work a run already committed is named too; the run-base file is read through the ts-runtime FileSystem seam (R1) |
-| `packages/app/src/services/task-record.ts:865` | `GitDiffU0Options` — the cwd/base/wbs seam the record service and the tests drive; the git call stays on the `BunSyncProcessExecutor` seam (no new spawn path) |
-| `packages/app/src/services/task-record.ts:742` | `SOLUTION_EXCLUDE_PATHSPECS` — `.spur/` runtime state and lockfiles excluded by pathspec, replacing the `*.ts`/`*.tsx`/`*.js` allowlist that made every non-JS change set empty by construction (R2) |
-| `packages/app/src/services/task-record.ts:752` | `isExcludedSolutionPath` — the same filter applied inside the pure renderer, so a raw diff handed straight to `renderSolutionFromDiff` is filtered identically (R2) |
-| `packages/app/src/services/task-record.ts:769` | `isEmptyRecordSolution` — recognizes record's own change-map carrying the no-rows row; the signal R3's denial reads |
+| `packages/app/src/services/task-record.ts:930` | `resolveDiffBase` — the resolution order: an explicit base, then the precheck's `.spur/run/<wbs>-base.sha` run-base capture, then `HEAD`; the captured revision is shape-checked and a malformed one falls back rather than poisoning the diff (R1) |
+| `packages/app/src/services/task-record.ts:984` | `gitDiffU0` diffs the resolved base against the working tree instead of `HEAD`, so work a run already committed is named too; `--no-renames` keeps a pure rename visible; the run-base file is read through the ts-runtime FileSystem seam (R1) |
+| `packages/app/src/services/task-record.ts:901` | `GitDiffU0Options` — the cwd/base/wbs/excludePaths seam the record service and the tests drive; the git call stays on the `BunSyncProcessExecutor` seam (no new spawn path) |
+| `packages/app/src/services/task-record.ts:754` | `SOLUTION_EXCLUDED_PATHSPECS` and the derived `SOLUTION_EXCLUDE_PATHSPECS` — `.spur/` runtime state and lockfiles excluded by pathspec, replacing the `*.ts`/`*.tsx`/`*.js` allowlist that made every non-JS change set empty by construction (R2) |
+| `packages/app/src/services/task-record.ts:771` | `isExcludedSolutionPath` — the same filter applied inside the pure renderer, plus the per-call exclusions, so a raw diff handed straight to `renderSolutionFromDiff` is filtered identically (R2) |
+| `packages/app/src/services/task-record.ts:952` | `listUntrackedFiles` — an untracked new file has no index entry, so `git diff <base>` can never see it; `git ls-files --others` supplies the paths the renderer cites at `:1` |
+| `packages/app/src/services/task-record.ts:813` | `renderSolutionFromDiff` accepts the untracked list and the per-call filter; the change-map no longer advertises the recording task's own file |
+| `packages/app/src/services/task-record.ts:793` | `isEmptyRecordSolution` — recognizes record's own change-map carrying the no-rows row; the signal R3's denial reads |
 | `packages/app/src/services/task-check.ts:884` | `isEmptyRecordSolution` drives the `L3.solution-file-line` wording: an empty backfill names its own cause, an unauthored Solution keeps the authoring message (R3) |
-| `packages/app/src/services/task-service.ts:1523` | record passes the resolved base into `gitDiffU0`; `RecordOptions.solutionDiffBase` supplies the explicit override without adding a CLI flag (R1) |
-| `packages/app/tests/services/task-record.test.ts:1622` | the `task 1090` backfill cases over a scratch git repo: committed work on a clean tree, the run-base capture, explicit-base precedence, the fallback to `HEAD`, a Markdown/YAML-only change set, a corpus-only change set, and the exclusion filter (R1/R2) |
-| `packages/app/tests/services/task-record.test.ts:1027` | R4: an authored `## Solution` is never overwritten and `solutionBackfilled` stays false |
+| `packages/app/src/services/task-service.ts:1530` | the backfill gate covers record's own stale map as well as a bare section, so a poisoned `(no changes detected)` body self-heals on the next record |
+| `packages/app/src/services/task-service.ts:1538` | record passes the resolved context root, the run WBS and the recording task's own path into `gitDiffU0`; `RecordOptions.solutionDiffBase` supplies the explicit override without adding a CLI flag (R1) |
+| `packages/app/tests/services/task-record.test.ts:1652` | the `task 1090` backfill cases over a scratch git repo: committed work on a clean tree, the run-base capture, explicit-base precedence, the fallback to `HEAD`, a Markdown/YAML-only change set, a corpus-only change set, and the exclusion filter (R1/R2) |
+| `packages/app/tests/services/task-record.test.ts:1036` | R4: an authored `## Solution` is never overwritten and `solutionBackfilled` stays false |
+| `packages/app/tests/services/task-record.test.ts:1055` | the self-heal counterpart: record's own stale map IS replaced, which is the widened gate's defining contrast with the row above |
+| `packages/app/tests/services/task-record.test.ts:1776` | the follow-up cases: the cwd seam, the derived pathspecs, the malformed run-base fallback, the rename row, the untracked row, the structural empty-map test, and the self-file exclusion |
 | `packages/app/tests/services/task-check.test.ts:930` | the denial-wording assertion: record's empty backfill must not be reported as a malformed Solution (R3) |
 | `plugins/sp/tests/skill-structure.test.ts:885` | **out-of-scope repair (operator-approved)**: the R44 `code-verification` body baseline 35_076 → 35_468. Commit c95c625e2 (task 1091) grew that skill body without bumping the ratchet, leaving `main` red for every task run; the bump is the test's own documented mechanism |
 
-**Deviation from the frozen Design (one, deliberate).** The Design's pathspec list also excluded `docs/tasks*/**` task-corpus churn. That exclusion was dropped: R2 requires a *corpus-only* change set to produce rows, and excluding the corpus would recreate a by-construction empty change-map for exactly the case AC2 names. Keeping the exclusion would also need a literal `docs/tasks…` prefix in the renderer, which the project's `no-hardcoded-planning-folder` rule rejects. Consequence: a backfilled change-map now carries one self-referential row for the recording task's own file.
+**Deviation from the frozen Design (one, deliberate).** The Design's pathspec list also excluded `docs/tasks*/**` task-corpus churn. That exclusion was dropped: R2 requires a *corpus-only* change set to produce rows, and excluding the corpus would recreate a by-construction empty change-map for exactly the case AC2 names. Keeping the exclusion would also need a literal `docs/tasks…` prefix in the renderer, which the project's `no-hardcoded-planning-folder` rule rejects. The self-referential row that consequence produced is instead removed per-call, by excluding the recording task's own file only.
 
-The R4 contract is untouched: the backfill is still gated on `sectionIsBare(doc, 'Solution')`, so an authored `## Solution` is never overwritten and `spur task record` without `--solution-from-diff` behaves exactly as before. No new CLI surface, no service seam moved.
+**Review follow-ups (1090's own review).** The 3 deferred P3 advisories and 5 P4 advisories were repaired in place rather than deferred to a new task: the widened gate above, the context-root threading, the derived pathspec list, the run-base shape check, the untracked-file scan, the `--no-renames` rename fix, the structural empty-map classification, and the self-file exclusion. Verified end-to-end through the CLI on a scratch repository: a poisoned `(no changes detected)` map re-records into real rows, with the untracked file named and no self-referential row.
+
+The R4 contract is untouched: `spur task record` without `--solution-from-diff` behaves exactly as before, and an authored `## Solution` is never overwritten. No new CLI surface, no service seam moved.
 
 ### Testing
 
