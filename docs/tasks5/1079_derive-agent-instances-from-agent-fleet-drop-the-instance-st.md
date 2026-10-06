@@ -4,7 +4,7 @@ name: Derive agent instances from agent.fleet, drop the instance store and sync 
 status: done
 template: feature-impl
 created_at: 2026-10-04T20:30:38.690Z
-updated_at: "2026-10-05T18:22:32.288Z"
+updated_at: "2026-10-06T19:00:37.221Z"
 feature_id: G72
 
 dependencies: ["1074", "1078"]
@@ -160,19 +160,19 @@ Implements G72 R3/R4 (plan `docs/plans/2026-10-04-agent-fleet-inbox-redesign.md`
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
-- Confidence: HIGH
+- Confidence: MEDIUM
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Draft `agent_instances` DDL/ID constants + their test deleted, `AgentInstanceStore` / `createFileAgentInstanceStore` / `agent-instance.ts` deleted, selector resolves over `FleetService.resolve` members. Evidence: `packages/domain/src/migrations.ts` (constants + DDL gone), `packages/domain/src/index.ts`, `packages/domain/tests/agent-instance.test.ts` + `packages/app/tests/services/agent-instance-store.test.ts` deleted, `packages/app/src/services/fleet-selector.ts:25,47`, `apps/cli/src/commands/message.ts:73`, `apps/cli/src/commands/agent.ts:366`; `rg AgentInstanceStore packages apps` → no matches |
-| R2 | MET | Members resolve their spec from `agent.fleet` at loop start; `.spur/agents/` fleet materialization removed; hand-authored specs remain supported. Evidence: `packages/app/src/services/fleet-service.ts:611` (`FleetService.specs`), `:350` (`mergeAgentSpecs`), `:264` (declaration-only `materializeRoster`), `packages/app/src/services/supervisor-service.ts:374` (`registerAgentSpecs`), `apps/server/src/serve.ts:930`, `packages/app/src/services/agent-service.ts:1049`, `packages/app/src/services/agent-coordination-service.ts:520,533`; targeted suites in `packages/app/tests/services/{fleet-service,agent-coordination-service,supervisor-service,agent-service}.test.ts` and `apps/server/tests/serve.test.ts` |
-| R3 | MET | `03_ARCHITECTURE` fleet topology, `fleet-config-declaration.md` §5, `inter-agent-control-plane.md` §11 describe the inbox-only fleet. Evidence: `docs/03_ARCHITECTURE.md:322,581`, `docs/design/fleet-config-declaration.md` §3/§5, `docs/design/inter-agent-control-plane.md` §2/§11; satellites `docs/design/cli-contracts.md`, `docs/design/project-switcher.md`, `docs/design/configuration-contracts.md`, `docs/01_PRD.md` |
-| R4 | MET | Superseded team-mode design delinked from `04_DESIGN.md`, supersession test updated, ADR-116 current-reading note added. Evidence: `docs/04_DESIGN.md` (row removed; design file retained as history), `docs/00_ADR.md` ADR-116 `**Current reading:**`, `repo-wide-tests/adr-supersession.test.ts:176` (assertions (g1)–(g3)) |
+| R1 | MET | `packages/domain/src/agent-instance.ts` and `packages/app/src/services/agent-instance-store.ts` absent (ls → No such file); `rg -n AgentInstanceStore packages apps` → exit 1; `rg agent_instances\|AGENT_INSTANCES` → no matches; selector at `packages/app/src/services/fleet-selector.ts:25` and `packages/app/src/services/fleet-selector.ts:47`; `(cd packages/app && bun test tests/services/fleet-selector.test.ts …)` 457 pass / 0 fail |
+| R2 | MET | `FleetService.specs` at `packages/app/src/services/fleet-service.ts:637`, `mergeAgentSpecs` at `packages/app/src/services/fleet-service.ts:360`, `registerAgentSpecs` at `packages/app/src/services/supervisor-service.ts:380`, serve registration at `apps/server/src/serve.ts:937`, `--spec-id` lookup at `packages/app/src/services/agent-service.ts:1063`; no `materialize(` caller remains (rg → no matches); `(cd apps/server && bun test tests/serve.test.ts …)` 102 pass |
+| R3 | MET | `docs/03_ARCHITECTURE.md:322` (`.spur/` holds hand-authored agent specs only); `docs/design/inter-agent-control-plane.md:262` (inbox-only dispatch, derived instances); `docs/design/fleet-config-declaration.md:133` §5 runtime vocabulary |
+| R4 | MET | `rg spur-team-mode-design docs/04_DESIGN.md` → no matches; ADR-116 `**Current reading:**` names derived instances and the delinked team-mode design (`docs/00_ADR.md` ADR-116); `bun test repo-wide-tests/adr-supersession.test.ts` 10 pass / 0 fail incl. `repo-wide-tests/adr-supersession.test.ts:176` |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Agent instances are derived, not stored | MET | command | `bun run spur-check` → 10,093 pass / 0 fail, covering `fleet-service.test.ts` ("FleetService.specs", "mergeAgentSpecs"), `agent-coordination-service.test.ts` ("listAgentSpecs merges hand-authored specs with the declared fleet and ignores stale generated files"), `supervisor-service.test.ts` ("config-derived specs autostart with no spec file on disk"), `agent-service.test.ts` ("fleet spec execution validates the actual launch context") |
-| AC2 — Docs describe the inbox-only fleet | MET | command | `bun test repo-wide-tests/adr-supersession.test.ts` → 10 pass / 0 fail, including "G72 R4 — inbox-only fleet docs; the team-mode design stays superseded and delinked" (g1)–(g3) |
+| AC1 — Agent instances are derived, not stored | MET | test | `(cd packages/app && bun test tests/services/{fleet-service,fleet-selector,agent-coordination-service,supervisor-service,agent-service}.test.ts …)` 457 pass / 0 fail; `(cd packages/domain && bun test tests/dao/migrations.test.ts)` 59 pass; no `agent_instances` DDL in `packages/domain/src/migrations.ts` |
+| AC2 — Docs describe the inbox-only fleet | MET | test | `bun test repo-wide-tests/adr-supersession.test.ts` → 10 pass / 0 fail incl. "G72 R4 — inbox-only fleet docs" at `repo-wide-tests/adr-supersession.test.ts:176` |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

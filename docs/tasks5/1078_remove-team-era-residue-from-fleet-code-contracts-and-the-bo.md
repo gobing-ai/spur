@@ -4,7 +4,7 @@ name: Remove team-era residue from fleet code, contracts and the Board
 status: done
 template: feature-impl
 created_at: 2026-10-04T20:30:38.321Z
-updated_at: "2026-10-05T18:22:32.287Z"
+updated_at: "2026-10-06T19:00:35.644Z"
 feature_id: G72
 
 priority: P2
@@ -173,32 +173,34 @@ trace asserts the ledger event and the frontmatter); server and web suites pass 
 
 ### Testing
 
-Verification for task 1078. Everything below was executed on the merged working tree after the G71 batch
-integration (`chore: merge main into sp/runall-g71-302b`).
+**Pipeline verify results**
 
-| Check | Command | Result |
-| --- | --- | --- |
-| Declared gate | `bun run spur-check` | PASS — exit 0, 10095 pass / 0 fail, lint + typecheck + pre/post rule presets clean |
-| CF gate | `bun run test-cf` | PASS — exit 0 |
-| Residue scan (task-local) | `rg -n "TeamOrchestrator\|TeamStatus\|teamId" packages apps --glob '!**/tests/**' --glob '!**/node_modules/**' --glob '!apps/cli/web/**'` | only `packages/domain/src/agent-instance.ts` and `packages/app/src/services/agent-instance-store.ts` remain — both owned by 1079, which deletes them |
-| Assignment through TaskService | `(cd apps/cli && bun test tests/commands/agent-server.test.ts)` | 15 pass — the trace asserts the frontmatter write and the `task.assigned` ledger row |
-| Service delegation contract | `(cd packages/app && bun test tests/services/agent-coordination-service.test.ts)` | 35 pass — delegation, the refusal without the seam, and a propagated seam failure |
-| Board with the field gone | `(cd apps/web && bun test tests/modules/projects)` | 178 pass |
-| Server projection | `(cd apps/server && bun test tests/modules/processes/index.test.ts)` | 31 pass — both row families now assert the key is ABSENT |
-| Migrations untouched by this task | `(cd packages/domain && bun test tests/dao/migrations.test.ts)` | 59 pass |
+- Verdict: PASS (from verdict artifact)
+- Confidence: MEDIUM
 
-Behavioural changes, recorded rather than hidden: the assignee write now validates L1 frontmatter (an
-invalid task file fails instead of being silently patched), and the `--spec` mismatch error text says
-"fleet agent spec". The wire contract drops `teamId`, so any external consumer of `/api/processes` that
-read the (since-0860 always-null) key would see it disappear; the Board that read it was updated in the
-same change.
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `getStatus`/`orchestrator()`/`TeamOrchestrator`/`TeamStatus*` gone (`rg TeamOrchestrator\|TeamStatus packages apps` excl. tests → no matches, re-run 2026-10-06); `mapServerStatus` typed by local `FleetProcessStatus` at `apps/cli/src/commands/agent.ts:1232` |
+| R2 | MET | `TaskService.assign` at `packages/app/src/services/task-service.ts:827`; `AgentCoordinationService` injected `Pick<TaskService,'assign'>` seam at `packages/app/src/services/agent-coordination-service.ts:55`; `(cd apps/cli && bun test tests/commands/agent-server.test.ts …)` 102 pass / 0 fail; `(cd packages/app && bun test …agent-coordination-service… task-service…)` 457 pass / 0 fail |
+| R3 | MET | `RosterMember` carries only `purpose`/`enabled` beyond identity at `packages/app/src/services/fleet-service.ts:156-160` |
+| R4 | MET | Error text "does not match a fleet agent spec" at `apps/cli/src/commands/agent.ts:1426`; no `"team"` property in `apps/cli/schemas/spur-config.schema.json` or `config/@gobing-ai/spur/schemas/spur-config.schema.json` (rg → no matches) |
+| R5 | MET | `teamId` absent from `processEntrySchema`/`processExecutionSchema` (`packages/contracts/src/fleet.ts:78-106`), server and web (rg → no matches). Fix pass this run: removed orphaned hidden `<th>Team</th>` header left at `apps/web/src/modules/projects/ProcessesView.tsx:379` (11 headers vs 10 cells); `(cd apps/web && bun test tests/modules/projects)` 178 pass / 0 fail after the fix |
 
-Not covered here: browser-level verification of the Board's filter bar — the component tests drive the
-rendered controls through happy-dom, and the Team filter they covered is deleted rather than restyled.
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — No team-era code residue remains | MET | command | `rg -n "TeamOrchestrator\|TeamStatus\|teamId" packages apps --glob '!**/tests/**' --glob '!**/node_modules/**' --glob '!apps/cli/web/**'` → exit 1 (no matches); remaining hit in gitignored `apps/cli/plugins` bundle originates from external @gobing-ai/ts-runtime `dist/process-registry.js` line 1 (out of scope) |
+| AC2 — No teamId crosses the transport or the Board | MET | test | `(cd apps/server && bun test tests/modules/processes/index.test.ts tests/serve.test.ts)` 102 pass; `(cd packages/contracts && bun test tests/contract.test.ts)` 61 pass; `(cd apps/web && bun test tests/modules/projects)` 178 pass |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
