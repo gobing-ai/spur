@@ -87,9 +87,9 @@ export async function recordLifecycle(
 }
 
 /**
- * Latest accepted lifecycle state per member actor — the newest
- * {@link AGENT_LIFECYCLE_EVENT} row wins (ledger `sequence`, then timestamp, then
- * id). A malformed payload is skipped rather than rendered as a state, and a
+ * Current lifecycle state per member actor — the {@link AGENT_LIFECYCLE_EVENT} row
+ * with the highest payload `seq` wins; equal seqs fall back to the newest row
+ * (ledger `sequence`, then timestamp, then id). A malformed payload is skipped rather than rendered as a state, and a
  * missing table (unmigrated db) reads as empty so observability degrades
  * instead of failing a dispatch tick.
  */
@@ -113,10 +113,15 @@ export async function readLifecycle(
         if (error instanceof Error && error.message.includes('no such table: system_events')) return out;
         throw error;
     }
+    // Highest seq wins, not newest row: detached hook processes can interleave the
+    // writer's read-then-insert so a lower seq lands last. Ties keep the newest row.
     for (const row of rows) {
-        if (row.actor === null || out.has(row.actor)) continue;
+        if (row.actor === null) continue;
         const observation = parseObservation(row.payload_json);
-        if (observation !== null) out.set(row.actor, { ...observation, at: row.occurred_at });
+        if (observation === null) continue;
+        const kept = out.get(row.actor);
+        if (kept === undefined || observation.seq > kept.seq)
+            out.set(row.actor, { ...observation, at: row.occurred_at });
     }
     return out;
 }

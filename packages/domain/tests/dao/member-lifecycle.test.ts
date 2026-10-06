@@ -97,6 +97,30 @@ describe('member lifecycle state (1080)', () => {
         expect(states.size).toBe(0);
     });
 
+    test('two racing reports that both pass the guard resolve to the higher seq, whatever lands last', async () => {
+        const db = await makeDb();
+        // Detached hook processes can interleave read-then-insert: seq 5 then seq 3 both land.
+        const events = new SystemEventDao(db);
+        for (const seq of [5, 3]) {
+            await events.insert({
+                id: crypto.randomUUID(),
+                event_name: AGENT_LIFECYCLE_EVENT,
+                occurred_at: new Date().toISOString(),
+                actor: 'proj-worker-1',
+                payload_json: JSON.stringify({
+                    member: 'proj-worker-1',
+                    state: seq === 5 ? 'blocked' : 'working',
+                    seq,
+                }),
+            });
+        }
+        expect((await readLifecycle(db, ['proj-worker-1'])).get('proj-worker-1')).toMatchObject({
+            state: 'blocked',
+            seq: 5,
+        });
+        expect((await recordLifecycle(db, 'proj-worker-1', { state: 'idle', seq: 4 })).accepted).toBe(false);
+    });
+
     test('an empty actor list reads no rows and writes nothing', async () => {
         const db = await makeDb();
         await recordLifecycle(db, 'member', { state: 'working', seq: 1 });

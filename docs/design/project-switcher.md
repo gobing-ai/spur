@@ -286,7 +286,7 @@ Optional later: `POST /api/projects/stop` (CLI covers stop for v1).
   exits. CLI senders persist metadata-only events; managed invocations flush the existing ledger.
   `--poll` remains the backstop, idle holds are recorded on change, and undeclared projects retain
   legacy queue consumption. Idle wakes make no model call.
-- A member whose newest accepted lifecycle row is `blocked` (`spur agent report`, 1080) is
+- A member whose highest-seq accepted lifecycle row is `blocked` (`spur agent report`, 1080) is
   unavailable: selection skips it with the `member-blocked` hold reason while its siblings stay
   eligible. The fleet snapshot carries `lifecycle`, which the Board renders as `needs human`.
 - Guest occupants (1081, ADR-121 A2) live outside the declaration: role/executor resolution counts

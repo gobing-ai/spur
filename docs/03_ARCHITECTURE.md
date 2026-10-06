@@ -731,7 +731,7 @@ stall / timeout still heartbeat at 100 ms). Lifecycle is derived by a pure proje
 (`working` = latest `agent.invoke.start`; `idle` = latest `agent.invoke.exit` + empty queued
 inbox). Member `blocked` is now first-class (task 1080): a host hook calls
 `spur agent report --state working|idle|blocked --seq <ns>` only when `SPUR_SPEC_ID` is set, which
-`AgentService` now stamps on every spec-id-addressed run; the newest accepted
+`AgentService` now stamps on every spec-id-addressed run; the highest-seq accepted
 `agent.lifecycle.changed` ledger row is the member's state, the strategy holds a blocked member
 with the `member-blocked` reason, and the Board shows `needs human`. The occupancy wait projector
 still reads `agent.invoke.*` only, so `--until blocked` remains unsupported.

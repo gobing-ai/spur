@@ -597,7 +597,7 @@ sees a member waiting on a human and the Board can show `needs human`.
 - The member id is `--spec` or `SPUR_SPEC_ID`; neither → exit 2 (`no member id (set SPUR_SPEC_ID or --spec)`).
   An unknown `--state` or a non-numeric `--seq` is also exit 2.
 - An accepted report writes the `agent.lifecycle.changed` ledger row (`system_events`, no new table);
-  the newest accepted row for the actor is the member's current state. `--json` returns
+  the highest-seq accepted row for the actor (racing reports cannot regress it) is the member's current state. `--json` returns
   `{ member, state, seq, accepted, observation }`.
 
 `agent join` makes a live interactive session a **guest occupant** that pulls its own work instead of
