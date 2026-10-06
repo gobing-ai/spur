@@ -13,6 +13,7 @@ import {
     TaskCheckService,
 } from '../../src/services/task-check';
 import { TaskLocator } from '../../src/services/task-locator';
+import { renderSolutionFromDiff } from '../../src/services/task-record';
 
 const matrix = {
     variants: {
@@ -921,6 +922,39 @@ describe('TaskCheckService', () => {
             (f) => f.layer === 'L3' && f.section === 'Solution' && f.severity === 'error',
         );
         expect(solErrors.length).toBeGreaterThan(0);
+        // 1090 R3: an unauthored Solution keeps the authoring wording — the backfill
+        // wording below is reserved for record's own empty change-map.
+        expect(solErrors[0]?.message).toContain('must contain at least one');
+    });
+
+    test("L3: record's empty backfill names the backfill cause, not an authoring error (task 1090 R3)", async () => {
+        // WHY: the record safety-net writes a change-map carrying a `(no changes detected)`
+        // row when the run diff named no file. Reported as "Solution must contain at least
+        // one file:line citation", it told the author their Solution was malformed when the
+        // real condition was an empty backfill (run 9e8af77d, task 1089).
+        const content = [
+            '---',
+            'schema_version: 1',
+            'name: "Empty backfill"',
+            'status: testing',
+            'created_at: 2026-06-13T00:00:00.000Z',
+            'updated_at: 2026-06-13T00:00:00.000Z',
+            '---',
+            '',
+            '## 0001. Empty backfill',
+            '',
+            '### Solution',
+            '',
+            ...renderSolutionFromDiff('').trimEnd().split('\n'),
+        ].join('\n');
+        const { fs, path, cleanup } = seedFile(content);
+        const svc = new TaskCheckService(fs, matrix);
+        const result = await svc.check(path, '0001');
+        cleanup();
+        const solError = result.findings.find((f) => f.code === FINDING_CODES.L3_SOLUTION_FILE_LINE);
+        expect(solError).toBeDefined();
+        expect(solError?.message).toContain('backfill produced no rows');
+        expect(solError?.message).not.toContain('must contain at least one');
     });
 
     test('L3: Solution table with backtick-wrapped file + adjacent line column passes (P3 regression)', async () => {

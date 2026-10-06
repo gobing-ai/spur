@@ -32,6 +32,7 @@ import {
 import { applyStructuralRepairs, type StructuralRepair } from './structural-repair';
 import { evaluateTaskEvidence, type TaskEvidenceDeps } from './task-evidence-precheck';
 import { TaskLocator } from './task-locator';
+import { isEmptyRecordSolution } from './task-record';
 import { evaluateTaskSize } from './task-size-precheck';
 import { parseVerifyVerdict } from './verify-verdict';
 
@@ -877,7 +878,12 @@ export class TaskCheckService extends PlanningCheckService {
                 code: FINDING_CODES.L3_SOLUTION_FILE_LINE,
                 severity: 'error',
                 section: 'Solution',
-                message: 'Solution must contain at least one `file:line` citation',
+                // 1090 R3: name the empty *backfill* for what it is. Reported as a
+                // malformed Solution, it sent the author hunting an authoring bug when
+                // the real condition was a diff that named no changed file.
+                message: isEmptyRecordSolution(solBody)
+                    ? 'Solution backfill produced no rows: the run diff named no changed file (empty after ignore-filtering, or no resolvable diff base) — author `## Solution`, or check `.spur/run/<wbs>-base.sha` and the run base commit'
+                    : 'Solution must contain at least one `file:line` citation',
             });
         }
 

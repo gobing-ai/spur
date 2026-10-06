@@ -1520,7 +1520,10 @@ export class TaskService {
 
         // ── Solution safety-net (R3) ──
         if (opts.solutionFromDiff && sectionIsBare(doc, 'Solution')) {
-            const diffText = gitDiffU0();
+            const diffText = await gitDiffU0({
+                ...(opts.solutionDiffBase !== undefined ? { base: opts.solutionDiffBase } : {}),
+                wbs,
+            });
             const solutionBody = renderSolutionFromDiff(diffText);
             await this.writeService.updateSection(ref, 'Solution', solutionBody);
             result.solutionBackfilled = true;

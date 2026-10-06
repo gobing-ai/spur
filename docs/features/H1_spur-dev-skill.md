@@ -2,11 +2,11 @@
 schema_version: 1
 id: H1
 name: spur-dev umbrella skill
-status: verifying
+status: active
 priority: P1
 tags: [rd3-migration, wave-3]
 created_at: 2026-06-12T23:45:00.000Z
-updated_at: "2026-09-24T21:57:21.033Z"
+updated_at: "2026-10-06T01:22:34.792Z"
 ---
 
 # H1: spur-dev umbrella skill
@@ -607,6 +607,7 @@ Feature: spur-dev umbrella skill
 | 0933 | Pause headless pipeline steps on an operator question and resume with the answer | done |
 | 0934 | Re-verify legacy H1 umbrella scenarios and close out the feature | done |
 | 0984 | Persist worktree run evidence so merged task files carry no dangling .spur/run anchors | done |
+| 1090 | Fix the record-stage Solution backfill's diff base and pathspec | testing |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -669,4 +670,5 @@ the residuals as final.
 - 2026-08-24T17:41:22.436Z active → blocked (system)
 - 2026-09-08T00:09:43.138Z blocked → active (system)
 - 2026-09-24T21:37:53.976Z active → verifying (system)
+- 2026-10-06T01:22:34.792Z verifying → active (system)
 
