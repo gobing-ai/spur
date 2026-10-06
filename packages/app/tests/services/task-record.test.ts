@@ -7,9 +7,10 @@
  */
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { basename, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { applyCliMigrations, createId, MarkdownDocument, TaskRunLinkDao } from '@gobing-ai/spur-domain';
 import { createDbAdapter, type DbAdapter } from '@gobing-ai/ts-db';
 import { DbWorkflowPersistenceAdapter } from '@gobing-ai/ts-dual-workflow-engine';
@@ -1023,6 +1024,25 @@ Feature: Disposal
         expect(raw).toContain('Change-map');
     });
 
+    test('R4: an authored Solution is never overwritten by --solution-from-diff', async () => {
+        const wbs = await createTask(svc);
+        const root = tasksDir.replace('/tasks', '');
+        const fs = createNodeFileSystem(root);
+        const taskPath = `${tasksDir}/${wbs}_record-test-task.md`;
+        const ref: EntityRef = { kind: 'task', id: wbs, filePath: taskPath, folder: tasksDir };
+        await new PlanningWriteService({ fs }).updateSection(
+            ref,
+            'Solution',
+            'Authored by the implement step at `src/app.ts:12` — replaced the HEAD diff base.\n',
+        );
+        const before = MarkdownDocument.parse(await fs.readFile(taskPath), 'task').getSection('Solution');
+
+        const result = await svc.record(wbs, { solutionFromDiff: true });
+
+        expect(result.solutionBackfilled).toBe(false);
+        expect(MarkdownDocument.parse(await fs.readFile(taskPath), 'task').getSection('Solution')).toBe(before);
+    });
+
     test('applies transition when requested', async () => {
         const wbs = await createTask(svc);
 
@@ -1551,9 +1571,173 @@ describe('sectionIsBare (existing integration)', () => {
 });
 
 describe('gitDiffU0', () => {
-    test('returns empty string when git diff fails (no repo)', () => {
-        const result = gitDiffU0('/tmp/nonexistent-git-repo-xyz');
+    test('returns empty string when git diff fails (no repo)', async () => {
+        const result = await gitDiffU0({ cwd: '/tmp/nonexistent-git-repo-xyz' });
         expect(result).toBe('');
+    });
+});
+
+// ─── Solution backfill diff base + pathspec (task 1090) ────────────────
+
+/** Run git in `root`, returning stdout. Fixture-local (no shared service). */
+function git(root: string, args: string[]): string {
+    return execFileSync('git', args, { cwd: root, encoding: 'utf8' });
+}
+
+function writeRepoFile(root: string, relPath: string, body: string): void {
+    const abs = join(root, relPath);
+    mkdirSync(dirname(abs), { recursive: true });
+    writeFileSync(abs, body);
+}
+
+/** Commit the whole tree and return the new commit sha. */
+function commitAll(root: string, message: string): string {
+    git(root, ['add', '-A']);
+    git(root, ['commit', '-q', '-m', message]);
+    return git(root, ['rev-parse', 'HEAD']).trim();
+}
+
+/**
+ * Scratch git repo with a `base` commit and one committed follow-up change, so the
+ * working tree is CLEAN — the state the `--worktree` flow leaves before `record` runs
+ * and the state the old `git diff HEAD` base could not see (task 1090 R1).
+ */
+function seedCommittedRepo(
+    initial: Array<[string, string]>,
+    follow: Array<[string, string]>,
+): { root: string; base: string; tip: string } {
+    const root = mkdtempSync(join(tmpdir(), 'spur-1090-repo-'));
+    git(root, ['init', '-q']);
+    git(root, ['config', 'user.email', 't@example.com']);
+    git(root, ['config', 'user.name', 't']);
+    git(root, ['config', 'commit.gpgsign', 'false']);
+    git(root, ['config', 'core.hooksPath', '/dev/null']);
+    for (const [p, body] of initial) writeRepoFile(root, p, body);
+    const base = commitAll(root, 'base');
+    for (const [p, body] of follow) writeRepoFile(root, p, body);
+    const tip = commitAll(root, 'work');
+    return { root, base, tip };
+}
+
+describe('Solution backfill diff base + pathspec (task 1090)', () => {
+    test('R1: names work already committed on the branch (clean working tree)', async () => {
+        const { root, base } = seedCommittedRepo(
+            [['app.ts', 'export const a = 1;\n']],
+            [['app.ts', 'export const a = 1;\nexport const b = 2;\n']],
+        );
+        try {
+            expect(git(root, ['status', '--porcelain'])).toBe('');
+            const out = renderSolutionFromDiff(await gitDiffU0({ cwd: root, base }));
+            expect(out).toContain('| `app.ts:2` |');
+            expect(out).not.toContain('(no changes detected)');
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('R1: resolves the pipeline run-base capture (.spur/run/<wbs>-base.sha)', async () => {
+        const { root, base } = seedCommittedRepo(
+            [['app.ts', 'export const a = 1;\n']],
+            [['app.ts', 'export const a = 1;\nexport const b = 2;\n']],
+        );
+        try {
+            writeRepoFile(root, '.spur/run/1090-base.sha', `${base}\n`);
+            const out = renderSolutionFromDiff(await gitDiffU0({ cwd: root, wbs: '1090' }));
+            expect(out).toContain('| `app.ts:2` |');
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('R1: an explicit base wins over the run-base capture', async () => {
+        const { root, base, tip } = seedCommittedRepo(
+            [['app.ts', 'export const a = 1;\n']],
+            [['app.ts', 'export const a = 1;\nexport const b = 2;\n']],
+        );
+        try {
+            writeRepoFile(root, '.spur/run/1090-base.sha', `${base}\n`);
+            const out = renderSolutionFromDiff(await gitDiffU0({ cwd: root, wbs: '1090', base: tip }));
+            expect(out).toContain('(no changes detected)');
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('R1: falls back to HEAD when no run-base is resolvable', async () => {
+        const { root } = seedCommittedRepo(
+            [['app.ts', 'export const a = 1;\n']],
+            [['app.ts', 'export const a = 1;\nexport const b = 2;\n']],
+        );
+        try {
+            writeRepoFile(root, 'app.ts', 'export const a = 1;\nexport const b = 2;\nexport const c = 3;\n');
+            const out = renderSolutionFromDiff(await gitDiffU0({ cwd: root, wbs: '9999' }));
+            expect(out).toContain('| `app.ts:3` |');
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('R2: names a non-JS-only change set (Markdown + YAML)', async () => {
+        const { root, base } = seedCommittedRepo(
+            [
+                ['docs/design/note.md', '# note\n'],
+                ['plugins/sp/references/thing.yaml', 'name: a\n'],
+            ],
+            [
+                ['docs/design/note.md', '# note\n\n## Added\n'],
+                ['plugins/sp/references/thing.yaml', 'name: a\nversion: "2"\n'],
+            ],
+        );
+        try {
+            const out = renderSolutionFromDiff(await gitDiffU0({ cwd: root, base }));
+            expect(out).toMatch(/\| `docs\/design\/note\.md:\d+` \|/);
+            expect(out).toMatch(/\| `plugins\/sp\/references\/thing\.yaml:\d+` \|/);
+            expect(out).not.toContain('(no changes detected)');
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('R2: a task-corpus-only change set still produces rows', async () => {
+        const { root, base } = seedCommittedRepo(
+            [['docs/tasks5/0001_x.md', 'a\n']],
+            [['docs/tasks5/0001_x.md', 'a\n\nb\n']],
+        );
+        try {
+            const out = renderSolutionFromDiff(await gitDiffU0({ cwd: root, base }));
+            expect(out).not.toContain('(no changes detected)');
+            expect(out).toMatch(/\| `docs\/tasks5\/0001_x\.md:\d+` \|/);
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('R2: excludes .spur/ runtime state and lockfiles from the change-map', async () => {
+        const { root, base } = seedCommittedRepo(
+            [
+                ['app.ts', 'export const a = 1;\n'],
+                ['.spur/run/state.json', '{}\n'],
+                ['bun.lock', 'x\n'],
+            ],
+            [
+                ['app.ts', 'export const a = 1;\nexport const b = 2;\n'],
+                ['.spur/run/state.json', '{"a":1}\n'],
+                ['bun.lock', 'y\n'],
+            ],
+        );
+        try {
+            const out = renderSolutionFromDiff(await gitDiffU0({ cwd: root, base }));
+            expect(out).toContain('| `app.ts:2` |');
+            expect(out).not.toContain('.spur/run/state.json');
+            expect(out).not.toContain('bun.lock');
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('R2: the pure renderer filters excluded planes from a raw diff too', () => {
+        const raw = ['+++ b/.spur/run/state.json', '@@ -1 +2 @@', '+++ b/bun.lock', '@@ -1 +4 @@'].join('\n');
+        expect(renderSolutionFromDiff(raw)).toContain('(no changes detected)');
     });
 });
 

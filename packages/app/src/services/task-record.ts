@@ -11,8 +11,9 @@
  * Design: docs/tasks/0108_*.md; ADR-022 (orchestration is configuration).
  */
 
+import { join } from 'node:path';
 import { parseChecklist } from '@gobing-ai/spur-domain';
-import { BunSyncProcessExecutor, type FileSystem } from '@gobing-ai/ts-runtime';
+import { BunSyncProcessExecutor, createNodeFileSystem, type FileSystem } from '@gobing-ai/ts-runtime';
 import type { TransitionCheckGate } from './task-transition';
 import {
     aggregateVerifyVerdict,
@@ -75,6 +76,12 @@ export interface RecordOptions {
     verdictFile?: string;
     /** When true AND Solution is bare, backfill from `git diff -U0` hunk headers. */
     solutionFromDiff?: boolean;
+    /**
+     * Explicit diff base for the Solution backfill. Wins over the pipeline's
+     * `.spur/run/<wbs>-base.sha` run-base capture, which wins over `HEAD`
+     * (task 1090 R1). Internal seam — deliberately not a public CLI flag.
+     */
+    solutionDiffBase?: string;
     /** Optional lifecycle transition (e.g. `'testing'`). A `'done'` target with
      *  a PASS verdict auto-walks `wip → testing → done` and auto-creates the
      *  pipeline run-link (task 0436 R4); a non-PASS verdict to `done` errors. */
@@ -705,6 +712,64 @@ export function renderReview(v: VerifyVerdict): string {
 
 // ─── R3: Solution safety-net ────────────────────────────────────────────
 
+/** First line of record's own `## Solution` backfill — the attribution marker. */
+export const RECORD_SOLUTION_HEADER = 'Change-map (auto-generated — implement step did not record a Solution).';
+
+/** The row record emits when the filtered diff named no changed file. */
+export const SOLUTION_NO_ROWS_ROW = '(no changes detected)';
+
+/** Lockfiles: regenerated dependency state, not an implementation change. */
+const SOLUTION_EXCLUDED_LOCKFILES = new Set([
+    'bun.lock',
+    'bun.lockb',
+    'package-lock.json',
+    'yarn.lock',
+    'pnpm-lock.yaml',
+]);
+
+/**
+ * Generated planes the auto change-map must not advertise: `.spur/` runtime state,
+ * task-corpus status churn, and lockfiles. Passed to git as pathspec excludes by
+ * {@link gitDiffU0} and re-applied by {@link isExcludedSolutionPath} inside the pure
+ * renderer, so a raw diff handed straight to the renderer is filtered identically.
+ *
+ * Design (task 1090 R2): the former `*.ts`/`*.tsx`/`*.js` allowlist made a docs, YAML or
+ * corpus-only task produce an empty change-map **by construction** — R2 requires those
+ * changes to be named, so the task corpus is deliberately NOT excluded here (a corpus-only
+ * task must produce rows too), and hardcoding a planning folder would additionally trip the
+ * `no-hardcoded-planning-folder` rule.
+ */
+export const SOLUTION_EXCLUDE_PATHSPECS = [
+    ':(exclude).spur/**',
+    ':(exclude)bun.lock',
+    ':(exclude)bun.lockb',
+    ':(exclude)package-lock.json',
+    ':(exclude)yarn.lock',
+    ':(exclude)pnpm-lock.yaml',
+] as const;
+
+/** True when a changed path belongs to a generated plane the change-map must not cite. */
+export function isExcludedSolutionPath(path: string): boolean {
+    if (path.startsWith('.spur/')) return true;
+    const base = path.split('/').pop() ?? path;
+    return SOLUTION_EXCLUDED_LOCKFILES.has(base);
+}
+
+/** True when a `## Solution` body is record's own backfill output. */
+export function isRecordAuthoredSolution(body: string | null): boolean {
+    if (body === null) return false;
+    return body.trim().startsWith(RECORD_SOLUTION_HEADER);
+}
+
+/**
+ * True when record's own backfill ran and reported no rows — the run diff named no
+ * changed file. The `L3.solution-file-line` denial reads this to name the empty
+ * backfill instead of misattributing the cause to an unauthored Solution (task 1090 R3).
+ */
+export function isEmptyRecordSolution(body: string | null): boolean {
+    return body !== null && isRecordAuthoredSolution(body) && body.includes(SOLUTION_NO_ROWS_ROW);
+}
+
 /**
  * Render the `## Solution` section body from `git diff -U0` output.
  *
@@ -719,7 +784,7 @@ export function renderReview(v: VerifyVerdict): string {
  */
 export function renderSolutionFromDiff(diffText: string): string {
     const lines: string[] = [];
-    lines.push('Change-map (auto-generated — implement step did not record a Solution).');
+    lines.push(RECORD_SOLUTION_HEADER);
     lines.push('Each entry cites the first changed line per file (`file:line`).');
     lines.push('');
     lines.push('| Change (`file:line`) |');
@@ -731,7 +796,7 @@ export function renderSolutionFromDiff(diffText: string): string {
         // Fallback: cite each changed file at :1.
         const files = extractChangedFiles(diffText);
         if (files.length === 0) {
-            lines.push('| `(no changes detected)` |');
+            lines.push(`| \`${SOLUTION_NO_ROWS_ROW}\` |`);
         } else {
             for (const f of files) {
                 lines.push(`| \`${f}:1\` |`);
@@ -760,7 +825,10 @@ function extractFileLineCitations(diffText: string): string[] {
     for (const line of diffText.split('\n')) {
         const fileMatch = /^\+\+\+ b\/(.+)$/.exec(line);
         if (fileMatch) {
-            currentFile = fileMatch[1] ?? null;
+            const path = fileMatch[1] ?? null;
+            // An excluded file's hunks are skipped too: `-U0` keeps each file's hunks
+            // directly under its own `+++` line (task 1090 R2).
+            currentFile = path !== null && !isExcludedSolutionPath(path) ? path : null;
             continue;
         }
 
@@ -785,7 +853,7 @@ function extractChangedFiles(diffText: string): string[] {
         const match = /^\+\+\+ b\/(.+)$/.exec(line);
         if (match) {
             const filePath = match[1];
-            if (filePath !== undefined) files.add(filePath);
+            if (filePath !== undefined && !isExcludedSolutionPath(filePath)) files.add(filePath);
         }
     }
     return [...files].sort();
@@ -793,19 +861,61 @@ function extractChangedFiles(diffText: string): string[] {
 
 // ─── Git helpers (sync shell — used by record method, not the pure generators) ──
 
+/** Options for {@link gitDiffU0} / {@link resolveDiffBase}. */
+export interface GitDiffU0Options {
+    /** Working directory the diff runs in (the project root by default). */
+    cwd?: string;
+    /** Explicit diff base (commit-ish). Highest precedence when non-empty. */
+    base?: string;
+    /** Task WBS — resolves the pipeline's `.spur/run/<wbs>-base.sha` run-base capture. */
+    wbs?: string;
+}
+
 /**
- * Run `git diff -U0` for the current working tree (uncommitted changes).
+ * Resolve the change-map's diff base, first non-empty of: an explicit option →
+ * `.spur/run/<wbs>-base.sha` (the pipeline precheck's run-base capture, task 0950) →
+ * `HEAD`.
  *
- * Scoped to source files so generated artifacts don't pollute the change-map.
+ * Design (task 1090 R1): fixing on `HEAD` made committed work invisible — the
+ * documented `--worktree` flow commits before `record` runs, so the safety-net
+ * backfill reported "no changes detected" for any run that had already committed.
+ *
+ * The run-base file is read through the ts-runtime FileSystem seam (the
+ * `no-direct-fs-io` boundary rule), hence async.
+ */
+export async function resolveDiffBase(options: GitDiffU0Options = {}): Promise<string> {
+    const explicit = options.base?.trim();
+    if (explicit !== undefined && explicit !== '') return explicit;
+    const wbs = options.wbs?.trim();
+    if (wbs !== undefined && wbs !== '') {
+        const baseFile = join(options.cwd ?? process.cwd(), '.spur', 'run', `${wbs}-base.sha`);
+        try {
+            const sha = (await createNodeFileSystem().readFile(baseFile)).trim();
+            if (sha !== '') return sha;
+        } catch {
+            // No run-base capture — fall through to HEAD.
+        }
+    }
+    return 'HEAD';
+}
+
+/**
+ * Run `git diff -U0 <base>` for the working tree.
+ *
+ * The base is the run base, not the working tree, so committed work is named too
+ * (task 1090 R1). Generated planes are excluded by pathspec rather than by an
+ * extension allowlist, so a non-JS change set produces rows (task 1090 R2).
  * Returns empty string on any failure — the Solution safety-net is best-effort.
  */
-export function gitDiffU0(cwd?: string): string {
+export async function gitDiffU0(options: GitDiffU0Options = {}): Promise<string> {
     try {
-        // ProcessExecutor seam (no-direct-process-spawn). Git expands pathspecs itself.
+        const base = await resolveDiffBase(options);
+        // ProcessExecutor seam (no-direct-process-spawn). Git expands pathspecs itself,
+        // and the excludes need `-- .` as their positive pathspec.
         const result = new BunSyncProcessExecutor().runSync({
             command: 'git',
-            args: ['diff', '-U0', 'HEAD', '--', '*.ts', '*.tsx', '*.js'],
-            ...(cwd !== undefined ? { cwd } : {}),
+            args: ['diff', '-U0', base, '--', '.', ...SOLUTION_EXCLUDE_PATHSPECS],
+            ...(options.cwd !== undefined ? { cwd: options.cwd } : {}),
             rejectOnError: false,
         });
         return result.exitCode === 0 ? result.stdout : '';
