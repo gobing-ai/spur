@@ -16,7 +16,9 @@ const IDEA_ACTION_BUDGET = 31;
 // (the proof-binding stamp must stay the state's last action and under the 800-char shell cap),
 // and `review-fail-triage` adds one decide action — the review-side twin of 0943's failure-class
 // router. Raising a budget here IS the change record; both additions are named in the commit.
-const TASK_ACTION_BUDGET = 50;
+// 51 at v5 (1077): test-fix gains one review-lane evidence projection action so the repair
+// hop is not fed an empty findings set.
+const TASK_ACTION_BUDGET = 51;
 
 const WORKFLOWS_DIR = join(import.meta.dir, '../../../../config', 'workflows');
 
