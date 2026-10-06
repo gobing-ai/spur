@@ -77,6 +77,11 @@
             "twin": "residual-scan.mjs"
         },
         {
+            "rel": "run-summary.ts",
+            "contract": "standard",
+            "twin": "run-summary.mjs"
+        },
+        {
             "rel": "script-root.ts",
             "contract": "standard",
             "twin": "script-root.mjs"
