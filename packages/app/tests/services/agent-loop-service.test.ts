@@ -20,6 +20,7 @@ import { EventBus } from '@gobing-ai/ts-infra';
 import type { AgentLoopDeps } from '../../src/services/agent-loop-service';
 import {
     createWriteSlotHeartbeat,
+    ORCHESTRATOR_REPLY_INSTRUCTION,
     recordIdleHold,
     runAgentLoopCore,
     waitForWake,
@@ -447,6 +448,56 @@ describe('G71 R1/R2/R3 — member drain, keyed run path, slot heartbeat, resume 
         expect((await runs.getByRunId('run-live-other'))?.status).toBe('running');
         // The instance is idle for the strategy again.
         expect(await runs.hasRunning('member-1')).toBe(false);
+    });
+
+    test('R4: the orchestrator answers its inbox with the reply instruction BEFORE the strategy observes and ticks', async () => {
+        const db = await memDb();
+        const order: string[] = [];
+        let runBody = '';
+        const deps = memberDeps(db, {
+            cwd: mkdtempSync(join(tmpdir(), 'loop-orch-order-')),
+            fleet: {
+                load: async () => ({ enabled: true }),
+                resolveOrchestrator: async () => ({ instanceId: 'member-1' }),
+                assertLaunchGroundTruth: async () => {},
+            } as unknown as FleetService,
+            drain: async () => {
+                order.push('drain');
+                return { prompt: 'status?', flags: {}, claimed: ['m-status'] };
+            },
+            agentService: () =>
+                ({
+                    run: async (body: string) => {
+                        order.push('run');
+                        runBody = body;
+                        return 0;
+                    },
+                    runTraced: async () => ({}),
+                }) as unknown as Pick<AgentService, 'run' | 'runTraced'>,
+            makeStrategyRuntime: async () =>
+                ({
+                    resume: async () => {},
+                    observe: async () => {
+                        order.push('observe');
+                        return { released: [] };
+                    },
+                    tick: async () => {
+                        order.push('tick');
+                        return { dispatched: [], holds: [] };
+                    },
+                    stop: () => {},
+                }) as unknown as StrategyRuntime,
+        });
+        const code = await runAgentLoopCore(deps, {
+            recipient: 'member-1',
+            pollMs: 10,
+            flags: {},
+            runtime: { maxIterations: 1 },
+        });
+        expect(code).toBe(0);
+        expect(order.slice(0, 4)).toEqual(['drain', 'run', 'observe', 'tick']);
+        expect(runBody.startsWith('status?')).toBe(true);
+        expect(runBody.endsWith(ORCHESTRATOR_REPLY_INSTRUCTION)).toBe(true);
     });
 
     test('R4: a throwing orchestrator drain is logged and does not take the dispatch loop down', async () => {
