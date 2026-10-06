@@ -4,7 +4,7 @@ name: Make fleet members drain their inbox and let the orchestrator converse
 status: done
 template: feature-impl
 created_at: 2026-10-04T20:30:36.790Z
-updated_at: "2026-10-05T18:22:32.282Z"
+updated_at: "2026-10-06T16:40:43.952Z"
 feature_id: G71
 
 dependencies: ["1073"]
@@ -184,15 +184,15 @@ contract (`agent-loop-wake`, `agent-loop-member-session`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | The fleet bypass is deleted, so every member loop drains and settles its inbox (`packages/app/src/services/agent-loop-service.ts:525`); a batch carrying a `fleet:task:*` key runs through `svc.run` even for a persistent member (`packages/app/src/services/agent-loop-service.ts:431`) because only that path writes the receipt 1073 waits on; the fleet `--spec-id` guard admits a drained run, keeping the refusal only for a dispatch with no originating ids (`packages/app/src/services/agent-service.ts:1053`, ids resolved before it at `:1028`). Tests: "R1: a fleet member drains its inbox and settles the run instead of only holding", "R1: a keyed batch runs through the run path even for a persistent member", and the guard case in `packages/app/tests/services/agent-service.test.ts` |
-| R2 | MET | `createWriteSlotHeartbeat` renews the held write slot while a keyed run is live, fenced on holder identity (`packages/app/src/services/agent-loop-service.ts:27`). Tests: "R2: the member heartbeat renews the held slot and stops when it is fenced out" and "R1: an unkeyed conversational batch claims and renews no write slot" |
-| R3 | MET | A resume member seeds its session id from its latest `fleet.member-session` ledger observation, before the mode mirror (`packages/app/src/services/member-session.ts:244`), and loop shutdown resets only a persistent session (`packages/app/src/services/agent-loop-service.ts:538`). Tests: "start seeds a resume member with the exact id its last drain recorded", "a deliberate reset clears the seed", "an unreadable ledger starts the resume member without an id", and the CLI traces "G71 R3: loop shutdown leaves a resume session alone" / "resume mode mirrors { mode, id } mid-loop and keeps the id across shutdown" |
-| R4 | MET | The orchestrator's wake order is drain its own inbox (with the reply instruction) then `observe` then the deterministic `tick` (`packages/app/src/services/agent-loop-service.ts:497`, instruction at `packages/app/src/services/agent-loop-service.ts:63`); a throwing drain is logged and cannot stop the loop. Tests in `packages/app/tests/services/agent-loop-service.test.ts` and the CLI trace asserting the orchestrator's only dispatch effect is the keyed inbox row with `runTraced` replaced by a throwing stub |
+| R1 | MET | No fleet bypass remains: a keyed drained batch runs through the agent service run path at `packages/app/src/services/agent-loop-service.ts:517`, then settles. Tests (fresh): `packages/app/tests/services/agent-loop-service.test.ts:249`, `packages/app/tests/services/agent-loop-service.test.ts:288`, `packages/app/tests/services/agent-loop-service.test.ts:325`. |
+| R2 | MET | Keyed run heartbeats the write slot at `packages/app/src/services/agent-loop-service.ts:501` via createWriteSlotHeartbeat (`packages/app/src/services/agent-loop-service.ts:27`). Test (fresh): `packages/app/tests/services/agent-loop-service.test.ts:351`. |
+| R3 | MET | Resume seeding from the ledger at `packages/app/src/services/member-session.ts:244`; shutdown resets only persistent sessions at `packages/app/src/services/agent-loop-service.ts:594-600`. Tests (fresh): `packages/app/tests/services/member-session.test.ts:431`, `packages/app/tests/services/member-session.test.ts:439`, `packages/app/tests/services/member-session.test.ts:449`, `packages/app/tests/services/agent-loop-service.test.ts:489`, `apps/cli/tests/commands/agent-loop-member-session.test.ts:315`. |
+| R4 | MET | ORCHESTRATOR_REPLY_INSTRUCTION at `packages/app/src/services/agent-loop-service.ts:63`; drain before observe and tick at `packages/app/src/services/agent-loop-service.ts:550-571`. Test (fresh): `packages/app/tests/services/agent-loop-service.test.ts:450` (a throwing orchestrator drain does not stop dispatch). Ordering is proven executably by the E2E orchestrator-reply row this run (reply body idle, inReplyTo equals the sent id), not by a unit test — see P4. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Members drain their inbox and hold the write slot | MET | test | `packages/app/tests/services/agent-loop-service.test.ts` drains a member's claimed row and settles it as delivered (no idle hold written), routes a keyed batch through the run path, and renews the held slot from the member's own heartbeat |
-| AC2 — The orchestrator converses through its inbox | MET | test | `apps/cli/tests/commands/agent-loop-wake.test.ts` and `agent-loop-member-session.test.ts` exercise the orchestrator drain path with the reply instruction, and the drain-guard test proves the tick still runs when the drain itself fails |
+| AC1 — Members drain their inbox and hold the write slot | MET | test | `packages/app/tests/services/agent-loop-service.test.ts:249` and `packages/app/tests/services/agent-loop-service.test.ts:351` (fresh). E2E this run: dispatch-to-done reached status=done through keyed message 7416df00 / requestKey fleet:task:0001:1 (`.spur/run/G71-verifyall-e2e-final.log`). |
+| AC2 — The orchestrator converses through its inbox | MET | command | `bun scripts/spur-dev.ts fleet-e2e` this run, exit 0: orchestrator-reply sent=446a6b84 reply=77dedb35 body=idle inReplyTo=446a6b84 (`.spur/run/G71-verifyall-e2e-final.log`). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
