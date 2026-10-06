@@ -163,6 +163,20 @@ The pipeline (`kind: state-machine`) runs the work loop:
 precheck → implement → test [→ test-fix → test-recheck] → review → approve(HITL) → verify → record → done
 ```
 
+Two branches reach the bounded repair hop, not one (session finding after 1088):
+
+- `test`/`test-recheck` FAIL → `test-fail-triage` (0943's failure-class router) → `test-fix`;
+- `review` without a `Verdict: PASS` in its answer → `review-fail-triage` (the review-side twin) →
+  `test-fix`, bounded by the SAME `qualityGateMaxFixAttempts` counter. A FAIL review therefore has
+  an on-graph, bounded path to remediation instead of dead-ending the run, and the fix re-enters
+  quality → review → verify on a freshly captured proof digest.
+
+The completion gate also reads the verifier's confidence (session finding after 1088): the verify
+answer's `Confidence: HIGH|MEDIUM|LOW` line reaches the verdict artifact, and both `verify → record`
+and `record → done` refuse a `LOW` (or absent) level unless the run was launched with
+`--vars '{"ackLowConfidence":"true"}'`. A PASS the verifier would not stand behind is an operator
+risk decision, so it takes an operator acknowledgement — not a silent certification.
+
 Agentic steps use the pure slash inputs declared by each YAML `agent.run` action (ADR-043). The
 workflow engine dispatches them; the interactive driver invokes their backing skills in-session.
 The `test` hop is primarily

@@ -366,6 +366,14 @@ Action semantics come from the YAML and the workflow action contract:
 - `note` — append the expanded message to the inline run log.
 - `doctor.probe` — run the declared Spur doctor once, persist its status file, and apply any
   `setVars` result (including a resolved executor) before the next action or state.
+  **Role-map mode has no inline surface (task 1088 session finding).** A `doctor.probe` that
+  declares `roles` resolves them through `AgentService.resolve`, which is reachable only in-process
+  (the engine composition injects the service); no CLI verb exposes it, so the host session cannot
+  reproduce `__executor.<role>` pins. The driver therefore probes the host-session agent instead,
+  writes that verdict to the declared status file, and records one run-log line naming the
+  substitution. Nothing downstream degrades: `__executor.<role>` pins are consumed by the
+  subprocess dispatch path, and the inline path executes its stages in the host session without
+  reading them. Never fabricate pins to satisfy the shape, and never skip the status file.
 - `file.read.into-var` — read the declared file into the declared run variable before subsequent
   actions/guards.
 - `hitl.confirm` — under `profile=auto`, follow the YAML's auto-skip transition. Otherwise pause,
