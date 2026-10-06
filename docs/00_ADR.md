@@ -2151,3 +2151,38 @@ descriptions above record earlier stages, not supported configuration.
   navigation (`LeftSidebar`) share identical icon definitions.
 - **Retains:** ADR-034 (accessible naming & contrast-verified tokens), ADR-081 (single-row header anatomy).
 - **Detail:** [DESIGN.md](../DESIGN.md) §Iconography; implementation in `apps/web/src/components/ModuleIcon.tsx`.
+
+## ADR-134: Decision Catalogs Are the SSOT for AI Decisions; `spur decision` Ships First, Workflow Adoption Is Staged
+
+- **Status:** Proposed · **Date:** 2026-10-06 · **Feature:** P (adoption: P1) · **Extends:** ADR-125
+- **Decision:** Every AI classification Spur makes is declared in a versioned decision catalog
+  (`@gobing-ai/ts-ai-decision` YAML, `version: 1`) whose repo SSOT is `config/decisions/` and
+  which ships in the npm tarball beside `config/workflows/`. One app service builds a
+  `DecisionHub` over catalogs resolved through ADR-113-style layers (project
+  `.spur/decisions/` → registered `decisions.paths` with `bundled:` support → shared
+  `bundledConfigRoot()/decisions`, found with no config). A standalone `spur decision` noun
+  (`list`, `show`, `run`, `status`) is the first and, for now, only consumer. The operator picks
+  the DecisionMaker in the global config: `decisions.maker` (default for all) and
+  `decisions.makers.<id>` (per decision point), with precedence `--maker` → per-decision config →
+  global config → catalog entry → catalog defaults. Existing workflow `decide` actions are not
+  touched; replacing every workflow decision point with a catalog reference is staged into feature
+  P1, one decision point at a time, each gated on recorded `spur decision run` reliability evidence.
+  Alternatives rejected: a required absolute `decisions` path in global config (breaks on
+  reinstall/relocation, unlike the auto-found shared layer); migrating workflow decisions in the
+  same feature (couples pipeline routing to makers whose reliability is still unmeasured).
+- **Why:** decisions are hand-written inline in workflow YAML (three in `task-pipeline.yaml`),
+  invisible to operators and not callable outside a run. A catalog makes each decision's closed
+  vocabulary, threshold and fallback reviewable, and `spur decision run` lets operators measure a
+  maker's reliability on real decision points before any workflow depends on it. Maker choice lives
+  in operator config because only the machine owner knows which backends exist there.
+  "Deterministic" means *total*: every call returns a value from the closed vocabulary, with the
+  declared fallback on no backend, error, timeout or low confidence; model output itself is not
+  deterministic.
+- **Consequence:** two decision vocabularies (catalog and inline `decide`) coexist until P1
+  completes; P1's end state is no inline decide in shipped workflows, with inline options
+  deprecated for one release. An unregistered configured maker is an error, never a silent
+  fallback. The upstream package and its maker backends become a `packages/app` runtime
+  dependency, so bundle and compiled-binary size must be measured.
+- **Retains:** ADR-113 (layered resolution), ADR-125 (non-pausing, default-on-degrade decide and its
+  `workflow.decideDecisionMaker` switch, unchanged until P1), ADR-117 (inline/subprocess parity).
+- **Detail:** [decision catalog](design/decision-catalog.md).
