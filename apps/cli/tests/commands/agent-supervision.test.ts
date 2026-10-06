@@ -7,7 +7,7 @@
  *   SIGKILLed serve cannot leave orphan loops.
  */
 import { describe, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { AgentCoordinationService, type PortProbeResult, setPortProbeForTests } from '@gobing-ai/spur-app';
@@ -81,10 +81,12 @@ describe('agent server resolution (1088 R1)', () => {
         }
     });
 
-    test('resolveAgentServer falls back to port 3000 with no registry entry', async () => {
+    test('resolveAgentServer falls back to port 3000 when no ancestor is registered', async () => {
         const { cwd, cleanup } = await makeProject(REGISTRY_PORT, 'in-use');
         try {
-            expect(await resolveAgentServer(join(cwd, 'some', 'other-project'))).toBe('http://localhost:3000/api');
+            // A path outside the registered tree. A path INSIDE it resolves to the project root's
+            // serve — that is the ancestor walk, pinned by the subdirectory test below.
+            expect(await resolveAgentServer(join(cwd, '..', 'not-registered'))).toBe('http://localhost:3000/api');
         } finally {
             await cleanup();
         }
@@ -103,6 +105,56 @@ describe('agent server resolution (1088 R1)', () => {
         const { cwd, cleanup } = await makeProject(REGISTRY_PORT, 'in-use');
         try {
             expect(await resolveAgentServer(cwd, 'http://x:9/api')).toBe('http://x:9/api');
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('resolveAgentServer finds the nearest registered ancestor from a subdirectory', async () => {
+        const projects = [{ name: 'demo', path: '/work/demo', port: 4321 }];
+        const deps = { registry: { peek: () => ({ projects, unreadable: false }) }, isLive: async () => true };
+        // Run from a nested directory: the exact-cwd lookup missed it and silently fell through
+        // to the 3000 default, which may be a different project's serve (1088 follow-up).
+        expect(await resolveAgentServer('/work/demo/packages/app/src', undefined, deps)).toBe(
+            'http://localhost:4321/api',
+        );
+        // A path outside the registered tree still falls back.
+        expect(await resolveAgentServer('/work/other', undefined, deps)).toBe('http://localhost:3000/api');
+    });
+
+    test('resolveAgentServer names the reason when the registry is unreadable', async () => {
+        const warnings: string[] = [];
+        const resolved = await resolveAgentServer('/work/demo', undefined, {
+            registry: { peek: () => ({ projects: [], unreadable: true }) },
+            warn: (m) => warnings.push(m),
+        });
+        expect(resolved).toBe('http://localhost:3000/api');
+        expect(warnings).toHaveLength(1);
+        expect(warnings[0]).toContain('project registry unreadable');
+    });
+
+    test('resolveAgentServer names the skipped port when the registered serve is not listening', async () => {
+        const warnings: string[] = [];
+        const resolved = await resolveAgentServer('/work/demo', undefined, {
+            registry: {
+                peek: () => ({ projects: [{ name: 'demo', path: '/work/demo', port: 4321 }], unreadable: false }),
+            },
+            isLive: async () => false,
+            warn: (m) => warnings.push(m),
+        });
+        expect(resolved).toBe('http://localhost:3000/api');
+        expect(warnings[0]).toContain('4321');
+    });
+
+    test('resolving the default server does not mutate the registry (read-only lookup)', async () => {
+        // `getByPath` routed through `list()` -> healStale, which clears a `port > 0` entry whose
+        // liveness probe misses. Resolving a read must not rewrite the operator's registry.
+        const { cwd, cleanup } = await makeProject(REGISTRY_PORT, 'available');
+        const registryFile = join(cwd, 'projects.json');
+        try {
+            const before = await readFile(registryFile, 'utf8');
+            expect(await resolveAgentServer(cwd)).toBe('http://localhost:3000/api');
+            expect(await readFile(registryFile, 'utf8')).toBe(before);
         } finally {
             await cleanup();
         }
@@ -143,6 +195,23 @@ describe('agent server resolution (1088 R1)', () => {
             }) as typeof fetch);
             expect(await main(['agent', 'status', '--server', 'http://x:9/api'], { cwd, output: out })).toBe(0);
             expect(urls).toEqual(['http://x:9/api/processes']);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('agent status surfaces the resolver diagnostic through the CLI output contract', async () => {
+        // The resolver's warnings ride `context.output.error`, never raw stdio
+        // (the `no-raw-stdout-stderr` rule). A dead registered port must say so instead of
+        // silently querying the 3000 fallback — the registry no longer heals it away.
+        const { cwd, out, cleanup } = await makeProject(REGISTRY_PORT, 'available');
+        try {
+            await seedSpec(cwd, 'planner');
+            setAgentServerFetchForTesting((async () =>
+                jsonResponse(200, { processes: [] })) as unknown as typeof fetch);
+            expect(await main(['agent', 'status', '--json'], { cwd, output: out })).toBe(0);
+            expect(out.errors.join('\n')).toContain(`${REGISTRY_PORT}`);
+            expect(out.errors.join('\n')).toContain('not listening');
         } finally {
             await cleanup();
         }

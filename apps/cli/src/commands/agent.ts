@@ -1,3 +1,4 @@
+import { dirname, resolve } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
 import type { AgentQuotaEventBus } from '@gobing-ai/spur-app';
 import {
@@ -16,8 +17,10 @@ import {
     FleetGuestService,
     FleetService,
     followSystemEventsAfter,
+    isPortLive,
     loopSleep,
     MAX_INJECT_ATTEMPTS,
+    normalizeProjectPath,
     ProjectRegistry,
     type RunAgentUsageOptions,
     resolveAgentSelector,
@@ -42,7 +45,7 @@ export type { AgentLoopRuntime };
  */
 export const DEFAULT_TRACE_FOLLOW_TIMEOUT_MS = 600_000;
 
-import { ExecutorDisabledError, resolveExecutor } from '@gobing-ai/spur-config';
+import { ExecutorDisabledError, type ProjectEntry, resolveExecutor } from '@gobing-ai/spur-config';
 import {
     CoordinationRunDao,
     InboxMessageDao,
@@ -93,18 +96,75 @@ const DEFAULT_SERVER = 'http://localhost:3000/api';
  * resolves to IPv6 `[::1]` only, so a `127.0.0.1` client has no listener (ECONNREFUSED). The
  * name form resolves the same address family the server bound.
  * An explicit `--server` always wins, which is why the commander options declare no default.
- * A stale entry self-heals to 0 inside `getByPath` (`healStale`), so a dead serve falls back.
+ *
+ * Resolving the default is a READ, so it uses `ProjectRegistry.peek()` — the read-only snapshot.
+ * `getByPath` routes through `list()`, which heals tilde paths, purges deleted project
+ * directories (signalling a purged entry's listener) and clears `port > 0` whenever a liveness
+ * probe misses: a transient miss on a loaded host therefore cleared a live serve's port and
+ * silently redirected the CLI to the 3000 default — possibly another project's serve. Liveness is
+ * still checked here, with `isPortLive`, so the documented "no live entry → 3000" contract and its
+ * diagnostic survive without the registry mutation.
+ *
+ * The lookup walks the cwd's ancestors: run from a subdirectory of a served project, the registry
+ * entry for the project root must still be found instead of falling through to the 3000 default.
  */
-export async function resolveAgentServer(cwd: string, explicit?: string): Promise<string> {
+export async function resolveAgentServer(
+    cwd: string,
+    explicit?: string,
+    deps: AgentServerResolveDeps = {},
+): Promise<string> {
     if (explicit !== undefined && explicit !== '') return explicit;
+    // The diagnostic sink is injected (the CLI passes `context.output.error`) — never raw stdio:
+    // the `no-raw-stdout-stderr` rule keeps every CLI message on the output contract.
+    const warn = deps.warn ?? (() => {});
     try {
-        const entry = await new ProjectRegistry().getByPath(cwd);
-        if (entry !== undefined && entry.port > 0) return `http://localhost:${entry.port}/api`;
+        const registry = deps.registry ?? new ProjectRegistry();
+        const { projects, unreadable } = registry.peek();
+        if (unreadable) {
+            // Previously indistinguishable from "this project has no entry": the parse failure was
+            // collapsed into an empty roster and only the generic 3000 fallback showed.
+            warn(
+                `warning: project registry unreadable — falling back to ${DEFAULT_SERVER}; run 'spur projects list' to repair it`,
+            );
+            return DEFAULT_SERVER;
+        }
+        const isLive = deps.isLive ?? isPortLive;
+        for (const candidate of ancestorDirs(cwd)) {
+            const normalized = normalizeProjectPath(candidate);
+            const entry = projects.find((p) => normalizeProjectPath(p.path) === normalized);
+            if (entry === undefined || entry.port <= 0) continue;
+            if (await isLive(entry.port)) return `http://localhost:${entry.port}/api`;
+            // The registered port has no listener. Keep the documented 3000 fallback, but name
+            // what was skipped: silence here reads as "no project registered" (1088 follow-up).
+            warn(
+                `warning: registered serve port ${entry.port} for ${entry.path} is not listening — falling back to ${DEFAULT_SERVER}`,
+            );
+            return DEFAULT_SERVER;
+        }
     } catch {
         // An unreadable/unlockable registry means "no live entry", not a failed command: fall
         // back to the default port so the existing unreachable-server warning still fires.
     }
     return DEFAULT_SERVER;
+}
+
+/** `cwd`, then each of its parents up to the filesystem root — nearest first. */
+export function ancestorDirs(cwd: string): string[] {
+    const dirs: string[] = [];
+    let current = resolve(cwd);
+    for (;;) {
+        dirs.push(current);
+        const parent = dirname(current);
+        if (parent === current) return dirs;
+        current = parent;
+    }
+}
+
+/** Test seams for {@link resolveAgentServer} — the registry snapshot, liveness, and the diagnostic sink. */
+export interface AgentServerResolveDeps {
+    registry?: { peek(): { projects: ProjectEntry[]; unreadable: boolean } };
+    isLive?: (port: number) => Promise<boolean>;
+    warn?: (message: string) => void;
 }
 
 /** Injectable seams for `runAgentUsage` tests (source stub, snapshot override). */
@@ -250,7 +310,10 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
         .option(...SHARED_OPTIONS.json)
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .option('--specs', 'List agent specs instead of detected agents')
-        .option('--server <url>', 'Server API URL for live run status (with --specs)')
+        .option(
+            '--server <url>',
+            "Server API URL for live run status (with --specs) (default: this project's registered serve, else http://localhost:3000/api)",
+        )
         .action(async (options) => {
             const svc = new AgentService({ cwd: context.cwd, env: context.env, output: context.output });
             const code = await runAgentList(svc, context, {
@@ -267,7 +330,10 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
         .description('Show agent specs with live process status and member session (requires spur serve).')
         .option(...SHARED_OPTIONS.json)
         .option(...SHARED_OPTIONS.jsonEnvelope)
-        .option('--server <url>', 'Server API URL for live run status and member session')
+        .option(
+            '--server <url>',
+            "Server API URL for live run status and member session (default: this project's registered serve, else http://localhost:3000/api)",
+        )
         .action(async (options) => {
             const code = await runAgentStatus(context, {
                 json: options.json,
@@ -580,7 +646,10 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
         .command('start')
         .description('Start a supervised agent process (requires spur serve).')
         .argument('<spec-id>', 'Agent spec id')
-        .option('--server <url>', 'Server API URL')
+        .option(
+            '--server <url>',
+            "Server API URL (default: this project's registered serve, else http://localhost:3000/api)",
+        )
         .option(...SHARED_OPTIONS.json)
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (specId, options) => {
@@ -590,7 +659,9 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
                 'start',
                 specId,
                 {
-                    server: await resolveAgentServer(context.cwd, options.server),
+                    server: await resolveAgentServer(context.cwd, options.server, {
+                        warn: (m) => context.output.error(m),
+                    }),
                     json: options.json,
                     jsonEnvelope: options.jsonEnvelope,
                 },
@@ -603,7 +674,10 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
         .command('stop')
         .description('Stop a supervised agent process (requires spur serve).')
         .argument('<spec-id>', 'Agent spec id')
-        .option('--server <url>', 'Server API URL')
+        .option(
+            '--server <url>',
+            "Server API URL (default: this project's registered serve, else http://localhost:3000/api)",
+        )
         .option(...SHARED_OPTIONS.json)
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (specId, options) => {
@@ -613,7 +687,9 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
                 'stop',
                 specId,
                 {
-                    server: await resolveAgentServer(context.cwd, options.server),
+                    server: await resolveAgentServer(context.cwd, options.server, {
+                        warn: (m) => context.output.error(m),
+                    }),
                     json: options.json,
                     jsonEnvelope: options.jsonEnvelope,
                 },
@@ -996,7 +1072,7 @@ async function runAgentList(
     // so the local listing is only the desired state until the server's process table
     // overrides it. Unreachable server ⇒ every spec `stopped` plus a stderr warning,
     // so offline listing still works.
-    const server = await resolveAgentServer(context.cwd, opts.server);
+    const server = await resolveAgentServer(context.cwd, opts.server, { warn: (m) => context.output.error(m) });
     const live = await fetchServerProcesses(server);
     if (live === null) {
         context.output.error(
@@ -1071,7 +1147,7 @@ async function runAgentStatus(
         context.output.write('No agent specs found in .spur/agents/');
         return 0;
     }
-    const server = await resolveAgentServer(context.cwd, opts.server);
+    const server = await resolveAgentServer(context.cwd, opts.server, { warn: (m) => context.output.error(m) });
     const live = await fetchServerProcesses(server);
     if (live === null) {
         context.output.error(

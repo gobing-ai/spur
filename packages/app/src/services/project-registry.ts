@@ -344,16 +344,41 @@ export class ProjectRegistry {
 
     /** Read registry contents from disk. */
     readRaw(): ProjectsFile {
+        return this.readRawWithStatus().data;
+    }
+
+    /**
+     * The same read, plus whether the file exists yet could not be parsed (1088 follow-up).
+     * `readRaw` collapses both failure modes into an empty list, which is right for callers that
+     * only need the roster — but an unreadable registry silently became "no entry", so a
+     * resolver fell through to the port-3000 default with no diagnostic.
+     */
+    private readRawWithStatus(): { data: ProjectsFile; unreadable: boolean } {
         if (!existsSync(this.filePath)) {
-            return { schema_version: 1, projects: [] };
+            return { data: { schema_version: 1, projects: [] }, unreadable: false };
         }
         try {
             const raw = readFileSync(this.filePath, 'utf-8');
             const json = JSON.parse(raw);
-            return projectsFileSchema.parse(json);
+            return { data: projectsFileSchema.parse(json), unreadable: false };
         } catch {
-            return { schema_version: 1, projects: [] };
+            return { data: { schema_version: 1, projects: [] }, unreadable: true };
         }
+    }
+
+    /**
+     * Read-only snapshot for callers that must not mutate the registry (1088 follow-up).
+     *
+     * `list()` deliberately heals tilde paths, purges deleted project directories (SIGTERM/SIGKILL
+     * on a purged entry's listener) and clears `port > 0` when a probe misses. That is the right
+     * behaviour for `projects list`, and the wrong one for resolving a *read* like the default
+     * `--server`: a transient connect miss there cleared a live serve's port and silently pointed
+     * the CLI at the 3000 default (possibly another project's serve). This snapshot never writes.
+     * Stale entries stay in place; the caller decides liveness and reports its own diagnostic.
+     */
+    peek(): { projects: ProjectEntry[]; unreadable: boolean } {
+        const { data, unreadable } = this.readRawWithStatus();
+        return { projects: data.projects, unreadable };
     }
 
     /** Write registry contents to disk atomically. */
