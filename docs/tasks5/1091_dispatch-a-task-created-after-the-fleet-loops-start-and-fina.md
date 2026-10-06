@@ -1,14 +1,16 @@
 ---
 schema_version: 1
 name: Dispatch a task created after the fleet loops start, and finalize a killed member turn
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-10-05T23:56:25.473Z
-updated_at: "2026-10-06T00:15:34.534Z"
+updated_at: "2026-10-06T01:56:05.368Z"
 feature_id: G71
 
 priority: P1
 ac_altitude: task-local
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1091-verdict.json
 ---
 
 ## 1091. Dispatch a task created after the fleet loops start, and finalize a killed member turn
@@ -70,9 +72,9 @@ replaced by explicit evidence.
 
 ### Requirements
 
-- [ ] R1. (N1) The GTD dispatch gate counts only fleet-keyed rows (`request_key` prefix `fleet:task:`). It ignores unkeyed traffic: an operator or conversational message to a member with no definite receipt never holds GTD dispatch. A keyed `outcome-unknown` row still holds dispatch, and the hold detail names the blocking message ids (not just a count).
-- [ ] R2. (N2) A `coordination_runs` row left `running` by a member loop that died without a graceful exit (SIGKILL or crash) is finalized `errored` with `completed_at` set when that member's loop restarts, before the loop's first drain. The killed keyed attempt then has a definite receipt, and the instance is idle again.
-- [ ] R3. (H) The `kill-redispatch` leg of `scripts/commands/fleet-e2e.ts` first sends the coder one unkeyed conversational message, so the stdin-delivered row from R1 exists. It then drives the hang task only through the strategy, with no operator dispatch message and no planner nudge:
+- [x] R1. (N1) The GTD dispatch gate counts only fleet-keyed rows (`request_key` prefix `fleet:task:`). It ignores unkeyed traffic: an operator or conversational message to a member with no definite receipt never holds GTD dispatch. A keyed `outcome-unknown` row still holds dispatch, and the hold detail names the blocking message ids (not just a count).
+- [x] R2. (N2) A `coordination_runs` row left `running` by a member loop that died without a graceful exit (SIGKILL or crash) is finalized `errored` with `completed_at` set when that member's loop restarts, before the loop's first drain. The killed keyed attempt then has a definite receipt, and the instance is idle again.
+- [x] R3. (H) The `kill-redispatch` leg of `scripts/commands/fleet-e2e.ts` first sends the coder one unkeyed conversational message, so the stdin-delivered row from R1 exists. It then drives the hang task only through the strategy, with no operator dispatch message and no planner nudge:
   - the keyed attempt `fleet:task:<wbs>:1` hangs;
   - the coder loop is killed with SIGKILL and restarted;
   - the attempt-1 row reaches a terminal `runStatus`;
@@ -125,6 +127,27 @@ Scenario: R3 — The harness proves kill and re-dispatch through the strategy
 - **Q: Should unkeyed persistent deliveries get a run row?** No. The 0831 contract stays. GTD stops consulting unkeyed rows instead (R1).
 - **Q: SIGTERM or SIGKILL in the harness?** SIGKILL. SIGTERM finalization already works through `AgentService.run`'s handler, and only SIGKILL exercises R2.
 - **Q: Rename this task?** The title still reads as K1/K2. No `spur task update` flag renames a task, so it is left for the operator, who may rename it to "Unwedge GTD from unkeyed deliveries and reap orphaned member runs".
+
+#### Q&A entry — 2026-10-06T01:00:03.262Z
+
+<!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
+     condition. Not a parking lot for open questions — an unanswered question here means the task
+     is not ready to hand off. Keep empty if none. -->
+
+#### Q&A entry — 2026-10-06T00:10:07.600Z
+
+- **Q: Is K1 still valid?** No; dropped. The orchestrator wakes on `task.created`/`task.updated` and the backstop poll. The late task was evaluated every tick and held by N1, and earlier by `not-ready`.
+- **Q: Is K2 still valid?** No; dropped as framed. The unkeyed persistent-stdin path never writes a run row (0831, by design). The real gaps are N1 (the gate counts unkeyed rows) and N2 (ungraceful death leaves `running`).
+- **Q: Should unkeyed persistent deliveries get a run row?** No. The 0831 contract stays. GTD stops consulting unkeyed rows instead (R1).
+- **Q: SIGTERM or SIGKILL in the harness?** SIGKILL. SIGTERM finalization already works through `AgentService.run`'s handler, and only SIGKILL exercises R2.
+- **Q: Rename this task?** The title still reads as K1/K2. No `spur task update` flag renames a task, so it is left for the operator, who may rename it to "Unwedge GTD from unkeyed deliveries and reap orphaned member runs".
+
+#### Q&A entry — 2026-10-06T01:00:00.000Z (implementation)
+
+- **Q: Plan step 1 — does the supervisor run at most one loop per spec (so every `running` row for the spec at startup is an orphan)?** Verified: yes, keep the reap design; no `process_id` liveness fallback. `SupervisorService.start` returns the existing entry when that agent's process is `running` and only spawns when it is `exited`/`errored` (`packages/app/src/services/supervisor-service.ts:184-190`), so a second loop for a spec cannot coexist with the first. Kernel-level SIGKILL leaves nothing to race: the old loop is dead before `start` can return. The `process_id` alternative was rejected anyway (cross-host pid checks are unsound), and the DAO reap is scoped to the loop's own `spec_id`, so a concurrently live other spec is never touched (covered by the DAO test).
+- **Q: Where does the reap run relative to the pre-drain reconcile?** Before it. `classify` reads the same run rows; reaping first turns the killed turn's `outcome-unknown` into the definite `delivery-failed`, which is what lets the strategy re-dispatch on its own (R2 → R1 interaction).
+- **Q: The harness's unkeyed `status?` — why must the coder be idle before it is sent?** `drainPending` claims every queued row into ONE batch, and a batch carrying a `fleet:task:*` key runs through `svc.run`, whose receipt then names the unkeyed message id too (observed on the first harness run: the chat rode in `0001`'s keyed batch and never produced the no-receipt state R1 is about). The leg therefore waits for the coder to be quiet (done task closed, no running turn, nothing queued) before sending it.
+- **Q: Why does the harness also link the hang task to the feature and set its AC altitude/numbering?** The strategy's readiness gate is a strict `task check --as wip`; without the feature link it fails `L4.missing-feature-id` and the task is held `not-ready` forever (observed). The operator-path dispatch the old leg used bypassed that gate entirely — one more reason it was the wrong path to assert.
 
 ### Design
 
@@ -180,15 +203,107 @@ Steps:
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+R1 narrows the GTD dispatch gate to the fleet's own keyed traffic; R2 gives an ungracefully killed
+turn a definite receipt at the next loop start; R3 replaces the harness's operator-path workaround
+with the product path, and the receipt reports 9 of 9 (run twice).
+
+| Change | Anchor |
+| --- | --- |
+| `UnresolvedDelivery` carries the row's `request_key`, so a consumer can separate a fleet dispatch from conversational traffic without re-reading the inbox | `packages/app/src/services/delivery-reconciler.ts:26` |
+| `classify` populates it for every held row (the same `row` already read) | `packages/app/src/services/delivery-reconciler.ts:72` |
+| The GTD gate counts only `fleet:task:*` rows, and the hold detail names the blocking message ids instead of only a count | `packages/app/src/services/strategy-runtime.ts:664` |
+| `CoordinationRunDao.reapOrphanedRunning(specId, completedAt)` — one pass, reuses `updateExit`'s column contract, preserves the last-known receipt, idempotent | `packages/domain/src/dao/coordination-run-dao.ts:237` |
+| The member loop reaps its own spec's orphans before the first drain and emits `agent.invoke.exit` per reaped row so re-dispatch does not wait for the backstop poll | `packages/app/src/services/agent-loop-service.ts:382` |
+| `kill-redispatch` now sends one unkeyed `status?`, drives the hang task through the strategy alone, SIGKILLs the coder loop, and asserts attempt-1 terminal + the strategy's own attempt-2 | `scripts/commands/fleet-e2e.ts:727` |
+| The e2e stub records its pid and exits when its loop is gone; teardown fails if a stub outlived the killed loop (F7) | `scripts/commands/fleet-e2e.ts:377` |
+| Correction note appended to the K1/K2 findings report (history preserved) | `docs/reports/2026-10-05-fleet-e2e-kill-leg-findings.md:39` |
+| `kill-redispatch` assertion + receipt rewritten to the product path | `scripts/commands/fleet-e2e.ts:727` |
+
+**Why not widen or reclassify instead (R1).** Making `classify` treat a stdin-accepted unkeyed row as
+settled changes inbox/`runStatus` semantics for every reader (Board, `message inbox`), and scoping
+`resume()` to keyed rows would drop the read-only `strategy status` view's unkeyed holds. The gate is
+the one place that must distinguish them, so the distinction is carried to it. The gate itself is NOT
+removed: a keyed row delivered with no run row (a crash between claim and `svc.run`) stays invisible
+to both `hasRunning` and an in-flight receipt read, and that window is exactly what it guards.
+
+**Why the loop reaps its own spec (R2).** Only a graceful `AgentService.run` exit writes `updateExit`;
+SIGKILL/OOM/crash never reaches it. The orchestrator cannot reap safely (it may run on another host,
+and pid liveness across hosts is unsound), and a TTL sweep races legitimately long turns. The one
+writer that knows "no other loop for this spec can be alive" is the loop starting up — the premise is
+verified in Q&A (Plan step 1) and the write is scoped to its own `spec_id`.
+
+Evidence this pass — the full project gate `bun run spur-check` is the pipeline's `test` hop, not
+implement (`sp-code-implementation` § "Implement scope: do not run the project quality gate"), so this
+pass ran the affected-path probes its dependency-aware matrix requires:
+
+- `packages/domain/tests/dao/coordination-run-dao.test.ts` — 10 pass / 0 fail (reap: own-spec only,
+  receipt preserved, already-settled untouched, idempotent).
+- `packages/app/tests/services/strategy-runtime.test.ts` — 40 pass / 0 fail (F1 unkeyed does not hold;
+  keyed `outcome-unknown` still holds and names the id).
+- `packages/app/tests/services/agent-loop-service.test.ts` — 14 pass / 0 fail (F4/F5/F6: orphan
+  finalized before the first drain, other spec untouched, `agent.invoke.exit` emitted).
+- `packages/app/tests/services/delivery-reconciler.test.ts` — 17 pass / 0 fail.
+- `bun run --filter @gobing-ai/spur-domain typecheck` and `--filter @gobing-ai/spur-app typecheck` — exit 0;
+  `bunx tsc -p scripts/tsconfig.json --noEmit` — exit 0.
+- `bun scripts/spur-dev.ts fleet-e2e` — exit 0, 9 of 9 steps passed, twice consecutively
+  (`docs/reports/fleet-e2e-receipt.json`); the `kill-redispatch` row carries the unkeyed delivery id,
+  attempt-1 `fleet:task:0002:1` finalized `errored` with `completed_at`, and attempt-2
+  `fleet:task:0002:2` with `--continue`.
+
+**Not covered by this pass.** F5's premise (one loop per spec) is verified from `SupervisorService`
+source plus the DAO's own-spec scoping, not by a concurrent-loop integration test; F7 is asserted by
+the harness teardown (`problems=none`) rather than a dedicated test.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/services/strategy-runtime.ts:664` narrows the GTD gate to `fleet:task:*` rows and the hold detail now names the blocking message ids; `packages/app/tests/services/strategy-runtime.test.ts:775` proves an unkeyed delivered row with no run row no longer holds, `packages/app/tests/services/strategy-runtime.test.ts:748` proves a keyed `outcome-unknown` row still holds and names its id. |
+| R2 | MET | `packages/domain/src/dao/coordination-run-dao.ts:237` adds the one-pass reap and `packages/app/src/services/agent-loop-service.ts:382` calls it before the first drain and emits `agent.invoke.exit`; `packages/app/tests/services/agent-loop-service.test.ts:397` asserts the orphan is `errored` with `completed_at` set before the drain runs and that another spec's live run is untouched. |
+| R3 | MET | `scripts/commands/fleet-e2e.ts:727` rewrites the leg; `bun scripts/spur-dev.ts fleet-e2e` exited 0 with nine of nine steps passed on two consecutive runs — `docs/reports/fleet-e2e-receipt.json:56`. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R1 — An unkeyed delivery without a receipt does not hold GTD dispatch | MET | test | `packages/app/tests/services/strategy-runtime.test.ts:775`; end to end, the stdin-delivered `status?` row is named by 0 of 3 `unresolved-deliveries` holds and the strategy dispatches on its own (`docs/reports/fleet-e2e-receipt.json:61`). |
+| R1 — A keyed delivery with an unknown outcome still holds dispatch and names itself | MET | test | `packages/app/tests/services/strategy-runtime.test.ts:748` — candidates held as `no-idle-instance` and every hold detail carries the message id. |
+| R2 — A run orphaned by an ungraceful member death is finalized on restart | MET | test | `packages/app/tests/services/agent-loop-service.test.ts:397`; end to end the SIGKILLed attempt-1 run reports `status=errored completed_at=2026-10-06T00:56:50.646Z` (`docs/reports/fleet-e2e-receipt.json:61`). |
+| R3 — The harness proves kill and re-dispatch through the strategy | MET | command | `bun scripts/spur-dev.ts fleet-e2e` → exit 0, nine steps passed on two consecutive runs; receipt `docs/reports/fleet-e2e-receipt.json:56`. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review Report — 1091
+
+**Scope:** `git diff` of the task's 12 changed files (product: strategy-runtime, delivery-reconciler, agent-loop-service, coordination-run-dao; harness: fleet-e2e; tests; the two report files)
+**Dimensions:** functional, security, efficiency, correctness, usability, architecture
+**Verdict:** PASS
+
+##### Findings (ranked)
+
+| # | Priority | Dimension | Finding | Location | Disposition |
+|---|----------|-----------|---------|----------|-------------|
+| 1 | P4 (advisory) | architecture | The reap's `agent.invoke.exit` row carries the run id only inside `payload_json`; the ledger's `run_id` correlation column (task 0369) is left null, so run-scoped ledger queries do not see the reap event. | `packages/app/src/services/agent-loop-service.ts:380` | ACCEPTED — the event's purpose is the orchestrator wake, which keys off `event_name`; the id is in the payload for a human reading the ledger. |
+| 2 | P4 (advisory) | correctness | The GTD hold detail now lists every ambiguous message id; a project with many stranded keyed rows grows the `fleet.idle-hold` payload without a cap. | `packages/app/src/services/strategy-runtime.ts:673` | ACCEPTED — the set is bounded by one keyed row per outstanding dispatch, and naming the ids is the point of R1 (the count-only detail is what made N1 unreadable). |
+| 3 | P4 (advisory) | verification | R2's one-loop-per-spec premise is verified from `SupervisorService.start` returning the live entry plus the DAO's own-spec scoping — not exercised by a concurrent-loop integration test. | `packages/domain/src/dao/coordination-run-dao.ts:237` | ACCEPTED — the harness SIGKILLs and restarts the real loop, which is the production recovery path. |
+
+No P1–P3 findings. The R1 change relaxes a fail-closed gate, so it was checked hardest: the narrowing is a filter over rows the reconciler still reads and still reports (no write, no reclassification), it keys on the identity the dispatcher itself writes (`fleetTaskKeyPrefix`, the same constant the enqueue path uses), and the keyed crash-window row is still held — covered by a test that asserts both directions.
+
+##### Functional Traceability
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | `packages/app/src/services/strategy-runtime.ts:664` filter + `packages/app/src/services/delivery-reconciler.ts:37` request key; F1/keyed-hold tests; the e2e leg's `kill-redispatch` evidence names the delivered unkeyed row and shows 0 of 3 holds naming it. |
+| R2 | MET | `packages/domain/src/dao/coordination-run-dao.ts:237` + `packages/app/src/services/agent-loop-service.ts:382`; DAO + loop-start tests assert `errored`/`completed_at` set before the first drain; the e2e `kill-redispatch` evidence shows the SIGKILLed attempt-1 run finalized `errored`. |
+| R3 | MET | `scripts/commands/fleet-e2e.ts:727` leg; `docs/reports/fleet-e2e-receipt.json` reports 9 of 9 steps passed on two consecutive runs; attempt-1 `fleet:task:0002:1` and the strategy's own `fleet:task:0002:2 --continue` both appear in the evidence. |
+
+**Residual risk:** this review and the verify stage ran in the implementing session (`--agent inline` per the operator's selector), so the diff was not reviewed by independent execution; the review is checklist-driven, and the two e2e runs plus the project gate are the external evidence. The `kill-redispatch` leg is timing-sensitive by nature (it polls real loop/receipt state with bounded deadlines), so a heavily loaded host can fail it for latency rather than for a product regression.
+
+**Next:** run the verify stage against the three requirements, then record.
 
 ### References
 
@@ -199,4 +314,7 @@ Steps:
 ### History
 
 - 2026-10-06T00:15:34.534Z backlog → todo (system)
+- 2026-10-06T01:00:17.773Z todo → wip (system)
+- 2026-10-06T01:24:11.666Z wip → testing (system)
+- 2026-10-06T01:56:05.363Z testing → done (system)
 

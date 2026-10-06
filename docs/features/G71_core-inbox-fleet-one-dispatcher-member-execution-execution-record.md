@@ -2,11 +2,11 @@
 schema_version: 1
 id: "G71"
 name: "Core inbox fleet: one dispatcher, member execution, execution record"
-status: backlog
+status: active
 priority: P2
 tags: []
 created_at: "2026-10-04T20:29:21.149Z"
-updated_at: "2026-10-04T20:30:19.657Z"
+updated_at: "2026-10-06T01:24:42.658Z"
 ---
 
 # G71: Core inbox fleet: one dispatcher, member execution, execution record
@@ -78,8 +78,12 @@ Feature: Core inbox fleet: one dispatcher, member execution, execution record
 | 1075 | Resume wip fleet work with --continue and stop deriving member ids from executors | done |
 | 1076 | Record every agent run and fleet turn as a durable execution record with spur agent trace | done |
 | 1077 | Prove the inbox-only fleet end to end with a repeatable receipt | todo |
+| 1091 | Dispatch a task created after the fleet loops start, and finalize a killed member turn | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
 
 ## History
+
+- 2026-10-06T01:24:42.658Z backlog → active (system)
+

@@ -878,10 +878,12 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
             // 1022: +274B review-mode `--focus` vocabulary SSOT declaration (R4 of I33:
             // functional/architecture routing + link-back note; `--fix` dropped from the
             // review flag list). Not permanent — candidate for references/ split.
-            // 1090 (out-of-scope repair, operator-approved): c95c625e2 (task 1091) grew the
-            // `code-verification` body to 35_468 B without bumping this baseline, leaving the
-            // ratchet red on `main` for every task run. Not permanent — candidate for the
-            // references/ split this comment asks for.
+            // 1022: baseline 33_959 → 35_076, +575 B evidence-citation rule in the answer-file
+            // schema contract. c95c625e2 (task 1091's feature-linked AC keying rule) then grew the
+            // body to 35_468 B without bumping this baseline, leaving the ratchet red on `main` for
+            // every task run — repaired by 1090 (out-of-scope, operator-approved) and carried here
+            // as part of 1091's own commit. Not permanent — candidate for the references/ split
+            // this comment asks for.
             'code-verification': 35_468,
             wayfinder: 26_264,
             // 0622 R9: +921B of live-matrix reconciliation (section table, SPUR_BIN

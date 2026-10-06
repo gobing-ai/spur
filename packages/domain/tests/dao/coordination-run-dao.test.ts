@@ -286,4 +286,52 @@ describe('CoordinationRunDao', () => {
         expect(await dao.getByRunId('r1')).toBeNull();
         adapter.close();
     });
+
+    test("G71 R2: reapOrphanedRunning finalizes only this spec's running rows, preserving its receipt", async () => {
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(adapter);
+        const dao = new CoordinationRunDao(adapter);
+
+        const start = (specId: string, runId: string): Promise<void> =>
+            dao.insertStart({
+                specId,
+                agentKind: 'claude',
+                processId: '4242',
+                runId,
+                generation: 1,
+                startedAt: '2026-08-13T01:00:00.000Z',
+                messageIds: ['msg-killed'],
+                taskId: '1091',
+            });
+        await start('coder', 'run-orphan');
+        await start('coder', 'run-orphan-2');
+        await start('other', 'run-untouched');
+        // A row that already exited is never reaped.
+        await start('coder', 'run-settled');
+        await dao.updateExit('run-settled', 'exited', '2026-08-13T01:00:05.000Z', '[]', {
+            messageIds: ['msg-killed'],
+            outcome: 'run-exit-only',
+        });
+
+        const reaped = await dao.reapOrphanedRunning('coder', '2026-08-13T02:00:00.000Z');
+        expect(reaped.map((row) => row.run_id).sort()).toEqual(['run-orphan', 'run-orphan-2']);
+
+        const orphan = await dao.getByRunId('run-orphan');
+        expect(orphan?.status).toBe('errored');
+        expect(orphan?.outcome).toBe('errored');
+        expect(orphan?.completed_at).toBe('2026-08-13T02:00:00.000Z');
+        // The last-known record survives the reap (updateExit's column contract).
+        expect(orphan?.message_ids_json).toBe('["msg-killed"]');
+        expect(orphan?.task_id).toBe('1091');
+        expect(orphan?.process_id).toBe('4242');
+        // Another spec's running row is untouched…
+        expect((await dao.getByRunId('run-untouched'))?.status).toBe('running');
+        // …and the already-settled row keeps its own exit timestamp.
+        expect((await dao.getByRunId('run-settled'))?.completed_at).toBe('2026-08-13T01:00:05.000Z');
+        // Idempotent: a second pass reaps nothing.
+        expect(await dao.reapOrphanedRunning('coder', '2026-08-13T03:00:00.000Z')).toEqual([]);
+        expect(await dao.hasRunning('coder')).toBe(false);
+
+        adapter.close();
+    });
 });

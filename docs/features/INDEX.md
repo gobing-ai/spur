@@ -107,7 +107,7 @@
         ├── [done] **G66**: Persistent fleet member: one agent session per member across inbox drains ([G66_persistent-fleet-member-one-agent-session-per-member-across-inbox-drains.md](./G66_persistent-fleet-member-one-agent-session-per-member-across-inbox-drains.md))
         └── [active] **G67**: Agent loop and member session in the application layer ([G67_agent-loop-and-member-session-in-the-application-layer.md](./G67_agent-loop-and-member-session-in-the-application-layer.md))
     └── [backlog] **G7**: Inbox-only agent fleet and execution record ([G7_inbox-only-agent-fleet-and-execution-record.md](./G7_inbox-only-agent-fleet-and-execution-record.md))
-        ├── [backlog] **G71**: Core inbox fleet: one dispatcher, member execution, execution record ([G71_core-inbox-fleet-one-dispatcher-member-execution-execution-record.md](./G71_core-inbox-fleet-one-dispatcher-member-execution-execution-record.md))
+        ├── [active] **G71**: Core inbox fleet: one dispatcher, member execution, execution record ([G71_core-inbox-fleet-one-dispatcher-member-execution-execution-record.md](./G71_core-inbox-fleet-one-dispatcher-member-execution-execution-record.md))
         ├── [verifying] **G72**: Fleet team-residue cleanup ([G72_fleet-team-residue-cleanup.md](./G72_fleet-team-residue-cleanup.md))
         └── [done] **G73**: Cooperative fleet participation: hook lifecycle and guest join ([G73_cooperative-fleet-participation-hook-lifecycle-and-guest-join.md](./G73_cooperative-fleet-participation-hook-lifecycle-and-guest-join.md))
 [done] **H**: Agent integration ([H_agent-integration.md](./H_agent-integration.md))

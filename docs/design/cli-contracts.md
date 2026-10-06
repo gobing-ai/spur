@@ -250,7 +250,7 @@ before any mutation. The release flow itself never needs structural edits for a 
 gate ignores exactly those untracked paths (`status --porcelain -uall`) and still blocks on
 anything else.
 
-<a id="spur-agent-run-prompt---agent-name---spec-id---continue---model-name---mode-mode---cwd-path---drain---json"></a>
+<a id="spur-agent-trace-runid---follow---timeout-ms---json"></a>
 
 #### `spur agent trace <runId> [--follow] [--timeout <ms>] [--json]`
 
@@ -259,6 +259,8 @@ The ADR-132 execution record as one lineage (1076 R4): `trace <runId>` walks
 parent, exact agent session ids and durable stream. Logic lives in `AgentTraceService`; the CLI is a
 thin transport (ADR-130). `--follow` polls until every node is terminal and prints one checkpoint line
 before exiting 1 on timeout, matching `spur workflow trace --follow`.
+
+<a id="spur-agent-run-prompt---agent-name---spec-id---continue---model-name---mode-mode---cwd-path---drain---json"></a>
 
 #### `spur agent run <prompt> [--agent <name>] [--spec <id>] [--continue] [--model <name>] [--mode <mode>] [--cwd <path>] [--drain] [--json]`
 
@@ -720,7 +722,7 @@ overrides the global root and suppresses the bundled fallback for a hermetic run
   explicit unavailable data without failing the command. Existing JSON keys remain present.
   Backed by `ts-rule-engine`. Help dispatch per §1.0.
 
-<a id="spur-workflow-show-workflowyaml---format-mermaidtodo---json--spur-workflow-validate-workflowyaml---json---no-schema--spur-workflow-run-workflowyaml---run-id-id---vars-json---dry-run---async---no-plan---detail-minimalinvocationfull---quiet--silent--verbose---trace-file---steer---no-log---json--spur-workflow-continue-run-id---yes---answer-yesnocancel---json--spur-workflow-cancel-run-id---json--spur-workflow-list---json--spur-workflow-trace-run-id---workflow-name---status-s---since-date---last-n---follow---poll-ms---output---timeout-ms---json--spur-workflow-clean---older-than-minutes---force---logs---dry-run---json--spur-workflow-progress-run-id---json"></a>
+<a id="spur-workflow-show-workflowyaml---format-mermaidtodo---json--spur-workflow-validate-workflowyaml---json---no-schema--spur-workflow-run-workflowyaml---run-id-id---vars-json---dry-run---async---from-state-id---from-run-run-id---no-plan---detail-minimalinvocationfull---quiet--silent--verbose---trace-file---steer---no-log---json--spur-workflow-continue-run-id---yes---answer-yesnocancel----answer-text-text---async---no-log---json--spur-workflow-cancel-run-id---json--spur-workflow-list---json--spur-workflow-trace-run-id---workflow-name---status-s---since-date---last-n---follow---poll-ms---output---timeout-ms---json--spur-workflow-clean---older-than-minutes---force---logs---dry-run---json--spur-workflow-progress-run-id---json"></a>
 
 #### `spur workflow show <workflow.yaml> [--format <mermaid|todo>] [--json]` · `spur workflow validate <workflow.yaml> [--json] [--no-schema]` · `spur workflow run <workflow.yaml> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--from <state-id>] [--from-run <run-id>] [--no-plan] [--detail <minimal|invocation|full>] [--quiet|--silent|--verbose] [--trace-file] [--steer] [--no-log] [--json]` · `spur workflow continue [run-id] [--yes] [--answer <yes|no|cancel> | --answer-text <text>] [--async] [--no-log] [--json]` · `spur workflow cancel <run-id> [--json]` · `spur workflow list [--json]` · `spur workflow trace [run-id] [--workflow <name>] [--status <s>] [--since <date>] [--last <n>] [--follow] [--poll <ms>] [--output] [--timeout <ms>] [--json]` · `spur workflow clean [--older-than <minutes>] [--force] [--logs] [--dry-run] [--json]` · `spur workflow progress <run-id> [--json]`
 

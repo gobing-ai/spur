@@ -221,6 +221,49 @@ export class CoordinationRunDao {
         );
     }
 
+    /**
+     * G71 R2 (1091): finalize every run this spec left `running`, in ONE pass.
+     *
+     * Only a graceful `AgentService.run` exit writes `updateExit`; a loop that died
+     * ungracefully (SIGKILL, OOM, crash) never reaches it, so its row stays `running` forever —
+     * `hasRunning` then keeps the instance out of the idle set and its keyed attempt never gets a
+     * definite receipt. The supervisor runs at most one loop per spec (`SupervisorService.start`
+     * returns the live entry instead of spawning a second), so every `running` row for this spec
+     * observed at loop start is an orphan. Idempotent: a second call reaps nothing. Reuses
+     * `updateExit`'s column contract (`status`, `completed_at`, `outcome`); the run's existing
+     * artifact refs, message ids and task id are preserved as its last known record. Returns the
+     * finalized rows so the caller can wake the orchestrator.
+     */
+    async reapOrphanedRunning(specId: string, completedAt: string): Promise<CoordinationRunRow[]> {
+        try {
+            const rows =
+                (await this.db.queryAll<CoordinationRunRow>(
+                    `SELECT spec_id, agent_kind, process_id, run_id, generation, status, started_at, completed_at, artifact_refs_json, message_ids_json, task_id, outcome, parent_run_id
+                     FROM coordination_runs
+                     WHERE spec_id = ? AND status = 'running'`,
+                    specId,
+                )) ?? [];
+            if (rows.length === 0) return [];
+            const reaped: CoordinationRunRow[] = [];
+            for (const row of rows) {
+                await this.db.run(
+                    `UPDATE coordination_runs
+                     SET status = 'errored', completed_at = ?, outcome = 'errored'
+                     WHERE run_id = ? AND status = 'running'`,
+                    completedAt,
+                    row.run_id,
+                );
+                reaped.push({ ...row, status: 'errored', completed_at: completedAt, outcome: 'errored' });
+            }
+            return reaped;
+        } catch (error) {
+            if (error instanceof Error && error.message.includes('no such table: coordination_runs')) {
+                return [];
+            }
+            throw error;
+        }
+    }
+
     /** Latest occupant row for a specId (highest generation, then newest started), or null. */
     async getLatestBySpecId(specId: string): Promise<CoordinationRunRow | null> {
         try {

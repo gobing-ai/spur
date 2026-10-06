@@ -5203,3 +5203,148 @@ Verification patterns
 - **(HIGH)** Reproduce global-config leaks with the path where it breaks: this run re-executed `HOME=$(mktemp -d) (cd apps/server && bun test tests/serve.test.ts)` → 71 pass / 0 fail and **zero** files written under the throwaway `HOME` (no `.config/spur/projects.json`, no `slash_commands.json`); the same suite run from the repo root writes neither, and `cd apps/desktop && bun test` writes nothing.
 - **(HIGH)** A new CLI-visible output key obligates its owning design satellite in the same change (T3): `reasons[]` landed in `apps/cli/src/commands/task.ts` and the plugin reference, but `docs/design/planning-record-contracts.md` was missed. The wrapup drift probe (`plugins/sp/scripts/wrapup-drift-probe.ts`, surface match on `apps/cli/src/commands/**`) is the deterministic catch (10 pins pass fresh); the repair is the two-row satellite sync (verb row + `done_reason` schema row).
 - **(MEDIUM)** A design satellite's frontmatter `updated_at`/`version` can drift silently from another task's substantive edit: `docs/00_ADR.md` and `docs/01_PRD.md` were both edited in `600dda990` (2026-10-05) while still carrying `updated_at: 2026-10-04`. Confidence is MEDIUM because only `00_ADR` was repaired in the named scope; `01_PRD` is reported unresolved.
+Verification added to the run artifact, following the repo's task-1068 confidence vocabulary (`plugins/sp/skills/code-verification/SKILL.md:363`): exactly one `Confidence: HIGH|MEDIUM|LOW` line, with grounds named, plus a per-claim level table (session-review style, where a level without grounds is not verification).
+
+**Overall level: `Confidence: MEDIUM`**
+
+- **HIGH** — the repaired doc statements match the code (source re-read this run); all 15 `04` → `docs/design` anchors resolve and every index row matches its satellite heading (0 diffs); gates re-run and green (`consistency.test.ts` 3/3, `recommended-pre-check` 50/50, `recommended-post-check` 2/2, `link-check` OK, surface/help parity 24/24); no task/feature corpus in my diff.
+- **MEDIUM** — the *negative* coverage claim ("no remaining drift") rests on a heuristic explicit-`<a id>` scan (5 stale/renamed labels, 2 live link targets) over an **unstable tree** — a concurrent session staged/unstaged changes under `packages/**`, `scripts/**`, `docs/features/**` and the task corpus during the audit; and the 1088 timing/budget rows quote that task's prior-pass receipts rather than re-executing them (`@gobing-ai/ts-ai-runner/team-agent-process.ts:96-115` not re-opened).
+- **LOW** — the claim that 1090's skipped satellite was the *only* T3 gap in the window; only three recent commits' code-vs-doc pairs were spot-checked, no corpus-wide or full-history sweep.
+
+Artifact: `.spur/run/9e7dfb48-0dca-49fd-8df2-ce9b25de3a7d-wrapup-learnings.md` (135 lines; one `Confidence:` line). Doc repairs unchanged: `docs/04_DESIGN.md`, `docs/design/cli-contracts.md`, `docs/design/planning-workflow-contracts.md`, all unstaged.
+
+# Wrapup Learnings — batch `9e7dfb48` (task 1088, feature G67)
+
+## Verification (this run, 2026-10-05)
+
+Confidence: MEDIUM
+
+Grounds for the level (task 1068 vocabulary): the repaired doc claims are backed by fresh
+**executable** evidence and re-read anchors from this run, but the negative coverage claim ("no
+other drift remains") is a heuristic scan over a tree another session is actively writing, and the
+timing/budget rows inherited from task 1088 quote its prior-pass receipts rather than re-executing
+them.
+
+| Claim | Confidence | Grounds (this run unless stated) |
+| --- | --- | --- |
+| The three doc repairs state what the code does | HIGH | `packages/app/src/services/task-record.ts:716-840` and `apps/cli/src/commands/agent.ts:84-107,1530` re-read; every documented flag re-read from `spur workflow {run,continue,trace} --help` and `spur agent trace --help` |
+| Every `04` → `docs/design/*` link resolves and each `04` row matches its satellite heading | HIGH | anchor checker: 15 rows / 0 unresolved, 15/15 heading-text equalities, 0 diffs |
+| The edits break no gate | HIGH | `bun test apps/cli/tests/consistency.test.ts` 3 pass/0 fail; `bun run test-pre-check` 50 rules pass; `bun run test-post-check` 2 rules pass; `bun run link-check` OK; `plugins/sp/tests/{cli-surface,help-docs}-parity.test.ts` 24 pass/0 fail |
+| No remaining drift in `docs/00_ADR.md`, `docs/03_ARCHITECTURE.md`, `docs/04_DESIGN.md`, `docs/design/*` | MEDIUM | §7 checklist ran clean this run, but this is a *negative*: the explicit-`<a id>` scan is heuristic (5 stale/renamed labels reported, 2 of them live link targets that still resolve via the explicit id) and the tree is unstable — a concurrent session staged/unstaged changes under `packages/**`, `scripts/**`, `docs/features/**` and the task corpus during the audit |
+| 1088 rows quoting exit timings (115–2065 ms; 6412/7160 ms) and the 5000 ms SIGTERM→SIGKILL budget | MEDIUM | quoted from task 1088's verify/review receipts in `docs/tasks5/1088_*.md`; `@gobing-ai/ts-ai-runner` `team-agent-process.ts:96-115` not re-opened and the timings not re-measured this run |
+| The 1090 design-satellite skip was the only T3 gap in the recent window | LOW | only recent commits' code-vs-doc pairs (`6826f81d1`, `05704dc50`, `b481d60df`) were spot-checked; no corpus-wide or full-history drift sweep was run |
+| Task/feature corpus untouched by this wrapup | HIGH | `git diff --name-only` on the unstaged change set contains no `docs/tasks*` or `docs/features/**` path |
+
+## 2026-10-05 · 1088 — Supervise agent loops: no orphan loops and no duplicate serves per project
+
+### Conventions established (follow these next time)
+
+- **Never default a CLI `--server` to a literal.** Commander options must omit the default so an
+  absent value is distinguishable from an explicit one; a resolver runs only when it is absent
+  (`apps/cli/src/commands/agent.ts:98`, wired at `:593`/`:616`/`:999`/`:1074`). A literal default
+  silently aims at another project's serve.
+- **A project's serve is found through the project registry entry for the cwd**, not by probing
+  ports: `ProjectRegistry.getByPath(cwd)` → `entry.port > 0` →
+  `http://localhost:<port>/api`, with `http://localhost:3000/api` only as the no-live-entry
+  fallback.
+- **Render the host as the name `localhost`, never the IPv4 literal `127.0.0.1`.** `spur serve`
+  binds `Bun.serve({ hostname: options.host })` with `--host` defaulting to `localhost`, which Bun
+  resolves to IPv6 `[::1]` only; an IPv4 literal has no listener. A client must resolve the same
+  address family the server bound.
+- **Every CLI POST to the local serve carries `Origin: <resolved server origin>`.**
+  `apps/cli/src/commands/agent.ts:1203`. The serve's hono `csrf()` reads a missing content-type as
+  `text/plain` and answers 403, so a lifecycle POST without it can never mutate anything. Do not
+  exempt the route — send what a same-origin caller sends.
+- **Bind a child's lifetime to its parent from the child side.** A SIGKILLed parent sends no signal,
+  so capture `process.ppid` and re-read it on the child's own poll cadence, then abort
+  (`startParentWatch`, `apps/cli/src/commands/agent.ts:1530`; installed at `:395`, cleared in the
+  existing `finally` at `:401`). `process.ppid` is re-read live in Bun — verified
+  `99191 → 1` after the parent was SIGKILLed.
+- **Reuse the owner that already exists.** `.spur/server-owner.lock` (1082,
+  `packages/app/src/services/project-server-owner.ts:10`) already owns per-project exclusivity; do
+  not add a second marker such as `.spur/serve.json`.
+
+### Errors fixed, with the root cause that actually mattered
+
+- **`agent status --json` reported all three specs `stopped` while 15 loops ran.** The root cause was
+  neither the registry nor the supervisor: the CLI queried a hard-coded
+  `http://localhost:3000/api` (`apps/cli/src/commands/agent.ts:77` before the fix) while serve
+  listened on the project's allocated port (3004–3011). A lying read and an unreachable read look
+  identical in output — check the URL first when a status surface reports everything empty.
+- **`spur agent stop <spec>` could not terminate a live loop at any URL.** Cause: the hono `csrf()`
+  403 above, pre-existing and independent of the URL the resolver chose. Two unrelated root causes
+  sat behind one symptom pair; split them before designing.
+- **A first revision of the resolver reproduced the original symptom** by rendering `127.0.0.1`;
+  a live probe showed `TCP [::1]:3011 (LISTEN)` while `127.0.0.1:3011` refused. Caught in P1 review,
+  not by unit tests — probe the address family of a freshly started server, do not assume.
+- **Orphan loops after a crash were real and unguarded.** Graceful shutdown already reaped loops
+  (`apps/server/src/serve.ts:836` `supervisor().stopAll()`); only the crash path was missing.
+
+### Patterns that worked
+
+- **Failure list before implementation.** The Plan named four concrete failures (registry port
+  honoured, explicit `--server` wins, no entry → 3000, child exits when its parent is SIGKILLed),
+  which made the tests fall out mechanically (`apps/cli/tests/commands/agent-supervision.test.ts`,
+  14 focused cases).
+- **Re-verify the inherited claim before building on it.** Re-checking against `65d6b3d92` showed
+  the duplicate-serve half was already delivered by 1082, so R1 narrowed from "refuse a second
+  serve" to "find the right serve" and R3/R4 (stale-marker reclamation, `agent doctor` orphan
+  finding) were dropped rather than duplicated.
+- **Restate an AC to the contract the code holds, and name both of its terms.** AC2's promise was a
+  shutdown-timing claim, not a detection claim: detection is bounded by one poll interval (2000 ms,
+  the loop's own `--poll` cadence) while the exit tail depends on the member stop — a fixed 5000 ms
+  SIGTERM→SIGKILL budget inside `@gobing-ai/ts-ai-runner`
+  (`node_modules/@gobing-ai/ts-ai-runner/src/team-agent-process.ts:96-115`), reached from
+  `packages/app/src/services/member-session.ts:304`, whose `stop(): Promise<void>` port takes no
+  budget parameter. Measured: 10 per-parent exits in 115–2065 ms; the held-member-turn path
+  6412/7160 ms. "Detection-only" was the honest bound.
+- **Doc sync in the same commit, not the next one.** 1088 landed code + `03` §17 + the `04` index
+  row + `docs/design/cli-contracts.md` + `docs/help*` + the plugin facade reference together
+  (`6826f81d1`).
+
+### Gotchas, traps and carried debt
+
+- **`ProjectRegistry.getByPath` is not a read-only lookup**: `list()` calls `healStale`
+  (`packages/app/src/services/project-registry.ts:394,529`), which rewrites a port with no live
+  listener to 0. A "resolver" therefore has a write side effect; do not call it in a pure path.
+- An unreadable/unlockable registry falls back to the 3000 URL **silently** (carried P4) — the
+  fallback is correct, the silence is not.
+- The lookup is an exact cwd match with no ancestor walk (carried P3).
+- The drain-in-flight abort gap is known: the abort resolves `loopSleep`/`waitForWake`
+  (`packages/app/src/services/agent-loop-service.ts:127-143,211,504-511`) but is **not** observed
+  mid-drain, so the shutdown tail is parent-independent (carried P3, disclosed by the restated AC2).
+- `docs/help*/**` and the plugin reference restate the `--server` default as a prose default while
+  the commander option declares none; the prose is accurate but reads like a declared default
+  (carried P4).
+
+## 2026-10-05 · 1088 (wrapup) — doc-drift audit findings worth keeping
+
+- **A `docs/design/` satellite can go stale while the code commit that changed it passes every
+  gate.** Task 1090 replaced the `## Solution` backfill mechanism (`git diff -U0` from a resolved run
+  base, `.spur/**` + lockfile excludes, untracked files cited at `:1`, `(no changes detected)` row,
+  auto-generated header — `packages/app/src/services/task-record.ts:716-840`) and updated only
+  `docs/features/**`; its owning satellite kept saying "backfills a minimal change-map from
+  `git diff --name-only`". T3 sync is not enforced by any rule — read the owning satellite when you
+  change a behavior it describes.
+- **The `04` index links to satellite anchors, so a satellite heading change breaks the index.**
+  The workflow command row in `docs/04_DESIGN.md` still carried the pre-`--from`/`--answer-text`/
+  `--timeout` heading slug and its own stale flag list; the anchor resolved to nothing. Repair order
+  per §6.5: fix the satellite anchor first, then the index row.
+- **Explicit `<a id>` stubs are hand-maintained and drift by construction.** They are not equal to
+  GitHub's heading slug, and several were stale or misplaced (an `spur-agent-run` anchor sitting
+  above the `spur agent trace` heading; `spur-agent-list---json---specs` missing the
+  `---server-url` its heading now carries). No rule covers this, so check anchor placement
+  mechanically before trusting a link.
+- **`04` index completeness is a real obligation**: `spur agent trace` had a full
+  `docs/design/cli-contracts.md` section but no `04` row at all — the same defect class 1088 recorded
+  for `spur agent status` ("missing since 0897").
+- **`consistency.test.ts` verifies nouns/verbs/`--json` only**, never the full flag list, and the CLI
+  surface parity suite covers the plugin facade references, not `docs/design/*`. A stale flag
+  inventory in `04`/satellites is invisible to every gate — verify documented flags against
+  `<noun> <verb> --help`, or against the satellite the index points at.
+- **Supervision/resolution mechanisms have no ADR owner** (precedent: 1082's server-owner guard and
+  1080/1081's guest occupancy live in `03` §17 + satellites). A bugfix that restores an existing
+  contract does not pass §6.1 — record it in `03`/`04`, not `00`.
+- **One writer per tree is real.** A concurrent session staged unrelated `packages/**`,
+  `scripts/**`, `docs/features/**` and task-corpus changes mid-audit; keep wrapup doc edits to their
+  own unstaged files and never `git add`/commit across them.

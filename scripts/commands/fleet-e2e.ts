@@ -36,10 +36,13 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getEnvVar, getEnvVars } from '@gobing-ai/spur-config';
 import { StrategyRuntime } from '../../packages/app/src/services/strategy-runtime';
+import { CoordinationRunDao } from '../../packages/domain/src/dao/coordination-run-dao';
+import { InboxUnfinishedDao } from '../../packages/domain/src/dao/inbox-unfinished-dao';
 import { readMemberSessions } from '../../packages/domain/src/dao/member-session';
 // Deep relative imports (the precedent in `real-run-cost.ts`): the root node_modules has no
 // workspace link for `scripts/commands`, so `@gobing-ai/spur-*` cannot resolve here.
 import { ProjectClaimDao } from '../../packages/domain/src/dao/project-claim-dao';
+import { SystemEventDao } from '../../packages/domain/src/dao/system-event-dao';
 import { createMigratedDb } from '../../packages/domain/src/db';
 
 const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
@@ -245,6 +248,8 @@ async function pollUntil<T>(label: string, probe: () => Promise<T | undefined>, 
 interface StubPrompt {
     at: string;
     spec: string | null;
+    /** The stub process id — teardown proves a SIGKILLed loop left no orphan behind (F7). */
+    pid?: number;
     argv: string[];
     stdin: string;
     prompt: string;
@@ -311,7 +316,7 @@ const directives = sources.flatMap((source) => source.match(DIRECTIVE) ?? []);
 // The hang gate asks the semantic question directly: this turn IS a resume.
 const resumedTurn = prompt.includes('--continue');
 
-appendFileSync(logPath, JSON.stringify({ at: new Date().toISOString(), spec: specId, argv, stdin: stdinText, prompt, directives }) + '\\n');
+appendFileSync(logPath, JSON.stringify({ at: new Date().toISOString(), spec: specId, pid: process.pid, argv, stdin: stdinText, prompt, directives }) + '\\n');
 
 function cliRun(args, input) {
     // The stub must never die on a bad invocation: an unspawnable CLI is recorded and returned as a
@@ -368,7 +373,16 @@ if (dispatch !== null) {
     // resumed with --continue, which is the prompt that lets it finish.
     if (tags.includes(${JSON.stringify(HANG_TAG)}) && !resumed) {
         process.stderr.write('stub: hanging on task ' + wbs + ' until a --continue resume\\n');
-        for (;;) await Bun.sleep(1000);
+        // A SIGKILLed loop cannot clean up its child: exit as soon as the parent is gone, so an
+        // orphaned hang stub can never outlive the run (F7).
+        const parent = process.ppid;
+        for (;;) {
+            await Bun.sleep(500);
+            if (process.ppid !== parent || process.ppid === 1) {
+                process.stderr.write('stub: parent loop gone — exiting the hung turn\\n');
+                process.exit(137);
+            }
+        }
     }
     cliRun(['task', 'update', wbs, 'wip', '--no-lifecycle']);
     cliRun(
@@ -455,7 +469,7 @@ const STEP_FOUR_ASSERTION =
 const STEP_FIVE_ASSERTION =
     "an operator 'status?' message to the orchestrator is drained by the orchestrator loop and answered in the operator inbox";
 const STEP_SIX_ASSERTION =
-    "a coder loop killed mid-turn (run errored, message delivered) is restarted and the task is resumed through the real `spur message send <...> --continue` CLI path, with the stub's next directive for the wbs carrying --continue. NOT proven: strategy auto-retry of a drained turn (residual risk strategy-retry-unreachable)";
+    'an unkeyed stdin delivery with no run row never holds dispatch; the hang task is dispatched as fleet:task:<wbs>:1 by the strategy alone (no operator message, no planner nudge); the coder loop is SIGKILLed mid-turn; the restarted loop finalizes the orphaned run errored before its first drain; and the strategy re-dispatches fleet:task:<wbs>:2 on its own';
 const STEP_SEVEN_ASSERTION =
     'a joined guest occupant (agent join --role) pulls a dispatched review request through agent wait --inbox and its reply lands in the operator inbox';
 const STEP_EIGHT_ASSERTION =
@@ -716,14 +730,74 @@ export async function runFleetE2e(args: string[]): Promise<number> {
         try {
             if (!loopsStarted || state.wbs === null)
                 throw new Error('loops or task missing; no dispatch can be observed');
-            // (0) the hang leg needs a second, separately tagged task: tagging the done-task would
+            const openDb = db;
+            if (openDb === undefined) throw new Error('no project db');
+            const runs = new CoordinationRunDao(openDb);
+            const inboxRows = new InboxUnfinishedDao(openDb);
+            const keyedRows = (wbs: string) => inboxRows.listByRequestKeyPrefix(`fleet:task:${wbs}:`);
+
+            // (0) R1's E2E proof: ONE unkeyed conversational message to the persistent coder,
+            // delivered through stdin with NO coordination run row — exactly the message class that
+            // used to wedge GTD project-wide.
+            //
+            // It must be drained ALONE: `drainPending` claims every queued row into one batch, and a
+            // batch carrying a `fleet:task:*` key runs through `svc.run`, whose receipt then names
+            // this message id too (observed 2026-10-06 — the chat rode in 0001's keyed batch and
+            // never produced the no-receipt state R1 is about). So wait for the coder to be quiet
+            // first: the done task closed, no running turn, nothing queued.
+            await pollUntil(
+                'the coder to be quiet before the conversational message',
+                async () => {
+                    const done = jsonOk<{ status: string }>(['task', 'show', state.wbs ?? '', '--json'], scratch);
+                    if (done.status !== 'done') return undefined;
+                    if (await runs.hasRunning(state.coderId)) return undefined;
+                    const queued = (await inboxRows.listUnfinished(state.coderId)).filter(
+                        (row) => row.status === 'queued' || row.status === 'injected',
+                    );
+                    return queued.length === 0 ? true : undefined;
+                },
+                BOUNDS.done,
+            );
+            const chat = jsonOk<{ msgId: string }>(
+                ['message', 'send', '--to', state.coderId, 'status?', '--json'],
+                scratch,
+            );
+            await pollUntil(
+                'the unkeyed status? delivery (stdin accepted, no run row)',
+                async () => {
+                    const rows = jsonOk<{ messages: Array<{ id: string; status: string; runStatus?: string | null }> }>(
+                        ['message', 'inbox', '--agent', state.coderId, '--json'],
+                        scratch,
+                    ).messages;
+                    const row = rows.find((message) => message.id === chat.msgId);
+                    if (row === undefined || row.status === 'queued' || row.status === 'injected') return undefined;
+                    // A run row here would make it a receipt-bearing delivery: this message must be
+                    // delivered through stdin, alone, with no run row at all.
+                    if ((await runs.listByMessageId(chat.msgId)).length > 0) {
+                        throw new Error(
+                            `the status? message ${chat.msgId} was claimed into a keyed run batch — it must be drained alone`,
+                        );
+                    }
+                    return row;
+                },
+                BOUNDS.reply,
+            );
+            state.ids.chatMessage = chat.msgId;
+
+            // (1) the hang leg needs a second, separately tagged task: tagging the done-task would
             // make its very first turn hang and `dispatch-to-done` could never close on its own.
             const hungTask = jsonOk<{ wbs: string }>(
                 ['task', 'create', `${TASK_TITLE} (hang)`, '--skip-ready', '--json'],
                 scratch,
             );
             // Same preparation as the done task: without real AC + Design the strategy's readiness
-            // gate holds the hang task as not-ready and it is never dispatched (G71 1077 R3).
+            // gate holds the hang task as not-ready — and without the feature link the strict
+            // `--as wip` check fails L4.missing-feature-id, so the strategy would never dispatch it.
+            cliOk(['task', 'update', hungTask.wbs, '--ac-altitude', 'task-local', '--no-lifecycle'], scratch);
+            cliOk(['task', 'update', hungTask.wbs, '--ac-numbering', 'task-local', '--no-lifecycle'], scratch);
+            if (state.featureId !== null) {
+                cliOk(['task', 'update', hungTask.wbs, '--feature', state.featureId, '--no-lifecycle'], scratch);
+            }
             cliOk(
                 [
                     'task',
@@ -751,100 +825,100 @@ export async function runFleetE2e(args: string[]): Promise<number> {
             );
             cliOk(['task', 'update', hungTask.wbs, 'todo', '--no-lifecycle'], scratch);
             const wbs = hungTask.wbs;
-            // (a) the planner's keyed attempt must reach the coder and the stub must hang on it.
-            // The strategy only ticks on wakes it follows, and a corpus task created after the loops
-            // started is not one of them: dispatch the hang task through the operator path (a real
-            // INBOX message to the member, the same path the resume below uses), then observe the
-            // member's turn. strategy auto-retry of this operator dispatch is recorded as a residual
-            // risk instead of asserted (G71 1077 R3).
-            const hangDispatch = jsonOk<{ msgId: string }>(
-                ['message', 'send', '--to', state.coderId, '/sp:dev-run ' + wbs + ' --auto', '--json'],
-                scratch,
-            );
-            const hung = await pollUntil(
-                'the hung first turn',
-                async () => {
-                    const records = readStubPrompts(state).filter((record) => directiveFor(record, wbs) !== undefined);
-                    const hung = records.find((record) => !(directiveFor(record, wbs) ?? '').includes('--continue'));
-                    // The orchestrator ticks once per wake and a task created after the loops started
-                    // is not an event it follows: keep waking it through the real CLI until the hang
-                    // task is dispatched (G71 1077 R3).
-                    if (hung === undefined) {
-                        try {
-                            cli(['message', 'send', '--to', state.plannerId, 'tick for ' + wbs, '--json'], scratch);
-                        } catch {
-                            /* the next poll retries */
-                        }
-                    }
-                    return hung;
-                },
+            // (a) the strategy dispatches the keyed attempt on its own. The orchestrator wakes on
+            // `task.created`/`task.updated` (WAKE_EVENT_NAMES) and on the --poll backstop, so a task
+            // created after the loops started IS followed — no operator dispatch message and no
+            // planner nudge. The previous workaround did both and measured a receipt the unkeyed
+            // path never writes.
+            const attemptOne = await pollUntil(
+                `the strategy to dispatch fleet:task:${wbs}:1`,
+                async () => (await keyedRows(wbs)).find((row) => row.request_key === `fleet:task:${wbs}:1`),
                 BOUNDS.hang,
             );
-            hungDirective = directiveFor(hung, wbs) ?? null;
-            const keyed = {
-                id: hangDispatch.msgId,
-                runId: null as string | null,
-                requestKey: null as string | null,
-            };
-            state.dispatchMessageId = keyed.id;
-            state.ids.dispatchMessage = keyed.id;
-            // (b) kill the coder loop mid-turn: the run finalizes errored and the message stays delivered.
-            const coderPid = state.loopPids[1];
-            process.kill(coderPid ?? 0, 'SIGTERM');
-            // Restart the member BEFORE asking for the killed turn's terminal receipt: the
-            // killed loop cannot finalize its own run row, so the restart's reconcile is what
-            // marks it interrupted — the real recovery order (G71 1077 R3).
-            const restartedPid = spawnLoop(scratch, state, state.coderId, '-restart');
-            const terminalRun = await pollUntil(
-                'the killed turn to reach a terminal receipt',
-                async () => {
-                    const rows = jsonOk<{ messages: Array<{ id: string; runStatus?: string | null }> }>(
-                        ['message', 'inbox', '--agent', state.coderId, '--json'],
-                        scratch,
-                    ).messages;
-                    const row = rows.find((message) => message.id === keyed.id);
-                    return row !== undefined &&
-                        row.runStatus !== null &&
-                        row.runStatus !== undefined &&
-                        row.runStatus !== 'running'
-                        ? row
-                        : undefined;
-                },
+            state.dispatchMessageId = attemptOne.id;
+            state.ids.dispatchMessage = attemptOne.id;
+            // The keyed turn writes its coordination row at invoke start; the stub then hangs.
+            const runningRun = await pollUntil(
+                'the hung keyed turn to start (run row running)',
+                async () => (await runs.listByMessageId(attemptOne.id)).find((row) => row.status === 'running'),
                 BOUNDS.kill,
             );
-            if (terminalRun.runStatus === 'running') throw new Error('killed turn is still running');
-            // (c) restart the coder loop and resume the task through the real operator path.
+            state.dispatchRunId = runningRun.run_id;
+            const hung = await pollUntil(
+                'the stub to receive the hung directive',
+                async () =>
+                    readStubPrompts(state).find(
+                        (record) =>
+                            directiveFor(record, wbs) !== undefined &&
+                            !(directiveFor(record, wbs) ?? '').includes('--continue'),
+                    ),
+                BOUNDS.kill,
+            );
+            hungDirective = directiveFor(hung, wbs) ?? null;
+            // (b) SIGKILL the coder loop mid-turn. SIGTERM already finalizes through
+            // `AgentService.run`'s own handler, so only SIGKILL exercises R2's orphan.
+            const coderPid = state.loopPids[1];
+            process.kill(coderPid ?? 0, 'SIGKILL');
+            // (c) restart the member. There is no harness-side recovery: the restarted loop reaps
+            // its spec's orphaned `running` row before its first drain (R2), which gives the killed
+            // attempt a definite receipt and wakes the orchestrator.
+            const restartedPid = spawnLoop(scratch, state, state.coderId, '-restart');
             state.loopPids[1] = restartedPid;
-            const promptsBefore = readStubPrompts(state).length;
-            const resume = jsonOk<{ msgId: string }>(
-                ['message', 'send', '--to', state.coderId, `/sp:dev-run ${wbs} --continue`, '--json'],
-                scratch,
+            const terminalRun = await pollUntil(
+                'the killed attempt to reach a terminal receipt',
+                async () =>
+                    (await runs.listByMessageId(attemptOne.id)).find(
+                        (row) => row.status !== 'running' && row.completed_at !== null,
+                    ),
+                BOUNDS.kill,
+            );
+            // (d) the strategy re-dispatches under the next attempt key with no operator message.
+            const attemptTwo = await pollUntil(
+                `the strategy to re-dispatch fleet:task:${wbs}:2`,
+                async () => (await keyedRows(wbs)).find((row) => row.request_key === `fleet:task:${wbs}:2`),
+                BOUNDS.dispatch,
             );
             const resumed = await pollUntil(
-                'the stub to receive the --continue resume',
+                'the stub to receive the resumed directive',
                 async () => {
-                    const records = readStubPrompts(state).slice(promptsBefore);
+                    const records = readStubPrompts(state).filter((record) => directiveFor(record, wbs) !== undefined);
                     return records.find((record) => (directiveFor(record, wbs) ?? '').includes('--continue'));
                 },
                 BOUNDS.resume,
             );
             resumedDirective = directiveFor(resumed, wbs) ?? null;
-            // With the retry wedge fixed in this task, the killed attempt's DEFINITE terminal
-            // receipt lets the planner re-dispatch on its own — the design's attempt-2 key.
+            // The strategy must not have been held by that unkeyed delivery: no idle-hold row may
+            // name it as a blocking (ambiguous) delivery (AC R1). A KEYED row in the crash window
+            // between claim and `svc.run` may legitimately hold — that is the gate's remaining job.
+            const keyedOnlyHolds = (await new SystemEventDao(openDb).query({ names: ['fleet.idle-hold'] })).filter(
+                (row) => (row.payload_json ?? '').includes('unresolved-deliveries'),
+            );
+            const wedgeHolds = keyedOnlyHolds.filter((row) => (row.payload_json ?? '').includes(chat.msgId));
+            if (wedgeHolds.length > 0) {
+                throw new Error(
+                    `the unkeyed delivery held dispatch: ${wedgeHolds.length} fleet.idle-hold row(s) name ${chat.msgId} as ambiguous`,
+                );
+            }
             pass(
                 state,
                 'kill-redispatch',
-                `kill -TERM <coder loop>; spur message send --to ${state.coderId} "/sp:dev-run ${wbs} --continue" (${resume.msgId})`,
+                `kill -KILL <coder loop>; restart spur agent loop --spec ${state.coderId} (no operator dispatch, no planner nudge)`,
                 STEP_SIX_ASSERTION,
                 [
-                    `killed run=${state.dispatchRunId ?? 'unknown'} status=${terminalRun.runStatus} message=${keyed.id} delivery=delivered`,
-                    `hung directive=${hungDirective}`,
-                    `resumed directive=${resumedDirective} (new pid=${restartedPid})`,
-                    'strategy auto-retry of an operator-dispatched turn: not asserted (unkeyed dispatch; the strategy legs are proven by dispatch-to-done)',
+                    `unkeyed delivered=${chat.msgId} status=delivered (stdin, no run row) — named by 0 of ${keyedOnlyHolds.length} unresolved-deliveries hold(s)`,
+                    `attempt-1=${attemptOne.request_key} run=${runningRun.run_id} hung directive=${hungDirective}`,
+                    `killed → restarted pid=${restartedPid}; attempt-1 run=${terminalRun.run_id} status=${terminalRun.status} completed_at=${terminalRun.completed_at}`,
+                    `attempt-2=${attemptTwo.request_key} dispatched by the strategy; resumed directive=${resumedDirective}`,
                 ].join(' | '),
             );
         } catch (error) {
-            fail(state, 'kill-redispatch', 'kill coder loop; spur message send --continue', STEP_SIX_ASSERTION, error);
+            fail(
+                state,
+                'kill-redispatch',
+                'kill -KILL <coder loop>; restart the coder loop (strategy-only re-dispatch)',
+                STEP_SIX_ASSERTION,
+                error,
+            );
         }
 
         // ── 4. dispatch-to-done (the done-task's own keyed dispatch closes it) ──────────
@@ -1055,6 +1129,28 @@ export async function runFleetE2e(args: string[]): Promise<number> {
                 }
             }
             await sleep(1_000);
+            // F7: the SIGKILLed loop could not clean up its hang stub. The stub exits when its
+            // parent dies, so a pid still alive here is a real leak — named, not hidden.
+            const liveStubPids = readStubPrompts(state)
+                .map((record) => record.pid)
+                .filter((pid): pid is number => pid !== undefined && !state.loopPids.includes(pid))
+                .filter((pid, index, all) => all.indexOf(pid) === index)
+                .filter((pid) => {
+                    try {
+                        process.kill(pid, 0);
+                        return true;
+                    } catch {
+                        return false;
+                    }
+                });
+            for (const pid of liveStubPids) {
+                try {
+                    process.kill(pid, 'SIGKILL');
+                } catch {
+                    /* exited between the probe and the kill */
+                }
+                problems.push(`stub pid ${pid} outlived the killed loop`);
+            }
             if (state.guestId !== null) {
                 const leave = cli(['agent', 'leave', state.guestId, '--json'], scratch);
                 if (leave.exitCode !== 0) problems.push(`guest leave exited ${leave.exitCode}`);
