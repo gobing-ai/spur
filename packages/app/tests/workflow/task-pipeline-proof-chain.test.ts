@@ -277,8 +277,8 @@ describe('task-pipeline proof-input completeness and honest review evidence (tas
             .map((a) => String((a.options as Record<string, unknown> | undefined)?.command ?? ''))
             .map((c) => c.replace(/\n/g, ' '));
 
-    test('the workflow identity carries the current contract version (0785; v4 for the confidence gate + review routing)', () => {
-        expect((DEF as unknown as { version: string }).version).toBe('4');
+    test('the workflow identity carries the current contract version (v5: onError-continue on the verify verdict action + test-fix review-lane evidence projection)', () => {
+        expect((DEF as unknown as { version: string }).version).toBe('5');
     });
 
     test('a featureSpecPath var exists and defaults to empty (orphan tasks stay compatible)', () => {

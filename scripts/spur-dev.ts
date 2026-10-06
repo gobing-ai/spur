@@ -23,6 +23,7 @@
  *   link-check                                  fail if a linked @gobing-ai pkg serves a stale dist/
  *   eval-pipeline [args]                        run fixture tasks through a pipeline and record cost/outcome
  *   fleet-e2e [--inject-failure <step>]         prove the inbox-only fleet end to end, write the receipt
+ *   fleet-e2e --guest-join-fixture              exercise the R4 pre-1081 guest-join skip arm, write its receipt
  *   real-run-cost [args]                        report real pipeline-run cost from the project DB
  *   check-pipeline-budgets [args]               fail when pipeline cost exceeds config/pipeline-budgets.json
  *   promotion [args]                            workflow candidate promotion/retirement records

@@ -54,7 +54,16 @@ name: task-pipeline
 # v4 (session finding after 1088): the completion gate reads the verifier's confidence level and
 # the graph routes a non-PASS review into bounded remediation — both are contract changes, so the
 # identity moves with them.
-version: "4"
+# v5 (task 1077's inline run, 2026-10-06): the verify verdict action is explicitly `onError:
+# continue`. `task verdict` exits non-zero on any non-PASS verdict BY DESIGN (1003 R2) — that is
+# data for the verify guards, not a state failure. Under the engine's default 'fail' policy
+# (`resolveOnErrorPolicy: action ?? workflowDefault ?? runOption ?? 'fail'`) the state sequence
+# halted on that exit code and `lifecycle.fail('verify')` finalized the run before any transition
+# guard was evaluated, which made the declared `verify → test-fix` "repairable non-PASS" lane
+# UNREACHABLE: a non-PASS verify could only end the run failed. `test-fix` also gained the
+# review-lane evidence projection (see its onEnter) so the repair hop is not fed an empty findings
+# list when the failing hop was `review-fail-triage` rather than the quality gate.
+version: "5"
 description: "Standard task pipeline: precheck → implement → quality-gate (test/fix/recheck) → review → approve → verify → record → done"
 # Task entity lifecycle (owned by task-lifecycle.yaml):
 #   normal: backlog → todo → wip → testing → done
@@ -464,6 +473,17 @@ states:
             options:
                 command: >-
                     printf '%s\n' "$(( $(cat ".spur/run/$wbs-test-fix-attempt" 2>/dev/null || echo 0) + 1 ))" > ".spur/run/$wbs-test-fix-attempt"; [ -f ".spur/run/$wbs-verdict.json" ] && echo '--- verify verdict (remediation input, task 0703 R4) ---' >> ".spur/run/$wbs-test-gate.log" && cat ".spur/run/$wbs-verdict.json" >> ".spur/run/$wbs-test-gate.log"; [ -f ".spur/run/$wbs-residuals.json" ] && echo '--- residual artifact (F96 fix targets; deferrals go to residual-deferrals.json, P3/markers only) ---' >> ".spur/run/$wbs-test-gate.log" && cat ".spur/run/$wbs-residuals.json" >> ".spur/run/$wbs-test-gate.log"; exit 0
+          # Review-lane input (v5, task 1077 run): `review-fail-triage` routes a non-PASS review
+          # into this same bounded repair hop, but it stages no review evidence — the fixer then
+          # received a GREEN gate log and an empty findings list, so the review finding it exists
+          # to repair was invisible to it. Project the reviewer's answer into the same log the
+          # other lanes use, and only on the review lane (the decision file exists only after
+          # `review-fail-triage`). Own action, not an append to the one above: ADR-115's 800-char
+          # shell cap is already 602 chars there.
+          - kind: shell
+            options:
+                command: >-
+                    [ -f ".spur/run/$wbs-review-failure-class.decision" ] && [ -f ".spur/run/$__runId-review-answer.txt" ] && echo '--- review verdict (remediation input, review lane) ---' >> ".spur/run/$wbs-test-gate.log" && cat ".spur/run/$__runId-review-answer.txt" >> ".spur/run/$wbs-test-gate.log"; exit 0
           # R3 (0482): project the extracted gate anchors into a var so the dispatch input
           # can NAME the failing file:line, not merely point at a log. A vars template cannot
           # run a shell, so the read is an action, not an inline `$(cat ...)` substitution.
@@ -734,6 +754,12 @@ states:
           # (d) `spur task verdict` owns the answer lint (task 1003 R2) — the shell below
           # fails closed when the verifier's answer is malformed, before any verdict artifact.
           - kind: shell
+            # `task verdict` exits 1 on a non-PASS verdict by design (1003 R2). The `continue`
+            # policy keeps that exit code as recorded evidence (the action row is still `failed`)
+            # while letting the state finish its remaining actions and reach the guards below;
+            # without it the default 'fail' policy halts the run here and `verify → test-fix`
+            # (the declared bounded remediation lane) can never fire (v5, task 1077 run).
+            onError: continue
             options:
                 command: "$spurBin task verdict $wbs --from-answer .spur/run/$wbs-verify-answer.txt"
           # Session finding after 1088: the verifier's confidence level becomes a `confidence` check
