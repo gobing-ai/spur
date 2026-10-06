@@ -155,7 +155,7 @@ export interface OrchestratorBinding {
  */
 export interface RosterMember extends MemberIdentity {
     purpose?: string;
-    /** Fleet-only (0835): `false` keeps the derived id but skips materialization. */
+    /** Fleet-only (0835): `false` keeps the derived id but leaves the member out of the derived specs. */
     enabled?: boolean;
 }
 

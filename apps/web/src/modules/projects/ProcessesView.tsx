@@ -376,7 +376,6 @@ export default function ProcessesView({ pollMs = STATUS_POLL_MS }: { pollMs?: nu
                         <th>Status</th>
                         <th>Started</th>
                         <th>Source</th>
-                        <th className="hidden">Team</th>
                     </tr>
                 </thead>
                 <tbody>
