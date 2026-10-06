@@ -1,7 +1,7 @@
 ---
 description: Run a batch of tasks through their pipelines in dependency-correct order — resolve a set, topo-sort, run each via task-pipeline.yaml, emit a batch report
 role: planner
-argument-hint: "--tasks <selector> [--feature <id>] [--mode <sequential|parallel>] [--keep-going] [--auto] [--agent <inline|auto|name>] [--json] [--wrap] [--next] [--continue] [--worktree [<name>]]"
+argument-hint: "--tasks <selector> [--feature <id>] [--mode <sequential|parallel>] [--keep-going] [--auto] [--agent <inline|auto|name>] [--json] [--wrap] [--next] [--continue] [--worktree [<name>]] [--no-summary]"
 allowed-tools: ["Bash", "Read", "Skill"]
 ---
 
@@ -24,6 +24,7 @@ Wraps the **sp:spur-dev** skill.
 | `--next` | Chain-to-completion via the next-router. | off |
 | `--continue` | Resume an interrupted batch. | off |
 | `--worktree` `[<name>]` | Run the batch in an isolated git worktree; FF-merge on success, retain on failure. Bare `--worktree` creates a fresh tree; `--worktree <name>` adopts an existing worktree by name/path/branch. | off |
+| `--no-summary` | Skip the measured execution summary (one row per task run: time, wait, tool calls, total / non-cached tokens) printed after the batch report. | off (summary printed) |
 | `--concurrency` `<n>` | Parallel-mode worker bound: at most `<n>` task pipelines run at once (task 0931); a dependent starts only after its in-set dependencies are integrated onto the base ref. No-op in sequential mode (ignored). | 2 |
 
 For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).
@@ -31,7 +32,7 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 ## Usage
 
 ```
-/sp:dev-runall --tasks <selector> [--feature <id>] [--mode <sequential|parallel>] [--keep-going] [--auto] [--agent <inline|auto|name>] [--json] [--wrap] [--next] [--continue] [--worktree [<name>]]
+/sp:dev-runall --tasks <selector> [--feature <id>] [--mode <sequential|parallel>] [--keep-going] [--auto] [--agent <inline|auto|name>] [--json] [--wrap] [--next] [--continue] [--worktree [<name>]] [--no-summary]
 ```
 
 Flags: `--tasks <selector>` (required — explicit WBS list, status pseudo-list, `feature:<id>`,
@@ -91,3 +92,5 @@ full distinction.
 - Apply the [shared startup contract](../skills/spur-dev/references/cross-cutting.md#shared-startup-contract-task-0814-r1r3r4r6r7r8) — bootstrap checklist, quick readiness before isolation, workflow inventory before YAML, comprehensive checks at owning boundaries (task 0814 R1/R3/R4/R7/R8).
 - Interactive sequential omit/inline: `Skill(skill="sp:spur-dev", args="runall-inline $ARGUMENTS")`.
 - Explicit executor or parallel mode: `Skill(skill="sp:spur-dev", args="runall $ARGUMENTS")` → `sp:super-planner` agent.
+- After the batch report, print the [execution summary](../skills/spur-dev/references/dev-operations.md#execution-summary) over every attempted run unless
+  `--no-summary`.

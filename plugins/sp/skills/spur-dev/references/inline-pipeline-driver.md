@@ -715,6 +715,8 @@ The driver reaches it through the existing run delegate (`$SETUP_SCRIPT`,
   `--status` is the declared terminal state's verdict, not a guess: a run that reached a terminal
   state is `done`; a run halted by a failing action under its error policy is `failed`. On success
   the close reports the recorded evidence: `{"ok":true,"runId":…,"actionRows":<n>}`.
+  After the close, the invoking command prints the measured
+  [execution summary](dev-operations.md#execution-summary) for `$RUN_ID` unless `--no-summary`.
 
   **Zero-row done closes are a named failure (task 0975 R2).** A run closed `done` with **zero**
   `action_runs` rows (`actionRows:0`) finalizes the row but exits `1` with

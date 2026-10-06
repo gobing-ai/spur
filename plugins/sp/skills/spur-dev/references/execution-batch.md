@@ -424,7 +424,8 @@ one or more tasks sit on an operator question (escalate, 0933) or an approval ga
 (cycle / unknown selector) — emit a structured report. The report is the orchestrator's sole
 output; it does not mutate the corpus (the pipeline's `record` step already wrote per-task
 results). A `paused` task is non-terminal — the report marks it `paused` (never `done`) and names
-the resume command.
+the resume command. Unless `--no-summary`, follow it with the measured
+[execution summary](dev-operations.md#execution-summary), one `--progress <wbs>=<file>` per attempted run.
 
 ```
 ## Batch Report — <selector>

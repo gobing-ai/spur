@@ -1,7 +1,7 @@
 ---
 description: Run a task — full pipeline (precheck→implement→test→review→approve→verify→record→done) or single-step (implement)
 role: coder
-argument-hint: "<wbs> [--mode <full|implement>] [--agent <inline|auto|name>] [--auto] [--next] [--wrap] [--continue] [--worktree [<name>]]"
+argument-hint: "<wbs> [--mode <full|implement>] [--agent <inline|auto|name>] [--auto] [--next] [--wrap] [--continue] [--worktree [<name>]] [--no-summary]"
 allowed-tools: ["Bash", "Read", "Write", "Edit", "Skill"]
 ---
 
@@ -21,12 +21,13 @@ Wraps the **sp:spur-dev** and **sp:code-implementation** skills.
 | `--wrap` | Run the wrap hop after the main step. The `--agent` selector is preserved into the `/sp:dev-wrap <wbs>` handoff when supplied; omission remains omission. The wrap hop is workflow-backed and reports its trigger-3 subprocess override. | off |
 | `--continue` | Resume an interrupted task from its checkpoint. | off |
 | `--worktree` `[<name>]` | Run the task pipeline in an isolated git worktree; FF-merge on success, retain on failure. Bare `--worktree` creates a fresh tree; `--worktree <name>` adopts an existing worktree by name/path/branch. Full mode only. | off |
+| `--no-summary` | Skip the measured execution summary (per-stage time, wait, tool calls, total / non-cached tokens) printed after a full-mode run. | off (summary printed) |
 
 For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).
 
 ## Usage
 
-/sp:dev-run <wbs> [--mode <full|implement>] [--agent <inline|auto|name>] [--auto] [--next] [--wrap] [--continue] [--worktree [<name>]]
+/sp:dev-run <wbs> [--mode <full|implement>] [--agent <inline|auto|name>] [--auto] [--next] [--wrap] [--continue] [--worktree [<name>]] [--no-summary]
 
 ## Implementation
 
@@ -37,6 +38,8 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
   `Skill(skill="sp:spur-dev", args="run-inline $ARGUMENTS")`; `--agent auto` or a named executor
   uses `Skill(skill="sp:spur-dev", args="run $ARGUMENTS")` and the workflow subprocess path.
 - Implement step only (`--mode implement`): `Skill(skill="sp:code-implementation", args="$ARGUMENTS")`
+- After a full-mode run settles (done, failed or paused), print the
+  [execution summary](../skills/spur-dev/references/dev-operations.md#execution-summary) unless `--no-summary`.
 
 **Flags:**
 

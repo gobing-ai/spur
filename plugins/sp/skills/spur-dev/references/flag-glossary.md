@@ -336,6 +336,14 @@ specific status slice).
 Skip the shippable guard on verify-family commands (`dev-verify`, `dev-verifyall`). Used when
 verifying a task whose artifact is intentionally not yet shippable (e.g. a doc-only task).
 
+### `--no-summary` — skip the execution summary
+
+**Anchor:** `#flag-no-summary`.
+
+Skip the measured execution summary that run commands (`dev-run`, `dev-runall`) print by default
+once the run settles: per-stage (or per-run) time, operator wait, tool calls and total / non-cached
+tokens from the host transcript. Procedure: [dev-operations.md § Execution summary](dev-operations.md#execution-summary).
+
 ### `--skip-design` — omit the design package
 
 **Anchor:** `#flag-skip-design`.
