@@ -4,7 +4,7 @@ name: "Supervise agent loops: no orphan loops and no duplicate serves per projec
 status: done
 template: feature-impl
 created_at: 2026-10-05T07:28:03.248Z
-updated_at: "2026-10-06T01:54:04.199Z"
+updated_at: "2026-10-06T03:03:40.370Z"
 feature_id: G67
 
 ac_altitude: task-local
@@ -203,9 +203,9 @@ caller sends; the server middleware is untouched and no exemption was added.
 | `apps/cli/src/commands/agent.ts:395` | the `agent loop` action installs the watch; cleared at `apps/cli/src/commands/agent.ts:400-401` |
 | `apps/cli/tests/commands/agent-supervision.test.ts:5` | 14 focused tests: resolver matrix (registry port / explicit `--server` / no entry / stale port), status-start-stop-list URL assertions, the rework regressions (the resolved host is `localhost`; the stop POST carries the resolved origin), parent-watch abort and stop |
 | `docs/design/cli-contracts.md:447` | Default server resolution paragraph; `spur agent status` section added at `docs/design/cli-contracts.md:454-462` |
-| `docs/design/cli-contracts.md:673` | `agent start|stop` default server + loop-lifetime note |
+| `docs/design/cli-contracts.md:675` | `agent start|stop` default server + loop-lifetime note |
 | `docs/04_DESIGN.md:136` | `spur agent status` index row (missing since 0897) |
-| `docs/03_ARCHITECTURE.md:758` | §17 project-owned supervision paragraph: discovery (rendered `localhost`) + loop lifetime bound to serve |
+| `docs/03_ARCHITECTURE.md:759-760` | §17 project-owned supervision paragraph: discovery (rendered `localhost`) + loop lifetime bound to serve |
 | `docs/help/cmd_agent.md:191` | `agent status` `--server` default restated (`docs/help/cmd_agent.md:209` list, `docs/help/cmd_agent.md:351` start, `docs/help/cmd_agent.md:366` stop) |
 | `docs/help2/agent.md:65-66` | `agent list --specs` `--server` default restated |
 | `plugins/sp/skills/spur-cli/references/agent.md:153-155` | facade reference `list` default restated (`plugins/sp/skills/spur-cli/references/agent.md:171-175` status, `plugins/sp/skills/spur-cli/references/agent.md:303-305` start) |
