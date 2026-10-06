@@ -31,10 +31,10 @@
 - apply biome fixes so the lint gate is green at HEAD (e7d654dfd)
 - record E93 verifyall re-audit — 3 PASS force re-verifies (1028-1030) (8a06ead3a)
 - file 1069 — dependency-drift-check scoped-key path bug (E93 follow-up) (1c7d83216)
-- merge sp/runall-e93-4ff4 (E93) — capability batch 1028-1030 done, E93 done, ts-* catalog ^0.5.12 (cac466566 — verified package.json:32)
+- merge sp/runall-e93-4ff4 (E93) — capability batch 1028-1030 done, E93 done, ts-* catalog ^0.5.12 (cac466566)
 - revert docs(tasks) file 1068 — dependency-drift-check scoped-key path bug (E93 follow-up) (6181a2695)
 - file 1068 — dependency-drift-check scoped-key path bug (E93 follow-up) (98b33ca7a)
-- align ts-* catalog to ^0.5.12 (E93 wrap) (f99bf3b38 — verified package.json:32)
+- align ts-* catalog to ^0.5.12 (E93 wrap) (f99bf3b38)
 - record 1030 verify-safe-historical-capability-replay sections (E93) (6e04e71ca)
 - pin isolated capability replay with frozen 8/3 oracle (1030) (00fbe15ef)
 - record 1029 verification and restore 1028 done state (E93) (c4b3b7ecf)
@@ -73,15 +73,6 @@
 - sync planning-record-contracts frontmatter schema with ac_numbering (1061) (c1e3b1d03)
 - re-verify D62 forced batch to 28 PASS and settle residual dispositions (9e8b97fe9)
 - annotate retired basic/docs-pipeline/feature-dev definitions (0866) (0cfc5d8cb)
-
-> Verification: HIGH — coverage 63/63 hashes unique (this footer commit is uncited and lands in the next range);
-> mapping Added 8 / Fixed 7 / Changed 48 / Other 0; header [0.3.99] - 2026-10-03 vs `--version 0.3.99`;
-> dependency claim cited (`package.json:32`).
-> Confidence: HIGH (section) — coverage, mapping and header reconciled against git; all API/dependency claims cited.
-> Confidence: HIGH (post-release fixes) — the `Revert "…"` commit was reworded to `revert: …` for the cog gate:
-> tree-identical to its predecessor (`52b3c9ed45`), both merges preserved, `cog check --ignore-merge-commits` clean,
-> 11 hashes changed and the citations above repinned; CI job `37163833414` and test-win `37163833409` green at
-> `027445e4c` after 9896 passing tests / 0 failing locally.
 
 ## [0.3.98] - 2026-10-02
 
