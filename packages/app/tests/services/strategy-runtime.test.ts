@@ -749,9 +749,12 @@ describe('StrategyRuntime.resume (0838 R6)', () => {
         const rig = await makeRig({ strategy: 'gtd' });
         try {
             await rig.claims.claim(rig.project, 'orchestrator', 'proj-orch', 30_000);
-            // One ambiguous delivery: injected by the drain, never settled, no receipt.
+            // One ambiguous FLEET-KEYED delivery: injected by the drain, never settled, no receipt.
+            // Only the fleet's own `fleet:task:*` dispatches can hold GTD (G71 R1) — an unkeyed
+            // conversational message no longer does, so this hold case must be keyed.
             const inbox = new (await import('@gobing-ai/spur-domain')).InboxMessageDao(rig.db);
-            const messageId = await inbox.enqueue('operator', 'proj-coder', 'do the work');
+            const keyed = await inbox.enqueueIdempotent('operator', 'proj-coder', 'do the work', 'fleet:task:0900:1');
+            const messageId = keyed.id;
             await inbox.drainPending('proj-coder');
             expect(messageId).toBeTruthy();
 
@@ -762,6 +765,33 @@ describe('StrategyRuntime.resume (0838 R6)', () => {
             const selected = await rig.runtime.selectNext(rig.project);
             expect(selected.decisions).toEqual([]);
             expect(selected.holds.every((hold) => hold.detail?.includes('unresolved-deliveries'))).toBe(true);
+            // F3: the hold detail names the blocking message id, not just a count.
+            expect(selected.holds.every((hold) => hold.detail?.includes(messageId))).toBe(true);
+        } finally {
+            await rig.cleanup();
+        }
+    });
+
+    test('F1: an unkeyed delivery with no receipt does NOT hold GTD dispatch (G71 R1)', async () => {
+        const rig = await makeRig({ strategy: 'gtd' });
+        try {
+            await rig.claims.claim(rig.project, 'orchestrator', 'proj-orch', 30_000);
+            // An operator/conversational message accepted through the persistent stdin path: by
+            // the 0831 "acceptance is delivery" contract it writes NO coordination run row, so its
+            // missing receipt is the designed outcome — it must not wedge the fleet.
+            const inbox = new (await import('@gobing-ai/spur-domain')).InboxMessageDao(rig.db);
+            const messageId = await inbox.enqueue('operator', 'proj-coder', 'status?');
+            await inbox.drainPending('proj-coder');
+
+            const report = await rig.runtime.resume(rig.project);
+            // Still REPORTED (the reconciler's contract is unchanged)…
+            expect(report.unresolved.map((u) => [u.messageId, u.reason, u.requestKey])).toEqual([
+                [messageId, 'outcome-unknown', null],
+            ]);
+            // …but never a hold: the task dispatches with its keyed attempt-1 row.
+            const selected = await rig.runtime.selectNext(rig.project);
+            expect(selected.holds.some((hold) => hold.detail?.includes('unresolved-deliveries'))).toBe(false);
+            expect(selected.decisions.length).toBeGreaterThan(0);
         } finally {
             await rig.cleanup();
         }

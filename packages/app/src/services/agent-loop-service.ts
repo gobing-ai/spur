@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { CLAIM_TTL_MS, ProjectClaimDao, SystemEventDao } from '@gobing-ai/spur-domain';
+import { CLAIM_TTL_MS, CoordinationRunDao, ProjectClaimDao, SystemEventDao } from '@gobing-ai/spur-domain';
 import type { AgentProcessOptions, AgentSpec } from '@gobing-ai/ts-ai-runner';
 import { EventBus } from '@gobing-ai/ts-infra';
 import type { AgentRunDeps, AgentService } from './agent-service';
@@ -363,6 +363,39 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
         recipient,
     );
     try {
+        // G71 R2 (1091): finalize this spec's orphaned runs BEFORE the first drain — and before
+        // the reconcile below reads them — so a killed turn has a definite receipt instead of
+        // staying `running` forever. A loop that died ungracefully (SIGKILL/OOM/crash) never
+        // reaches `AgentService.run`'s exit sink; the supervisor runs at most one loop per spec,
+        // so every `running` row for this spec at loop start is an orphan.
+        const reaped = await new CoordinationRunDao(await deps.getDb()).reapOrphanedRunning(
+            recipient,
+            new Date().toISOString(),
+        );
+        if (reaped.length > 0) {
+            // Wake the orchestrator for each finalized run so re-dispatch does not wait for the
+            // backstop poll (the killed turn's own exit event was never written).
+            const events = new SystemEventDao(await deps.getDb());
+            for (const row of reaped) {
+                await events.insert({
+                    id: randomUUID(),
+                    event_name: 'agent.invoke.exit',
+                    occurred_at: new Date().toISOString(),
+                    actor: recipient,
+                    payload_json: JSON.stringify({
+                        agent: recipient,
+                        operation: 'orphan-reap',
+                        exitCode: 137,
+                        runId: row.run_id,
+                    }),
+                });
+            }
+            deps.error(
+                `reaped ${reaped.length} orphaned run(s) left running by a previous ${recipient} loop: ${reaped
+                    .map((row) => row.run_id)
+                    .join(', ')}`,
+            );
+        }
         // 0834 R2: reconcile unfinished requests and runs BEFORE the first drain —
         // ambiguous work is named (outcome-unknown, never requeued) and budget-
         // exhausted rows are marked failed, so the loop never re-dispatches them.

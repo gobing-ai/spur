@@ -29,6 +29,12 @@ export interface UnresolvedDelivery {
     reason: HoldReason;
     injectAttempts: number;
     injectError?: string;
+    /**
+     * The row's `request_key` (0832 keyed-submission identity), or null for keyless traffic
+     * (G71 R1). Carried so a consumer can tell a fleet dispatch from an operator/conversational
+     * message without re-reading the inbox row.
+     */
+    requestKey: string | null;
     runId?: string;
     taskId?: string;
     runStatus?: string;
@@ -63,6 +69,7 @@ export class DeliveryReconciler {
                 messageId: row.id,
                 toId: row.to_id,
                 injectAttempts: row.inject_attempts,
+                requestKey: row.request_key,
                 ...(row.inject_error !== null && row.inject_error !== '' ? { injectError: row.inject_error } : {}),
             };
 

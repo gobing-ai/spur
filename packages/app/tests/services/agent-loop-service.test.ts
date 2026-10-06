@@ -9,7 +9,13 @@ import { describe, expect, test, vi } from 'bun:test';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createMigratedDb, type DbAdapter, ProjectClaimDao, SystemEventDao } from '@gobing-ai/spur-domain';
+import {
+    CoordinationRunDao,
+    createMigratedDb,
+    type DbAdapter,
+    ProjectClaimDao,
+    SystemEventDao,
+} from '@gobing-ai/spur-domain';
 import { EventBus } from '@gobing-ai/ts-infra';
 import type { AgentLoopDeps } from '../../src/services/agent-loop-service';
 import {
@@ -386,6 +392,59 @@ describe('G71 R1/R2/R3 — member drain, keyed run path, slot heartbeat, resume 
         } finally {
             vi.useRealTimers();
         }
+    });
+
+    test('R2: a run orphaned by an ungraceful death is finalized at loop start, before the first drain', async () => {
+        const db = await memDb();
+        const runs = new CoordinationRunDao(db);
+        await runs.insertStart({
+            specId: 'member-1',
+            agentKind: 'claude',
+            processId: '9999',
+            runId: 'run-killed',
+            generation: 1,
+            startedAt: new Date().toISOString(),
+            messageIds: ['m-keyed'],
+            taskId: '1091',
+        });
+        await runs.insertStart({
+            specId: 'other-1',
+            agentKind: 'claude',
+            processId: '8888',
+            runId: 'run-live-other',
+            generation: 1,
+            startedAt: new Date().toISOString(),
+        });
+        // The state the row is in when the loop's first drain runs: the reap must have landed
+        // BEFORE it (the killed turn needs a definite receipt before anything is classified).
+        let statusAtDrain: string | undefined;
+        const deps = memberOnlyDeps(db, {
+            drain: async () => {
+                statusAtDrain = (await runs.getByRunId('run-killed'))?.status;
+                return { prompt: undefined, flags: {}, claimed: [] };
+            },
+        });
+
+        const code = await runAgentLoopCore(deps, {
+            recipient: 'member-1',
+            pollMs: 10,
+            flags: {},
+            runtime: { maxIterations: 1 },
+        });
+        expect(code).toBe(0);
+        expect(statusAtDrain).toBe('errored');
+        const orphan = await runs.getByRunId('run-killed');
+        expect(orphan?.status).toBe('errored');
+        expect(orphan?.outcome).toBe('errored');
+        expect(orphan?.completed_at).not.toBeNull();
+        expect(orphan?.message_ids_json).toBe('["m-keyed"]');
+        // F6: the reap wakes the orchestrator instead of waiting for the backstop poll.
+        const exits = await new SystemEventDao(db).query({ names: ['agent.invoke.exit'] });
+        expect(exits.map((row) => row.actor)).toEqual(['member-1']);
+        // F5: a concurrently running loop's spec is never reaped.
+        expect((await runs.getByRunId('run-live-other'))?.status).toBe('running');
+        // The instance is idle for the strategy again.
+        expect(await runs.hasRunning('member-1')).toBe(false);
     });
 
     test('R4: a throwing orchestrator drain is logged and does not take the dispatch loop down', async () => {

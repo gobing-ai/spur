@@ -652,11 +652,27 @@ export class StrategyRuntime {
             // ever close a run as `run-exit-only`/`errored`, never `verified` (G71 1077 R3; repro
             // in docs/reports/fleet-e2e-receipt.json `residualRisks`). Only an outcome we cannot
             // establish at all still holds new dispatch.
-            const ambiguous = resumed.unresolved.filter((delivery) => delivery.reason === 'outcome-unknown');
+            //
+            // G71 R1 (1091): only the FLEET's own keyed dispatches can hold the fleet. An unkeyed
+            // operator/conversational message accepted through the persistent stdin path writes no
+            // `coordination_runs` row — by the 0831 "acceptance is delivery" contract — so its
+            // missing receipt is the designed outcome, not an unknown one. Consulting it here
+            // wedged every candidate on the first such message (the harness's own `status?`). Two
+            // narrower guards already cover what the gate is for: the per-task attempt state keeps a
+            // keyed `outcome-unknown` attempt in flight, and `hasRunning` keeps a busy instance out
+            // of the idle set. A keyed row in the crash window between claim and `svc.run` remains
+            // invisible to both, so the gate stays — narrowed to `fleet:task:*` rows.
+            const ambiguous = resumed.unresolved.filter(
+                (delivery) =>
+                    delivery.reason === 'outcome-unknown' &&
+                    (delivery.requestKey ?? '').startsWith(FLEET_TASK_KEY_PREFIX),
+            );
             if (!resumed.reconciled || ambiguous.length > 0) {
                 const detail = !resumed.reconciled
                     ? `orchestrator:${resumed.orchestrator.state}; restore its live claim before dispatch`
-                    : `unresolved-deliveries; reconcile prior results before dispatch (${ambiguous.length} ambiguous)`;
+                    : `unresolved-deliveries; reconcile prior results before dispatch (${ambiguous.length} ambiguous: ${ambiguous
+                          .map((delivery) => delivery.messageId)
+                          .join(', ')})`;
                 return {
                     name,
                     statusByWbs,

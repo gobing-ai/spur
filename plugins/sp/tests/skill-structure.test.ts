@@ -878,7 +878,12 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
             // 1022: +274B review-mode `--focus` vocabulary SSOT declaration (R4 of I33:
             // functional/architecture routing + link-back note; `--fix` dropped from the
             // review flag list). Not permanent — candidate for references/ split.
-            'code-verification': 35_076, // +575 B: evidence-citation rule in the answer-file schema contract
+            // 1022: baseline 33_959 → 35_076, +575 B evidence-citation rule in the answer-file
+            // schema contract.
+            // 2026-10-05 (1091): 35_076 → 35_468, +392 B feature-linked AC keying rule — a feature
+            // `R1 — …` scenario title satisfies L4 scenario matching, which is what unblocked the
+            // 1091 verification re-audits. Not permanent — candidate for a references/ split.
+            'code-verification': 35_468,
             wayfinder: 26_264,
             // 0622 R9: +921B of live-matrix reconciliation (section table, SPUR_BIN
             // refusal, artifact-size discipline). Not permanent — split into references.
