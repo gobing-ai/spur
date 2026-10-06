@@ -15,7 +15,7 @@
         "~/xprojects/spur-new/.git/worktrees/worktree",
         "~/xprojects/spur-new/config/",
         "~/xprojects/ts-libs",
-        "~/xprojects/spur-new-*",
+        "~/xprojects",
         "~/.omp",
         "~/tools/dot_files/config/omp",
         "~/tools/dot_files/config/pi",
