@@ -3,8 +3,8 @@ kind: design
 title: "Planning workflow and operation contracts"
 status: implemented
 created_at: 2026-09-09
-updated_at: 2026-10-02
-related: ["0889", "0898", "0949", "0976", "0958"]
+updated_at: 2026-10-05
+related: ["0889", "0898", "0949", "0976", "0958", "1090"]
 tags: [contract, planning, workflow]
 ---
 
@@ -462,8 +462,14 @@ terminal as `done` (backward compatible).
 | `Review` (P1–P4 findings) | `record`                       | Post-verify — transcribes SECU findings from the verify output.                                                                                                                                                                     |
 
 The `record` step provides a **Solution safety-net**: if the implement step didn't write
-`## Solution`, `record` backfills a minimal change-map from `git diff --name-only`. A
-`sectionIsBare` predicate (in `packages/app/src/services/task-service.ts`) detects absent,
+`## Solution`, `record` backfills a minimal change-map from `git diff -U0` against the resolved run
+base — an explicit `solutionDiffBase` wins, then the precheck's `.spur/run/<wbs>-base.sha` capture,
+then `HEAD` — citing the first changed line per file (untracked files, which `git diff <base>` never
+sees, at `:1`); `git diff --name-only` is only the no-hunk fallback. `.spur/**` runtime state,
+lockfiles and the recording task's own file are excluded, non-code change sets are named rather than
+filtered by extension, and a diff that names nothing emits the `(no changes detected)` row under the
+auto-generated change-map header (task 1090). A `sectionIsBare` predicate (in
+`packages/app/src/services/task-service.ts`) detects absent,
 empty/whitespace, or placeholder sections — the single reusable mechanism behind all three
 writes.
 
