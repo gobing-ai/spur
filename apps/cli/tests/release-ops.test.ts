@@ -1,7 +1,8 @@
-import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
+import { afterEach, describe, expect, setDefaultTimeout, spyOn, test } from 'bun:test';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import { bumpVer as runBumpVer, dropTags as runDropTags } from '../src/release-ops';
 import { createCapturedOutput } from './helpers';
 
@@ -114,6 +115,25 @@ describe('builder bump-ver', () => {
         const { repo } = mkRepo();
         await bumpVer(['lib', '0.2.0', '--push'], repo);
         expect(remoteTags(repo)).toContain('@demo/lib-v0.2.0');
+    });
+
+    test('--push gives git pushes a timeout beyond the default 30s command deadline', async () => {
+        // Regression (0.4.0 bump-ver --push failure): the executor's 30s default killed the
+        // push mid pre-push-hook (cog + lint ≈ 35s on the spur repo), so every push failed.
+        const { repo } = mkRepo();
+        const timeouts: (number | null | undefined)[] = [];
+        const real = NodeProcessExecutor.prototype.run;
+        using _spy = spyOn(NodeProcessExecutor.prototype, 'run').mockImplementation(async function (
+            this: NodeProcessExecutor,
+            options: Parameters<typeof real>[0],
+        ) {
+            timeouts.push(options.timeout);
+            return real.call(this, options);
+        });
+        await bumpVer(['lib', '0.2.0', '--push'], repo);
+        const pushRuns = timeouts.filter((t): t is number => t != null);
+        expect(pushRuns.length).toBe(2); // branch push + trigger tag push
+        expect(pushRuns.every((t) => t > 30_000)).toBeTrue();
     });
 
     test('--all --push ships only the aggregate tag when push.followTags is set', async () => {

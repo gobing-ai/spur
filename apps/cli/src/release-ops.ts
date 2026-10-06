@@ -101,13 +101,22 @@ function resolveAggregateTag(ctx: ReleaseContext, version: string): string {
 }
 
 /** Run a command, capturing stdout; never throws (caller checks `ok`). */
-async function run(repoRoot: string, cmd: string[]): Promise<{ ok: boolean; stdout: string; stderr: string }> {
+// The pre-push hook chain (lefthook: cog check + bun run lint) takes ~35s; the 30s
+// executor default kills the push mid-hook (run 37545591250-era bump-ver --push failure).
+const PUSH_TIMEOUT_MS = 600_000;
+
+async function run(
+    repoRoot: string,
+    cmd: string[],
+    timeoutMs?: number,
+): Promise<{ ok: boolean; stdout: string; stderr: string }> {
     const executor = new NodeProcessExecutor({ defaultTimeout: 30_000, defaultMaxOutput: 512_000 });
     const result = await executor.run({
         command: cmd[0] ?? '',
         args: cmd.slice(1),
         cwd: repoRoot,
         forceBuffered: true,
+        timeout: timeoutMs,
     });
     return {
         ok: result.exitCode === 0,
@@ -155,8 +164,8 @@ async function assertPluginInstallable(ctx: ReleaseContext, output: CommandOutpu
     output.write('  ↳ plugin-install-smoke: plugin surface is standalone and installs clean');
 }
 
-async function git(repoRoot: string, args: string[]): Promise<string> {
-    const result = await run(repoRoot, ['git', ...args]);
+async function git(repoRoot: string, args: string[], timeoutMs?: number): Promise<string> {
+    const result = await run(repoRoot, ['git', ...args], timeoutMs);
     if (!result.ok) {
         throw new Error(`git ${args.join(' ')} failed: ${result.stderr || result.stdout}`);
     }
@@ -564,12 +573,12 @@ async function bumpVersion(
     // --no-follow-tags: push.followTags in user git config would silently bundle all
     // annotated release tags into this branch push; >3 tags in one push makes GitHub
     // drop every tag push event, so the publish workflow never triggers.
-    await git(ctx.repoRoot, ['push', '--no-follow-tags', 'origin', branch]);
+    await git(ctx.repoRoot, ['push', '--no-follow-tags', 'origin', branch], PUSH_TIMEOUT_MS);
     output.write(`Pushing release trigger tag ${tag}...`);
     // --no-follow-tags here too: every per-package trace tag points at this same commit,
     // so push.followTags would bundle them into this single-tag push — recreating the
     // >3-tags-in-one-push event drop the branch push was fixed for (0.3.59 shipped 6 tags).
-    await git(ctx.repoRoot, ['push', '--no-follow-tags', 'origin', tag]);
+    await git(ctx.repoRoot, ['push', '--no-follow-tags', 'origin', tag], PUSH_TIMEOUT_MS);
 
     output.write(`\nReleased ${version}. The publish workflow should now be running:`);
     output.write(`  gh run list --workflow=${config.publishWorkflow} --limit ${config.ghRunListLimit}`);
@@ -680,11 +689,11 @@ async function bumpAll(
     output.write(`\nPushing branch ${branch} (tags excluded)...`);
     // Same followTags guard as bumpVersion: the branch push must not smuggle the
     // per-package trace tags past GitHub's >3-tags-per-push event limit.
-    await git(ctx.repoRoot, ['push', '--no-follow-tags', 'origin', branch]);
+    await git(ctx.repoRoot, ['push', '--no-follow-tags', 'origin', branch], PUSH_TIMEOUT_MS);
     output.write(`Pushing release trigger tag ${aggregateTag}...`);
     // --no-follow-tags here too: the trace tags all point at this same commit, so
     // push.followTags would bundle them into this push and re-trigger the >3-tags drop.
-    await git(ctx.repoRoot, ['push', '--no-follow-tags', 'origin', aggregateTag]);
+    await git(ctx.repoRoot, ['push', '--no-follow-tags', 'origin', aggregateTag], PUSH_TIMEOUT_MS);
 
     output.write(`\nReleased ${version}. The publish workflow should now be running:`);
     output.write('  gh run list --workflow=publish.yml --limit 3');
