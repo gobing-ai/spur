@@ -1,16 +1,16 @@
 {
     "schemaVersion": 1,
-    "generatedAt": "2026-10-06T15:53:35.928Z",
-    "projectPath": "/private/tmp/claude-501/spur-fleet-e2e-1791301999193",
+    "generatedAt": "2026-10-06T17:03:01.885Z",
+    "projectPath": "/private/tmp/claude-501/spur-fleet-e2e-1791306163045",
     "guestJoinCli": "source-local",
     "ids": {
-        "planner": "spur-fleet-e2e-1791301999193-planner-1",
-        "coder": "spur-fleet-e2e-1791301999193-coder-1",
+        "planner": "spur-fleet-e2e-1791306163045-planner-1",
+        "coder": "spur-fleet-e2e-1791306163045-coder-1",
         "feature": "A",
         "wbs": "0001",
-        "chatMessage": "475c53ce-4235-4f67-bffd-46b5469f8aba",
-        "dispatchMessage": "e87f689f-10b8-4315-8752-63d6d38e5eb3",
-        "replyMessage": "7e507c2a-5536-4dd3-81df-4d1f481ff6e2"
+        "chatMessage": "791c4bbb-33f6-45cc-a89c-0881a635f7bd",
+        "dispatchMessage": "34e234f0-fa19-43fd-a473-aaf8700932df",
+        "replyMessage": "864fdaff-64d8-4aaf-b1d6-4681f133f1da"
     },
     "steps": [
         {
@@ -19,7 +19,7 @@
             "exitCode": 0,
             "status": "passed",
             "assertion": "a scratch project scaffolds with a declared agent.fleet (gtd, planner-1 orchestrator, coder-1 member), the project strategy row reconciled to gtd, and a PATH stub named after the member agent type",
-            "evidence": "scratch=/private/tmp/claude-501/spur-fleet-e2e-1791301999193 | fleet=spur-fleet-e2e-1791301999193-planner-1, spur-fleet-e2e-1791301999193-coder-1 | strategy=gtd v1 | stub=/private/tmp/claude-501/spur-fleet-e2e-1791301999193/bin/claude (PATH first)"
+            "evidence": "scratch=/private/tmp/claude-501/spur-fleet-e2e-1791306163045 | fleet=spur-fleet-e2e-1791306163045-planner-1, spur-fleet-e2e-1791306163045-coder-1 | strategy=gtd v1 | stub=/private/tmp/claude-501/spur-fleet-e2e-1791306163045/bin/claude (PATH first)"
         },
         {
             "step": "create-task",
@@ -31,35 +31,35 @@
         },
         {
             "step": "start-loops",
-            "command": "spur agent loop --spec spur-fleet-e2e-1791301999193-planner-1 | --spec spur-fleet-e2e-1791301999193-coder-1",
+            "command": "spur agent loop --spec spur-fleet-e2e-1791306163045-planner-1 | --spec spur-fleet-e2e-1791306163045-coder-1",
             "exitCode": 0,
             "status": "passed",
             "assertion": "the planner and coder loops attach: a live orchestrator claim and a recorded fleet member session, with the stub first on PATH",
-            "evidence": "pids=28835,28836 (stub first on PATH) orchestrator claim live member session recorded"
+            "evidence": "pids=32214,32215 (stub first on PATH) orchestrator claim live member session recorded"
         },
         {
             "step": "dispatch-to-done",
-            "command": "spur task show 0001 --json (poll) + spur message inbox --agent spur-fleet-e2e-1791301999193-coder-1 --json",
+            "command": "spur task show 0001 --json (poll) + spur message inbox --agent spur-fleet-e2e-1791306163045-coder-1 --json",
             "exitCode": 0,
             "status": "passed",
             "assertion": "one keyed dispatch fleet:task:<wbs>:1 reaches the coder member, the member process runs the turn, and the task ends done",
-            "evidence": "status=done keyed message=e87f689f-10b8-4315-8752-63d6d38e5eb3 requestKey=fleet:task:0001:1 run=f6d8549a-46b9-4493-b476-ca1ff4eaae42 closure=the member's own turn"
+            "evidence": "status=done keyed message=34e234f0-fa19-43fd-a473-aaf8700932df requestKey=fleet:task:0001:1 run=5f4cf2b9-50ee-4b7f-8c4b-42bec81a6ff1 closure=the member's own turn"
         },
         {
             "step": "orchestrator-reply",
-            "command": "spur message send --to spur-fleet-e2e-1791301999193-planner-1 \"status?\" (7e507c2a-5536-4dd3-81df-4d1f481ff6e2) → spur message inbox --agent operator",
+            "command": "spur message send --to spur-fleet-e2e-1791306163045-planner-1 \"status?\" (864fdaff-64d8-4aaf-b1d6-4681f133f1da) → spur message inbox --agent operator",
             "exitCode": 0,
             "status": "passed",
             "assertion": "an operator 'status?' message to the orchestrator is drained by the orchestrator loop and answered in the operator inbox",
-            "evidence": "sent=7e507c2a-5536-4dd3-81df-4d1f481ff6e2 reply=4338ff22-d549-415b-8413-14b26bc643b1 body=idle inReplyTo=7e507c2a-5536-4dd3-81df-4d1f481ff6e2"
+            "evidence": "sent=864fdaff-64d8-4aaf-b1d6-4681f133f1da reply=2b179049-c8b5-4e56-96e7-e1030b6a4147 body=idle inReplyTo=864fdaff-64d8-4aaf-b1d6-4681f133f1da"
         },
         {
             "step": "kill-redispatch",
-            "command": "kill -KILL <coder loop>; restart spur agent loop --spec spur-fleet-e2e-1791301999193-coder-1 (no operator dispatch, no planner nudge)",
+            "command": "kill -KILL <coder loop>; restart spur agent loop --spec spur-fleet-e2e-1791306163045-coder-1 (no operator dispatch, no planner nudge)",
             "exitCode": 0,
             "status": "passed",
             "assertion": "an unkeyed stdin delivery with no run row never holds dispatch; the hang task is dispatched as fleet:task:<wbs>:1 by the strategy alone (no operator message, no planner nudge); the coder loop is SIGKILLed mid-turn; the restarted loop finalizes the orphaned run errored before its first drain; and the strategy re-dispatches fleet:task:<wbs>:2 on its own",
-            "evidence": "unkeyed delivered=475c53ce-4235-4f67-bffd-46b5469f8aba status=delivered (stdin, no run row) — named by 0 of 3 unresolved-deliveries hold(s) | attempt-1=fleet:task:0002:1 run=8d3fd815-fa44-49a0-b88e-924fa2a0bf2a hung directive=/sp:dev-run 0002 --auto | killed → restarted pid=28974; attempt-1 run=8d3fd815-fa44-49a0-b88e-924fa2a0bf2a status=errored completed_at=2026-10-06T15:53:30.056Z | attempt-2=fleet:task:0002:2 dispatched by the strategy; resumed directive=/sp:dev-run 0002 --auto --continue"
+            "evidence": "unkeyed delivered=791c4bbb-33f6-45cc-a89c-0881a635f7bd status=delivered (stdin, no run row) — named by 0 of 3 unresolved-deliveries hold(s) | attempt-1=fleet:task:0002:1 run=a75ca413-c2b1-4bce-9b65-356f132afe60 hung directive=/sp:dev-run 0002 --auto | killed → restarted pid=32404; attempt-1 run=a75ca413-c2b1-4bce-9b65-356f132afe60 status=errored completed_at=2026-10-06T17:02:55.308Z | attempt-2=fleet:task:0002:2 dispatched by the strategy; resumed directive=/sp:dev-run 0002 --auto --continue"
         },
         {
             "step": "guest-join",
@@ -67,15 +67,15 @@
             "exitCode": 0,
             "status": "passed",
             "assertion": "a joined guest occupant (agent join --role) pulls a dispatched review request through agent wait --inbox and its reply lands in the operator inbox",
-            "evidence": "guest=reviewer-g request=ac4ce8e7-7c3b-4dbf-b4d2-e45e3eaf5337 pending=1 reply=dbad13aa-c660-4e50-bf41-1a1292f5c239 left=reviewer-g"
+            "evidence": "guest=reviewer-g request=c52ad8be-d98e-4d1f-a51f-5c73b54bbf06 pending=1 reply=ad8bd864-f03a-44ac-8c78-59b0e220fadb left=reviewer-g"
         },
         {
             "step": "trace",
-            "command": "spur agent trace f6d8549a-46b9-4493-b476-ca1ff4eaae42 --json",
+            "command": "spur agent trace 5f4cf2b9-50ee-4b7f-8c4b-42bec81a6ff1 --json",
             "exitCode": 0,
             "status": "passed",
             "assertion": "spur agent trace resolves the execution record of the dispatched turn: an agent node whose durable stream exists with content, over a loop-free lineage",
-            "evidence": "root=f6d8549a-46b9-4493-b476-ca1ff4eaae42 nodes=1 node=agent/exited stream=/private/tmp/claude-501/spur-fleet-e2e-1791301999193/.spur/memory/runs/f6d8549a-46b9-4493-b476-ca1ff4eaae42.md lines=12 sessionIds=[] parentRunId=null"
+            "evidence": "root=5f4cf2b9-50ee-4b7f-8c4b-42bec81a6ff1 nodes=1 node=agent/exited stream=/private/tmp/claude-501/spur-fleet-e2e-1791306163045/.spur/memory/runs/5f4cf2b9-50ee-4b7f-8c4b-42bec81a6ff1.md lines=12 sessionIds=[] parentRunId=null"
         },
         {
             "step": "teardown",
@@ -83,7 +83,7 @@
             "exitCode": 0,
             "status": "passed",
             "assertion": "loop pids are killed, the guest leaves, and the scratch dir under $TMPDIR is removed",
-            "evidence": "killed pids=28835,28974 | scratch removed=true | problems=none"
+            "evidence": "killed pids=32214,32404 | scratch removed=true | problems=none"
         }
     ],
     "residualRisks": [

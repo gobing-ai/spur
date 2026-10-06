@@ -1068,9 +1068,9 @@ export async function runFleetE2e(args: string[]): Promise<number> {
                 async () => {
                     const row = jsonOk<{ status: string }>(['task', 'show', wbs, '--json'], scratch);
                     if (row.status !== 'done') {
-                        // Keep waking the orchestrator through the real CLI: its loop ticks on a
-                        // drain, and a task that appeared after the loops started is not an event it
-                        // follows, so a single tick may not reach it (G71 1077 R3).
+                        // Nudge the orchestrator through the real CLI so each poll is a prompt
+                        // wake instead of waiting out its backstop poll: the loop ticks on every
+                        // drain, and the deadline-bounded poll stays short (G71 1077 R3).
                         try {
                             cli(['message', 'send', '--to', state.plannerId, `tick for ${wbs}`, '--json'], scratch);
                         } catch {
