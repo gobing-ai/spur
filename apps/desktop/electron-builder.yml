@@ -17,6 +17,9 @@ linux:
   target:
     - AppImage
   category: Development
+  # Default executableName derives from the scoped package name (@gobing-ai/spur-desktop →
+  # @gobing-aispur-desktop); '@' fails electron-builder's AppImage path-safety check (run 37544077796).
+  executableName: spur-desktop
 mac:
   target:
     - dmg
