@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { execSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -18,6 +18,16 @@ import {
     runInlineRunTraceBatch,
 } from '../../src';
 import { RunArtifactActionRunner } from '../../src/workflow/actions/run-artifact';
+
+// runInlineRunSetup narrates on stderr; keep that out of the test reporter (mirrors
+// inline-run-driver.test.ts). No test here asserts on stderr.
+let errSpy: ReturnType<typeof spyOn>;
+beforeEach(() => {
+    errSpy = spyOn(console, 'error').mockImplementation(() => {});
+});
+afterEach(() => {
+    errSpy.mockRestore();
+});
 
 /**
  * Task 0804 R1 / AC1: the inline full-pipeline driver's run setup must persist an
