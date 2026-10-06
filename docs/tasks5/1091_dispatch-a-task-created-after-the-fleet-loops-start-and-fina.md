@@ -4,7 +4,7 @@ name: Dispatch a task created after the fleet loops start, and finalize a killed
 status: done
 template: feature-impl
 created_at: 2026-10-05T23:56:25.473Z
-updated_at: "2026-10-06T16:40:50.962Z"
+updated_at: "2026-10-06T17:06:37.815Z"
 feature_id: G71
 
 priority: P1
@@ -263,16 +263,16 @@ the harness teardown (`problems=none`) rather than a dedicated test.
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/delivery-reconciler.ts:37` carries requestKey, set from the inbox row at `packages/app/src/services/delivery-reconciler.ts:72`; the GTD gate narrows ambiguous rows to FLEET_TASK_KEY_PREFIX at `packages/app/src/services/strategy-runtime.ts:665-668` (prefix `packages/app/src/services/strategy-runtime.ts:44`), and the hold detail names the message ids at `packages/app/src/services/strategy-runtime.ts:670-674`. Tests (fresh): `packages/app/tests/services/strategy-runtime.test.ts:775` (unkeyed does not hold), `packages/app/tests/services/strategy-runtime.test.ts:748` (keyed outcome-unknown reconciled and surfaced). |
-| R2 | MET | `packages/domain/src/dao/coordination-run-dao.ts:237` reapOrphanedRunning; called at loop start before the first drain at `packages/app/src/services/agent-loop-service.ts:371`, with a wake event per reaped run. Tests (fresh): `packages/app/tests/services/agent-loop-service.test.ts:397`, `packages/domain/tests/dao/coordination-run-dao.test.ts:290`. |
-| R3 | MET | Kill leg `scripts/commands/fleet-e2e.ts:868` sends one unkeyed status? message, drives the hang task through the strategy alone and SIGKILLs the coder loop; the hung stub exits when its parent loop dies (`scripts/commands/fleet-e2e.ts:414-418`). Fresh run this pass: attempt-1 run ffb2e829 status=errored after restart, attempt-2 fleet:task:0002:2 dispatched by the strategy with --continue (`.spur/run/G71-verifyall-e2e-final-evidence.txt`); committed receipt `docs/reports/fleet-e2e-receipt.json:57-62`. |
+| R1 | MET | `packages/app/src/services/delivery-reconciler.ts:37` carries requestKey, set from the inbox row at `packages/app/src/services/delivery-reconciler.ts:72`; the GTD gate narrows ambiguous rows to FLEET_TASK_KEY_PREFIX at `packages/app/src/services/strategy-runtime.ts:668-671` (prefix `packages/app/src/services/strategy-runtime.ts:47`), and the hold detail names the message ids at `packages/app/src/services/strategy-runtime.ts:673-683`. Tests (fresh): `packages/app/tests/services/strategy-runtime.test.ts:797` (unkeyed does not hold), `packages/app/tests/services/strategy-runtime.test.ts:748` (keyed outcome-unknown reconciled and surfaced). |
+| R2 | MET | `packages/domain/src/dao/coordination-run-dao.ts:237` reapOrphanedRunning; called at loop start before the first drain at `packages/app/src/services/agent-loop-service.ts:371`, with a wake event per reaped run. Tests (fresh): `packages/app/tests/services/agent-loop-service.test.ts:398`, `packages/domain/tests/dao/coordination-run-dao.test.ts:290`. |
+| R3 | MET | Kill leg `scripts/commands/fleet-e2e.ts:868` sends one unkeyed status? message, drives the hang task through the strategy alone and SIGKILLs the coder loop; the hung stub exits when its parent loop dies (`scripts/commands/fleet-e2e.ts:414-418`). Fresh run this pass: attempt-1 run a75ca413 status=errored after restart, attempt-2 fleet:task:0002:2 dispatched by the strategy with --continue (receipt `docs/reports/fleet-e2e-receipt.json:62`). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R1 — An unkeyed delivery without a receipt does not hold GTD dispatch | MET | test | `packages/app/tests/services/strategy-runtime.test.ts:775` (fresh); E2E this run: unkeyed row d4eeb245 named by 0 of 3 holds (`.spur/run/G71-verifyall-e2e-final-evidence.txt`). |
-| R1 — A keyed delivery with an unknown outcome still holds dispatch and names itself | MET | test | `packages/app/tests/services/strategy-runtime.test.ts:748` (fresh); detail naming the message ids at `packages/app/src/services/strategy-runtime.ts:670-674`. |
-| R2 — A run orphaned by an ungraceful member death is finalized on restart | MET | test | `packages/app/tests/services/agent-loop-service.test.ts:397` and `packages/domain/tests/dao/coordination-run-dao.test.ts:290` (fresh); E2E this run: run ffb2e829 status=errored completed_at=2026-10-06T16:35:50.868Z after SIGKILL and restart. |
-| R3 — The harness proves kill and re-dispatch through the strategy | MET | command | `bun scripts/spur-dev.ts fleet-e2e` this run -> exit 0, 9 of 9, kill-redispatch ok, teardown problems=none (`.spur/run/G71-verifyall-e2e-final.log`). |
+| R1 — An unkeyed delivery without a receipt does not hold GTD dispatch | MET | test | `packages/app/tests/services/strategy-runtime.test.ts:797` (fresh); E2E this run: unkeyed row 791c4bbb named by 0 of 3 holds (receipt `docs/reports/fleet-e2e-receipt.json:62`). |
+| R1 — A keyed delivery with an unknown outcome still holds dispatch and names itself | MET | test | `packages/app/tests/services/strategy-runtime.test.ts:748` (fresh); detail naming the message ids at `packages/app/src/services/strategy-runtime.ts:673-683`. |
+| R2 — A run orphaned by an ungraceful member death is finalized on restart | MET | test | `packages/app/tests/services/agent-loop-service.test.ts:398` and `packages/domain/tests/dao/coordination-run-dao.test.ts:290` (fresh); E2E this run: run a75ca413 status=errored completed_at=2026-10-06T17:02:55.308Z after SIGKILL and restart (receipt `docs/reports/fleet-e2e-receipt.json:62`). |
+| R3 — The harness proves kill and re-dispatch through the strategy | MET | command | `bun scripts/spur-dev.ts fleet-e2e` this run -> exit 0, 9 of 9, kill-redispatch ok, teardown problems=none (`.spur/run/G71-verifyall-e2e-final-2.log`). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
