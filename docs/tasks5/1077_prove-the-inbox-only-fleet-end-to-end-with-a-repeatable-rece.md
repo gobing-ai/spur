@@ -4,7 +4,7 @@ name: Prove the inbox-only fleet end to end with a repeatable receipt
 status: done
 template: feature-impl
 created_at: 2026-10-04T20:30:37.927Z
-updated_at: "2026-10-06T16:40:49.294Z"
+updated_at: "2026-10-06T17:06:37.446Z"
 feature_id: G71
 
 dependencies: ["1073", "1074", "1075", "1076", "1080", "1081", "1091"]
@@ -147,14 +147,14 @@ asserts the joined-guest leg and still runs it); the skip arm's row asserts the 
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `scripts/commands/fleet-e2e.ts:679` runFleetE2e scaffolds a scratch fleet project, runs the step list `scripts/commands/fleet-e2e.ts:66` against the source-local CLI and tears down. Fresh run this pass: 9 of 9 steps ok, scratch removed (`.spur/run/G71-verifyall-e2e-final.log`). |
-| R2 | MET | Each step row records command, exit code, assertion and evidence into `docs/reports/fleet-e2e-receipt.json:41-86` (receipt path `scripts/commands/fleet-e2e.ts:57`). Fixed this pass (e3e74a69c): the trace row now names the done task's own run — `docs/reports/fleet-e2e-receipt.json:78`. |
+| R1 | MET | `scripts/commands/fleet-e2e.ts:679` runFleetE2e scaffolds a scratch fleet project, runs the step list `scripts/commands/fleet-e2e.ts:66` against the source-local CLI and tears down. Fresh run this pass: 9 of 9 steps ok, scratch removed (`.spur/run/G71-verifyall-e2e-final-2.log`). |
+| R2 | MET | Each step row records command, exit code, assertion and evidence into `docs/reports/fleet-e2e-receipt.json:41-86` (receipt path `scripts/commands/fleet-e2e.ts:57`). Fixed this pass (e3e74a69c): the trace row now names the done task's own run 5f4cf2b9 with sessionIds=[] — `docs/reports/fleet-e2e-receipt.json:78`. |
 | R3 | MET | Only the model is stubbed: stub binary on PATH (`scripts/commands/fleet-e2e.ts:245-258`), the loop spawns the real CLI; deterministic reruns — fresh run this pass and the committed run both pass 9 of 9. |
 | R4 | MET | Guest-join skip arm: `scripts/commands/fleet-e2e.ts:585` records skipped with the reason; skip-arm receipt `docs/reports/fleet-e2e-receipt-skip-arm.json:65`. Task 1081 has landed, so the fresh run executes guest-join (ok). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — The inbox-only fleet is proven end to end | MET | command | `bun scripts/spur-dev.ts fleet-e2e` this run -> exit 0, 9 of 9 steps (scaffold, create-task, start-loops, dispatch-to-done, orchestrator-reply, kill-redispatch, guest-join, trace, teardown) — `.spur/run/G71-verifyall-e2e-final.log`; committed receipt `docs/reports/fleet-e2e-receipt.json:17-86`. |
+| AC1 — The inbox-only fleet is proven end to end | MET | command | `bun scripts/spur-dev.ts fleet-e2e` this run -> exit 0, 9 of 9 steps (scaffold, create-task, start-loops, dispatch-to-done, orchestrator-reply, kill-redispatch, guest-join, trace, teardown) — `.spur/run/G71-verifyall-e2e-final-2.log`; refreshed receipt `docs/reports/fleet-e2e-receipt.json:17-86`. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
