@@ -55,6 +55,7 @@ apps/server ─► packages/{app, config, contracts, domain} + engine/runtime fa
 apps/web ────► packages/contracts (oRPC) + domain status vocabulary
 apps/desktop ► verified project server or child `spur serve` + config gateway + type-only process DTOs — no server, domain, or SQLite import
 packages/app ───► packages/{config, contracts, domain} + engine packages
+packages/contracts ► packages/domain schema vocabulary (status/type enums, ID patterns) only
 packages/domain ► @gobing-ai/ts-db (persistence owner — §8.1)
 ```
 

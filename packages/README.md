@@ -11,8 +11,8 @@ are external `@gobing-ai/ts-*` packages (see root `AGENTS.md`).
 | `contracts/` | `@gobing-ai/spur-contracts` | oRPC transport contracts — the CLI/server/web type seam; OpenAPI is generated from it | Transport DTOs **only**; domain types never leak in (ADR-005) |
 | `config/` | `@gobing-ai/spur-config` | Portable config schema, defaults and environment parsing for `.spur/config.yaml` (ADR-027) | Portable core; filesystem loading lives in the Node-only `@gobing-ai/spur-config/loader` subpath |
 
-Dependency direction: `apps/* → app → domain`; `contracts` and `config` are leaves consumed by
-apps and services. Cross-workspace imports always use the `@gobing-ai/*` alias, never relative
+Dependency direction: `apps/* → app → domain`; `config` is a leaf, and `contracts` depends only on
+`domain`'s schema vocabulary (status/type enums, ID patterns) — both are consumed by apps and services. Cross-workspace imports always use the `@gobing-ai/*` alias, never relative
 paths into a sibling package.
 
 Creating a new local package requires a recorded decision (no package sprawl by default —
