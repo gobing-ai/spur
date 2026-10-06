@@ -178,6 +178,7 @@ const REFERENCE_LAYOUT: Record<string, { file: string; heading: string; format: 
     self: { file: 'self.md', heading: '## Verb map', format: 'table' },
     history: { file: 'history.md', heading: '## Verb map', format: 'table' },
     projects: { file: 'projects.md', heading: '## Verb map', format: 'table' },
+    decision: { file: 'decision.md', heading: '## Verb map', format: 'table' },
 };
 
 /** Extract `--flag` tokens (same shape the 0512 Commander adapter parses). */

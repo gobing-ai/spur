@@ -20,6 +20,7 @@ import figlet from 'figlet';
 import standard from 'figlet/fonts/Standard';
 import { registerAgentCommand } from './commands/agent';
 import { registerBuilderCommand } from './commands/builder';
+import { registerDecisionCommand } from './commands/decision';
 import { registerFeatureCommand } from './commands/feature';
 import { registerHistoryCommand } from './commands/history';
 import { registerInitCommand } from './commands/init';
@@ -208,6 +209,7 @@ export function buildProgram(context: ReturnType<typeof createCliContext>, outpu
     // Register every noun command group — UNCHANGED (R3).
     registerAgentCommand(program, context);
     registerBuilderCommand(program, context);
+    registerDecisionCommand(program, context);
     registerFeatureCommand(program, context);
     registerHistoryCommand(program, context);
     registerMessageCommand(program, context);

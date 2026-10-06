@@ -49,6 +49,7 @@ Pick the noun, read its reference. Each Tier A and Tier B reference owns that no
 | **Tier B** | **self** | Self-management verbs: scaffold (`init`), database maintenance (`maintain`), schema migrations (`migrate`), local web server (`serve`), status overview (`status`); `self init` runs post-scaffold validation probes & layout classification | [references/self.md](references/self.md) |
 | **Tier B** | **history** | Import agent histories, aggregate forensic artifacts, render reports, and run the checkpoint-resumed daily pipeline | [references/history.md](references/history.md) |
 | **Tier B** | **projects** | Manage the local multi-project registry and start/stop project servers | [references/projects.md](references/projects.md) |
+| **Tier B** | **decision** | Decision-catalog transport: list visible decisions, show a served contract, run a decision to a served outcome, audit catalog health | [references/decision.md](references/decision.md) |
 | **Tier C** | **help** | Commander-generated help command; not a Spur noun | Generated `--help` |
 
 **Execute-First Contract:** Load the noun reference first and execute Tier A or Tier B commands

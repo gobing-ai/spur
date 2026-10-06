@@ -250,6 +250,36 @@ before any mutation. The release flow itself never needs structural edits for a 
 gate ignores exactly those untracked paths (`status --porcelain -uall`) and still blocks on
 anything else.
 
+<a id="spur-decision-list---layer---json--spur-decision-show-id---json--spur-decision-run-id---param---evidence---maker---model---json--spur-decision-status---json"></a>
+
+#### `spur decision list [--layer <project|registered|shared>] [--json] [--json-envelope]` · `spur decision show <id> [--json] [--json-envelope]` · `spur decision run <id> [--param <k=v>]... [--evidence <file>]... [--maker <name>] [--json] [--json-envelope]` · `spur decision status [--json] [--json-envelope]`
+
+**Decision catalog surface (task 1093, ADR-117/134).** `decision` is the read/serve transport over
+`DecisionService` (`packages/app`) and the `@gobing-ai/ts-ai-decision` hub. Decisions resolve
+first-wins across the `project` (`<cwd>/.spur/decisions/`), `registered` (config `decisions.paths`
+folders + programmatic registrations), and `shared` (bundled `config/decisions/`) layers.
+Full authoring and config keys: `docs/design/decision-catalog.md`; agent-facing reference:
+`plugins/sp/skills/spur-cli/references/decision.md`.
+
+- `list [--layer <layer>]` — every visible decision as id/type/layer/catalog-file/description;
+  `--layer` filters to one layer.
+- `show <id>` — one served contract: parameters, criteria vocabulary, fallback, minConfidence, and
+  the effective maker `{name, source}` (`flag → config-decision → config-default →
+  catalog-decision → catalog-default`). Unknown id exits 1.
+- `run <id>` — serve one outcome. `--param k=v` is repeatable and type-coerced against the
+  decision's declared parameters; a parameter without a `default` is required. `--evidence <file>`
+  is repeatable; files are redacted and bounded to 2000 chars and ride the hub's implicit
+  `instructions` input. `run` **never writes a workflow resultFile**. Every backend-observed
+  outcome serves with exit 0 (the envelope carries `source`/`confidence`); exit 1 is reserved for
+  caller mistakes caught before the backend: unknown id, unknown parameter, missing required
+  parameter, type-invalid parameter, unregistered `--maker`, unreadable evidence file.
+- `status` — layer counts, registered makers, per-decision maker resolution, load errors; exit 0
+  clean, exit 1 on catalog load errors.
+
+All verbs declare `--json` (bare payload) and `--json-envelope` (`{ok, data|error}`); failure
+output for `--json` commands is the canonical error envelope only under `--json-envelope`
+(ADR-091). The default maker is the hub built-in `typesafe`, so all four verbs work offline.
+
 <a id="spur-agent-trace-runid---follow---timeout-ms---json"></a>
 
 #### `spur agent trace <runId> [--follow] [--timeout <ms>] [--json]`

@@ -9,6 +9,21 @@ export {
 } from '@gobing-ai/spur-domain';
 export type { PlanningFolders } from './config/planning-folders';
 export { resolvePlanningFolders } from './config/planning-folders';
+// Decision-catalog noun surface (feature P, task 1093): the CLI imports only
+// through this package index (ADR — apps never import app internals directly).
+export {
+    type DecisionDescription,
+    type DecisionListEntry,
+    type DecisionMakerSource,
+    DecisionService,
+    type DecisionStatus,
+    type DecisionStatusRow,
+    type EffectiveMaker,
+    getDecisionService,
+    type ServedDecision,
+    UnknownDecisionError,
+    UnknownDecisionMakerError,
+} from './decision/decision-service';
 export {
     GuardDeniedError,
     hitlAutoApproveEnabled,
