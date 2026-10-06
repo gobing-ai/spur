@@ -1003,48 +1003,62 @@ export async function runFleetE2e(args: string[]): Promise<number> {
             fail(state, 'orchestrator-reply', 'spur message send --to planner "status?"', STEP_FIVE_ASSERTION, error);
         }
 
-        // ── 7. guest-join (task 1081 landed: `spur agent join|leave|wait --inbox` exist) ──
+        // ── 7. guest-join — R4: run only when task 1081 has landed; otherwise record `skipped`
+        //    with the reason. The `agent join|leave|wait --inbox` verbs land with 1081, so probe
+        //    its help (design §7) before running the leg instead of recording a spurious failure.
         try {
-            const joined = jsonOk<{ guest: { id: string } }>(
-                ['agent', 'join', '--role', 'reviewer', '--id', 'reviewer-g', '--json'],
-                scratch,
-            );
-            state.guestId = joined.guest.id;
-            const request = jsonOk<{ msgId: string }>(
-                ['message', 'send', '--to', state.guestId, `review request: ${state.wbs ?? 'task'}`, '--json'],
-                scratch,
-            );
-            // The harness plays the joined session: the real pull verb, then the (stubbed) model answer.
-            const pull = jsonOk<{ id: string; pending: number }>(
-                ['agent', 'wait', '--inbox', state.guestId, '--timeout', '30000', '--json'],
-                scratch,
-            );
-            const inbox = jsonOk<{ messages: Array<{ id: string; body: string }> }>(
-                ['message', 'inbox', '--agent', state.guestId, '--json'],
-                scratch,
-            );
-            const pending = inbox.messages.find((message) => message.id === request.msgId);
-            if (pending === undefined) throw new Error('the guest request was not in the guest inbox');
-            cliOk(['message', 'reply', pending.id, 'lgtm: approved'], scratch);
-            const operatorInbox = jsonOk<{ messages: Array<{ id: string; inReplyTo: string | null }> }>(
-                ['message', 'inbox', '--agent', 'operator', '--json'],
-                scratch,
-            );
-            const guestReply = await pollUntil(
-                "the guest's reply in the operator inbox",
-                async () => operatorInbox.messages.find((message) => message.inReplyTo === request.msgId) ?? undefined,
-                BOUNDS.guest,
-            );
-            const guestId = joined.guest.id;
-            const left = jsonOk<{ guest?: { id: string } }>(['agent', 'leave', guestId, '--json'], scratch);
-            state.guestId = null; // teardown must not leave a guest that already left
-            pass(
-                state,
-                'guest-join',
-                `spur agent join --role reviewer --id ${guestId} → agent wait --inbox → message reply → agent leave`,
-                STEP_SEVEN_ASSERTION,
-                `guest=${guestId} request=${request.msgId} pending=${pull.pending} reply=${guestReply.id} left=${left.guest?.id ?? guestId}`,
-            );
+            if (cli(['agent', 'join', '--help'], scratch).exitCode !== 0) {
+                state.rows.set('guest-join', {
+                    step: 'guest-join',
+                    command: 'spur agent join --help',
+                    exitCode: 0,
+                    status: 'skipped',
+                    assertion: STEP_SEVEN_ASSERTION,
+                    evidence: 'skipped: 1081 not landed (spur agent join --help exited nonzero)',
+                });
+            } else {
+                const joined = jsonOk<{ guest: { id: string } }>(
+                    ['agent', 'join', '--role', 'reviewer', '--id', 'reviewer-g', '--json'],
+                    scratch,
+                );
+                state.guestId = joined.guest.id;
+                const request = jsonOk<{ msgId: string }>(
+                    ['message', 'send', '--to', state.guestId, `review request: ${state.wbs ?? 'task'}`, '--json'],
+                    scratch,
+                );
+                // The harness plays the joined session: the real pull verb, then the (stubbed) model answer.
+                const pull = jsonOk<{ id: string; pending: number }>(
+                    ['agent', 'wait', '--inbox', state.guestId, '--timeout', '30000', '--json'],
+                    scratch,
+                );
+                const inbox = jsonOk<{ messages: Array<{ id: string; body: string }> }>(
+                    ['message', 'inbox', '--agent', state.guestId, '--json'],
+                    scratch,
+                );
+                const pending = inbox.messages.find((message) => message.id === request.msgId);
+                if (pending === undefined) throw new Error('the guest request was not in the guest inbox');
+                cliOk(['message', 'reply', pending.id, 'lgtm: approved'], scratch);
+                const operatorInbox = jsonOk<{ messages: Array<{ id: string; inReplyTo: string | null }> }>(
+                    ['message', 'inbox', '--agent', 'operator', '--json'],
+                    scratch,
+                );
+                const guestReply = await pollUntil(
+                    "the guest's reply in the operator inbox",
+                    async () =>
+                        operatorInbox.messages.find((message) => message.inReplyTo === request.msgId) ?? undefined,
+                    BOUNDS.guest,
+                );
+                const guestId = joined.guest.id;
+                const left = jsonOk<{ guest?: { id: string } }>(['agent', 'leave', guestId, '--json'], scratch);
+                state.guestId = null; // teardown must not leave a guest that already left
+                pass(
+                    state,
+                    'guest-join',
+                    `spur agent join --role reviewer --id ${guestId} → agent wait --inbox → message reply → agent leave`,
+                    STEP_SEVEN_ASSERTION,
+                    `guest=${guestId} request=${request.msgId} pending=${pull.pending} reply=${guestReply.id} left=${left.guest?.id ?? guestId}`,
+                );
+            }
         } catch (error) {
             fail(state, 'guest-join', 'spur agent join --role reviewer --id reviewer-g', STEP_SEVEN_ASSERTION, error);
         }
