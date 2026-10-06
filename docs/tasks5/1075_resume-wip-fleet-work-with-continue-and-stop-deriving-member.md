@@ -4,7 +4,7 @@ name: Resume wip fleet work with --continue and stop deriving member ids from ex
 status: done
 template: feature-impl
 created_at: 2026-10-04T20:30:37.131Z
-updated_at: "2026-10-06T16:40:45.881Z"
+updated_at: "2026-10-06T17:06:36.710Z"
 feature_id: G71
 
 dependencies: ["1073"]
@@ -173,14 +173,14 @@ still runs); and the `#sp:dev-run` prompt contract in `apps/cli/tests/commands/a
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/strategy-runtime.ts:239` admits todo and wip fleet:auto candidates; the resume hint adds `--continue` at `packages/app/src/services/strategy-runtime.ts:486` and is appended to the directive at `packages/app/src/services/strategy-runtime.ts:501`. Tests (fresh): `packages/app/tests/services/strategy-runtime.test.ts:392`, `packages/app/tests/services/strategy-runtime.test.ts:921`, `packages/app/tests/services/strategy-runtime.test.ts:937`. |
+| R1 | MET | `packages/app/src/services/strategy-runtime.ts:242` admits todo and wip fleet:auto candidates; the resume hint adds `--continue` at `packages/app/src/services/strategy-runtime.ts:489` and is appended to the directive at `packages/app/src/services/strategy-runtime.ts:504`. Tests (fresh): `packages/app/tests/services/strategy-runtime.test.ts:392`, `packages/app/tests/services/strategy-runtime.test.ts:943`, `packages/app/tests/services/strategy-runtime.test.ts:959`. |
 | R2 | MET | The beforeDispatch refusal branch is gone from `packages/app/src/services/agent-service.ts:1072-1077`; test (fresh) `packages/app/tests/services/agent-service.test.ts:4505` runs an addressed fleet member with exit code 0 and no managed dispatch guard. |
 | R3 | MET | memberLocalId order id, then role, then executor at `packages/config/src/index.ts:471`; frozen legacy derivation at `packages/config/src/index.ts:523`. Tests (fresh): `packages/config/tests/member-local-id.test.ts:190`, `packages/config/tests/member-local-id.test.ts:198`, `packages/config/tests/member-local-id.test.ts:204`, `packages/config/tests/member-local-id.test.ts:209`, `packages/config/tests/member-local-id.test.ts:214`. Breaking change footer on commit 1b3254c07. |
 | R4 | MET | `packages/app/src/services/fleet-service.ts:441-466` refuses a member whose old id has recorded occupancy, naming both ids and the explicit id pin. Tests (fresh): `packages/app/tests/services/fleet-service.test.ts:957`, `packages/app/tests/services/fleet-service.test.ts:975`. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Interrupted fleet work resumes | MET | test | `packages/app/tests/services/strategy-runtime.test.ts:921` (wip dispatched with --continue) and `packages/app/tests/services/strategy-runtime.test.ts:937` (failed prior attempt retried with --continue) — fresh, 390 pass. E2E this run: kill-redispatch row records attempt-2 directive `/sp:dev-run 0002 --auto --continue` (`.spur/run/G71-verifyall-e2e-final.log`). |
+| AC1 — Interrupted fleet work resumes | MET | test | `packages/app/tests/services/strategy-runtime.test.ts:943` (wip dispatched with --continue) and `packages/app/tests/services/strategy-runtime.test.ts:959` (failed prior attempt retried with --continue) — fresh, 426 pass. E2E this run: kill-redispatch row records attempt-2 directive `/sp:dev-run 0002 --auto --continue` (receipt `docs/reports/fleet-e2e-receipt.json:62`) (`.spur/run/G71-verifyall-e2e-final-2.log`). |
 | AC2 — Member identity does not follow the executor | MET | test | `packages/config/tests/member-local-id.test.ts:190` (role id independent of the pinned executor) and `packages/app/tests/services/fleet-service.test.ts:957` (old-id occupancy fails with the fix-it error) — fresh this run. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
