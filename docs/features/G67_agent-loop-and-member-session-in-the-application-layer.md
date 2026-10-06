@@ -2,11 +2,11 @@
 schema_version: 1
 id: "G67"
 name: "Agent loop and member session in the application layer"
-status: backlog
+status: active
 priority: P2
 tags: []
 created_at: "2026-09-26T05:45:42.052Z"
-updated_at: "2026-09-26T05:46:26.667Z"
+updated_at: "2026-10-06T01:53:45.140Z"
 ---
 
 # G67: Agent loop and member session in the application layer
@@ -66,8 +66,12 @@ Feature: Agent loop and member session in the application layer
 | --- | ---- | ------ |
 | 0967 | Move the G66 member session out of the agent CLI into a spur-app MemberSession service | done |
 | 0968 | Move the self-draining agent loop out of the agent CLI into a spur-app loop service | done |
+| 1088 | Supervise agent loops: no orphan loops and no duplicate serves per project | testing |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
 
 ## History
+
+- 2026-10-06T01:53:45.140Z backlog → active (system)
+

@@ -62,7 +62,8 @@ spur agent list [--specs] [--server <url>] [--json]
 ```
 
 Without flags: detected coding agents. With `--specs`: team agent specs from `.spur/agents/`;
-`--server` points at the server API for live run status (default `http://localhost:3000/api`).
+`--server` points at the server API for live run status (default: this project's registry serve port,
+`http://localhost:<port>/api`; `http://localhost:3000/api` only when the project has no live entry).
 
 ## spur agent report
 

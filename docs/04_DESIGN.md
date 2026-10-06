@@ -133,6 +133,10 @@ See [contract detail](design/cli-contracts.md#spur-agent-run-prompt---agent-name
 
 See [contract detail](design/cli-contracts.md#spur-agent-list---json---specs---server-url).
 
+#### `spur agent status [--server <url>] [--json]`
+
+See [contract detail](design/cli-contracts.md#spur-agent-status---server-url---json).
+
 #### `spur agent doctor [agent] [--json] [--probe-health] [--force-refresh]`
 
 See [contract detail](design/cli-contracts.md#spur-agent-doctor-agent---json---probe-health---force-refresh).
