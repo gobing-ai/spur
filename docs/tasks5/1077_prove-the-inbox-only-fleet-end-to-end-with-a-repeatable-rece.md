@@ -4,7 +4,7 @@ name: Prove the inbox-only fleet end to end with a repeatable receipt
 status: done
 template: feature-impl
 created_at: 2026-10-04T20:30:37.927Z
-updated_at: "2026-10-06T06:47:40.759Z"
+updated_at: "2026-10-06T16:40:49.294Z"
 feature_id: G71
 
 dependencies: ["1073", "1074", "1075", "1076", "1080", "1081", "1091"]
@@ -147,14 +147,14 @@ asserts the joined-guest leg and still runs it); the skip arm's row asserts the 
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `scripts/commands/fleet-e2e.ts:680` `runFleetE2e` scaffolds a $TMPDIR scratch project with a declared agent.fleet, drives all 9 plan §1 steps through the source-local CLI and tears down; registered at `package.json:105` and `scripts/spur-dev.ts:25-41`. Re-executed fresh this session: `bun scripts/spur-dev.ts fleet-e2e` runs A and B both exited 0 with all 9 rows passed (`.spur/run/1077-verify-runA.log`, `.spur/run/1077-verify-runB.log`); each run's teardown removed its scratch dir (row evidence "scratch removed=true", "problems=none") |
-| R2 | MET | `scripts/commands/fleet-e2e.ts:103-110` `StepRow` carries step/command/exitCode/status/assertion/evidence; `scripts/commands/fleet-e2e.ts:578` `writeReceipt` emits them to the stable path `scripts/commands/fleet-e2e.ts:57` under docs/reports/ (skip arm to `:63`). Both committed receipts hold per-step command, exitCode and observed evidence — real message ids (chat/dispatch/reply), run ids, trace stream path and line count — re-read this session in `docs/reports/fleet-e2e-receipt.json` and `docs/reports/fleet-e2e-receipt-skip-arm.json` |
-| R3 | MET | Determinism proven with fresh execution this session: runs A and B produced byte-identical step-status-assertion projections (`diff .spur/run/1077-verify-proj-runA.json .spur/run/1077-verify-proj-runB.json` empty) and both match the committed receipt's projection (`git show HEAD:docs/reports/fleet-e2e-receipt.json`, diff empty). Only model work is stubbed: scaffold row evidence puts a stub named after the member agent type first on PATH (`docs/reports/fleet-e2e-receipt.json` scaffold row, "stub=...bin/claude (PATH first)"), while the fleet config, inbox, coordination run rows and `agent trace` output in every row are real source-local CLI paths |
-| R4 | MET | Both arms now carry EXECUTED evidence. Land arm: fresh runs A and B this session ran the real guest leg — agent join as reviewer-g, agent wait --inbox, reply lands in operator inbox, agent leave — and the guest-join row is passed with real ids. Skip arm: `bun scripts/spur-dev.ts fleet-e2e --guest-join-fixture` exited 0 this session and wrote a guest-join row with status skipped, command "spur-pre1081 agent --help", exitCode 0 and reason evidence, matching the committed `docs/reports/fleet-e2e-receipt-skip-arm.json` exactly (`jq` diff of the row is empty). Predicate: `scripts/commands/fleet-e2e.ts:656` `probeAgentCommand` reads the interrogated CLI's parent help command column; skip row written at `scripts/commands/fleet-e2e.ts:1151-1167`; fixture constant `scripts/commands/fleet-e2e.ts:464-482` matches the visible agent command set of the parent of 0411c912b (list, status, usage, doctor, run, wait, trace, start, stop, help — no join), spot-checked via git history this session |
+| R1 | MET | `scripts/commands/fleet-e2e.ts:679` runFleetE2e scaffolds a scratch fleet project, runs the step list `scripts/commands/fleet-e2e.ts:66` against the source-local CLI and tears down. Fresh run this pass: 9 of 9 steps ok, scratch removed (`.spur/run/G71-verifyall-e2e-final.log`). |
+| R2 | MET | Each step row records command, exit code, assertion and evidence into `docs/reports/fleet-e2e-receipt.json:41-86` (receipt path `scripts/commands/fleet-e2e.ts:57`). Fixed this pass (e3e74a69c): the trace row now names the done task's own run — `docs/reports/fleet-e2e-receipt.json:78`. |
+| R3 | MET | Only the model is stubbed: stub binary on PATH (`scripts/commands/fleet-e2e.ts:245-258`), the loop spawns the real CLI; deterministic reruns — fresh run this pass and the committed run both pass 9 of 9. |
+| R4 | MET | Guest-join skip arm: `scripts/commands/fleet-e2e.ts:585` records skipped with the reason; skip-arm receipt `docs/reports/fleet-e2e-receipt-skip-arm.json:65`. Task 1081 has landed, so the fresh run executes guest-join (ok). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — The inbox-only fleet is proven end to end | MET | command | Two fresh `bun scripts/spur-dev.ts fleet-e2e` runs this session each exited 0 with 9 of 9 steps passed and identical {step,status,assertion} projections (diff empty, fresh-vs-fresh and fresh-vs-committed). Negative control fresh this session: `bun scripts/spur-dev.ts fleet-e2e --inject-failure trace` recorded the trace row failed with exit code 1 (`.spur/run/1077-verify-runInject.log`, receipt row "injected failure: --inject-failure trace"). Receipts of record: `docs/reports/fleet-e2e-receipt.json` (source-local, 9/9) and `docs/reports/fleet-e2e-receipt-skip-arm.json` (pre-1081-fixture, guest-join skipped) |
+| AC1 — The inbox-only fleet is proven end to end | MET | command | `bun scripts/spur-dev.ts fleet-e2e` this run -> exit 0, 9 of 9 steps (scaffold, create-task, start-loops, dispatch-to-done, orchestrator-reply, kill-redispatch, guest-join, trace, teardown) — `.spur/run/G71-verifyall-e2e-final.log`; committed receipt `docs/reports/fleet-e2e-receipt.json:17-86`. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
