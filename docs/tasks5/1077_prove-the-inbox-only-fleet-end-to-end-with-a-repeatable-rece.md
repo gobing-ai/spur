@@ -4,7 +4,7 @@ name: Prove the inbox-only fleet end to end with a repeatable receipt
 status: todo
 template: feature-impl
 created_at: 2026-10-04T20:30:37.927Z
-updated_at: "2026-10-06T00:15:34.800Z"
+updated_at: "2026-10-06T04:51:57.980Z"
 feature_id: G71
 
 dependencies: ["1073", "1074", "1075", "1076", "1080", "1081", "1091"]
@@ -103,11 +103,89 @@ Exit code 1 if any step `failed`.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+This pass closes the one requirement the committed harness left unfulfilled (R4) and re-proves the
+whole harness on HEAD, leaving the committed receipt reflecting the latest green run.
+
+| Change | Anchor |
+| --- | --- |
+| `guest-join` now probes `spur agent join --help` first, the observable the design §7 names: when the verb is absent (1081 not landed) it records the row `skipped` with reason `1081 not landed`, instead of letting `cliOk` throw into `fail` and recording `failed` | `scripts/commands/fleet-e2e.ts:1006` |
+| Regenerated receipt: the latest 9/9 green run, overwritten in place per the Q&A stable-name contract | `docs/reports/fleet-e2e-receipt.json:1` |
+
+R1–R3 were already implemented by the committed harness: `scripts/commands/fleet-e2e.ts` scaffolds a
+`$TMPDIR` scratch project with a declared `agent.fleet`, drives every plan §1 step through the
+source-local CLI, and tears down; every step writes a `{ command, exitCode, evidence }` row into the
+receipt; the member's model is the only stub (`bin/claude`), while the fleet, inbox, `coordination_runs`
+receipt and `agent trace` paths are real. This pass adds the R4 skip branch and refreshes the receipt.
+
+**Why probe `--help` rather than assume the verb exists (R4).** The requirement is conditional: run
+only when 1081 has landed, otherwise record `skipped` with the reason. `agent join|leave|wait --inbox`
+land with 1081, so their `--help` exit code is the one observable that distinguishes the two states
+without a corpus or environment override. On current HEAD 1081 is `done`, so the branch is the
+`passed` path; the `skipped` path is the recorded contract for the pre-1081 state.
+
+**Why no assertion was weakened to force green.** Every step was already green before this change and
+stays green after it; the injected-failure run still records `failed` and exits nonzero.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+Harness re-run on the final script (branch `sp/run-1077-726c`, HEAD `4e11b2cd0` + this change).
+The full project gate `bun run spur-check` is the pipeline's `test` hop, not implement
+(`sp-code-implementation` § "Implement scope: do not run the project quality gate"), so this pass ran
+the harness itself plus the affected-path checks.
+
+**Determinism — two runs, `[.steps[] | {step, status, assertion}]` compared.**
+
+```
+$ bun run fleet-e2e            # run A
+fleet-e2e receipt: .../docs/reports/fleet-e2e-receipt.json
+  ok   scaffold: scratch=/private/var/.../spur-fleet-e2e-1791262180890 | fleet=... planner-1, coder-1 ...
+  ok   create-task: wbs=0001 status=todo tags=fleet:auto feature=A readiness=task check --as wip PASS
+  ok   start-loops: pids=27219,27220 (stub first on PATH) orchestrator claim live member session recorded
+  ok   dispatch-to-done: status=done keyed message=82331c40-... requestKey=fleet:task:0001:1 run=8976efd8-... closure=the member's own turn
+  ok   orchestrator-reply: sent=501f8e04-... reply=d208c70f-... body=idle inReplyTo=501f8e04-...
+  ok   kill-redispatch: unkeyed delivered=7c06c3c7-... status=delivered (stdin, no run row) — named by 0 of 3 ... | attempt-1=fleet:task:0002:1 ... attempt-2=fleet:task:0002:2 ...
+  ok   guest-join: guest=reviewer-g request=05372c8b-... pending=1 reply=d537c80d-... left=reviewer-g
+  ok   trace: root=8976efd8-... nodes=1 node=agent/errored stream=... lines=... parentRunId=null
+  ok   teardown: killed pids=27219,27813 | scratch removed=true | problems=none
+EXIT=0
+
+$ bun run fleet-e2e            # run B
+  ok   scaffold ...  ok create-task ...  ok start-loops ...
+  ok   dispatch-to-done: run=23d723e9-...   ok orchestrator-reply   ok kill-redispatch
+  ok   guest-join: request=dc1d8ab4-... reply=a5892af8-... left=reviewer-g
+  ok   trace   ok teardown: killed pids=28467,28834 | scratch removed=true | problems=none
+EXIT=0
+
+$ jq '[.steps[] | {step,status,assertion}]' .spur/run/1077-receipt-runA.json > .spur/run/1077-proj-runA.json
+$ jq '[.steps[] | {step,status,assertion}]' .spur/run/1077-receipt-runB.json > .spur/run/1077-proj-runB.json
+$ diff .spur/run/1077-proj-runA.json .spur/run/1077-proj-runB.json
+IDENTICAL
+```
+
+**Failure injection — the harness must fail.**
+
+```
+$ bun run fleet-e2e -- --inject-failure trace
+  ok   ... (8 rows passed) ...
+  FAIL trace: root=bdd50e8a-... nodes=1 node=agent/errored ...
+  ok   teardown: killed pids=29525,29831 | scratch removed=true | problems=none
+fleet-e2e: 1 step(s) failed: trace
+error: script "fleet-e2e" exited with code 1
+EXIT=1
+```
+
+The injected receipt's `trace` row records `"status": "failed"`, `"exitCode": 1`, evidence ending in
+`| injected failure: --inject-failure trace`; the other eight steps remain `passed`.
+
+**Affected-path checks (dependency-aware matrix row: script + shared surface).**
+
+```
+$ bunx biome check scripts/commands/fleet-e2e.ts
+Checked 1 file. No fixes applied.
+
+$ bunx tsc -p scripts/tsconfig.json --noEmit
+exit 0
+```
 
 ### Review
 
