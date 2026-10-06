@@ -66,3 +66,4 @@ git ls-files docs/dogfood | grep -Ev '(README|INDEX)\.md$'
 - `2026-10-04-E72-observability-trace-tab-dogfood.md`
 - `2026-10-05-G73-fleet-lifecycle-guest-join-dogfood.md`
 - `2026-10-05-G67-agent-loop-supervision-dogfood.md`
+- `2026-10-06-G72-fleet-team-residue-cleanup-dogfood.md`

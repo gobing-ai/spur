@@ -2,11 +2,11 @@
 schema_version: 1
 id: "G72"
 name: "Fleet team-residue cleanup"
-status: verifying
+status: done
 priority: P2
 tags: []
 created_at: "2026-10-04T20:29:21.387Z"
-updated_at: "2026-10-05T08:53:07.107Z"
+updated_at: "2026-10-06T19:13:28.211Z"
 ---
 
 # G72: Fleet team-residue cleanup
@@ -62,4 +62,5 @@ Feature: Fleet team-residue cleanup
 
 - 2026-10-05T08:46:52.513Z backlog → active (system)
 - 2026-10-05T08:53:07.107Z active → verifying (system)
+- 2026-10-06T19:13:28.211Z verifying → done (system)
 
