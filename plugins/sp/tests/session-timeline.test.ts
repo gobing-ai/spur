@@ -149,6 +149,62 @@ describe('resolveTranscript (F7)', () => {
     });
 });
 
+describe('main CLI surface', () => {
+    const writeFixture = (): string => {
+        const path = join(mkdtempSync(join(tmpdir(), 'session-timeline-cli-')), 's.jsonl');
+        writeFileSync(path, `${fixture().join('\n')}\n`);
+        return path;
+    };
+
+    test('builds the timeline from --transcript, with stages via --group', () => {
+        const out: string[] = [];
+        const path = writeFixture();
+        expect(main(['--transcript', path, '--group', '1-2'], {}, (s) => out.push(s), '/nope')).toBe(0);
+        const parsed = JSON.parse(out.join(''));
+        expect(parsed).toMatchObject({ available: true, transcript: path, skippedLines: 1 });
+        expect(parsed.segments).toHaveLength(2);
+        expect(parsed.stages).toHaveLength(1);
+    });
+
+    test('accepts and ignores --spur-bin (0482 R2)', () => {
+        const out: string[] = [];
+        expect(main(['--spur-bin', 'spur', '--transcript', writeFixture()], {}, (s) => out.push(s), '/nope')).toBe(0);
+        expect(JSON.parse(out.join('')).available).toBe(true);
+    });
+
+    test('unknown and value-less flags exit 2 (usage goes to stderr)', () => {
+        expect(main(['--bogus'], {}, () => {})).toBe(2);
+        expect(main(['--transcript'], {}, () => {})).toBe(2);
+    });
+
+    test('a group past the segment count is a caught error, exit 2', () => {
+        expect(main(['--transcript', writeFixture(), '--group', '9-9'], {}, () => {})).toBe(2);
+    });
+
+    test('a missing --transcript override is unavailable, exit 0', () => {
+        const out: string[] = [];
+        expect(main(['--transcript', '/nope/missing.jsonl'], {}, (s) => out.push(s), '/nope')).toBe(0);
+        expect(JSON.parse(out.join(''))).toMatchObject({ available: false });
+    });
+
+    test('default writer prints the timeline JSON to stdout (V8 needs the default invoked)', () => {
+        expect(main(['--transcript', writeFixture()], {}, undefined, '/nope')).toBe(0);
+    });
+
+    test('a direct override short-circuits the session-id lookup', () => {
+        const path = writeFixture();
+        expect(resolveTranscript({}, '/nope', path)).toEqual({ ok: true, path });
+        expect(resolveTranscript({}, '/nope', '/nope/missing.jsonl')).toEqual({ ok: false, reason: 'no transcript' });
+    });
+
+    test('prompts longer than 80 chars are truncated with an ellipsis', () => {
+        const rows = [{ type: 'user', timestamp: at(0), message: { role: 'user', content: 'x'.repeat(100) } }].map(
+            (r) => JSON.stringify(r),
+        );
+        expect(buildTimeline(rows).segments[0]?.prompt).toBe(`${'x'.repeat(80)}…`);
+    });
+});
+
 test('formatDuration uses M:SS below an hour and H:MM:SS above', () => {
     expect(formatDuration(33_000)).toBe('0:33');
     expect(formatDuration(104_000)).toBe('1:44');
