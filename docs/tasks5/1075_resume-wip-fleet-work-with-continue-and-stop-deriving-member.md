@@ -4,7 +4,7 @@ name: Resume wip fleet work with --continue and stop deriving member ids from ex
 status: done
 template: feature-impl
 created_at: 2026-10-04T20:30:37.131Z
-updated_at: "2026-10-05T18:22:32.283Z"
+updated_at: "2026-10-06T16:40:45.881Z"
 feature_id: G71
 
 dependencies: ["1073"]
@@ -173,15 +173,15 @@ still runs); and the `#sp:dev-run` prompt contract in `apps/cli/tests/commands/a
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Candidates are `todo` ∪ `wip`, deduped by wbs (`packages/app/src/services/strategy-runtime.ts:604`); gtd accepts both statuses with `not-ready` reserved for other ones (`packages/app/src/services/strategy-runtime.ts:211`); the dispatch body gains `--continue` for a wip task or a prior keyed attempt (`packages/app/src/services/strategy-runtime.ts:453`, body at `:468`). Tests: "G71 R1: a wip task is dispatched with --continue", "G71 R1: a todo task whose prior keyed attempt failed is retried with --continue", "G71 R1: a wip fleet:auto candidate is dispatchable (interrupted work is still work)", plus the existing tick test asserting a fresh task gets no `--continue` |
-| R2 | MET | The `beforeDispatch` refusal branch is deleted while the spec lookup and both ground-truth assertions stay (`packages/app/src/services/agent-service.ts:1049`). Test "fleet spec execution validates the actual launch context and no longer requires a managed dispatch guard" asserts a bare spec-id run is admitted with a clean message, and that an orchestrator-supplied guard still runs |
-| R3 | MET | `memberLocalId` derives id → `<role>-<n>` (role set) → executor-derived (no role), with every derived id collision-checked (`packages/config/src/index.ts:471`). Tests: "a role member keeps its role-derived id no matter which executor is pinned", "a member with no role still derives from its executor, unchanged", "an explicit id still wins over the role derivation", "a role-derived id never collides with an explicit id already in the roster" |
-| R4 | MET | `FleetService.resolve` refuses to rename a member with recorded occupancy, naming both ids and both `id:` pins (`packages/app/src/services/fleet-service.ts:448`), using the frozen pre-1075 derivation (`packages/config/src/index.ts:523`). Tests: "a member whose OLD executor-derived id already has runs is refused, naming both ids and both pins", "a project with no occupancy adopts the new role id silently", "an explicit id is never touched by the migration check". The task's commit carries the `BREAKING CHANGE:` footer, which is what generates the release note |
+| R1 | MET | `packages/app/src/services/strategy-runtime.ts:239` admits todo and wip fleet:auto candidates; the resume hint adds `--continue` at `packages/app/src/services/strategy-runtime.ts:486` and is appended to the directive at `packages/app/src/services/strategy-runtime.ts:501`. Tests (fresh): `packages/app/tests/services/strategy-runtime.test.ts:392`, `packages/app/tests/services/strategy-runtime.test.ts:921`, `packages/app/tests/services/strategy-runtime.test.ts:937`. |
+| R2 | MET | The beforeDispatch refusal branch is gone from `packages/app/src/services/agent-service.ts:1072-1077`; test (fresh) `packages/app/tests/services/agent-service.test.ts:4505` runs an addressed fleet member with exit code 0 and no managed dispatch guard. |
+| R3 | MET | memberLocalId order id, then role, then executor at `packages/config/src/index.ts:471`; frozen legacy derivation at `packages/config/src/index.ts:523`. Tests (fresh): `packages/config/tests/member-local-id.test.ts:190`, `packages/config/tests/member-local-id.test.ts:198`, `packages/config/tests/member-local-id.test.ts:204`, `packages/config/tests/member-local-id.test.ts:209`, `packages/config/tests/member-local-id.test.ts:214`. Breaking change footer on commit 1b3254c07. |
+| R4 | MET | `packages/app/src/services/fleet-service.ts:441-466` refuses a member whose old id has recorded occupancy, naming both ids and the explicit id pin. Tests (fresh): `packages/app/tests/services/fleet-service.test.ts:957`, `packages/app/tests/services/fleet-service.test.ts:975`. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Interrupted fleet work resumes | MET | test | `packages/app/tests/services/strategy-runtime.test.ts` dispatches a wip task and a task whose prior keyed attempt errored, both with the exact body `/sp:dev-run 0841 --auto --continue`, and the retry carries the new attempt key `fleet:task:0841:2` |
-| AC2 — Member identity does not follow the executor | MET | test | `packages/config/tests/member-local-id.test.ts` proves a role member derives `coder-1` with `executor: writer` and with `executor: pi`; `packages/app/tests/services/fleet-service.test.ts` proves the resolution and the migration refusal that keeps an already-occupied address |
+| AC1 — Interrupted fleet work resumes | MET | test | `packages/app/tests/services/strategy-runtime.test.ts:921` (wip dispatched with --continue) and `packages/app/tests/services/strategy-runtime.test.ts:937` (failed prior attempt retried with --continue) — fresh, 390 pass. E2E this run: kill-redispatch row records attempt-2 directive `/sp:dev-run 0002 --auto --continue` (`.spur/run/G71-verifyall-e2e-final.log`). |
+| AC2 — Member identity does not follow the executor | MET | test | `packages/config/tests/member-local-id.test.ts:190` (role id independent of the pinned executor) and `packages/app/tests/services/fleet-service.test.ts:957` (old-id occupancy fails with the fix-it error) — fresh this run. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
