@@ -976,15 +976,12 @@ export async function runFleetE2e(args: string[]): Promise<number> {
                 async () => (await keyedRows(wbs)).find((row) => row.request_key === `fleet:task:${wbs}:1`),
                 BOUNDS.hang,
             );
-            state.dispatchMessageId = attemptOne.id;
-            state.ids.dispatchMessage = attemptOne.id;
             // The keyed turn writes its coordination row at invoke start; the stub then hangs.
             const runningRun = await pollUntil(
                 'the hung keyed turn to start (run row running)',
                 async () => (await runs.listByMessageId(attemptOne.id)).find((row) => row.status === 'running'),
                 BOUNDS.kill,
             );
-            state.dispatchRunId = runningRun.run_id;
             const hung = await pollUntil(
                 'the stub to receive the hung directive',
                 async () =>
@@ -1095,7 +1092,9 @@ export async function runFleetE2e(args: string[]): Promise<number> {
             const keyed = inbox.messages.find((message) => (message.requestKey ?? '').startsWith(`fleet:task:${wbs}:`));
             if (keyed === undefined) throw new Error(`no keyed fleet dispatch found for ${wbs}`);
             state.dispatchMessageId = keyed.id;
-            if (state.dispatchRunId === null) state.dispatchRunId = keyed.runId ?? null;
+            // This leg runs AFTER kill-redispatch in source order, so the run id must come from this
+            // task's own keyed row — never from shared state the hang leg could have written.
+            state.dispatchRunId = keyed.runId ?? null;
             state.ids.dispatchMessage = keyed.id;
             pass(
                 state,
