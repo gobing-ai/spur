@@ -143,7 +143,7 @@ Another agent “reads output” by reading `artifactRefs[].path` (or a bounded 
 | --- | --- |
 | `working` | latest `agent.invoke.start` for this `runId` |
 | `idle` | latest `agent.invoke.exit` for this `runId` **and** `countPending(specId)===0` |
-| `blocked` | First-class signal only: the newest accepted `agent.lifecycle.changed` row for this member (`spur agent report --state blocked`, 1080). Absent signal ⇒ state is not `blocked` |
+| `blocked` | First-class signal only: the highest-seq accepted `agent.lifecycle.changed` row for this member (`spur agent report --state blocked`, 1080). Absent signal ⇒ state is not `blocked` |
 | `done` | Out of v1. Herdr `done` is unseen-idle UI; do not invent an unseen bit here |
 
 No screen-manifest detector. No OSC/spinner matching.
@@ -276,7 +276,9 @@ instead of being driven by Spur. Three facts, no new table:
 | Lease | `ProjectClaimDao` claim on slot `guest:<id>` with the shared `CLAIM_TTL_MS`; only the record's own owner epoch can heartbeat it (R5) |
 | Discovery | `.spur/run/guests/<id>.json` (`{ id, role, sessionId, pid, executor }`) so a host hook finds the joined session without a CLI call |
 
-`spur agent join` registers; `spur agent leave` or lease expiry releases. Expiry is applied on every
+`spur agent join` registers — claiming the lease before writing the occupant row, so a refused claim
+leaves no orphan `running` row — and the same host session rejoining its own live guest renews the
+lease instead of colliding; `spur agent leave` or lease expiry releases. Expiry is applied on every
 guest-touching operation and by the server's reconciler pass. `retire` releases the lease first,
 returns claimed messages to `queued`, marks the row `exited`, and only then deletes the record — a
 crash mid-retire leaves a leaseless guest (retired by the next pass) rather than a half-release.

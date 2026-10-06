@@ -153,7 +153,7 @@ being driven by it: it is never supervised, never restarted, and never a stage t
 | Flag | Description |
 |---|---|
 | `--role <name>` | Layer-1 role the guest occupies (`scribe` \| `coder` \| `reviewer` \| `planner`) |
-| `--id <id>` | Guest id (defaults to `<role>-g<n>`); a collision with a declared member or a joined guest exits 2 |
+| `--id <id>` | Guest id (defaults to `<role>-g<n>`); a collision with a declared member or a joined guest exits 2, except that the same host session rejoining its own live guest renews the lease |
 | `--session-id <sid>` | Host session id (defaults to `CLAUDE_CODE_SESSION_ID`); the Stop hook matches on it |
 | `--pid <n>` | Process id to record (defaults to this process) |
 | `--executor <name>` | Executor name to record (informational — a guest is never dispatched to) |

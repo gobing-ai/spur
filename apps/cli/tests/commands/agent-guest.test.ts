@@ -160,8 +160,14 @@ describe('guest CLI surface through the real command tree (1081 E2E)', () => {
             ).toBe(0);
             expect(out.messages.join('\n')).toContain('g-e2e');
 
-            // a colliding id is a usage error
-            expect(await main(['agent', 'join', '--role', 'reviewer', '--id', 'g-e2e', '--json'], deps)).toBe(2);
+            // the same host session rejoining renews its guest; another session collides (usage error)
+            expect(await main(['agent', 'join', '--role', 'reviewer', '--id', 'g-e2e', '--json'], deps)).toBe(0);
+            expect(
+                await main(
+                    ['agent', 'join', '--role', 'reviewer', '--id', 'g-e2e', '--session-id', 'sess-other', '--json'],
+                    deps,
+                ),
+            ).toBe(2);
 
             // wait --inbox: nothing queued → exit 1 with the envelope
             expect(await main(['agent', 'wait', '--inbox', 'g-e2e', '--timeout', '50', '--json'], deps)).toBe(1);

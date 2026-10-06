@@ -152,9 +152,17 @@ export class FleetGuestService {
             };
         }
         const declared = new Set((await this.ctx.declaredMemberIds?.()) ?? []);
-        const joined = new Set((await this.list()).map((g) => g.id));
+        const guests = await this.list();
+        const joined = new Set(guests.map((g) => g.id));
         const requested = input.id?.trim();
         const id = requested !== undefined && requested !== '' ? requested : this.nextGuestId(role, declared, joined);
+        // A restarted session rejoining its own live guest renews it rather than colliding:
+        // the session id proves it is the same occupant. Absent or different sessions fall
+        // through to the collision refusal below.
+        const own = guests.find((g) => g.id === id);
+        if (own !== undefined && own.sessionId !== null && own.sessionId === (input.sessionId ?? null)) {
+            if (await this.heartbeat(id)) return { ok: true, guest: own };
+        }
         if (declared.has(id) || joined.has(id)) {
             return {
                 ok: false,
@@ -164,6 +172,16 @@ export class FleetGuestService {
         }
 
         const db = await this.ctx.getDb();
+        // Claim before inserting the occupant row: a refused claim must not leave a
+        // `running` occupant behind that nothing will ever retire.
+        const claim = await new ProjectClaimDao(db).claim(this.ctx.cwd, this.slot(id), id, GUEST_LEASE_TTL_MS);
+        if (claim === null) {
+            return {
+                ok: false,
+                code: 'collision',
+                message: `guest id "${id}" already holds a live lease — leave it first or pass a free --id`,
+            };
+        }
         const runId = crypto.randomUUID();
         const generation = ((await new CoordinationRunDao(db).maxGeneration(id)) ?? 0) + 1;
         await new CoordinationRunDao(db).insertStart({
@@ -174,14 +192,6 @@ export class FleetGuestService {
             generation,
             startedAt: new Date().toISOString(),
         });
-        const claim = await new ProjectClaimDao(db).claim(this.ctx.cwd, this.slot(id), id, GUEST_LEASE_TTL_MS);
-        if (claim === null) {
-            return {
-                ok: false,
-                code: 'collision',
-                message: `guest id "${id}" already holds a live lease — leave it first or pass a free --id`,
-            };
-        }
         const record: GuestRecord = {
             id,
             role,

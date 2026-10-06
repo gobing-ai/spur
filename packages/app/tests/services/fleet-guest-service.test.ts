@@ -10,7 +10,13 @@ import { describe, expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createMigratedDb, InboxMessageDao, InboxUnfinishedDao, ProjectClaimDao } from '@gobing-ai/spur-domain';
+import {
+    CoordinationRunDao,
+    createMigratedDb,
+    InboxMessageDao,
+    InboxUnfinishedDao,
+    ProjectClaimDao,
+} from '@gobing-ai/spur-domain';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { FleetGuestService, GUEST_LEASE_TTL_MS, GUEST_RECORD_DIR } from '../../src/index';
 
@@ -72,6 +78,38 @@ describe('FleetGuestService (1081 R2/R5)', () => {
             const result = await service.join({ role: 'reviewer', id: 'proj-reviewer' });
             expect(result.ok).toBe(false);
             expect(result.ok ? '' : result.code).toBe('collision');
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('a refused lease claim leaves no running occupant row behind', async () => {
+        const { service, db, cwd, cleanup } = await makeGuestService();
+        try {
+            // A live lease with no record file (another process mid-join) — the claim is refused.
+            await new ProjectClaimDao(db).claim(cwd, 'guest:coder-x', 'coder-x', GUEST_LEASE_TTL_MS);
+            const result = await service.join({ role: 'coder', id: 'coder-x' });
+            expect(result.ok ? '' : result.code).toBe('collision');
+            expect(await new CoordinationRunDao(db).maxGeneration('coder-x')).toBeNull();
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('the same session rejoining its live guest renews the lease instead of colliding', async () => {
+        const { service, db, cleanup } = await makeGuestService();
+        try {
+            const first = await service.join({ role: 'reviewer', sessionId: 'sess-1' });
+            const id = first.ok ? first.guest.id : '';
+            const again = await service.join({ role: 'reviewer', id, sessionId: 'sess-1' });
+            expect(again.ok ? again.guest : null).toEqual(first.ok ? first.guest : null);
+            expect(await new CoordinationRunDao(db).maxGeneration(id)).toBe(1);
+
+            // A different session, or one that names none, still cannot take the address.
+            const other = await service.join({ role: 'reviewer', id, sessionId: 'sess-2' });
+            expect(other.ok ? '' : other.code).toBe('collision');
+            const anonymous = await service.join({ role: 'reviewer', id });
+            expect(anonymous.ok ? '' : anonymous.code).toBe('collision');
         } finally {
             await cleanup();
         }
