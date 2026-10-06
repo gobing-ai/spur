@@ -134,5 +134,5 @@ agent:
     orchestrator: planner-1
     members:
       - { role: planner, purpose: orchestrator }  # planner-1
-      - { role: coder, executor: pi-k3 }          # coder-1 (volc + zai standard quotas exhausted 2026-10-03)
+      - { role: coder, executor: pi-k3, id: coder-1 } # coder-1 (volc + zai standard quotas exhausted 2026-10-03; id pinned per ADR-126 A4 rename guard)
       - { role: reviewer }                        # reviewer-1
