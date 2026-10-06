@@ -4,7 +4,7 @@ name: Let a live session join the fleet as a guest occupant after a Codex parity
 status: done
 template: feature-impl
 created_at: 2026-10-04T20:30:39.562Z
-updated_at: "2026-10-05T18:22:32.291Z"
+updated_at: "2026-10-06T19:39:19.312Z"
 feature_id: G73
 
 dependencies: ["1074", "1080", "1079"]
@@ -83,7 +83,7 @@ Task-local verification:
 **Routing**
 - Role resolution (`resolveRoleTarget`, moved onto fleet members in 1079) counts declared members only, so guests are invisible to `--role`.
 - `dispatchToFleet` role resolution skips guests.
-- Stages with `requiresCapabilities` (`agent-service.ts:1239-1250`) refuse a guest target unless the guest record carries an attestation. There is no attestation verb yet, so this is always a refusal with a clear error.
+- Stages with `requiresCapabilities` (`packages/app/src/services/agent-service.ts:1418-1428`) refuse a guest target unless the guest record carries an attestation. There is no attestation verb yet, so this is always a refusal with a clear error.
 
 **Write slot.** Guests can be strategy targets only if declared. As concrete-id recipients, a keyed `fleet:task:*` dispatch to a guest is not produced by `tick` (declared members only). If a guest holds a slot via a workflow path, the slot heartbeat is the guest's lease heartbeat (R5).
 
@@ -134,53 +134,56 @@ G73 R2–R5 land as guest occupancy: a live session joins, pulls its own work, a
 | Guest lease TTL reuses the shared claim TTL | `packages/app/src/services/fleet-guest-service.ts:22` |
 | `FleetGuestService`: identity in `coordination_runs`, lease in `ProjectClaimDao`, record file for hooks | `packages/app/src/services/fleet-guest-service.ts:98` |
 | `join`: role validation, `<role>-g<n>` allocation, declared-member/id collision refusal, occupant row, lease, record | `packages/app/src/services/fleet-guest-service.ts:144` |
-| `heartbeat`: extends the lease only for the record's own fencing token (R5) | `packages/app/src/services/fleet-guest-service.ts:201` |
-| `leave`: releases the lease and retires the occupant | `packages/app/src/services/fleet-guest-service.ts:215` |
-| `expire`: the reconciler pass retires lease-expired guests | `packages/app/src/services/fleet-guest-service.ts:227` |
-| `pendingCount`: the `wait --inbox` predicate (read-only, no claim) | `packages/app/src/services/fleet-guest-service.ts:240` |
-| `retire`: releases the lease, returns claimed messages to `queued`, marks the run exited, deletes the record | `packages/app/src/services/fleet-guest-service.ts:245` |
+| `heartbeat`: extends the lease only for the record's own fencing token (R5) | `packages/app/src/services/fleet-guest-service.ts:211` |
+| `leave`: releases the lease and retires the occupant | `packages/app/src/services/fleet-guest-service.ts:225` |
+| `expire`: the reconciler pass retires lease-expired guests | `packages/app/src/services/fleet-guest-service.ts:237` |
+| `pendingCount`: the `wait --inbox` predicate (read-only, no claim) | `packages/app/src/services/fleet-guest-service.ts:250` |
+| `retire`: releases the lease, returns claimed messages to `queued`, marks the run exited, deletes the record | `packages/app/src/services/fleet-guest-service.ts:255` |
 | Guest expiry wired into the server's reconciler pass | `apps/server/src/modules/health/index.ts:483` |
-| `spur agent join` registration | `apps/cli/src/commands/agent.ts:373` |
-| `spur agent leave` registration | `apps/cli/src/commands/agent.ts:396` |
-| `spur agent wait --inbox <id>` flag (the guest pull primitive) | `apps/cli/src/commands/agent.ts:423` |
-| `runAgentJoin`: expiry sweep, session-id default, exit-2 refusals | `apps/cli/src/commands/agent.ts:712` |
-| `runAgentLeave`: id or the guest joined by this session | `apps/cli/src/commands/agent.ts:753` |
-| `runAgentWaitInbox`: heartbeat per tick, 0 on pending, 1 on timeout/not-joined — never a hang | `apps/cli/src/commands/agent.ts:791` |
-| `refuseGuestStageTarget`: `agent run --spec <guest>` is refused (R3) | `apps/cli/src/commands/agent.ts:852` |
+| `spur agent join` registration | `apps/cli/src/commands/agent.ts:475` |
+| `spur agent leave` registration | `apps/cli/src/commands/agent.ts:498` |
+| `spur agent wait --inbox <id>` flag (the guest pull primitive) | `apps/cli/src/commands/agent.ts:525` |
+| `runAgentJoin`: expiry sweep, session-id default, exit-2 refusals | `apps/cli/src/commands/agent.ts:834` |
+| `runAgentLeave`: id or the guest joined by this session | `apps/cli/src/commands/agent.ts:875` |
+| `runAgentWaitInbox`: heartbeat per tick, 0 on pending, 1 on timeout/not-joined — never a hang | `apps/cli/src/commands/agent.ts:913` |
+| `refuseGuestStageTarget`: `agent run --spec <guest>` is refused (R3) | `apps/cli/src/commands/agent.ts:984` |
 | `fleet-guest-stop` hook: session-matched, bounded, fail-open Stop delivery | `plugins/sp/hooks/fleet-guest-stop.ts:140` |
 | Hook decision builder: only queued messages, bounded preview, non-empty reason | `plugins/sp/hooks/fleet-guest-stop.ts:98` |
 | Hook registration under `Stop` (shared with the lifecycle hook) | `plugins/sp/hooks/hooks.json:77` |
-| `fleet-join` skill: join → `wait --inbox` loop → reply → leave | `plugins/sp/skills/fleet-join/SKILL.md:9` |
+| `fleet-join` skill: join → `wait --inbox` loop → reply → leave | `plugins/sp/skills/fleet-join/SKILL.md:29` |
 
 Routing (R3): guests live outside the fleet declaration, and role/executor selectors are resolved over `FleetService.resolve(...).members` by `resolveRoleTarget`, which filters declared enabled members — so a guest is structurally invisible to `--role`, and the explicit `--spec` refusal above covers the remaining dispatch entry.
 
 **Spike outcome (R1, links in the note):** (a) **conditional go** — the Codex `Stop` block contract is documented and source-backed (`{"decision":"block","reason":…}`, exit-2 alternative, `stop_hook_active` guard; https://developers.openai.com/codex/hooks), but a live `codex exec` turn on codex-cli 0.160.0 fired `SessionStart`/`UserPromptSubmit` and **not** `Stop`, so no requirement depends on it; delivery stays the `wait --inbox` loop. (b) **go, decision only** — `codex app-server` exists and `codex app-server generate-json-schema` emits a protocol containing `turn/completed`/`TurnCompleted`, so an app-server `MemberSession` mode can be receipt-based; the follow-up task is not filed here (out of scope).
 
-Tests pinning the Plan's failure list: `packages/app/tests/services/fleet-guest-service.test.ts:34` (join/heartbeat/leave, unknown role, declared-id collision, **expired guest releases claimed messages back to `queued`** and marks the run exited, live guest survives a reconciler pass); `apps/cli/tests/commands/agent-guest.test.ts:29` (join/leave + usage errors), `:65` (`wait --inbox` returns on pending work, times out with exit 1, fails fast for a never-joined id), `:100` (a guest is refused as a stage target while an ordinary id is not); `plugins/sp/hooks/fleet-guest-stop.test.ts:38` (matching session blocks with the message list, **non-joined session makes no CLI call**, never blocks a continued turn, fail-open on malformed input/CLI failure).
+Tests pinning the Plan's failure list: `packages/app/tests/services/fleet-guest-service.test.ts:40` (join/heartbeat/leave, unknown role, declared-id collision, **expired guest releases claimed messages back to `queued`** and marks the run exited, live guest survives a reconciler pass); `apps/cli/tests/commands/agent-guest.test.ts:30` (join/leave + usage errors), `:66` (`wait --inbox` returns on pending work, times out with exit 1, fails fast for a never-joined id), `:101` (a guest is refused as a stage target while an ordinary id is not); `plugins/sp/hooks/fleet-guest-stop.test.ts:38` (matching session blocks with the message list, **non-joined session makes no CLI call**, never blocks a continued turn, fail-open on malformed input/CLI failure).
 
 Bounded-lease note: expiry is applied on every guest-touching operation (join/leave/wait/heartbeat in the CLI) and by the server's reconciler pass; the service mutates nothing on a read path, so the Board's snapshot stays read-only.
 
-Docs in the same change (T3/T4): `docs/help/cmd_agent.md:168` and `:283`, `docs/help2/agent.md:20` and `:66`, `plugins/sp/skills/spur-cli/references/agent.md:30` and `:172`, and the CLI matrix rows/counts at `docs/help/spur-cli-matrix.md:36`, `:71`, `:93`.
+Docs in the same change (T3/T4): `docs/help/cmd_agent.md:144` and `:293`, `docs/help2/agent.md:14` and `:86`, `plugins/sp/skills/spur-cli/references/agent.md:29` and `:232`, and the CLI matrix rows/counts at `docs/help/spur-cli-matrix.md:37`, `:72`, `:96`.
+
+
+Re-verify fixes (2026-10-06, `/sp:dev-verifyall --feature G73 --fix all`): `join` now claims the lease before inserting the occupant row, so a refused claim leaves no orphan `running` occupant (`packages/app/src/services/fleet-guest-service.ts:175`, test `packages/app/tests/services/fleet-guest-service.test.ts:86`); the same host session rejoining its own live guest renews the lease instead of colliding (`packages/app/src/services/fleet-guest-service.ts:162`, tests `packages/app/tests/services/fleet-guest-service.test.ts:99` and the E2E at `apps/cli/tests/commands/agent-guest.test.ts:163`). Anchors above re-pointed after later commits moved `agent.ts`.
 
 ### Testing
 
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
-- Confidence: HIGH
+- Confidence: MEDIUM
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `docs/plans/2026-10-05-codex-guest-spike.md:1` records go/no-go with evidence: (a) conditional go — the `Stop` block contract (`{"decision":"block","reason":…}`, exit-2 alternative, `stop_hook_active` guard) is documented at `https://developers.openai.com/codex/hooks` and implemented in `codex-rs/hooks/src/events/stop.rs`, but a live `codex exec` turn on codex-cli 0.160.0 fired `SessionStart`/`UserPromptSubmit` and not `Stop`; (b) go, decision only — `codex app-server generate-json-schema` emits a protocol containing `turn/completed`. |
-| R2 | MET | `packages/app/src/services/fleet-guest-service.ts:144` registers the occupant (`coordination_runs`), the `guest:<id>` lease and the record file; `:201` heartbeats by fencing token, `:215` leaves, `:227` expires. CLI: `apps/cli/src/commands/agent.ts:712` (`join`), `:753` (`leave`, session-id default). Executable: `packages/app/tests/services/fleet-guest-service.test.ts:34` (join/ordinals/unknown role/declared-id collision/heartbeat/leave/expiry) and `apps/cli/tests/commands/agent-guest.test.ts:29` — 7 + 10 tests, 0 fail, run this pass. |
-| R3 | MET | Guests live outside the fleet declaration, so role/executor selectors over `resolveRoleTarget(...)`'s declared-member list cannot match one, and a concrete guest id is refused as a stage target at `apps/cli/src/commands/agent.ts:852` (JSON-enveloped). Executable: `apps/cli/tests/commands/agent-guest.test.ts:100` (refusal + enveloped refusal + ordinary id allowed) and the E2E `agent run ping --spec g-env --json` → exit 2. |
-| R4 | MET | `spur agent wait --inbox <id>` at `apps/cli/src/commands/agent.ts:791` returns on pending work (heartbeating the lease), exits 1 on timeout/not-joined; `plugins/sp/skills/fleet-join/SKILL.md:9` loops it with the ~10-minute Bash budget; `plugins/sp/hooks/fleet-guest-stop.ts:140` delivers at turn end for a matching session only, registered at `plugins/sp/hooks/hooks.json:77`. Executable: `apps/cli/tests/commands/agent-guest.test.ts:65` (pending → 0, timeout → 1, never-joined → 1) and `plugins/sp/hooks/fleet-guest-stop.test.ts:38` (match blocks, non-match makes no CLI call, `stop_hook_active` never blocks again, fail-open). |
-| R5 | MET | The lease is a `ProjectClaimDao` claim on `guest:<id>` (`packages/domain/src/dao/project-claim-dao.ts:12`) with the shared TTL; `heartbeat` requires the record's own owner epoch (`packages/app/src/services/fleet-guest-service.ts:201`), so no other path can hold it, and release is the only thing that frees it. Executable: the heartbeat/leave/expiry cases in `packages/app/tests/services/fleet-guest-service.test.ts:34`. |
+| R1 | MET | `docs/plans/2026-10-05-codex-guest-spike.md:1` records go/no-go with evidence for (a) Codex `Stop` block/continue (conditional go: contract documented at `https://developers.openai.com/codex/hooks`, but a live `codex exec` on codex-cli 0.160.0 fired SessionStart/UserPromptSubmit and not Stop) and (b) `codex app-server` (go, decision only: the generated schema contains `turn/completed`). |
+| R2 | MET | `packages/app/src/services/fleet-guest-service.ts:144` joins (occupant row, `guest:<id>` lease, record file); `packages/app/src/services/fleet-guest-service.ts:175` (re-verify fix) claims the lease before inserting the occupant row so a refused claim leaves no orphan `running` row; `packages/app/src/services/fleet-guest-service.ts:162` (re-verify fix) lets the same host session renew its live guest instead of colliding; `packages/app/src/services/fleet-guest-service.ts:225` leaves and `packages/app/src/services/fleet-guest-service.ts:237` expires. CLI: `apps/cli/src/commands/agent.ts:834` (`join`), `apps/cli/src/commands/agent.ts:875` (`leave`). Executable: `packages/app/tests/services/fleet-guest-service.test.ts:86`, `packages/app/tests/services/fleet-guest-service.test.ts:99` and the join/heartbeat/leave/expiry cases — 9 pass; `apps/cli/tests/commands/agent-guest.test.ts:30` — 10 pass, run this pass. |
+| R3 | MET | Guest ids never enter the declared-member list `--role` resolves over (`apps/cli/src/commands/agent.ts:790`), and a guest id is refused as a stage target at `apps/cli/src/commands/agent.ts:428`. Executable: `apps/cli/tests/commands/agent-guest.test.ts:101` (plain and enveloped refusal, ordinary id allowed). |
+| R4 | MET | `apps/cli/src/commands/agent.ts:525` adds `--inbox` and `apps/cli/src/commands/agent.ts:913` returns on pending work while heartbeating; `plugins/sp/skills/fleet-join/SKILL.md:29` loops it under the ~10-minute Bash budget; `plugins/sp/hooks/fleet-guest-stop.ts:140` blocks Stop only for a joined session, registered at `plugins/sp/hooks/hooks.json:77`. Executable: `apps/cli/tests/commands/agent-guest.test.ts:66` and `plugins/sp/hooks/fleet-guest-stop.test.ts:38`, run this pass. |
+| R5 | MET | `packages/domain/src/dao/project-claim-dao.ts:9` documents the `guest:<id>` lease slot; `packages/app/src/services/fleet-guest-service.ts:211` heartbeats only with the record's own owner epoch, so the write slot is held only through the heartbeat. Executable: heartbeat/leave/expiry cases in `packages/app/tests/services/fleet-guest-service.test.ts:86` onward. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Codex parity is decided by evidence | MET | command | `docs/plans/2026-10-05-codex-guest-spike.md:1` carries both decisions with their evidence: the live `codex exec` transcript (hook events observed: SessionStart, UserPromptSubmit; Stop absent), the installed `codex-cli 0.160.0`, the official contract at `https://developers.openai.com/codex/hooks` and `codex-rs/hooks/src/events/stop.rs`, and the locally generated app-server schema containing `TurnCompleted`. Both answers are recorded as go/no-go: (a) conditional go, (b) go (decision only). Commands run for this AC: `codex --version` (0.160.0), `codex exec --cd <scratch> --dangerously-bypass-hook-trust -s read-only "<prompt>" < /dev/null` (hook events observed), `codex app-server generate-json-schema --out <dir>` (schema contains `TurnCompleted`). |
-| AC2 — A live session joins the fleet cooperatively | MET | test | `packages/app/tests/services/fleet-guest-service.test.ts:34` (join → lease → heartbeat → leave/expiry, expiry returning claimed messages to `queued`), `apps/cli/tests/commands/agent-guest.test.ts:29` and the E2E `main()` round-trip (join → wait `--inbox` → leave over a file-backed DB, including the JSON/envelope branches), `:65` (`wait --inbox` returns on pending work and times out cleanly), and `plugins/sp/hooks/fleet-guest-stop.test.ts:38` (Stop delivery blocks only the joined session). Command evidence: `bun run spur-check` PASS (10142 pass / 0 fail) — `.spur/run/1081-test-gate.log`; `bun run plugin-smoke` PASS. Limitation: no real Claude Code session ran the skill loop end to end this pass; the delivery seam is covered by the CLI E2E above plus the hook tests, and the Codex Stop gap is recorded in the spike note. |
+| AC1 — Codex parity is decided by evidence | MET | command | `docs/plans/2026-10-05-codex-guest-spike.md:1` records both go/no-go decisions with evidence. Commands this pass: `codex --version` → codex-cli 0.160.1; `codex app-server generate-json-schema --out <dir>` exit 0, and `ServerNotification.json` plus `codex_app_server_protocol.v2.schemas.json` contain `turn/completed` — decision (b) re-proven. Decision (a) rests on the recorded 0.160.0 `codex exec` transcript and the contract at `https://developers.openai.com/codex/hooks`: the live re-probe this pass could not reach the model from the sandbox (`workspace routing discovery failed`, no turn ran), so whether 0.160.1 now fires `Stop` in `exec` is unconfirmed; no requirement depends on it because guests work through `wait --inbox`. |
+| AC2 — A live session joins the fleet cooperatively | MET | test | `apps/cli/tests/commands/agent-guest.test.ts:129` (real command tree: join → same-session rejoin renews → other-session collision exits 2 → `wait --inbox` → leave over a file-backed DB), `packages/app/tests/services/fleet-guest-service.test.ts:99` (rejoin), expiry returning claimed messages to queued in the same file, `plugins/sp/hooks/fleet-guest-stop.test.ts:38` (Stop delivery only for the joined session). Commands this pass: `bun run plugin-smoke` PASS; `bun run test-cf` PASS; `bun run spur-check` 10209 pass / 7 fail, all 7 environmental or pre-existing and outside this scope — `.spur/run/g73-verifyall-gate.log`. Limitation: no live Claude Code session ran the skill loop end to end this pass. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -201,10 +204,10 @@ Review of 1081 (`/sp:dev-review --tasks 1081 --auto`) — three dimensions over 
 **Traceability (R → evidence)**
 
 - R1 (spike, go/no-go with evidence) → `docs/plans/2026-10-05-codex-guest-spike.md:1` (live `codex exec` transcript, official hooks reference, generated app-server schema containing `turn/completed`).
-- R2 (join/leave/lease) → `packages/app/src/services/fleet-guest-service.ts:144`, `:201`, `:215`, `:227`, CLI at `apps/cli/src/commands/agent.ts:712`, `:753`; tests `packages/app/tests/services/fleet-guest-service.test.ts:34`, `apps/cli/tests/commands/agent-guest.test.ts:29`.
-- R3 (id-only, declared-only role resolution, no stage) → `apps/cli/src/commands/agent.ts:852` + the E2E `agent run --spec <guest> --json` refusal, plus guest ids never entering `declaredMemberIds` (`packages/app/src/services/fleet-guest-service.ts:144`).
-- R4 (pull loop + Stop hook) → `apps/cli/src/commands/agent.ts:791` (`wait --inbox`), `plugins/sp/skills/fleet-join/SKILL.md:9`, `plugins/sp/hooks/fleet-guest-stop.ts:140`, registered at `plugins/sp/hooks/hooks.json:77`; tests `apps/cli/tests/commands/agent-guest.test.ts:65`, `plugins/sp/hooks/fleet-guest-stop.test.ts:38`.
-- R5 (lease-only ownership) → `packages/app/src/services/fleet-guest-service.ts:201` (heartbeat by ownerEpoch), `packages/domain/src/dao/project-claim-dao.ts:12` (the `guest:` slot).
+- R2 (join/leave/lease) → `packages/app/src/services/fleet-guest-service.ts:144`, `:211`, `:225`, `:237`, CLI at `apps/cli/src/commands/agent.ts:834`, `:875`; tests `packages/app/tests/services/fleet-guest-service.test.ts:40`, `apps/cli/tests/commands/agent-guest.test.ts:30`.
+- R3 (id-only, declared-only role resolution, no stage) → `apps/cli/src/commands/agent.ts:984` + the E2E `agent run --spec <guest> --json` refusal, plus guest ids never entering `declaredMemberIds` (`packages/app/src/services/fleet-guest-service.ts:144`).
+- R4 (pull loop + Stop hook) → `apps/cli/src/commands/agent.ts:913` (`wait --inbox`), `plugins/sp/skills/fleet-join/SKILL.md:29`, `plugins/sp/hooks/fleet-guest-stop.ts:140`, registered at `plugins/sp/hooks/hooks.json:77`; tests `apps/cli/tests/commands/agent-guest.test.ts:66`, `plugins/sp/hooks/fleet-guest-stop.test.ts:38`.
+- R5 (lease-only ownership) → `packages/app/src/services/fleet-guest-service.ts:211` (heartbeat by ownerEpoch), `packages/domain/src/dao/project-claim-dao.ts:12` (the `guest:` slot).
 
 **SECUA**
 
@@ -220,6 +223,9 @@ Review of 1081 (`/sp:dev-review --tasks 1081 --auto`) — three dimensions over 
 - Lease expiry is applied on guest-touching operations and the server's reconciler pass; a project with no server and no guest activity keeps expired records until the next touch (harmless: the lease is the authority).
 
 **Disposition:** accept. No P1; one P2 accepted with a recorded upgrade path (renew-on-rejoin would need a DAO claim-statement change); two P3s and two P4s recorded.
+
+
+**Re-verify addendum (2026-10-06).** The P2 same-session rejoin is now **fixed**: a matching session renews its lease, a different or absent session still collides (`packages/app/src/services/fleet-guest-service.ts:162`, test `packages/app/tests/services/fleet-guest-service.test.ts:99`). New P3 found and fixed: `join` inserted the `running` occupant row before claiming the lease, orphaning it on a refused claim; the claim now comes first (`packages/app/src/services/fleet-guest-service.ts:175`, test `packages/app/tests/services/fleet-guest-service.test.ts:86`). The `wait --inbox` P3 and both P4s stand. Codex 0.160.1 re-probe: `turn/completed` still in the app-server schema; the live `Stop` probe could not reach the model from the sandbox, so decision (a) still rests on the 0.160.0 transcript.
 
 ### References
 
