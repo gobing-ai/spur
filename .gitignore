@@ -141,6 +141,8 @@ spur.js
 !/.spur/agents/.gitkeep
 /.spur/context/.session*.json
 /.spur/context/token-ledger.jsonl
+# Machine-local learnings corpus: appended per-session, never committed.
+/.spur/context/learnings.md
 /.spur/memory/sessions/*-checkpoint.md
 /.spur/reports/
 /.spur/tmp/
