@@ -77,7 +77,7 @@ each would be scope creep for one-liner procedures.
 | 5a  | refineall  | `dev-refineall`     | `Skill()`         | `sp:spur-dev` (`refineall`)                                                        | `--feature <id> \| --tasks <selector> [--focus <mode>] [--description <text>] [--depth <standard\|ready>] [--agent <inline\|auto\|name>] [--auto] [--keep-going] [--status <s>] [--json] [--worktree [<name>]]` |
 | 6   | plan       | `dev-plan`          | `Skill()`         | inline driver (`idea-pipeline`) or async workflow                                  | `"<description>" [--feature <id>] [--parent <feature-id>] [--skip-design] [--agent <inline\|auto\|name>] [--auto]`                                                                   |
 | 7   | docs       | _(no thin wrapper)_ | `Skill()`         | `sp:doc-evolve`                                                                    | `"<change description>"`                                                                                                                                                                               |
-| 8   | changelog  | `dev-changelog`     | `inline`          | git log + conventional-commit grouping                                             | `[--since <ref>] [--until <ref>] [--version <ver>]`                                                                                                                                                    |
+| 8   | changelog  | `dev-changelog`     | `inline`          | git log + conventional-commit grouping                                             | `[<file>] [--since <ref>] [--until <ref>] [--version <ver>]`                                                                                                                                            |
 | 9   | gitmsg     | `dev-gitmsg`        | `inline`          | bounded diff capture → concern grouping → conventional commit                      | `[--commit] [--squash] [--all] [--scope <path>]`                                                                                                                            |
 | 10  | fixall     | `dev-fixall`        | `inline`          | lint + test fix loop                                                               | `[<validation-command>] [--max-retry <n>] [--scope <path>] [--gate-log <path>] [--findings <anchors>]`                                                                                                 |
 | 11  | handover   | `dev-handover`      | `inline`          | structured doc generation                                                          | `"<blocker description>"`                                                                                                                                                                              |
@@ -519,7 +519,7 @@ is the procedure. The backing is a combination of git CLI, `spur` CLI, and agent
 ### 8. changelog
 
 - **Purpose:** Generate a structured changelog from git commits between two refs.
-- **Inputs:** `--since <ref>` (default: last tag), `--until <ref>` (default: `HEAD`), `--version <ver>` (default: auto-detect from latest tag).
+- **Inputs:** `<file>` (optional positional, e.g. `CHANGELOG.md`; default: stdout), `--since <ref>` (default: last tag), `--until <ref>` (default: `HEAD`), `--version <ver>` (default: auto-detect from latest tag).
 - **Backing:** `inline` — git log + conventional-commit grouping.
 - **Behavior:**
   1. Resolve `--since`: if not given, use the most recent tag (`git describe --tags --abbrev=0`). If no tags exist, use the repo root commit.
@@ -529,15 +529,10 @@ is the procedure. The backing is a combination of git CLI, `spur` CLI, and agent
   5. Format as markdown:
      - `keepachangelog` (default): `## [<version>] - <date>` header, then category headings per the keepachangelog convention — `### Added` / `### Fixed` / `### Changed` / `### Removed` / `### Other` — mapped from conventional-commit types.
      - `simple`: flat bulleted list grouped by type heading (`### feat`, `### fix`, …).
-  6. Print the changelog to stdout. If the operator wants it in `CHANGELOG.md`, they redirect or paste.
-  7. Verify the emitted section against git and close with one line: `Verification: HIGH|MEDIUM|LOW — <first failing check and deviation, or 'all checks passed'>`.
-     - **Coverage** — bullet count equals the commit count in `<since>..<until>`, and every short hash appears exactly once.
-     - **Mapping** — per-category bullet counts match the conventional-type counts (`feat`→`Added`, `fix`→`Fixed`, other recognized types→`Changed`, unrecognized→`Other`).
-     - **Header** — `[<version>] - <date>` matches the resolved `--version` (or detected tag) and the header date.
-     - **Citations** — a bullet that asserts API/library behavior or a version/dependency claim beyond its commit summary carries a source citation: an official docs URL, or a local `path:line` verified against the installed manifest/lockfile (`package.json`, lockfile, or the cited file). A commit hash is provenance for what shipped, not a citation for what the API/library does; an uncited claim is flagged inline on the bullet (`(uncited: <claim>)`) rather than silently dropped.
-     - **Confidence** — the level is derived, never asserted: evaluate the Coverage / Mapping / Header / Citations outcomes against the ladder below, name the first condition that denies a higher level, and report the level the evidence actually supports. Declaring a level above what the checks support is itself a failure of this check.
-     - **HIGH** — all checks pass with every API/library claim cited. **MEDIUM** — coverage intact but mapping or header deviates, or at least one API/library claim lacks a source citation. **LOW** — coverage broken (missing/duplicate hashes), the range cannot be reconciled against git, or a citation fails verification (dead URL, or a `path:line` that does not support the claim).
-- **Invariants:** Never mutates `CHANGELOG.md` directly — the command surface is stdout-only; writing it to a file (e.g. appending to `CHANGELOG.md`) is the operator's redirect choice, never the command's.
+  6. Emit: with `<file>`, insert the section into that file above its newest `## [` release heading (or after its title when none exists) and touch nothing else in the file; without `<file>`, print it to stdout.
+  7. Self-check before emitting: every short hash in `<since>..<until>` appears exactly once. Fix any miss or duplicate; do not report a verdict.
+  8. Reply in at most three lines: the range, bullet counts per category, and the output target.
+- **Invariants:** Output is derived from `git log` only. No quality gates — no lint/test/`spur-check`/rule runs, citation or manifest lookups, confidence ratings, or edits beyond the one inserted section. The file is left uncommitted.
 
 ### 9. gitmsg
 
