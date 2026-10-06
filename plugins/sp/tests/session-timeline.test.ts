@@ -10,6 +10,7 @@ import {
     main,
     parseGroups,
     resolveTranscript,
+    SESSION_TIMELINE_USAGE,
 } from '../scripts/session-timeline';
 
 /**
@@ -173,12 +174,37 @@ describe('main CLI surface', () => {
     });
 
     test('unknown and value-less flags exit 2 (usage goes to stderr)', () => {
-        expect(main(['--bogus'], {}, () => {})).toBe(2);
-        expect(main(['--transcript'], {}, () => {})).toBe(2);
+        const errs: string[] = [];
+        const writeErr = (s: string) => errs.push(s);
+        expect(main(['--bogus'], {}, () => {}, '/nope', writeErr)).toBe(2);
+        expect(errs).toEqual([`${SESSION_TIMELINE_USAGE}\n`]);
+        // V8 needs the default writeErr invoked: stub the real stream, invoke the default.
+        const chunks: string[] = [];
+        const real = process.stderr.write.bind(process.stderr);
+        process.stderr.write = ((s: string) => {
+            chunks.push(s);
+            return true;
+        }) as typeof process.stderr.write;
+        try {
+            expect(main(['--transcript'], {}, () => {}, '/nope')).toBe(2);
+        } finally {
+            process.stderr.write = real;
+        }
+        expect(chunks).toEqual([`${SESSION_TIMELINE_USAGE}\n`]);
     });
 
     test('a group past the segment count is a caught error, exit 2', () => {
-        expect(main(['--transcript', writeFixture(), '--group', '9-9'], {}, () => {})).toBe(2);
+        const errs: string[] = [];
+        expect(
+            main(
+                ['--transcript', writeFixture(), '--group', '9-9'],
+                {},
+                () => {},
+                '/nope',
+                (s) => errs.push(s),
+            ),
+        ).toBe(2);
+        expect(errs[0]).toContain('invalid --group "9-9"');
     });
 
     test('a missing --transcript override is unavailable, exit 0', () => {
@@ -188,7 +214,18 @@ describe('main CLI surface', () => {
     });
 
     test('default writer prints the timeline JSON to stdout (V8 needs the default invoked)', () => {
-        expect(main(['--transcript', writeFixture()], {}, undefined, '/nope')).toBe(0);
+        const chunks: string[] = [];
+        const real = process.stdout.write.bind(process.stdout);
+        process.stdout.write = ((s: string) => {
+            chunks.push(s);
+            return true;
+        }) as typeof process.stdout.write;
+        try {
+            expect(main(['--transcript', writeFixture()], {}, undefined, '/nope')).toBe(0);
+        } finally {
+            process.stdout.write = real;
+        }
+        expect(JSON.parse(chunks.join(''))).toMatchObject({ available: true });
     });
 
     test('a direct override short-circuits the session-id lookup', () => {

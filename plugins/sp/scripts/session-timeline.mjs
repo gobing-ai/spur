@@ -186,7 +186,7 @@ function buildTimeline(lines, group) {
   return timeline;
 }
 var SESSION_TIMELINE_USAGE = 'usage: session-timeline [--transcript <path>] [--group "1-3,4,..."]';
-function main(argv, env = getEnvVars(), write = (s) => process.stdout.write(s), projectsRoot) {
+function main(argv, env = getEnvVars(), write = (s) => process.stdout.write(s), projectsRoot, writeErr = (s) => process.stderr.write(s)) {
   let transcript;
   let group;
   for (let i = 0;i < argv.length; i++) {
@@ -198,7 +198,7 @@ function main(argv, env = getEnvVars(), write = (s) => process.stdout.write(s), 
     else if (arg === "--spur-bin" && argv[i + 1])
       i++;
     else {
-      process.stderr.write(`${SESSION_TIMELINE_USAGE}
+      writeErr(`${SESSION_TIMELINE_USAGE}
 `);
       return 2;
     }
@@ -216,7 +216,7 @@ function main(argv, env = getEnvVars(), write = (s) => process.stdout.write(s), 
 `);
     return 0;
   } catch (error) {
-    process.stderr.write(`session-timeline: ${error.message}
+    writeErr(`session-timeline: ${error.message}
 `);
     return 2;
   }

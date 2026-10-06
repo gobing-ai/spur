@@ -119,6 +119,7 @@ export function main(
     env: Record<string, string | undefined> = getEnvVars(),
     write: (s: string) => void = (s) => process.stdout.write(s),
     projectsRoot?: string,
+    writeErr: (s: string) => void = (s) => process.stderr.write(s),
 ): number {
     let transcript: string | undefined;
     let group: string | undefined;
@@ -129,7 +130,7 @@ export function main(
         else if (arg === '--spur-bin' && argv[i + 1])
             i++; // 0482 R2: accepted, unused (no spur calls)
         else {
-            process.stderr.write(`${SESSION_TIMELINE_USAGE}\n`);
+            writeErr(`${SESSION_TIMELINE_USAGE}\n`);
             return 2;
         }
     }
@@ -143,7 +144,7 @@ export function main(
         write(`${JSON.stringify({ ...timeline, transcript: resolved.path })}\n`);
         return 0;
     } catch (error) {
-        process.stderr.write(`session-timeline: ${(error as Error).message}\n`);
+        writeErr(`session-timeline: ${(error as Error).message}\n`);
         return 2;
     }
 }
