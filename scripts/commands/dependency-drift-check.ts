@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 export interface DependencyDrift {
@@ -60,8 +60,17 @@ export function lockKeyPackageName(lockKey: string): string {
  * installs at node_modules/<parentKey>/node_modules/<name> when the resolution
  * diverges from the hoisted one — so the nested path is checked first, then the
  * hoisted node_modules/<name>.
+ *
+ * Bun ≥1.2 store layout: a package bun hoists only as a transitive dependency
+ * (no workspace names it directly) gets no user-visible node_modules/<name>
+ * entry — it lives solely at node_modules/.bun/<@scope+name@version+hash>/
+ * node_modules/<name> and resolves through its parent's store dir. The store
+ * fallback (keyed on name@lockedVersion) finds those; without it every
+ * transitive-only @gobing-ai/ts-* package false-positives as `installed
+ * missing`. The version match keeps real drift detectable: a store dir pinned
+ * to a different version simply misses the prefix and the drift still reports.
  */
-function findInstalledPkgJsonPath(nodeModulesDir: string, lockKey: string): string | null {
+function findInstalledPkgJsonPath(nodeModulesDir: string, lockKey: string, lockedVersion: string): string | null {
     const name = lockKeyPackageName(lockKey);
     const parentKey = lockKey === name ? null : lockKey.slice(0, lockKey.length - name.length - 1);
     if (parentKey) {
@@ -69,7 +78,16 @@ function findInstalledPkgJsonPath(nodeModulesDir: string, lockKey: string): stri
         if (existsSync(nested)) return nested;
     }
     const hoisted = join(nodeModulesDir, name, 'package.json');
-    return existsSync(hoisted) ? hoisted : null;
+    if (existsSync(hoisted)) return hoisted;
+    const storeDir = join(nodeModulesDir, '.bun');
+    if (!existsSync(storeDir)) return null;
+    const prefix = `${name.replace('/', '+')}@${lockedVersion}+`;
+    for (const entry of readdirSync(storeDir)) {
+        if (!entry.startsWith(prefix)) continue;
+        const storePath = join(storeDir, entry, 'node_modules', name, 'package.json');
+        if (existsSync(storePath)) return storePath;
+    }
+    return null;
 }
 
 /**
@@ -89,7 +107,7 @@ export function checkDependencyDrift(options?: { lockfilePath?: string; nodeModu
 
     for (const [lockKey, lockedVersion] of locked.entries()) {
         const name = lockKeyPackageName(lockKey);
-        const pkgJsonPath = findInstalledPkgJsonPath(nodeModulesDir, lockKey);
+        const pkgJsonPath = findInstalledPkgJsonPath(nodeModulesDir, lockKey, lockedVersion);
         let installedVersion: string | null = null;
 
         if (pkgJsonPath !== null) {

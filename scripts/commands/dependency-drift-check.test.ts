@@ -149,6 +149,57 @@ describe('dependency-drift-check (0738 R3/R17)', () => {
         await rm(dir, { recursive: true });
     });
 
+    test('resolves transitive-only packages through the bun .bun store layout (regression: feature P verification)', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'drift-check-test-'));
+        const lockPath = join(dir, 'bun.lock');
+        const nodeModulesDir = join(dir, 'node_modules');
+
+        // Bun ≥1.2 installs a package hoisted only as a transitive dependency
+        // (no workspace names it directly — e.g. ts-decision-fm under
+        // ts-ai-decision) solely at node_modules/.bun/<@scope+name@ver+hash>/
+        // node_modules/<name> with no user-visible symlink. The store fallback
+        // keyed on name@lockedVersion must find it; a store dir pinned to a
+        // different version must still report drift.
+        const lockContent = JSON.stringify({
+            packages: {
+                '@gobing-ai/ts-decision-fm': ['@gobing-ai/ts-decision-fm@0.5.16'],
+                '@gobing-ai/ts-laya-mlx': ['@gobing-ai/ts-laya-mlx@0.5.15'],
+            },
+        });
+        await writeFile(lockPath, lockContent);
+
+        const store = join(nodeModulesDir, '.bun');
+        for (const [pkg, version] of [
+            ['ts-decision-fm', '0.5.16'],
+            ['ts-laya-mlx', '0.5.15'],
+        ] as const) {
+            const storePkg = join(
+                store,
+                `@gobing-ai+${pkg}@${version}+54ea709f1eda7cee`,
+                'node_modules',
+                '@gobing-ai',
+                pkg,
+            );
+            await mkdir(storePkg, { recursive: true });
+            await writeFile(join(storePkg, 'package.json'), JSON.stringify({ version }));
+        }
+
+        // Matching store entries resolve: no drift.
+        expect(checkDependencyDrift({ lockfilePath: lockPath, nodeModulesDir })).toHaveLength(0);
+
+        // Store pinned to the wrong version: store fallback misses, drift reports.
+        await writeFile(
+            lockPath,
+            JSON.stringify({ packages: { '@gobing-ai/ts-decision-fm': ['@gobing-ai/ts-decision-fm@0.5.17'] } }),
+        );
+        const drifts = checkDependencyDrift({ lockfilePath: lockPath, nodeModulesDir });
+        expect(drifts).toHaveLength(1);
+        expect(drifts[0]?.name).toBe('@gobing-ai/ts-decision-fm');
+        expect(drifts[0]?.installed).toBeNull();
+
+        await rm(dir, { recursive: true });
+    });
+
     test('lockKeyPackageName derives the package from plain, scoped, and nested keys', () => {
         expect(lockKeyPackageName('zod')).toBe('zod');
         expect(lockKeyPackageName('@gobing-ai/ts-db')).toBe('@gobing-ai/ts-db');
