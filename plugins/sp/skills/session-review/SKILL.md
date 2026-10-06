@@ -120,8 +120,9 @@ and operator wait time. Then render non-overlapping stages:
 Format durations as `M:SS` below one hour and `H:MM:SS` at one hour or above (`1:44`, not `1m44s`;
 `0:33`, not `33s`). Include a `Total` row when elapsed time is available. Keep operator approval
 waits separate from execution bottlenecks. Time is the stage `work` and Wait its operator `wait`.
-Token renders `<in> / <out>` in compact units (`3.2M / 41k`): in = input + cache creation + cache
-read, out = output. These are measured session counts, not the 0912 baseline token/USD claims that
+Token renders `<total> / <non-cached>` in compact units (`28.7M / 717k`) — the measurement's
+`token` field: total = input + cache creation + cache read + output; non-cached = total minus cache
+read (fresh input, cache writes and output). These are measured session counts, not the 0912 baseline token/USD claims that
 step 4 excludes. Use `n/a` for any value not supported by the measurement.
 
 ### Resolved issues

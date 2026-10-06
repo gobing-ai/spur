@@ -2,7 +2,15 @@ import { describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { buildTimeline, formatDuration, main, parseGroups, resolveTranscript } from '../scripts/session-timeline';
+import {
+    buildTimeline,
+    formatDuration,
+    formatTokenSplit,
+    formatTokens,
+    main,
+    parseGroups,
+    resolveTranscript,
+} from '../scripts/session-timeline';
 
 /**
  * session-timeline feeds the /sp:dev-review-session Time breakdown. Failure modes, written before
@@ -18,6 +26,8 @@ import { buildTimeline, formatDuration, main, parseGroups, resolveTranscript } f
  *     session's transcript; an id with path characters must be refused;
  *  F8 stage grouping out of range or overlapping silently mis-sums the table.
  *  F9 an AskUserQuestion gate blocks inside a segment → the operator's answer time counted as work.
+ *  F10 cache reads dominate the total → a single "in" figure hides the non-cached spend; total must
+ *      include cache read and non-cached must exclude it, both in compact units.
  */
 
 const T0 = Date.parse('2026-10-04T03:00:00.000Z');
@@ -161,4 +171,22 @@ test('time answering an AskUserQuestion inside a segment is wait, not work (F9)'
         { type: 'assistant', timestamp: at(150), message: { id: 'a2', content: [{ type: 'text' }] } },
     ].map((r) => JSON.stringify(r));
     expect(buildTimeline(rows).segments[0]).toMatchObject({ workMs: 30_000, waitMs: 120_000, toolCalls: 1 });
+});
+
+describe('token split (F10)', () => {
+    test('formatTokens renders compact units', () => {
+        expect(formatTokens(950)).toBe('950');
+        expect(formatTokens(41_200)).toBe('41k');
+        expect(formatTokens(28_430_000)).toBe('28.4M');
+    });
+
+    test('total includes cache read; non-cached excludes it', () => {
+        const tokens = { input: 2_000, cacheCreate: 600_000, cacheRead: 28_000_000, output: 115_000 };
+        expect(formatTokenSplit(tokens)).toBe('28.7M / 717k');
+        expect(formatTokenSplit(null)).toBe('n/a');
+    });
+
+    test('session timeline spans carry the rendered split', () => {
+        expect(buildTimeline(fixture()).segments[0]?.token).toBe('2k / 264');
+    });
 });

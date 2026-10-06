@@ -13,7 +13,7 @@ the session context is preserved — no workflow launch, history import, task cr
 remediation. With `--triage`, it first triages the findings, then applies direct fixes (pure
 documentation work and one-to-two-line fixes) inline and files everything remaining as one or more
 implement-ready tasks for further fixing. The result includes a non-overlapping time breakdown —
-work time, operator wait, tool calls and tokens per stage, measured from the host transcript by
+work time, operator wait, tool calls and tokens (total / non-cached) per stage, measured from the host transcript by
 `session-timeline.mjs` — with durations in `M:SS` or `H:MM:SS` form and `n/a` only when that
 measurement is unavailable.
 

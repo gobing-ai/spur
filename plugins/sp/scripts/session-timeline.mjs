@@ -2,18 +2,18 @@
 // @bun
 
 // plugins/sp/scripts/session-timeline.ts
-import { existsSync, readdirSync, readFileSync } from "fs";
-import { homedir } from "os";
-import { join } from "path";
+import { readFileSync } from "fs";
 
 // plugins/sp/lib/env.ts
 function getEnvVars() {
   return process.env;
 }
 
-// plugins/sp/scripts/session-timeline.ts
+// plugins/sp/lib/transcript.ts
+import { existsSync, readdirSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 var SESSION_ID = /^[A-Za-z0-9_-]+$/;
-var PROMPT_EXCERPT = 80;
 var OPERATOR_TOOLS = new Set(["AskUserQuestion"]);
 var zeroTokens = () => ({ input: 0, cacheCreate: 0, cacheRead: 0, output: 0 });
 function formatDuration(ms) {
@@ -23,11 +23,17 @@ function formatDuration(ms) {
   const ss = String(s % 60).padStart(2, "0");
   return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${ss}` : `${m}:${ss}`;
 }
-var render = (span) => ({
-  ...span,
-  work: formatDuration(span.workMs),
-  wait: formatDuration(span.waitMs)
-});
+function formatTokens(n) {
+  if (n >= 999500)
+    return `${(n / 1e6).toFixed(1)}M`;
+  return n >= 1000 ? `${Math.round(n / 1000)}k` : String(n);
+}
+function formatTokenSplit(t) {
+  if (!t)
+    return "n/a";
+  const nonCached = t.input + t.cacheCreate + t.output;
+  return `${formatTokens(nonCached + t.cacheRead)} / ${formatTokens(nonCached)}`;
+}
 function promptText(row) {
   if (row.type !== "user" || row.isMeta || row.isCompactSummary)
     return;
@@ -53,6 +59,80 @@ function sumSpans(spans) {
     tokens: sumTokens(spans.map((s) => s.tokens))
   };
 }
+var newAcc = (ts) => ({
+  last: ts,
+  askMs: 0,
+  asks: new Map,
+  toolIds: new Set,
+  messages: new Map
+});
+function accumulate(acc, row, ts) {
+  acc.last = Math.max(acc.last, ts);
+  const blocks = Array.isArray(row.message?.content) ? row.message.content : [];
+  for (const b of blocks) {
+    if (b.type === "tool_use" && b.id) {
+      acc.toolIds.add(b.id);
+      if (b.name && OPERATOR_TOOLS.has(b.name))
+        acc.asks.set(b.id, ts);
+    } else if (b.type === "tool_result" && b.tool_use_id && acc.asks.has(b.tool_use_id)) {
+      acc.askMs += ts - (acc.asks.get(b.tool_use_id) ?? ts);
+    }
+  }
+  const u = row.message?.usage;
+  if (row.type === "assistant" && u && row.message?.id) {
+    acc.messages.set(row.message.id, {
+      input: u.input_tokens ?? 0,
+      cacheCreate: u.cache_creation_input_tokens ?? 0,
+      cacheRead: u.cache_read_input_tokens ?? 0,
+      output: u.output_tokens ?? 0
+    });
+  }
+}
+function parseRows(lines) {
+  const rows = [];
+  let skippedLines = 0;
+  for (const line of lines) {
+    if (!line.trim())
+      continue;
+    let row;
+    try {
+      row = JSON.parse(line);
+    } catch {
+      skippedLines++;
+      continue;
+    }
+    const ts = row.timestamp ? Date.parse(row.timestamp) : Number.NaN;
+    if (!Number.isNaN(ts))
+      rows.push([row, ts]);
+  }
+  return { rows, skippedLines };
+}
+function resolveTranscript(env, projectsRoot = join(homedir(), ".claude", "projects"), override) {
+  if (override)
+    return existsSync(override) ? { ok: true, path: override } : { ok: false, reason: "no transcript" };
+  const id = env.CLAUDE_CODE_SESSION_ID;
+  if (!id)
+    return { ok: false, reason: "no host session id (CLAUDE_CODE_SESSION_ID); pass --transcript <path>" };
+  if (!SESSION_ID.test(id))
+    return { ok: false, reason: "refusing a session id with path characters" };
+  if (!existsSync(projectsRoot))
+    return { ok: false, reason: `no transcript root ${projectsRoot}` };
+  for (const dir of readdirSync(projectsRoot)) {
+    const path = join(projectsRoot, dir, `${id}.jsonl`);
+    if (existsSync(path))
+      return { ok: true, path };
+  }
+  return { ok: false, reason: `no transcript for session ${id}` };
+}
+
+// plugins/sp/scripts/session-timeline.ts
+var PROMPT_EXCERPT = 80;
+var render = (span) => ({
+  ...span,
+  work: formatDuration(span.workMs),
+  wait: formatDuration(span.waitMs),
+  token: formatTokenSplit(span.tokens)
+});
 function parseGroups(spec, count) {
   let next = 1;
   return spec.split(",").map((part) => {
@@ -66,49 +146,16 @@ function parseGroups(spec, count) {
 }
 function buildTimeline(lines, group) {
   const open = [];
-  let skippedLines = 0;
-  for (const line of lines) {
-    if (!line.trim())
-      continue;
-    let row;
-    try {
-      row = JSON.parse(line);
-    } catch {
-      skippedLines++;
-      continue;
-    }
-    const ts = row.timestamp ? Date.parse(row.timestamp) : Number.NaN;
-    if (Number.isNaN(ts))
-      continue;
+  const { rows, skippedLines } = parseRows(lines);
+  for (const [row, ts] of rows) {
     const prompt = promptText(row);
     if (prompt !== undefined) {
-      const fresh = { asks: new Map, toolIds: new Set, messages: new Map };
-      open.push({ start: ts, prompt, last: ts, askMs: 0, ...fresh });
+      open.push({ start: ts, prompt, ...newAcc(ts) });
       continue;
     }
     const seg = open.at(-1);
-    if (!seg)
-      continue;
-    seg.last = Math.max(seg.last, ts);
-    const blocks = Array.isArray(row.message?.content) ? row.message.content : [];
-    for (const b of blocks) {
-      if (b.type === "tool_use" && b.id) {
-        seg.toolIds.add(b.id);
-        if (b.name && OPERATOR_TOOLS.has(b.name))
-          seg.asks.set(b.id, ts);
-      } else if (b.type === "tool_result" && b.tool_use_id && seg.asks.has(b.tool_use_id)) {
-        seg.askMs += ts - (seg.asks.get(b.tool_use_id) ?? ts);
-      }
-    }
-    const u = row.message?.usage;
-    if (row.type === "assistant" && u && row.message?.id) {
-      seg.messages.set(row.message.id, {
-        input: u.input_tokens ?? 0,
-        cacheCreate: u.cache_creation_input_tokens ?? 0,
-        cacheRead: u.cache_read_input_tokens ?? 0,
-        output: u.output_tokens ?? 0
-      });
-    }
+    if (seg)
+      accumulate(seg, row, ts);
   }
   const segments = open.map((seg, i) => {
     const next = open[i + 1]?.start;
@@ -137,23 +184,6 @@ function buildTimeline(lines, group) {
     timeline.stages = parseGroups(group, segments.length).map(([a, b]) => render({ ...sumSpans(segments.slice(a - 1, b)), segments: a === b ? `${a}` : `${a}-${b}` }));
   }
   return timeline;
-}
-function resolveTranscript(env, projectsRoot = join(homedir(), ".claude", "projects"), override) {
-  if (override)
-    return existsSync(override) ? { ok: true, path: override } : { ok: false, reason: "no transcript" };
-  const id = env.CLAUDE_CODE_SESSION_ID;
-  if (!id)
-    return { ok: false, reason: "no host session id (CLAUDE_CODE_SESSION_ID); pass --transcript <path>" };
-  if (!SESSION_ID.test(id))
-    return { ok: false, reason: "refusing a session id with path characters" };
-  if (!existsSync(projectsRoot))
-    return { ok: false, reason: `no transcript root ${projectsRoot}` };
-  for (const dir of readdirSync(projectsRoot)) {
-    const path = join(projectsRoot, dir, `${id}.jsonl`);
-    if (existsSync(path))
-      return { ok: true, path };
-  }
-  return { ok: false, reason: `no transcript for session ${id}` };
 }
 var SESSION_TIMELINE_USAGE = 'usage: session-timeline [--transcript <path>] [--group "1-3,4,..."]';
 function main(argv, env = getEnvVars(), write = (s) => process.stdout.write(s), projectsRoot) {
@@ -196,6 +226,8 @@ export {
   resolveTranscript,
   parseGroups,
   main,
+  formatTokens,
+  formatTokenSplit,
   formatDuration,
   buildTimeline,
   SESSION_TIMELINE_USAGE

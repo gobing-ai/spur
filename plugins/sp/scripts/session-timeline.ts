@@ -5,26 +5,30 @@
  * transcript carries both. Reads the active Claude Code JSONL read-only
  * (`~/.claude/projects/<slug>/<CLAUDE_CODE_SESSION_ID>.jsonl`, or `--transcript`), one segment per
  * operator prompt: work = prompt → last activity; wait = idle until the next prompt plus time spent
- * answering an AskUserQuestion; tokens counted once per message id (a response spans several
- * records). `--group "1-3,4"` sums segments into stages. No transcript → `{available:false}`,
+ * answering an AskUserQuestion; tokens counted once per message id and rendered `<total> /
+ * <non-cached>`. `--group "1-3,4"` sums segments into stages. No transcript → `{available:false}`,
  * exit 0, and the review renders `n/a` instead of guessing. Node builtins only (standalone plugin).
  */
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { readFileSync } from 'node:fs';
 import { getEnvVars } from '../lib/env';
+import {
+    type Acc,
+    accumulate,
+    formatDuration,
+    formatTokenSplit,
+    newAcc,
+    parseRows,
+    promptText,
+    resolveTranscript,
+    type Span,
+    sumSpans,
+    sumTokens,
+} from '../lib/transcript';
 
-export type Tokens = Record<'input' | 'cacheCreate' | 'cacheRead' | 'output', number>;
+export { formatDuration, formatTokenSplit, formatTokens, resolveTranscript } from '../lib/transcript';
 
-export interface Span {
-    workMs: number;
-    waitMs: number;
-    toolCalls: number;
-    tokens: Tokens;
-}
-
-/** A span plus its `M:SS` / `H:MM:SS` renderings, so the review table needs no arithmetic. */
-export type Rendered<T> = T & { work: string; wait: string };
+/** A span plus its `M:SS` / `H:MM:SS` and token renderings, so the review table needs no arithmetic. */
+export type Rendered<T> = T & { work: string; wait: string; token: string };
 
 export interface Timeline {
     available: true;
@@ -35,60 +39,14 @@ export interface Timeline {
     skippedLines: number;
 }
 
-type Block = Partial<Record<'type' | 'id' | 'name' | 'text' | 'tool_use_id', string>>;
-
-interface Row {
-    type?: string;
-    timestamp?: string;
-    isMeta?: boolean;
-    isCompactSummary?: boolean;
-    message?: { id?: string; content?: unknown; usage?: Record<string, number | undefined> };
-}
-
-const SESSION_ID = /^[A-Za-z0-9_-]+$/;
 const PROMPT_EXCERPT = 80;
-/** Host tools whose call→result gap is the operator answering, not the agent working. */
-const OPERATOR_TOOLS = new Set(['AskUserQuestion']);
-
-const zeroTokens = (): Tokens => ({ input: 0, cacheCreate: 0, cacheRead: 0, output: 0 });
-
-export function formatDuration(ms: number): string {
-    const s = Math.round(ms / 1000);
-    const h = Math.floor(s / 3600);
-    const m = Math.floor((s % 3600) / 60);
-    const ss = String(s % 60).padStart(2, '0');
-    return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`;
-}
 
 const render = <T extends Span>(span: T): Rendered<T> => ({
     ...span,
     work: formatDuration(span.workMs),
     wait: formatDuration(span.waitMs),
+    token: formatTokenSplit(span.tokens),
 });
-
-/** Operator prompt text, or undefined for tool results, meta rows and compaction summaries. */
-function promptText(row: Row): string | undefined {
-    if (row.type !== 'user' || row.isMeta || row.isCompactSummary) return undefined;
-    const content = row.message?.content;
-    if (typeof content === 'string') return content;
-    if (!Array.isArray(content) || (content as Block[]).some((b) => b.type === 'tool_result')) return undefined;
-    return (content as Block[]).find((b) => b.type === 'text')?.text;
-}
-
-function sumTokens(all: Tokens[]): Tokens {
-    const total = zeroTokens();
-    for (const t of all) for (const k of Object.keys(total) as (keyof Tokens)[]) total[k] += t[k];
-    return total;
-}
-
-function sumSpans(spans: Span[]): Span {
-    return {
-        workMs: spans.reduce((n, s) => n + s.workMs, 0),
-        waitMs: spans.reduce((n, s) => n + s.waitMs, 0),
-        toolCalls: spans.reduce((n, s) => n + s.toolCalls, 0),
-        tokens: sumTokens(spans.map((s) => s.tokens)),
-    };
-}
 
 /** "1-3,4" → [[1,3],[4,4]]; 1-based, ascending, in range, non-overlapping. */
 export function parseGroups(spec: string, count: number): [number, number][] {
@@ -103,59 +61,23 @@ export function parseGroups(spec: string, count: number): [number, number][] {
     });
 }
 
-interface Open {
+interface Open extends Acc {
     start: number;
     prompt: string;
-    last: number;
-    askMs: number;
-    asks: Map<string, number>;
-    toolIds: Set<string>;
-    messages: Map<string, Tokens>;
 }
 
 export function buildTimeline(lines: string[], group?: string): Timeline {
     const open: Open[] = [];
-    let skippedLines = 0;
+    const { rows, skippedLines } = parseRows(lines);
 
-    for (const line of lines) {
-        if (!line.trim()) continue;
-        let row: Row;
-        try {
-            row = JSON.parse(line) as Row;
-        } catch {
-            skippedLines++;
-            continue;
-        }
-        const ts = row.timestamp ? Date.parse(row.timestamp) : Number.NaN;
-        if (Number.isNaN(ts)) continue;
+    for (const [row, ts] of rows) {
         const prompt = promptText(row);
         if (prompt !== undefined) {
-            const fresh = { asks: new Map(), toolIds: new Set<string>(), messages: new Map() };
-            open.push({ start: ts, prompt, last: ts, askMs: 0, ...fresh });
+            open.push({ start: ts, prompt, ...newAcc(ts) });
             continue;
         }
         const seg = open.at(-1);
-        if (!seg) continue; // session preamble before the first prompt
-        seg.last = Math.max(seg.last, ts);
-        const blocks = Array.isArray(row.message?.content) ? (row.message.content as Block[]) : [];
-        for (const b of blocks) {
-            if (b.type === 'tool_use' && b.id) {
-                seg.toolIds.add(b.id);
-                if (b.name && OPERATOR_TOOLS.has(b.name)) seg.asks.set(b.id, ts);
-            } else if (b.type === 'tool_result' && b.tool_use_id && seg.asks.has(b.tool_use_id)) {
-                seg.askMs += ts - (seg.asks.get(b.tool_use_id) ?? ts);
-            }
-        }
-        const u = row.message?.usage;
-        // Split records of one response repeat its usage: keyed by message id, overwrite, never add.
-        if (row.type === 'assistant' && u && row.message?.id) {
-            seg.messages.set(row.message.id, {
-                input: u.input_tokens ?? 0,
-                cacheCreate: u.cache_creation_input_tokens ?? 0,
-                cacheRead: u.cache_read_input_tokens ?? 0,
-                output: u.output_tokens ?? 0,
-            });
-        }
+        if (seg) accumulate(seg, row, ts); // rows before the first prompt are session preamble
     }
 
     const segments = open.map((seg, i) => {
@@ -188,25 +110,6 @@ export function buildTimeline(lines: string[], group?: string): Timeline {
         );
     }
     return timeline;
-}
-
-export type Resolved = { ok: true; path: string } | { ok: false; reason: string };
-
-export function resolveTranscript(
-    env: Record<string, string | undefined>,
-    projectsRoot = join(homedir(), '.claude', 'projects'),
-    override?: string,
-): Resolved {
-    if (override) return existsSync(override) ? { ok: true, path: override } : { ok: false, reason: 'no transcript' };
-    const id = env.CLAUDE_CODE_SESSION_ID;
-    if (!id) return { ok: false, reason: 'no host session id (CLAUDE_CODE_SESSION_ID); pass --transcript <path>' };
-    if (!SESSION_ID.test(id)) return { ok: false, reason: 'refusing a session id with path characters' };
-    if (!existsSync(projectsRoot)) return { ok: false, reason: `no transcript root ${projectsRoot}` };
-    for (const dir of readdirSync(projectsRoot)) {
-        const path = join(projectsRoot, dir, `${id}.jsonl`);
-        if (existsSync(path)) return { ok: true, path };
-    }
-    return { ok: false, reason: `no transcript for session ${id}` };
 }
 
 export const SESSION_TIMELINE_USAGE = 'usage: session-timeline [--transcript <path>] [--group "1-3,4,..."]';
