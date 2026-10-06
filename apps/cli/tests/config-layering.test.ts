@@ -2,6 +2,9 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { chmod, mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
+import { getEnvVar } from '@gobing-ai/spur-config';
+import { main } from '../src';
+import type { CommandOutput } from '../src/output';
 import { runCli } from './helpers';
 
 /**
@@ -285,4 +288,22 @@ describe('config layering — composition-root merged-config (A5)', () => {
             expect((coderExec?.capabilityStale?.detected ?? '').startsWith('1.0.0')).toBe(true);
         },
     );
+});
+
+// Task 0817 R1 AC1 (moved from packages/config/tests/loader.test.ts — a package test must not
+// deep-import an app). `main()` must forward its absent `options.cwd` verbatim so the
+// SPUR_SKIP_PROJECT_CONFIG gate (set by tests/setup.ts) fires for a no-cwd programmatic call;
+// otherwise a repository-root run would load this checkout's live `.spur/config.yaml`, whose
+// `agent.executors` define `pi-zai`.
+describe('SPUR_SKIP_PROJECT_CONFIG composition root (task 0817 R1)', () => {
+    slowTest('a programmatic no-cwd CLI run exits 1 for a repo-config-only executor (AC1)', async () => {
+        expect(getEnvVar('SPUR_SKIP_PROJECT_CONFIG')).toBe('true');
+        const messages: string[] = [];
+        const output: CommandOutput = { write: (m) => messages.push(m), error: () => {} };
+        const exitCode = await main(['agent', 'doctor', 'pi-zai', '--json'], { output, dbUrl: ':memory:' });
+        const envelope = JSON.parse(messages.join('')) as { agents: Array<{ agent: string; error: string | null }> };
+        const piZai = envelope.agents.find((agent) => agent.agent === 'pi-zai');
+        expect(piZai?.error ?? '').toContain('Unknown agent: pi-zai');
+        expect(exitCode).toBe(1);
+    });
 });

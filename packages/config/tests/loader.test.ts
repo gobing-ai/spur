@@ -908,22 +908,9 @@ describe('agent.executors disabled JSON schema round-trip (0796)', () => {
 // ---- SPUR_SKIP_PROJECT_CONFIG (task 0817 R1) ----
 // The project layer must be suppressible for unpinned callers the same way
 // SPUR_SKIP_GLOBAL_CONFIG suppresses the global layer — but only when the caller
-// left `cwd` unpinned (explicit cwd > env skip > process.cwd()). The end-to-end
-// check at the bottom exercises the composition root: `main()` must forward its
-// absent `options.cwd` verbatim so the gate fires for a no-cwd programmatic
-// invocation; run under `bun run test` (repository-root cwd) that invocation
-// would otherwise resolve this checkout's live `.spur/config.yaml`, whose
-// `agent.executors` define `pi-zai`.
-
-import { main as cliMain } from '../../../apps/cli/src/index';
-import type { CommandOutput } from '../../../apps/cli/src/output';
-
-/**
- * The end-to-end check boots the real composition root (config-free direct path)
- * and runs doctor's binary probes; give it more than Bun's 5 s default so a
- * loaded machine cannot turn it into a timeout flake (task 0817 R2 rationale).
- */
-const CLI_BOOT_TIMEOUT_MS = 30_000;
+// left `cwd` unpinned (explicit cwd > env skip > process.cwd()). The composition-root
+// end-to-end check (AC1) lives in apps/cli/tests/config-layering.test.ts: a package
+// test must not import an app.
 
 describe('SPUR_SKIP_PROJECT_CONFIG hermeticity (task 0817 R1)', () => {
     /** Set the skip env, run `body`, then restore the ambient value. */
@@ -965,32 +952,6 @@ describe('SPUR_SKIP_PROJECT_CONFIG hermeticity (task 0817 R1)', () => {
             expect(config.agent?.executors ?? []).toEqual([]);
         });
     });
-
-    test(
-        'a programmatic no-cwd CLI run exits 1 for a repo-config-only executor (AC1)',
-        async () => {
-            await withSkipEnv(async () => {
-                const messages: string[] = [];
-                const output: CommandOutput = { write: (m) => messages.push(m), error: () => {} };
-                // No `cwd` in options — the same shape as the confirmed no-cwd
-                // call sites in apps/cli/tests/commands/workflow.test.ts:136.
-                // Under the harness preload the skip env is set, so the live
-                // `.spur/config.yaml` must NOT be loaded: executor `pi-zai`
-                // (project-config-only) has to come back unknown.
-                const exitCode = await cliMain(['agent', 'doctor', 'pi-zai', '--json'], {
-                    output,
-                    dbUrl: ':memory:',
-                });
-                const envelope = JSON.parse(messages.join('')) as {
-                    agents: Array<{ agent: string; error: string | null }>;
-                };
-                const piZai = envelope.agents.find((agent) => agent.agent === 'pi-zai');
-                expect(piZai?.error ?? '').toContain('Unknown agent: pi-zai');
-                expect(exitCode).toBe(1);
-            });
-        },
-        CLI_BOOT_TIMEOUT_MS,
-    );
 });
 
 // ---- retired fleet carriers (0858 R2) ----
