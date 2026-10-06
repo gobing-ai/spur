@@ -934,7 +934,7 @@ export async function runFleetE2e(args: string[]): Promise<number> {
                         // drain, and a task that appeared after the loops started is not an event it
                         // follows, so a single tick may not reach it (G71 1077 R3).
                         try {
-                            cli(['message', 'send', '--to', state.plannerId, 'tick for ' + wbs, '--json'], scratch);
+                            cli(['message', 'send', '--to', state.plannerId, `tick for ${wbs}`, '--json'], scratch);
                         } catch {
                             /* the next poll retries */
                         }
