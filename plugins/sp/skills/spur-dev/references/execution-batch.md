@@ -1209,16 +1209,42 @@ ordered divergence recipe, run by the operator — the driver never merges, reba
 conflicts itself. Other halt causes (task failure, HITL pause) keep the hint as printed:
 
 ```
-# 1. integrate as a merge commit — never a rebase; task evidence cites the branch's commit SHAs
-git checkout <base-ref> && git merge --no-ff --no-commit <branch>
+# 1. decide whether conflicts need resolving FIRST, because that decides the merge form:
+#      git merge-tree $(git merge-base <base-ref> <branch>) <base-ref> <branch> | grep -q '^<<<<<<<' \
+#        && echo "conflicts — use the two-phase form below" || echo "clean — use the atomic form"
+#
+# 1a. CLEAN (the common case): integrate as ONE atomic merge commit. Never a rebase — task
+#     evidence cites the branch's commit SHAs. This is the file's sanctioned merge commit.
+#     Do NOT split this into a two-phase merge + commit when nothing needs resolving: that spans
+#     the whole gate run, and anything in that window that touches the repository's git state
+#     (a test, a hook, a tool invocation) discards MERGE_HEAD silently. The failure is invisible
+#     until the history is read — it produced a single-parent commit in run ada5a36c (task 1090),
+#     which then needed an extra empty ancestry merge to repair. A cheap probe could not
+#     reproduce it (MERGE_HEAD survived `bun run lint`, the rule preset and a test-file subset),
+#     so the cross-command dependency is removed rather than diagnosed.
+git checkout <base-ref> && git merge --no-ff -m "<prepared message>" <branch>
+
+# 1b. CONFLICTING: the two-phase form is correct here, because the resolution work must land
+#     between the merge and the commit. Everything in steps 2–4 belongs to this branch only.
+#     A divergent branch cannot fast-forward, so the merge flag from 1a is not needed here.
+#     git checkout <base-ref> && git merge --no-commit <branch>
 # 2. resolve source conflicts by hand; generated files are then regenerated with the project's
 #    generator, never hand-merged
 #    (this repo: bun run build:plugin-lib && bun run --filter @gobing-ai/spur build:bundle)
 # 3. stage every resolved path and regenerated bundle (git add …) — an unmerged or
 #    unstaged path makes step 5 abort
 # 4. run qualityGateCmd once, after ALL conflicts are resolved
-# 5. commit the merge with the prepared message file
-git commit -F <message-file>
+# 5. commit the merge with the prepared message file — CHECK THE PARENTS FIRST (step 5a)
+#    git commit -F <message-file>
+#
+# 5a. ALWAYS verify the merge really is a merge before treating it as landed:
+#       git log -1 --format='%h parents=%p'   # must print TWO parents
+#     One parent means MERGE_HEAD was lost somewhere between steps 1 and 5 — the content is on
+#     the base ref but the branch is not an ancestor, so `git branch -d` would refuse and the
+#     retained worktree's provenance would not be readable from the base ref. Recover by
+#     re-running step 1a against the already-landed tree (a content-free merge commit restores
+#     ancestry).
+
 # 6. persist evidence out (WT-4a), then WT-4b/4c cleanup, and set the marker to merged
 inline-run-setup --persist-out --from <worktree> --task-file …
 ```

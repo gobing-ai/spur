@@ -116,6 +116,9 @@ describe('transferRunTables (task 0975 R1)', () => {
         const source = await setup();
         const target = await setup();
         await insertRun(source, 'run_new', { workflowName: 'task-lifecycle', externalKey: 'task-0975' });
+        // The source run OWNS provenance, so refusing teardown is the point of this case
+        // (1090 follow-up: the grading keys on child rows, so the fixture must have one).
+        await insertChild(source, 'action_runs', 'act_0975', 'run_new', 'm');
         await insertRun(target, 'run_old', {
             workflowName: 'task-lifecycle',
             externalKey: 'task-0975',
@@ -131,6 +134,34 @@ describe('transferRunTables (task 0975 R1)', () => {
             'task-0975',
         );
         expect(row).toEqual({ id: 'run_old', status: 'failed' });
+        source.close();
+        target.close();
+    });
+
+    test('external-key-conflict with a CHILDLESS source run is graded as bookkeeping (1090 follow-up)', async () => {
+        // The identity belongs to the target row either way, so a bare bookkeeping row — the
+        // pipeline precheck's auto-profile feature reopen creates one in the execution tree
+        // while the invoking tree already owns that key — has nothing to orphan. It is still
+        // reported, but teardown is not refused for it.
+        const source = await setup();
+        const target = await setup();
+        await insertRun(source, 'run_bookkeeping', {
+            workflowName: 'feature-lifecycle',
+            externalKey: 'feature:H1',
+            status: 'running',
+        });
+        await insertRun(target, 'run_owner', {
+            workflowName: 'feature-lifecycle',
+            externalKey: 'feature:H1',
+            status: 'failed',
+        });
+
+        const result = await transferRunTables(source, target);
+        expect(result.skipped).toEqual([{ id: 'run_bookkeeping', reason: 'external-key-conflict-bookkeeping' }]);
+        // Nothing was written, and the owning row stands.
+        expect(await count(target, 'runs')).toBe(1);
+        const row = await target.queryFirst<{ id: string }>('SELECT id FROM runs WHERE external_key = ?', 'feature:H1');
+        expect(row).toEqual({ id: 'run_owner' });
         source.close();
         target.close();
     });

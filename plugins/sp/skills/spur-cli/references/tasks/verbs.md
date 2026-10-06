@@ -448,3 +448,25 @@ spur task path     <wbs> [--folder] [--json]
 spur task run-link <wbs> [--source <src>] [--run-id <id>] [--json]
 spur task scaffold-tests <wbs> [--file <path>] [--folder] [--json]
 ```
+
+**No `delete` verb — and that is the surface's shape, not an oversight.** The corpus is
+append-only history: a task that is no longer wanted is a *decision*, and the lifecycle already owns
+it. Use
+
+```
+spur task update <wbs> cancelled [--json]      # the in-band terminal; the file stays as the record
+```
+
+Removing the file entirely is reserved for a task that should never have existed (a duplicate WBS, a
+mis-scaffolded capture) — a **corpus repair**, not a lifecycle move. Do it as a tracked deletion so
+the removal itself is auditable:
+
+```
+git rm docs/tasks<N>/<wbs>_<slug>.md
+git commit -m "chore(corpus): drop <wbs> — <why it never existed>"
+```
+
+Check for inbound references before deleting (`grep -rn "<wbs>" docs/ config/ plugins/`, plus any
+`dependencies[]` edge via `spur task list --json`). The `deps remove` verb clears an edge. A deleted
+WBS must not stay referenced: a dangling `dependencies[]` entry is a broken traceability edge, not a
+harmless leftover.

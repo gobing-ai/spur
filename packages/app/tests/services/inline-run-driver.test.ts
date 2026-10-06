@@ -488,6 +488,12 @@ describe('runInlineRunSetup + runInlineRunTrace (moved driver bodies, 1006 R3)',
         try {
             await sourceSeed.adapter.run(RUN_INSERT, 'run_1049s');
             await sourceSeed.adapter.run("UPDATE runs SET external_key = 'k1049' WHERE id = 'run_1049s'");
+            // 1090 follow-up: the refusal is graded by whether the refused source run OWNS
+            // provenance, so this fixture must have a child row to pin the fail-closed branch.
+            await sourceSeed.adapter.run(
+                `INSERT INTO action_runs (id, run_id, node, kind, status, duration_ms, ok, created_at, updated_at)
+                 VALUES ('act_1049s', 'run_1049s', 'implement', 'agent.run', 'done', 5, 1, 1, 1)`,
+            );
         } finally {
             sourceSeed.close();
         }
@@ -518,6 +524,55 @@ describe('runInlineRunSetup + runInlineRunTrace (moved driver bodies, 1006 R3)',
                 const toRecords = runStoragePaths(to.dir).recordsDir;
                 expect(existsSync(join(toRecords, 'run_1049s.md'))).toBe(false);
                 expect(existsSync(join(toRecords, 'run_1049s.state.json'))).toBe(false);
+            });
+        } finally {
+            from.cleanup();
+            to.cleanup();
+        }
+    });
+
+    test('persist-out does NOT block teardown for a childless external-key conflict (1090 follow-up)', async () => {
+        // The pipeline precheck's auto-profile feature reopen runs in the execution tree, so a
+        // `feature-lifecycle` / `feature:<id>` row is created in the throwaway DB while the
+        // invoking tree already owns that key. The row owns nothing, so refusing teardown would
+        // strand a worktree for no provenance reason — the exact state run ada5a36c hit.
+        const from = makeProject('persist-xk2-from');
+        const to = makeProject('persist-xk2-to');
+        const seed = async (dir: string, id: string, status: string): Promise<void> => {
+            const db = await openInlineRunProjectDb(dir);
+            try {
+                await db.adapter.run(
+                    `INSERT INTO runs (id, workflow_name, mode, status, agent, external_key, started_at, completed_at,
+                                       metadata_json, created_at, updated_at)
+                     VALUES (?, 'feature-lifecycle', 'state-machine', ?, NULL, 'feature:H1', '2026-10-02T00:00:00Z', NULL, '{}', 1, 1)`,
+                    id,
+                    status,
+                );
+            } finally {
+                db.close();
+            }
+        };
+        await seed(to.dir, 'run_owner', 'failed');
+        await seed(from.dir, 'run_bookkeeping', 'running');
+        try {
+            await inDir(to.dir, async () => {
+                const pass = await captureAsync(() => runInlineRunPersistOut({ from: from.dir, taskFiles: [] }));
+                expect(pass.value).toBe(0);
+                const payload = JSON.parse(pass.out.trimEnd()) as { ok: boolean; skipped: unknown[] };
+                expect(payload.ok).toBe(true);
+                expect(payload.skipped).toContainEqual({
+                    id: 'run_bookkeeping',
+                    reason: 'external-key-conflict-bookkeeping',
+                });
+                // The owning row stands; the bookkeeping row was not inserted.
+                const target = await openInlineRunProjectDb(to.dir);
+                try {
+                    expect(await target.adapter.queryFirst<{ n: number }>('SELECT COUNT(*) AS n FROM runs')).toEqual({
+                        n: 1,
+                    });
+                } finally {
+                    target.close();
+                }
             });
         } finally {
             from.cleanup();

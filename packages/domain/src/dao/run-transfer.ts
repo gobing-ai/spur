@@ -18,6 +18,20 @@ import type { DbAdapter } from '@gobing-ai/ts-db';
  * `ON CONFLICT(id) DO NOTHING`, so persisting the same worktree twice leaves every
  * invoking-tree row count unchanged (idempotent).
  *
+ * `external-key-conflict` is graded by what the refused source run actually owns (1090
+ * follow-up). The identity belongs to the TARGET's row either way, so a source row with no
+ * child rows has nothing to orphan — it is a bare bookkeeping row the worktree created for
+ * itself (the pipeline precheck's auto-profile feature reopen runs in the execution tree, so
+ * a `feature-lifecycle`/`feature:<id>` row is created in a throwaway DB while the invoking
+ * tree already owns that key). That case reports
+ * `reason:'external-key-conflict-bookkeeping'` and does NOT fail the pass. A source run that
+ * owns action/phase/transition/state/artifact/link rows keeps the fail-closed
+ * `external-key-conflict`: refusing teardown is what stops that provenance being lost.
+ *
+ * Evidence for the grading (run `ada5a36c`, task 1090): the refused `feature:H1` row owned 0
+ * child rows in every child table, against 48 `action_runs` for that run's task-pipeline run
+ * and 9 `action_runs` + 5 `phase_runs` for its wrap run in the same archive.
+ *
  * Columns copy by INTERSECTION: the engine applies guarded ALTERs (`owner_attempt`,
  * `owner_pid`, `interrupt_reason`) to any DB it runs in, so an engine-touched worktree DB
  * can carry columns a freshly CLI-migrated invoking tree does not have yet (they appear
@@ -30,7 +44,7 @@ import type { DbAdapter } from '@gobing-ai/ts-db';
 
 export interface RunTransferSkipped {
     readonly id: string;
-    readonly reason: 'id-exists' | 'external-key-conflict';
+    readonly reason: 'id-exists' | 'external-key-conflict' | 'external-key-conflict-bookkeeping';
 }
 
 /** Outcome of one transfer pass: inserted run ids in source order, plus runs the conflict policy refused. */
@@ -120,7 +134,23 @@ export async function transferRunTables(from: DbAdapter, to: DbAdapter): Promise
                 row.external_key,
             );
             if (conflict !== undefined) {
-                skipped.push({ id, reason: 'external-key-conflict' });
+                // Grade the refusal by what the source row owns (see the module doc). A childless
+                // row is bookkeeping the worktree created for itself, not provenance.
+                let ownsChildren = false;
+                for (const table of CHILD_TABLES) {
+                    const child = await from.queryFirst<{ c: number }>(
+                        `SELECT COUNT(*) AS c FROM ${table} WHERE run_id = ?`,
+                        id,
+                    );
+                    if ((child?.c ?? 0) > 0) {
+                        ownsChildren = true;
+                        break;
+                    }
+                }
+                skipped.push({
+                    id,
+                    reason: ownsChildren ? 'external-key-conflict' : 'external-key-conflict-bookkeeping',
+                });
                 continue;
             }
         }

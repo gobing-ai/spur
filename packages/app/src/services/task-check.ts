@@ -1561,6 +1561,23 @@ export class TaskCheckService extends PlanningCheckService {
         recordStatus: string,
         completionGate: boolean,
     ): Promise<void> {
+        // 1090 follow-up — measured, then deliberately NOT enabled. A terminal record used to
+        // skip this pass, so a done task's citations were never re-checked: 1090's own
+        // `## Solution` kept four anchors on the wrong code after a later commit shifted the
+        // lines, and `spur task check --as done` reported `pass: true, findings: []`. Removing
+        // the early return was tried and rejected on evidence — over 40 recently-done tasks the
+        // pass emitted 115 findings (3 per task) and `pass` stayed true for all of them, i.e.
+        // pure noise. Precision is the blocker, not coverage:
+        //   - L4.anchor-subject-mismatch (73): the subject tokens come from the row's PROSE, so an
+        //     emphasized word (`IS replaced`) or a backticked literal the row quotes
+        //     (`` `(no changes detected)` ``) becomes a subject the cited line cannot contain.
+        //   - L4.anchor-unresolved (36): citations written as project-internal shorthand
+        //     (`taste-refactoring-architect/SKILL.md:1-16`, relative to plugins/sp/skills/) are
+        //     resolved from the project root and reported missing.
+        //   - L4.stale-line-anchor (6): the external-evidence form, by design.
+        // On 1090 itself the rule produced 3 false positives to 1 true positive. Until the
+        // subject extraction is restricted to real symbols, enabling this for landed records
+        // would teach operators to ignore L4 rather than catch drift.
         const terminal = recordStatus === 'done' || recordStatus === 'cancelled';
         if (terminal) return;
         const resolutionSeverity = completionGate ? ('error' as const) : ('warning' as const);

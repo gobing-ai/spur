@@ -1575,12 +1575,26 @@ export async function runInlineRunPersistOut(input: InlineRunPersistOutInput): P
         // (workflow_name, external_key) already belongs to a different receiving run — the
         // batch was NOT persisted, so automatic worktree teardown would orphan provenance.
         // Same fail-closed channel as record conflicts: exit 1, driver routes to WT-5.
+        //
+        // 1090 follow-up: only a source run that OWNS child rows can orphan anything. The
+        // transfer grades a childless conflict as `external-key-conflict-bookkeeping` — a bare
+        // bookkeeping row the pipeline precheck's auto-profile feature reopen created in the
+        // execution tree while the invoking tree already owned that key. It is reported (so the
+        // operator still sees it) but does not fail the pass, because teardown loses nothing.
         const keyConflicts = result.skipped.filter((skip) => skip.reason === 'external-key-conflict');
         if (keyConflicts.length > 0 || result.skipped.some((skip) => skip.reason.startsWith('record-conflict:'))) {
+            // Name what DID land. The durable-evidence and cited/owned file copies run BEFORE the
+            // run-row transfer, so by the time this refusal fires the evidence plane is usually
+            // already in the invoking tree — the operator could not tell that from a bare "the
+            // batch was NOT persisted" and had to verify plane by plane by hand (task 1090).
+            const landed =
+                `already persisted before this refusal: ${result.persisted} run row(s)` +
+                `${result.skipped.length > 0 ? `, ${result.skipped.length} skipped` : ''};` +
+                ' the durable evidence plane and every cited/owned .spur/run file were copied by the same pass';
             const error =
                 keyConflicts.length > 0
-                    ? `persist-out: external-key conflict for source runs ${keyConflicts.map((skip) => skip.id).join(', ')}; retain the source worktree and reconcile provenance before teardown`
-                    : 'persist-out: unresolved retained record conflicts; retain the worktree and reconcile copies before teardown';
+                    ? `persist-out: external-key conflict for source runs ${keyConflicts.map((skip) => skip.id).join(', ')}; ${landed}. retain the source worktree and reconcile provenance before teardown`
+                    : `persist-out: unresolved retained record conflicts; ${landed}. retain the worktree and reconcile copies before teardown`;
             process.stdout.write(`${JSON.stringify({ ...result, ok: false, error })}\n`);
             return 1;
         }
