@@ -43,7 +43,9 @@ import {
     parseYamlObject,
 } from '@gobing-ai/ts-runtime';
 import { ValidationError } from '@gobing-ai/ts-utils';
+import { getDecisionService } from '../decision/decision-service';
 import { redactAndBound } from '../observability/agent-execution';
+import type { SystemEventBus } from '../services/system-event-tap';
 import { createRunLogTraceFailureRecorder, withActionTrace } from '../workflow/action-trace';
 import type { HostAllowlist, HttpRequester } from '../workflow/actions/http-request';
 import { resolveDurableArtifactPath, resolveRunArtifactPath } from '../workflow/actions/run-path';
@@ -2041,7 +2043,7 @@ export class WorkflowAppService {
             agentService: this.ctx.agentService(),
             ruleService: this.ctx.ruleService(),
             hitlResponder: this.ctx.hitlResponder(),
-            decisionEvaluator: this.buildDecisionEvaluator(),
+            decisionEvaluator: this.buildDecisionEvaluator(bus),
             httpRequester: this.ctx.httpRequester?.(),
             hostAllowlist: this.ctx.hostAllowlist?.(),
             ...(bus !== undefined ? { observabilityBus: bus } : {}),
@@ -2108,9 +2110,11 @@ export class WorkflowAppService {
     /**
      * Application decision evaluator for explicit never/evidence HITL modes (0911). Composes the
      * merged-config activation switch, action-evidence DAO, optional provider factory, configured
-     * secrets and the registered-summary artifact resolver.
+     * secrets and the registered-summary artifact resolver. `bus` is the run's observability bus:
+     * evidence-mode operator gates decide through the catalog service (1099) and its lifecycle
+     * events flow on the same bus with caller `gate`.
      */
-    private buildDecisionEvaluator(): DecisionEvaluator {
+    private buildDecisionEvaluator(bus?: WorkflowObservabilityBus): DecisionEvaluator {
         const summary: SummaryResolver = {
             resolve: async (runId, path) => {
                 const fs = createNodeFileSystem(this.ctx.cwd);
@@ -2170,6 +2174,12 @@ export class WorkflowAppService {
                     secrets: this.ctx.secretValues,
                     warn: this.ctx.warn,
                     summary,
+                    // 1099: evidence-mode confirm gates decide through the catalog decision
+                    // `gate-evidence` (same construction the `decision` CLI serves).
+                    decisionService: () => getDecisionService(this.ctx.spurConfig ?? null, this.ctx.cwd),
+                    // SAFETY: WorkflowObservabilityBus and SystemEventBus are nominal names over
+                    // one structural ts-infra EventBus instance (ADR-044 event bridge), decide.ts.
+                    ...(bus !== undefined ? { bus: bus as unknown as SystemEventBus } : {}),
                 }),
         };
     }

@@ -1,0 +1,35 @@
+# Decision catalog for evidence-mode operator gates (feature P1 / task 1099,
+# decision-observability-and-adoption.md §4, class keep-human).
+#
+# `gate-evidence` serves `hitl.confirm` actions overridden to
+# `decision.mode: evidence`: the workflow gate responder decides through it
+# instead of the legacy inline maker, so operator gates get catalog maker
+# resolution, the catalog min-confidence floor and `decision.*` lifecycle
+# events with caller `gate` (task 1099 R2). Bundled workflows keep
+# `mode: never` and always pause for the operator (task 1099 R4); no shipped
+# workflow YAML references this id.
+#
+# Resolution: this file ships in the shared layer (the installed package's
+# config/decisions/). A project can override it per basename through
+# .spur/decisions/ or decisions.paths (first layer wins, ADR-113 style).
+version: 1
+
+decisions:
+    gate-evidence:
+        type: choice
+        description: Should an evidence-mode operator gate proceed, stop, or defer to the operator?
+        parameters:
+            prompt:
+                type: string
+                description: The gate question that would have been asked to the operator.
+            evidence:
+                type: json
+                description: Bounded, redacted producer-node evidence recorded for this run.
+            node:
+                type: string
+                description: The workflow node that raised the gate.
+        criteria:
+            yes: The recorded evidence establishes that the gate should proceed.
+            no: The recorded evidence establishes that the gate should not proceed.
+            defer: The evidence is insufficient or conflicting; defer to the operator.
+        fallback: defer

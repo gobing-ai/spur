@@ -4,7 +4,7 @@ name: Route evidence-mode operator gates through catalog decisions
 status: todo
 template: feature-impl
 created_at: 2026-10-07T01:02:20.692Z
-updated_at: "2026-10-07T01:19:57.495Z"
+updated_at: "2026-10-07T05:57:51.434Z"
 feature_id: P1
 priority: P2
 tags:
@@ -94,11 +94,20 @@ Slice S7 of docs/design/decision-observability-and-adoption.md §5. Evidence-mod
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+- `config/decisions/gates.yaml:1` (new): `gate-evidence` choice decision — criteria yes/no/defer, fallback `defer`, required params `prompt` (string), `evidence` (json), `node` (string). Serves at the upstream 0.7 confidence floor (R1 declares no override); verified with `decision show gate-evidence --json` (shared layer, effective maker `typesafe`).
+- `packages/app/src/workflow/decision-hitl-responder.ts` (`evaluateEvidence` confirm branch `decision-hitl-responder.ts:455-500`, before the legacy maker call): when the request is `confirm` and `decisionService` is injected, decide through `DecisionService.decide('gate-evidence', { prompt, evidence: payload, node }, { bus, context: { caller: 'gate', correlation: { runId, nodeId } } })`. Mapping: `source === 'model'` with value `yes`/`no` → `accepted` (value + served confidence, unchanged evidence ids/digest/artifact); a `defer` value or any served fallback → `deferred` — explicit model defer keeps the D5 `explicit-defer` reason, served fallbacks carry the hub reason (`low-confidence`/`no-backend`/`timeout`/`error`), so a served default never yields `accepted`. `DecisionEvaluationDeps` gains `decisionService?`/`bus?` (`decision-hitl-responder.ts:76-78`); service throws (unknown id / duplicate catalog / unregistered maker) land in the existing catch → deferred `provider-unavailable` (fail closed to the operator, `decision.rejected` still emitted).
+- `packages/app/src/services/workflow-service.ts` (`createEngineService` / `buildDecisionEvaluator`): the call passes the run bus (`workflow-service.ts:2046`, the same bus given as `observabilityBus`); `buildDecisionEvaluator` injects `decisionService: () => getDecisionService(...)` (`workflow-service.ts:2179`) and the bus (`workflow-service.ts:2182`) (ADR-044 structural-bridge cast, as decide.ts).
+- Unchanged by design (R3/R4): `evaluateLegacy`, select gates, direct construction without a service, bundled `mode: never` gates, and all workflow YAML.
+
+**Start condition (R5) — NOT met, overridden by batch order:** `decision status --reliability --json` on this worktree reports `evidence: none`, 0 samples for every group, and no `gate-evidence` group exists (no recorded samples anywhere). Implementation proceeds on the batch's explicit sequencing; the first real gate-evidence samples can only appear after this slice lands and an operator runs an evidence-mode override or `decision run gate-evidence`.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- `packages/app/tests/workflow/decision-gate-catalog.test.ts` (new, 9 tests): catalog confirm path (decide id/input/context + accepted provenance with served confidence), explicit model defer → `explicit-defer`, every served fallback → deferred with the served reason (defaults never accepted), service rejection → deferred `provider-unavailable`, oversized evidence defers before any decide, never mode never decides, select gates and direct construction keep the legacy maker, and an integration test over the REAL bundled catalog + service + recording bus (no backend): `decision.start/failure/end` with caller `gate`, runId/nodeId correlation, shared layer, makerSource `catalog-default`, fallback value `defer`.
+- E2E evidence: `.spur/run/1099-gate.json` (script `.spur/run/1099-gate-e2e.ts`) — evidence confirm + no backend pauses the run (answer cleared, `statusValue: 'deferred'`, reason `no-backend`) with the three decision events; `mode: never` writes no decision rows and hands to the operator; select writes no decision rows.
+- Targeted: `bun test tests/workflow/decision-gate-catalog.test.ts tests/workflow/decision-evidence.test.ts tests/workflow/decision-hitl-responder.test.ts tests/workflow/builtins.test.ts tests/decision` — 71 + 9 pass. `tsc --noEmit` and `biome check` clean on changed files. Repo gate: `bun run spur-check` (see gate result below).
+- `packages/app/tests/services/workflow-service.test.ts` (resume update): the evidence-mode workflow E2E now exercises the catalog path — env-var hygiene around `TYPESAFE_API_KEY` (as the catalog tests), the context-level legacy maker asserted untouched in both modes, and the retained registered summary proven by the served `no-backend` fallback (`data.decision` provenance) after scratch removal; `disabled` for the off branch.
+- Final gate (resume): `bun run spur-check` EXIT=0 — 10361 pass / 0 fail across 604 files (the one pre-resume repo failure was this same evidence-mode workflow test, updated above to the 1099 contract).
 
 ### Review
 

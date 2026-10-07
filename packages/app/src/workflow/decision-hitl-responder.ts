@@ -1,7 +1,9 @@
 import type { ActionRunRow } from '@gobing-ai/spur-domain';
 import type { DecisionMaker } from '@gobing-ai/ts-ai-runner';
 import type { HitlAnswer, HitlRequest, HitlResponder } from '@gobing-ai/ts-dual-workflow-engine';
+import type { DecisionService } from '../decision/decision-service';
 import { redactAndBound } from '../observability/agent-execution';
+import type { SystemEventBus } from '../services/system-event-tap';
 import {
     evidencePayloadDigest,
     MAX_SERIALIZED_BYTES,
@@ -55,6 +57,9 @@ export type DecisionConfig =
     | { mode: 'never' }
     | { mode: 'evidence'; statusVar: string; evidenceNodes: readonly string[]; summaryArtifact?: string };
 
+/** The catalog decision serving evidence-mode confirm gates (task 1099). */
+const GATE_EVIDENCE_DECISION_ID = 'gate-evidence';
+
 /** Dependencies for application decision evaluation, threaded from the composition root. */
 export interface DecisionEvaluationDeps {
     enabled: boolean;
@@ -63,6 +68,14 @@ export interface DecisionEvaluationDeps {
     secrets?: readonly string[];
     warn?(message: string): void;
     decisionMaker?(): Promise<DecisionMaker>;
+    /**
+     * Catalog decision service (task 1099): evidence-mode confirm gates decide through
+     * `gate-evidence` so they get the catalog's maker/min-confidence resolution and lifecycle
+     * events. Absent (direct construction without a composition root) keeps the legacy maker.
+     */
+    decisionService?: () => Promise<DecisionService>;
+    /** Workflow observability bus carrying the cataloged `decision.*` events (task 1095). */
+    bus?: SystemEventBus;
 }
 
 /** Discriminated evaluation result consumed by the HITL actions. */
@@ -437,6 +450,52 @@ async function evaluateEvidence(
             };
         }
 
+        // Task 1099: evidence-mode confirm gates decide through the catalog (`gate-evidence`),
+        // so an override gets the catalog's maker/min-confidence resolution and emits lifecycle
+        // events with caller `gate`. A service throw (unknown id, duplicate catalog, unregistered
+        // maker) rejects before any backend call and lands in the catch below: the gate fails
+        // closed to the operator, never to an accepted answer.
+        if (request.kind === 'confirm' && deps.decisionService !== undefined) {
+            const service = await deps.decisionService();
+            const served = await service.decide(
+                GATE_EVIDENCE_DECISION_ID,
+                { prompt: clean(request.prompt), evidence: payload, node: nodeText },
+                {
+                    ...(deps.bus !== undefined ? { bus: deps.bus } : {}),
+                    context: {
+                        caller: 'gate',
+                        correlation: { runId: request.runId, nodeId: request.node },
+                    },
+                },
+            );
+            // Only an accepted model answer from the fixed yes/no vocabulary proceeds; a served
+            // fallback never does (task 1099 invariant). Both the `defer` choice and the `defer`
+            // fallback defer to the operator (task 1099 Q&A): an explicit model defer keeps the
+            // D5 `explicit-defer` vocabulary of the legacy path, while a fallback carries the
+            // served hub reason (low-confidence / no-backend / timeout / error).
+            if (served.source === 'model' && (served.value === 'yes' || served.value === 'no')) {
+                const digest = evidencePayloadDigest({ actions: selected.rows, summary });
+                return {
+                    kind: 'accepted',
+                    value: served.value,
+                    provenance: {
+                        ...baseProvenance('evidence', 'accepted', 'accepted', Date.now() - started),
+                        confidence: served.confidence,
+                        evidenceActionIds: selected.actionIds,
+                        evidenceDigest: digest,
+                        artifactId,
+                    },
+                };
+            }
+            const reason: string = served.source === 'model' ? 'explicit-defer' : served.reason;
+            return {
+                kind: 'deferred',
+                provenance: baseProvenance('evidence', 'deferred', reason, Date.now() - started),
+            };
+        }
+
+        // Legacy maker path: select gates (per-request choices, task 1099 R3) and direct
+        // construction without an injected service.
         const labels = Object.fromEntries(choices.map((choice, i) => [`option_${i}`, clean(choice)]));
         labels.defer = 'Insufficient or conflicting evidence; defer to the existing responder.';
         const maker = deps.decisionMaker ? await deps.decisionMaker() : await defaultDecisionMaker();
