@@ -4,7 +4,7 @@ name: Rescue unparseable idea-pipeline recommendation and needs-design signals w
 status: todo
 template: feature-impl
 created_at: 2026-10-07T01:02:20.691Z
-updated_at: "2026-10-07T01:03:33.499Z"
+updated_at: "2026-10-07T01:19:57.131Z"
 feature_id: P1
 priority: P2
 tags:
@@ -22,10 +22,15 @@ Slice S5 of docs/design/decision-observability-and-adoption.md §5. idea-pipelin
 
 ### Requirements
 
-- [ ] R1. Add catalog entries `idea-recommendation` (choice proceed/reshape/drop) and `needs-design` (noul, fallback yes) to config/decisions.
-- [ ] R2. Keep the deterministic parse first; call the decision only when it yields unknown or the JSON is missing/corrupt.
-- [ ] R3. A fallback outcome writes unknown so the run pauses for the operator exactly as today.
-- [ ] R4. A recommendation the parser classifies never calls a maker.
+- [ ] R1. Add the catalog file `config/decisions/idea-pipeline.yaml` (version 1, same shape as `config/decisions/task-pipeline.yaml`):
+  - `idea-recommendation`: `type: choice`; criteria `proceed`, `reshape`, `drop`, `unknown` ("the report states no clear recommendation"); `fallback: unknown`.
+  - `needs-design`: `type: choice`; criteria `design`, `skip`; `fallback: design`.
+- [ ] R2. Recommendation rescue in `config/workflows/idea-pipeline.yaml`, discovery `onEnter`: add one shell step after the awk derivation at `:146`. The step runs only when the derived file equals `unknown`:
+  `[ "$(cat f)" = unknown ] && $spurBin decision run idea-recommendation --evidence .spur/run/$__runId-idea-eval-report.md --json | jq -r 'if .source=="model" then .value else "unknown" end' > f`.
+  On a non-zero exit or unparseable output, it leaves `unknown` in place.
+- [ ] R3. needs_design rescue, in the same discovery `onEnter`, after the agent step (`:132`): when `jq -e '.needs_design|type=="boolean"' .spur/run/$__runId-idea-needs-design.json` fails, run `$spurBin decision run needs-design --evidence <eval-report> --json`. Write `{"needs_design": false}` only when `source == "model"` and `value == "skip"`. Otherwise write `{"needs_design": true}`, which is today's behavior for a missing or corrupt file. The guard at `:274` is unchanged.
+- [ ] R4. When the parse succeeds (`proceed|reshape|drop` derived, or a valid boolean JSON), neither decision is called. The existing `--auto` guards at `:584-604` and the idea-eval pause are unchanged.
+- [ ] R5. Start condition: `spur decision status --reliability --json` (task 1096) shows at least one recorded sample for both ids with the configured maker. Record the cited output in this task's Solution.
 
 ### Acceptance Criteria
 
@@ -42,16 +47,52 @@ Slice S5 of docs/design/decision-observability-and-adoption.md §5. idea-pipelin
 - Scope and approach closed at idea-pipeline run 4111db4a-101f-420c-8b6f-9530bf678534: chosen approach and rejected alternatives recorded in Design; contract in docs/design/decision-observability-and-adoption.md.
 - Adoption slices start only after the reliability report shows recorded evidence for their decision id and maker (feature P1 entry condition).
 
+#### Q&A entry — 2026-10-07T01:19:11.203Z
+
+- `needs-design` is a `choice` (design/skip) instead of `noul`. That makes the fallback explicit and keeps the JSON writer a two-value map.
+- `idea-recommendation` includes `unknown` as a choice, so the fallback stays inside the closed vocabulary and maps 1:1 onto today's pause.
+- Shell-invoked decisions carry caller `cli` with no run correlation (closed in 1095 Q&A).
+
 ### Design
 
-Chosen: rescue-only — deterministic parse stays authoritative, decision resolves the residue. Rejected: replacing the awk parse outright (adds latency and model risk on the happy path). Invariant: routing for parseable reports is byte-identical to today.
+**Chosen: rescue through shell `$spurBin decision run`.** This works today through `spur decision run` (task 1093), with no dependency on the catalog-reference `decide` of 1094. `$spurBin` is the existing PATH-independent workflow var (`config/workflows/idea-pipeline.yaml:73`). Events come from 1095 (caller `cli`).
+
+**Rejected:** replacing the awk parse. A deterministic parse costs nothing and is exact on well-formed reports. A maker is called only on the `unknown` branch.
+
+**Fail-safe:**
+- `unknown` and `design` are the fallbacks, which reproduce today's routing: pause at idea-eval, and run system-design.
+- A model answer is written only when `source == "model"`.
+- No path can auto-create a feature from a default.
+
+**Seams:**
+- `config/workflows/idea-pipeline.yaml:132` (discovery agent)
+- `:143-148` (awk derivation)
+- `:274` (needs_design guard)
+- `:584-604` (--auto discovery edges)
+- New catalog: `config/decisions/idea-pipeline.yaml`
+- After editing YAML, regenerate the bundle with `bun run --filter @gobing-ai/spur build:bundle`.
+
+**Execution budget:**
+- 2 YAML files.
+- `requireDiff: true`.
+- No TypeScript change expected.
 
 ### Plan
 
-1. Failure list: parse hit calling maker, fallback auto-proceeding, corrupt JSON skipping design.
-2. Catalog entries.
-3. Workflow decide/rescue step in idea-pipeline after the awk derivation.
-4. E2E: inline run with a malformed recommendation line routes via decision; parseable line shows no decision events.
+1. Failure list:
+   - The rescue fires on a parsed recommendation.
+   - A default `proceed` auto-creates a feature (must be impossible: fallback `unknown`).
+   - `spur` is missing or exits non-zero, which corrupts the file. The step must leave `unknown`.
+   - A valid needs_design JSON is overwritten.
+   - A corrupt needs_design JSON with no backend skips design. It must write `true`.
+2. Add the catalog `config/decisions/idea-pipeline.yaml`. Check it with `spur decision show idea-recommendation --json` and `spur decision show needs-design --json`.
+3. Add the two shell steps in discovery `onEnter` and run `build:bundle`.
+4. E2E, inline-run fixtures with no backend:
+   - (a) A report with `## Recommendation\nproceed` derives `proceed`, and no `decision.*` rows are written.
+   - (b) A report with prose and no keyword derives `unknown`, writes `decision.start`/`failure`/`end` rows for `idea-recommendation`, and the file stays `unknown`.
+   - (c) A corrupt needs-design JSON results in `{"needs_design": true}`.
+   - Save the derived files and rows as `.spur/run/1097-rescue.json`.
+5. Gate: `bun run spur-check`, then `spur workflow validate config/workflows/idea-pipeline.yaml --json`.
 
 ### Solution
 

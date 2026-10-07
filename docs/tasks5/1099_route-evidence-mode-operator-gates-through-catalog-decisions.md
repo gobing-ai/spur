@@ -4,7 +4,7 @@ name: Route evidence-mode operator gates through catalog decisions
 status: todo
 template: feature-impl
 created_at: 2026-10-07T01:02:20.692Z
-updated_at: "2026-10-07T01:03:33.907Z"
+updated_at: "2026-10-07T01:19:57.495Z"
 feature_id: P1
 priority: P2
 tags:
@@ -22,9 +22,15 @@ Slice S7 of docs/design/decision-observability-and-adoption.md §5. Evidence-mod
 
 ### Requirements
 
-- [ ] R1. Add catalog entry `gate-evidence` (yes/no, fallback defers to the operator).
-- [ ] R2. Route the evidence-mode path through DecisionService with caller gate and run correlation so it emits the lifecycle events.
-- [ ] R3. Bundled gates keep mode never and still pause for the operator.
+- [ ] R1. Add catalog file `config/decisions/gates.yaml` with `gate-evidence`:
+  - `type: choice`; criteria `yes`, `no`, `defer`; `fallback: defer`.
+  - Parameters: `prompt` (string), `evidence` (json), `node` (string).
+- [ ] R2. In `packages/app/src/workflow/decision-hitl-responder.ts`, `evaluateEvidence` (`:371`), replace the `maker.choice(...)` call at `:442-447` for `confirm` requests with `DecisionService.decide('gate-evidence', {prompt, evidence: payload, node}, {bus, context: {caller: 'gate', correlation: {runId: request.runId, nodeId: request.node}}})`.
+  - `DecisionEvaluationDeps` gains `decisionService?: () => Promise<DecisionService>` and `bus?`, injected in `WorkflowService.buildDecisionEvaluator` (`packages/app/src/services/workflow-service.ts:2163`): change the call at `:2044` to `this.buildDecisionEvaluator(bus)`, using the run bus that `:2047` passes as `observabilityBus`, and build the service with `getDecisionService(this.ctx.spurConfig ?? null, <workflow cwd>)`.
+  - Mapping: `source == "model"` with value `yes` or `no` → `accepted`, with provenance confidence from the served result. A `defer` value, or any default → `deferred` with reason = served `reason`.
+- [ ] R3. `select` requests (dynamic option lists) and `evaluateLegacy` (`:286`, `:340`) keep the current `defaultDecisionMaker` path unchanged. A catalog cannot declare per-request choices.
+- [ ] R4. Bundled gates keep `mode: never` and still pause for the operator. No bundled workflow YAML changes.
+- [ ] R5. Start condition: the 1096 reliability report shows recorded samples for `gate-evidence`. Cite them in Solution.
 
 ### Acceptance Criteria
 
@@ -41,15 +47,50 @@ Slice S7 of docs/design/decision-observability-and-adoption.md §5. Evidence-mod
 - Scope and approach closed at idea-pipeline run 4111db4a-101f-420c-8b6f-9530bf678534: chosen approach and rejected alternatives recorded in Design; contract in docs/design/decision-observability-and-adoption.md.
 - Adoption slices start only after the reliability report shows recorded evidence for their decision id and maker (feature P1 entry condition).
 
+#### Q&A entry — 2026-10-07T01:19:12.888Z
+
+- Scope is evidence-mode `confirm` only. `select` and legacy mode keep `defaultDecisionMaker`, because the catalog has no runtime-choice support. Revisit if `ts-ai-decision` adds per-call choices.
+- The `defer` choice and the `defer` fallback both map to `deferred`, so the operator still answers whenever the model is not confident.
+
 ### Design
 
-Chosen: replace the legacy maker call with DecisionService.decide behind the same evidence-mode switch. Rejected: changing bundled gate modes. Invariant: mode never remains a pure operator pause.
+**Chosen: route only evidence-mode `confirm` through the catalog.** A confirm gate's choices are fixed (yes/no plus defer), so a catalog entry describes them exactly. Going through `DecisionService` gives evidence-mode gates the catalog's minConfidence, maker resolution and lifecycle events (caller `gate`).
+
+**Rejected:** routing `select` gates through the catalog. Their options are per-request, and a catalog entry cannot declare them, so they stay on the legacy maker until the catalog supports runtime choices.
+
+**Seams:**
+- `packages/app/src/workflow/decision-hitl-responder.ts:371` (`evaluateEvidence`)
+- `:442-447` (maker call)
+- `:233` (`defaultDecisionMaker`)
+- `packages/app/src/decision/decision-service.ts:182`
+- `config/decisions/gates.yaml` (new)
+
+**Invariants:**
+- Evidence selection, the size bound and the summary envelope checks (`:378-433`) run before any decide, unchanged.
+- A served default never yields `accepted`.
+- `mode: never` gates are never evaluated.
+
+**Execution budget:**
+- About 3 source files and 1 YAML.
+- `requireDiff: true`.
+- No public surface change.
 
 ### Plan
 
-1. Failure list: never-mode gate calling a maker, fallback auto-answering yes, missing events.
-2. Catalog entry; swap call in the responder.
-3. E2E: project override in evidence mode emits decision events; bundled run still pauses.
+1. Failure list:
+   - A default `defer` is read as accepted.
+   - A select gate is broken by the catalog path.
+   - Oversized evidence reaches decide.
+   - A `mode: never` gate calls a maker.
+   - Events are missing runId/nodeId correlation.
+2. Add `config/decisions/gates.yaml`. Check it with `spur decision show gate-evidence --json`.
+3. Add the `decisionService` and `bus` deps, wire them in `workflow-service.ts:2044/2163`, and replace the confirm branch.
+4. E2E, with a workflow fixture using an evidence-mode override on one confirm gate and no backend:
+   - The run pauses (deferred to the operator).
+   - `system_events` holds `gate-evidence` start/failure/end rows with caller `gate` and the run's runId.
+   - The same fixture with `mode: never` writes no decision rows.
+   - Save the results as `.spur/run/1099-gate.json`.
+5. Gate: `bun run spur-check`.
 
 ### Solution
 

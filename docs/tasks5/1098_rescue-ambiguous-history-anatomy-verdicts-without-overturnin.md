@@ -4,7 +4,7 @@ name: Rescue ambiguous history-anatomy verdicts without overturning FAIL
 status: todo
 template: feature-impl
 created_at: 2026-10-07T01:02:20.692Z
-updated_at: "2026-10-07T01:03:33.704Z"
+updated_at: "2026-10-07T01:19:57.308Z"
 feature_id: P1
 priority: P2
 tags:
@@ -22,10 +22,11 @@ Slice S6 of docs/design/decision-observability-and-adoption.md §5. history-anat
 
 ### Requirements
 
-- [ ] R1. Add catalog entry `anatomy-validation-verdict` (PASS/FAIL, fallback FAIL).
-- [ ] R2. Any exact `Verdict: FAIL` line short-circuits to FAIL without a maker call.
-- [ ] R3. Decision consulted only when verdict lines are absent or ambiguous; it can never turn a deterministic FAIL into PASS.
-- [ ] R4. Deterministic status checks in pr-review, wayfinder, wrapup, feature-verification and history stay free of decision calls (pin with a workflow scan test).
+- [ ] R1. Add catalog file `config/decisions/history-anatomy.yaml` with `anatomy-validation-verdict`: `type: choice`, criteria `PASS`/`FAIL`, `fallback: FAIL`.
+- [ ] R2. In `config/workflows/history-anatomy.yaml`, extend the verdict-normalization shell step at `:236-251`. The rescue runs only when, after normalization, the last line is not exactly `Verdict: PASS` and there are zero exact `Verdict: FAIL` lines. That covers zero PASS lines, or several. Any exact `Verdict: FAIL` line short-circuits, and no maker is called.
+- [ ] R3. In the ambiguous case, run `$spurBin decision run anatomy-validation-verdict --evidence "$f" --json`. Append `Verdict: PASS` only when `source == "model"` and `value == "PASS"`. Otherwise append `Verdict: FAIL`. A deterministic FAIL can never become PASS, and a fallback is always FAIL.
+- [ ] R4. Add a workflow scan test that asserts the deterministic status checks contain no `decision run` or `kind: decide`. The checks are pr-review, wayfinder-resolution, wrapup-pipeline, feature-verification, and the history-anatomy structure gate. The allowlist is the single rescue step above.
+- [ ] R5. Start condition: the 1096 reliability report shows recorded samples for `anatomy-validation-verdict`. Cite them in Solution.
 
 ### Acceptance Criteria
 
@@ -42,15 +43,48 @@ Slice S6 of docs/design/decision-observability-and-adoption.md §5. history-anat
 - Scope and approach closed at idea-pipeline run 4111db4a-101f-420c-8b6f-9530bf678534: chosen approach and rejected alternatives recorded in Design; contract in docs/design/decision-observability-and-adoption.md.
 - Adoption slices start only after the reliability report shows recorded evidence for their decision id and maker (feature P1 entry condition).
 
+#### Q&A entry — 2026-10-07T01:19:12.051Z
+
+- The rescue lives inside the existing normalization step, not a new state, so the 0771 guard and `assert-clean` are untouched.
+- An ambiguous verdict with no model answer becomes FAIL. That is stricter than today, where the guard also fails, so the routing is the same.
+
 ### Design
 
-Chosen: rescue-only after the existing normalization, fallback FAIL. Rejected: model-first verdict (would launder FAIL). Invariant: FAIL dominates.
+**Chosen: extend the existing normalization step** (`config/workflows/history-anatomy.yaml:236-251`) instead of adding a new state.
+
+- The 0771 guard and the `assert-clean` step (`:252-255`) stay the authorities.
+- The rescue only decides which verdict line the guard reads when the file is ambiguous.
+
+**Rejected:** asking the model whenever the last line is not PASS. That would put a maker in front of real FAILs.
+
+**Invariants:**
+- An exact `Verdict: FAIL` line anywhere in the file means no maker call and a FAIL result.
+- A fallback or non-model answer means FAIL.
+- PASS is written only from `source == "model"`.
+
+**Execution budget:**
+- 2 YAML files and 1 test file.
+- `requireDiff: true`.
+- Run `build:bundle` after the YAML edit.
 
 ### Plan
 
-1. Failure list: FAIL line overridden, ambiguous text auto-PASS, decision added to deterministic gates.
-2. Catalog entry and workflow step.
-3. E2E: validator file with mixed lines yields FAIL with no maker call.
+1. Failure list:
+   - A file with both `Verdict: PASS` and `Verdict: FAIL` calls the maker.
+   - A no-backend fallback writes PASS.
+   - A file with a single correct `Verdict: PASS` already in the final line calls the maker.
+   - The normalization step from 2026-09-13 regresses.
+2. Add the catalog. Check it with `spur decision show anatomy-validation-verdict --json`.
+3. Extend the shell step, then run `build:bundle`.
+4. Add the scan test as `apps/cli/tests/workflow-decision-scan.test.ts` (reads `config/workflows/*.yaml`) to assert R4.
+5. E2E, no backend, with four fixture validation files run through the step's command:
+   - exact FAIL
+   - FAIL plus PASS
+   - prose only
+   - single leading PASS
+   - Expected final lines: FAIL with no decision rows, FAIL with no decision rows, FAIL with start/failure/end rows, and PASS from normalization with no decision rows.
+   - Save the results as `.spur/run/1098-verdicts.json`.
+6. Gate: `bun run spur-check`.
 
 ### Solution
 
