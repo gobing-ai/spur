@@ -785,6 +785,12 @@ tasks (0617, 0619) because the sections were hand-written **before** the verdict
 2. **Done-probe before done.** Run the check projected to `done` (`spur task check <wbs> --as done`
    via the `TaskCheckService` probe pattern) — it surfaces `L3.unchecked-checklist` (flip `- [ ]` → `- [x]`)
    and `L3.required-section-placeholder` before the transition, not after.
+   **Anchor repair is the YAML implement stage's job, not the driver's** (task 1109 R4):
+   `task-pipeline.yaml` runs `$spurBin task migrate-anchors --wbs $wbs --json ; exit 0` after the
+   format step and before `test` captures the proof digest, so unique basename anchors are already
+   repo-relative by the time this probe runs. The driver does not hand-patch anchors: anything the
+   scoped pass leaves (ambiguous basenames, line drift, `L4.anchor-subject-mismatch`) is reported by
+   this probe and belongs to the implementer to re-anchor.
 3. **Solution change-map anchor rule (L4.anchor-subject-mismatch).** A Solution change-map table must
    list **one `file:line` per row**. A ·-joined paragraph makes every anchor's "subject" the other
    anchors and trips the L4 subject check. Since 0804 R9, subject extraction ignores complete parsed

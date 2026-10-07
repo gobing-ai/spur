@@ -84,6 +84,13 @@ export interface AnchorQualifyReport {
 export interface AnchorQualifyOptions {
     /** Produce the full report but write nothing. */
     dryRun?: boolean;
+    /**
+     * Exact task files to scan (task 1109 R1) — the CLI resolves `--wbs` through the task
+     * locator and passes the single resolved path, so a scoped repair cannot rewrite the
+     * rest of the corpus (an unscoped run rewrote 119 unrelated files on 2026-10-07).
+     * Absent = every file in every configured task folder.
+     */
+    files?: string[];
 }
 
 /** Options for an anchor qualifier. */
@@ -101,6 +108,10 @@ export interface AnchorQualifierOptions {
     writeField?: (filePath: string, wbs: string, key: string, value: string) => Promise<void>;
     /** Resolve the planning folders (used when taskDirs not provided). */
     resolveFolders?: () => Promise<string[]>;
+    /**
+     * Exact task files to scan (task 1109 R1). Absent = every `.md` in every task dir.
+     */
+    files?: string[];
     /** Repo root for the git tracked-file index. Defaults to `git rev-parse --show-toplevel`. */
     projectRoot?: string;
 }
@@ -283,6 +294,10 @@ export async function anchorQualify(
     fs: FileSystem,
     opts: AnchorQualifyOptions & {
         taskDirs?: string[];
+        /**
+         * Exact task files to scan (task 1109 R1). Absent = every configured folder.
+         */
+        files?: string[];
         write?: AnchorQualifierOptions['write'];
         writeField?: AnchorQualifierOptions['writeField'];
         /**
@@ -299,6 +314,7 @@ export async function anchorQualify(
         fs,
         dryRun: opts.dryRun ?? false,
         taskDirs: opts.taskDirs,
+        ...(opts.files === undefined ? {} : { files: opts.files }),
         write: opts.write,
         writeField: opts.writeField,
         projectRoot: opts.projectRoot,
@@ -322,17 +338,22 @@ export async function qualifyAnchors(
     const index = await buildTrackedBasenameIndex(projectRoot);
 
     const fileReports: AnchorFileReport[] = [];
-    for (const dir of taskDirs) {
+    // 1109 R1: a scoped run receives the exact resolved paths, so the pass neither walks
+    // the corpus nor re-derives a file identity from a filename.
+    const scopedFiles = opts.files === undefined ? null : [...opts.files].sort();
+    for (const dir of scopedFiles === null ? taskDirs : ['.']) {
         let entries: string[];
         try {
             entries = await fs.readDir(dir);
         } catch {
             continue;
         }
-        const mdFiles = entries
-            .filter((name) => name.endsWith('.md') && name !== 'kanban.md')
-            .map((name) => join(dir, name))
-            .sort();
+        const mdFiles =
+            scopedFiles ??
+            entries
+                .filter((name) => name.endsWith('.md') && name !== 'kanban.md')
+                .map((name) => join(dir, name))
+                .sort();
         for (const filePath of mdFiles) {
             let raw: string;
             try {

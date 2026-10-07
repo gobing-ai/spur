@@ -3650,6 +3650,128 @@ updated_at: "2026-08-10T00:00:00.000Z"
                 rmSync(isoCwd, { recursive: true, force: true });
             }
         });
+
+        // 1109 R1/R2: `--wbs` scopes the pass to one task file. The failure cases are
+        // asserted first (a sibling that must NOT be touched, an ambiguous anchor that must
+        // NOT be guessed at, an unknown wbs that must fail loudly) because the unscoped pass
+        // rewrites the whole corpus in one call — the scope is the whole point of the flag.
+        test('--wbs qualifies only the named task and leaves a sibling fixture untouched', async () => {
+            const isoCwd = await mkdtemp(join(tmpdir(), 'spur-task-migrate-anchors-scoped-'));
+            await mkdir(join(isoCwd, 'docs', 'tasks'), { recursive: true });
+            await mkdir(join(isoCwd, 'src'), { recursive: true });
+            await writeFile(join(isoCwd, 'src', 'bar.ts'), 'export const bar = 1;\n');
+            const fixture = (wbs: string, name: string) => `---
+template: standard
+schema_version: 1
+name: "${name}"
+description: "fixture"
+status: todo
+type: task
+profile: standard
+parent_wbs: null
+priority: P3
+tags: []
+dependencies: []
+created_at: "2026-08-10T00:00:00.000Z"
+updated_at: "2026-08-10T00:00:00.000Z"
+---
+
+## ${wbs}. ${name}
+
+### Testing
+
+- Evidence: \`bar.ts:1\`
+`;
+            const targetPath = join(isoCwd, 'docs', 'tasks', '0001_anchor-target.md');
+            const siblingPath = join(isoCwd, 'docs', 'tasks', '0002_anchor-sibling.md');
+            await writeFile(targetPath, fixture('0001', 'Anchor target'));
+            await writeFile(siblingPath, fixture('0002', 'Anchor sibling'));
+            Bun.spawnSync(['git', 'init'], { cwd: isoCwd });
+            Bun.spawnSync(['git', 'add', '.'], { cwd: isoCwd });
+            try {
+                const scopedOut = createCapturedOutput();
+                const scopedCode = await main(['task', 'migrate-anchors', '--wbs', '0001', '--json'], {
+                    cwd: isoCwd,
+                    output: scopedOut,
+                });
+                expect(scopedCode).toBe(0);
+                const scoped = JSON.parse(scopedOut.messages[0] ?? '{}');
+                expect(scoped.wbs).toBe('0001');
+                // Only the named task's file appears in the report, and only it was rewritten.
+                expect(scoped.fileReports.map((r: { path: string }) => basename(r.path))).toEqual([
+                    '0001_anchor-target.md',
+                ]);
+                const appliedTarget = await readFile(targetPath, 'utf8');
+                const untouchedSibling = await readFile(siblingPath, 'utf8');
+                expect(appliedTarget).toContain('`src/bar.ts:1`');
+                expect(appliedTarget).not.toContain('`bar.ts:1`');
+                expect(untouchedSibling).toContain('`bar.ts:1`');
+                expect(untouchedSibling).not.toContain('`src/bar.ts:1`');
+            } finally {
+                rmSync(isoCwd, { recursive: true, force: true });
+            }
+        });
+
+        test('--wbs reports an ambiguous anchor instead of guessing and fails on an unknown wbs', async () => {
+            const isoCwd = await mkdtemp(join(tmpdir(), 'spur-task-migrate-anchors-ambig-'));
+            await mkdir(join(isoCwd, 'docs', 'tasks'), { recursive: true });
+            await mkdir(join(isoCwd, 'src', 'a'), { recursive: true });
+            await mkdir(join(isoCwd, 'src', 'b'), { recursive: true });
+            // Two tracked files share the basename: the qualifier cannot know which is meant.
+            await writeFile(join(isoCwd, 'src', 'a', 'dup.ts'), 'export const a = 1;\n');
+            await writeFile(join(isoCwd, 'src', 'b', 'dup.ts'), 'export const b = 1;\n');
+            const taskPath = join(isoCwd, 'docs', 'tasks', '0007_ambiguous.md');
+            await writeFile(
+                taskPath,
+                `---
+template: standard
+schema_version: 1
+name: "Ambiguous"
+description: "fixture"
+status: todo
+type: task
+profile: standard
+parent_wbs: null
+priority: P3
+tags: []
+dependencies: []
+created_at: "2026-08-10T00:00:00.000Z"
+updated_at: "2026-08-10T00:00:00.000Z"
+---
+
+## 0007. Ambiguous
+
+### Testing
+
+- Evidence: \`dup.ts:1\`
+`,
+            );
+            Bun.spawnSync(['git', 'init'], { cwd: isoCwd });
+            Bun.spawnSync(['git', 'add', '.'], { cwd: isoCwd });
+            try {
+                const ambOut = createCapturedOutput();
+                const ambCode = await main(['task', 'migrate-anchors', '--wbs', '0007', '--json'], {
+                    cwd: isoCwd,
+                    output: ambOut,
+                });
+                expect(ambCode).toBe(0);
+                const amb = JSON.parse(ambOut.messages[0] ?? '{}');
+                expect(amb.ambiguous.length).toBe(1);
+                expect(amb.qualified.length).toBe(0);
+                const untouched = await readFile(taskPath, 'utf8');
+                expect(untouched).toContain('`dup.ts:1`');
+
+                const unknownOut = createCapturedOutput();
+                const unknownCode = await main(['task', 'migrate-anchors', '--wbs', '0404', '--json'], {
+                    cwd: isoCwd,
+                    output: unknownOut,
+                });
+                expect(unknownCode).toBe(1);
+                expect(unknownOut.errors.join(' ')).toContain('0404');
+            } finally {
+                rmSync(isoCwd, { recursive: true, force: true });
+            }
+        });
     });
 });
 

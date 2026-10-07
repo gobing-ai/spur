@@ -766,6 +766,15 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         expect(implementBlock).toContain(`timeoutMs: ${varsImplementTimeout}`);
         expect(implementBlock).not.toContain(`timeoutMs: \${vars.stepTimeoutMs}`);
 
+        // 1109 R3 — the scoped anchor repair runs in the implement stage, after the format
+        // step and before the `test` state, so it can never invalidate the proof digest the
+        // test stage captures. Scoped and non-fatal by construction.
+        const anchorRepair = 'task migrate-anchors --wbs $wbs --json ; exit 0';
+        expect(implementBlock).toContain(anchorRepair);
+        expect(implementBlock.indexOf(anchorRepair)).toBeGreaterThan(
+            implementBlock.indexOf('command: "$formatCmd ; exit 0"'),
+        );
+
         // R2c — anti-recursion (bug-742) is structural + skill-level, not YAML prose (ADR-043).
         // 1) Pipeline agent.run input is a pure slash command that already selects implement mode.
         // 2) The recursive-launch prohibition lives in the command/skill SSOT, not multi-line

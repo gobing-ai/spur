@@ -359,6 +359,17 @@ states:
           - kind: shell
             options:
                 command: "$formatCmd ; exit 0"
+          # 1109 R3: qualify this task's unique basename anchors to repo-relative paths.
+          # Placement is load-bearing: it runs AFTER implement's mutations (and the format
+          # above) but BEFORE the `test` stage's `proof.fingerprint` capture, so a rewrite in
+          # a digest section cannot invalidate the proof. `--wbs` scopes the pass to this
+          # task's resolved file — the unscoped form rewrites ~119 unrelated task files.
+          # Non-fatal (`; exit 0`): the done gate still reports anything left, and this step
+          # deliberately does NOT address line drift or `L4.anchor-subject-mismatch`
+          # (those need the implementer to re-anchor). Scope contract: task 1109 R5.
+          - kind: shell
+            options:
+                command: "$spurBin task migrate-anchors --wbs $wbs --json ; exit 0"
 
     # ── escalate hop (operator-question pause, 0933) ──────────────────────────
     # The implement agent paused on an operator question: it wrote

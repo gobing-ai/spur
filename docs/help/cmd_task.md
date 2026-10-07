@@ -479,10 +479,13 @@ spur task migrate-anchors [options]
 | Flag | Description |
 |---|---|
 | `--dry-run` | Produce the full report without writing files |
+| `--wbs <wbs>` | Scope the pass to one task file (unknown wbs fails without writing) |
 | `--json` | Output machine-readable JSON |
 
 Rewrites stale `file:line` anchors in task sections to the current line numbers. Dry-run reports
-the same per-file changes without writing.
+the same per-file changes without writing. Without `--wbs` the pass walks every configured task
+folder, so `--wbs` is how the pipeline's implement step repairs one task's unique basename anchors
+without rewriting unrelated files.
 
 ## See Also
 
