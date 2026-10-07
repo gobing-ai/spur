@@ -2,8 +2,8 @@
 kind: design
 title: "Spur artifact composition and evolution (feature I21)"
 created_at: 2026-09-11
-updated_at: 2026-09-25
-related: [I21, "0819", "0820", "0827", "0955"]
+updated_at: 2026-10-06
+related: [I21, "0819", "0820", "0827", "0955", "1079"]
 tags: [system, I21, plugin, workflow]
 ---
 
@@ -143,11 +143,14 @@ trace evidence, never from a guess.
 
 ## 9. Agent specs and team retirement
 
-Agent specs (`.spur/agents/<id>.yaml`) stay in scope. They are the occupant identity of the
+Agent specs stay in scope. They are the occupant identity of the
 inter-agent control plane (`OccupantRef.specId`, [inter-agent control plane](inter-agent-control-plane.md)
 §2), addressed by `spur agent run --spec`, `spur agent wait` and `spur message`, so they outlive the
-`team` noun (removed at the G64 cutover, 2026-09-14). Specs are materialized from the fleet declaration
-at serve start; composer and doctor read them only through `spur agent list --specs`.
+`team` noun (removed at the G64 cutover, 2026-09-14). A spec is either hand-authored under
+`.spur/agents/<id>.yaml` or derived in memory from the `agent.fleet` declaration (G72, task 1079):
+fleet specs are never written to disk, the declaration wins an id clash, and a stale
+`fleet:generated` file is ignored. Composer and doctor read them only through
+`spur agent list --specs`, whose rows carry `source: file|fleet`.
 
 ## 10. Composition budgets and step evidence (ADR-115)
 
