@@ -179,4 +179,5 @@
 [backlog] **O**: Observability run-detail refinements ([O_observability-run-detail-refinements.md](./O_observability-run-detail-refinements.md))
 [done] **P**: Decision catalogs and the spur decision noun ([P_decision-catalogs-and-the-spur-decision-noun.md](./P_decision-catalogs-and-the-spur-decision-noun.md))
     └── [backlog] **P1**: Spur decision production readiness: events and workflow adoption ([P1_workflow-decision-points-adopt-spur-decision-catalogs.md](./P1_workflow-decision-points-adopt-spur-decision-catalogs.md))
+[backlog] **Q**: Two-layer plan and progress visibility for dev workflows ([Q_two-layer-plan-and-progress-visibility-for-dev-workflows.md](./Q_two-layer-plan-and-progress-visibility-for-dev-workflows.md))
 <!-- END AUTO-GENERATED -->
