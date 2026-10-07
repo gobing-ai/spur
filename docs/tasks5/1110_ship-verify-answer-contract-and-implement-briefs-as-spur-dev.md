@@ -4,7 +4,7 @@ name: Ship verify-answer contract and implement briefs as spur-dev references
 status: done
 template: feature-impl
 created_at: 2026-10-07T07:29:49.913Z
-updated_at: "2026-10-07T20:16:57.959Z"
+updated_at: "2026-10-07T22:38:12.811Z"
 feature_id: H15
 
 priority: P3
@@ -17,7 +17,7 @@ done_reason: unforced close; PASS artifact at .spur/memory/evidence/1110-verdict
 
 ### Background
 
-The batch's four consecutive first-attempt verify verdicts (1096–1099) came from two hand-authored briefs written into the gitignored driver tree: `.spur/run/verify-answer-contract.md` (how the verifier's answer must be shaped) and `.spur/run/implement-context.md` (repo-relative production anchors from the start, focused checks before reporting done). The pipeline already lints answers (`task verdict`, 1003 R2, `task-pipeline.yaml:718-764`) but nothing ships the shape guidance — every downstream session re-derives it or fails the lint.
+The batch's four consecutive first-attempt verify verdicts (1096–1099) came from two hand-authored briefs written into the gitignored driver tree of the (since removed) P1 worktree — `verify-answer-contract.md` (how the verifier's answer must be shaped) and `implement-context.md` (repo-relative production anchors from the start, focused checks before reporting done); both files are gone with that tree and are recoverable only from the session transcript. The pipeline already lints answers (`task verdict`, 1003 R2, `task-pipeline.yaml:718-764`) but nothing ships the shape guidance — every downstream session re-derives it or fails the lint.
 
 **Refine corrections (2026-10-07)**
 
