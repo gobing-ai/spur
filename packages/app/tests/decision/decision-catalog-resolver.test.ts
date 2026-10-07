@@ -117,4 +117,13 @@ describe('decision catalog resolver (E2E, task 1092)', () => {
         const other = await getDecisionService(null, join(root, 'project'), join(root, 'registered'));
         expect(other).not.toBe(a);
     });
+
+    test('a later getDecisionService config never leaks into an earlier caller', async () => {
+        const configA = { decisions: { maker: 'typesafe', makers: {} } } as unknown as SpurConfig;
+        const configB = { decisions: { maker: 'fm-local', makers: {} } } as unknown as SpurConfig;
+        const a = await getDecisionService(configA, join(root, 'project'), join(root, 'shared'));
+        const b = await getDecisionService(configB, join(root, 'project'), join(root, 'shared'));
+        expect(a.describe('proj-only').effectiveMaker.name).toBe('typesafe');
+        expect(b.describe('proj-only').effectiveMaker.name).toBe('fm-local');
+    });
 });

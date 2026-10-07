@@ -344,10 +344,14 @@ export class DecisionService {
     /** Config threaded at create time; kept off the constructor signature so tests can build without one. */
     private config: SpurConfig | null = null;
 
-    /** Attach the config used for maker resolution (called by {@link create}). */
+    /**
+     * Bind the config used for maker resolution (called by {@link create}). Returns a view that
+     * shares the loaded catalogs and registry but owns its config, so a later
+     * {@link getDecisionService} caller with another config cannot rewrite an earlier caller's.
+     */
     withConfig(config: SpurConfig | null): this {
-        this.config = config;
-        return this;
+        if (config === this.config) return this;
+        return Object.assign(Object.create(this) as this, { config });
     }
 }
 
