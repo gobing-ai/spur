@@ -2,11 +2,11 @@
 schema_version: 1
 id: "H15"
 name: "Batch execution performance productization: budget defaults, integrated gates, shipped worker briefs"
-status: done
+status: active
 priority: P2
 tags: []
 created_at: "2026-10-07T15:57:49.599Z"
-updated_at: "2026-10-07T21:39:10.953Z"
+updated_at: "2026-10-07T22:56:57.364Z"
 ---
 
 # H15: Batch execution performance productization: budget defaults, integrated gates, shipped worker briefs
@@ -62,4 +62,5 @@ Feature: Batch execution performance productization
 - 2026-10-07T18:32:37.541Z backlog → active (system)
 - 2026-10-07T21:39:10.277Z active → verifying (system)
 - 2026-10-07T21:39:10.953Z verifying → done (system)
+- 2026-10-07T22:56:57.364Z done → active (system)
 
