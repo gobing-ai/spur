@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Rescue unparseable idea-pipeline recommendation and needs-design signals with catalog decisions
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-10-07T01:02:20.691Z
-updated_at: "2026-10-07T06:08:03.100Z"
+updated_at: "2026-10-07T06:33:03.618Z"
 feature_id: P1
 priority: P2
 tags:
@@ -12,6 +12,8 @@ tags:
 estimate_hours: 5
 
 dependencies: ["1096"]
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1097-verdict.json
 ---
 
 ## 1097. Rescue unparseable idea-pipeline recommendation and needs-design signals with catalog decisions
@@ -22,19 +24,19 @@ Slice S5 of docs/design/decision-observability-and-adoption.md §5. idea-pipelin
 
 ### Requirements
 
-- [ ] R1. Add the catalog file `config/decisions/idea-pipeline.yaml` (version 1, same shape as `config/decisions/task-pipeline.yaml`):
+- [x] R1. Add the catalog file `config/decisions/idea-pipeline.yaml` (version 1, same shape as `config/decisions/task-pipeline.yaml`):
   - `idea-recommendation`: `type: choice`; criteria `proceed`, `reshape`, `drop`, `unknown` ("the report states no clear recommendation"); `fallback: unknown`.
   - `needs-design`: `type: choice`; criteria `design`, `skip`; `fallback: design`.
-- [ ] R2. Recommendation rescue in `config/workflows/idea-pipeline.yaml`, discovery `onEnter`: add one shell step after the awk derivation at `:146`. The step runs only when the derived file equals `unknown`:
+- [x] R2. Recommendation rescue in `config/workflows/idea-pipeline.yaml`, discovery `onEnter`: add one shell step after the awk derivation at `:146`. The step runs only when the derived file equals `unknown`:
   `[ "$(cat f)" = unknown ] && $spurBin decision run idea-recommendation --evidence .spur/run/$__runId-idea-eval-report.md --json | jq -r 'if .source=="model" then .value else "unknown" end' > f`.
   On a non-zero exit or unparseable output, it leaves `unknown` in place.
-- [ ] R3. needs_design rescue, in the same discovery `onEnter`, after the agent step (`:132`): when `jq -e '.needs_design|type=="boolean"' .spur/run/$__runId-idea-needs-design.json` fails, run `$spurBin decision run needs-design --evidence <eval-report> --json`. Write `{"needs_design": false}` only when `source == "model"` and `value == "skip"`. Otherwise write `{"needs_design": true}`, which is today's behavior for a missing or corrupt file. The guard at `:274` is unchanged.
-- [ ] R4. When the parse succeeds (`proceed|reshape|drop` derived, or a valid boolean JSON), neither decision is called. The existing `--auto` guards at `:584-604` and the idea-eval pause are unchanged.
-- [ ] R5. Start condition: `spur decision status --reliability --json` (task 1096) shows at least one recorded sample for both ids with the configured maker. Record the cited output in this task's Solution.
+- [x] R3. needs_design rescue, in the same discovery `onEnter`, after the agent step (`:132`): when `jq -e '.needs_design|type=="boolean"' .spur/run/$__runId-idea-needs-design.json` fails, run `$spurBin decision run needs-design --evidence <eval-report> --json`. Write `{"needs_design": false}` only when `source == "model"` and `value == "skip"`. Otherwise write `{"needs_design": true}`, which is today's behavior for a missing or corrupt file. The guard at `:274` is unchanged.
+- [x] R4. When the parse succeeds (`proceed|reshape|drop` derived, or a valid boolean JSON), neither decision is called. The existing `--auto` guards at `:584-604` and the idea-eval pause are unchanged.
+- [x] R5. Start condition: `spur decision status --reliability --json` (task 1096) shows at least one recorded sample for both ids with the configured maker. Record the cited output in this task's Solution.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Unparseable agent output resolves through a catalog decision
+- [x] AC1 — Unparseable agent output resolves through a catalog decision
 
 ### Q&A
 
@@ -104,7 +106,7 @@ Implemented the rescue-only decision adoption for the idea pipeline (design §4)
 - **R4** — E2E-verified: parsed `proceed` + valid boolean produce 0 decision rows.
 - **Action budget** — `IDEA_ACTION_BUDGET` 31 → 33 in `packages/app/tests/workflow/pipeline-action-budget.test.ts:17` with a named 1097 comment.
 
-Workspace E2E: `apps/cli/tests/workflow/idea-pipeline-rescue.test.ts:99` extracts the onEnter shell commands from the workflow YAML, runs them via `sh -c` against a temp project with the source CLI, and asserts derived files plus the recorded decision lifecycle in `system_events` (one start→failure→end invocation sharing an invocationId, `reason: no-backend`, `source: default`, `caller: cli`). 4/4 pass. Regenerated bundle: `bun run --filter @gobing-ai/spur build:bundle` (new catalog staged at `apps/cli/config/decisions/idea-pipeline.yaml`; the tracked `plugins/sp/lib/inline-run.generated.mjs` is unchanged because only config, not code, changed this task).
+Workspace E2E: `apps/cli/tests/workflow/idea-pipeline-rescue.test.ts:126` extracts the onEnter shell commands from the workflow YAML, runs them via `sh -c` against a temp project with the source CLI, and asserts derived files plus the recorded decision lifecycle in `system_events` (one start→failure→end invocation sharing an invocationId, `reason: no-backend`, `source: default`, `caller: cli`). 4/4 pass. Regenerated bundle: `bun run --filter @gobing-ai/spur build:bundle` (new catalog staged at `apps/cli/config/decisions/idea-pipeline.yaml`; the tracked `plugins/sp/lib/inline-run.generated.mjs` is unchanged because only config, not code, changed this task).
 
 E2E artifact: `.spur/run/1097-rescue.json` — scenario (a) parsed `proceed` + valid needs_design → 0 decision rows; scenario (b) prose report → file stays `unknown`, 3 recorded rows (decision.start/failure/end, decisionId `idea-recommendation`, maker `typesafe`); scenario (c) corrupt needs-design JSON → `{"needs_design": true}` written via 3 needs-design rows.
 
@@ -120,14 +122,41 @@ Both configured ids show ≥1 recorded sample with the configured (catalog-defau
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | static-ref |
+| R2 | MET | test |
+| R3 | MET | test |
+| R4 | MET | test |
+| R5 | MET | command |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | Unparseable agent output resolves through a catalog decision: E2E matrix (a/b/c/d) drives the tracked YAML's own commands through the real source CLI in a temp project and asserts lifecycle rows; offline resolution paths verified (b): file stays unknown + full event lifecycle; (c): needs-design rescue fires on corrupt JSON. See AC1: apps/cli/tests/workflow/idea-pipeline-rescue.test.ts:1 |
+| Unparseable agent output resolves through a catalog decision | MET | test | see AC1: config/workflows/idea-pipeline.yaml:158 (scenario twin of AC1, feature Scenario R11) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-10-07T06:33:01.336Z todo → testing (system)
+- 2026-10-07T06:33:03.608Z testing → done (system)
+

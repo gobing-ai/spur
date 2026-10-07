@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Rescue ambiguous history-anatomy verdicts without overturning FAIL
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-10-07T01:02:20.692Z
-updated_at: "2026-10-07T06:10:48.428Z"
+updated_at: "2026-10-07T06:26:00.421Z"
 feature_id: P1
 priority: P2
 tags:
@@ -12,6 +12,8 @@ tags:
 estimate_hours: 3
 
 dependencies: ["1096"]
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1098-verdict.json
 ---
 
 ## 1098. Rescue ambiguous history-anatomy verdicts without overturning FAIL
@@ -22,15 +24,15 @@ Slice S6 of docs/design/decision-observability-and-adoption.md §5. history-anat
 
 ### Requirements
 
-- [ ] R1. Add catalog file `config/decisions/history-anatomy.yaml` with `anatomy-validation-verdict`: `type: choice`, criteria `PASS`/`FAIL`, `fallback: FAIL`.
-- [ ] R2. In `config/workflows/history-anatomy.yaml`, extend the verdict-normalization shell step at `:236-251`. The rescue runs only when, after normalization, the last line is not exactly `Verdict: PASS` and there are zero exact `Verdict: FAIL` lines. That covers zero PASS lines, or several. Any exact `Verdict: FAIL` line short-circuits, and no maker is called.
-- [ ] R3. In the ambiguous case, run `$spurBin decision run anatomy-validation-verdict --evidence "$f" --json`. Append `Verdict: PASS` only when `source == "model"` and `value == "PASS"`. Otherwise append `Verdict: FAIL`. A deterministic FAIL can never become PASS, and a fallback is always FAIL.
-- [ ] R4. Add a workflow scan test that asserts the deterministic status checks contain no `decision run` or `kind: decide`. The checks are pr-review, wayfinder-resolution, wrapup-pipeline, feature-verification, and the history-anatomy structure gate. The allowlist is the single rescue step above.
-- [ ] R5. Start condition: the 1096 reliability report shows recorded samples for `anatomy-validation-verdict`. Cite them in Solution.
+- [x] R1. Add catalog file `config/decisions/history-anatomy.yaml` with `anatomy-validation-verdict`: `type: choice`, criteria `PASS`/`FAIL`, `fallback: FAIL`.
+- [x] R2. In `config/workflows/history-anatomy.yaml`, extend the verdict-normalization shell step at `:236-251`. The rescue runs only when, after normalization, the last line is not exactly `Verdict: PASS` and there are zero exact `Verdict: FAIL` lines. That covers zero PASS lines, or several. Any exact `Verdict: FAIL` line short-circuits, and no maker is called.
+- [x] R3. In the ambiguous case, run `$spurBin decision run anatomy-validation-verdict --evidence "$f" --json`. Append `Verdict: PASS` only when `source == "model"` and `value == "PASS"`. Otherwise append `Verdict: FAIL`. A deterministic FAIL can never become PASS, and a fallback is always FAIL.
+- [x] R4. Add a workflow scan test that asserts the deterministic status checks contain no `decision run` or `kind: decide`. The checks are pr-review, wayfinder-resolution, wrapup-pipeline, feature-verification, and the history-anatomy structure gate. The allowlist is the single rescue step above.
+- [x] R5. Start condition: the 1096 reliability report shows recorded samples for `anatomy-validation-verdict`. Cite them in Solution.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — A deterministic FAIL is never overturned by a decision
+- [x] AC1 — A deterministic FAIL is never overturned by a decision
 
 ### Q&A
 
@@ -103,19 +105,41 @@ E2E evidence: `.spur/run/1098-verdicts.json` — the validate state's normalizat
 
 ### Testing
 
-- Failure list from the Plan, each covered: (a) both `Verdict: PASS` and `Verdict: FAIL` → fixture `fail-plus-pass` makes no maker call (zero decision rows); (b) no-backend fallback → fixture `prose-only` writes `Verdict: FAIL`, never PASS; (c) single correct leading `Verdict: PASS` → fixture `single-leading-pass` resolves by normalization with zero decision rows; (d) the 2026-09-13 normalization step is unchanged (git diff byte-identical) and still passes its fixture.
-- `bun test apps/cli/tests/workflow-decision-scan.test.ts` — 2 pass, 19 assertions (R4 placement scan).
-- E2E (no backend): `bun .spur/tmp/1098-e2e.ts` extracted the folded normalization+rescue commands from the YAML and ran the four fixtures — all final lines and event expectations pass; artifact `.spur/run/1098-verdicts.json`.
-- `spur workflow validate config/workflows/history-anatomy.yaml` — valid, composition findings warn-only (normalization 10, rescue 10 logical commands — both inside the ADR-115 6-10 warn band; no error-level findings).
-- `spur decision show anatomy-validation-verdict --json` — serves choice PASS/FAIL, fallback FAIL, maker `typesafe` (catalog-default), layer shared.
-- Gate: `bun run spur-check` — PASS (biome + typecheck all workspaces clean; 10354 tests, 0 fail; pre-check 50 rules, post-check 2 rules). Third run required two pre-gate fixes (TS noUncheckedIndexedAccess in the new test; `sp-runtime-path` forbidden literal `config/…` in its doc comment).
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | static-ref |
+| R2 | MET | static-ref |
+| R3 | MET | test |
+| R4 | MET | test |
+| R5 | MET | command |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | Deterministic-FAIL-never-overturned proven three ways: in-step guard ordering (history-anatomy.yaml:269 before :270), E2E fixtures (exact FAIL → zero decision rows; FAIL+PASS → FAIL zero rows), and the hard-default arm (:272). See AC1: config/workflows/history-anatomy.yaml:269 |
+| A deterministic FAIL is never overturned by a decision | MET | test | see AC1: apps/cli/tests/workflow-decision-scan.test.ts:1 (scenario twin of AC1, feature Scenario R12) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-10-07T06:25:52.910Z todo → testing (system)
+- 2026-10-07T06:26:00.417Z testing → done (system)
+

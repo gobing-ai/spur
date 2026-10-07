@@ -19,7 +19,7 @@ export type DecisionMode = 'legacy' | 'never' | 'evidence';
 /** Stable provenance outcomes (D5): what actually happened. */
 export type DecisionOutcome = 'accepted' | 'deferred' | 'fallback' | 'disabled';
 
-/** Closed provenance reason vocabulary (D5). */
+/** Provenance reason vocabulary: closed D5 reasons plus hub-served reasons (no-backend, low-confidence, timeout, error) on the catalog path. */
 export type DecisionReason =
     | 'accepted'
     | 'disabled'
