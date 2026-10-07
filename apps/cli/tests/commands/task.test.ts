@@ -2216,6 +2216,7 @@ Only this section exists.
                     wbs,
                     verdict: 'PASS',
                     source: 'test-stub',
+                    confidence: 'HIGH',
                     requirements: [{ id: 'r1', status: 'MET', evidence: 'stub' }],
                     acceptanceCriteria: [],
                     checks: [{ name: 'stub', status: 'pass', evidence: 'stub' }],
@@ -2445,6 +2446,7 @@ Only this section exists.
             `${JSON.stringify({
                 wbs,
                 verdict: 'PASS',
+                confidence: 'HIGH',
                 requirements: [{ id: 'R1', status: 'MET', evidenceType: '', evidence: 'tests pass' }],
                 acceptanceCriteria: [],
                 checks: [{ name: 'Security', status: 'P1', evidence: 'no bypass' }],
@@ -2917,6 +2919,7 @@ Only this section exists.
     const PASS_VERDICT = {
         wbs: 'PLACEHOLDER',
         verdict: 'PASS',
+        confidence: 'HIGH',
         requirements: [
             { id: 'R1', status: 'MET', evidence: 'x' },
             { id: 'R2', status: 'MET', evidence: 'y' },
