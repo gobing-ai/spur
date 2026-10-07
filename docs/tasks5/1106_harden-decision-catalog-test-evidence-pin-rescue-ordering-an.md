@@ -1,15 +1,17 @@
 ---
 schema_version: 1
 name: "Harden decision-catalog test evidence: pin rescue ordering and persisted gate rows"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-10-07T07:09:24.800Z
-updated_at: "2026-10-07T17:16:11.267Z"
+updated_at: "2026-10-07T18:29:18.732Z"
 feature_id: P1
 
 ac_altitude: task-local
 priority: P3
 estimate_hours: 3
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1106-verdict.json
 ---
 
 ## 1106. Harden decision-catalog test evidence: pin rescue ordering and persisted gate rows
@@ -31,13 +33,13 @@ Session review of runall-P1-20261006-02 (wrap, 2026-10-07) triaged two report-on
 
 ### Requirements
 
-- [ ] R1. `apps/cli/tests/workflow-decision-scan.test.ts` gains an explicit normalize-then-rescue ordering assertion; reordering either shell action fails the test.
-- [ ] R2. A committed test in `packages/app/tests/` asserts evidence-mode gate fallback persists decision rows through the run tap (system_events) with caller `gate` and runId/node correlation — no reliance on gitignored artifacts. The seam is `registerSystemEventTap(bus, new SystemEventDao(<in-memory SQLite>), …)` (`packages/app/src/services/system-event-tap.ts:51`), not the `FakeSystemEventDao` that `packages/app/tests/decision/decision-events.test.ts:342` uses. Assert the `run_id` column is populated from the nested `correlation.runId` (`extractSystemEventCorrelation`, `:195`) and the source is `decision`.
+- [x] R1. `apps/cli/tests/workflow-decision-scan.test.ts` gains an explicit normalize-then-rescue ordering assertion; reordering either shell action fails the test.
+- [x] R2. A committed test in `packages/app/tests/` asserts evidence-mode gate fallback persists decision rows through the run tap (system_events) with caller `gate` and runId/node correlation — no reliance on gitignored artifacts. The seam is `registerSystemEventTap(bus, new SystemEventDao(<in-memory SQLite>), …)` (`packages/app/src/services/system-event-tap.ts:51`), not the `FakeSystemEventDao` that `packages/app/tests/decision/decision-events.test.ts:342` uses. Assert the `run_id` column is populated from the nested `correlation.runId` (`extractSystemEventCorrelation`, `:195`) and the source is `decision`.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — History-anatomy rescue fires only after normalization, pinned by a failing-if-reordered test
-- [ ] AC2 — Gate-evidence fallback decision rows are persisted and provable from committed coverage alone
+- [x] AC1 — History-anatomy rescue fires only after normalization, pinned by a failing-if-reordered test
+- [x] AC2 — Gate-evidence fallback decision rows are persisted and provable from committed coverage alone
 
 ### Q&A
 
@@ -109,11 +111,31 @@ Key anchors: rescue step `config/workflows/history-anatomy.yaml:253`; scan test 
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Ordering pin added to apps/cli/tests/workflow-decision-scan.test.ts ("history-anatomy normalize-then-rescue ordering pin"). Structural: in state validate of config/workflows/history-anatomy.yaml the normalization action (contains `grep -vx 'Verdict: PASS'`) and the rescue action (contains `decision run anatomy-validation-verdict`) each match exactly one action chunk and rescueIndex == normalizeIndex + 1, so reorder or collapse fails. Behavioral: /bin/sh runs of both extracted commands over .spur/run fixture — YAML order with a PASS-first artifact leaves 0 stub calls and final line `Verdict: PASS`; reversed order leaves exactly 1 stub call; a `Verdict: FAIL` artifact leaves 0 stub calls and no appended PASS. Suite 4/4 pass (bun test apps/cli). |
+| R2 | MET | New packages/app/tests/workflow/decision-gate-persistence.test.ts wires registerSystemEventTap (packages/app/src/services/system-event-tap.ts:51) over createDbAdapter bun-sqlite in-memory + applyCliMigrations + SystemEventDao, runs the genuine no-backend gate-evidence fallback (no model stubs), awaits tap.flush(), reads dao.query (packages/domain/src/dao/system-event-dao.ts:359) for the decision.start/failure/end rows: lifecycle order by sequence, one shared invocationId, run_id 'run-gate' on every row via nested correlation.runId, decision.* source family, caller 'gate', minConfidence 0.7, makerSource 'catalog-default', correlation.nodeId 'approve-gate', failure reason 'no-backend', fallbackValue 'defer', end source 'default'. No .spur/run reads, no FakeSystemEventDao, env via config gateway only, no YAML edits. 1/1 pass; catalog suite still 10/10. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | Failing-if-reordered proven two ways: structural index pin (reorder/collapse of the two validate actions fails) and the behavioral reversed-order arm where the stub fires exactly once versus zero in YAML order. |
+| AC2 | MET | test | Persistence proven from committed coverage alone through the real tap into in-memory SQLite (packages/app/tests/workflow/decision-gate-persistence.test.ts); no gitignored artifact is read anywhere in the test. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -122,6 +144,9 @@ Key anchors: rescue step `config/workflows/history-anatomy.yaml:253`; scan test 
 ### History
 
 - 2026-10-07T07:19:56.733Z backlog → todo (system)
+- 2026-10-07T18:09:52.749Z todo → wip (system)
+- 2026-10-07T18:27:09.399Z wip → testing (system)
+- 2026-10-07T18:29:18.727Z testing → done (system)
 
 ### Notes
 
