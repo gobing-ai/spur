@@ -6,7 +6,7 @@ status: backlog
 priority: P2
 tags: []
 created_at: "2026-10-06T18:15:41.140Z"
-updated_at: "2026-10-07T00:59:48.013Z"
+updated_at: "2026-10-07T03:14:07.071Z"
 ---
 
 # P1: Workflow decision points adopt spur decision catalogs
@@ -21,6 +21,7 @@ Make `spur decision` production ready: every decision it serves is observable an
 
 - Decision lifecycle events on the system event bus, emitted from the `DecisionService.decide` seam for both `spur decision run` and workflow `decide`: `decision.start`, `decision.success`, `decision.failure`, `decision.end`, plus `decision.rejected` for caller mistakes (unknown id, unregistered maker) that throw before any backend call. A new `decision` event source; bounded, metadata-only payloads (input keys and evidence digest, never raw input values); run/workflow/node/WBS correlation when called from a workflow.
 - Persisting those events to `system_events` for `spur decision run` and workflow runs, so they are visible to the Board, SSE and `workflow trace`.
+- A `decision_logs` table that stores one row per decision invocation with its redacted, bounded input, output, maker resolution, run correlation and per-phase timing, separate from the metadata-only system event ledger and joined to it by invocation id. A Board Observability **Decisions** tab lists, filters and explains those rows.
 - A decision reliability report derived from recorded events (accept rate, fallback reasons, confidence, latency per decision id and maker) — the evidence each adoption slice cites.
 - A comprehensive audit of `config/workflows/*.yaml` classifying each step as adopt, rescue-only, keep-deterministic or keep-human, published as a design satellite with a staged adoption roadmap.
 - `spur decision` enhancements the roadmap needs (catalog entries for new decision points, run correlation, evidence-file inputs).
@@ -155,6 +156,24 @@ Feature: Spur decision production readiness: events and workflow adoption
     When the gate is reached
     Then the gate answer comes from a catalog decision and emits the decision lifecycle events
     And bundled gates keep mode never and still pause for the operator
+  @core
+  Scenario: R14 — Every decision invocation is recorded in the decision log
+    # covers: I6, I9
+    Given a decision served by spur decision run, a workflow decide action or an evidence-mode operator gate
+    When the invocation ends with an accepted answer, a fallback or a maker error
+    Then one decision_logs row keyed by the invocation id stores the decision id, caller, run correlation, registered maker name and maker source, the redacted bounded input, the value, source, reason and confidence, any redacted error, and the timing of each phase
+    And configured secrets never appear in the stored input or error
+    And a decision log write failure never changes the decision result
+    And the invocation's decision.* lifecycle events are stored in system_events, not in decision_logs
+
+  @core
+  Scenario: R15 — The Board Decisions tab lists and explains recorded decisions
+    # covers: I8, I9
+    Given recorded decision log rows in the selected time range
+    When the operator opens the Decisions tab in Observability
+    Then the tab lists the invocations newest first with decision, caller, maker, value, outcome, confidence, duration and run columns, and shows invocation count, accepted rate, fallback rate and p95 duration for the filtered rows
+    And the operator can filter by decision id, maker, outcome, caller and run id
+    And opening a row shows its stored input, phase timeline, value and fallback, error and a link to the run's system events
 ```
 
 ## Tasks
