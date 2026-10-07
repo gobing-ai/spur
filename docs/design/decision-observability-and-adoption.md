@@ -35,8 +35,9 @@ Feature P1 owns two things:
 
 - **One seam.** Every decision passes through `DecisionService.decide`: CLI `spur decision run`
   today, and the workflow `decide` action after slice S4. Emitting events there covers both
-  callers. The workflow `decide` action's current inline path, `runDecide`, will route through the
-  service in S4, so this design does not instrument it twice.
+  callers. The workflow `decide` action's current inline-question path (`runDecide`) emits through
+  the same payload module until S4 routes catalog-backed decides through the service; the
+  inline-question form never reaches the service, so nothing is emitted twice.
 - **Event catalog contract.** Every name is registered in `BASE_CATALOG`, has a presenter in
   `SYSTEM_EVENT_PRESENTERS`, and belongs to a `SystemEventSource` that has a `SOURCE_PROFILES`
   row (`packages/app/src/services/event-names.ts:14`, `:76`). The model for decision events is
@@ -57,13 +58,13 @@ Feature P1 owns two things:
 | `decision.rejected` | A caller mistake throws (`UnknownDecisionError`, `UnknownDecisionMakerError`, `DecisionCatalogError`). It fires before any maker call, and no `start` follows. | error |
 | `decision.start` | The decision id and maker are resolved, and the maker is about to be called. | info |
 | `decision.success` | `source: model`, `reason: accepted` | info |
-| `decision.failure` | `source: default`, and the reason is one of `low-confidence`, `no-backend`, `timeout`, `error` | warn (`error` reason → error) |
+| `decision.failure` | `source: default`, and the reason is one of `low-confidence`, `no-backend`, `timeout`, `error` | warning (`error` reason → error) |
 | `decision.end` | Always fires after `start`, after `success`/`failure`. | info |
 
 The order is fixed: `start → (success | failure) → end`, or `rejected` alone. All events from one
 call share an `invocationId`, a uuid minted at `start`. `decision.failure` means a fallback was
 served. It does not mean a crash: the caller still receives a value. The `inferSeverity` suffix
-rule does not match `failure`, so the presenter sets the severity explicitly.
+rule does not match `failure`, so the producer stamps `severity` in the payload (event-tracking §8).
 
 ### 3.2 Payloads (metadata-only)
 
@@ -77,10 +78,10 @@ Per event:
 
 | Event | Extra fields |
 | --- | --- |
-| `start` | `type` (`choice` / `noul` / …), `maker`, `makerSource` (`flag` / `config.makers` / `config.maker` / `catalog` / `defaults`), `catalogLayer`, `inputKeys[]`, `evidenceDigest?` (sha256 of the bounded evidence), `minConfidence` |
+| `start` | `type` (`choice` / `noul` / …), `maker`, `makerSource` (`flag` / `config-decision` / `config-default` / `catalog-decision` / `catalog-default`; `inline` for the workflow inline-question path), `catalogLayer`, `inputKeys[]`, `evidenceDigest?` (sha256 of the bounded evidence), `minConfidence` |
 | `success` | `value`, `confidence`, `maker` |
 | `failure` | `reason`, `fallbackValue`, `confidence \| null`, `maker`, `error?` (redacted, ≤ 512 chars) |
-| `end` | `durationMs`, `value`, `source`, `reason`, `maker` |
+| `end` | `durationMs`, `value`, `source`, `reason`, `maker`, `confidence` |
 | `rejected` | `errorKind`, `message` (redacted), `maker?` |
 
 `value` is allowed in payloads because it is always a member of the catalog's closed vocabulary.
@@ -88,8 +89,11 @@ Input values and evidence text are never included.
 
 ### 3.3 Emission seam
 
-`DecisionService` accepts an optional `bus` and a per-call `context`
-(`{ caller, correlation }`). The flow is:
+`DecisionService.decide` accepts a per-call `bus` and `context` (`{ caller, correlation }`) on
+`DecideOptions`. They are not passed to the constructor, because `getDecisionService` caches one
+instance per process. Payloads are built in one module, `packages/app/src/decision/decision-events.ts`.
+Until S4, the workflow inline-question `decide` runner emits through the same module (caller
+`workflow`, makerSource `inline`; reason `disabled` emits nothing). The flow is:
 
 1. Resolution errors emit `rejected`, then rethrow.
 2. `start` fires around `hub.decide`.
