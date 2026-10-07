@@ -398,8 +398,13 @@ Action semantics come from the YAML and the workflow action contract:
   `answerFile`; assert `expectFile`; honor `escalationFile` (a non-empty file after exit 0 means
   the agent paused on an operator question — treat the attempt as succeeded-with-escalation and
   skip `requireDiff` for that attempt only); enforce `requireDiff` against a pre-action git snapshot,
-  including the task-scope guard; honor declared error policy. `timeoutMs` is recorded as not
-  applicable because the host session has no independent kill boundary.
+  including the task-scope guard; honor declared error policy. `timeoutMs` is **requested from the
+  host, not ignored** (0727 amendment, task 1108): when the host's dispatch tool accepts a
+  per-dispatch timeout (pi: the subagent `timeoutMs` option), the driver passes the stage's resolved
+  YAML `timeoutMs` (implement → `implementTimeoutMs`) and records
+  `host timeout <ms> (yaml timeoutMs)`; when the host exposes no such parameter the platform's own
+  limit governs and the driver records `host timeout <ms> (platform subagent limit)`. The host
+  session still owns no independent kill boundary either way — the host's limit is the boundary.
 - `run.artifact` — the engine's ledger registration has **no inline execution surface** (0808 R4).
   The inline equivalent is a documented **registration-equivalent convention**: before the record
   state mutates the task, the host validates the same refusal conditions inline — the declared
@@ -597,11 +602,16 @@ grading its own work defeats the stage. A continuation stage also dispatches fre
 same-task subagent exists (the earlier stage ran host-inline or below the dispatch floor), when a
 host-owned gate sat between the stages, or when the platform cannot address completed subagents.
 
-**Timeout boundary (task 0727):** a dispatched subagent is governed by
-**the host platform's subagent limit, not the YAML timeoutMs** — `timeoutMs` stays not-applicable
-for host execution only — and before dispatch the driver must
-**record the governing timeout boundary and its source before dispatch** in the run log
-(e.g. `host timeout <ms> (<platform subagent limit|yaml timeoutMs>)`). If the dispatch reaches that
+**Timeout boundary (task 0727; amended by task 1108):** a dispatched subagent is governed by
+**the host platform's limit, and the driver asks the host for the YAML budget wherever the host
+exposes one** — before dispatch the driver must
+**record the governing timeout boundary and its source before dispatch** in the run log as either
+`host timeout <ms> (yaml timeoutMs)` (the host accepted the stage's resolved YAML `timeoutMs`;
+implement passes `implementTimeoutMs`) or `host timeout <ms> (platform subagent limit)` (the host
+exposes no per-dispatch timeout, so its own default governs — the 30 min pi default that killed the
+1096/1099 implement workers mid-gate). A host that silently imposes its own budget while the
+operator set one in the YAML is the failure this amendment removes; a host without the parameter
+keeps its previous behavior, so no host is broken. If the dispatch reaches that
 boundary, **a dispatch timeout is a started-subagent failure**: the no-replay rule above and the
 stage's declared YAML error policy govern (implement's default `fail` policy routes the run to
 `failed`); it is never a host re-execution. Recovery follows the

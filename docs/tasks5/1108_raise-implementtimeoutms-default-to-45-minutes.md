@@ -1,14 +1,16 @@
 ---
 schema_version: 1
 name: Raise implementTimeoutMs default to 45 minutes
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-10-07T07:29:49.093Z
-updated_at: "2026-10-07T16:17:18.408Z"
+updated_at: "2026-10-07T19:07:55.927Z"
 feature_id: H15
 
 priority: P2
 estimate_hours: 2
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1108-verdict.json
 ---
 
 ## 1108. Raise implementTimeoutMs default to 45 minutes
@@ -27,15 +29,15 @@ estimate_hours: 2
 
 ### Requirements
 
-- [ ] R1. `config/workflows/task-pipeline.yaml:123` sets `implementTimeoutMs: "2700000"`. The comment block (`:118-122`) states the 45m default, that it governs subprocess surfaces, and that 45m is a reasoned default (P1: one 45m timeout still occurred) — not a proven bound.
-- [ ] R2. The inline driver timeout contract (`inline-pipeline-driver.md` § Timeout boundary, `:600-612`) is amended: when the host's dispatch tool accepts a per-dispatch timeout (pi: subagent `timeoutMs`), the driver passes the stage's resolved YAML `timeoutMs` (implement → `implementTimeoutMs`) and records `host timeout <ms> (yaml timeoutMs)`; when it does not, it records `(platform subagent limit)` as today. No-replay and resume-from-partial-tree rules are unchanged. The `:401` "timeoutMs not applicable inline" statement is reworded to match.
-- [ ] R3. The run-var override still works: `--vars '{"implementTimeoutMs":"..."}'` overrides the default on a subprocess run without YAML edits.
-- [ ] R4. Budget exhaustion stays visible: the existing `configured timeout` message (`agent-run.ts:1280`) and its test (`agent-run.test.ts:1378`) are unchanged and green.
-- [ ] R5. Every dependent of the old value is updated: `skill-structure.test.ts:762` assertion, `planning-workflow-contracts.md:257`, the `context-session-start.ts:77` comment, `execution-workflow.md:311`/`:349` if they state 30m, and `apps/cli/config/` regenerated via `bun run --filter @gobing-ai/spur build:bundle`.
+- [x] R1. `config/workflows/task-pipeline.yaml:123` sets `implementTimeoutMs: "2700000"`. The comment block (`:118-122`) states the 45m default, that it governs subprocess surfaces, and that 45m is a reasoned default (P1: one 45m timeout still occurred) — not a proven bound.
+- [x] R2. The inline driver timeout contract (`inline-pipeline-driver.md` § Timeout boundary, `:600-612`) is amended: when the host's dispatch tool accepts a per-dispatch timeout (pi: subagent `timeoutMs`), the driver passes the stage's resolved YAML `timeoutMs` (implement → `implementTimeoutMs`) and records `host timeout <ms> (yaml timeoutMs)`; when it does not, it records `(platform subagent limit)` as today. No-replay and resume-from-partial-tree rules are unchanged. The `:401` "timeoutMs not applicable inline" statement is reworded to match.
+- [x] R3. The run-var override still works: `--vars '{"implementTimeoutMs":"..."}'` overrides the default on a subprocess run without YAML edits.
+- [x] R4. Budget exhaustion stays visible: the existing `configured timeout` message (`agent-run.ts:1280`) and its test (`agent-run.test.ts:1378`) are unchanged and green.
+- [x] R5. Every dependent of the old value is updated: `skill-structure.test.ts:762` assertion, `planning-workflow-contracts.md:257`, the `context-session-start.ts:77` comment, `execution-workflow.md:311`/`:349` if they state 30m, and `apps/cli/config/` regenerated via `bun run --filter @gobing-ai/spur build:bundle`.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Implement dispatch budget defaults to 45 minutes on subprocess and inline hosts and exhaustion is visible (req: R1, R2, R3, R4, R5)
+- [x] AC1 — Implement dispatch budget defaults to 45 minutes on subprocess and inline hosts and exhaustion is visible (req: R1, R2, R3, R4, R5)
 
 ### Q&A
 
@@ -82,15 +84,65 @@ estimate_hours: 2
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+One config default, one driver-contract amendment, and the dependents that pinned either. No runtime code change.
+
+| File:line | Change |
+| --- | --- |
+| `config/workflows/task-pipeline.yaml:118-132` | `implementTimeoutMs` default `"1800000"` → `"2700000"`; the superseded 30-minute rationale is replaced by the pilot evidence (`docs/reports/i31/1107-runall-p1-pilot.md:70`), the subprocess-surface scope, and the explicit "reasoned default, not a proven bound" caveat |
+| `plugins/sp/tests/skill-structure.test.ts:761-763` | R2a assertion follows the new default (`implementTimeoutMs: "2700000"`); the timeout-template assertions on the implement block are unchanged |
+| `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:401-411` | `agent.run` bullet: `timeoutMs` is now **requested from the host** where the host exposes a per-dispatch timeout, instead of being recorded not-applicable — implement passes `implementTimeoutMs` |
+| `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:600-616` | Timeout-boundary contract amended: the host's limit still governs as the fallback, the YAML budget is requested first, and the pre-dispatch record names which bound is in force (`host timeout <ms> (yaml timeoutMs)` vs `(platform subagent limit)`) |
+| `scripts/commands/inline-execution-contract.test.ts:330-334` | The 0727 contract test pinned the superseded sentence; it now asserts the amended contract (host budget requested, both boundary strings) while keeping the classification and inline-resume assertions — an R2 dependent that R5's list did not name |
+| `docs/design/planning-workflow-contracts.md:255-260` | Step-timeout contract states the two budgets separately: `stepTimeoutMs` `"1800000"` (30 min), `implementTimeoutMs` `"2700000"` (45 min), plus the inline host-limit rule |
+| `plugins/sp/hooks/context-session-start.ts:77` | Comment states the implement budget as 45 min |
+
+**Rationale.** The P1 evidence shows the 30-minute default was never the cause of the observed kills — those were the host's own default — so the change is deliberately two-part rather than a bare number bump: the subprocess default moves, and the inline driver stops discarding the operator's budget when the host can accept one. Both halves are labeled with what they do not prove: 45 minutes is a reasoned default (one P1 implement still hit it and resumed from the partial tree), and the host-boundary fallback keeps working for hosts without a per-dispatch timeout. `apps/cli/config/` is regenerated by `build:bundle`, never hand-edited.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `config/workflows/task-pipeline.yaml:132` reads `implementTimeoutMs: "2700000"` (read back with `grep -n implementTimeoutMs config/workflows/task-pipeline.yaml`); the comment block at `config/workflows/task-pipeline.yaml:118-131` names the 45-minute default, the subprocess-surface scope and the reasoned-default caveat with the P1 citation |
+| R2 | MET | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:401-411` and `:600-616` carry the amended contract for the `timeoutMs` request rule; `bun test scripts/commands/inline-execution-contract.test.ts` → 21 pass / 0 fail, including the amended assertions on both boundary strings and on the host-budget request |
+| R3 | MET | `--vars` merge probed end-to-end with `bun apps/cli/src/index.ts workflow run task-pipeline.yaml --dry-run`: without `wbs` the run stopped at precheck against the YAML default `0000`; with `--vars '{"wbs":"1108"}'` it walked 11 transitions. `implementTimeoutMs` is a var of that same object (`config/workflows/task-pipeline.yaml:132`) consumed by the implement stage template (`config/workflows/task-pipeline.yaml:309`, asserted green at `plugins/sp/tests/skill-structure.test.ts:765`). A direct single-var probe was attempted and is BLOCKED by an independent gate: the subprocess run fails at implement with a capability-attestation error for the resolved `agent.default` executor, so no spawn ever reaches a timeout — recorded, not claimed as proof |
+| R4 | MET | `packages/app/src/workflow/actions/agent-run.ts` is absent from the diff (`git diff --name-only`); `(cd packages/app && bun test tests/workflow/actions/agent-run.test.ts)` → 163 pass / 0 fail in isolation of the one flaky timeout |
+| R5 | MET | `plugins/sp/tests/skill-structure.test.ts:760-762`, `docs/design/planning-workflow-contracts.md:255-260`, `plugins/sp/hooks/context-session-start.ts:77`, `scripts/commands/inline-execution-contract.test.ts:330-334` all updated; `bun run --filter @gobing-ai/spur build:bundle` exited 0 and `apps/cli/config/workflows/task-pipeline.yaml:132` reads the new value |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | command | `grep -n implementTimeoutMs config/workflows/task-pipeline.yaml` returns the new default at `config/workflows/task-pipeline.yaml:132`; `(cd plugins/sp && bun test tests/skill-structure.test.ts)` → 91 pass / 0 fail (assertion at `plugins/sp/tests/skill-structure.test.ts:762`); `bun test scripts/commands/inline-execution-contract.test.ts` → 21 pass / 0 fail (assertions at `scripts/commands/inline-execution-contract.test.ts:330-334`); `bun run build:bundle` → exit 0, regenerated copy read back at `apps/cli/config/workflows/task-pipeline.yaml:132`; full gate `bun run spur-check` → 10370 pass / 0 fail across 606 files in 546.02s (`plugins/sp/scripts/quality-gate.ts:1`, log `.spur/run/1108-test-gate.log`) |
+| R2 — Implement dispatch budget defaults to 45 minutes on subprocess and inline hosts and exhaustion is visible | MET | command | Same command set: the 45-minute default in the SSOT and its generated copy, the inline driver's amended boundary contract asserted by the contract test, and the unchanged `configured timeout` message path (`packages/app/src/workflow/actions/agent-run.ts:1280`, test file green) covering "exhaustion is visible" |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**Verdict: PASS** — config/doc/test surface only; 3-dimensional review executed in-session by the inline driver (reviewer independence not achievable on the host-inline path, recorded as P4).
+
+**Requirement traceability**
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `config/workflows/task-pipeline.yaml:118-132` — `"2700000"` with the subprocess-scope and reasoned-default caveats |
+| R2 | MET | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:401-411`, `:600-616` — host-budget request, both record strings, unchanged no-replay/resume rules |
+| R3 | MET | `--vars` merge probed end-to-end (without `wbs` → failed at the YAML default; with `wbs=1108` → 11 transitions); the implement stage template at `config/workflows/task-pipeline.yaml:309` reads the var |
+| R4 | MET | `packages/app/src/workflow/actions/agent-run.ts:1280` is not in the diff; its test file is green (163 pass) |
+| R5 | MET | Every named dependent updated; `apps/cli/config/workflows/task-pipeline.yaml:132` regenerated by `build:bundle`; `scripts/commands/inline-execution-contract.test.ts:330-334` added as an R2 dependent |
+
+**Findings**
+
+| P | Finding | Disposition |
+| --- | --- | --- |
+| P3 | R5's list omitted `scripts/commands/inline-execution-contract.test.ts`, which pinned the superseded 0727 sentence and failed the first gate run | fixed in-flight; narrow + full gates green |
+| P4 | R3's direct single-var E2E observation is blocked by an independent capability-attestation error on the subprocess surface | accepted; R3 stands on the merge probe plus the template assertion |
+| P4 | `apps/cli/tests/helpers.test.ts:34` is flaky under full-suite load only | accepted; pre-existing |
+| P4 | In-session review | accepted; P2 task |
+
+No P1/P2 findings. Residual risk: the new default is a reasoned value, not a measured bound.
 
 ### References
 
@@ -103,6 +155,9 @@ estimate_hours: 2
 ### History
 
 - 2026-10-07T07:34:13.557Z backlog → todo (system)
+- 2026-10-07T18:38:33.813Z todo → wip (system)
+- 2026-10-07T19:06:46.534Z wip → testing (system)
+- 2026-10-07T19:07:55.914Z testing → done (system)
 
 ### Notes
 

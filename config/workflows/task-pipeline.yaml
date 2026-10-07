@@ -118,9 +118,18 @@ vars:
     # Timeout for the `implement` step specifically (R2a). Implementation is the
     # heaviest agent.run step (full read/write/test-probe loop) and has timed out
     # at the 600s default in five consecutive dogfood runs (bugs 742/744/746/748),
-    # a 100% failure rate at that budget. 30 min gives real headroom; STOP and
-    # record honestly rather than raising it further without operator sign-off.
-    implementTimeoutMs: "1800000"
+    # a 100% failure rate at that budget. Raised 30 → 45 min (task 1108) after the
+    # runall-P1 pilot measured two 30 min kills mid-gate
+    # (docs/reports/i31/1107-runall-p1-pilot.md:70).
+    # SCOPE: this value governs SUBPROCESS surfaces (spur workflow run, --mode
+    # parallel, headless). The inline driver is bounded by the host's own dispatch
+    # limit and passes this budget to the host only where the host accepts one
+    # (0727 amendment, task 1108).
+    # 45 min is a REASONED DEFAULT, not a proven bound: one P1 implement still hit
+    # 45 min while isolating an unrelated test failure and resumed from the partial
+    # tree. STOP and record honestly rather than raising it further without
+    # operator sign-off.
+    implementTimeoutMs: "2700000"
     # Answer captured by the approve gate's hitl.confirm (R1): "yes" | "no" | "cancel".
     # Empty by default; only meaningful once the approve state has been entered.
     __hitlAnswer: ""
