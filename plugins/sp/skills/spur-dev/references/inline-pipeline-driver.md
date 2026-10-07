@@ -353,8 +353,6 @@ entry and `.spur/memory/runs/runall-D63-2ebbd97c.md`.
 
 ## Comprehensive-check retention and evidence (R7/R8)
 
-## Comprehensive-check retention and evidence (R7/R8)
-
 **R7 — comprehensive checks stay at their owning boundaries.** Quick readiness and plan projection are
 admission and visibility, not a substitute for the owning gates. After the plan is visible and after
 isolation when requested, retain the full task/feature integrity, size, evidence-channel,

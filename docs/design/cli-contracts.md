@@ -778,7 +778,7 @@ clean` reclaims retained logs older than `workflow.logRetentionDays` (default 30
   format. Consumer: the inline driver's layer-1 todo (0696, `inline-pipeline-driver.md`).
   Task 1104: the todo `--json` payload additionally carries `plan` — the two-layer A-Z/1-9
   phased plan projected from the definition's `display` annotations (`null` when no state declares
-  display, so unannotated projections keep the exact pre-1104 shape). `plan` rows are
+  display; unannotated projections keep the pre-1104 `steps` shape plus `plan: null`). `plan` rows are
   `{label, id, outcome, text, title?, parent?}` with ids `prepare`, `prepare.<n>`, `phase.<key>`,
   state ids, and `report`; letters cap at Z and digits at 9. `workflow validate` rejects a
   half-annotated phase table (missing non-terminal phases, display on terminals, >25 phases,

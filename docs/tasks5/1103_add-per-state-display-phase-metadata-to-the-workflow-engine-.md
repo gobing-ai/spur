@@ -4,7 +4,7 @@ name: Add per-state display phase metadata to the workflow engine state schema
 status: done
 template: feature-impl
 created_at: 2026-10-07T06:14:15.476Z
-updated_at: "2026-10-07T16:00:36.777Z"
+updated_at: "2026-10-07T19:07:32.902Z"
 feature_id: I13
 
 priority: P1
@@ -43,6 +43,10 @@ a state is rejected today. Per AGENTS.md, fix the released engine facade rather 
    `apps/cli/src/config/embedded-schemas.ts:19`. Updating that copy belongs to 1104, which first writes `display` into YAML.
 
 ### Requirements
+
+- [ ] R1. Add an optional, behavior-free per-state `display` field to the engine `StateDef` type, the state-machine zod schema and the engine state-machine JSON schema: `display: { phase: string, phaseTitle?: string, title?: string, show?: 'plan' | 'on-entry' }`, itself strict. The engine never reads it at run time.
+- [ ] R2. Prepare the engine release (version bump, CHANGELOG, ADR/ARCHITECTURE/README notes) in ts-libs; after the operator pushes the release tag, bump the Spur catalog pin (`package.json:35`) and `bun install`; every bundled workflow still loads and validates unchanged.
+- [ ] R3. Engine tests cover: field accepted, unknown `display` sub-keys rejected, invalid `show` rejected, absent field leaves the parsed definition unchanged.
 
 ### Acceptance Criteria
 

@@ -4,7 +4,7 @@ name: Generate the two-layer A-Z/1-9 plan from workflow YAML phases in workflow 
 status: done
 template: feature-impl
 created_at: 2026-10-07T06:14:17.109Z
-updated_at: "2026-10-07T17:20:11.983Z"
+updated_at: "2026-10-07T19:07:33.415Z"
 feature_id: I13
 
 dependencies: ["1103"]
@@ -56,6 +56,14 @@ and approved `spur workflow show --format todo` emitting the labeled two-layer p
    route; the CLI public surface stays limited to `workflow show --format todo`.
 
 ### Requirements
+
+- [ ] R1. Add `display` to `apps/cli/schemas/state-machine-workflow.schema.json` (same shape as the 1103 engine field); annotate every non-terminal state of `config/workflows/task-pipeline.yaml` and `idea-pipeline.yaml` with the approved phases (prototype table); regenerate the bundle.
+- [ ] R2. Phased projection in `packages/app/src/workflow/step-reporter.ts`: `A Prepare` (A1–A3) plus one letter per phase from B, digits = `show: plan` states, item text `<label> <title> · <state-id>`; `on-entry` states take the next digit only when entered; terminal states never appear. Labels come from a capped labeler that throws past Z or past 9; the flat inventory for unannotated workflows keeps `columnLabel`.
+- [ ] R3. When a state-machine workflow declares `display` on any state, `spur workflow validate` rejects: a non-terminal state without `display`, a terminal state with `display`, more than 25 phases, more than 9 states in a phase (counting on-entry), conflicting `phaseTitle` values within one phase.
+- [ ] R4. `spur workflow show --format todo --json` adds a `plan` array of ready-to-publish items for annotated workflows (`null` otherwise); `steps` unchanged. Update `docs/design/cli-contracts.md` and `plugins/sp/skills/spur-cli/references/workflows.md`.
+- [ ] R5. Batch projection, reachable by agents through a plugin script `plugins/sp/scripts/batch-plan.ts` over a bundled core: `A` Prepare batch (A1–A4), one letter per task (`B 0812 <title>`), `Z` Batch report, waves of 24 tasks; **letters first** — the script's `task-children` mode produces a task's phase digits from that task's `workflow show` plan when the task starts.
+- [ ] R6. Host rendering: skipped / failed / unattempted / blocked map to host `pending` with an `[outcome]` text suffix on every host; only an observed completion is `completed`.
+- [ ] R7. Port the prototype's self-checks into `packages/app/tests/workflow/` tests (cap, validation, label stability across loop-back, skipped never completed, letters-first batch).
 
 ### Acceptance Criteria
 

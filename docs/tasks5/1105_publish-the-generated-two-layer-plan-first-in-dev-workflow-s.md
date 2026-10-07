@@ -4,7 +4,7 @@ name: Publish the generated two-layer plan first in dev workflow skills and comm
 status: done
 template: feature-impl
 created_at: 2026-10-07T06:14:17.623Z
-updated_at: "2026-10-07T17:58:07.813Z"
+updated_at: "2026-10-07T19:07:33.805Z"
 feature_id: I13
 
 dependencies: ["1104"]
@@ -44,6 +44,11 @@ workflow-backed `/sp:dev-*` run publish it verbatim as its first action and keep
    `batch-preflight` precedent in `plugins/sp/agents/super-planner.md:160`; never by importing `packages/app`.
 
 ### Requirements
+
+- [ ] R1. `plugins/sp/skills/spur-dev/references/cross-cutting.md` (shared startup contract) and `inline-pipeline-driver.md` (run setup): for workflow-backed runs, the first action is `spur workflow show <resolved-file> --no-logo --format todo --json` and publishing `.plan` item texts verbatim; the A–D bootstrap rows are removed for those runs; A1/A2/A3 track readiness, Git/isolation and digest binding; on-entry states are inserted as the next digit; re-entry keeps the label and adds `attempt N`; skipped/failed/unattempted/blocked render as `pending` + `[outcome]`. Fallback to `steps[]` when `.plan` is `null`.
+- [ ] R2. Document the per-host update style: per-item hosts (Claude Code `TaskCreate`/`TaskUpdate`, pi `todo`) create each item once and update by id, appending inserted steps at the end (labels carry identity); full-list hosts (Codex `update_plan`, Gemini `write_todos`, OpenCode `todowrite`, Grok `todo_write`) rewrite the whole list in plan order; omp maps letters to `phase`. Markdown fallback stays `renderProgressMarkdown`.
+- [ ] R3. `execution-batch.md`: publish `A Prepare batch` (A1–A4) and `Z Batch report` first; after freeze and ordering, add one letter per task from `batch-plan.mjs waves` (wave 1, later waves on rollover); add a task's phase digits from `batch-plan.mjs task-children` when it starts and mark its letter with the task outcome when it ends.
+- [ ] R4. `plugins/sp/commands/dev-{run,runall,parallel,idea,plan}.md`: the first Implementation bullet publishes the generated plan; `plugins/sp/agents/super-planner.md` states the parent host owns the visible list and the subagent returns per-task stage outcomes for the parent to apply.
 
 ### Acceptance Criteria
 
