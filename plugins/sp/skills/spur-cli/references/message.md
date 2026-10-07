@@ -31,10 +31,10 @@ All verbs accept `--json` and `--json-envelope`. `watch` applies the envelope pe
 
 ```bash
 spur message send "Please review PR 42" --to reviewer
-spur message send "Task 0040 is blocked" --to worker-1 --from operator
+spur message send "Task 0040 is blocked" --to coder-1 --from operator
 spur message send "Done" --to planner --json
 spur message send "Review 0042" --to reviewer --wait --until invoke-exit --timeout 30000
-spur message send "Done" --to manager --request-key 0695-report-42      # retry-safe: same key replays the original receipt
+spur message send "Done" --to planner-1 --request-key 0695-report-42      # retry-safe: same key replays the original receipt
 spur message send "Start the pass" --role reviewer          # resolves to exactly one instance
 ```
 
@@ -66,9 +66,9 @@ wait; enqueue is **not** rolled back if the wait later fails.
 ## `inbox` - list addressed messages
 
 ```bash
-spur message inbox --agent worker-1
-spur message inbox --agent worker-1 --json
-spur message inbox --agent worker-1 --unresolved --json
+spur message inbox --agent coder-1
+spur message inbox --agent coder-1 --json
+spur message inbox --agent coder-1 --unresolved --json
 ```
 
 Lists messages addressed to `--agent <id>`, oldest first. The body is truncated in plain-text output;
@@ -107,8 +107,8 @@ Threads a reply to a specific message id. The reply is addressable to the origin
 ## `watch` - follow an inbox live
 
 ```bash
-spur message watch --agent worker-1
-spur message watch --agent worker-1 --interval 1000 --json
+spur message watch --agent coder-1
+spur message watch --agent coder-1 --interval 1000 --json
 ```
 
 Polls the inbox and surfaces each **new** message exactly once as it arrives. `Ctrl-C` to exit. With

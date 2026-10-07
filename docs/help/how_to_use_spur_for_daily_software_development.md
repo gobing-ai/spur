@@ -361,8 +361,8 @@ spur agent run "Generate a summary" --mode json --json
 # Working directory for agent execution
 spur agent run "Run the tests" --cwd ./packages/domain
 
-# Team mode: prepend pending inbox messages for a team agent spec
-spur agent run "Work on task 0089" --agent reviewer --drain
+# Fleet occupant: prepend pending inbox messages for an agent spec
+spur agent run "Work on task 0089" --spec reviewer-1 --drain
 ```
 
 **Exit codes** for `spur agent run`: 0 success · 1 agent-not-found / known-but-unusable ·
@@ -376,13 +376,14 @@ Canonical coding-agent ids (`ts-ai-runner` 0.4.10+): `claude`, `codex`, `gemini`
 
 ```bash
 spur agent list             # list detected coding agents (includes grok when installed)
-spur agent list --specs     # list team agent specs (.spur/agents/*.yaml)
+spur agent list --specs     # list agent specs (.spur/agents/*.yaml + agent.fleet members)
 spur agent doctor           # check readiness of all agents
 spur agent doctor claude    # check one agent
 spur agent doctor grok      # Grok: version + XAI_API_KEY / ~/.grok/auth.json
 
-# Agent specs under .spur/agents/ are materialized from the `agent.fleet` declaration in
-# .spur/config.yaml — there are no `agent create|edit|delete` verbs.
+# Fleet member specs are derived in memory from the `agent.fleet` declaration in
+# .spur/config.yaml (nothing is written to .spur/agents/; the declaration wins on an id
+# clash) — there are no `agent create|edit|delete` verbs.
 ```
 
 > **Single LLM execution surface:** every model call in Spur routes through `spur agent run`.
@@ -575,10 +576,13 @@ spur message inbox --agent reviewer
 spur message reply msg-001 "Looks good, merging"
 ```
 
-> **Team mode:** `task update <wbs> --assignee <spec-id>` + `message send` + `agent run --spec <id> --drain`
+> **Fleet:** `task update <wbs> --assignee <spec-id>` + `message send` + `agent run --spec <id> --drain`
 > folds the spec's inbox into the prompt and resolves the spec's executor before dispatch.
-> `agent start|stop` manage supervised agent processes through `spur self serve` (the supervisor
-> runs each member's persistent `spur agent loop`).
+> `agent start|stop` manage supervised members through `spur self serve` (the supervisor-internal
+> loop is not a public verb). With `agent.fleet.strategy: gtd`, todo tasks tagged `fleet:auto`
+> auto-dispatch by priority; pipelines target the fleet with `--agent fleet`. A live session can
+> occupy a role as a guest: `spur agent join --role coder`, then `spur agent wait --inbox <id>`;
+> `spur agent leave` returns claimed messages to `queued`. Full surface: [spur agent](./cmd_agent.md).
 
 ### 5.7 Serving the Web UI
 

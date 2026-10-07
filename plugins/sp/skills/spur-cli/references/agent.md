@@ -22,19 +22,19 @@ that before using `run` for fan-out dispatch.
 | Verb | Purpose | Key flags |
 | ---- | ------- | --------- |
 | `run <prompt>` | Execute a prompt or slash command via a coding agent | `--agent <name>` `--spec <id>` `--model <name>` `--mode <mode>` `--continue` `--cwd <path>` `--drain` `--json` |
-| `wait [<specId>]` | Identity-pinned wait for an occupant run to reach a lifecycle state (G4 wave 2; `--role` selector per 0685) | `--role <name>` `--run <runId>` `--until <state>...` `--timeout <ms>` `--json` |
+| `wait [<specId>]` | Identity-pinned wait for an occupant run to reach a lifecycle state (G4 wave 2; `--role` selector per 0685) | `--role <name>` `--run <runId>` `--until <state>...` `--timeout <ms>` `--inbox <id>` `--json` |
 | `trace <runId>` | Print one execution record's lineage — the run, its dispatch parents, agent session ids and streams (1076 R4, ADR-132) | `--follow` `--timeout <ms>` `--json` |
 | `list` | List detected coding agents, or agent specs with `--specs` (live run status + member session merged from `spur self serve`) | `--specs` `--server <url>` `--json` |
 | `report` | Report a fleet member lifecycle state (`working`/`idle`/`blocked`) from a host hook (G73 R1/R2, task 1080) | `--state <state>` `--seq <ns>` `--spec <id>` `--json` |
 | `join` | Join the fleet as a guest occupant — a live session that pulls its own work (G73 R2, task 1081) | `--role <name>` `--id <id>` `--session-id <sid>` `--pid <n>` `--executor <name>` `--json` |
-| `leave` | Leave the fleet: release the guest lease, retire the occupant, return claimed messages to pending | `[id]` `--session-id <sid>` `--json` |
+| `leave` | Leave the fleet: release the guest lease, retire the occupant, return claimed messages to `queued` | `[id]` `--session-id <sid>` `--json` |
 | `status` | Agent specs with live process status and member session (requires `spur self serve`) | `--server <url>` `--json` |
 | `doctor [agent]` | Check agent readiness | `--json` `--probe-health` `--force-refresh` |
 | `usage` | Run-once provider usage capture (codexbar) → quota-owned availability refresh; scheduled externally | `--dry-run` `--source <name>` `--json` |
 | `start <spec-id>` | Start a supervised agent process (requires `spur self serve`) | `--server <url>` `--json` |
 | `stop <spec-id>` | Stop a supervised agent process (requires `spur self serve`) | `--server <url>` `--json` |
 
-`list`, `status`, `doctor`, `run`, `wait`, `trace`, `start`, and `stop` accept `--json` plus `--json-envelope`. The hidden
+Every verb except `trace` accepts `--json` plus `--json-envelope`; `trace` is `--json` only. The hidden
 `loop` is a supervisor-internal process surface. **Exit codes:** `0` success, `1` failure, and `2`
 invalid usage; `run` can also propagate the invoked agent's non-zero result.
 
@@ -142,12 +142,14 @@ exits 2 naming the accepted vocabulary. Resolution collapses onto the same ident
 
 ```bash
 spur agent list              # detected coding agents on this machine
-spur agent list --specs      # agent specs under .spur/agents/
+spur agent list --specs      # agent specs: .spur/agents/*.yaml + agent.fleet members
 spur agent list --json       # machine-readable
 ```
 
 Without `--specs`, lists coding agents detected on the host (by binary on `PATH`). With `--specs`,
-lists agent specs (`.spur/agents/*.yaml`) **with live run status merged from the server's
+lists agent specs — hand-authored `.spur/agents/*.yaml` merged with the members declared under
+`agent.fleet.members` (derived in memory, never written to disk; the fleet declaration wins on an
+id clash; stale `fleet:generated` files are ignored) — **with live run status merged from the server's
 supervisor**: each row carries a trailing status column
 (`running` / `stopped` / `errored` / `unknown`), `pid=<n>` where a process exists, and the member
 session (0897): the session mode plus a shortened resume id (`resume id=3f9c2a1d`), or `-` when the
@@ -158,8 +160,8 @@ falling back to `http://localhost:3000/api` only when the project has no live en
 
 ```bash
 spur agent list --specs
-# planner	claude	reviewer	claude	plans the work	running pid=4132	resume id=3f9c2a1d
-# worker-1	pi	worker	pi	implements	stopped	one-shot
+# planner-1	claude	planner	claude	orchestrator	running pid=4132	resume id=3f9c2a1d
+# coder-1	pi	coder	pi	implements	stopped	one-shot
 ```
 
 ## `status` - live status + member session per spec
@@ -180,7 +182,7 @@ unreachable server reports every spec `stopped` with no session. `--server <url>
 
 ```bash
 spur agent report --state working --seq 1759665600000000000
-spur agent report --state blocked --seq 1759665600000000000 --spec proj-worker-1 --json
+spur agent report --state blocked --seq 1759665600000000000 --spec coder-1 --json
 ```
 
 | Flag | Description |
@@ -215,7 +217,7 @@ concrete id only (role/executor selectors count declared members, so a guest is 
 claim table (same TTL/heartbeat semantics as the write slot — R5) and writes
 `.spur/run/guests/<id>.json` so a host Stop hook can recognize its own session without a CLI call.
 `leave`, or lease expiry in the reconciler pass, releases the lease, marks the occupant exited,
-returns its claimed messages to `pending` and removes the record.
+returns its claimed messages to `queued` and removes the record.
 
 | Flag | Description |
 | --- | --- |
@@ -296,8 +298,8 @@ buffer is only a live view.
 ## `start` - start a supervised process
 
 ```bash
-spur agent start worker-1
-spur agent start worker-1 --json
+spur agent start coder-1
+spur agent start coder-1 --json
 ```
 
 Posts to the `spur self serve` supervisor API
@@ -310,8 +312,8 @@ when the server is unreachable or the start fails.
 ## `stop` - stop a supervised process
 
 ```bash
-spur agent stop worker-1
-spur agent stop worker-1 --json
+spur agent stop coder-1
+spur agent stop coder-1 --json
 ```
 
 Posts to the supervisor API
@@ -388,7 +390,9 @@ one never re-sends settled work; only never-started deliveries release and redel
   **[dispatch-surface rule](../../parallel-execution/references/dispatch-surface.md)**, not this
   reference. This reference documents the verbs; that rule decides which surface carries a dispatch.
 - **Not the fleet orchestrator.** The `spur self serve` supervisor drives the lifecycle: `spur agent
-  start` / `stop` manage supervised processes and `agent list --specs` reports live state.
+  start` / `stop` manage supervised processes and `agent list --specs` reports live state. Dispatch
+  policy (`agent.fleet.strategy` `rest|gtd`, the `orchestrator` member, `--agent fleet` routing)
+  lives in project config and the workflow executor, not in these verbs.
 
 ## See also
 

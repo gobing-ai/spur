@@ -88,9 +88,10 @@ the per-job contract is still env.
 | Variable | Read by | Purpose |
 | --- | --- | --- |
 | `SPUR_BIN` | plugin scripts (inline run setup, prechecks, feature sync) | Absolute path of the invoking `spur` binary — children re-invoke the same build |
-| `SPUR_ROLE` | packages/app (agent service) | Declares the child's coordination role in agent-team runs |
+| `SPUR_ROLE` | packages/app (agent service) | Declares the child's coordination role in fleet runs |
 | `SPUR_SERVE_URL` | packages/app (supervisor service) | Serve URL handed to supervised children |
 | `SPUR_RUN_ID` | packages/app (supervisor, fleet), plugin hooks | Process-generation id for a spawned run |
+| `SPUR_SPEC_ID` | apps/cli (`agent report`), plugin lifecycle hooks | Fleet member id set by the supervisor for each member; hooks report lifecycle only when it is set |
 | `GIT_INDEX_FILE` | packages/app (workflow proof fingerprint, agent run) | Git's own env var; read to fingerprint staged-tree state in proofs |
 
 ## TTY / standard

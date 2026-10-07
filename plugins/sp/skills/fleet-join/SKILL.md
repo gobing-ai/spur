@@ -11,7 +11,7 @@ description: >-
 A guest is a session that **pulls** work: it is neither supervised nor restarted, it is addressed
 by concrete id only, and it never receives a stage (`requiresCapabilities` stages can never route
 to it — a guest carries no attestation). Joining registers an occupant row plus a heartbeat lease;
-leaving (or an expired lease) releases it and returns any claimed messages to `pending`.
+leaving (or an expired lease) releases it and returns any claimed messages to `queued`.
 
 ## Join
 

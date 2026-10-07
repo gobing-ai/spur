@@ -7,10 +7,11 @@
 Spur is a **local-first harness engineering toolkit** for mainstream coding agents (Claude Code,
 Codex, Gemini CLI, pi, omp, OpenCode, Antigravity, OpenClaw, Hermes, Grok). It wraps agents you
 already have installed and authenticated, adding execution discipline, constraint checking, workflow
-orchestration, task & feature management, history analytics, and team coordination.
+orchestration, task & feature management, history analytics, and agent-fleet coordination.
 
 It is **not** a coding agent and **not** a BYOK LLM platform. Coding work is delegated to installed
-agents; optional workflow DecisionMaker integration can call TypeSafe for structured decisions.
+agents; a decision catalog (`spur decision`) serves closed-vocabulary outcomes offline by default,
+and optional DecisionMaker backends can call TypeSafe for structured decisions.
 
 ### How to install Spur?
 

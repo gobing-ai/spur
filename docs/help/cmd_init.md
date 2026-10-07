@@ -3,7 +3,7 @@
 > Scaffold a local Spur project. Writes `.spur/config.yaml` and, unless `--minimal`, scaffolds
 > `.spur/rules/` (with the `recommended-pre-check` + `recommended-post-check` presets) and
 > `.spur/workflows/basic.yaml` from the bundled config assets. Always creates `.spur/agents/`
-> (with a `.gitkeep`) for team-mode agent specs, regardless of `--minimal`. On first run it
+> (with a `.gitkeep`) for hand-authored agent specs, regardless of `--minimal`. On first run it
 > seeds `~/.config/spur/` from the bundled package-root `config/` assets so `spur rule run` resolves
 > a real ruleset from any project.
 >

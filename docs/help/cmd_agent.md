@@ -1,7 +1,7 @@
 # spur agent
 
 > Run and inspect supported coding agents. **This is Spur's single LLM execution surface** —
-> every model call in Spur (sp skills, workflow `agent.run` actions, team-mode runs) routes
+> every model call in Spur (sp skills, workflow `agent.run` actions, fleet dispatch) routes
 > through `spur agent run`. Spur owns no other path to a model (it is not a BYOK LLM
 > platform — ADR/PRD).
 
@@ -11,10 +11,13 @@
 |---|---|
 | `run <prompt>` | Execute a prompt or slash command via a coding agent |
 | `list` | List detected coding agents; with `--specs`, list agent specs |
+| `status` | Live status per agent spec (supervisor-backed) |
+| `usage` | Run-once provider usage capture that refreshes quota-owned executor availability |
 | `report` | Report a fleet member lifecycle state (`working`/`idle`/`blocked`) from a host hook |
 | `join` / `leave` | Join or leave the fleet as a guest occupant (a live session that pulls its own work) |
 | `doctor [agent]` | Check agent readiness (usable, authenticated, version) |
-| `wait <specId>` | Identity-pinned wait for an occupant run to reach a lifecycle state |
+| `trace <runId>` | Run lineage (workflow → agent runs), optionally followed to completion |
+| `wait [specId]` | Identity-pinned wait for an occupant run to reach a lifecycle state, or (`--inbox`) for a guest's queued work |
 | `loop` | Supervisor-internal self-draining loop for an agent spec (hidden from `--help`) |
 | `start <spec-id>` | Start a supervised agent process (requires `spur self serve`) |
 | `stop <spec-id>` | Stop a supervised agent process (requires `spur self serve`) |
@@ -28,13 +31,14 @@ spur agent run [options] <prompt>
 | Flag | Description |
 |---|---|
 | `--agent <name>` | Role, executor, agent binary, `auto`, or `inline`. A **role** (`scribe`/`coder`/`reviewer`/`planner`) selects the starting tier; an **executor** pins a configured profile; a bare binary name works with a one-time warning; `auto` (default) resolves via the `agent` config block. Explicit `inline` requests host-session execution; on headless surfaces (this command is headless) a role/tier fallback resolves with one warning (ADR-087 — substitution over rejection; the G5 exit-2 rejection is retired). `spur agent run` always starts a subprocess. |
-| `--spec <id>` | Team agent spec id (occupant addressing); pairs with `--drain` |
+| `--spec <id>` | Agent spec id (occupant addressing; a fleet member such as `coder-1`); pairs with `--drain` |
 | `--continue` | Resume the previous agent session |
 | `--model <name>` | Agent model argument (explicit `--model` wins over the configured one) |
 | `--mode <mode>` | Agent output mode: `text` \| `json` (default: `text`) |
 | `--cwd <path>` | Working directory for agent execution |
 | `--drain` | Prepend pending inbox messages for the `--spec <id>` occupant |
-| `--json` | Output machine-readable envelope |
+| `--json` | Output machine-readable JSON |
+| `--json-envelope` | With `--json`, wrap output in the `{ok, data\|error}` envelope |
 
 ### Exit codes
 
@@ -66,7 +70,7 @@ The resolution steps below are specific to `spur agent run` (the subprocess surf
 (Phase-based routing is retired: `default-by-phase` was removed in task 0452 and prompt-regex
 phase detection in 0536 R4.)
 
-### `--drain` (team mode)
+### `--drain` (fleet occupant)
 
 `--drain` resolves the addressed `--spec <id>` as an **agent spec id** (a different namespace
 from the coding-agent type; a legacy `--agent <spec-id>` still works during the transition with a
@@ -84,7 +88,7 @@ spur agent run "Refactor the DB layer" --agent gemini --model gemini-2.0-flash
 spur agent run "Summarize the diff" --agent grok
 spur agent run "Generate a summary" --mode json --json
 spur agent run "Run the tests" --cwd ./packages/domain
-spur agent run "Work on task 0089" --agent reviewer --drain
+spur agent run "Work on task 0089" --spec reviewer-1 --drain
 ```
 
 ### JSON shape
@@ -177,7 +181,7 @@ spur agent leave [id] [--session-id <sid>]
 | `--json-envelope` | Wrap the JSON in the standard output envelope |
 
 `leave` (or lease expiry) releases the lease, marks the occupant exited, returns its claimed
-messages to `pending`, and removes the record. Exit `2` on an unknown role, an id collision, or
+messages to `queued`, and removes the record. Exit `2` on an unknown role, an id collision, or
 `leave` without an id when this host session never joined.
 
 ## spur agent status
@@ -205,9 +209,10 @@ spur agent list [options]
 
 | Flag | Description |
 |---|---|
-| `--specs` | List agent specs under `.spur/agents/` instead of detected agents |
+| `--specs` | List agent specs instead of detected agents (see [Agent spec sources](#agent-spec-sources)) |
 | `--server <url>` | With `--specs`: supervisor API for live run status (default: this project's registry serve port, `http://localhost:<port>/api`; `http://localhost:3000/api` only when the project has no live entry) |
 | `--json` | Output machine-readable JSON |
+| `--json-envelope` | With `--json`, wrap output in the `{ok, data\|error}` envelope |
 
 With `--specs`, each row carries live run status merged from the server's supervisor: trailing `status` column plus `pid=<n>` where a process exists, then the member session (`<mode>` + `id=<8-char short>`; `-` when none).
 When `spur self serve` is unreachable, the listing falls back to all `stopped` with a stderr warning.
@@ -295,6 +300,7 @@ spur agent wait [options] <specId>
 | `--until <state>` | Lifecycle state to wait for (repeatable OR): `idle` \| `working` \| `invoke-exit` \| `blocked`. Default `idle` |
 | `--timeout <ms>` | Caller deadline in milliseconds. Omit = no deadline (stall budget still applies) |
 | `--json` | `{ satisfied, pin }` on success; `{ error: { code, message } }` on failure |
+| `--json-envelope` | With `--json`, wrap output in the `{ok, data\|error}` envelope |
 
 Pins `specId` + `runId` + `generation` from the snapshot at wait start, then polls until the
 first satisfied `--until` (OR). Replacement, generation bump, or disappearance fails fast
@@ -316,9 +322,10 @@ first-class blocked signal in wave 2.
 spur agent wait reviewer
 spur agent wait reviewer --run R3 --until invoke-exit
 spur agent wait reviewer --until working --until invoke-exit --timeout 30000 --json
+spur agent wait --inbox coder-g1 --timeout 60000   # guest: block until queued work arrives
 ```
 
-## spur agent loop
+## spur agent loop (supervisor-internal)
 
 ```
 spur agent loop [options]
@@ -333,10 +340,8 @@ Supervisor-internal: `spur self serve` spawns one loop per started spec (`spur a
 Each iteration: check the agent inbox → drain pending messages into a prompt → run the agent
 → wakes on ledger events (message sent, strategy/capacity change, completion receipt); `--poll` is the no-event backstop. Runs until `SIGINT` / `SIGTERM`, or until its parent `spur serve` disappears: the loop re-reads `process.ppid` every poll and shuts down when it changes, so a `SIGKILL`ed serve cannot leave an orphan loop (1088 R2).
 
-```bash
-spur agent loop --spec worker-1
-spur agent loop --spec worker-1 --poll 1000
-```
+Not a public verb: do not invoke it from skills, workflows, or scripts — use `spur agent start` / `stop`
+(or `agent.fleet.enabled: true` + `spur self serve`) instead.
 
 ## spur agent start
 
@@ -365,6 +370,33 @@ Stops a supervised agent process via `spur self serve`.
 |---|---|
 | `--server <url>` | Server API URL (default: this project's registry serve port, `http://localhost:<port>/api`; `http://localhost:3000/api` only when the project has no live entry) |
 | `--json` | Output machine-readable JSON |
+
+## Agent spec sources
+
+An agent spec is the addressable identity behind `--spec`, `wait`, `start`/`stop`, and
+`message --to`. `spur agent list --specs` merges two sources:
+
+1. Hand-authored `.spur/agents/*.yaml` files.
+2. Members declared under `agent.fleet.members` in project config (ids default to
+   `<role>-<n>`, e.g. `planner-1`, `coder-1`, `reviewer-1`). On an id clash the fleet
+   declaration wins. Fleet specs are derived in memory — nothing is written to `.spur/agents/`,
+   and stale `fleet:generated` files there are ignored.
+
+```yaml
+agent:
+  fleet:
+    enabled: true          # `spur self serve` supervises and autostarts enabled members
+    strategy: gtd          # rest = no autonomous dispatch; gtd = auto-dispatch todo tasks tagged `fleet:auto`
+    orchestrator: planner-1
+    members:
+      - { role: planner, purpose: orchestrator }
+      - { role: coder, executor: pi-k3, id: coder-1 }
+      - { role: reviewer }
+```
+
+Preview the resolved fleet with `spur projects list --fleet`. Pipelines dispatch into it with
+`--agent fleet` (`executor: 'fleet'`; `executorFallback: traditional` falls back when no member is free).
+Guests (`join`/`leave`) are live sessions that occupy a role without being supervised.
 
 ## See Also
 

@@ -49,7 +49,7 @@ its own output and never runs a recurring loop — evaluation is the doctor's jo
 | feature | Apply accepted rows through `spur feature update --section --from-file`; keep acceptance criteria in Gherkin | [../spur-cli/references/features.md](../spur-cli/references/features.md) |
 | rule | The trace-driven tuning loop (§ Rule tuning loop) | [../spur-cli/references/rules.md](../spur-cli/references/rules.md) · [fine-tuning](../spur-cli/references/rules/fine-tuning.md) |
 | workflow | Catalog selection, the composition ladder, and the ADR-115 budgets (§ below) | [../spur-cli/references/workflows.md](../spur-cli/references/workflows.md) · [operations](../spur-cli/references/workflows/operations.md) |
-| agent spec | Read through `spur agent list --specs`; specs are materialized from the fleet declaration at serve start | [../spur-cli/references/agent.md](../spur-cli/references/agent.md) |
+| agent spec | Read through `spur agent list --specs`; fleet member specs are derived in memory from `agent.fleet` (never written to `.spur/agents/`) | [../spur-cli/references/agent.md](../spur-cli/references/agent.md) |
 | board module | Declare under `bootstrap.modules`, gated by the serve preflight (§ Board module composition) | [../spur-cli/references/serve.md](../spur-cli/references/serve.md) |
 
 Do not drive the planning→execution lifecycle from here — that is `sp:spur-dev`.
