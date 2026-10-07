@@ -262,7 +262,8 @@ Full authoring and config keys: `docs/design/decision-catalog.md`; agent-facing 
 `plugins/sp/skills/spur-cli/references/decision.md`.
 
 - `list [--layer <layer>]` — every visible decision as id/type/layer/catalog-file/description;
-  `--layer` filters to one layer.
+  `--layer` filters to one layer; any other value exits `1` (`VALIDATION_FAILED`). Unknown ids
+  report `NOT_FOUND`; every other caller mistake reports `VALIDATION_FAILED`.
 - `show <id>` — one served contract: parameters, criteria vocabulary, fallback, minConfidence, and
   the effective maker `{name, source}` (`flag → config-decision → config-default →
   catalog-decision → catalog-default`). Unknown id exits 1.

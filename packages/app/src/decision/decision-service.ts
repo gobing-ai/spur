@@ -1,6 +1,7 @@
 import type { SpurConfig } from '@gobing-ai/spur-config';
 import {
     DecisionCatalogError,
+    type DecisionDescriptor,
     DecisionHub,
     DecisionMakerRegistry,
     type DecisionResult,
@@ -46,8 +47,12 @@ export interface DecisionDescription {
     catalog: string;
     layer: DecisionLayerId;
     minConfidence: number;
+    /** The closed answer vocabulary (choice criteria) the maker must answer from. */
+    criteria: DecisionDescriptor['criteria'];
     fallback: string | number | boolean;
     parameters: Readonly<Record<string, unknown>>;
+    /** Catalog model (decision → catalog defaults); absent when neither declares one. */
+    model?: string;
     effectiveMaker: EffectiveMaker;
 }
 
@@ -160,8 +165,10 @@ export class DecisionService {
             catalog: descriptor.source,
             layer: file?.layer ?? 'shared',
             minConfidence: descriptor.minConfidence,
+            criteria: descriptor.criteria,
             fallback: descriptor.fallback,
             parameters: descriptor.parameters,
+            model: descriptor.model,
             effectiveMaker: this.effectiveMaker(id, raw?.maker, file?.catalog.defaults.maker),
         };
     }
@@ -183,7 +190,7 @@ export class DecisionService {
         }
         this.hub.describe(id); // UnknownDecisionError before any maker work
         const file = this.resolution.files.find((f) => Object.keys(f.catalog.decisions).includes(id));
-        const { name } = this.effectiveMaker(
+        const { name, source } = this.effectiveMaker(
             id,
             file?.catalog.decisions[id]?.maker,
             file?.catalog.defaults.maker,
@@ -196,15 +203,7 @@ export class DecisionService {
             );
         }
         const result = await this.hub.decide(id, input as Parameters<DecisionHub['decide']>[1], { maker: name });
-        return {
-            ...result,
-            makerSource: this.effectiveMaker(
-                id,
-                file?.catalog.decisions[id]?.maker,
-                file?.catalog.defaults.maker,
-                options?.maker,
-            ).source,
-        };
+        return { ...result, makerSource: source };
     }
 
     /** Readiness: layers, load errors, duplicate ids, maker resolution and registration. */
@@ -286,7 +285,7 @@ export class DecisionService {
     }
 }
 
-/** Per-process cache of DecisionService instances, keyed by cwd (design §3.3). */
+/** Per-process cache of DecisionService instances, keyed by cwd + shared root (design §3.3). */
 const serviceCache = new Map<string, Promise<DecisionService>>();
 
 /**
@@ -300,10 +299,12 @@ export async function getDecisionService(
     cwd: string,
     sharedRoot?: string,
 ): Promise<DecisionService> {
-    let pending = serviceCache.get(cwd);
+    // The shared root selects which catalogs load, so it is part of the identity.
+    const key = `${cwd}\0${sharedRoot ?? ''}`;
+    let pending = serviceCache.get(key);
     if (pending === undefined) {
         pending = DecisionService.create(config, cwd, sharedRoot);
-        serviceCache.set(cwd, pending);
+        serviceCache.set(key, pending);
     }
     const service = await pending;
     return service.withConfig(config);

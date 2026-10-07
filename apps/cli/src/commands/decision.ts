@@ -5,6 +5,7 @@ import {
     type DecisionStatus,
     getDecisionService,
     redactAndBound,
+    UnknownDecisionError,
 } from '@gobing-ai/spur-app';
 import type { CliContext } from '../context';
 import { toEnvelopeJson, toJson, writeJsonError } from '../output';
@@ -44,6 +45,11 @@ export function registerDecisionCommand(program: Command, context: CliContext): 
                 const service = await getDecisionService(context.spurConfig ?? null, context.cwd);
                 let entries = service.list();
                 if (options.layer !== undefined) {
+                    if (!DECISION_LAYERS.includes(options.layer)) {
+                        throw new Error(
+                            `invalid --layer "${options.layer}": expected one of ${DECISION_LAYERS.join(', ')}`,
+                        );
+                    }
                     entries = entries.filter((entry) => entry.layer === options.layer);
                 }
                 if (options.json === true) {
@@ -90,8 +96,10 @@ export function registerDecisionCommand(program: Command, context: CliContext): 
                             `catalog: ${description.catalog}`,
                             `layer: ${description.layer}`,
                             `minConfidence: ${description.minConfidence}`,
+                            `criteria: ${toJson(description.criteria)}`,
                             `fallback: ${toJson(description.fallback)}`,
                             `parameters: ${toJson(description.parameters)}`,
+                            `model: ${description.model ?? '(unset)'}`,
                             `effectiveMaker: ${description.effectiveMaker.name}`,
                             `makerSource: ${description.effectiveMaker.source}`,
                         ].join('\n'),
@@ -201,6 +209,8 @@ export function registerDecisionCommand(program: Command, context: CliContext): 
         });
 }
 
+const DECISION_LAYERS: readonly string[] = ['project', 'registered', 'shared'];
+
 /** --param/--evidence collector: commander repeatable-option value arrays. */
 function collect(value: string, previous: string[] | undefined): string[] {
     return [...(previous ?? []), value];
@@ -260,11 +270,20 @@ function parseParams(
     return input;
 }
 
-/** One error path for every verb: JSON envelope when asked, human line otherwise, exit 1. */
+/**
+ * One error path for every verb: JSON envelope when asked, human line otherwise, exit 1.
+ * Every throw reaching here is a caller mistake (design §3.4): unknown id → NOT_FOUND,
+ * everything else (bad param/layer/maker/evidence, duplicate id) → VALIDATION_FAILED.
+ */
 function fail(context: CliContext, options: { json?: boolean; jsonEnvelope?: boolean }, error: unknown): void {
     const message = error instanceof Error ? error.message : String(error);
     if (options.json === true) {
-        writeJsonError(context.output, options, message, 'INTERNAL_ERROR');
+        writeJsonError(
+            context.output,
+            options,
+            message,
+            error instanceof UnknownDecisionError ? 'NOT_FOUND' : 'VALIDATION_FAILED',
+        );
     } else {
         context.output.error(message);
     }

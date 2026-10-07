@@ -47,8 +47,9 @@ All verbs support `--json` (bare payload) and `--json-envelope` (`{ok, data|erro
 ADR-091). Failure output for `--json` commands uses the canonical error envelope only under
 `--json-envelope`; plain `--json` keeps the human message on stderr.
 
-**Exit codes:** `status` exits 1 on catalog load errors; `show` exits 1 on unknown id; `list` always
-exits 0 (design §3.4 — load errors surface via `status`).
+**Exit codes:** `status` exits 1 on catalog load errors; `show` exits 1 on unknown id; `list` exits 0
+(design §3.4 — load errors surface via `status`) except for an invalid `--layer` value (exit 1).
+Error envelopes use `NOT_FOUND` for an unknown id and `VALIDATION_FAILED` for every other caller mistake.
 
 **Exit contract for `run` (design §3.4):** any backend-observed outcome — low confidence, model
 error surfaced as fallback, declined — is still a **successful serve** (exit 0, envelope carries

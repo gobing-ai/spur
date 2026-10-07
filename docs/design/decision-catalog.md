@@ -121,8 +121,8 @@ builds its own hub.
 
 | Verb | Behavior | Exit |
 | --- | --- | --- |
-| `list [--layer <l>] --json` | id, type, description, catalog file, layer | 0 |
-| `show <id> --json` | full entry: type, choices/criteria, parameters, fallback, minConfidence, catalog, layer, plus the effective maker and its source. Never constructs a maker | 0; 1 if unknown id |
+| `list [--layer <l>] --json` | id, type, description, catalog file, layer | 0; 1 on an invalid `--layer` |
+| `show <id> --json` | full entry: type, choices/criteria, parameters, fallback, minConfidence, model, catalog, layer, plus the effective maker and its source. Never constructs a maker | 0; 1 if unknown id |
 | `run <id> [--param k=v]… [--evidence <file>]… [--maker <name>] --json` | validates params, redacts and bounds evidence, calls the effective maker, prints the result. Never writes a workflow result file | 0 for every backend outcome (accepted, low-confidence, no-backend, timeout, error) |
 | `status --json` | configured default maker, per-decision effective maker and source, registered makers, per-layer catalog counts and load errors, duplicate ids | 0 when clean; 1 on any catalog or maker-config error |
 

@@ -4,7 +4,7 @@ name: "spur decision noun: list, show, run, status"
 status: done
 template: feature-impl
 created_at: 2026-10-06T17:55:55.425Z
-updated_at: "2026-10-06T21:36:16.084Z"
+updated_at: "2026-10-07T00:23:06.615Z"
 feature_id: P
 priority: P1
 tags:
@@ -65,27 +65,22 @@ Command file is transport only; all logic stays in DecisionService (ADR-021). Re
 
 ### Solution
 
-Change-map (auto-generated — implement step did not record a Solution).
-Each entry cites the first changed line per file (`file:line`).
+Change-map (authored by the 2026-10-06 `--force --fix all` re-verify; the implement step left this section empty).
 
-| Change (`file:line`) |
-|----------------------|
-| `apps/cli/src/index.ts:212` |
-| `apps/cli/src/index.ts:23` |
-| `apps/cli/tests/json-envelope-inventory.test.ts:288` |
-| `docs/design/cli-contracts.md:253` |
-| `docs/help/spur-cli-matrix.md:18` |
-| `docs/help/spur-cli-matrix.md:92` |
-| `docs/help/spur-cli-matrix.md:96` |
-| `docs/help/spur-cli-matrix.md:99` |
-| `packages/app/src/index.ts:12` |
-| `plugins/sp/skills/spur-cli/SKILL.md:52` |
-| `plugins/sp/tests/cli-surface-parity.test.ts:181` |
-| `apps/cli/src/commands/decision.ts:1` |
-| `apps/cli/tests/commands/decision.test.ts:1` |
-| `docs/help/cmd_decision.md:1` |
-| `docs/help2/decision.md:1` |
-| `plugins/sp/skills/spur-cli/references/decision.md:1` |
+| Change (`file:line`) | What / why |
+|----------------------|------------|
+| `apps/cli/src/commands/decision.ts:21` | `registerDecisionCommand`: the four verbs `list`/`show`/`run`/`status` as a thin transport over `DecisionService` (ADR-021) |
+| `apps/cli/src/commands/decision.ts:151` | `run`: evidence read + `redactAndBound` before `parseParams`, so unreadable evidence and bad params exit 1 before any backend call |
+| `apps/cli/src/commands/decision.ts:199` | `status` exits 1 when `status.ok` is false (catalog or maker-config error) |
+| `apps/cli/src/index.ts:212` | noun registration |
+| `packages/app/src/index.ts:26` | re-exports the decision service surface for the CLI |
+| `apps/cli/tests/commands/decision.test.ts:93` | E2E CLI suite: list/show/run/caller-mistakes/status against temp projects, offline `typesafe` maker |
+| `plugins/sp/skills/spur-cli/references/decision.md:1` | spur-cli noun reference incl. `decisions` config keys (CLI parity, R6) |
+| `docs/design/cli-contracts.md:266` | CLI contract rows for the noun |
+
+**Re-verify fix (2026-10-06):** `show` dropped the closed answer vocabulary and the catalog model that task R2 ("full entry") and feature scenario R2 require. `DecisionDescription` now carries `criteria` and `model` (`packages/app/src/decision/decision-service.ts:43`), the human `show` prints both (`apps/cli/src/commands/decision.ts:93`), the JSON and human `show` tests assert them (`apps/cli/tests/commands/decision.test.ts:156`), and `docs/design/decision-catalog.md:125` lists `model`.
+
+**Re-verify fix 2 (2026-10-06):** caller-mistake JSON errors no longer report `INTERNAL_ERROR`: unknown id → `NOT_FOUND`, every other caller mistake → `VALIDATION_FAILED` (`apps/cli/src/commands/decision.ts:285`). `list --layer` rejects values outside `project|registered|shared` with exit 1 instead of silently listing nothing (`apps/cli/src/commands/decision.ts:50`). Regression checks: `apps/cli/tests/commands/decision.test.ts:124` (invalid layer), `:174` (`NOT_FOUND`), `:263` (caller mistakes never `INTERNAL_ERROR`). Contract docs: `plugins/sp/skills/spur-cli/references/decision.md:50`, `docs/design/decision-catalog.md:124`, `docs/design/cli-contracts.md:265`.
 
 ### Testing
 
@@ -96,21 +91,22 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | apps/cli/src/commands/decision.ts:36-62 list verb + --layer filter; decision.test.ts:94-133 |
-| R2 | MET | apps/cli/src/commands/decision.ts:65-99 show contract; never constructs maker (decision-service.ts:112-131); unknown id exit 1 test :158-162 |
-| R3 | MET | apps/cli/src/commands/decision.ts:105-152 run via hub, exits 0 all backend outcomes; redactAndBound reuse; no resultFile (test :201) |
-| R4 | MET | caller mistakes rejected pre-backend: decision.ts:128,142,225-252; 7 test cases :236-271 |
-| R5 | MET | apps/cli/src/commands/decision.ts:164-198 status report; !status.ok exit 1 (:197); tests :274-324 |
-| R6 | MET | plugins/sp/skills/spur-cli/references/decision.md + SKILL.md:52 routing row; cli-surface-parity 22/22 |
+| R1 | MET | `apps/cli/src/commands/decision.ts:37-69` list verb + validated `--layer` filter; `apps/cli/tests/commands/decision.test.ts:94` lists fixture plus shipped shared decisions; `:124` invalid `--layer` exits 1 (21/21 pass this run) |
+| R2 | MET | `apps/cli/src/commands/decision.ts:71-111` show (re-verify fix: now emits `criteria` + `model`); `apps/cli/tests/commands/decision.test.ts:144` contract + criteria assertion, :169 unknown id exit 1 `NOT_FOUND` |
+| R3 | MET | `apps/cli/src/commands/decision.ts:113-170` run; evidence via redactAndBound; `apps/cli/tests/commands/decision.test.ts:197` closed vocabulary, exit 0, no resultFile; live `spur decision run task-triage --param wbs=1093` → standard/default/no-backend exit 0 |
+| R4 | MET | `apps/cli/src/commands/decision.ts:157` parseParams before `decide`; `apps/cli/tests/commands/decision.test.ts:251-264` unknown id/param, missing/type-invalid param, unregistered maker exit 1, never `INTERNAL_ERROR`; :266 invalid JSON; :272 unreadable evidence |
+| R5 | MET | `apps/cli/src/commands/decision.ts:172-209` status, `!status.ok` sets exit 1; `apps/cli/tests/commands/decision.test.ts:293` clean exit 0, :315 catalog error exit 1 |
+| R6 | MET | `plugins/sp/skills/spur-cli/references/decision.md:15` four frozen verbs, :32 `decisions` config keys, :42 show contract |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC-1 | MET | test | decision.test.ts:93-133 list fixture+shared, --layer filter, human output, broken catalog exit 0 |
-| AC-2 | MET | test | decision.test.ts:135-163 show json + human, unknown id |
-| AC-3 | MET | test | decision.test.ts:165-223 run serves, closed vocabulary, no resultFile |
-| AC-4 | MET | test | decision.test.ts:225-271 caller mistakes incl. invalid JSON, unreadable evidence |
-| AC-5 | MET | test | decision.test.ts:273-324 status clean/broken json + human |
-| AC-6 | MET | test | packages/app/tests/decision/decision-catalog-resolver.test.ts (precedence cases); decision.test.ts threads config via tempProject fixture; decision.ts:44/78/114/168 |
+| R1 — Decision list shows every resolvable decision with its layer and catalog | MET | test | `apps/cli/tests/commands/decision.test.ts:94` json + `--layer`; :116 human; :124 invalid layer exit 1; :132 broken catalog still lists at exit 0 |
+| R2 — Decision show describes one decision without calling a model | MET | test | `apps/cli/tests/commands/decision.test.ts:144` served contract incl. criteria + effective maker/source; :177 human renders criteria/model; :169 unknown id exit 1 `NOT_FOUND` |
+| R3 — Decision run always returns a concrete answer from the closed vocabulary | MET | test | `apps/cli/tests/commands/decision.test.ts:197` value in closed vocabulary, exit 0, no resultFile; :219 redacted bounded evidence + type coercion |
+| R4 — Decision run rejects caller mistakes before any backend call | MET | test | `apps/cli/tests/commands/decision.test.ts:251-264` five caller mistakes exit 1; :266 invalid JSON; :272 unreadable evidence |
+| R5 — Decision status reports readiness and catalog problems per layer | MET | test | `apps/cli/tests/commands/decision.test.ts:293` layer counts + makers exit 0; :315 catalog error exit 1; :324/:333 human |
+| R6 — Repository decision catalogs live in config/decisions and ship in the package | MET | test | `apps/cli/tests/commands/decision.test.ts:94` shared-layer decisions from `config/decisions/` served by the CLI; `bun run --filter @gobing-ai/spur build:bundle` emits `apps/cli/config/decisions/task-pipeline.yaml` this run |
+| R8 — Global config selects the default DecisionMaker for each decision point | MET | command | scratch project with `decisions.maker: typesafe`, `makers.task-triage: laya-local`: `spur decision show task-triage --json` → laya-local/config-decision; `show failure-class` → typesafe/config-default (run this session) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

@@ -121,6 +121,14 @@ describe('spur decision list (AC1)', () => {
         expect(lines[0]).toContain('triage-test');
     });
 
+    test('unknown --layer exits 1 instead of listing nothing', async () => {
+        const result = await main(['decision', 'list', '--layer', 'bogus', '--json', '--json-envelope'], CLEAN);
+        expect(result.code).toBe(1);
+        const parsed = JSON.parse(result.out) as { ok: boolean; error: { code: string; message: string } };
+        expect(parsed.error.code).toBe('VALIDATION_FAILED');
+        expect(parsed.error.message).toContain('project, registered, shared');
+    });
+
     test('broken catalog still lists surviving decisions at exit 0 (design §3.4)', async () => {
         const broken = tempProject({
             '.spur/decisions/broken.yaml':
@@ -143,6 +151,7 @@ describe('spur decision show (AC2)', () => {
                 type: string;
                 fallback: string;
                 minConfidence: number;
+                criteria: unknown;
                 effectiveMaker: { name: string; source: string };
             };
         };
@@ -151,6 +160,8 @@ describe('spur decision show (AC2)', () => {
         expect(parsed.data.type).toBe('choice');
         expect(parsed.data.fallback).toBe('standard');
         expect(parsed.data.minConfidence).toBe(0.8);
+        // The closed answer vocabulary is part of the served contract (feature scenario R2).
+        expect(JSON.stringify(parsed.data.criteria)).toContain('standard');
         expect(parsed.data.effectiveMaker.name).toBe('typesafe'); // hub default; nothing configured
         expect(parsed.data.effectiveMaker.source).toBe('catalog-default');
     });
@@ -158,7 +169,9 @@ describe('spur decision show (AC2)', () => {
     test('unknown id exits 1 with an error envelope', async () => {
         const result = await main(['decision', 'show', 'no-such-decision', '--json', '--json-envelope'], CLEAN);
         expect(result.code).toBe(1);
-        expect(JSON.parse(result.out).ok).toBe(false);
+        const parsed = JSON.parse(result.out) as { ok: boolean; error: { code: string } };
+        expect(parsed.ok).toBe(false);
+        expect(parsed.error.code).toBe('NOT_FOUND');
     });
 
     test('human output renders the contract fields', async () => {
@@ -167,6 +180,8 @@ describe('spur decision show (AC2)', () => {
         expect(result.out).toContain('id: triage-test');
         expect(result.out).toContain('type: choice');
         expect(result.out).toContain('layer: project');
+        expect(result.out).toContain('criteria: ');
+        expect(result.out).toContain('model: ');
         expect(result.out).toContain('effectiveMaker: typesafe');
         expect(result.out).toContain('makerSource: catalog-default');
     });
@@ -242,7 +257,10 @@ describe('spur decision run caller mistakes (AC4)', () => {
     ])('%s exits 1', async (_label, argv) => {
         const result = await main([...argv, '--json', '--json-envelope'], CLEAN);
         expect(result.code).toBe(1);
-        expect(JSON.parse(result.out).ok).toBe(false);
+        const parsed = JSON.parse(result.out) as { ok: boolean; error: { code: string } };
+        expect(parsed.ok).toBe(false);
+        // Caller mistakes are never reported as internal failures.
+        expect(parsed.error.code).not.toBe('INTERNAL_ERROR');
     });
 
     test('invalid JSON param exits 1; human path reports the message', async () => {

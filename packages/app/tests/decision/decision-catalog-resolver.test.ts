@@ -97,7 +97,7 @@ describe('decision catalog resolver (E2E, task 1092)', () => {
         expect(status.errors.join(' ')).toContain('nope-missing');
 
         // decide on a duplicate id fails closed before any backend call.
-        expect(service.decide('shared-id', {})).rejects.toThrow();
+        await expect(service.decide('shared-id', {})).rejects.toThrow('multiple winning catalogs');
 
         // Registered maker resolution still works: describe reports the selecting source.
         const config2 = { decisions: { maker: 'typesafe', makers: {} } } as unknown as SpurConfig;
@@ -113,5 +113,8 @@ describe('decision catalog resolver (E2E, task 1092)', () => {
         const a = await getDecisionService(null, join(root, 'project'), join(root, 'shared'));
         const b = await getDecisionService(null, join(root, 'project'), join(root, 'shared'));
         expect(a).toBe(b);
+        // A different shared root is a different catalog set, never the cached instance.
+        const other = await getDecisionService(null, join(root, 'project'), join(root, 'registered'));
+        expect(other).not.toBe(a);
     });
 });
