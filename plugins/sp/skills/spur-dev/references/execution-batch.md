@@ -201,17 +201,52 @@ remain SSOT in `next-router/references/routing-table.md`. Step 2.3 already pre-b
 out-of-set deps; 2.6 is belt-and-braces for status STOP rows and a uniform report shape
 (`dev-next:`-style reasons). Parallel mode: preflight each WBS before fan-out.
 
+### 2.7 Visible batch plan (1105 R3)
+
+The batch publishes a generated two-layer plan in the host's native todo list — letters first, digits
+per task only at task start. Rows come from `batch-plan.mjs` (ADR-130 glue over
+`packages/app/src/workflow/plan-projection.ts`), reached like `batch-preflight`:
+`node "$(superskill script path sp batch-plan.mjs)"`. The visible plan is a projection of the frozen
+plan, never a second plan: labels carry identity, updates happen at the boundaries below only, and no
+per-task letter is ever hand-assigned.
+
+1. **Kickoff (before the first task):** publish `A Prepare batch` (A1 Resolve and freeze task set, A2
+   Order by dependencies, A3 Prepare Git, A4 Publish plan) and `Z Batch report`. The task set is
+   unknown before A1, so task letters do not exist yet.
+2. **After freeze and ordering (Step 2 complete):** write the frozen ordered list to a temp file as a
+   JSON array of `{wbs, name}` and render the waves:
+
+   ```bash
+   node "$(superskill script path sp batch-plan.mjs)" waves --tasks <tasks.json>
+   ```
+
+   Publish wave 1's rows — one letter (B…Y) per task with no digit children, then `Z Batch report`;
+   a batch past 24 tasks publishes the next wave on rollover (same A/Z bookends).
+3. **When a task starts:** mark its letter in_progress and add its phase digits, rendered from a
+   `spur workflow show task-pipeline.yaml --no-logo --format todo --json` payload:
+
+   ```bash
+   node "$(superskill script path sp batch-plan.mjs)" task-children --letter <task-letter> --plan <plan.json>
+   ```
+
+4. **When a task ends:** mark the task's letter (and its published digits) with the task's terminal
+   outcome — `done` renders completed; `failed`/`skipped`/`blocked` render pending + ` [<outcome>]`
+   per the frozen status mapping in
+   [inline-pipeline-driver.md](inline-pipeline-driver.md) § Host todo update styles.
+
 ## Step 3 — The driver loop (R3, R4)
 
 ```
 plan = resolve(--tasks) → freeze → order(deps)        # may abort (cycle) or pre-block (unmet dep)
 report = []
+publish visible plan §2.7: A/Z rows now; one letter per task after this freeze (batch-plan.mjs waves)
 for wbs in plan:                                       # default sequential mode
     if any dependency of wbs failed earlier in THIS batch:
         report += skipped(wbs, reason); continue       # only relevant under --keep-going
     preflight = batch-preflight(wbs)                   # Step 2.6 — TABLE A STOP
     if preflight.action == skip:
         report += preflight-skip(wbs, preflight); continue
+    visible plan (§2.7): letter in_progress + task-children digits at start; letter ← outcome at end
     run: if interactive sequential omit/inline:
              inline-pipeline-driver(task-pipeline.yaml, wbs)
          else:

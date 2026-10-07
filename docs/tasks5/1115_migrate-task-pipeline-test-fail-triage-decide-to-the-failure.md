@@ -4,7 +4,7 @@ name: Migrate task-pipeline test-fail-triage decide to the failure-class catalog
 status: blocked
 template: feature-impl
 created_at: 2026-10-07T16:29:03.102Z
-updated_at: "2026-10-07T17:23:41.609Z"
+updated_at: "2026-10-07T18:56:02.692Z"
 feature_id: P1
 
 dependencies: ["1094"]
@@ -52,6 +52,11 @@ Blocked until the evidence bar in the feature P1 Entry condition is met for `fai
 #### Q&A entry — 2026-10-07T16:29:28.730Z
 
 - Evidence bar: _operator to record before start (samples ≥ N, acceptedRate ≥ X on maker M)._
+
+#### Q&A entry — 2026-10-07 operator evidence bar
+
+- **Evidence bar (operator decision, 2026-10-07):** at least **20 samples** with an **accepted rate ≥ 80%** for `failure-class` on its effective maker, in `spur decision status --reliability --json` on the project database. Only samples served by a configured, reachable maker count; `no-backend` fallbacks are excluded (feature P1 Entry condition). The 80% rate matches the catalog `minConfidence: 0.8`, and the same bar applies to all three adoption slices.
+- **Status:** the task stays `blocked` until the report meets the bar; no waiver. Report on 2026-10-07: `failure-class` has 0 samples.
 
 ### Design
 

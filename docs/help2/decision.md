@@ -1,9 +1,9 @@
 # spur decision
 
-> Decision-catalog transport: list visible decisions, show one served contract, run a decision to a
-> served outcome (never writes a workflow resultFile), and audit catalog health. Thin CLI over
-> `DecisionService`; the hub is `@gobing-ai/ts-ai-decision` (task 1093). Frozen at exactly these
-> four verbs (`docs/design/decision-catalog.md` §3.4).
+Decision-catalog transport: list visible decisions, show one served contract, run a decision to a
+served outcome (never writes a workflow resultFile), and audit catalog health. Thin CLI over
+`DecisionService`; the hub is `@gobing-ai/ts-ai-decision` (task 1093). Frozen at exactly these
+four verbs (`docs/design/decision-catalog.md` §3.4).
 
 ## Catalog layers
 

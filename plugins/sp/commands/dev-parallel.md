@@ -27,5 +27,10 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 
 ## Implementation
 
+- **Publish the visible batch plan first (1105):** as the batch orchestrator, publish `A Prepare
+  batch` (A1–A4) and `Z Batch report` before the first task, then one letter per task from
+  `batch-plan.mjs waves` after freeze/order and digit children from `batch-plan.mjs task-children` at
+  task start — [execution-batch.md](../skills/spur-dev/references/execution-batch.md#27-visible-batch-plan-1105-r3)
+  § 2.7 Visible batch plan.
 - Apply the [inline-default execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface) before choosing native subagents or `spur agent run`.
 - `Skill(skill="sp:parallel-execution", args="$ARGUMENTS")`

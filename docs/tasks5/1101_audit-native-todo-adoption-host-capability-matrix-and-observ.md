@@ -4,7 +4,7 @@ name: "Audit native todo adoption: host capability matrix and observed behavior 
 status: done
 template: feature-impl
 created_at: 2026-10-07T05:39:24.638Z
-updated_at: "2026-10-07T05:54:27.255Z"
+updated_at: "2026-10-07T19:25:25.816Z"
 feature_id: I13
 
 done_forced: "true"
@@ -99,16 +99,16 @@ No source edits (research only).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `docs/analysis/2026-10-native-todo-adoption-audit.md:16-45`: 10-host matrix with tool, shape, statuses, hierarchy and citations; agy shape, OpenClaw and Hermes flagged unverified |
-| R2 | MET | `docs/analysis/2026-10-native-todo-adoption-audit.md:47-74`: 24 runs, 3 traces; read-only SQL re-run this session returned 24 runs / 16 with todo / first item +14…+379 |
-| R3 | MET | `docs/analysis/2026-10-native-todo-adoption-audit.md:76-87`: classes C1–C7, each with evidence, plus the refuted frontmatter hypothesis |
-| R4 | MET | `docs/analysis/2026-10-native-todo-adoption-audit.md:89-101`: 9 surfaces with path, current state, required change |
+| R1 | MET | `docs/analysis/2026-10-native-todo-adoption-audit.md:16-29`: 10-host matrix (tool, shape, statuses, hierarchy, evidence); re-read 2026-10-07 force re-verify; agy shape, OpenClaw, Hermes disclosed unverified |
+| R2 | MET | `docs/analysis/2026-10-native-todo-adoption-audit.md:47-74`: 24 runs measured, 3 traced runs with publish offset, labels, reconciliation; sqlite3 -readonly re-run this session returned 24 runs; drift vs the doc's 16 with todo / +379 is later-imported rows (session started 2026-10-07T01:28 imported at 12:00, +780), not an audit error |
+| R3 | MET | `docs/analysis/2026-10-native-todo-adoption-audit.md:76-87`: classes C1–C7 each with file:line or trace evidence plus the refuted frontmatter hypothesis |
+| R4 | MET | `docs/analysis/2026-10-native-todo-adoption-audit.md:89-101`: 9-row impact table with path, current state, required change |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Capability matrix covers all supported hosts with cited sources (req: R1) | MET | command | `grep -cE` over the ten host names in `docs/analysis/2026-10-native-todo-adoption-audit.md:18-29` returned 10 (exit 0); each row names a tool or "none documented" with history counts or superskill doc path:line |
-| AC2 — Observed run behavior is classified by root cause (req: R2, R3) | MET | command | `docs/analysis/2026-10-native-todo-adoption-audit.md:53-87`: sqlite3 -readonly re-run gives 24/16/14/379; traces carry publish offset, labels, reconciliation, mapped to C1–C7 |
-| AC3 — Impact table names every surface to change (req: R4) | MET | command | awk field check over `docs/analysis/2026-10-native-todo-adoption-audit.md:93-101` counted 9 rows, each with non-empty path, current and required change (exit 0) |
+| AC1 — Capability matrix covers all supported hosts with cited sources (req: R1) | MET | command | grep of the ten host names over `docs/analysis/2026-10-native-todo-adoption-audit.md:18-29` returned 10 this run (exit 0); every row names a tool or "none documented" with evidence |
+| AC2 — Observed run behavior is classified by root cause (req: R2, R3) | MET | command | `sqlite3 -readonly .spur/spur.db` reproduction query from `docs/analysis/2026-10-native-todo-adoption-audit.md:107-111` re-run this session (exit 0): 24 runs, offsets +14…+379 for rows imported before the audit; `grep -cE '^\| C[1-7]'` over `docs/analysis/2026-10-native-todo-adoption-audit.md:76-87` returned 7 (exit 0); traces at `docs/analysis/2026-10-native-todo-adoption-audit.md:62-74` carry publish timing, labels, reconciliation |
+| AC3 — Impact table names every surface to change (req: R4) | MET | command | awk non-empty-field check over `docs/analysis/2026-10-native-todo-adoption-audit.md:93-101` counted 9 rows this run (exit 0) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

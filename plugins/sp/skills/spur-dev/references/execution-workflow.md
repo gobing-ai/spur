@@ -176,11 +176,12 @@ answer's `Confidence: HIGH|MEDIUM|LOW` line reaches the verdict artifact, and bo
 and `record → done` refuse a `LOW` (or absent) level unless the run was launched with
 `--vars '{"ackLowConfidence":"true"}'`. A PASS the verifier would not stand behind is an operator
 risk decision, so it takes an operator acknowledgement — not a silent certification.
-The CLI-layer done gate (`done-transition-guard`, task 1117) separately requires the artifact to *state* a
-level at all: a PASS artifact whose `confidence` is missing or outside HIGH|MEDIUM|LOW is denied there
-too, so a hand-driven `task update <wbs> done` — which is how this pipeline itself reaches `done`
-(`--no-lifecycle`) — cannot certify a verdict that carries no confidence. `LOW` is accepted at that
-gate; the acknowledgement rule above stays the pipeline's.
+The CLI-layer done gate (`done-transition-guard`, task 1068 R3) separately requires the artifact to *state* a
+level at all: a PASS artifact whose `confidence` is missing is denied there too, and a present but
+out-of-vocabulary value fails the read closed (`invalid confidence field`), so a hand-driven
+`task update <wbs> done` — which is how this pipeline itself reaches `done` (`--no-lifecycle`) —
+cannot certify a verdict that carries no confidence. `LOW` is accepted at that gate; the
+acknowledgement rule above stays the pipeline's.
 
 Agentic steps use the pure slash inputs declared by each YAML `agent.run` action (ADR-043). The
 workflow engine dispatches them; the interactive driver invokes their backing skills in-session.

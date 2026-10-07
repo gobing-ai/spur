@@ -32,6 +32,32 @@ describe('parseVerifyVerdict (R1 — one canonical parser)', () => {
         if (o.kind === 'invalid') expect(o.reason.length).toBeGreaterThan(0);
     });
 
+    test('confidence normalizes case (1068 R3)', () => {
+        const o = parseVerifyVerdict(
+            JSON.stringify({
+                verdict: 'PASS',
+                confidence: 'high',
+                requirements: [{ id: 'R1', status: 'MET', evidence: 'e' }],
+            }),
+            '0299',
+        );
+        expect(o.kind).toBe('valid');
+        if (o.kind === 'valid') expect(o.verdict.confidence).toBe('HIGH');
+    });
+
+    test('invalid confidence value → kind invalid naming the field (1068 R3)', () => {
+        const o = parseVerifyVerdict(
+            JSON.stringify({
+                verdict: 'PASS',
+                confidence: 'SURE',
+                requirements: [{ id: 'R1', status: 'MET', evidence: 'e' }],
+            }),
+            '0299',
+        );
+        expect(o.kind).toBe('invalid');
+        if (o.kind === 'invalid') expect(o.reason).toContain('confidence');
+    });
+
     test('invalid verdict value → kind invalid', () => {
         const o = parseVerifyVerdict(JSON.stringify({ verdict: 'MAYBE', requirements: [] }), '0299');
         expect(o.kind).toBe('invalid');

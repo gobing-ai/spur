@@ -1013,6 +1013,20 @@ export {
     type WorkflowRunStartedEvent,
     type WorkflowTransitionEvent,
 } from './workflow/observability';
+// Phased plan projection — def→two-layer A-Z/1-9 plan from `display` annotations (1104)
+export {
+    type BatchTask,
+    buildBatchPlan,
+    buildPhasedPlan,
+    hostStatus,
+    hostText,
+    insertOnEntry,
+    type PhasedPlanItem,
+    planChild,
+    planLetter,
+    taskPhaseChildren,
+    validatePhaseTable,
+} from './workflow/plan-projection';
 export {
     type FollowWorkflowProgressOptions,
     followWorkflowProgress,

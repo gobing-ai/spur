@@ -40,6 +40,11 @@ export const CHECK_SEVERITIES = ['blocker', 'major', 'minor', 'advisory'] as con
 /** Canonical check severity type derived from {@link CHECK_SEVERITIES}. */
 export type CheckSeverity = (typeof CHECK_SEVERITIES)[number];
 
+/** Canonical confidence levels a verifier may assert (task 1068 R3). */
+export const CONFIDENCE_LEVELS = ['HIGH', 'MEDIUM', 'LOW'] as const;
+/** Canonical confidence type derived from {@link CONFIDENCE_LEVELS}. */
+export type VerdictConfidence = (typeof CONFIDENCE_LEVELS)[number];
+
 /** A requirement or Acceptance Criteria coverage row after canonical normalization. */
 export interface VerdictCoverageRow {
     id: string;
@@ -163,7 +168,24 @@ export const verifyVerdictSchema = z.object({
     acceptanceCriteria: z.array(coverageRowSchema).optional().default([]),
     checks: z.array(checkSchema).optional().default([]),
     source: z.string().optional(),
-    confidence: z.enum(['HIGH', 'MEDIUM', 'LOW']).optional(),
+    // Case-insensitive like `verdict`/row `status`: a hand-authored "high" must
+    // normalize, not invalidate the whole artifact (parity with the answer lint,
+    // which accepts the line case-insensitively).
+    confidence: z
+        .string()
+        .transform((c, ctx): VerdictConfidence => {
+            const up = c.toUpperCase();
+            if (!(CONFIDENCE_LEVELS as readonly string[]).includes(up)) {
+                ctx.addIssue({
+                    code: 'custom',
+                    message: `invalid confidence "${c}" (expected HIGH|MEDIUM|LOW)`,
+                    path: ['confidence'],
+                });
+                return 'LOW';
+            }
+            return up as VerdictConfidence;
+        })
+        .optional(),
     pipelineRunId: z.string().optional(),
     recordedAt: z.string().optional(),
 });

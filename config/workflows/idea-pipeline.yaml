@@ -79,6 +79,10 @@ vars:
 
 states:
   - id: start
+    display:
+      phase: discover
+      phaseTitle: Discover
+      title: Check inputs
     description: >
       Pipeline start. The idea text arrives as vars.idea. The pipeline stops at
       handoff — no task execution. Soft agent doctor (status file) so doctor red
@@ -113,6 +117,10 @@ states:
             printf 'FAIL\n' > ".spur/run/$__runId-idea-precheck-doctor.status"
 
   - id: discovery
+    display:
+      phase: discover
+      phaseTitle: Discover
+      title: Discovery interview
     description: >
       Dispatch sp:brainstorm to explore the idea, generate approaches with trade-offs,
       and record a design summary. The brainstorm ALWAYS records a design summary
@@ -171,6 +179,10 @@ states:
             $spurBin decision run needs-design --evidence ".spur/run/$__runId-idea-eval-report.md" --json 2>/dev/null | jq -e '.source=="model" and .value=="skip"' >/dev/null 2>&1 && printf '{"needs_design": false}\n' > "$f" || printf '{"needs_design": true}\n' > "$f"
 
   - id: idea-eval
+    display:
+      phase: discover
+      phaseTitle: Discover
+      title: Evaluate idea
     description: >
       HITL taste gate. Discovery has produced the idea-evaluation report
       (.spur/run/${vars.__runId}-idea-eval-report.md) with urgency/necessity scores, premises,
@@ -187,6 +199,10 @@ states:
             mode: never
 
   - id: feature-create
+    display:
+      phase: define
+      phaseTitle: "Define feature"
+      title: Create feature
     description: >
       Create a feature via spur feature create, or select an existing feature id.
       The agent writes the feature id to .spur/run/${vars.__runId}-idea-feature-id.txt and body-only
@@ -226,6 +242,10 @@ states:
             $spurBin feature update "$featureId" --section Scope --from-file .spur/run/$__runId-idea-scope.md
 
   - id: ac-generate
+    display:
+      phase: define
+      phaseTitle: "Define feature"
+      title: Generate AC
     description: >
       Generate acceptance criteria per ac-style-guide.md. Write AC scenarios to the
       feature file via `spur feature update --section "Acceptance Criteria"
@@ -302,6 +322,10 @@ states:
             printf 'FAIL\n' > .spur/run/$__runId-idea-ac-ready.status; }
 
   - id: feature-check
+    display:
+      phase: define
+      phaseTitle: "Define feature"
+      title: Check feature
     description: >
       HITL gate over the recorded `idea-ac-check` result (measured at the ac-generate
       boundary — this gate never re-runs the CLI). Deliberately NOT --strict: before
@@ -329,6 +353,10 @@ states:
       # JSON, recorded ac-check status) cannot change across hitl.confirm.
 
   - id: system-design
+    display:
+      phase: design
+      phaseTitle: Design
+      title: System design
     description: >
       Dispatch sp:sys-architecture to produce the system design. This state runs
       only when needs_design=true (design=auto signal path). The agent creates ADR
@@ -379,6 +407,10 @@ states:
           timeoutMs: 120000
 
   - id: design-approval
+    display:
+      phase: design
+      phaseTitle: Design
+      title: Approve design
     description: >
       HITL taste gate. The operator reviews the system design and approves or
       rejects it. Routed around only when profile=auto AND vars.design_approved=true
@@ -406,6 +438,10 @@ states:
             mode: never
 
   - id: decompose
+    display:
+      phase: decompose
+      phaseTitle: Decompose
+      title: Decompose into tasks
     description: >
       Dispatch sp:spec-decomposition with the brainstorm artifact, feature AC, and
       design doc as input. The agent produces a task-batch JSON file at
@@ -450,6 +486,10 @@ states:
             ' "$ORDER" >/dev/null
 
   - id: batch-create
+    display:
+      phase: decompose
+      phaseTitle: Decompose
+      title: Approve task batch
     description: >
       HITL gate: runs spur task batch-create with the batch JSON from the
       decompose state. The check is objective (schema validation) and
@@ -466,6 +506,10 @@ states:
             mode: never
 
   - id: batch-create-run
+    display:
+      phase: decompose
+      phaseTitle: Decompose
+      title: Create tasks
     description: >
       Executes task batch creation exactly once per decomposition attempt. The
       side effect lives in onEnter and records a sentinel; transition guards only
@@ -495,6 +539,10 @@ states:
             fi
 
   - id: ready-prepare
+    display:
+      phase: handoff
+      phaseTitle: "Hand off"
+      title: Prepare ready set
     description: >
       Ready-by-default preparation (0788): the planning owner applies the
       ready-refinement checklist to each created task (requirements, design,
@@ -544,6 +592,10 @@ states:
             jq -e 'type == "object" and (.tasks | type == "array") and (all(.tasks[]; (.wbs | type == "string") and (.status == "ready" or .status == "failed" or .status == "skipped") and (.planningDigest | type == "string") and (.checks | type == "array") and (all(.checks[]; (.id | type == "string") and (.pass | type == "boolean") and (.evidence | type == "string")))))' "$READY" >/dev/null
 
   - id: handoff-finalize
+    display:
+      phase: handoff
+      phaseTitle: "Hand off"
+      title: Finalize handoff
     description: >
       Post-create finalization (0518): zip batch item names to the created WBS
       values from the captured batch-create result (equal-length/unique-name

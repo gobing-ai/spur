@@ -254,7 +254,10 @@ now auto-creates the `pipeline` run-link when recording a PASS verdict to `done`
 CLI verb is needed from a shell step.
 **Step timeout (ADR-026 amendment, 2026-06-23, task 0107; raised task 0398 R4):** each `agent.run`
 step carries a `timeoutMs` option — `${vars.stepTimeoutMs}` for review/verify/test-fix and
-`${vars.implementTimeoutMs}` for the heavier implement hop, both defaulting to `"1800000"` (30 min).
+`${vars.implementTimeoutMs}` for the heavier implement hop, defaulting to `"1800000"` (30 min) and
+`"2700000"` (45 min, task 1108 — a reasoned default, not a proven bound) respectively. Inline
+dispatch passes the YAML budget to the host only when its dispatch tool accepts a timeout
+(`inline-pipeline-driver.md` § Timeout boundary).
 On elapse the ts-libs `ProcessExecutor` kills the subprocess (never abandons it); the agent step
 exits non-zero → `ok:false` → pipeline routes to `failed`, and a partial-work handoff artifact is
 written to `.spur/run/<runId>-<state>-partial.md`. The artifact carries a `## resume context` block

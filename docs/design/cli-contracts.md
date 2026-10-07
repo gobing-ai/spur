@@ -776,6 +776,13 @@ clean` reclaims retained logs older than `workflow.logRetentionDays` (default 30
   path}`, the layer and file that name resolution picked (ADR-113). Unknown `--format` exits 1
   naming both values before file resolution; not-found and schema-invalid errors are identical for every
   format. Consumer: the inline driver's layer-1 todo (0696, `inline-pipeline-driver.md`).
+  Task 1104: the todo `--json` payload additionally carries `plan` — the two-layer A-Z/1-9
+  phased plan projected from the definition's `display` annotations (`null` when no state declares
+  display; unannotated projections keep the pre-1104 `steps` shape plus `plan: null`). `plan` rows are
+  `{label, id, outcome, text, title?, parent?}` with ids `prepare`, `prepare.<n>`, `phase.<key>`,
+  state ids, and `report`; letters cap at Z and digits at 9. `workflow validate` rejects a
+  half-annotated phase table (missing non-terminal phases, display on terminals, >25 phases,
+  >9 states per phase, conflicting `phaseTitle`) with findings naming the offending state or phase.
 - `progress <run-id> [--json]` — read-only projection of one run's execution progress
   (D62 / ADR-117). The payload **is** `projectWorkflowProgress`
   (`packages/app/src/workflow/progress-projection.ts`): `{schemaVersion, runId, workflow, status,

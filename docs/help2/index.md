@@ -39,11 +39,12 @@ spur task create "Investigate flaky login test" --skip-ready
 | --- | --- | --- | --- |
 | `spur agent` | [agent](./agent.md) | `spur projects` | [projects](./projects.md) |
 | `spur builder` | [builder](./builder.md) | `spur rule` | [rule](./rule.md) |
-| `spur feature` | [feature](./feature.md) | `spur self serve` | [serve](./serve.md) |
-| `spur history` | [history](./history.md) | `spur self status` | [status](./status.md) |
-| `spur self init` | [init](./init.md) | `spur task` | [task](./task.md) |
-| `spur self maintain` | [maintain](./maintain.md) | `spur workflow` | [workflow](./workflow.md) |
-| `spur message` | [message](./message.md) | `spur self migrate` | [migrate](./migrate.md) |
+| `spur decision` | [decision](./decision.md) | `spur self serve` | [serve](./serve.md) |
+| `spur feature` | [feature](./feature.md) | `spur self status` | [status](./status.md) |
+| `spur history` | [history](./history.md) | `spur task` | [task](./task.md) |
+| `spur self init` | [init](./init.md) | `spur workflow` | [workflow](./workflow.md) |
+| `spur self maintain` | [maintain](./maintain.md) | `spur self migrate` | [migrate](./migrate.md) |
+| `spur message` | [message](./message.md) | | |
 
 ## Global conventions
 

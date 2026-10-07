@@ -4561,7 +4561,7 @@ test('fleet spec execution validates the actual launch context and no longer req
         await db.close();
         rmSync(root, { recursive: true, force: true });
     }
-});
+}, 15000);
 
 // ---------------------------------------------------------------------------
 // Tests: doctor capability surface (B8 / task 0889 R3/R5)

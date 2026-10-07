@@ -245,25 +245,36 @@ stage is required, select the subprocess path (`--agent auto` or `--agent <name>
 
 The workflow-backed dev commands (`dev-run`, `dev-runall`, `dev-refineall`, `dev-verifyall`) share one
 startup order. The order is load-bearing and applies on both the inline driver and the subprocess
-path; skill-only operations (refine/verify batches with no nested workflow) display their owned
+path. Runs that resolve a workflow definition publish the generated plan as their first action
+(1105 R1); skill-only operations (refine/verify batches with no nested workflow) display their owned
 procedure and do not fabricate a workflow YAML.
 
-1. **Publish a compact bootstrap checklist immediately** (host-preparation rows, never copied
-   workflow states): `A, Quick readiness` · `B, Prepare Git` · `C, Publish workflow plan` ·
-   `D, Comprehensive checking`.
-2. **Quick deterministic readiness (R2), before isolation.** Evaluate `quickReadiness`
+1. **Publish the generated plan first (1105 R1), before readiness and isolation.** Resolve the
+   selected workflow through the same resolver execution uses and run `spur workflow show
+   <resolved-file> --no-logo --format todo --json`; the projection reads the definition and executes
+   nothing, so publishing it first is safe. Publish every `.plan` row's `text` verbatim (`A Prepare`,
+   `B Implement`, `B1 … · precheck`) as the visible host list — never hand-write rows or copy state
+   tables into prose. `.plan` is `null` for unannotated workflows: those keep the flat `steps[]`
+   inventory with `columnLabel` labels; the skill-only refine/verify batches keep the bootstrap rows
+   below.
+2. **Quick deterministic readiness (R2) — plan row A1, before isolation.** Evaluate `quickReadiness`
    (`plugins/sp/scripts/batch-preflight.ts`) with the operation, status, filtered-set size, and the
    selected matrix required/present sections + content-policy findings. This is an admission decision
    (runnable / needs-refinement / blocked / skipped / invalid), never an implementation certificate.
-3. **Isolation (R3), only when `--worktree` is valid.** After quick readiness and the required Git
-   safety checks, create/adopt and switch to the execution tree; confirm absolute cwd, branch, base
-   SHA, and ownership. An invalid/empty target, unsupported mode, ambiguous ownership, or stale target
-   stops without creating a tree or discarding work. All subsequent tools, agents, corpus writes, and
-   run artifacts use the confirmed execution tree.
-4. **Publish the workflow inventory (R4), before reading the YAML.** `spur workflow show
-   <resolved-file> --no-logo --format todo --json`; validate with `parseWorkflowInventory` and bind to
-   the run's `__definitionDigest` with `assertInventoryIdentity`. Drift or projection failure stops the
-   run before any comprehensive/model work — never execute with a misleading plan.
+3. **Isolation (R3) — plan row A2, only when `--worktree` is valid.** After quick readiness and the
+   required Git safety checks, create/adopt and switch to the execution tree; confirm absolute cwd,
+   branch, base SHA, and ownership. An invalid/empty target, unsupported mode, ambiguous ownership, or
+   stale target stops without creating a tree or discarding work. All subsequent tools, agents, corpus
+   writes, and run artifacts use the confirmed execution tree.
+4. **Bind the published plan to the run digest (R4) — plan row A3.** Validate the step-1 projection
+   with `parseWorkflowInventory` and bind it to the run's `__definitionDigest` with
+   `assertInventoryIdentity`. Drift or projection failure stops the run before any
+   comprehensive/model work — never execute with a misleading plan.
+
+**Bootstrap rows without a generated plan (1105 R1).** `dev-refineall` and `dev-verifyall` have no
+workflow plan (their phases are map I13 fog), so until phases exist they keep publishing a compact
+host-preparation checklist immediately, never copied workflow states: A Quick readiness, B Prepare
+Git, C Publish workflow plan, D Comprehensive checking.
 5. **Load execution detail and run comprehensive checks (R7).** Only after the plan is visible (and
    after isolation when requested) load the full YAML for the active stage and run the owning
    comprehensive gates at their boundaries. Prefer deterministic checks; invoke semantic model work

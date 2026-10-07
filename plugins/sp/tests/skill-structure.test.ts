@@ -759,7 +759,7 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
 
         // R2a — implement step uses its own (longer) timeout budget, not the shared
         // stepTimeoutMs, and the rationale is documented inline (bugs 742/744/746/748).
-        expect(taskPipeline).toContain('implementTimeoutMs: "1800000"');
+        expect(taskPipeline).toContain('implementTimeoutMs: "2700000"');
         const implementBlock = taskPipeline.split('  - id: implement\n')[1]?.split('  - id: test\n')[0] ?? '';
         const varsImplementTimeout = `$${'{vars.implementTimeoutMs}'}`;
         expect(implementBlock).toContain(`timeoutMs: ${varsImplementTimeout}`);

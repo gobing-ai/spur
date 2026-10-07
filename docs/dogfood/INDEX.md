@@ -68,3 +68,4 @@ git ls-files docs/dogfood | grep -Ev '(README|INDEX)\.md$'
 - `2026-10-05-G67-agent-loop-supervision-dogfood.md`
 - `2026-10-06-G72-fleet-team-residue-cleanup-dogfood.md`
 - `2026-10-06-P-spur-decision-noun-dogfood.md`
+- `2026-10-07-I13-dev-runall-two-layer-plan-dogfood.md`

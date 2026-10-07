@@ -13,8 +13,6 @@ const PASS_ARTIFACT = {
     requirements: [{ id: 'R1', status: 'MET' as const, evidence: 'a' }],
     acceptanceCriteria: [],
     source: 'test',
-    // 1117: the done gate certifies a PASS only when the artifact states the
-    // verifier's confidence, so a PASS fixture must carry one.
     confidence: 'HIGH' as const,
 };
 

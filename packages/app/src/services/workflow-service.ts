@@ -76,6 +76,7 @@ import type { SummaryResolver } from '../workflow/decision-evidence';
 import { type DecisionEvaluator, evaluateDecision } from '../workflow/decision-hitl-responder';
 import type { FleetDispatchDeps } from '../workflow/fleet-dispatch';
 import { ObservableWorkflowAdapter, type WorkflowObservabilityBus } from '../workflow/observability';
+import { validatePhaseTable } from '../workflow/plan-projection';
 import { projectWorkflowProgress } from '../workflow/progress-projection';
 import { loadRunCorrelation } from '../workflow/run-correlation';
 import {
@@ -710,6 +711,17 @@ export class WorkflowAppService {
             const terminalReasonErrors = collectTerminalReasonViolations(workflow);
             if (terminalReasonErrors.length > 0) {
                 return { ok: false, valid: false, file, errors: terminalReasonErrors };
+            }
+
+            // Phase-table check (1104 R3): once any state declares `display`, every
+            // non-terminal state must carry a phase, terminals must stay bare, and the
+            // A-Z/1-9 plan caps must hold — `workflow show --format todo` projects the
+            // plan from these annotations, so a half-annotated table would render a
+            // misleading plan. Opt-in per annotated workflow; unannotated defs are
+            // valid by omission. Findings name the offending state or phase.
+            const phaseErrors = validatePhaseTable(workflow);
+            if (phaseErrors.length > 0) {
+                return { ok: false, valid: false, file, errors: phaseErrors };
             }
 
             // 0614: warn-only composition advisory (shell measure + agent.run

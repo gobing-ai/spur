@@ -35,14 +35,20 @@ interface VerifyVerdict {
     status: 'pass' | 'fail' | 'warn';
     evidence: string;
   }>;
-  /**
-   * The verifier's stated confidence, carried from the answer's `Confidence:` line
-   * (task 1068). Optional on read so pre-1068 artifacts still parse; the CLI-layer
-   * done gate requires it on any PASS it certifies (task 1117).
-   */
+  /** Verifier confidence (task 1068 R3). REQUIRED for PASS — the done gate denies
+   *  a confidence-less PASS. Accepted case-insensitively, normalized to uppercase. */
   confidence?: 'HIGH' | 'MEDIUM' | 'LOW';
 }
 ```
+
+## Confidence level (task 1068 R3)
+
+A PASS verdict must state the verifier's confidence: `"confidence": "HIGH" | "MEDIUM" | "LOW"`.
+The value is case-insensitive on read (normalized to uppercase), but a present value outside the
+enum invalidates the artifact, and a PASS with the field absent is denied at the `* → done`
+transition with a remediation naming the field (`--force-done` remains the documented escape).
+The verify answer's `Confidence:` lint rule (producer side) already guarantees the field for
+pipeline-produced artifacts; this closes the hand-authored / pre-1068 artifact hole.
 
 ## Compatibility alias: `scenario` row key
 
@@ -185,19 +191,6 @@ guard:
 with a sibling `verify → failed` guarded on the negation. So a missing file, malformed JSON, or any
 non-`PASS` verdict routes the run to `failed` rather than `done` — the pipeline cannot certify
 completion without an explicit PASS artifact.
-
-Two readers beyond that workflow guard:
-
-- **Confidence (tasks 1068 / 1117).** The pipeline guards also refuse a `LOW` — or absent — level
-  unless the run was launched with `--vars '{"ackLowConfidence":"true"}'`. Independently, the CLI
-  done gate (`done-transition-guard`, the choke point every `* → done` transition passes through,
-  including this pipeline's `task update <wbs> done --no-lifecycle`) certifies a PASS only when the
-  artifact states a level in this vocabulary: absent or out-of-vocabulary is denied with the task
-  path, the artifact path and the remedies (`/sp:dev-verify <wbs>`, `--force-done --reason`). `LOW`
-  is accepted there — the acknowledgement policy is the pipeline's, not the gate's.
-- **Aggregate consistency.** The gate recomputes the aggregate from the rows and treats a stored
-  `PASS` that its rows contradict as non-PASS (task 0292 R10), so a hand-edited `verdict` field
-  cannot slide a task to `done`.
 
 ## Lifecycle
 

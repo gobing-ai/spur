@@ -3865,6 +3865,8 @@ transitions:
                     conditional: true,
                 },
             ],
+            // 1104 R4: additive — null unless a state declares display.
+            plan: null,
         });
         await rm(dir, { recursive: true, force: true });
     });

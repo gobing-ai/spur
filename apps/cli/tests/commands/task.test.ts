@@ -2216,11 +2216,10 @@ Only this section exists.
                     wbs,
                     verdict: 'PASS',
                     source: 'test-stub',
+                    confidence: 'HIGH',
                     requirements: [{ id: 'r1', status: 'MET', evidence: 'stub' }],
                     acceptanceCriteria: [],
                     checks: [{ name: 'stub', status: 'pass', evidence: 'stub' }],
-                    // 1123: the done gate requires the verifier's stated confidence.
-                    confidence: 'HIGH',
                 })}\n`,
             );
 
@@ -2447,11 +2446,10 @@ Only this section exists.
             `${JSON.stringify({
                 wbs,
                 verdict: 'PASS',
+                confidence: 'HIGH',
                 requirements: [{ id: 'R1', status: 'MET', evidenceType: '', evidence: 'tests pass' }],
                 acceptanceCriteria: [],
                 checks: [{ name: 'Security', status: 'P1', evidence: 'no bypass' }],
-                // 1123: the done gate requires the verifier's stated confidence.
-                confidence: 'HIGH',
             })}\n`,
         );
         const recordOutput = createCapturedOutput();
@@ -2921,15 +2919,13 @@ Only this section exists.
     const PASS_VERDICT = {
         wbs: 'PLACEHOLDER',
         verdict: 'PASS',
+        confidence: 'HIGH',
         requirements: [
             { id: 'R1', status: 'MET', evidence: 'x' },
             { id: 'R2', status: 'MET', evidence: 'y' },
         ],
         acceptanceCriteria: [],
         source: 'spur task verdict',
-        // 1123: the done gate certifies a PASS only when the artifact states the
-        // verifier's confidence, so a PASS fixture must carry one.
-        confidence: 'HIGH',
     };
     const PARTIAL_VERDICT = {
         wbs: 'PLACEHOLDER',
@@ -3006,8 +3002,11 @@ Only this section exists.
         const exitCode = await main(['task', 'update', wbs, 'done', '--no-lifecycle'], { cwd, output });
         expect(exitCode).toBe(1);
         const msg = output.errors.join('\n') + output.messages.join('\n');
-        expect(msg).toContain('no usable confidence level (absent)');
-        expect(msg).toContain('HIGH | MEDIUM | LOW');
+        // Landed wording (1068 R3 on main, merged over this branch's own guard): the
+        // denial names the gap, the artifact path, the expected field and both remedies.
+        expect(msg).toContain('PASS verdict does not state a confidence level');
+        expect(msg).toContain('HIGH|MEDIUM|LOW');
+        expect(msg).toContain('/sp:dev-verify');
         expect(msg).toContain('--force-done');
         expect(await readStatus(wbs)).toBe('testing');
     });

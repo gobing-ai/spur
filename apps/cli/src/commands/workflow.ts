@@ -6,6 +6,7 @@ import type { Command } from '@commander-js/extra-typings';
 import type { AgentQuotaEventBus } from '@gobing-ai/spur-app';
 import {
     assertStartStateStartable,
+    buildPhasedPlan,
     buildWorkflowSteps,
     configuredSecretValues,
     createShellOutputRedactor,
@@ -1690,6 +1691,11 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                         // vocabulary `workflow list --json` reports.
                         source: { layer: resolvedDefinition.layer, path: resolvedDefinition.path },
                         steps: buildWorkflowSteps(def),
+                        // 1104 R4: additive phased plan projected from `display`
+                        // annotations — null unless a state declares display, so the
+                        // existing JSON schema (name/kind/format/version/digest/source/
+                        // steps) is unchanged for unannotated definitions.
+                        plan: buildPhasedPlan(def),
                     };
                     const parsed = parseWorkflowInventory(projection);
                     if (!parsed.ok) {

@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: Add per-state display phase metadata to the workflow engine state schema
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-10-07T06:14:15.476Z
-updated_at: "2026-10-07T06:21:14.115Z"
+updated_at: "2026-10-07T19:35:28.823Z"
 feature_id: I13
 
 priority: P1
 ac_numbering: task-local
 ac_altitude: task-local
 estimate_hours: 3
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/run/1103-verdict.json
 ---
 
 ## 1103. Add per-state display phase metadata to the workflow engine state schema
@@ -42,9 +44,9 @@ a state is rejected today. Per AGENTS.md, fix the released engine facade rather 
 
 ### Requirements
 
-- [ ] R1. Add an optional, behavior-free per-state `display` field to the engine `StateDef` type, the state-machine zod schema and the engine state-machine JSON schema: `display: { phase: string, phaseTitle?: string, title?: string, show?: 'plan' | 'on-entry' }`, itself strict. The engine never reads it at run time.
-- [ ] R2. Prepare the engine release (version bump, CHANGELOG, ADR/ARCHITECTURE/README notes) in ts-libs; after the operator pushes the release tag, bump the Spur catalog pin (`package.json:35`) and `bun install`; every bundled workflow still loads and validates unchanged.
-- [ ] R3. Engine tests cover: field accepted, unknown `display` sub-keys rejected, invalid `show` rejected, absent field leaves the parsed definition unchanged.
+- [x] R1. Add an optional, behavior-free per-state `display` field to the engine `StateDef` type, the state-machine zod schema and the engine state-machine JSON schema: `display: { phase: string, phaseTitle?: string, title?: string, show?: 'plan' | 'on-entry' }`, itself strict. The engine never reads it at run time.
+- [x] R2. Prepare the engine release (version bump, CHANGELOG, ADR/ARCHITECTURE/README notes) in ts-libs; after the operator pushes the release tag, bump the Spur catalog pin (`package.json:35`) and `bun install`; every bundled workflow still loads and validates unchanged.
+- [x] R3. Engine tests cover: field accepted, unknown `display` sub-keys rejected, invalid `show` rejected, absent field leaves the parsed definition unchanged.
 
 ### Acceptance Criteria
 
@@ -124,15 +126,61 @@ Scenario: AC4 — Spur adopts the release with no workflow change (req: R2)
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+ts-libs branch `sp/task-1103-display-metadata` (2 commits, not pushed; tags local only):
+
+- feat b11ee9b8 `feat(dual-workflow-engine): optional per-state display metadata (1103)`:
+  - packages/dual-workflow-engine/src/types.ts:70 `StateDisplay` interface ({phase, phaseTitle?, title?, show?: 'plan'|'on-entry'}); :105 `StateDef.display?: StateDisplay` (presentation-only doc comment). Engine code paths untouched — display is never read at run time.
+  - packages/dual-workflow-engine/src/schema.ts:77 `StateDisplaySchema` (.strict, phase min(1)); :116 `display: StateDisplaySchema.optional()` in the state object — unknown display sub-keys / empty labels / bad `show` fail load with WorkflowValidationError naming states.N.display.
+  - packages/dual-workflow-engine/src/index.ts:40,70 re-exports `StateDisplaySchema` + `StateDisplay`.
+  - packages/dual-workflow-engine/schemas/state-machine-workflow.schema.json:49 `display` on state items, same shape, additionalProperties:false. resumeRerun/startable JSON-schema drift left as-is (out of scope).
+  - tests/schema.test.ts:467 AC1 (full/partial display accepted+preserved; YAML round-trip) + AC2 (unknown sub-key and show:"always" rejected via loadWorkflowDefFromText, error message names `display`) + R3 absent-field invariance + packaged-JSON-schema declaration test. tests/state-machine.test.ts:839 AC3 run-equivalence (with/without display on every state → identical normalized event trace, same finalState/transitionsTaken; vacuity guard asserts annotated copy really carries display).
+  - Docs per da66f12a precedent: CHANGELOG.md:11 ([0.5.17] section), docs/00_ADR.md:712 ADR-036, docs/03_ARCHITECTURE.md:68-72 + updated_at, README.md:621 "State Display Metadata".
+- release cd827528 `chore(release): bump all packages to 0.5.17` — produced by `bun run bump-ver 0.5.17` (13 manifests + bun.lock + llm-jsonl-importer HISTORY_IMPORT_SCHEMA_VERSION sync); 13 local annotated tags incl. @gobing-ai/ts-dual-workflow-engine-v0.5.17 and aggregate @gobing-ai/ts-libs-v0.5.17. NOT pushed, NOT published (operator release gate).
+
+Gates: `bun run check` in packages/dual-workflow-engine (biome + tsc --noEmit + tests) — 524 pass / 0 fail, run pre- and post-bump; llm-jsonl-importer schema-version test 3 pass / 0 fail post-bump. Tests written first (red: 4 schema-test fails + 1 AC3 fail + 7 tsc `display` errors), then implemented to green.
+
+R2 remainder (operator): push branch, push tags (aggregate tag triggers publish.yml), verify `bun pm view @gobing-ai/ts-dual-workflow-engine version` = 0.5.17; then 1104/Spur side bumps catalog pin + bun install.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: MEDIUM
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | @gobing-ai/ts-dual-workflow-engine `src/types.ts` line 70 StateDisplay and line 105 display?; `src/schema.ts` line 77 StateDisplaySchema; `schemas/state-machine-workflow.schema.json` line 49 |
+| R2 | MET | Spur catalog pin `package.json:35` = ^0.5.17; engine release 0.5.17 per @gobing-ai/ts-dual-workflow-engine `package.json` line 3; installed copy carries display |
+| R3 | MET | @gobing-ai/ts-dual-workflow-engine `tests/schema.test.ts` line 482 (accepted), line 533 (unknown sub-key rejected), line 557 (invalid show rejected), line 589 (absent field unchanged) |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — A state may declare display metadata (req: R1, R3) | MET | test | `bun test tests/schema.test.ts tests/state-machine.test.ts` in ts-libs dual-workflow-engine: 106 pass / 0 fail this run; @gobing-ai/ts-dual-workflow-engine `tests/schema.test.ts` lines 482-531 |
+| AC2 — Malformed display metadata is rejected (req: R1, R3) | MET | test | same run; @gobing-ai/ts-dual-workflow-engine `tests/schema.test.ts` lines 533-588 reject unknown sub-key, show "always", empty phase |
+| AC3 — Display metadata has no run-time effect (req: R1, R3) | MET | test | same run; @gobing-ai/ts-dual-workflow-engine `tests/state-machine.test.ts` line 839 run-inert suite compares annotated vs plain runs |
+| AC4 — Spur adopts the release with no workflow change (req: R2) | MET | command | `spur workflow validate` over all 9 `config/workflows/*.yaml` returned valid this run (exit 0); pin at `package.json:35`; `bun run plugin-smoke` PASS; `bun run spur-check` 10323 pass / 12 fail, failures unrelated to 1103 (1068 confidence fixture gap at `apps/cli/tests/commands/task.test.ts:2917`, sandbox git/Chromium) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
 <!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+
+Review + verify (2026-10-07, fresh-context reviewer subagent):
+
+- Review verdict: pass — 0 P1/P2, 1 P3 (ts-libs schema.test.ts:600-608 parity test could assert required/minLength/enum too; non-blocking, ts-libs backlog).
+- Verify verdict: PASS — R1, R2, R3 PASS; AC1–AC4 PASS.
+- Evidence: .spur/run/evidence/1103-review-verdict.json, .spur/run/evidence/1103-verify-verdict.json.
+- Implementation: ts-libs sp/task-1103-display-metadata b11ee9b8 (feat) + cd827528 (release bump).
+
+Findings table (fresh-context review, 2026-10-07):
+
+| Priority | Finding | Location | Disposition |
+| --- | --- | --- | --- |
+| P1 | none found | — | — |
+| P2 | none found | — | — |
+| P3 | JSON-schema parity test asserts display presence/additionalProperties/key-set but not required:['phase']/minLength/enum constraints | ts-libs packages/dual-workflow-engine/tests/schema.test.ts:600-608 | FIXED — ts-libs dual-workflow-engine tests/schema.test.ts now asserts required, minLength and show enum parity (I13 re-verify) |
+| P4 | none found | — | — |
 
 ### References
 
@@ -141,4 +189,7 @@ Scenario: AC4 — Spur adopts the release with no workflow change (req: R2)
 ### History
 
 - 2026-10-07T06:21:14.115Z backlog → todo (system)
+- 2026-10-07T07:40:28.415Z todo → wip (system)
+- 2026-10-07T15:59:53.733Z wip → testing (system)
+- 2026-10-07T16:00:36.770Z testing → done (system)
 

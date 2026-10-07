@@ -116,11 +116,14 @@ vars:
     # run unbounded — if a hop still hits this wall, STOP and record it.
     stepTimeoutMs: "1800000"
     # Timeout for the `implement` step specifically (R2a). Implementation is the
-    # heaviest agent.run step (full read/write/test-probe loop) and has timed out
-    # at the 600s default in five consecutive dogfood runs (bugs 742/744/746/748),
-    # a 100% failure rate at that budget. 30 min gives real headroom; STOP and
-    # record honestly rather than raising it further without operator sign-off.
-    implementTimeoutMs: "1800000"
+    # heaviest agent.run step (full read/write/test-probe loop); the old 600s default
+    # failed five consecutive dogfood runs (bugs 742/744/746/748). Default is 45 min
+    # (task 1108): it governs subprocess surfaces (`spur workflow run`, parallel,
+    # headless); inline hosts receive it only when their dispatch tool accepts a
+    # timeout (inline-pipeline-driver.md § Timeout boundary). 45 min is a reasoned
+    # default, not a proven bound — in P1 one implement still hit 45 min and resumed.
+    # Override per run: `--vars '{"implementTimeoutMs":"3600000"}'`.
+    implementTimeoutMs: "2700000"
     # Answer captured by the approve gate's hitl.confirm (R1): "yes" | "no" | "cancel".
     # Empty by default; only meaningful once the approve state has been entered.
     __hitlAnswer: ""
@@ -213,6 +216,10 @@ vars:
 
 states:
     - id: precheck
+      display:
+          phase: implement
+          phaseTitle: Implement
+          title: Check task readiness
       description: >
           Fast deterministic task readiness and size checks. Failures route to the
           `failed` terminal state (not a raw lifecycle abort mid-enter).
@@ -256,6 +263,10 @@ states:
                     reviewer: "${vars.agent}"
 
     - id: implement
+      display:
+          phase: implement
+          phaseTitle: Implement
+          title: Implement
       description: >
           Run agent-driven implementation via /sp:dev-run --mode implement, THEN move the
           task to `wip` via the normal verb. The lifecycle transition fires AFTER the
@@ -363,6 +374,11 @@ states:
     # the escalate→implement guard so a stale question can never re-trigger the hop
     # after the answered attempt.
     - id: escalate
+      display:
+          phase: implement
+          phaseTitle: Implement
+          title: Ask operator
+          show: on-entry
       description: >-
           Operator-question pause (0933): the implement agent asked a question
           headlessly; surface it to the operator and resume implement with the answer.
@@ -396,6 +412,10 @@ states:
     #   test-fix     — increment attempt + pure slash /sp:dev-fixall (≤ max attempts)
     #   test-recheck — soft recheck → review | test-fix | failed (never silent lifecycle abort)
     - id: test
+      display:
+          phase: test
+          phaseTitle: Test
+          title: Run quality gate
       description: >
           Proof-chain entry + soft quality-gate probe (single logical gate on the green path; bounded retries only
           for SQLite lock contention). Capture of the canonical proof-input digest happens HERE — before any
@@ -452,6 +472,11 @@ states:
                     eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/quality-gate.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/quality-gate.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; if [ -f "$S" ]; then "$RUNNER" "$S" run; else echo "quality gate failed closed — quality-gate script not found — run 'superskill install sp --marketplace gobing-ai/spur'" >&2; printf 'FAIL\n' > ".spur/run/$wbs-test-gate.status"; fi; exit 0
 
     - id: test-fix
+      display:
+          phase: test
+          phaseTitle: Test
+          title: Fix failures
+          show: on-entry
       description: >
           Bounded auto-fix hop when the quality gate is red OR final verification returned a
           repairable non-PASS (task 0703 R4: remediation never happens inside verify — it loops
@@ -515,6 +540,11 @@ states:
                     processSpawn: available
 
     - id: test-recheck
+      display:
+          phase: test
+          phaseTitle: Test
+          title: Re-run quality gate
+          show: on-entry
       description: >
           Soft recheck after fixall with bounded SQLite-lock retry. Writes PASS|FAIL (always exit 0). Transitions
           branch to `triage` (PASS — the 0943 lane router), `test-fail-triage` (FAIL — the 0943
@@ -542,6 +572,10 @@ states:
                     eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/quality-gate.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/quality-gate.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; if [ -f "$S" ]; then "$RUNNER" "$S" recheck; else echo "quality gate failed closed — quality-gate script not found — run 'superskill install sp --marketplace gobing-ai/spur'" >&2; printf 'FAIL\n' > ".spur/run/$wbs-test-gate.status"; fi; exit 0
 
     - id: triage
+      display:
+          phase: review
+          phaseTitle: Review
+          title: Choose review depth
       description: >-
           Deterministic lane router between a green gate and the review/verify fork (0943 R1).
           Writes the diffstat evidence file, honors a caller-set `mode` (never overridden), pins
@@ -601,6 +635,11 @@ states:
                 var: mode
 
     - id: test-fail-triage
+      display:
+          phase: test
+          phaseTitle: Test
+          title: Triage test failure
+          show: on-entry
       description: >-
           Deterministic failure-class router on a red gate (0943 R3). The engine has no onEnter
           conditionals, so the FAIL branch from `test`/`test-recheck` lands here as its own
@@ -625,6 +664,10 @@ states:
                 resultFile: .spur/run/${vars.wbs}-failure-class.decision
 
     - id: review
+      display:
+          phase: review
+          phaseTitle: Review
+          title: Review changes
       description: Three-dimensional code review via /sp:dev-review (functional requirements traceability + SECUA framework (Security, Efficiency, Correctness, Usability, Architecture) + architecture depth), findings written to `## Review`.
       onEnter:
           - kind: agent.run
@@ -674,6 +717,11 @@ states:
     # itself always runs (the engine has no onEnter conditionals); with
     # `workflow.decideDecisionMaker` off it degrades to its declared default.
     - id: review-fail-triage
+      display:
+          phase: review
+          phaseTitle: Review
+          title: Triage review findings
+          show: on-entry
       description: >-
           Deterministic router for a review that did NOT certify PASS (session finding after 1088).
           `decide review-failure-class` reads the reviewer's answer and the task spec and routes:
@@ -695,6 +743,11 @@ states:
                 resultFile: .spur/run/${vars.wbs}-review-failure-class.decision
 
     - id: approve
+      display:
+          phase: review
+          phaseTitle: Review
+          title: Operator approval
+          show: on-entry
       description: >
           Human-in-the-loop approval gate. Under `profile=auto` this state is never entered
           (review routes around it straight to verify). In interactive mode this state pauses
@@ -710,6 +763,10 @@ states:
                     mode: never
 
     - id: verify
+      display:
+          phase: verify
+          phaseTitle: "Verify & record"
+          title: Verify requirements and AC
       description: >
           Observe-only functional verification (BDD + traceability) via /sp:dev-verify --fix none
           (task 0703 R1, ADR-071): the verifier certifies the state, it never repairs its own subject.
@@ -782,6 +839,10 @@ states:
                     V=".spur/run/$wbs-verdict.json"; [ -f "$V" ] && [ -n "$proofDigest" ] || exit 0; jq --arg d "$proofDigest" --arg r "$__runId" --arg dd "$__definitionDigest" --arg rp "$(cat .spur/run/$__runId-review-proof.digest 2>/dev/null)" --arg g "$(cat .spur/run/$wbs-test-gate.status 2>/dev/null || echo UNKNOWN)" '. + {proof: {digest: $d, runId: $r, definitionDigest: $dd, capturePoint: "quality-gate-entry", stages: {qualityGate: {status: $g, digest: $d}, review: {status: (if $rp == $d then "completed" else "skipped" end), digest: $d}, verification: {status: .verdict, digest: $d}}}} | .checks += [{name: "proof-input-digest", status: "pass", evidence: $d}]' "$V" > "$V.tmp" && mv "$V.tmp" "$V"; exit 0
 
     - id: record
+      display:
+          phase: verify
+          phaseTitle: "Verify & record"
+          title: Record evidence
       description: >
           Record pipeline results into the task file via `spur task record` —
           Testing/Review from the verdict, Solution backfilled from git diff as a

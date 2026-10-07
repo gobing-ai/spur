@@ -66,6 +66,7 @@ export const InlineDecideOptionsSchema = z
         }
     });
 
+/** Inline `question`/`method`/`default` form — deprecated by task 1094; see {@link CatalogDecideOptionsSchema}. */
 export type InlineDecideOptions = z.infer<typeof InlineDecideOptionsSchema>;
 
 /**
@@ -96,11 +97,13 @@ export const CatalogDecideOptionsSchema = z
         }
     });
 
+/** Structural form of {@link CatalogDecideOptionsSchema} — a catalog-reference decide step. */
 export type CatalogDecideOptions = z.infer<typeof CatalogDecideOptionsSchema>;
 
 /** One schema for validation and execution (0941 R1): inline (deprecated) or catalog-reference. */
 export const DecideOptionsSchema = z.union([InlineDecideOptionsSchema, CatalogDecideOptionsSchema]);
 
+/** Discriminator: true when a decide step uses the catalog-reference form (task 1094). */
 export function isCatalogDecideOptions(
     options: InlineDecideOptions | CatalogDecideOptions,
 ): options is CatalogDecideOptions {
