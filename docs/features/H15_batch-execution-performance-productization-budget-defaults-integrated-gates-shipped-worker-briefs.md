@@ -51,6 +51,8 @@ Feature: Batch execution performance productization
 | 1109 | Auto-repair task-check anchor warnings via task migrate-anchors in the driver recovery path | done |
 | 1110 | Ship verify-answer contract and implement briefs as spur-dev references | done |
 | 1111 | Add deferQualityGate batch gate policy to parallel mode | done |
+| 1121 | Worktree merge/cleanup: re-install the invoking tree and persist the feature receipts | todo |
+| 1122 | A passing review's findings cost a full re-certification cycle (no review fix edge) | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
