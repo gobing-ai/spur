@@ -200,6 +200,24 @@ function gitChangedFiles(cwd) {
 function receiptRunId(env) {
   return (env.runId ?? "").length > 0 ? env.runId : `pipeline-${env.wbs}`;
 }
+function runDeferredGate(env, options = {}) {
+  const cwd = options.cwd;
+  const light = runLightGate(env, options);
+  const status = light.status === "PASS" ? "DEFERRED" : "FAIL";
+  const runDir = join(".spur", "run");
+  const abs = (p) => cwd ? join(cwd, p) : p;
+  mkdirSync(abs(runDir), { recursive: true });
+  const statusFile = join(runDir, `${env.wbs}-test-gate.status`);
+  writeFileSync(abs(statusFile), `${status}
+`);
+  const note = status === "DEFERRED" ? `deferred gate: light tier PASS — the integrated full gate is owed on the batch base ref (1111 R3)
+` : `deferred gate: light tier FAIL — the task's bounded fix lane runs; the integrated full gate stays owed (1111 R3)
+`;
+  appendFileSync(abs(light.logFile), note);
+  process.stdout.write(`quality gate ${status} (deferred tier; log: ${light.logFile})
+`);
+  return { status, light, statusFile };
+}
 function runLightGate(env, options = {}) {
   const cwd = options.cwd;
   const abs = (p) => cwd ? join(cwd, p) : p;
@@ -425,6 +443,7 @@ export {
   runShellCommand,
   runQualityGate,
   runLightGate,
+  runDeferredGate,
   retryMessage,
   receiptFailsAtDigest,
   readReceiptStatus,

@@ -10,6 +10,7 @@ import {
     planLightChecks,
     RECEIPT_SCHEMA_VERSION,
     readReceiptStatus,
+    runDeferredGate,
     runLightGate,
     runQualityGate,
     runShellCommand,
@@ -273,6 +274,7 @@ describe('main dispatch', () => {
             expect(main(['nope'], { wbs: 'x' })).toBe(2);
             expect(main(['light'], { wbs: '' })).toBe(2);
             expect(main(['status'], { wbs: '' })).toBe(2);
+            expect(main(['deferred'], { wbs: '' })).toBe(2);
         } finally {
             process.stderr.write = originalError;
         }
@@ -280,6 +282,70 @@ describe('main dispatch', () => {
 });
 
 // ─── light mode end-to-end (0939 plan 3): temp git repo fixture ───
+
+describe('runDeferredGate (1111 R1/R2)', () => {
+    function gitRepoFixture(): { dir: string; cleanup: () => void } {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-deferred-fixture-'));
+        const git = (args: string): void => {
+            const result = runShellCommand(`git ${args}`, dir);
+            if (result.code !== 0) throw new Error(`fixture git ${args} failed: ${result.output}`);
+        };
+        git('init -q -b main');
+        git('config user.email fixture@spur.dev');
+        git('config user.name fixture');
+        writeFileSync(join(dir, '.gitignore'), 'node_modules\n.spur/\n');
+        mkdirSync(join(dir, 'pkg-a/src'), { recursive: true });
+        mkdirSync(join(dir, 'pkg-a/tests'), { recursive: true });
+        writeFileSync(
+            join(dir, 'biome.json'),
+            JSON.stringify({
+                formatter: { indentStyle: 'space', indentWidth: 4, lineWidth: 120 },
+                javascript: { formatter: { quoteStyle: 'single' } },
+            }),
+        );
+        writeFileSync(
+            join(dir, 'pkg-a/package.json'),
+            `${JSON.stringify({ name: 'pkg-a', scripts: { typecheck: 'echo typed-ok' } }, null, 4)}\n`,
+        );
+        writeFileSync(join(dir, 'pkg-a/src/m.ts'), 'export const one = 1;\n');
+        writeFileSync(
+            join(dir, 'pkg-a/tests/m.test.ts'),
+            "import { expect, test } from 'bun:test';\nimport { one } from '../src/m';\n\ntest('one', () => {\n    expect(one).toBe(1);\n});\n",
+        );
+        git('add .');
+        git('commit -qm init');
+        writeFileSync(join(dir, 'pkg-a/src/m.ts'), "export const one = 1;\nexport const label = 'one';\n");
+        return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+    }
+
+    test('light PASS writes DEFERRED (never PASS) and light FAIL writes FAIL', () => {
+        const { dir, cleanup } = gitRepoFixture();
+        try {
+            const statusPath = join(dir, '.spur', 'run', '1111t-test-gate.status');
+            const passing = silenceStdout(() =>
+                runDeferredGate({ wbs: '1111t', proofDigest: 'digest-d' }, { cwd: dir }),
+            );
+            expect(passing.status).toBe('DEFERRED');
+            // The whole point of the token: a light result must never certify the full gate.
+            expect(readFileSync(statusPath, 'utf8').trim()).toBe('DEFERRED');
+            expect(readFileSync(statusPath, 'utf8')).not.toContain('PASS');
+
+            // Red light tier -> FAIL, and the deferral note states the integrated gate is owed.
+            writeFileSync(
+                join(dir, 'pkg-a/tests/m.test.ts'),
+                "import { expect, test } from 'bun:test';\ntest('one', () => {\n    expect(1).toBe(2);\n});\n",
+            );
+            const failing = silenceStdout(() =>
+                runDeferredGate({ wbs: '1111t', proofDigest: 'digest-d2' }, { cwd: dir }),
+            );
+            expect(failing.status).toBe('FAIL');
+            expect(readFileSync(statusPath, 'utf8').trim()).toBe('FAIL');
+            expect(readFileSync(join(dir, '.spur', 'run', '1111t-light-gate.log'), 'utf8')).toContain('deferred');
+        } finally {
+            cleanup();
+        }
+    });
+});
 
 describe('runLightGate (temp git repo)', () => {
     function gitRepoFixture(): { dir: string; cleanup: () => void } {

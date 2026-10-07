@@ -1988,6 +1988,23 @@ descriptions above record earlier stages, not supported configuration.
   removes the duplication without weakening the "review only after a green full gate" invariant.
 - **Consequence:** check truth has one writer per task; a stale or mismatched receipt forces a full
   run, so correctness never depends on cache freshness. A public `spur check` verb needs separate consent.
+- **Clarification (2026-10-07, task 1111 / feature H15):** the rejected "single end-of-run gate only"
+  alternative is *narrowly* reopened for **opt-in parallel batches** by the shipped
+  `deferQualityGate` policy (`--defer-gate` on `spur-dev-runall --mode parallel` /
+  `spur-dev-parallel`). The rejection itself stands on its reason — losing early feedback during
+  implement — so the shipped policy removes neither the per-task check nor the early signal: each
+  task still runs the **light tier** (changed-scope format, per-workspace typecheck, related tests)
+  and writes `DEFERRED` to `.spur/run/<wbs>-test-gate.status`. `DEFERRED` is never `PASS`: only the
+  full tier writes `PASS`, and under this policy the one full gate runs on the **integrated base ref
+  over the merged slices**, before the deferred feature sync. The "review only after a green full
+  gate" invariant is therefore preserved at **batch** scope rather than per task — nothing is
+  reported PASS without the integrated full gate, and an integrated FAIL fails the batch, skips the
+  feature sync, and lists per-branch re-gate commands (no automatic bisect). Default off: with
+  `deferQualityGate` unset or `"false"` the per-task full gate is unchanged, and a stray `DEFERRED`
+  status file fails the `test → triage` / `test-recheck → triage` guards. Sequential and inline
+  batches never set the var; `--defer-gate` without `--mode parallel` is rejected. Rationale for
+  reusing the light tier rather than skipping the `test` state: that state is also the proof-chain
+  entry (ADR-071 digest capture), which deferral must not disturb.
 - **Retains:** ADR-119 (repo-wide checks stay feature-scoped), ADR-118 (stage outcomes).
 - **Detail:** [workflow catalogue refactor](design/workflow-catalogue-refactor.md) §4.
 

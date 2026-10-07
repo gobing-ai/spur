@@ -164,6 +164,11 @@ vars:
     # with the same package-manager surface (this monorepo is Bun-only):
     # `--vars '{"qualityGateCmd":"bun run lint && bun run test"}'`. Soft probe, hard recheck,
     # and the fixall slash input all use this same var so the command stays single-sourced.
+    # INVARIANT (ADR-124, clarified 2026-10-07 by task 1111 R5): only the FULL tier writes PASS.
+    # Under the opt-in `deferQualityGate` policy the per-task token is DEFERRED (light tier) and
+    # the "review runs only after a green full gate" invariant moves to BATCH scope — nothing is
+    # reported PASS without the integrated full gate on the base ref. Default "false" = per-task
+    # full gate, unchanged.
     # TRUSTED CONFIG ONLY — this string is executed via `sh -c` (see test/test-recheck). Never
     # interpolate untrusted operator/LLM input into qualityGateCmd (task 0436 SECUA residual).
     # NO `format` PREFIX: `implement` already ran `$formatCmd` on its way out, and `test`
@@ -213,6 +218,14 @@ vars:
     # (default) = on; set to "off" to bypass:
     # `--vars '{"implementScopeGuard":"off"}'`.
     implementScopeGuard: ""
+    # 1111 R1: opt-in parallel-batch gate policy. When "true", `test` / `test-recheck` run the
+    # LIGHT tier for per-task early feedback and write `DEFERRED` (light PASS) or `FAIL` to
+    # `.spur/run/<wbs>-test-gate.status` — never `PASS`, because that token means the full
+    # project gate ran green on this tree. The batch orchestrator owes ONE integrated full gate
+    # on the base ref over the merged slices (1111 R3). Default "false" = unchanged behavior,
+    # and a stray `DEFERRED` file fails the guards. Sequential/inline runs never set it:
+    # `--defer-gate` requires `--mode parallel`.
+    deferQualityGate: "false"
     # 0931 R5: parallel batches defer the per-task feature sync so a task branch never
     # touches feature files or docs/features/INDEX.md. When "true", the record step's
     # post-record shell appends a deferral note and skips the sync; the parallel batch
@@ -473,7 +486,7 @@ states:
           - kind: shell
             options:
                 command: >-
-                    eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/quality-gate.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/quality-gate.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; if [ -f "$S" ]; then "$RUNNER" "$S" run; else echo "quality gate failed closed — quality-gate script not found — run 'superskill install sp --marketplace gobing-ai/spur'" >&2; printf 'FAIL\n' > ".spur/run/$wbs-test-gate.status"; fi; exit 0
+                    eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/quality-gate.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/quality-gate.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; M=run; [ "$deferQualityGate" = "true" ] && M=deferred; if [ -f "$S" ]; then "$RUNNER" "$S" "$M"; else echo "quality gate failed closed — quality-gate script not found — run 'superskill install sp --marketplace gobing-ai/spur'" >&2; printf 'FAIL\n' > ".spur/run/$wbs-test-gate.status"; fi; exit 0
 
     - id: test-fix
       description: >
@@ -563,7 +576,7 @@ states:
           - kind: shell
             options:
                 command: >-
-                    eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/quality-gate.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/quality-gate.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; if [ -f "$S" ]; then "$RUNNER" "$S" recheck; else echo "quality gate failed closed — quality-gate script not found — run 'superskill install sp --marketplace gobing-ai/spur'" >&2; printf 'FAIL\n' > ".spur/run/$wbs-test-gate.status"; fi; exit 0
+                    eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/quality-gate.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/quality-gate.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; M=recheck; [ "$deferQualityGate" = "true" ] && M=deferred; if [ -f "$S" ]; then "$RUNNER" "$S" "$M"; else echo "quality gate failed closed — quality-gate script not found — run 'superskill install sp --marketplace gobing-ai/spur'" >&2; printf 'FAIL\n' > ".spur/run/$wbs-test-gate.status"; fi; exit 0
 
     - id: triage
       description: >-
@@ -1038,9 +1051,11 @@ transitions:
       guard:
           kind: shell
           options:
+              # 1111 R2: `DEFERRED` is accepted ONLY when the opt-in var is "true" — with the
+              # default "false" a stray DEFERRED file fails the guard exactly like a corrupt one.
               command: >-
                   gate_status="$(cat .spur/run/$wbs-test-gate.status 2>/dev/null)";
-                  test "$gate_status" = PASS
+                  test "$gate_status" = PASS || { test "$gate_status" = DEFERRED && test "$deferQualityGate" = "true"; }
     - from: test
       to: test-fail-triage
       description: Quality gate red — classify the failure before the repair hop (0943 R3).
@@ -1071,9 +1086,10 @@ transitions:
       guard:
           kind: shell
           options:
+              # 1111 R2: same var-gated acceptance of the deferred token as `test → triage`.
               command: >-
                   gate_status="$(cat .spur/run/$wbs-test-gate.status 2>/dev/null)";
-                  test "$gate_status" = PASS
+                  test "$gate_status" = PASS || { test "$gate_status" = DEFERRED && test "$deferQualityGate" = "true"; }
     - from: test-recheck
       to: test-fail-triage
       description: Still red after fixall — classify the failure (0943 R3).

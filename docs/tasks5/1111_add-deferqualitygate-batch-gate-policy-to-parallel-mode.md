@@ -1,15 +1,17 @@
 ---
 schema_version: 1
 name: Add deferQualityGate batch gate policy to parallel mode
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-10-07T07:29:50.343Z
-updated_at: "2026-10-07T16:17:19.749Z"
+updated_at: "2026-10-07T21:27:21.439Z"
 feature_id: H15
 
 dependencies: ["1107"]
 priority: P2
 estimate_hours: 6
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1111-verdict.json
 ---
 
 ## 1111. Add deferQualityGate batch gate policy to parallel mode
@@ -29,15 +31,15 @@ Under `--mode parallel` every task pipeline runs its own full quality gate insid
 
 ### Requirements
 
-- [ ] R1. `task-pipeline.yaml` gains var `deferQualityGate` (default `"false"`), placed and commented like `deferFeatureSync` (`:207-212`). With `"true"`, the `test` state keeps every proof-chain onEnter step and replaces only the final gate command with `quality-gate.ts deferred`, which runs the light tier and writes `DEFERRED` (light PASS) or `FAIL` (light FAIL) to `.spur/run/<wbs>-test-gate.status`. `test-recheck` behaves the same under the var.
-- [ ] R2. The `test → triage` and `test-recheck → triage` guards accept `DEFERRED` only when `deferQualityGate = "true"`; the verify proof stamp records `qualityGate.status: "DEFERRED"`; the completion-gate digest checks are unchanged. With the default `"false"`, behavior is identical to today (`DEFERRED` is rejected).
-- [ ] R3. `/sp:dev-runall --mode parallel` (and `/sp:dev-parallel`) gain opt-in flag `--defer-gate`; only then WT-3 adds `"deferQualityGate":"true"`. The post step runs the project `qualityGateCmd` once on the integrated BASE_REF **before** feature sync and records PASS/FAIL in the batch report. On FAIL: batch verdict FAIL, feature sync skipped, and the report lists per-branch re-gate commands newest-first (no automatic bisect).
-- [ ] R4. Batch report rows of deferred tasks carry `gate: deferred`.
-- [ ] R5. ADR-124 gets a dated clarification: under opt-in `--defer-gate` parallel batches, per-task review follows a green **light** receipt, and the "green full gate" invariant moves to batch scope (nothing integrated is reported PASS without the integrated full gate). The YAML invariant comment (`:166-170`) and the flag glossary (`flag-glossary.md`, anchor `#flag-defer-gate`) state the same.
+- [x] R1. `task-pipeline.yaml` gains var `deferQualityGate` (default `"false"`), placed and commented like `deferFeatureSync` (`:207-212`). With `"true"`, the `test` state keeps every proof-chain onEnter step and replaces only the final gate command with `quality-gate.ts deferred`, which runs the light tier and writes `DEFERRED` (light PASS) or `FAIL` (light FAIL) to `.spur/run/<wbs>-test-gate.status`. `test-recheck` behaves the same under the var.
+- [x] R2. The `test → triage` and `test-recheck → triage` guards accept `DEFERRED` only when `deferQualityGate = "true"`; the verify proof stamp records `qualityGate.status: "DEFERRED"`; the completion-gate digest checks are unchanged. With the default `"false"`, behavior is identical to today (`DEFERRED` is rejected).
+- [x] R3. `/sp:dev-runall --mode parallel` (and `/sp:dev-parallel`) gain opt-in flag `--defer-gate`; only then WT-3 adds `"deferQualityGate":"true"`. The post step runs the project `qualityGateCmd` once on the integrated BASE_REF **before** feature sync and records PASS/FAIL in the batch report. On FAIL: batch verdict FAIL, feature sync skipped, and the report lists per-branch re-gate commands newest-first (no automatic bisect).
+- [x] R4. Batch report rows of deferred tasks carry `gate: deferred`.
+- [x] R5. ADR-124 gets a dated clarification: under opt-in `--defer-gate` parallel batches, per-task review follows a green **light** receipt, and the "green full gate" invariant moves to batch scope (nothing integrated is reported PASS without the integrated full gate). The YAML invariant comment (`:166-170`) and the flag glossary (`flag-glossary.md`, anchor `#flag-defer-gate`) state the same.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Opt-in deferred quality gate runs one integrated full gate per parallel batch (req: R1, R2, R3, R4, R5)
+- [x] AC1 — Opt-in deferred quality gate runs one integrated full gate per parallel batch (req: R1, R2, R3, R4, R5)
 
 ### Q&A
 
@@ -105,15 +107,77 @@ Under `--mode parallel` every task pipeline runs its own full quality gate insid
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Opt-in deferred gate for parallel batches: the proof chain stays intact, the per-task tier drops to light, and the one full gate moves to the integrated base ref.
+
+| File:line | Change |
+| --- | --- |
+| `packages/app/src/services/quality-gate.ts:450-481` | New `runDeferredGate`: runs the light tier, then writes `DEFERRED` (light PASS) or `FAIL` to `.spur/run/<wbs>-test-gate.status` — never `PASS`; logs that the integrated full gate is owed |
+| `plugins/sp/scripts/quality-gate.ts:20-51` | `deferred` mode wired into the argv dispatch (exit 0 on `DEFERRED`, 1 on `FAIL`), usage string updated; the script stays ADR-130 glue over the bundled core |
+| `scripts/commands/bundle-plugin-lib.ts:484` | The generated plugin-lib type surface declares `runDeferredGate` so the standalone twin typechecks |
+| `config/workflows/task-pipeline.yaml:228` | Var `deferQualityGate: "false"`, documented next to `deferFeatureSync` (default false = unchanged behavior; sequential/inline never set it) |
+| `config/workflows/task-pipeline.yaml:489`, `:579` | `test` / `test-recheck` select the gate mode through `M` (`run`/`recheck` → `deferred` when the var is `"true"`); every proof-chain onEnter step is untouched |
+| `config/workflows/task-pipeline.yaml:168-172` | The gate invariant comment states the ADR-124 clarification: only the full tier writes `PASS`, and under the opt-in policy the "green full gate before review" invariant holds at batch scope |
+| `config/workflows/task-pipeline.yaml:1050-1052`, `:1093-1095` | Both triage guards accept `DEFERRED` only while `deferQualityGate = "true"`; with the default the token fails like a corrupt status |
+| `plugins/sp/tests/quality-gate-receipt.test.ts:286-346` | Failure-case-first test: light PASS → `DEFERRED` (and the status file never contains `PASS`), light FAIL → `FAIL`, plus the `deferred` usage-error case |
+| `plugins/sp/tests/skill-structure.test.ts:778-800` | Pipeline-definition assertions: the var defaults to `"false"`, both hops select the mode via `M`, and the var-gated guard appears on both triage edges |
+| `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:1034-1056` | Driver-contract pins: `--defer-gate` adds the var, the report marker is `gate: deferred`, and the integrated gate precedes the feature sync, with no automatic bisect |
+| `plugins/sp/tests/task-pipeline-resilience.test.ts:258-262`, `packages/domain/tests/planning/lifecycle-drift.test.ts:305-310`, `plugins/sp/tests/inline-pipeline-driver.test.ts:251-268` | The three shells that pinned the literal `"$S" run|recheck` dispatch now pin the `M`-driven form (resolver, fail-closed, and stub-simulation contracts unchanged) |
+| `plugins/sp/skills/spur-dev/references/flag-glossary.md:149-175` | New `--defer-gate` entry (anchor `#flag-defer-gate`) with the two load-bearing properties and the `--mode parallel` requirement |
+| `plugins/sp/skills/spur-dev/references/execution-batch.md:1392-1400`, `:1466-1480` | Driver loop passes the var only under the flag; the post step runs the integrated full gate before the deferred feature sync; the FAIL lane (batch FAIL, sync skipped, per-branch re-gate newest-first, no bisect) and the `gate: deferred` marker are specified |
+| `plugins/sp/commands/dev-runall.md:29`, `plugins/sp/commands/dev-parallel.md:21` | Public flag documented with the argument-hint updated (flag-parity gates read both) |
+| `plugins/sp/skills/spur-dev/references/dev-operations.md:89-90` | The operation-map arg-hint rows for runall/parallel carry the flag (R8/R9 parity) |
+| `docs/00_ADR.md:1991-2006` | ADR-124 dated clarification: the rejected single-end-of-run-gate alternative is narrowly reopened for opt-in parallel batches, with the light tier keeping early feedback and the invariant moved to batch scope |
+| `docs/design/workflow-catalogue-refactor.md:89-97` | The catalogue design records the deferred tier and that deferral never disturbs the proof-chain entry |
+
+**Rationale.** The batch's cost problem is N full gates for one integrated tree, but the naive fix — skip the gate — breaks both ADR-124's stated reason and the proof chain that `test` also owns. So the change moves exactly one thing: which tier runs per task. The light tier keeps the per-task early signal, `DEFERRED` (never `PASS`) keeps the "only the full tier certifies" rule honest, and the full gate lands where the integrated tree exists. Default-off keeps sequential and inline behavior byte-identical, and the guards make a stray `DEFERRED` fail closed. 1107's `partial` verdict means the flag ships as a pilot that produces the missing samples; the default is unaffected.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Var `deferQualityGate: "false"` at `config/workflows/task-pipeline.yaml:228` (commented like `deferFeatureSync`, which sits directly below); the `test` hop keeps all six proof-chain onEnter steps and selects the mode at `config/workflows/task-pipeline.yaml:489` (`M=run; [ "$deferQualityGate" = "true" ] && M=deferred`), `test-recheck` at `:579` (`M=recheck; …`); `runDeferredGate` (`packages/app/src/services/quality-gate.ts:459-481`) runs the light tier and writes `DEFERRED`/`FAIL` — the behavioral test asserts the status file contains `DEFERRED` on light PASS and never `PASS` (`plugins/sp/tests/quality-gate-receipt.test.ts:320-345`) |
+| R2 | MET | Both triage guards carry `test "$gate_status" = DEFERRED && test "$deferQualityGate" = "true"` (`config/workflows/task-pipeline.yaml:1050-1052`, `:1093-1095`), asserted as exactly two occurrences by `plugins/sp/tests/skill-structure.test.ts:778-800`; the verify proof stamp reads `.spur/run/<wbs>-test-gate.status` into `qualityGate.status`, so a deferred run records `DEFERRED`; the completion-gate predicate compares digests, runId, definitionDigest and confidence only — `deferQualityGate` never enters it, and with the default `"false"` the guards reject `DEFERRED` |
+| R3 | MET | `plugins/sp/skills/spur-dev/references/flag-glossary.md:149-175` (anchor `#flag-defer-gate`) and `plugins/sp/commands/dev-runall.md:29` / `plugins/sp/commands/dev-parallel.md:21` document the opt-in flag and the `--mode parallel` requirement; `plugins/sp/skills/spur-dev/references/execution-batch.md:1392-1400` adds the var to the per-task `--vars` only under the flag and `:1466-1480` runs the integrated `qualityGateCmd` on `BASE_REF` **before** the deferred feature sync, with the FAIL lane (batch FAIL, sync skipped, per-branch re-gate newest-first, no automatic bisect) specified; the ordering and both FAIL properties are pinned by `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:1034-1056` |
+| R4 | MET | `plugins/sp/skills/spur-dev/references/execution-batch.md:1466-1480` states the `gate: deferred` marker for deferred task rows, and the pin at `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:1040` fails if the marker text regresses |
+| R5 | MET | `docs/00_ADR.md:1991-2006` carries the dated ADR-124 clarification (2026-10-07, task 1111): the rejected single-end-of-run-gate alternative is narrowly reopened for opt-in parallel batches, the light tier keeps per-task early feedback, and the "review only after a green full gate" invariant is preserved at batch scope; the YAML invariant comment states the same (`config/workflows/task-pipeline.yaml:168-172`), as does the flag-glossary entry and `docs/design/workflow-catalogue-refactor.md:89-97` |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | command | `(cd plugins/sp && bun test tests/quality-gate-receipt.test.ts)` → 27 pass / 0 fail (`plugins/sp/tests/quality-gate-receipt.test.ts:286-346`); `(cd plugins/sp && bun test tests/skill-structure.test.ts)` → 91 pass / 0 fail (`plugins/sp/tests/skill-structure.test.ts:778-800`); `(cd plugins/sp && bun test tests/dogfood-testing/execution-batch-contract.test.ts)` → 50 pass / 0 fail (`plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:1034-1056`); `bun run apps/cli/src/index.ts rule run --preset recommended-pre-check --fail-on warning --no-logo` → all 50 rules passed; `bun run plugin-smoke` → PASS; full gate `bun run spur-check` → 10376 tests / 0 fail across 606 files in 521.87s (`plugins/sp/scripts/quality-gate.ts:1`, log `.spur/run/1111-test-gate.log`) |
+| R1 — Opt-in deferred quality gate runs one integrated full gate per parallel batch | MET | command | Same command set plus the generated-copy read-back: `rg -c deferQualityGate apps/cli/config/workflows/task-pipeline.yaml` → 6, and `apps/cli/config/workflows/task-pipeline.yaml:489` carries the `M=run … M=deferred` dispatch after `bun run --filter @gobing-ai/spur build:bundle` |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**Verdict: PASS** — pipeline/service/script/docs surface; 3-dimensional review executed in-session by the inline driver (reviewer independence not achievable on the host-inline path, recorded as P4).
+
+**Requirement traceability**
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `config/workflows/task-pipeline.yaml:228` (var, default `"false"`), `:489` / `:579` (tier selection via `M`), `packages/app/src/services/quality-gate.ts:459-481` (`DEFERRED`/`FAIL`, never `PASS`) |
+| R2 | MET | Var-gated guards on both triage edges (pinned as exactly two occurrences); the completion predicate never reads the status token |
+| R3 | MET | Glossary + both commands document the flag; the driver adds the var only under it and runs the integrated gate before the deferred sync (pinned) |
+| R4 | MET | `gate: deferred` marker stated and pinned |
+| R5 | MET | Dated ADR-124 clarification plus the YAML invariant comment, glossary entry and catalogue design |
+
+**Findings**
+
+| P | Finding | Disposition |
+| --- | --- | --- |
+| P3 | `sp-runtime-path` tripped by a comment citing the pipeline path from app code | fixed in-flight (reworded) |
+| P3 | Generated plugin-lib type surface needed the new export | fixed in-flight; regeneration byte-deterministic |
+| P3 | Three pins + the inline smoke stub keyed on the literal gate dispatch, silently disabling the smoke | fixed in-flight; now keyed on the `M` assignment + `"$RUNNER" "$S" "$M"` |
+| P4 | No end-to-end parallel batch ran with `--defer-gate` | accepted; stated in residual risk |
+| P4 | Gate crossed the fix-attempt bound (2 all-flake runs) | recorded bound deviation with isolation evidence |
+| P4 | In-session review | accepted |
+
+No P1/P2 findings. Residual risk: the flag is a labelled pilot (1107 verdict `partial`); the integrated-gate step is pinned, not observed.
 
 ### References
 
@@ -126,4 +190,7 @@ Under `--mode parallel` every task pipeline runs its own full quality gate insid
 ### History
 
 - 2026-10-07T07:34:14.542Z backlog → todo (system)
+- 2026-10-07T20:25:59.074Z todo → wip (system)
+- 2026-10-07T21:27:05.281Z wip → testing (system)
+- 2026-10-07T21:27:21.425Z testing → done (system)
 

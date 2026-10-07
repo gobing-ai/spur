@@ -439,6 +439,41 @@ export interface LightGateResult {
     receiptFile: string;
 }
 
+/** Deferred-tier result (task 1111): the light verdict plus the status token written. */
+export interface DeferredGateResult {
+    /** `DEFERRED` when the light tier passed, `FAIL` when it did not — never `PASS`. */
+    status: 'DEFERRED' | 'FAIL';
+    light: LightGateResult;
+    statusFile: string;
+}
+
+/**
+ * Deferred tier (task 1111 R1): the opt-in parallel-batch gate. Runs the light tier for the
+ * per-task early feedback the ADR-124 invariant exists to protect, then writes `DEFERRED`
+ * (light PASS) or `FAIL` (light FAIL) to `.spur/run/<wbs>-test-gate.status`.
+ *
+ * It NEVER writes `PASS`: that token means "the project quality gate ran green on this tree",
+ * and only the full tier may claim it (the gate-invariant comment in the task pipeline definition).
+ * The batch orchestrator owes the integrated full gate on the base ref over the merged slices.
+ */
+export function runDeferredGate(env: QualityGateEnv, options: QualityGateOptions = {}): DeferredGateResult {
+    const cwd = options.cwd;
+    const light = runLightGate(env, options);
+    const status: 'DEFERRED' | 'FAIL' = light.status === 'PASS' ? 'DEFERRED' : 'FAIL';
+    const runDir = join('.spur', 'run');
+    const abs = (p: string): string => (cwd ? join(cwd, p) : p);
+    mkdirSync(abs(runDir), { recursive: true });
+    const statusFile = join(runDir, `${env.wbs}-test-gate.status`);
+    writeFileSync(abs(statusFile), `${status}\n`);
+    const note =
+        status === 'DEFERRED'
+            ? `deferred gate: light tier PASS — the integrated full gate is owed on the batch base ref (1111 R3)\n`
+            : `deferred gate: light tier FAIL — the task's bounded fix lane runs; the integrated full gate stays owed (1111 R3)\n`;
+    appendFileSync(abs(light.logFile), note);
+    process.stdout.write(`quality gate ${status} (deferred tier; log: ${light.logFile})\n`);
+    return { status, light, statusFile };
+}
+
 /**
  * Light tier (0939 R1): run the planned sub-checks, merge their rows into the receipt under
  * `tier: light`, exit soft. A sub-check already PASS in a light receipt at the same

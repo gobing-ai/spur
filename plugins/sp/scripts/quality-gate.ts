@@ -17,12 +17,12 @@ import { appendFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { getEnvVars } from '../lib/env';
 import type { QualityGateEnv, QualityGateOptions } from '../lib/quality-gate.generated.mjs';
-import { readReceiptStatus, runLightGate, runQualityGate } from '../lib/quality-gate.generated.mjs';
+import { readReceiptStatus, runDeferredGate, runLightGate, runQualityGate } from '../lib/quality-gate.generated.mjs';
 
 export * from '../lib/quality-gate.generated.mjs';
 
 export const QUALITY_GATE_USAGE =
-    'usage: quality-gate.ts <run|recheck|light|status>  (env: wbs, qualityGateCmd, gateProbeCmd, proofDigest, runId)';
+    'usage: quality-gate.ts <run|recheck|light|deferred|status>  (env: wbs, qualityGateCmd, gateProbeCmd, proofDigest, runId)';
 
 export function main(
     argv: string[],
@@ -30,7 +30,7 @@ export function main(
     options: QualityGateOptions = {},
 ): number {
     const mode = argv[0];
-    if (mode !== 'run' && mode !== 'recheck' && mode !== 'light' && mode !== 'status') {
+    if (mode !== 'run' && mode !== 'recheck' && mode !== 'light' && mode !== 'deferred' && mode !== 'status') {
         process.stderr.write(`${QUALITY_GATE_USAGE}\n`);
         return 2;
     }
@@ -42,6 +42,10 @@ export function main(
     const env: QualityGateEnv = { ...rawEnv, wbs };
     if (mode === 'light') {
         runLightGate(env);
+    } else if (mode === 'deferred') {
+        // 1111 R1: light tier for per-task feedback, `DEFERRED`/`FAIL` for the status token —
+        // exit 0 on DEFERRED so the YAML's `; exit 0` wrapper and the action result agree.
+        return runDeferredGate(env, options).status === 'DEFERRED' ? 0 : 1;
     } else if (mode === 'status') {
         const runDir = join(options.cwd ?? '.', '.spur', 'run');
         const verdict = readReceiptStatus(join(runDir, `${env.wbs}-check-receipt.json`), env.proofDigest ?? '');

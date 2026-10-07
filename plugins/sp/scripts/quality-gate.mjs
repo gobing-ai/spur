@@ -212,6 +212,24 @@ function gitChangedFiles(cwd) {
 function receiptRunId(env) {
   return (env.runId ?? "").length > 0 ? env.runId : `pipeline-${env.wbs}`;
 }
+function runDeferredGate(env, options = {}) {
+  const cwd = options.cwd;
+  const light = runLightGate(env, options);
+  const status = light.status === "PASS" ? "DEFERRED" : "FAIL";
+  const runDir = join(".spur", "run");
+  const abs = (p) => cwd ? join(cwd, p) : p;
+  mkdirSync(abs(runDir), { recursive: true });
+  const statusFile = join(runDir, `${env.wbs}-test-gate.status`);
+  writeFileSync(abs(statusFile), `${status}
+`);
+  const note = status === "DEFERRED" ? `deferred gate: light tier PASS — the integrated full gate is owed on the batch base ref (1111 R3)
+` : `deferred gate: light tier FAIL — the task's bounded fix lane runs; the integrated full gate stays owed (1111 R3)
+`;
+  appendFileSync(abs(light.logFile), note);
+  process.stdout.write(`quality gate ${status} (deferred tier; log: ${light.logFile})
+`);
+  return { status, light, statusFile };
+}
 function runLightGate(env, options = {}) {
   const cwd = options.cwd;
   const abs = (p) => cwd ? join(cwd, p) : p;
@@ -431,10 +449,10 @@ function runQualityGate(mode, env, options = {}) {
 }
 
 // plugins/sp/scripts/quality-gate.ts
-var QUALITY_GATE_USAGE = "usage: quality-gate.ts <run|recheck|light|status>  (env: wbs, qualityGateCmd, gateProbeCmd, proofDigest, runId)";
+var QUALITY_GATE_USAGE = "usage: quality-gate.ts <run|recheck|light|deferred|status>  (env: wbs, qualityGateCmd, gateProbeCmd, proofDigest, runId)";
 function main(argv, rawEnv = getEnvVars(), options = {}) {
   const mode = argv[0];
-  if (mode !== "run" && mode !== "recheck" && mode !== "light" && mode !== "status") {
+  if (mode !== "run" && mode !== "recheck" && mode !== "light" && mode !== "deferred" && mode !== "status") {
     process.stderr.write(`${QUALITY_GATE_USAGE}
 `);
     return 2;
@@ -447,6 +465,8 @@ function main(argv, rawEnv = getEnvVars(), options = {}) {
   const env = { ...rawEnv, wbs };
   if (mode === "light") {
     runLightGate(env);
+  } else if (mode === "deferred") {
+    return runDeferredGate(env, options).status === "DEFERRED" ? 0 : 1;
   } else if (mode === "status") {
     const runDir = join2(options.cwd ?? ".", ".spur", "run");
     const verdict = readReceiptStatus(join2(runDir, `${env.wbs}-check-receipt.json`), env.proofDigest ?? "");
@@ -474,6 +494,7 @@ export {
   runShellCommand,
   runQualityGate,
   runLightGate,
+  runDeferredGate,
   retryMessage,
   receiptFailsAtDigest,
   readReceiptStatus,

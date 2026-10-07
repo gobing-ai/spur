@@ -1,7 +1,7 @@
 ---
 description: Run a batch of tasks through their pipelines in dependency-correct order — resolve a set, topo-sort, run each via task-pipeline.yaml, emit a batch report
 role: planner
-argument-hint: "--tasks <selector> [--feature <id>] [--mode <sequential|parallel>] [--keep-going] [--auto] [--agent <inline|auto|name>] [--json] [--wrap] [--next] [--continue] [--worktree [<name>]] [--no-summary]"
+argument-hint: "--tasks <selector> [--feature <id>] [--mode <sequential|parallel>] [--keep-going] [--auto] [--agent <inline|auto|name>] [--json] [--wrap] [--next] [--continue] [--worktree [<name>]] [--no-summary] [--defer-gate]"
 allowed-tools: ["Bash", "Read", "Skill"]
 ---
 
@@ -26,13 +26,14 @@ Wraps the **sp:spur-dev** skill.
 | `--worktree` `[<name>]` | Run the batch in an isolated git worktree; FF-merge on success, retain on failure. Bare `--worktree` creates a fresh tree; `--worktree <name>` adopts an existing worktree by name/path/branch. | off |
 | `--no-summary` | Skip the measured execution summary (one row per task run: time, wait, tool calls, total / non-cached tokens) printed after the batch report. | off (summary printed) |
 | `--concurrency` `<n>` | Parallel-mode worker bound: at most `<n>` task pipelines run at once (task 0931); a dependent starts only after its in-set dependencies are integrated onto the base ref. No-op in sequential mode (ignored). | 2 |
+| `--defer-gate` | Opt-in parallel-batch gate policy (task 1111): each task's `test` hop runs the light tier and writes `DEFERRED`; the batch runs one integrated full gate on the base ref before the feature sync. Requires `--mode parallel`; default off. | off |
 
 For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).
 
 ## Usage
 
 ```
-/sp:dev-runall --tasks <selector> [--feature <id>] [--mode <sequential|parallel>] [--keep-going] [--auto] [--agent <inline|auto|name>] [--json] [--wrap] [--next] [--continue] [--worktree [<name>]] [--no-summary]
+/sp:dev-runall --tasks <selector> [--feature <id>] [--mode <sequential|parallel>] [--keep-going] [--auto] [--agent <inline|auto|name>] [--json] [--wrap] [--next] [--continue] [--worktree [<name>]] [--no-summary] [--defer-gate]
 ```
 
 Flags: `--tasks <selector>` (required — explicit WBS list, status pseudo-list, `feature:<id>`,

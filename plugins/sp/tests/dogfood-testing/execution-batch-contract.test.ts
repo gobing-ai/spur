@@ -1030,3 +1030,32 @@ write_marker
         }
     });
 });
+
+describe('execution-batch spec contract (task 1111 R3/R4)', () => {
+    test('--defer-gate adds the pipeline var and records the report marker', () => {
+        // The var is added only under the opt-in flag; the marker is what stops a reader
+        // mistaking a light receipt for the batch's full-gate evidence.
+        expect(SPEC).toContain('"deferQualityGate":"true"');
+        expect(SPEC).toContain('deferQualityGate is added ONLY under the opt-in --defer-gate flag');
+        expect(SPEC).toContain('`gate: deferred`');
+    });
+
+    test('the integrated full gate runs before the deferred feature sync', () => {
+        const post = SPEC.split('post: integrated full gate on BASE_REF')[1] ?? '';
+        expect(post.length).toBeGreaterThan(0);
+        const deferredSection = SPEC.split('**Deferred gate (`--defer-gate`, task 1111 R3/R4).**')[1] ?? '';
+        expect(deferredSection.length).toBeGreaterThan(0);
+        // Order inside the deferred recipe: gate, then sync, then the FAIL lane.
+        // Avoid the literal brace-brace placeholder: biome's noTemplateCurlyInString flags it
+        // in any string, so anchor the gate line on its trailing marker instead.
+        const gateAt = deferredSection.indexOf('on BASE_REF');
+        const syncAt = deferredSection.indexOf('PASS -> proceed to feature sync');
+        const failAt = deferredSection.indexOf('FAIL -> batch verdict FAIL; feature sync SKIPPED');
+        expect(gateAt).toBeGreaterThan(-1);
+        expect(syncAt).toBeGreaterThan(gateAt);
+        expect(failAt).toBeGreaterThan(syncAt);
+        // No automatic bisect, and the re-gate list is newest-first.
+        expect(deferredSection).toContain('no automatic bisect');
+        expect(deferredSection).toContain('newest-first');
+    });
+});

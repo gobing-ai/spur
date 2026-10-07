@@ -257,7 +257,10 @@ esac`,
             const command = commandFor(stateId, shellIndex);
             expect(command).toContain('@sh"\\(.dir)/quality-gate.ts"+" RUNNER=bun"');
             expect(command).toContain('@sh"\\(.dir)/quality-gate.mjs"+" RUNNER=node"');
-            expect(command).toContain(`"$RUNNER" "$S" ${mode}`);
+            // 1111: the mode is selected through `M` so `--defer-gate` can swap the tier without
+            // a second dispatch line; the resolver contract above is unchanged.
+            expect(command).toContain(`M=${mode};`);
+            expect(command).toContain('"$RUNNER" "$S" "$M"');
             expect(command).not.toContain('superskill script path');
             // Fail closed: an unresolvable gate writes FAIL (never PASS) and stays soft.
             expect(command).toContain('failed closed');

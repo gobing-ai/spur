@@ -775,6 +775,21 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
             implementBlock.indexOf('command: "$formatCmd ; exit 0"'),
         );
 
+        // 1111 R1/R2 — the opt-in deferred gate policy. Failure cases first: the var defaults
+        // to "false" (no behavior change), the deferred mode is reachable only through the var,
+        // and the triage guards accept DEFERRED only while the var is "true".
+        expect(taskPipeline).toContain('deferQualityGate: "false"');
+        const gateTestBlock = taskPipeline.split('  - id: test\n')[1]?.split('  - id: test-fix\n')[0] ?? '';
+        expect(gateTestBlock).toContain('M=run; [ "$deferQualityGate" = "true" ] && M=deferred');
+        const recheckBlock = taskPipeline.split('  - id: test-recheck\n')[1]?.split('  - id: triage\n')[0] ?? '';
+        expect(recheckBlock).toContain('M=recheck; [ "$deferQualityGate" = "true" ] && M=deferred');
+        const deferredGuard = 'test "$gate_status" = DEFERRED && test "$deferQualityGate" = "true"';
+        // Both triage edges (test and test-recheck) carry the var-gated acceptance.
+        const guardOccurrences = taskPipeline.split(deferredGuard).length - 1;
+        expect(guardOccurrences).toBe(2);
+        // The full tier is still the only PASS writer: the deferred mode never writes PASS
+        // (asserted in plugins/sp/tests/quality-gate-receipt.test.ts).
+
         // R2c — anti-recursion (bug-742) is structural + skill-level, not YAML prose (ADR-043).
         // 1) Pipeline agent.run input is a pure slash command that already selects implement mode.
         // 2) The recursive-launch prohibition lives in the command/skill SSOT, not multi-line

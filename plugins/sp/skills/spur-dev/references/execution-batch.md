@@ -1391,13 +1391,16 @@ while ready or running:
         WT-3 marker  {command: dev-runall, selector: <wbs>, batchId: <batchId>}
                      # WT-3 schema fields (path, branch, baseRef, baseSha) + batchId shared by every marker
         RUN[t] = (cd "$WT" && spur workflow run task-pipeline.yaml \
-                  --vars '{"wbs":"<wbs>","deferFeatureSync":"true",...}' --async --json)
+                  --vars '{"wbs":"<wbs>","deferFeatureSync":"true"[,"deferQualityGate":"true"],...}' --async --json)
+                     # deferQualityGate is added ONLY under the opt-in --defer-gate flag (1111 R3):
+                     # the task's `test` hop then runs the light tier and writes DEFERRED.
     wait for any RUN terminal        # trace poll --follow --timeout 600000; stale-evidence rule applies
     on done:    WT-3b commit on $BRANCH → integrate(t)
     on failed:  WT-5 retain (marker retained); failure policy — stop-the-batch default / --keep-going subtree skip
     on timeout/paused:  WT-5 retain; run is non-terminal (HITL approve pause or poll bound) — stop-the-batch
                         default / --keep-going subtree skip; the report marks the task `non-terminal`, never `done`
-post: feature sync + refresh per touched feature, one chore(corpus) commit (generated regions, R5)
+post: integrated full gate on BASE_REF (only under --defer-gate, 1111 R3) -> feature sync + refresh
+      per touched feature, one chore(corpus) commit (generated regions, R5)
 emit batch report (per-task outcomes + preflight skips + recovery hints + batch verdict)
 ```
 
@@ -1459,6 +1462,24 @@ base ref, the orchestrator runs `spur feature sync <f> --json` (service-level su
 once per touched feature and commits the result as one `chore(corpus)` commit. Sequential and
 inline runs keep the default `"false"` and are unchanged. Any rebase conflict — on a generated
 path or any other — is an R4 `integration-conflict`; there is no path-based exception.
+
+**Deferred gate (`--defer-gate`, task 1111 R3/R4).** The opt-in flag adds
+`deferQualityGate: "true"` to the same per-task `--vars`, so each task's `test` hop runs the light
+tier and writes `DEFERRED` instead of a full-gate `PASS` (see
+[flag-glossary](flag-glossary.md#flag-defer-gate)). The orchestrator then runs the project
+`qualityGateCmd` **once** on the integrated `BASE_REF` **before** the deferred feature sync:
+
+```
+if deferred:
+    run ${qualityGateCmd} on BASE_REF            # the ONE full gate for the batch
+    PASS -> proceed to feature sync (R5)
+    FAIL -> batch verdict FAIL; feature sync SKIPPED; report every affected branch with a
+            re-gate command, newest-first (git log order); no automatic bisect, no revert
+```
+
+Every report row of a deferred task carries `gate: deferred`, so a reader can never mistake a light
+receipt for the batch's full-gate evidence. A task with a red light tier follows its normal bounded
+fix lane and never reaches integration.
 
 **Report.** Step 5's per-task outcome vocabulary gains the parallel-only `integration-conflict`;
 its row carries `worktree`, `branch`, and the manual commands above. Under parallel mode `done`
