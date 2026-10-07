@@ -4,7 +4,7 @@ name: Add per-state display phase metadata to the workflow engine state schema
 status: done
 template: feature-impl
 created_at: 2026-10-07T06:14:15.476Z
-updated_at: "2026-10-07T19:25:30.625Z"
+updated_at: "2026-10-07T19:35:28.823Z"
 feature_id: I13
 
 priority: P1
@@ -179,7 +179,7 @@ Findings table (fresh-context review, 2026-10-07):
 | --- | --- | --- | --- |
 | P1 | none found | — | — |
 | P2 | none found | — | — |
-| P3 | JSON-schema parity test asserts display presence/additionalProperties/key-set but not required:['phase']/minLength/enum constraints | ts-libs packages/dual-workflow-engine/tests/schema.test.ts:600-608 | Deferred — ts-libs backlog, non-blocking |
+| P3 | JSON-schema parity test asserts display presence/additionalProperties/key-set but not required:['phase']/minLength/enum constraints | ts-libs packages/dual-workflow-engine/tests/schema.test.ts:600-608 | FIXED — ts-libs dual-workflow-engine tests/schema.test.ts now asserts required, minLength and show enum parity (I13 re-verify) |
 | P4 | none found | — | — |
 
 ### References

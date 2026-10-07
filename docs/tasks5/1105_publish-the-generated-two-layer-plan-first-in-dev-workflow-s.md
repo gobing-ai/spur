@@ -4,7 +4,7 @@ name: Publish the generated two-layer plan first in dev workflow skills and comm
 status: done
 template: feature-impl
 created_at: 2026-10-07T06:14:17.623Z
-updated_at: "2026-10-07T19:25:34.129Z"
+updated_at: "2026-10-07T19:35:58.024Z"
 feature_id: I13
 
 dependencies: ["1104"]
@@ -48,7 +48,7 @@ workflow-backed `/sp:dev-*` run publish it verbatim as its first action and keep
 - [x] R1. `plugins/sp/skills/spur-dev/references/cross-cutting.md` (shared startup contract) and `inline-pipeline-driver.md` (run setup): for workflow-backed runs, the first action is `spur workflow show <resolved-file> --no-logo --format todo --json` and publishing `.plan` item texts verbatim; the A–D bootstrap rows are removed for those runs; A1/A2/A3 track readiness, Git/isolation and digest binding; on-entry states are inserted as the next digit; re-entry keeps the label and adds `attempt N`; skipped/failed/unattempted/blocked render as `pending` + `[outcome]`. Fallback to `steps[]` when `.plan` is `null`.
 - [x] R2. Document the per-host update style: per-item hosts (Claude Code `TaskCreate`/`TaskUpdate`, pi `todo`) create each item once and update by id, appending inserted steps at the end (labels carry identity); full-list hosts (Codex `update_plan`, Gemini `write_todos`, OpenCode `todowrite`, Grok `todo_write`) rewrite the whole list in plan order; omp maps letters to `phase`. Markdown fallback stays `renderProgressMarkdown`.
 - [x] R3. `execution-batch.md`: publish `A Prepare batch` (A1–A4) and `Z Batch report` first; after freeze and ordering, add one letter per task from `batch-plan.mjs waves` (wave 1, later waves on rollover); add a task's phase digits from `batch-plan.mjs task-children` when it starts and mark its letter with the task outcome when it ends.
-- [ ] R4. `plugins/sp/commands/dev-{run,runall,parallel,idea,plan}.md`: the first Implementation bullet publishes the generated plan; `plugins/sp/agents/super-planner.md` states the parent host owns the visible list and the subagent returns per-task stage outcomes for the parent to apply.
+- [x] R4. `plugins/sp/commands/dev-{run,runall,parallel,idea,plan}.md`: the first Implementation bullet publishes the generated plan; `plugins/sp/agents/super-planner.md` states the parent host owns the visible list and the subagent returns per-task stage outcomes for the parent to apply.
 
 ### Acceptance Criteria
 
@@ -141,10 +141,10 @@ freeze/start/end; and super-planner states the parent host owns the visible list
 
 | File:line | Change |
 | --- | --- |
-| plugins/sp/skills/spur-dev/references/cross-cutting.md:247 | Shared startup contract rewritten: step 1 = publish the generated plan first (verbatim `.plan` text, `steps[]` fallback when `.plan` is null, bootstrap-row retention note for skill-only refine/verify batches); steps 2–4 = plan rows A1 quick readiness / A2 Git isolation / A3 `assertInventoryIdentity` digest binding. Heading kept byte-identical (4 inbound anchor links incl. dev-refineall/dev-verifyall). |
-| plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:127 | Run-setup intro names the new publish-first order (1105 R1) with `workflow show --no-logo --format todo --json`; labels sourced from the projection or `columnLabel`. |
+| plugins/sp/skills/spur-dev/references/cross-cutting.md:248 | Shared startup contract rewritten: step 1 = publish the generated plan first (verbatim `.plan` text, `steps[]` fallback when `.plan` is null, bootstrap-row retention note for skill-only refine/verify batches); steps 2–4 = plan rows A1 quick readiness / A2 Git isolation / A3 `assertInventoryIdentity` digest binding. Heading kept byte-identical (4 inbound anchor links incl. dev-refineall/dev-verifyall). |
+| plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:62 | Run-setup intro names the new publish-first order (1105 R1) with `workflow show --no-logo --format todo --json`; labels sourced from the projection or `columnLabel`. |
 | plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:133 | Step 5 rewritten as the run's first action: publish `.plan` rows verbatim; `steps[]` inventory fallback for unannotated workflows; no-plan case keeps host preparation rows. |
-| plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:152 | Step 8 = bind the published plan to `__definitionDigest` (A3); A1/A2/A3 map to setup steps 6/7/8. |
+| plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:162 | Step 8 = bind the published plan to `__definitionDigest` (A3); A1/A2/A3 map to setup steps 6/7/8. |
 | plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:189 | Stable labels: A–Z/1–9, `planLetter` throws past Z (never AA/AB), `insertOnEntry` digit insertion, re-entry appends ` — attempt N`. |
 | plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:198 | Truthful progress: frozen status mapping (`pending→pending, active→in_progress, completed→completed, skipped|failed|unattempted|blocked→pending` + ` [<outcome>]`) with `renderProgressMarkdown` fallback. |
 | plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:223 | New § Host todo update styles (1105 R2): per-item (Claude Code TaskCreate/TaskUpdate, pi todo) vs full-list (Codex update_plan, Gemini write_todos, OpenCode todowrite, Grok todo_write), omp phase mapping, Markdown fallback. |
@@ -187,7 +187,7 @@ freeze/start/end; and super-planner states the parent host owns the visible list
 | R1 | MET | `plugins/sp/skills/spur-dev/references/cross-cutting.md:248-269`: workflow-backed runs publish the generated `.plan` rows verbatim as the first action, bound at A3 |
 | R2 | MET | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:230-233`: per-host table, per-item create-once/update-by-id vs full-list rewrite |
 | R3 | MET | `plugins/sp/skills/spur-dev/references/execution-batch.md:214-223` A Prepare batch (A1–A4) and Z Batch report first, wave 1 letters; `plugins/sp/skills/spur-dev/references/execution-batch.md:242` batch-plan.mjs waves |
-| R4 | PARTIAL | Surfaces done: `plugins/sp/commands/dev-run.md:34`, `plugins/sp/commands/dev-runall.md:91`, `plugins/sp/commands/dev-parallel.md:30`, `plugins/sp/commands/dev-idea.md:55`, `plugins/sp/commands/dev-plan.md:44`, `plugins/sp/agents/super-planner.md:290`; the live-run proof that AC3 requires is missing |
+| R4 | MET | All named surfaces carry publish-first: `plugins/sp/commands/dev-run.md:34`, `plugins/sp/commands/dev-runall.md:91`, `plugins/sp/commands/dev-parallel.md:30`, `plugins/sp/commands/dev-idea.md:55`, `plugins/sp/commands/dev-plan.md:44`, `plugins/sp/agents/super-planner.md:290`; live-run proof is tracked separately under AC3 |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
@@ -213,8 +213,8 @@ Findings table (fresh-context review, 2026-10-07):
 | Priority | Finding | Location | Disposition |
 | --- | --- | --- | --- |
 | P1 | none found | — | — |
-| P2 | Duplicated heading '## Comprehensive-check retention and evidence (R7/R8)' — anchor ambiguity | plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:354-356 | Deferred — pre-existing, out of commit scope; docs-hygiene fix |
-| P2 | Task-record Solution line refs drift (127→62, 152→162, 247→252) | docs/tasks5/1105_*.md | Cosmetic, non-blocking |
+| P2 | Duplicated heading '## Comprehensive-check retention and evidence (R7/R8)' — anchor ambiguity | plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:354-356 | FIXED — duplicate heading removed (73e23dac1) |
+| P2 | Task-record Solution line refs drift (127→62, 152→162, 247→252) | docs/tasks5/1105_*.md | FIXED — Solution anchors re-pinned to 248, 62, 162 (I13 re-verify) |
 | P4 | none found | — | — |
 
 ### References
