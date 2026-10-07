@@ -4,7 +4,7 @@ name: Add per-state display phase metadata to the workflow engine state schema
 status: todo
 template: feature-impl
 created_at: 2026-10-07T06:14:15.476Z
-updated_at: "2026-10-07T06:21:14.115Z"
+updated_at: "2026-10-07T07:38:16.300Z"
 feature_id: I13
 
 priority: P1
@@ -124,7 +124,20 @@ Scenario: AC4 — Spur adopts the release with no workflow change (req: R2)
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+ts-libs branch `sp/task-1103-display-metadata` (2 commits, not pushed; tags local only):
+
+- feat b11ee9b8 `feat(dual-workflow-engine): optional per-state display metadata (1103)`:
+  - packages/dual-workflow-engine/src/types.ts:70 `StateDisplay` interface ({phase, phaseTitle?, title?, show?: 'plan'|'on-entry'}); :105 `StateDef.display?: StateDisplay` (presentation-only doc comment). Engine code paths untouched — display is never read at run time.
+  - packages/dual-workflow-engine/src/schema.ts:77 `StateDisplaySchema` (.strict, phase min(1)); :116 `display: StateDisplaySchema.optional()` in the state object — unknown display sub-keys / empty labels / bad `show` fail load with WorkflowValidationError naming states.N.display.
+  - packages/dual-workflow-engine/src/index.ts:40,70 re-exports `StateDisplaySchema` + `StateDisplay`.
+  - packages/dual-workflow-engine/schemas/state-machine-workflow.schema.json:49 `display` on state items, same shape, additionalProperties:false. resumeRerun/startable JSON-schema drift left as-is (out of scope).
+  - tests/schema.test.ts:467 AC1 (full/partial display accepted+preserved; YAML round-trip) + AC2 (unknown sub-key and show:"always" rejected via loadWorkflowDefFromText, error message names `display`) + R3 absent-field invariance + packaged-JSON-schema declaration test. tests/state-machine.test.ts:839 AC3 run-equivalence (with/without display on every state → identical normalized event trace, same finalState/transitionsTaken; vacuity guard asserts annotated copy really carries display).
+  - Docs per da66f12a precedent: CHANGELOG.md:11 ([0.5.17] section), docs/00_ADR.md:712 ADR-036, docs/03_ARCHITECTURE.md:68-72 + updated_at, README.md:621 "State Display Metadata".
+- release cd827528 `chore(release): bump all packages to 0.5.17` — produced by `bun run bump-ver 0.5.17` (13 manifests + bun.lock + llm-jsonl-importer HISTORY_IMPORT_SCHEMA_VERSION sync); 13 local annotated tags incl. @gobing-ai/ts-dual-workflow-engine-v0.5.17 and aggregate @gobing-ai/ts-libs-v0.5.17. NOT pushed, NOT published (operator release gate).
+
+Gates: `bun run check` in packages/dual-workflow-engine (biome + tsc --noEmit + tests) — 524 pass / 0 fail, run pre- and post-bump; llm-jsonl-importer schema-version test 3 pass / 0 fail post-bump. Tests written first (red: 4 schema-test fails + 1 AC3 fail + 7 tsc `display` errors), then implemented to green.
+
+R2 remainder (operator): push branch, push tags (aggregate tag triggers publish.yml), verify `bun pm view @gobing-ai/ts-dual-workflow-engine version` = 0.5.17; then 1104/Spur side bumps catalog pin + bun install.
 
 ### Testing
 
