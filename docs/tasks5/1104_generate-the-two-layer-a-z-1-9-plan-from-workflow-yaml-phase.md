@@ -4,7 +4,7 @@ name: Generate the two-layer A-Z/1-9 plan from workflow YAML phases in workflow 
 status: todo
 template: feature-impl
 created_at: 2026-10-07T06:14:17.109Z
-updated_at: "2026-10-07T06:23:30.237Z"
+updated_at: "2026-10-07T17:00:01.544Z"
 feature_id: I13
 
 dependencies: ["1103"]
@@ -171,7 +171,21 @@ Scenario: AC6 — Non-completed outcomes never render as completed (req: R6, R7)
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Two-layer A-Z/1-9 plan derived from the engine's presentation-only `StateDef.display` (0.5.17); no hand-maintained mirror table.
+
+- `packages/app/src/workflow/plan-projection.ts` (new, pure; caps `planLetter` at packages/app/src/workflow/plan-projection.ts:26, `planChild` at :37, item shape `PhasedPlanItem` at :50, projection `buildPhasedPlan` at :106, `validatePhaseTable` at :173, `insertOnEntry` at :226, `buildBatchPlan` at :269, `taskPhaseChildren` at :329, `hostStatus`/`hostText` at :354/:361): `planLetter(i)` 0→A…25→Z and `planChild(parent, i)` 0→A1…8→A9 both throw past their caps; `interface PhasedPlanItem extends VisibleItem { text: string; parent?: string; title?: string }` with ids `prepare`, `prepare.<n>`, `phase.<key>`, state ids, `task.<wbs>`, `report`; `buildPhasedPlan(def)` returns null when no state declares `display` (unannotated pipelines unchanged), opens with `A Prepare` + A1..A3, letters phases by first appearance in state declaration order (`phaseTitle` when any state of the phase declares one, else the phase key), and projects only `show: 'plan'` states as digits; `validatePhaseTable(def)` is opt-in per annotated workflow — unannotated defs and non-state-machine kinds are valid by omission, findings name the offending state or phase (non-terminal without display, terminal with display, >25 phases, >9 states in a phase, conflicting `phaseTitle`); `insertOnEntry(items, stateId, def)` adds the on-entry digit the moment the host enters the state — pure, idempotent, existing labels never change (loop verify→test-fix→verify renders identically); `buildBatchPlan(tasks)` slices waves of 24 (`A Prepare batch` + A1..A4, B..Y task rows with no digit children, `Z Batch report`; task names truncate to 60 chars with `…`); `taskPhaseChildren(taskLetter, plan)` yields one digit per phase row; `hostStatus(outcome)` maps only `completed`→completed and `active`→in_progress — `skipped`/`failed`/`unattempted`/`blocked` stay pending because the host decides them; `hostText(item)` appends `[outcome]` for exactly those four.
+- Annotations: `config/workflows/task-pipeline.yaml` (13 non-terminal states; phases implement / test / review / "Verify & record"; `show: on-entry` on escalate, test-fix, test-recheck, test-fail-triage, review-fail-triage, approve) and `idea-pipeline.yaml` (discover / "Define feature" / design / decompose / "Hand off"; all states plan-visible). Initial task-pipeline plan: A prepare block, B Implement (precheck, implement), C Test (test), D Review (triage, review), E Verify & record (verify, record).
+- `apps/cli/schemas/state-machine-workflow.schema.json:108`: backfilled `display` (same commit as the YAML annotation, R1). Engine JSON-schema drift (`resumeRerun`/`startable`) intentionally not fixed here; no workflow version bump (digest changes are expected).
+- `WorkflowAppService.validate` calls `validatePhaseTable` after the terminal-reason check (packages/app/src/services/workflow-service.ts:695); findings fail validate as `{ ok: false, valid: false, file, errors }` (R3).
+- `workflow show --format todo --json` additionally projects `plan: buildPhasedPlan(def) ?? null` (apps/cli/src/commands/workflow.ts:1698) — additive; `steps` and the JSON schema for unannotated definitions unchanged (R4).
+- `plugins/sp/scripts/batch-plan.ts` + committed `.mjs` twin: ADR-130 thin wrapper over `plugins/sp/lib/plan-projection.generated.*` — `waves --tasks <file>` prints `{ waves }`, `task-children --letter <A-Z> --plan <file>` prints the phase digits (accepts a bare plan array or a todo `--json` payload); exit 2 usage / 1 IO. Bundler entry `bundlePlanProjectionLib` added to `scripts/commands/bundle-plugin-lib.ts`; script registered in `config/plugin-scripts.json` and the `build:scripts` chain.
+- Docs (T3): `docs/design/cli-contracts.md` and `plugins/sp/skills/spur-cli/references/workflows.md` document the additive `plan` key and the validate phase-table gate.
+
+Tests were written first (red), then implemented (green): `packages/app/tests/workflow/plan-projection.test.ts` (20 tests — caps AC4, projection AC2, validation AC3, batch AC5, children R5, host mapping AC6, label stability), `apps/cli/tests/workflow/display-plan.test.ts` (AC1 every bundled workflow validates; AC2 todo `--json` plan content vs the real task-pipeline with `steps` unchanged; AC3 CLI rejection of a half-annotated table naming state `b` and terminal `done`, plus a fully annotated pass). Existing 0695 R4 exact-shape test updated with the additive `plan: null`.
+
+Verification: `bun run spur-check` PASS (biome + workspace typechecks + 10393 tests + pre/post rules); `bun run plugin-smoke` PASS; `script-contract-check` PASS (21 scripts, 0 violations); AC5 demonstrated with bare `node plugins/sp/scripts/batch-plan.mjs` on a 30-task fixture (2 waves of 24/6, B..Y letters, A/Z bookends) and `task-children --letter B` over the live todo projection (B1..B4 phase rows).
+
+Constraints honored: no lifecycle status transitions from this task; `plugins/sp/lib/idea-handoff.generated.mjs` and `inline-run.generated.mjs` left untouched (pre-existing working-tree churn from a concurrent session — full `build:plugin-lib` regeneration deliberately not run; only the new `plan-projection.generated.*` was bundled).
 
 ### Testing
 

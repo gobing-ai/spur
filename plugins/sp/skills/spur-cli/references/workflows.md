@@ -273,6 +273,11 @@ spur workflow progress <run-id> [--json]
 `spur workflow show <file>` renders the declared graph as Mermaid. `--format todo` instead emits a
 declared-step checklist; `--json` serializes the selected projection. This verb intentionally does
 not advertise `--json-envelope` because its JSON projection is a kept-raw document surface.
+Task 1104: for annotated definitions the todo `--json` payload also carries `plan` — the two-layer
+A-Z/1-9 phased plan derived from each state's `display` (`phase`/`phaseTitle`/`title`/`show`);
+`null` when no state declares `display`. `workflow validate` enforces the phase table on annotated
+definitions (every non-terminal state phased, terminals bare, ≤25 phases, ≤9 states per phase,
+consistent `phaseTitle`).
 
 | Flag (on `run`) | Effect |
 | --------------- | ------ |

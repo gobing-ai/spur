@@ -8,6 +8,11 @@
             "twin": "batch-preflight.mjs"
         },
         {
+            "rel": "batch-plan.ts",
+            "contract": "standard",
+            "twin": "batch-plan.mjs"
+        },
+        {
             "rel": "daily-summary/daily-summary.ts",
             "contract": "standard",
             "twin": "daily-summary/daily-summary.mjs"
