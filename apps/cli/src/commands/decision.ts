@@ -1,14 +1,13 @@
 import { resolve } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
 import {
-    DECIDE_EVIDENCE_MAX_CHARS,
     DecisionInputError,
     type DecisionStatus,
     decisionCorrelationFromVars,
     decisionReliability,
     emitDecisionRejected,
     getDecisionService,
-    redactAndBound,
+    readDecisionEvidence,
     type SystemEventBus,
     UnknownDecisionError,
 } from '@gobing-ai/spur-app';
@@ -163,22 +162,15 @@ export function registerDecisionCommand(program: Command, context: CliContext): 
                 }
 
                 // Evidence before any backend interaction: an unreadable declared file is
-                // a caller mistake (design §3.4). Redaction uses the built-in SECRET_PATTERN
-                // only — secrets are deliberately not threaded (workflow decide parity).
+                // a caller mistake (design §3.4). The shared helper applies the SAME
+                // redaction + bound the workflow decide uses (task 1094 R3), so
+                // CLI-gathered reliability samples measure the workflow input.
                 let evidence: string[] | undefined;
                 try {
                     if (options.evidence !== undefined && options.evidence.length > 0) {
-                        evidence = await Promise.all(
-                            options.evidence.map(async (file) => {
-                                const path = resolve(context.cwd, file);
-                                let text: string;
-                                try {
-                                    text = await context.fs.readFile(path);
-                                } catch {
-                                    throw new Error(`evidence file "${file}" is unreadable (cwd ${context.cwd})`);
-                                }
-                                return redactAndBound(text, [], DECIDE_EVIDENCE_MAX_CHARS);
-                            }),
+                        evidence = await readDecisionEvidence(
+                            options.evidence.map((file) => resolve(context.cwd, file)),
+                            async (path) => await context.fs.readFile(path),
                         );
                     }
                 } catch (error) {

@@ -145,8 +145,12 @@ async function main() {
       const app2 = await import(entry2);
       const bundlePath = fileURLToPath(new URL("../lib/inline-run.generated.mjs", import.meta.url));
       const lib = await import(bundlePath);
-      const enabled = await lib.resolveDecideDecisionMakerEnabled(process.cwd(), portable2 ? { embeddedSchemas: lib.EMBEDDED_SPUR_SCHEMAS } : undefined);
-      process.exit(await app2.runInlineRunDecide({ runId, node, optionsFile: optionsJson, enabled }));
+      const loadOpts = portable2 ? { embeddedSchemas: lib.EMBEDDED_SPUR_SCHEMAS } : undefined;
+      const [enabled, spurConfig] = await Promise.all([
+        lib.resolveDecideDecisionMakerEnabled(process.cwd(), loadOpts),
+        lib.loadSpurConfig(process.cwd(), loadOpts)
+      ]);
+      process.exit(await app2.runInlineRunDecide({ runId, node, optionsFile: optionsJson, enabled, spurConfig }));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       process.stdout.write(`${JSON.stringify({ ok: false, runId, error: message })}

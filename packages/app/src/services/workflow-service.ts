@@ -18,6 +18,7 @@ import {
     TaskRunLinkDao,
     TransitionRunDao,
 } from '@gobing-ai/spur-domain';
+import type { DecisionType } from '@gobing-ai/ts-ai-decision';
 import { type DecisionMaker, resolveAgentName } from '@gobing-ai/ts-ai-runner';
 
 import {
@@ -63,10 +64,12 @@ import {
     collectCompositionAdvisory,
     collectDecideViolations,
     collectHitlDecisionViolations,
+    collectInlineDecideWarnings,
     collectShellCommands,
     collectTerminalReasonViolations,
     collectUndeclaredShellVarViolations,
     gateSitesForState,
+    hasCatalogDecideAction,
     hitlAnswerVar,
 } from '../workflow/composition-lint';
 import type { SummaryResolver } from '../workflow/decision-evidence';
@@ -669,10 +672,33 @@ export class WorkflowAppService {
                 return { ok: false, valid: false, file, errors: decisionErrors };
             }
 
-            // Decide-action check (0941 R6): a decide action missing its default, declaring a
-            // default outside choices, or omitting resultFile is rejected with the SAME zod
-            // schema the runner executes — validation and execution cannot drift.
-            const decideErrors = collectDecideViolations(workflow);
+            // Decide-action check (0941 R6 + task 1094 R7): a decide action missing its
+            // default, declaring a default outside choices, or omitting resultFile is rejected
+            // with the SAME zod schema the runner executes — validation and execution cannot
+            // drift. Catalog-reference actions additionally resolve against the loaded catalog
+            // (unknown id / non-choice/noul type = error); inline actions are deprecated with
+            // the same text the runner warns per run.
+            let decideErrors: string[];
+            if (hasCatalogDecideAction(workflow)) {
+                let catalogTypes: Map<string, DecisionType>;
+                try {
+                    const service = await getDecisionService(this.ctx.spurConfig ?? null, this.ctx.cwd);
+                    catalogTypes = new Map(service.list().map((entry) => [entry.id, entry.type]));
+                } catch (error) {
+                    return {
+                        ok: false,
+                        valid: false,
+                        file,
+                        errors: [
+                            `decide validation failed: decision catalog unavailable — ${error instanceof Error ? error.message : String(error)}`,
+                        ],
+                    };
+                }
+                decideErrors = collectDecideViolations(workflow, catalogTypes);
+            } else {
+                decideErrors = collectDecideViolations(workflow);
+            }
+            for (const warning of collectInlineDecideWarnings(workflow)) this.ctx.warn?.(warning);
             if (decideErrors.length > 0) {
                 return { ok: false, valid: false, file, errors: decideErrors };
             }
@@ -2060,6 +2086,10 @@ export class WorkflowAppService {
             decideDecisionMaker: this.ctx.spurConfig?.workflow?.decideDecisionMaker === true,
             // 0941 R4: the backend comes from existing DecisionMaker config when the composition root supplies one.
             ...(this.ctx.decisionMaker !== undefined ? { decideMaker: this.ctx.decisionMaker } : {}),
+            // Task 1094: the catalog-reference decide path resolves through the shared service;
+            // inline decide options are deprecated through ctx.warn.
+            decisionService: () => getDecisionService(this.ctx.spurConfig ?? null, this.ctx.cwd),
+            warn: (message: string) => this.ctx.warn?.(message),
             // 0942/ADR-126: the fleet executor surface for `agent.run`.
             fleetDispatchDeps,
             // 0901 R5: configured secrets redact streamed shell output at the

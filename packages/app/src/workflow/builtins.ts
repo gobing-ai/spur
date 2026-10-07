@@ -7,6 +7,7 @@ import {
     NodeProcessExecutor,
     type ProcessExecutor,
 } from '@gobing-ai/ts-runtime';
+import type { DecisionService } from '../decision/decision-service';
 import type { AgentService } from '../services/agent-service';
 import type { RuleService } from '../services/rule-service';
 import { AgentRunActionRunner, type AgentRunAgentConfig } from './actions/agent-run';
@@ -58,6 +59,10 @@ export interface SpurWorkflowBuiltinsOptions {
     decideDecisionMaker?: boolean;
     /** Optional provider factory for the decide action backend (0941 R4); defaults to the shared lazy maker. */
     decideMaker?: () => Promise<DecisionMaker>;
+    /** Catalog service factory for the catalog-reference decide path (task 1094). */
+    decisionService?: () => Promise<DecisionService>;
+    /** Deprecation sink for inline decide options (task 1094 R7). */
+    warn?: (message: string) => void;
     /** Fleet executor deps for `agent.run` (0942/ADR-126). Absent = a selected fleet surface fails 'not wired'. */
     fleetDispatchDeps?: FleetDispatchDeps;
 }
@@ -108,6 +113,8 @@ export function registerSpurBuiltins(host: WorkflowEngineHost, options: SpurWork
         new DecideActionRunner(fileSystem, {
             enabled: options.decideDecisionMaker === true,
             ...(options.decideMaker !== undefined ? { decisionMaker: options.decideMaker } : {}),
+            ...(options.decisionService !== undefined ? { decisionService: options.decisionService } : {}),
+            ...(options.warn !== undefined ? { warn: options.warn } : {}),
             ...(options.observabilityBus !== undefined ? { observabilityBus: options.observabilityBus } : {}),
         } satisfies DecideActionDeps),
         'builtin',

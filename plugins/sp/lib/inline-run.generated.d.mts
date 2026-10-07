@@ -27,6 +27,7 @@ export declare const startFeatureVerificationReceipt: typeof import('@gobing-ai/
 export declare const validateFeatureVerificationReceipt: typeof import('@gobing-ai/spur-app').validateFeatureVerificationReceipt;
 export declare const resolveWorkflowDefinition: typeof import('@gobing-ai/spur-app').resolveWorkflowDefinition;
 export declare const resolveDecideDecisionMakerEnabled: typeof import('@gobing-ai/spur-config/loader').resolveDecideDecisionMakerEnabled;
+export declare const loadSpurConfig: typeof import('@gobing-ai/spur-config/loader').loadSpurConfig;
 export declare const ArtifactDao: typeof import('@gobing-ai/spur-domain').ArtifactDao;
 export declare const RunDao: typeof import('@gobing-ai/spur-domain').RunDao;
 export declare const EMBEDDED_SPUR_SCHEMAS: ReadonlyMap<string, string>;

@@ -8,6 +8,7 @@
 
 import { basename } from 'node:path';
 import { AGENT_ROLE_NAMES } from '@gobing-ai/spur-config';
+import type { DecisionType } from '@gobing-ai/ts-ai-decision';
 import type {
     ActionDef,
     GuardDef,
@@ -15,7 +16,7 @@ import type {
     TransitionFlowWorkflowDef,
     WorkflowDef,
 } from '@gobing-ai/ts-dual-workflow-engine';
-import { DECIDE_KIND, DecideOptionsSchema } from './actions/decide';
+import { DECIDE_KIND, DecideOptionsSchema, isCatalogDecideOptions } from './actions/decide';
 import { validateEvidenceChoices } from './actions/hitl-select';
 import { parseDecisionConfig } from './decision-hitl-responder';
 import { isTerminalReason, TERMINAL_REASONS } from './terminal-reason';
@@ -197,12 +198,16 @@ export function collectTerminalReasonViolations(def: WorkflowDef): string[] {
 }
 
 /**
- * Decide-action rule (0941 R6): every `decide` action must parse against the runner's own
- * {@link DecideOptionsSchema} — rejecting a missing `default`, a `default` outside `choices`
- * (or outside yes/no for `noul`), a missing `resultFile`, and any other option-shape drift —
- * before a run can start.
+ * Decide-action rule (0941 R6 + task 1094 R7): every `decide` action must parse against the
+ * runner's own {@link DecideOptionsSchema} — rejecting a missing `default`, a `default` outside
+ * `choices` (or outside yes/no for `noul`), a missing `resultFile`, and any other option-shape
+ * drift — before a run can start. Catalog-reference actions additionally resolve against the
+ * loaded catalog when `catalogTypes` is supplied: an unknown id or a non-choice/noul type is a
+ * violation (score decisions are CLI-only). The map is built by the caller (workflow-service
+ * validate) only when a catalog-form action exists, so inline-only workflows never touch the
+ * catalog service.
  */
-export function collectDecideViolations(def: WorkflowDef): string[] {
+export function collectDecideViolations(def: WorkflowDef, catalogTypes?: ReadonlyMap<string, DecisionType>): string[] {
     const violations: string[] = [];
     const visitAction = (stateId: string, action: ActionDef, idx: number): void => {
         if (action.kind !== DECIDE_KIND) return;
@@ -212,21 +217,68 @@ export function collectDecideViolations(def: WorkflowDef): string[] {
             violations.push(
                 `Invalid decide action at ${location}: ${parsed.error.issues.map((i) => i.message).join('; ')}`,
             );
+            return;
+        }
+        if (catalogTypes !== undefined && isCatalogDecideOptions(parsed.data)) {
+            const location = `${stateId}/${DECIDE_KIND}[${idx}]`;
+            const type = catalogTypes.get(parsed.data.decision);
+            if (type === undefined) {
+                violations.push(
+                    `Invalid decide action at ${location}: references unknown decision "${parsed.data.decision}" (not served by any loaded catalog)`,
+                );
+            } else if (type !== 'choice' && type !== 'noul') {
+                violations.push(
+                    `Invalid decide action at ${location}: decision "${parsed.data.decision}" has type "${type}"; workflow decide supports choice and noul`,
+                );
+            }
         }
     };
+    visitDecideActions(def, visitAction);
+    return violations;
+}
 
+/**
+ * Inline-decide deprecation warnings (task 1094 R7): one per inline-form decide action site.
+ * Warn-only — inline actions keep running until the 1114–1116 catalog migrations land.
+ */
+export function collectInlineDecideWarnings(def: WorkflowDef): string[] {
+    const warnings: string[] = [];
+    visitDecideActions(def, (stateId, action) => {
+        if (action.kind !== DECIDE_KIND) return;
+        const parsed = DecideOptionsSchema.safeParse(action.options ?? {});
+        if (parsed.success && !isCatalogDecideOptions(parsed.data)) {
+            warnings.push(
+                `decide ${stateId}/${parsed.data.id}: inline decide options are deprecated; use { decision: <catalog-id>, params?, evidence?, resultFile }`,
+            );
+        }
+    });
+    return warnings;
+}
+
+/** Walk every decide action site in both definition shapes (transition-flow nodes / state onEnter). */
+function visitDecideActions(def: WorkflowDef, visit: (stateId: string, action: ActionDef, idx: number) => void): void {
     if (def.kind === 'transition-flow' || def.kind === undefined) {
         const flowDef = def as TransitionFlowWorkflowDef;
         for (const node of flowDef.nodes ?? []) {
-            if (node.action) visitAction(node.id, node.action, 0);
+            if (node.action) visit(node.id, node.action, 0);
         }
     } else {
         const smDef = def as StateMachineWorkflowDef;
         for (const state of smDef.states ?? []) {
-            for (const [i, action] of (state.onEnter ?? []).entries()) visitAction(state.id, action, i);
+            for (const [i, action] of (state.onEnter ?? []).entries()) visit(state.id, action, i);
         }
     }
-    return violations;
+}
+
+/** True when at least one decide action uses the catalog-reference form (task 1094 R7). */
+export function hasCatalogDecideAction(def: WorkflowDef): boolean {
+    let found = false;
+    visitDecideActions(def, (_stateId, action) => {
+        if (found || action.kind !== DECIDE_KIND) return;
+        const parsed = DecideOptionsSchema.safeParse(action.options ?? {});
+        if (parsed.success && isCatalogDecideOptions(parsed.data)) found = true;
+    });
+    return found;
 }
 
 const HITL_DECISION_KINDS = new Set(['hitl.confirm', 'hitl.select', 'hitl.input']);

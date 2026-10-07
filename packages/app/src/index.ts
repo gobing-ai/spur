@@ -27,6 +27,7 @@ export {
     decisionErrorKind,
     emitDecisionRejected,
 } from './decision/decision-events';
+export { readDecisionEvidence } from './decision/decision-evidence-input';
 // Decision reliability report (task 1096, slice S3): reads the recorded
 // `decision.end` ledger; the CLI imports only through this package index.
 export {
@@ -876,12 +877,16 @@ export {
 } from './workflow/action-trace';
 export { AgentRunActionRunner } from './workflow/actions/agent-run';
 export { CommandGateActionRunner, type CommandGateOptions } from './workflow/actions/command-gate';
-// Non-pausing decide action (0941, ADR-125)
+// Non-pausing decide action (0941, ADR-125); catalog-reference form (task 1094)
 export {
+    CatalogDecideOptionsSchema,
     DECIDE_KIND,
     type DecideActionDeps,
     DecideActionRunner,
     DecideOptionsSchema,
+    type InlineDecideOptions,
+    InlineDecideOptionsSchema,
+    isCatalogDecideOptions,
 } from './workflow/actions/decide';
 export { FileExistsActionRunner } from './workflow/actions/file-exists';
 export { FileReadActionRunner } from './workflow/actions/file-read';

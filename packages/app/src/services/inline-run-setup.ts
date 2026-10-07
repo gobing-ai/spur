@@ -46,6 +46,7 @@ const {
 const { lstat, mkdir, readdir, readFile } = await import('node:fs/promises');
 
 import { basename, join, resolve } from 'node:path';
+import type { SpurConfig } from '@gobing-ai/spur-config';
 import type { DbAdapter, RunDefinitionSource } from '@gobing-ai/spur-domain';
 import {
     createMigratedDb,
@@ -63,6 +64,7 @@ import {
 } from '@gobing-ai/ts-dual-workflow-engine';
 import { EventBus } from '@gobing-ai/ts-infra';
 import { createNodeFileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
+import { getDecisionService } from '../decision/decision-service';
 import { createWorkflowActionTraceWriter } from '../workflow/action-trace';
 import { DecideActionRunner, DecideOptionsSchema } from '../workflow/actions/decide';
 import { resolveDurableArtifactPath } from '../workflow/actions/run-path';
@@ -838,6 +840,11 @@ export interface InlineDecideInput {
     /** Bus carrying cataloged `decision.*` events (task 1095); absent ⇒ no events. */
     readonly observabilityBus?: WorkflowObservabilityBus;
     /**
+     * Task 1094 R5: the merged Spur config, threaded at the composition boundary (ADR-082),
+     * backing the catalog-reference decide path through the shared decision service.
+     */
+    readonly spurConfig?: SpurConfig;
+    /**
      * Task 1113 R3: correlation vars (`__workflowName`, `wbs`) resolved from the
      * run row + snapshot by the caller; passed as the action's run vars so
      * decide events carry full run correlation. Absent ⇒ `{}` (placeholder runs).
@@ -883,8 +890,15 @@ export async function runDecideForInlineRun(input: InlineDecideInput): Promise<I
             error: `decide: invalid options — ${parsed.error.issues.map((i) => i.message).join('; ')}`,
         };
     }
+    const spurConfig = input.spurConfig;
     const runner = new DecideActionRunner(createNodeFileSystem(), {
         enabled: input.enabled,
+        // Task 1094 R5: catalog-reference decide resolves through the shared service with
+        // the config threaded from the driver boundary (ADR-082 — app services never load
+        // Spur config themselves).
+        ...(spurConfig !== undefined
+            ? { decisionService: () => getDecisionService(spurConfig, resolve(input.workdir)) }
+            : {}),
         ...(input.observabilityBus !== undefined ? { observabilityBus: input.observabilityBus } : {}),
     });
     const result = await runner.execute(raw as Record<string, unknown>, {
@@ -1535,6 +1549,8 @@ export interface InlineRunDecideInput {
     readonly node: string;
     readonly optionsFile: string;
     readonly enabled: boolean;
+    /** Task 1094 R5: merged config threaded by the delegate for the catalog-reference decide path. */
+    readonly spurConfig?: SpurConfig;
 }
 
 /**
@@ -1572,6 +1588,7 @@ export async function runInlineRunDecide(input: InlineRunDecideInput): Promise<n
                 workdir: process.cwd(),
                 optionsFile: input.optionsFile,
                 enabled: input.enabled,
+                ...(input.spurConfig !== undefined ? { spurConfig: input.spurConfig } : {}),
                 runId: input.runId,
                 node: input.node,
                 observabilityBus: bus,

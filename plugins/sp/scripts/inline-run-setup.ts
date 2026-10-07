@@ -148,12 +148,14 @@ async function main(): Promise<void> {
             const app = (await import(entry)) as InlineApp;
             const bundlePath = fileURLToPath(new URL('../lib/inline-run.generated.mjs', import.meta.url));
             const lib = (await import(bundlePath)) as typeof import('../lib/inline-run.generated.mjs');
-            // Decide-enabled switch resolved at the driver boundary (ADR-082), passed as a param.
-            const enabled = await lib.resolveDecideDecisionMakerEnabled(
-                process.cwd(),
-                portable ? { embeddedSchemas: lib.EMBEDDED_SPUR_SCHEMAS } : undefined,
-            );
-            process.exit(await app.runInlineRunDecide({ runId, node, optionsFile: optionsJson, enabled }));
+            // Decide-enabled switch + catalog config resolved ONCE at the driver boundary
+            // (task 1094, ADR-082), passed as params.
+            const loadOpts = portable ? { embeddedSchemas: lib.EMBEDDED_SPUR_SCHEMAS } : undefined;
+            const [enabled, spurConfig] = await Promise.all([
+                lib.resolveDecideDecisionMakerEnabled(process.cwd(), loadOpts),
+                lib.loadSpurConfig(process.cwd(), loadOpts),
+            ]);
+            process.exit(await app.runInlineRunDecide({ runId, node, optionsFile: optionsJson, enabled, spurConfig }));
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             process.stdout.write(`${JSON.stringify({ ok: false, runId, error: message })}\n`);

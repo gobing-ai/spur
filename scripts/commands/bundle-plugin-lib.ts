@@ -641,6 +641,13 @@ const INLINE_RUN_EXPORTS: readonly InlineRunExport[] = [
         declare:
             "export declare const resolveDecideDecisionMakerEnabled: typeof import('@gobing-ai/spur-config/loader').resolveDecideDecisionMakerEnabled;",
     },
+    // Catalog-reference decide (task 1094): the delegate loads the merged config once at the
+    // driver boundary and threads it into runInlineRunDecide (ADR-082).
+    {
+        name: 'loadSpurConfig',
+        from: 'packages/config/src/loader',
+        declare: "export declare const loadSpurConfig: typeof import('@gobing-ai/spur-config/loader').loadSpurConfig;",
+    },
     ...['ArtifactDao', 'RunDao'].map((name) => ({
         name,
         from: 'packages/domain/src/dao',

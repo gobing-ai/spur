@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Migrate workflow decide action to catalog references
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-10-06T17:55:55.426Z
-updated_at: "2026-10-07T17:23:56.791Z"
+updated_at: "2026-10-07T21:31:05.761Z"
 feature_id: P1
 priority: P2
 tags:
@@ -13,6 +13,8 @@ tags:
 
 dependencies: ["1092", "1093", "1096", "1113"]
 estimate_hours: 8
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1094-verdict.json
 ---
 
 ## 1094. Migrate workflow decide action to catalog references
@@ -40,20 +42,20 @@ Today the workflow `decide` action (`packages/app/src/workflow/actions/decide.ts
 
 ### Requirements
 
-- [ ] R1. `DecideOptionsSchema` (`packages/app/src/workflow/actions/decide.ts:25`) becomes a union.
+- [x] R1. `DecideOptionsSchema` (`packages/app/src/workflow/actions/decide.ts:25`) becomes a union.
   - The inline form stays accepted unchanged.
   - The new strict catalog form is `{decision: string, params?: Record<string, string|number|boolean|null>, evidence?: string[], resultFile: string}`. It rejects `id`, `question`, `choices`, `default`, `method` and `minConfidence`: the catalog owns them.
   - Export `isCatalogDecideOptions(options)` for the validator and the runner.
-- [ ] R2. The catalog form calls `DecisionService.decide(decision, input, { bus, context })` through a lazy `decisionService?: () => Promise<DecisionService>` dependency on `DecideActionDeps`.
+- [x] R2. The catalog form calls `DecisionService.decide(decision, input, { bus, context })` through a lazy `decisionService?: () => Promise<DecisionService>` dependency on `DecideActionDeps`.
   - The dependency is wired in `packages/app/src/workflow/builtins.ts:108` from a new `RegisterSpurBuiltinsOptions.decisionService`. `workflow-service.ts:2042` supplies it with the same factory the gate uses (`() => getDecisionService(this.ctx.spurConfig ?? null, this.ctx.cwd)`, `:2179`).
   - `context` is `{ caller: 'workflow', correlation: decisionCorrelationFromVars({...context.vars, __runId: context.runId, __nodeId: context.stateOrNodeId}) }`; the helper comes from task 1113.
   - A missing `decisionService` dependency fails the action (`ok: false`): it is a wiring error.
-- [ ] R3. Extract `readDecisionEvidence(paths, readFile): Promise<{ instructions: string; evidenceDigest: string }>` into `packages/app/src/decision/decision-evidence-input.ts`.
+- [x] R3. Extract `readDecisionEvidence(paths, readFile): Promise<{ instructions: string; evidenceDigest: string }>` into `packages/app/src/decision/decision-evidence-input.ts`.
   - Each file is redacted and bounded with `redactAndBound(text, [], DECIDE_EVIDENCE_MAX_CHARS)`. The files are joined with `'\n\n'`, and the digest is `sha256:` of the joined string.
   - An unreadable file throws `Error('evidence file "<path>" is unreadable')`.
   - The CLI (`apps/cli/src/commands/decision.ts:158-172` and the join in `parseParams` at `:351`) and the runner both call it. The CLI's output is byte-identical to today.
   - The runner resolves paths against the workdir. On a throw it writes the degraded row (reason `error`) and emits one `decision.rejected` (errorKind `error`), with no service decide call.
-- [ ] R4. The served result maps onto the unchanged schemaVersion-1 `DecideResult` row (`packages/app/src/workflow/decide.ts:53`):
+- [x] R4. The served result maps onto the unchanged schemaVersion-1 `DecideResult` row (`packages/app/src/workflow/decide.ts:53`):
 
   | Row field | Source |
   | --- | --- |
@@ -66,24 +68,24 @@ Today the workflow `decide` action (`packages/app/src/workflow/actions/decide.ts
   | `confidence`, `reason`, `source`, `durationMs` | passed through |
 
   Guards and resultFile paths are untouched.
-- [ ] R5. With `workflow.decideDecisionMaker` off (`packages/config/src/index.ts:842`, default off), the catalog form:
+- [x] R5. With `workflow.decideDecisionMaker` off (`packages/config/src/index.ts:842`, default off), the catalog form:
   - makes no `decide` call, reads no evidence and emits no events;
   - writes the catalog fallback, mapped per R4, with `source: 'default'`, `reason: 'disabled'`, `backend: null`;
   - reads the fallback from `service.describe(decision).fallback`, the only service call allowed.
 
   This is feature R1.
-- [ ] R6. Caller mistakes in the catalog form fail the action (`ok: false`, the service error message) and do not degrade. The mistakes are an unknown id, bad params and an unregistered maker. The service already emits `decision.rejected`.
-- [ ] R7. Validation.
+- [x] R6. Caller mistakes in the catalog form fail the action (`ok: false`, the service error message) and do not degrade. The mistakes are an unknown id, bad params and an unregistered maker. The service already emits `decision.rejected`.
+- [x] R7. Validation.
   - `collectDecideViolations(def, catalogIds?)` reports a catalog-form `decision` that is absent from `catalogIds`, naming the id. It also reports a catalog decision whose type is not `choice`/`noul`, which requires passing types: use `ReadonlyMap<string, DecisionType>` instead of a Set.
   - `validate` (`workflow-service.ts:674`) builds the map from `(await getDecisionService(...)).list()` only when the definition contains a catalog-form action. If the service fails to load, that becomes a violation.
   - Each inline-form action emits one warning through `this.ctx.warn`: `decide <state>/<id>: inline decide options are deprecated; use { decision: <catalog-id>, params?, evidence?, resultFile }` (feature R3).
   - The runner emits the same text once per run per inline `id` through `DecideActionDeps.warn`.
-- [ ] R8. Inline driver parity.
+- [x] R8. Inline driver parity.
   - `InlineRunDecideInput` and `InlineDecideInput` gain `spurConfig?: SpurConfig | null`.
   - `runDecideForInlineRun` (`packages/app/src/services/inline-run-setup.ts:864`) passes `decisionService: () => getDecisionService(spurConfig ?? null, workdir)` to the runner.
   - The plugin delegate (`plugins/sp/scripts/inline-run-setup.ts:152`) loads config once through a new bundled-lib `loadSpurConfig` export, derives `enabled` from it and passes both.
   - Both forms write the same row as the engine runner. Regenerate the bundles (`bun run --filter @gobing-ai/spur build:bundle`), then run `bun run plugin-smoke`.
-- [ ] R9. No shipped workflow YAML changes. No new public `spur` noun, verb or flag. The inline form keeps working unchanged.
+- [x] R9. No shipped workflow YAML changes. No new public `spur` noun, verb or flag. The inline form keeps working unchanged.
 
 **Out of scope:**
 
@@ -93,8 +95,8 @@ Today the workflow `decide` action (`packages/app/src/workflow/actions/decide.ts
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Workflow decide action resolves a catalog decision by id
-- [ ] AC2 — Inline decide options keep working for one release with a deprecation warning
+- [x] AC1 — Workflow decide action resolves a catalog decision by id
+- [x] AC2 — Inline decide options keep working for one release with a deprecation warning
 
 ### Q&A
 
@@ -184,15 +186,125 @@ Today the workflow `decide` action (`packages/app/src/workflow/actions/decide.ts
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `apps/cli/src/commands/decision.ts:10` |
+| `apps/cli/src/commands/decision.ts:165` |
+| `apps/cli/src/commands/decision.ts:171` |
+| `apps/cli/src/commands/decision.ts:3` |
+| `apps/cli/tests/commands/task.test.ts:2222` |
+| `apps/cli/tests/commands/task.test.ts:2453` |
+| `apps/cli/tests/commands/task.test.ts:2930` |
+| `apps/cli/tests/commands/task.test.ts:2997` |
+| `apps/server/tests/modules/task/transition-gate.test.ts:64` |
+| `docs/help/cmd_task.md:140` |
+| `docs/tasks5/1117_require-a-usable-confidence-level-at-the-done-gate-artifact-.md:1` |
+| `packages/app/src/index.ts:30` |
+| `packages/app/src/index.ts:880` |
+| `packages/app/src/index.ts:882` |
+| `packages/app/src/index.ts:887` |
+| `packages/app/src/services/done-transition-guard.ts:248` |
+| `packages/app/src/services/done-transition-guard.ts:29` |
+| `packages/app/src/services/done-transition-guard.ts:405` |
+| `packages/app/src/services/done-transition-guard.ts:470` |
+| `packages/app/src/services/done-transition-guard.ts:74` |
+| `packages/app/src/services/inline-run-setup.ts:1552` |
+| `packages/app/src/services/inline-run-setup.ts:1591` |
+| `packages/app/src/services/inline-run-setup.ts:49` |
+| `packages/app/src/services/inline-run-setup.ts:67` |
+| `packages/app/src/services/inline-run-setup.ts:842` |
+| `packages/app/src/services/inline-run-setup.ts:893` |
+| `packages/app/src/services/inline-run-setup.ts:896` |
+| `packages/app/src/services/workflow-service.ts:2089` |
+| `packages/app/src/services/workflow-service.ts:21` |
+| `packages/app/src/services/workflow-service.ts:67` |
+| `packages/app/src/services/workflow-service.ts:675` |
+| `packages/app/src/services/workflow-service.ts:72` |
+| `packages/app/src/workflow/actions/decide.ts:114` |
+| `packages/app/src/workflow/actions/decide.ts:129` |
+| `packages/app/src/workflow/actions/decide.ts:146` |
+| `packages/app/src/workflow/actions/decide.ts:15` |
+| `packages/app/src/workflow/actions/decide.ts:2` |
+| `packages/app/src/workflow/actions/decide.ts:212` |
+| `packages/app/src/workflow/actions/decide.ts:247` |
+| `packages/app/src/workflow/actions/decide.ts:28` |
+| `packages/app/src/workflow/actions/decide.ts:31` |
+| `packages/app/src/workflow/actions/decide.ts:34` |
+| `packages/app/src/workflow/actions/decide.ts:69` |
+| `packages/app/src/workflow/actions/decide.ts:7` |
+| `packages/app/src/workflow/builtins.ts:10` |
+| `packages/app/src/workflow/builtins.ts:116` |
+| `packages/app/src/workflow/builtins.ts:62` |
+| `packages/app/src/workflow/composition-lint.ts:11` |
+| `packages/app/src/workflow/composition-lint.ts:19` |
+| `packages/app/src/workflow/composition-lint.ts:201` |
+| `packages/app/src/workflow/composition-lint.ts:210` |
+| `packages/app/src/workflow/composition-lint.ts:220` |
+| `packages/app/src/workflow/composition-lint.ts:236` |
+| `packages/app/src/workflow/composition-lint.ts:240` |
+| `packages/app/src/workflow/composition-lint.ts:263` |
+| `packages/app/src/workflow/composition-lint.ts:268` |
+| `packages/app/src/workflow/composition-lint.ts:271` |
+| `packages/app/tests/services/done-transition-guard.test.ts:27` |
+| `packages/app/tests/services/done-transition-guard.test.ts:271` |
+| `packages/app/tests/services/done-transition-guard.test.ts:305` |
+| `packages/app/tests/services/done-transition-guard.test.ts:9` |
+| `packages/app/tests/services/task-transition.test.ts:16` |
+| `plugins/sp/lib/inline-run.generated.d.mts:30` |
+| `plugins/sp/lib/inline-run.generated.mjs:1710` |
+| `plugins/sp/lib/inline-run.generated.mjs:1713` |
+| `plugins/sp/lib/inline-run.generated.mjs:1715` |
+| `plugins/sp/lib/inline-run.generated.mjs:1720` |
+| `plugins/sp/lib/inline-run.generated.mjs:1746` |
+| `plugins/sp/lib/inline-run.generated.mjs:1750` |
+| `plugins/sp/scripts/inline-run-setup.mjs:148` |
+| `plugins/sp/scripts/inline-run-setup.ts:151` |
+| `plugins/sp/skills/code-verification/references/verdict-schema.md:189` |
+| `plugins/sp/skills/code-verification/references/verdict-schema.md:38` |
+| `plugins/sp/skills/spur-dev/references/execution-workflow.md:179` |
+| `scripts/commands/bundle-plugin-lib.ts:644` |
+| `packages/app/src/decision/decision-evidence-input.ts:1` |
+| `packages/app/tests/decision/decision-evidence-input.test.ts:1` |
+| `packages/app/tests/workflow/actions/decide-catalog.test.ts:1` |
+| `packages/app/tests/workflow/decide-validate-catalog.test.ts:1` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | packages/app/src/workflow/actions/decide.ts — DecideOptionsSchema is a discriminated union (InlineDecideOptionsSchema unchanged; CatalogDecideOptionsSchema strict {decision, params?, evidence?, resultFile} rejecting id/question/choices/default/method/minConfidence via .strict()); isCatalogDecideOptions exported (decide.ts:105) and unit-tested (tests/workflow/actions/decide-catalog.test.ts — unknown keys, union, key-presence semantics). |
+| R2 | MET | DecideActionDeps gains lazy decisionService? (decide.ts:63); builtins.ts:116 wires RegisterSpurBuiltinsOptions.decisionService through; workflow-service.ts:2091 and :2214 supply `() => getDecisionService(this.ctx.spurConfig ?? null, this.ctx.cwd)`; runner builds context `{caller:'workflow', correlation}` from 1113's decisionCorrelationFromVars (decide.ts catalog runner); missing dependency → ok:false wiring error (catalog-path guard). Tests: decide-catalog.test.ts fake-service rows + unknown-id rejection via decision.rejected. |
+| R3 | MET | packages/app/src/decision/decision-evidence-input.ts exports readDecisionEvidence (redactAndBound per file, '\n\n' join, sha256 digest, 'evidence file "<path>" is unreadable' throw); consumed by the runner (paths resolved against workdir; throw → degraded 'error' row + one decision.rejected, no decide call) and by apps/cli/src/commands/decision.ts (--evidence read + parseParams join), CLI output byte-identical. Tests: tests/decision/decision-evidence-input.test.ts + runner degraded-row test. |
+| R4 | MET | Catalog runner maps served results onto the unchanged schemaVersion-1 row: method = catalog type gated to choice |
+| R5 | MET | With the switch off the catalog path calls only service.describe(decision).fallback, writes the mapped fallback row (source 'default', reason 'disabled', backend null, confidence null, durationMs 0) and makes no decide call / reads no evidence / emits no events. Tests: disabled-row test (fake service asserting no decide) + real-service disabled integration. E2E: delegate --decide against served 'gate-evidence' produced the disabled row end to end. |
+| R6 | MET | Caller mistakes fail the action with the service error message and no degrade: unknown id → runner emits decision.rejected + ok:false row; params.instructions reservation fails unconditionally before any evidence read; malformed/unknown evidence read is the one degraded path (R3). Tests: rejected-event payload assertion (decisionId/message/correlation), params.instructions reserved test, unknown-id row assertion. |
+| R7 | MET | composition-lint: collectDecideViolations takes ReadonlyMap<string, DecisionType> (unknown id named in the error; non-choice/noul type rejected); validate builds the map from (await getDecisionService(...)).list() only when hasCatalogDecideAction(def), service failure → 'decide validation failed: decision catalog unavailable — …'; inline actions warn 'decide <state>/<id>: inline decide options are deprecated; use { decision: <catalog-id>, params?, evidence?, resultFile }' through ctx.warn at validate and once per run per id in the runner. Tests: decide-catalog.test.ts lint section + deprecation-warning tests; integration tests/workflow/decide-validate-catalog.test.ts (valid catalog clean + silent, legacy warn, unknown id error, malformed catalog fails closed). |
+| R8 | MET | InlineRunDecideInput/InlineDecideInput gain spurConfig?: SpurConfig |
+| R9 | MET | git status shows no shipped workflow YAML, no spur noun/verb/flag additions (decision noun already existed; only internal flags), inline form unchanged (existing decide.test.ts + workflow suites pass). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Workflow decide action resolves a catalog decision by id | MET | test | Real-service integration resolves pick-lane (choice, 'slow', typesafe backend) and is-clean (noul, 'no') through getDecisionService and maps them onto the schemaVersion-1 row (packages/app/tests/workflow/actions/decide-catalog.test.ts); E2E delegate --decide wrote the disabled-row artifact .spur/run/1094-e2e-row.json through the installed-CLI handshake. |
+| Inline decide options keep working for one release with a deprecation warning | MET | test | Existing inline suites pass (packages/app/tests/workflow/actions/decide.test.ts); validate integration asserts the exact deprecation warning once per inline action through ctx.warn and the runner warns once per run per id (packages/app/tests/workflow/actions/decide-catalog.test.ts, tests/workflow/decide-validate-catalog.test.ts). |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -202,4 +314,7 @@ Today the workflow `decide` action (`packages/app/src/workflow/actions/decide.ts
 
 - 2026-10-06T18:16:39.105Z todo → blocked (system)
 - 2026-10-07T16:29:37.970Z blocked → todo (system)
+- 2026-10-07T21:30:37.552Z todo → wip (system)
+- 2026-10-07T21:30:43.111Z wip → testing (system)
+- 2026-10-07T21:30:44.845Z testing → done (system)
 
