@@ -6,7 +6,7 @@ status: active
 priority: P2
 tags: []
 created_at: "2026-10-06T18:15:41.140Z"
-updated_at: "2026-10-07T03:48:25.544Z"
+updated_at: "2026-10-07T16:26:07.700Z"
 ---
 
 # P1: Workflow decision points adopt spur decision catalogs
@@ -36,7 +36,13 @@ Make `spur decision` production ready: every decision it serves is observable an
 
 **Entry condition**
 
-Event, report and audit slices start immediately. Each workflow adoption slice starts only when the reliability report shows recorded evidence for its decision id and effective maker.
+Event, report, audit and decide-framework slices start immediately. Each workflow adoption slice starts only when the reliability report (`spur decision status --reliability --json`) shows recorded evidence for its decision id and effective maker that meets the slice's evidence bar:
+
+- Only samples served by a configured, reachable maker count. `no-backend` fallbacks prove the fallback path, not maker reliability, and do not count.
+- The bar (minimum samples, minimum accepted rate) is an operator call recorded in the slice's Q&A before the slice leaves `blocked`. A slice that starts without meeting it records an explicit operator waiver there.
+- Evidence is gathered in the project database with `spur decision run <id> --evidence <file>` over real historical inputs (the CLI and the workflow path send the same `instructions` input), not in a throwaway worktree.
+
+Review note (2026-10-07): slices 1097 and 1098 cited two `no-backend` samples from a worktree DB, and 1099 overrode the condition by batch order. The project report shows zero samples for every id. Those slices stay landed (each is rescue-only and reproduces today's route on fallback), but their decision points have no reliability evidence yet.
 
 ## Acceptance Criteria
 
