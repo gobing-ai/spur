@@ -4,10 +4,10 @@ name: Persist decision invocations to decision_logs and add a Board Decisions ta
 status: todo
 template: feature-impl
 created_at: 2026-10-07T02:58:40.297Z
-updated_at: "2026-10-07T03:13:51.155Z"
+updated_at: "2026-10-07T16:27:37.215Z"
 feature_id: P1
 
-dependencies: ["1095"]
+dependencies: ["1095", "1113"]
 ---
 
 ## 1100. Persist decision invocations to decision_logs and add a Board Decisions tab
@@ -27,7 +27,7 @@ The UI contract is in root `DESIGN.md` § Product UI — Decisions.
 
 - [ ] R0. Scope boundary: the `decision.*` lifecycle events from task 1095 stay in `system_events`, together with every other source. This task does not move, copy or widen them. `decision_logs` stores decision records (one per invocation), not events, and the two join on `invocationId`.
 - [ ] R1. Add migration `0052_spur_cli_decision_logs`:
-  - The file `drizzle/0052_spur_cli_decision_logs.sql` must be byte-compatible with a new `DECISION_LOGS_SCHEMA_SQL` constant in `packages/domain/src/migrations.ts`, registered after `0051_spur_cli_coordination_runs_parent` (`migrations.ts:1584`).
+  - The file `drizzle/0052_spur_cli_decision_logs.sql` must be byte-compatible with a new `DECISION_LOGS_SCHEMA_SQL` constant in `packages/domain/src/migrations.ts`, registered after `0051_spur_cli_coordination_runs_parent` (`migrations.ts:1587`). Confirm `0052` is still the next free prefix at pickup (H15 work is landing in parallel).
   - It creates `decision_logs` with the columns of design §3.5 and a `maker_name` column holding the registered `DecisionMaker` name (the registry key, `ServedDecision.maker`; null only for a `rejected` row that failed before a maker resolved), and the indexes `(started_at)`, `(decision_id, started_at)`, `(maker_name, started_at)` and `(run_id)`.
   - It uses `CREATE TABLE IF NOT EXISTS` and is idempotent.
 - [ ] R2. Add `packages/domain/src/dao/decision-log-dao.ts` (raw SQL over `DbAdapter`, the same pattern as `SystemEventDao`, `packages/domain/src/dao/system-event-dao.ts:229`). Export it from the domain index.
@@ -37,24 +37,27 @@ The UI contract is in root `DESIGN.md` § Product UI — Decisions.
   - `facets(spec{since?})` returns the distinct decision ids and `maker_name` values.
   - `get(id)` returns the full row or null.
 - [ ] R3. Record at the 1095 emitter seam (`packages/app/src/decision/decision-events.ts`):
-  - The invocation handle gains `phase(name)` marks. Phases are `resolve`, `evidence`, `maker-init`, `maker-call` and `serve`.
-  - It accepts an optional `decisionLog?: DecisionLogDao` plus `{ secrets, mode }`, where `mode` is the `decisions.log` value.
+  - The lifecycle clock opens at the **service entry**, before resolution, so `started_at` and the `resolve` phase are real and a rejected call shares the same clock. Today `beginDecisionInvocation` runs only after resolution, and `emitDecisionRejected` mints its own id; both gain an optional `log` argument `{ dao, secrets, mode, startedAt, phases, input?, question?, fallbackValue?, catalogSource? }` and write the row under the same `invocationId` their events carry.
+  - Phases are `resolve`, `evidence` (CLI and workflow paths only), `maker` and `serve`. `maker` is the whole `hub.decide` call: ts-ai-decision 0.5.16 resolves the maker and asks it inside one call (`dist/hub.js:165-167`), so `maker-init` and `maker-call` are not separately observable at Spur's seam. Update design §3.5 to this phase list.
   - At `end` or `rejected`, it inserts exactly one row built per §3.5:
     - input redacted with `redactAndBound` and the configured secrets (`configuredSecretValues(env)`), at most 16 KiB;
     - question and error at most 2 KiB each;
     - `maker_name` set from the resolved maker name.
     - `outcome` set to `accepted` (`source` model and `reason` accepted), `fallback`, or `rejected`.
+  - Every rejection site writes a row, including the three CLI pre-decide sites in `apps/cli/src/commands/decision.ts` (unknown id via `describe`, unreadable evidence, bad `--param`) and the input rejection added by task 1113.
+  - The workflow inline-question path (`packages/app/src/workflow/actions/decide.ts`) emits after `runDecide` returns, so its row records one `maker` phase of `result.durationMs`, `started_at = ended_at - durationMs`, `question` = the inline question, and `maker_source` `inline`. Task 1094 moves catalog decides onto the service path; inline rows remain until S8 removes the inline form.
   - The insert is best-effort: a failure goes to the warn sink and never changes the decision result or the error thrown to the caller.
 - [ ] R4. Pass the DAO from every caller that 1095 wired:
   - `spur decision run` (`apps/cli/src/commands/decision.ts`) uses `new DecisionLogDao(await context.getDb())`, with `DecideOptions.decisionLog`;
   - the workflow decide runner uses a `DecideActionDeps.decisionLog` wired in `packages/app/src/workflow/builtins.ts`, from the workflow service DB;
   - the inline driver (`packages/app/src/services/inline-run-setup.ts`, `runInlineRunDecide`) uses `projectDb.adapter`;
-  - the evidence-mode gate path (task 1099, `packages/app/src/services/workflow-service.ts`, `buildDecisionEvaluator`) uses the workflow service DB, when 1099 has landed. If 1099 has not landed, leave this caller out and record that in Solution.
+  - the evidence-mode gate path (task 1099, landed: `packages/app/src/services/workflow-service.ts:2117` `buildDecisionEvaluator`, service injected at `:2179`) uses the workflow service DB. The gate calls `service.decide`, so the DAO travels on `DecideOptions.decisionLog`.
 - [ ] R5. Config: `DecisionsConfigSchema` (`packages/config/src/index.ts:824`) gains a single key, `log: z.enum(['full', 'metadata', 'off']).default('full')`.
   - `off` writes no rows.
   - `metadata` writes rows with null `input_json` and `question`.
   - None of the values affects `decision.*` events.
-  - Update the config design satellite that documents `decisions.*`.
+  - `decisions` is optional in `spurConfigSchema` (`packages/config/src/index.ts:1001`); read the mode as `config?.decisions?.log ?? 'full'`.
+  - Update the config table in `docs/design/decision-catalog.md` (the satellite that documents `decisions.paths/maker/makers`).
 - [ ] R6. Contracts and server:
   - Add Zod schemas `decisionLogRowSchema`, `decisionLogDetailSchema` and `decisionLogListResponseSchema` (rows, summary{count, acceptedRate, fallbackRate, p95DurationMs}, facets{decisionIds, makers}, nextCursor) in `packages/contracts/src/observability.ts`.
   - Add an app query service, `packages/app/src/decision/decision-log-query.ts`, that computes rates and the nearest-rank p95.
@@ -83,6 +86,13 @@ The UI contract is in root `DESIGN.md` § Product UI — Decisions.
 - There is no CLI reader (for example `spur decision logs`). That would be a public-surface change, and the Board plus the API cover the request. Add one with operator consent if a terminal workflow needs it.
 - Dependencies: task 1095 (emitter module, invocation id, caller wiring). Task 1099's gate path is wired only if it has landed, and otherwise recorded in Solution, so 1100 does not block on 1099.
 - The open-design MCP server was unavailable during refinement, so the UI contract was derived from the shipped Jobs and System Events tabs and recorded in `DESIGN.md`.
+
+#### Q&A entry — 2026-10-07 P1 review
+
+- Depends on task 1113: it moves input rejection ahead of `decision.start` and adds `errorKind: 'input'`. Without it, a bad workflow/gate parameter produces a `start` with no terminal event, and the row's outcome would be ambiguous.
+- The handle opens at service entry (R3) because §3.5's `resolve` phase and a rejected row's `started_at` cannot be measured from a handle created after resolution.
+- `maker-init`/`maker-call` collapse into one `maker` phase: the upstream hub does both inside `decide`. Splitting them needs an upstream hook, which feature P1 keeps out of scope.
+- 1099 has landed, so the gate DAO wiring is unconditional.
 
 ### Design
 
