@@ -124,6 +124,65 @@ each group it reports:
 It never calls a maker. A decision with zero rows reports `evidence: none`. This report is the
 evidence each adoption slice cites.
 
+### 3.5 Decision log (`decision_logs`)
+
+The `decision.*` lifecycle events of §3.3 are stored in `system_events` with every other source.
+They stay metadata-only and are capped together with the rest. `decision_logs` is a separate table
+of **decision records, not events**: one row per invocation, holding the input the maker actually
+saw, the answer it gave, and where the time went. Its primary key is the `invocationId`, so a record
+joins its events. The table is owned by `packages/domain` (migration `0052`), and the DDL is
+mirrored in `packages/domain/src/migrations.ts`.
+
+| Column | Content |
+| --- | --- |
+| `id` | `invocationId` (PK) |
+| `decision_id`, `decision_type` | Catalog id or inline-question id, and the decision type |
+| `caller` | `cli`, `workflow` or `gate` |
+| `run_id`, `workflow_name`, `node_id`, `wbs` | Correlation. Null when the caller did not pass it. |
+| `maker_name` | Name of the registered `DecisionMaker` that served the call: the registry key, the same as `ServedDecision.maker`. Not null for served calls; null for a `rejected` call that failed before a maker resolved. Used to compare makers and to select data for maker fine-tuning. |
+| `maker_source`, `catalog_layer`, `catalog_source`, `min_confidence` | How the maker was chosen, and catalog resolution |
+| `question` | Inline-question text, or null for catalog ids. Redacted, ≤ 2 KiB. |
+| `input_json` | The decide input, redacted with the built-in pattern plus configured secrets, ≤ 16 KiB, with a `"truncated": true` marker when cut. Null when `decisions.log` is `metadata`. |
+| `input_keys_json`, `evidence_digest` | Always stored, even when input capture is off |
+| `outcome` | `accepted`, `fallback` or `rejected` |
+| `value`, `fallback_value`, `source`, `reason`, `confidence` | Served result. `value` is null for `rejected`. |
+| `error` | Maker error or rejection message, redacted, ≤ 2 KiB |
+| `started_at`, `ended_at`, `duration_ms` | Wall clock |
+| `phases_json` | `[{ phase, startedAt, durationMs }]` with phase ∈ `resolve`, `evidence`, `maker-init`, `maker-call`, `serve`. Only phases the caller observed are listed. |
+| `schema_version` | `1` |
+
+Indexes: `(started_at)`, `(decision_id, started_at)`, `(maker_name, started_at)`, `(run_id)`.
+
+**Write seam.**
+- The §3.3 emitter module builds the row and inserts it once, at `end` (or at `rejected`), through
+  a `DecisionLogDao` that the caller passes in. That is the CLI context DB, the workflow service DB,
+  the inline driver's `projectDb.adapter`, or the gate evaluator's DB.
+- The write is best-effort, like emission: a failed insert is warned and swallowed, and it never
+  changes the decision result.
+- With no DAO passed, nothing is written.
+
+**Retention.** After each insert, rows beyond the newest 10,000 are deleted by `started_at`.
+
+**Config.** One key, `decisions.log`: `full` (default) | `metadata` | `off`.
+- `full` writes every column.
+- `metadata` writes the row but nulls `input_json` and `question`, for projects whose inputs are too sensitive to keep even after redaction.
+- `off` writes no rows.
+- Events are not affected by any of these values.
+
+### 3.6 Board Decisions tab
+
+The Observability module gains a `decisions` tab, placed after Routing. It is served by:
+
+- `GET /api/observability/decisions`:
+  - Query params: `since`, `decisionId`, `maker` (matches `maker_name`), `outcome`, `caller`, `runId`, `limit` ≤ 200, and `before` (cursor `started_at|id`).
+  - Returns `{ rows, summary: { count, acceptedRate, fallbackRate, p95DurationMs }, facets: { decisionIds, makers }, nextCursor }`.
+  - List rows omit `input_json`, `question` and `phases_json`.
+- `GET /api/observability/decisions/:id`: the full row, or 404.
+
+Both are Zod schemas in `packages/contracts/src/observability.ts`. The handlers in
+`apps/server/src/modules/observability/index.ts` call a `packages/app` query service. UI rules live
+in root `DESIGN.md` § Product UI — Decisions.
+
 ## 4. Workflow audit (`config/workflows/*.yaml`)
 
 Classes:
@@ -157,6 +216,7 @@ gates get catalog entries and lifecycle events.
 | S1 | Event catalog entries, presenters, the `decision` source, and emission in `DecisionService` | now |
 | S2 | Ledger wiring for `spur decision run` and the workflow bus, plus correlation passing | S1 |
 | S3 | Reliability report over `system_events` | S2 |
+| S3b | `decision_logs` table and Board Decisions tab (§3.5–§3.6, task 1100) | S2 |
 | S4 | Task 1094: catalog-reference `decide`, the three task-pipeline decision points, and the inline deprecation warning | S3 report shows evidence for `task-triage`, `failure-class`, `review-failure-class` |
 | S5 | `idea-recommendation` + `needs-design` catalog entries and rescue paths in idea-pipeline | S3 evidence for both ids (gathered with `spur decision run`) |
 | S6 | `anatomy-validation-verdict` rescue in history-anatomy | S3 evidence |

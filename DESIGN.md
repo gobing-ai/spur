@@ -450,6 +450,49 @@ the shared canvas/surface/hairline/type tokens above.
   under the event name and Agent. No horizontal information loss may require
   color interpretation.
 
+## Product UI — Decisions
+
+The Observability **Decisions** tab is a dense diagnostic table over `decision_logs`, built in the
+same idiom as Jobs and System Events. It uses the shared tokens and `@/ui` primitives, and adds no
+new component library.
+
+- **Header strip.** Four KPI cards, reusing Summary's `KpiCard`: Invocations, Accepted rate,
+  Fallback rate, and p95 duration. They are computed for the active filters and the shell time
+  range.
+- **Filters row.** Decision id and maker are selects populated from the response facets. Outcome
+  is a segmented toggle (All / Accepted / Fallback / Rejected) reusing `SegmentedToggle`. Caller is
+  a select. Run id is a text input. The row ends with a Refresh button and the retention badge,
+  whose copy reads "Decision logs keep the newest 10,000 invocations". Filters are tab-local; the
+  time range stays shell-owned.
+- **Columns:**
+  - Time: relative, with the absolute time in a tooltip.
+  - Decision: mono.
+  - Caller.
+  - Maker, with maker source as secondary text.
+  - Value: mono.
+  - Outcome: icon + text. Accepted uses success semantics; fallback uses warning semantics and
+    shows its reason (e.g. `fallback · no-backend`); rejected uses error semantics.
+  - Confidence: two decimals, or `-`.
+  - Duration: `formatDuration`.
+  - Run: short id, or `-`.
+- **Order and paging.** Newest first. Infinite paging uses the `before` cursor. A missing value
+  renders as `-`.
+- **Detail drawer.** Row activation (click or Enter) opens a drawer, modelled on `JobDetailDrawer`.
+  It has these sections:
+  - Summary: decision, caller, maker and source, catalog layer and file, and min confidence.
+  - Result: value, fallback, source, reason, confidence, and error.
+  - Timeline: one horizontal bar per phase, scaled to total duration, with ms labels.
+  - Input: pretty-printed mono JSON with a Copy action. When input capture was off, it shows
+    "Input not recorded (decisions.log: metadata)". When the input was cut, it shows a truncated notice.
+  - Links: "View run events", which navigates to System Events filtered by the run id through the
+    existing nav intent, shown only when a run id exists.
+- **States and accessibility.**
+  - Empty state: "No decisions recorded in this range". Its hint names `spur decision run`.
+  - Error state: an actionable message with Retry.
+  - The tab streams nothing. It fetches on mount, on filter or range change, and on Refresh.
+  - Keyboard: rows are focusable, Enter opens the drawer, Escape closes it, and focus returns to
+    the row.
+
 ## Product UI — Downstream Board Modules (proposed)
 
 These accepted design rules accompany the [contribution contract](docs/design/downstream-board-modules.md)
