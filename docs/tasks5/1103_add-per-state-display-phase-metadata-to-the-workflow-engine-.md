@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Add per-state display phase metadata to the workflow engine state schema
-status: todo
+status: wip
 template: feature-impl
 created_at: 2026-10-07T06:14:15.476Z
-updated_at: "2026-10-07T07:38:16.300Z"
+updated_at: "2026-10-07T07:40:28.415Z"
 feature_id: I13
 
 priority: P1
@@ -154,4 +154,5 @@ R2 remainder (operator): push branch, push tags (aggregate tag triggers publish.
 ### History
 
 - 2026-10-07T06:21:14.115Z backlog → todo (system)
+- 2026-10-07T07:40:28.415Z todo → wip (system)
 
