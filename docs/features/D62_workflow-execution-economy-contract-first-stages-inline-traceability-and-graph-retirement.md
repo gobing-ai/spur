@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: []
 created_at: "2026-09-16T10:34:18.496Z"
-updated_at: "2026-10-02T23:18:43.216Z"
+updated_at: "2026-10-07T18:02:51.800Z"
 ---
 
 # D62: Workflow execution economy: contract-first stages, inline traceability, and graph retirement
@@ -225,6 +225,10 @@ Feature: Workflow execution economy: contract-first stages, inline traceability,
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+Scoped-gate / test-fix-timeout pilot (F3/F4): the `0912-workflow-baseline.md:55` criterion sample is recorded in `docs/reports/i31/1107-runall-p1-pilot.md` (task 1107, feature H15), with the dated verdict addendum in `docs/reports/i31/0912-workflow-baseline.md`.
+
+**R3 verdict: `partial — INSUFFICIENT_EVIDENCE retained`** — the five-run sample (1095–1099) is met, retained failing-gate output and diff attribution are not. F3/F4 stay unfrozen; `deferQualityGate` (1111) remains opt-in pending a sample with those two elements.
 
 ## History
 
