@@ -4,9 +4,10 @@ name: "Harden decision-catalog test evidence: pin rescue ordering and persisted 
 status: todo
 template: feature-impl
 created_at: 2026-10-07T07:09:24.800Z
-updated_at: "2026-10-07T07:19:56.733Z"
+updated_at: "2026-10-07T07:21:20.221Z"
 feature_id: P1
 
+ac_altitude: task-local
 ---
 
 ## 1106. Harden decision-catalog test evidence: pin rescue ordering and persisted gate rows
