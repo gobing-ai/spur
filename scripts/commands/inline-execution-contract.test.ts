@@ -331,7 +331,8 @@ describe('task 0406 / H82 — unified --agent execution-surface contract', () =>
         // 1108 amendment: the host's limit still governs as the fallback, and the driver asks the
         // host for the stage's resolved YAML budget wherever the host exposes a per-dispatch
         // timeout — so the pre-dispatch record names which of the two bounds is in force.
-        expect(driver).toContain("the host platform's limit, and the driver asks the host for the YAML budget");
+        expect(driver).toContain("the host platform's subagent limit, not the YAML timeoutMs");
+        expect(driver).toContain("host's dispatch tool accepts a");
         expect(driver).toContain('host timeout <ms> (yaml timeoutMs)');
         expect(driver).toContain('host timeout <ms> (platform subagent limit)');
         expect(driver).toContain('record the governing timeout boundary and its source before dispatch');
