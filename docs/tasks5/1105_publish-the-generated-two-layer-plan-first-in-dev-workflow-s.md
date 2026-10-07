@@ -4,7 +4,7 @@ name: Publish the generated two-layer plan first in dev workflow skills and comm
 status: todo
 template: feature-impl
 created_at: 2026-10-07T06:14:17.623Z
-updated_at: "2026-10-07T06:25:37.967Z"
+updated_at: "2026-10-07T17:45:11.355Z"
 feature_id: I13
 
 dependencies: ["1104"]
@@ -129,7 +129,49 @@ Scenario: AC4 — Plugin surfaces stay valid (req: R1, R2, R3, R4)
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Publish-first contract for workflow-backed dev runs (1105 R1–R4). The generated two-layer plan (1104
+plan-projection) is now the first visible action of every workflow-backed `/sp:dev-*` run; the
+hand-written bootstrap rows and the AA label rule are gone from run instructions; per-host todo
+update styles are documented; the batch driver publishes A/Z rows at kickoff and per-task letters at
+freeze/start/end; and super-planner states the parent host owns the visible list.
+
+#### Change map
+
+| File:line | Change |
+| --- | --- |
+| plugins/sp/skills/spur-dev/references/cross-cutting.md:247 | Shared startup contract rewritten: step 1 = publish the generated plan first (verbatim `.plan` text, `steps[]` fallback when `.plan` is null, bootstrap-row retention note for skill-only refine/verify batches); steps 2–4 = plan rows A1 quick readiness / A2 Git isolation / A3 `assertInventoryIdentity` digest binding. Heading kept byte-identical (4 inbound anchor links incl. dev-refineall/dev-verifyall). |
+| plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:127 | Run-setup intro names the new publish-first order (1105 R1) with `workflow show --no-logo --format todo --json`; labels sourced from the projection or `columnLabel`. |
+| plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:133 | Step 5 rewritten as the run's first action: publish `.plan` rows verbatim; `steps[]` inventory fallback for unannotated workflows; no-plan case keeps host preparation rows. |
+| plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:152 | Step 8 = bind the published plan to `__definitionDigest` (A3); A1/A2/A3 map to setup steps 6/7/8. |
+| plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:189 | Stable labels: A–Z/1–9, `planLetter` throws past Z (never AA/AB), `insertOnEntry` digit insertion, re-entry appends ` — attempt N`. |
+| plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:198 | Truthful progress: frozen status mapping (`pending→pending, active→in_progress, completed→completed, skipped|failed|unattempted|blocked→pending` + ` [<outcome>]`) with `renderProgressMarkdown` fallback. |
+| plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:223 | New § Host todo update styles (1105 R2): per-item (Claude Code TaskCreate/TaskUpdate, pi todo) vs full-list (Codex update_plan, Gemini write_todos, OpenCode todowrite, Grok todo_write), omp phase mapping, Markdown fallback. |
+| plugins/sp/skills/spur-dev/references/execution-batch.md:204 | New § 2.7 Visible batch plan (1105 R3): `A Prepare batch` (A1–A4) + `Z Batch report` at kickoff; task letters from `batch-plan.mjs waves --tasks` after freeze; digit children from `task-children --letter <L> --plan` at task start; letter marked with outcome at end; Step 3 loop gained the visible-plan update lines. |
+| plugins/sp/commands/dev-run.md:34 | Publish-first as the first Implementation bullet (links shared startup contract step 1 / driver step 5); startup-contract bullet updated to the new order. |
+| plugins/sp/commands/dev-runall.md:91 | Publish-first bullet names batch-plan.mjs waves/task-children and links execution-batch § 2.7. |
+| plugins/sp/commands/dev-parallel.md:30 | Publish-first bullet: orchestrator publishes A/Z + letters/digits; links § 2.7. |
+| plugins/sp/commands/dev-idea.md:55 | Publish-first bullet: `idea-pipeline.yaml` plan published before the pipeline's first stage. |
+| plugins/sp/commands/dev-plan.md:44 | Same publish-first bullet as dev-idea. |
+| plugins/sp/agents/super-planner.md:288 | New § Parent-host ownership of the visible plan (1105 R4): parent host owns the native list; subagents have no todo tools and return `{wbs, state, outcome}` per stage boundary; parent marks rows with reported outcomes. |
+| plugins/sp/tests/dogfood-testing/startup-contract.test.ts:44 | Red-first pins updated: new 0814 order, AC1 negative greps (bootstrap rows / AA rule gone), publish-first + steps[]/columnLabel fallback pins, frozen mapping + ` — attempt N` + `insertOnEntry`, R2 host-tool table pins, § 2.7 placement/naming pins, five-command first-bullet pins, super-planner `{wbs, state, outcome}` pin. |
+
+#### Verification
+
+- Red-first: 10/15 startup-contract pins failed before the prose edits; all 15 pass after.
+- `bun run spur-check` PASS (biome + typecheck + 10401 tests across 608 files + post-check rules 2/2).
+- `bun run plugin-smoke` PASS (plugin surface standalone and installs clean).
+- Live projection evidence (observed, run-scoped): `workflow show task-pipeline.yaml --format todo
+  --json` → 15 `.plan` rows (A Prepare, A1 Quick readiness, A2 Prepare Git, A3 Publish plan, B
+  Implement … E2 Record evidence · record); `idea-pipeline.yaml` → `.plan` is a non-null array
+  (annotated), so dev-idea/dev-plan publish a real generated plan.
+
+#### Risks / notes
+
+- AC3 (live run artifact recording native todo tool calls) is deferred: a worker subagent has no
+  native todo tools and cannot host a live `/sp:dev-run`. The host should capture it on the next
+  live dev-run; the R2 table and frozen mapping are pinned by tests in the meantime.
+- A pre-existing duplicated heading `## Comprehensive-check retention and evidence (R7/R8)` exists
+  in inline-pipeline-driver.md at HEAD (untouched; out of scope).
 
 ### Testing
 

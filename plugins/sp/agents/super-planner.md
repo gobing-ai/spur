@@ -285,6 +285,17 @@ With `--json`, emit the same shape as a JSON object for machine consumption.
   `spur workflow continue --answer-text` and the run resumes implement with the Q/A transcript
   (bounded by `maxEscalations`). See [execution-batch.md Step 3](../skills/spur-dev/references/execution-batch.md#step-3--the-driver-loop-r3-r4).
 
+## Parent-host ownership of the visible plan (1105 R4)
+
+The parent host owns the visible plan: apply the § 2.7 Visible batch plan updates in the parent
+session's native todo list (`execution-batch.md` § 2.7; the frozen status mapping lives in
+[inline-pipeline-driver.md](../skills/spur-dev/references/inline-pipeline-driver.md) § Host todo
+update styles). Subagents own code and evidence — subagents never render the visible list and todo
+tools are not available to them; at each **stage boundary** (implement, test, review, verify) a
+subagent returns `{wbs, state, outcome}` (+ optional `next`), and the parent marks the matching rows
+with the reported outcome. Keep letters/digits from the projection identical across both layers so
+row identity stays stable.
+
 ## Platform Notes
 
 - **Claude Code:** native - `Bash` runs `spur` CLI for deterministic verbs; `Skill()` is available

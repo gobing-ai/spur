@@ -88,8 +88,13 @@ full distinction.
 
 ## Implementation
 
+- **Publish the visible batch plan first (1105):** publish `A Prepare batch` (A1–A4) and `Z Batch
+  report` before the first task, then one letter per task from `batch-plan.mjs waves` after
+  freeze/order and digit children from `batch-plan.mjs task-children` at task start —
+  [execution-batch.md](../skills/spur-dev/references/execution-batch.md#27-visible-batch-plan-1105-r3)
+  § 2.7 Visible batch plan.
 - Apply the [inline-default execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface). Interactive sequential omit/`inline` keeps the orchestrator in the host session through the [inline pipeline driver](../skills/spur-dev/references/inline-pipeline-driver.md); the resolved selector applies uniformly — eligible `agent.run` stages dispatch once to a native subagent with host fallback (0508). `--agent auto`, a name, or parallel mode retains the isolated per-task workflow boundary.
-- Apply the [shared startup contract](../skills/spur-dev/references/cross-cutting.md#shared-startup-contract-task-0814-r1r3r4r6r7r8) — bootstrap checklist, quick readiness before isolation, workflow inventory before YAML, comprehensive checks at owning boundaries (task 0814 R1/R3/R4/R7/R8).
+- Apply the [shared startup contract](../skills/spur-dev/references/cross-cutting.md#shared-startup-contract-task-0814-r1r3r4r6r7r8) — publish the generated plan first, quick readiness before isolation, digest binding, comprehensive checks at owning boundaries (task 0814 R1/R3/R4/R7/R8; 1105 R1).
 - Interactive sequential omit/inline: `Skill(skill="sp:spur-dev", args="runall-inline $ARGUMENTS")`.
 - Explicit executor or parallel mode: `Skill(skill="sp:spur-dev", args="runall $ARGUMENTS")` → `sp:super-planner` agent.
 - After the batch report, print the [execution summary](../skills/spur-dev/references/dev-operations.md#execution-summary) over every attempted run unless

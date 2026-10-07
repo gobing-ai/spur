@@ -59,16 +59,18 @@ and YAML changes require restarting the invoking process.
 
 ## Run setup
 
-**Shared startup contract (task 0814 R1/R3/R4/R6/R7).** The order is load-bearing: publish a compact
-**bootstrap checklist** immediately (host-preparation rows, never copied workflow states); run quick
-deterministic readiness (admission, not an implementation certificate) before any isolation; when
-`--worktree` is valid, create/adopt and switch to the execution tree; then publish the **workflow
-inventory** (the CLI todo projection) — and only then read the full YAML for comprehensive/model work.
-Comprehensive checks stay at their owning boundaries and run after the plan is visible and after
-isolation when requested (R7); quick readiness and plan projection dispatch zero models and execute
-zero workflow actions (R8). Use the stable label helpers
-(`columnLabel` / `buildStepLabels` / `labelChild` in `packages/app/src/workflow/step-reporter.ts`) for
-the human/native presentation layer — labels are display addresses only, never an execution key.
+**Shared startup contract (task 0814 R1/R3/R4/R6/R7; publish-first 1105 R1).** The order is
+load-bearing: publish the **generated plan** first — resolve the selected workflow through the same
+project/bundled resolver as execution, run `spur workflow show <resolved-file> --no-logo --format
+todo --json`, and publish the `.plan` rows verbatim (the projection reads the definition and executes
+nothing, so it is safe before readiness and isolation); run quick deterministic readiness (admission,
+not an implementation certificate) next; when `--worktree` is valid, create/adopt and switch to the
+execution tree; then bind the published plan to the run's persisted `__definitionDigest` — and only
+then read the full YAML for comprehensive/model work. Comprehensive checks stay at their owning
+boundaries and run after the plan is visible and after isolation when requested (R7); quick readiness
+and plan projection dispatch zero models and execute zero workflow actions (R8). Labels come from the
+projection (or `columnLabel` in `packages/app/src/workflow/step-reporter.ts` for the `steps[]`
+fallback) — labels are display addresses only, never an execution key.
 
 1. Resolve the command inputs, `--auto`, and any explicit `--vars` — **without reading the selected
    YAML yet**. An explicit non-inline executor selection chooses the subprocess workflow path.
@@ -128,10 +130,21 @@ the human/native presentation layer — labels are display addresses only, never
    `session` and the Codex key `session_id` (in that order). If neither is available, allocate
    `host-session-<run-id>` and record that fallback in the log; provenance must never be blank or
    guessed from an executor subprocess.
-5. **Publish the bootstrap checklist (R1).** Render host-preparation rows into the host todo list
-   before any expensive check: `A, Quick readiness`, `B, Prepare Git`, `C, Publish workflow plan`,
-   `D, Comprehensive checking`. These are host preparation, never copied workflow states; they are
-   not silently reassigned to unrelated workflow states when the workflow view later appears.
+5. **Publish the generated plan (R1, 1105) — the run's first action.** Run `spur workflow show
+   <resolved-file> --no-logo --format todo --json` and publish the projection into the host todo list
+   before any expensive check:
+   - **Annotated workflow (the normal case):** publish every `.plan` row's `text` **verbatim** —
+     `A Prepare`, `A1 Quick readiness`, `A2 Prepare Git`, `A3 Publish plan`, `B Implement`, … — in
+     plan order. Never hand-write rows, never copy the YAML state table into prose, and never
+     renumber: the labels carry identity.
+   - **Unannotated workflow (`.plan` is `null`):** publish the flat `steps[]` inventory in
+     declaration order with `columnLabel` labels and their `initial` / `terminal` / `failure` /
+     `pause` / `loopBack` / `conditional` markers. Never re-derive this list from the YAML.
+   - **No workflow plan at all** (skill-only refine/verify batches): keep the existing host
+     preparation rows; do not fabricate a workflow YAML.
+
+   Publishing executes nothing, so it safely precedes readiness and isolation, which keep their
+   existing order below.
 6. **Quick deterministic readiness (R2), before isolation.** Evaluate `quickReadiness` from
    `plugins/sp/scripts/batch-preflight.ts` with the operation, status, filtered-set size, the
    matrix-selected required/present sections, and content-policy findings. Record the outcome
@@ -146,15 +159,12 @@ the human/native presentation layer — labels are display addresses only, never
    inherited**: a host shell call starts in an arbitrary directory and carries no cwd from the
    previous call, so every later call runs inside the **Per-call execution-tree pin** protocol
    below (task 1058), which consumes the identity confirmed here.
-8. **Publish the workflow inventory (R4), BEFORE reading the YAML.** Resolve the selected workflow
-   through the same project/bundled resolver as execution and run
-   `spur workflow show <resolved-file> --no-logo --format todo --json`. Validate the projection with
-   `parseWorkflowInventory` and bind it to the run's persisted `__definitionDigest` with
+8. **Bind the published plan to the run digest (R4) — plan row A3.** Validate the step-5 projection
+   with `parseWorkflowInventory` and bind it to the run's persisted `__definitionDigest` with
    `assertInventoryIdentity` — a drift or projection failure stops the run before any
-   comprehensive/model work, never executing with a misleading plan.
-   - **Layer 1** = that projection's `steps[]`: the declared state inventory in declaration order
-     with `initial` / `terminal` / `failure` / `pause` / `loopBack` / `conditional` markers. Mark
-     the active state. Never re-derive this list from the YAML.
+   comprehensive/model work, never executing with a misleading plan. The A rows published at step 5
+   track this setup order: A1 = quick readiness (step 6), A2 = Git/isolation (step 7), A3 = this
+   binding; mark each row completed as its step settles.
 9. **Read the selected YAML and overlay its `vars` defaults** with the invocation values. Compare the
    resolved definition identity against the bound `__definitionDigest`; a mismatch is identity drift
    and fails closed (step 8 already caught projection-side drift; this re-checks the same definition
@@ -176,15 +186,25 @@ the human/native presentation layer — labels are display addresses only, never
      ended 0/11 with precheck and implement still open).
    - **Source of truth** = the CLI projection for layer 1; the YAML read here for layer 2.
      Never hand-copy or hand-derive the state list into the driver, a command, a skill, or a script.
-   - **Stable labels (task 0814 R5).** Top-level declaration indexes map to A, B, … Z, AA, AB …;
-     visible children restart numbering under their parent (A1, A2, B1 …). Labels never replace the
-     canonical step id, and are re-derived identically on retry/resume against the same definition.
-   - **Truthful progress (task 0814 R6).** Publish pending/active state before the visible item
-     starts, then update it immediately after the observed item completes and before the next item
-     starts. Keep completed, skipped, failed, blocked, paused, and unattempted outcomes distinct;
-     never mark skipped/conditional work completed merely to clear the UI. If the host has no
-     suitable native todo tool, or it fails, use an explicit Markdown fallback with the same labels
-     and truth — never a fabricated successful tool invocation.
+   - **Stable labels (task 0814 R5; A–Z / 1–9 rule, 1105 R1).** Labels come from the published
+     `.plan`: single letters A–Z for top-level rows, digits 1–9 for children under one letter. The
+     projection enforces that cap instead of rolling to two-letter labels (`planLetter` throws past
+     Z — split into waves or stop; never render `AA`-style addresses). An `on-entry` state is
+     inserted as the next digit the moment the host enters it (`insertOnEntry` in
+     `packages/app/src/workflow/plan-projection.ts`), appended after its letter's existing children;
+     re-entering an already-published loop state keeps its label and appends the re-entry note
+     ` — attempt N`. Labels never replace the canonical step id, and are re-derived identically on
+     retry/resume against the same definition.
+   - **Truthful progress (task 0814 R6; frozen status mapping, 1105 R1).** Publish pending/active
+     state before the visible item starts, then update it immediately after the observed item
+     completes and before the next item starts. Frozen status mapping: `pending → pending`,
+     `active → in_progress`, `completed → completed`,
+     `skipped|failed|unattempted|blocked → pending` + ` [<outcome>]` — the four engine-decided
+     outcomes stay visible on a pending row, never cleared. Keep completed, skipped, failed, blocked,
+     paused, and unattempted outcomes distinct; never mark skipped/conditional work completed merely
+     to clear the UI. Re-entry appends ` — attempt N`. If the host has no suitable native todo tool,
+     or it fails, use the `renderProgressMarkdown` fallback with the same labels and truth — never a
+     fabricated successful tool invocation.
 10. For task execution only, record lifecycle provenance before entering the FSM:
 
    ```bash
@@ -199,6 +219,25 @@ the human/native presentation layer — labels are display addresses only, never
    forced audited `--provenance-bypass` on tasks 1029/1030 (E93). Under `--worktree`, enter the
    worktree first and run this command (and every lifecycle-touching command: `task record`,
    `task update <wbs> testing|done`) from the worktree root.
+
+### Host todo update styles (1105 R2)
+
+The same published plan is updated differently per host family. Both styles keep plan order and are
+bookkeeping for the one projection — never a second source of truth:
+
+| Host | Tool(s) | Update style |
+| --- | --- | --- |
+| Claude Code | `TaskCreate` / `TaskUpdate` | per-item — create each item once, then update by id; append inserted (`on-entry`) steps at the end (the label carries identity, so list position is display only) |
+| pi | `todo` | per-item — same create-once/update-by-id discipline |
+| Codex | `update_plan` | full-list — rewrite the whole list in plan order on every update |
+| Gemini | `write_todos` | full-list — rewrite the whole list in plan order |
+| OpenCode | `todowrite` | full-list — rewrite the whole list in plan order |
+| Grok | `todo_write` | full-list — rewrite the whole list in plan order |
+| omp | host todo tool | maps plan letters to `phase` |
+| any host without a native tool | `renderProgressMarkdown` | Markdown fallback with the same labels and truth |
+
+Per-item hosts update the one row whose outcome changed; full-list hosts re-render every row from the
+current plan state. Both render the frozen status mapping above identically.
 
 ### Idea-pipeline quick start (0887 R1/R2)
 

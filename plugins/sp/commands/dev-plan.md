@@ -41,6 +41,11 @@ contract as `/sp:dev-idea`). If passed, ignore them with a one-line notice.
 
 ## Implementation
 
+- **Publish the generated plan first (1105):** resolve `idea-pipeline.yaml` and run `spur workflow
+  show <resolved-file> --no-logo --format todo --json`, then publish every `.plan` row's `text`
+  verbatim as the host todo list (the `steps[]` inventory when `.plan` is `null`) before the
+  pipeline's first stage — [inline pipeline driver](../skills/spur-dev/references/inline-pipeline-driver.md)
+  run setup step 5.
 - Apply the [inline-default execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
 - Omitted/`inline`: drive `idea-pipeline.yaml` through the [inline pipeline driver](../skills/spur-dev/references/inline-pipeline-driver.md). Do not launch `spur workflow run`, `spur agent run`, or a native subagent unless the operator explicitly requests delegation.
 - `auto`/name: launch `spur workflow run idea-pipeline.yaml --async`, observe with one `workflow trace --follow`, and only report cancellation as stopped when `workflow cancel --json` returns `killed: true`.
