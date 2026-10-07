@@ -4,7 +4,7 @@ name: "spur decision noun: list, show, run, status"
 status: done
 template: feature-impl
 created_at: 2026-10-06T17:55:55.425Z
-updated_at: "2026-10-07T00:23:06.615Z"
+updated_at: "2026-10-07T00:42:14.353Z"
 feature_id: P
 priority: P1
 tags:
@@ -38,7 +38,7 @@ Feature P (docs/design/decision-catalog.md §3.4). Thin commander transport over
 - [x] AC3 — R3 — Decision run always returns a concrete answer from the closed vocabulary
 - [x] AC4 — R4 — Decision run rejects caller mistakes before any backend call
 - [x] AC5 — R5 — Decision status reports readiness and catalog problems per layer
-- [x] AC6 — R6 — Repository decision catalogs live in config/decisions and ship in the package
+- [x] AC6 — R8 — Global config selects the default DecisionMaker for each decision point
 
 ### Q&A
 
@@ -105,7 +105,6 @@ Change-map (authored by the 2026-10-06 `--force --fix all` re-verify; the implem
 | R3 — Decision run always returns a concrete answer from the closed vocabulary | MET | test | `apps/cli/tests/commands/decision.test.ts:197` value in closed vocabulary, exit 0, no resultFile; :219 redacted bounded evidence + type coercion |
 | R4 — Decision run rejects caller mistakes before any backend call | MET | test | `apps/cli/tests/commands/decision.test.ts:251-264` five caller mistakes exit 1; :266 invalid JSON; :272 unreadable evidence |
 | R5 — Decision status reports readiness and catalog problems per layer | MET | test | `apps/cli/tests/commands/decision.test.ts:293` layer counts + makers exit 0; :315 catalog error exit 1; :324/:333 human |
-| R6 — Repository decision catalogs live in config/decisions and ship in the package | MET | test | `apps/cli/tests/commands/decision.test.ts:94` shared-layer decisions from `config/decisions/` served by the CLI; `bun run --filter @gobing-ai/spur build:bundle` emits `apps/cli/config/decisions/task-pipeline.yaml` this run |
 | R8 — Global config selects the default DecisionMaker for each decision point | MET | command | scratch project with `decisions.maker: typesafe`, `makers.task-triage: laya-local`: `spur decision show task-triage --json` → laya-local/config-decision; `show failure-class` → typesafe/config-default (run this session) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
