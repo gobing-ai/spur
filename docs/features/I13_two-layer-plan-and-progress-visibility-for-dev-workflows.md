@@ -2,11 +2,11 @@
 schema_version: 1
 id: "I13"
 name: "Two-layer plan and progress visibility for dev workflows"
-status: verifying
+status: done
 priority: P2
 tags: ["wayfinder-map"]
 created_at: "2026-10-07T05:39:04.812Z"
-updated_at: "2026-10-07T17:59:07.656Z"
+updated_at: "2026-10-07T18:02:18.459Z"
 ---
 
 # I13: Two-layer plan and progress visibility for dev workflows
@@ -114,4 +114,5 @@ Skills to consult: `sp:spur-dev` (inline-pipeline-driver, cross-cutting, executi
 - 2026-10-07T05:44:13.363Z moved Q → I13 (system)
 - 2026-10-07T17:59:03.442Z backlog → active (system)
 - 2026-10-07T17:59:07.656Z active → verifying (system)
+- 2026-10-07T18:02:18.459Z verifying → done (system)
 
