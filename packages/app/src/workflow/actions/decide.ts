@@ -3,7 +3,10 @@ import type { DecisionMaker } from '@gobing-ai/ts-ai-runner';
 import type { ActionResult, ActionRunContext, ActionRunner } from '@gobing-ai/ts-dual-workflow-engine';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { z } from 'zod';
-import { runDecide } from '../decide';
+import { beginDecisionInvocation } from '../../decision/decision-events';
+import type { SystemEventBus } from '../../services/system-event-tap';
+import { DEFAULT_MIN_CONFIDENCE, runDecide } from '../decide';
+import type { WorkflowObservabilityBus } from '../observability';
 
 /**
  * Non-pausing `decide` action runner (task 0941, ADR-125). Executes {@link runDecide} against
@@ -54,10 +57,12 @@ export const DecideOptionsSchema = z
         }
     });
 
-/** Constructor dependencies: the feature switch (R4) and the optional provider factory. */
+/** Constructor dependencies: the feature switch (R4), the optional provider factory, and the optional decision-event bus (1095). */
 export interface DecideActionDeps {
     enabled: boolean;
     decisionMaker?: () => Promise<DecisionMaker>;
+    /** Workflow observability bus carrying the cataloged `decision.*` events (task 1095). */
+    observabilityBus?: WorkflowObservabilityBus;
 }
 
 /** Runs the non-pausing `decide` action: resolves a DecisionMaker answer (or a degraded default) and writes the schemaVersion-1 result row (0941). */
@@ -96,6 +101,52 @@ export class DecideActionRunner implements ActionRunner {
                 now: Date.now.bind(Date),
             },
         );
+        // Decision lifecycle events (task 1095): start → (success | failure) → end on the
+        // workflow bus. Reason `disabled` emits nothing — no maker was involved, and it must
+        // not count as a fallback in the reliability report.
+        // SAFETY: WorkflowObservabilityBus and SystemEventBus are nominal names over one
+        // structural ts-infra EventBus instance (ADR-044 event bridge), so the decision
+        // emitter can share the workflow bus.
+        const bus = this.deps.observabilityBus as unknown as SystemEventBus | undefined;
+        if (this.deps.enabled && bus !== undefined && result.reason !== 'disabled') {
+            const maker = result.backend ?? 'none';
+            const invocation = beginDecisionInvocation(
+                bus,
+                {
+                    decisionId: options.id,
+                    caller: 'workflow',
+                    correlation: { runId: context.runId, nodeId: context.stateOrNodeId },
+                },
+                {
+                    type: options.method,
+                    maker,
+                    // The inline-question path is not catalog-backed; `inline` marks it.
+                    makerSource: 'inline',
+                    catalogLayer: '',
+                    inputKeys: [],
+                    ...(result.evidenceDigest !== null ? { evidenceDigest: result.evidenceDigest } : {}),
+                    minConfidence: options.minConfidence ?? DEFAULT_MIN_CONFIDENCE,
+                },
+            );
+            if (result.source === 'model' && result.reason === 'accepted') {
+                invocation.succeed({ value: result.value, confidence: result.confidence, maker });
+            } else {
+                invocation.fail({
+                    reason: result.reason,
+                    fallbackValue: result.value,
+                    confidence: result.confidence,
+                    maker,
+                });
+            }
+            invocation.end({
+                durationMs: result.durationMs,
+                value: result.value,
+                source: result.source,
+                reason: result.reason,
+                maker,
+                confidence: result.confidence,
+            });
+        }
         await this.fileSystem.writeFile(join(workdir, options.resultFile), `${JSON.stringify(result, null, 2)}\n`);
         return { ok: true, data: { value: result.value, decision: result } };
     }

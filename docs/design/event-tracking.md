@@ -18,7 +18,7 @@ tags: [contract, I6, J9, observability]
 
 The task-0597 baseline is an **audit + SSOT only**: it changed no emitter, catalog entry, or Board component. J9 now owns the accepted remediation design in §§6–11. This document answers two questions and locks the contract that closes them:
 
-1. Which of the 74 cataloged events actually answer who/what/when/where/why/how?
+1. Which of the 79 cataloged events actually answer who/what/when/where/why/how?
 2. What convention closes the two concrete operator complaints — `task.updated` never says *what* changed, and `workflow.*` renders raw ids?
 
 J9 (0601/0602) shipped that shape: producer enrichment, event-specific presenters, history-read reprojection, and a Board free of event-specific switches. This document remains the per-event SSOT; it is not a second implementation.
@@ -46,7 +46,7 @@ Every cataloged event must answer six questions. "Present" means the payload car
 
 **Legend:** `P` present · `~` partial · `–` absent.
 
-## 4. 5W1H matrix (75/75)
+## 4. 5W1H matrix (80/80)
 
 > **Alias collapse (task 0869 R2):** the action-boundary aliases
 > `workflow.action.start`/`.done` were retired in favour of the verb-form
@@ -129,10 +129,15 @@ Scores are family-uniform **by construction** — the defect from §2.1 means pr
 | 73 | `bus.handler.error` | `context.ts:411` → ts-infra `EventBus` | – | ~ | P | ~ | P | P |
 | 74 | `bus.handler.async.enqueued` | `context.ts:411` → ts-infra `EventBus` | – | ~ | P | ~ | – | ~ |
 | 75 | `workflow.agent.contract-violation` *(added 0870)* | `agent-run.ts:36` (`contractViolation`) / `observability.ts:272` | ~ | P | P | P | – | P |
+| 76 | `decision.start` *(added 1095)* | `decision-events.ts:146` via `decision-service.ts:229` / `workflow/actions/decide.ts:113` | ~ | ~ | P | ~ | – | ~ |
+| 77 | `decision.success` *(added 1095)* | `decision-events.ts:159` (`invocation.succeed` ← `decision-service.ts`) | ~ | P | P | ~ | – | – |
+| 78 | `decision.failure` *(added 1095)* | `decision-events.ts:164` (`invocation.fail` ← `decision-service.ts`) | ~ | P | P | ~ | P | – |
+| 79 | `decision.end` *(added 1095)* | `decision-events.ts:171` (`invocation.end` ← `decision-service.ts` `finally`) | ~ | ~ | P | ~ | ~ | P |
+| 80 | `decision.rejected` *(added 1095)* | `decision-events.ts:116` (`decision-service.ts:204,211,226` / `commands/decision.ts:149,173,181`) | – | ~ | P | ~ | P | – |
 
-**Tally:** Who — present `0`, partial `50`, absent `24`. What — present `4`, partial `70`, absent `0`. When — present `70`, partial `4`, absent `0`. Where — present `29`, partial `41`, absent `4`. Why — present `20`, partial `12`, absent `42`. How — present `35`, partial `35`, absent `4`.
+**Tally:** Who — present `0`, partial `54`, absent `25`. What — present `6`, partial `73`, absent `0`. When — present `75`, partial `4`, absent `0`. Where — present `29`, partial `46`, absent `4`. Why — present `22`, partial `13`, absent `44`. How — present `36`, partial `36`, absent `7`.
 
-The most complete dimension is **When** — 70 of 74 payloads carry a timestamp or duration, and the tap stamps `occurred_at` for the rest (`system-event-tap.ts:68`), so no event is ever atemporal. **Who is never fully present** (0 of 74 carry a canonical actor/executor/role; 50 carry a partial machine id such as `agentId`/`pid`/`memberId`). **Why is the deepest hole** — 42 of 74 events carry no `trigger`/`reason`, because no payload in the planning, queue, scheduler, message, history, or bus families captures what fired them.
+The most complete dimension is **When** — 75 of 79 payloads carry a timestamp or duration, and the tap stamps `occurred_at` for the rest (`system-event-tap.ts:68`), so no event is ever atemporal. **Who is never fully present** (0 of 79 carry a canonical actor/executor/role; 54 carry a partial machine id such as `agentId`/`pid`/`memberId`/`caller`). **Why is the deepest hole** — 44 of 79 events carry no `trigger`/`reason`, because no payload in the planning, queue, scheduler, message, history, or bus families captures what fired them. The `decision.*` family (1095) closes part of the hole at the boundary: `failure`/`end` carry the fallback `reason` and `rejected` carries a closed `errorKind` + bounded `message`, but the *upstream trigger* (which workflow node or operator asked) remains a `caller` label, not a cause — `start`/`success` still score Why absent.
 
 ## 5. Gap list (payload vs presentation — do not conflate)
 
@@ -211,7 +216,7 @@ Tier/policy rules are owned by `04_DESIGN.md` §7.9 (tier table) and `actionable
 3. **Per-event `metadataFields`, not per-source.** New events must declare their own retention fields rather than inherit a family profile (closes G6).
 4. **Authored description.** A description is a sentence naming the change, not `describeEvent` output (closes G5).
 5. **Payload policy by content.** `redacted` for anything with operator context (`workflow.hitl.*`, `workflow.steering`); `metadata-only` for counts/ids/outcomes; `raw-safe` only when no secrets/prompts/commands can ever ride the payload.
-6. **Tier by volume.** High-frequency per-chunk/per-interval rows stay `diagnostic`; semantically important low-volume rows stay `default`. Do not grow `inferSeverity` — producers stamp severity at emit time (`event-names.ts:288-294`).
+6. **Tier by volume.** High-frequency per-chunk/per-interval rows stay `diagnostic`; semantically important low-volume rows stay `default`. Do not grow `inferSeverity` — producers stamp severity at emit time (`event-names.ts:288-294`). The `decision.*` family is the worked example: severity is stamped in the payload by the producer (`decision-events.ts` — `info` for start/success/end, `warning` for failure, `error` for rejected), so `inferSeverity` never needs a decision branch.
 
 ## 9. Enforcement recommendation
 
@@ -347,6 +352,11 @@ The following matrix fixes summary behavior, retained facts, and outcome support
 | `bus.emit.noop` | `event`, `handlers`, `durationMs` | `[bus] {event} had no handlers` | `handlers` |
 | `bus.handler.error` | `event`, `handlers`, `durationMs`, `error` | `[bus] {event} handler error` | `error` |
 | `bus.handler.async.enqueued` | `event`, `handlers` | `[bus] {event} handlers enqueued` | `handlers` |
+| `decision.start` | `decisionId`, `type`, `maker`, `makerSource`, `catalogLayer`, `minConfidence` | `[decision] {decisionId} asking {maker}` | unsupported |
+| `decision.success` | `decisionId`, `value`, `confidence`, `maker` | `[decision] {decisionId} answered {value}` | `value` |
+| `decision.failure` | `decisionId`, `reason`, `fallbackValue`, `confidence`, `maker`, error | `[decision] {decisionId} fell back ({reason})` | `reason` |
+| `decision.end` | `decisionId`, `durationMs`, `value`, `source`, `reason`, `maker`, `confidence` | `[decision] {decisionId} finished via {source}` | `reason` |
+| `decision.rejected` | `decisionId`, `errorKind`, `message`, `maker` | `[decision] {decisionId} rejected ({errorKind})` | `errorKind` |
 
 The deterministic gate compares matrix event names with `SYSTEM_EVENT_CATALOG` in both directions and validates each
 resolved catalog entry has non-generated description text, an explicit field list, a summary function, and exactly one

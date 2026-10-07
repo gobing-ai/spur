@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { SpurConfig } from '@gobing-ai/spur-config';
 import {
     DecisionCatalogError,
@@ -9,12 +10,19 @@ import {
     UnknownDecisionError,
     UnknownDecisionMakerError,
 } from '@gobing-ai/ts-ai-decision';
+import type { SystemEventBus } from '../services/system-event-tap';
 import {
     type DecisionLayerId,
     type DecisionResolution,
     registeredDecisionPaths,
     resolveDecisionCatalogs,
 } from './decision-catalog-resolver';
+import {
+    beginDecisionInvocation,
+    type DecisionCallContext,
+    type DecisionInvocationContext,
+    emitDecisionRejected,
+} from './decision-events';
 
 /**
  * Where the effective maker of one decision came from (design §3.6). The first
@@ -85,6 +93,10 @@ export interface DecisionStatus {
 export interface DecideOptions {
     /** `--maker` override; outranks every configured and catalog source. */
     readonly maker?: string;
+    /** Optional decision-event bus: lifecycle/rejection events emit only when set. */
+    readonly bus?: SystemEventBus;
+    /** Caller attribution carried by every emitted decision event. */
+    readonly context?: DecisionCallContext;
 }
 
 /** One decide outcome plus the maker resolution that served it. */
@@ -180,15 +192,25 @@ export class DecisionService {
      * call; every backend outcome resolves to the declared fallback.
      */
     async decide(id: string, input?: Record<string, unknown>, options?: DecideOptions): Promise<ServedDecision> {
+        const callContext: DecisionCallContext = options?.context ?? { caller: 'cli' };
+        const ctx: DecisionInvocationContext = { decisionId: id, ...callContext };
         if (this.duplicateIds.has(id)) {
             const sources = this.duplicateIds.get(id)?.join(', ') ?? '';
-            throw new DecisionCatalogError(
+            const error = new DecisionCatalogError(
                 `decision "${id}" is declared by multiple winning catalogs (${sources}); remove one to unblock decide`,
                 sources,
                 id,
             );
+            emitDecisionRejected(options?.bus, ctx, error);
+            throw error;
         }
-        this.hub.describe(id); // UnknownDecisionError before any maker work
+        let description: DecisionDescription;
+        try {
+            description = this.describe(id); // UnknownDecisionError before any maker work
+        } catch (error) {
+            emitDecisionRejected(options?.bus, ctx, error);
+            throw error;
+        }
         const file = this.resolution.files.find((f) => Object.keys(f.catalog.decisions).includes(id));
         const { name, source } = this.effectiveMaker(
             id,
@@ -197,13 +219,57 @@ export class DecisionService {
             options?.maker,
         );
         if (!this.registry.has(name)) {
-            throw new UnknownDecisionMakerError(
+            const error = new UnknownDecisionMakerError(
                 `maker "${name}" for decision "${id}" is not registered (built-ins: ${this.registry.names().join(', ')})`,
                 name,
             );
+            emitDecisionRejected(options?.bus, ctx, error, name);
+            throw error;
         }
-        const result = await this.hub.decide(id, input as Parameters<DecisionHub['decide']>[1], { maker: name });
-        return { ...result, makerSource: source };
+        const invocation = beginDecisionInvocation(options?.bus, ctx, {
+            type: description.type,
+            maker: name,
+            makerSource: source,
+            catalogLayer: description.layer,
+            inputKeys: Object.keys(input ?? {}),
+            ...(typeof input?.['instructions'] === 'string'
+                ? {
+                      evidenceDigest: `sha256:${createHash('sha256')
+                          .update(input['instructions'] as string, 'utf8')
+                          .digest('hex')}`,
+                  }
+                : {}),
+            minConfidence: description.minConfidence,
+        });
+        let outcome: DecisionResult | undefined;
+        try {
+            outcome = await this.hub.decide(id, input as Parameters<DecisionHub['decide']>[1], { maker: name });
+            if (outcome.source === 'model' && outcome.reason === 'accepted') {
+                invocation.succeed({ value: outcome.value, confidence: outcome.confidence, maker: outcome.maker });
+            } else {
+                invocation.fail({
+                    reason: outcome.reason,
+                    fallbackValue: outcome.value,
+                    confidence: outcome.confidence,
+                    maker: outcome.maker,
+                });
+            }
+            return { ...outcome, makerSource: source };
+        } finally {
+            // Always close the lifecycle, even if a maker throw escaped the hub.
+            invocation.end(
+                outcome !== undefined
+                    ? {
+                          durationMs: outcome.durationMs,
+                          value: outcome.value,
+                          source: outcome.source,
+                          reason: outcome.reason,
+                          maker: outcome.maker,
+                          confidence: outcome.confidence,
+                      }
+                    : { durationMs: 0, reason: 'error', maker: name },
+            );
+        }
     }
 
     /** Readiness: layers, load errors, duplicate ids, maker resolution and registration. */

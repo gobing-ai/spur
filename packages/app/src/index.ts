@@ -9,6 +9,29 @@ export {
 } from '@gobing-ai/spur-domain';
 export type { PlanningFolders } from './config/planning-folders';
 export { resolvePlanningFolders } from './config/planning-folders';
+// Decision lifecycle events (task 1095): payload-owned emitter surface.
+export {
+    beginDecisionInvocation,
+    type DecisionCallContext,
+    type DecisionCaller,
+    type DecisionEndFields,
+    type DecisionFailureFields,
+    type DecisionInvocation,
+    type DecisionInvocationContext,
+    type DecisionStartFields,
+    type DecisionTerminalFields,
+    decisionErrorKind,
+    emitDecisionRejected,
+} from './decision/decision-events';
+// Decision reliability report (task 1096, slice S3): reads the recorded
+// `decision.end` ledger; the CLI imports only through this package index.
+export {
+    type DecisionReliabilityCatalogEntry,
+    type DecisionReliabilityGroup,
+    type DecisionReliabilityReport,
+    type DecisionReliabilitySpec,
+    decisionReliability,
+} from './decision/decision-reliability';
 // Decision-catalog noun surface (feature P, task 1093): the CLI imports only
 // through this package index (ADR — apps never import app internals directly).
 export {

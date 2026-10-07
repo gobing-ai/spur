@@ -340,3 +340,90 @@ describe('spur decision status (AC5)', () => {
         expect(result.out).toContain('loadErrors:');
     });
 });
+
+describe('spur decision status --reliability (task 1096)', () => {
+    // A dedicated project so the recorded sample counts are known exactly.
+    const RELIABILITY = tempProject({ '.spur/decisions/fixture.yaml': FIXTURE });
+
+    test('reports recorded groups, fallback reasons and the evidence-none fill; plain path unchanged', async () => {
+        for (const _ of [1, 2, 3]) {
+            const run = await main(['decision', 'run', 'triage-test', '--param', 'wbs=1'], RELIABILITY);
+            expect(run.code).toBe(0);
+        }
+        const once = await main(['decision', 'run', 'gate-test', '--param', 'attempts=1'], RELIABILITY);
+        expect(once.code).toBe(0);
+
+        const result = await main(['decision', 'status', '--reliability', '--json', '--json-envelope'], RELIABILITY);
+        expect(result.code).toBe(0);
+        const parsed = JSON.parse(result.out) as {
+            ok: boolean;
+            data: {
+                generatedAt: string;
+                groups: Array<{
+                    decisionId: string;
+                    maker: string;
+                    evidence: string;
+                    samples: number;
+                    accepted: number;
+                    acceptedRate: number;
+                    fallbacks: Record<string, number>;
+                    medianConfidence: number | null;
+                    p50DurationMs: number | null;
+                    p95DurationMs: number | null;
+                }>;
+            };
+        };
+        expect(parsed.ok).toBe(true);
+        expect(parsed.data.generatedAt).toBeDefined();
+
+        const triage = parsed.data.groups.find((g) => g.decisionId === 'triage-test');
+        expect(triage).toMatchObject({
+            maker: 'typesafe',
+            evidence: 'recorded',
+            samples: 3,
+            accepted: 0, // offline typesafe maker serves the fallback every time
+            acceptedRate: 0,
+            fallbacks: { 'no-backend': 3 },
+            medianConfidence: null,
+        });
+        const gate = parsed.data.groups.find((g) => g.decisionId === 'gate-test');
+        expect(gate).toMatchObject({ evidence: 'recorded', samples: 1 });
+        // Catalog ids without rows report evidence none (shared catalog included).
+        const shared = parsed.data.groups.find((g) => g.decisionId === 'review-failure-class');
+        expect(shared).toMatchObject({ evidence: 'none', samples: 0 });
+        // A recorded id is never duplicated as a none row.
+        expect(parsed.data.groups.filter((g) => g.decisionId === 'triage-test')).toHaveLength(1);
+
+        // Plain status output and exit code stay unchanged alongside the new flag.
+        const plain = await main(['decision', 'status', '--json', '--json-envelope'], RELIABILITY);
+        expect(plain.code).toBe(0);
+        const plainParsed = JSON.parse(plain.out) as { data: { layers: Record<string, number> } };
+        expect(plainParsed.data.layers).toBeDefined();
+    });
+
+    test('human reliability output is one line per group', async () => {
+        const result = await main(['decision', 'status', '--reliability'], RELIABILITY);
+        expect(result.code).toBe(0);
+        const lines = result.out.split('\n').filter((line) => line.trim() !== '');
+        expect(lines.length).toBeGreaterThanOrEqual(2);
+        expect(lines[0]).toContain('triage-test');
+        expect(lines.join('\n')).toContain('none');
+    });
+
+    test('an invalid --since timestamp exits 1', async () => {
+        const result = await main(
+            ['decision', 'status', '--reliability', '--since', 'not-a-date', '--json', '--json-envelope'],
+            RELIABILITY,
+        );
+        expect(result.code).toBe(1);
+        const parsed = JSON.parse(result.out) as { ok: boolean; error: { code: string; message: string } };
+        expect(parsed.ok).toBe(false);
+        expect(parsed.error.message).toContain('invalid --since');
+    });
+
+    test('--since without --reliability is a caller mistake and plain status stays exit-coded', async () => {
+        const bad = await main(['decision', 'status', '--since', '2026-10-01T00:00:00Z'], RELIABILITY);
+        expect(bad.code).toBe(1);
+        expect(bad.out).toContain('--since is only valid together with --reliability');
+    });
+});

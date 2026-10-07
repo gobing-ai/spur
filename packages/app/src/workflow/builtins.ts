@@ -108,6 +108,7 @@ export function registerSpurBuiltins(host: WorkflowEngineHost, options: SpurWork
         new DecideActionRunner(fileSystem, {
             enabled: options.decideDecisionMaker === true,
             ...(options.decideMaker !== undefined ? { decisionMaker: options.decideMaker } : {}),
+            ...(options.observabilityBus !== undefined ? { observabilityBus: options.observabilityBus } : {}),
         } satisfies DecideActionDeps),
         'builtin',
     );

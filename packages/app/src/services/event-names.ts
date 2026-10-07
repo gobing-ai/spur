@@ -22,7 +22,8 @@ export type SystemEventSource =
     | 'agent'
     | 'history'
     | 'bus'
-    | 'api';
+    | 'api'
+    | 'decision';
 /** Visibility tier for board consumers. Diagnostic entries only persist/stream when the runtime toggle is on. */
 export type SystemEventTier = 'default' | 'diagnostic';
 
@@ -93,6 +94,7 @@ const SOURCE_PROFILES: Record<SystemEventSource, SourceProfile> = {
     history: { producerPackage: 'spur', subsystem: 'history', remediationKind: 'prefix-filter' },
     bus: { producerPackage: '@gobing-ai/ts-infra', subsystem: 'event-bus', remediationKind: 'prefix-filter' },
     api: { producerPackage: 'spur', subsystem: 'http-api', remediationKind: 'prefix-filter' },
+    decision: { producerPackage: 'spur', subsystem: 'decision', remediationKind: 'prefix-filter' },
 };
 
 // ─── Presenter contract (R1) ────────────────────────────────────────────
@@ -366,6 +368,13 @@ const BASE_CATALOG = [
     baseEvent('bus.emit.noop', 'bus', 'bus', 'metadata-only', 'diagnostic'),
     baseEvent('bus.handler.error', 'bus', 'bus', 'metadata-only', 'diagnostic'),
     baseEvent('bus.handler.async.enqueued', 'bus', 'bus', 'metadata-only', 'diagnostic'),
+
+    // Decision lifecycle — design/decision-observability-and-adoption.md §3.2 (task 1095).
+    baseEvent('decision.start', 'decision', 'decision'),
+    baseEvent('decision.success', 'decision', 'decision'),
+    baseEvent('decision.failure', 'decision', 'decision'),
+    baseEvent('decision.end', 'decision', 'decision'),
+    baseEvent('decision.rejected', 'decision', 'decision'),
 ] satisfies readonly BaseCatalogEntry[];
 
 /** Union of all system event names registered in the base catalog policy. */
@@ -1580,6 +1589,144 @@ export const SYSTEM_EVENT_PRESENTERS: Record<SystemEventName, SystemEventPresent
             return event !== undefined ? `[bus] ${event} handlers enqueued` : '[bus] handlers enqueued';
         },
         outcome: derivedFromValue('handlers'),
+    },
+
+    // ── decision ────────────────────────────────────────────────────────────
+    // Fixed order: start → (success | failure) → end, or rejected alone.
+    // Payloads are metadata-only; retained fields survive projection as bounded scalars.
+    'decision.start': {
+        description: 'A decision invocation began — a maker is about to be asked.',
+        fields: [
+            field('decisionId', 'Decision'),
+            field('type', 'Type'),
+            field('maker', 'Maker'),
+            field('makerSource', 'Maker source'),
+            field('catalogLayer', 'Catalog layer'),
+            field('minConfidence', 'Min confidence'),
+        ],
+        retain: [
+            field('invocationId', 'Invocation'),
+            field('caller', 'Caller'),
+            field('inputKeys', 'Input keys'),
+            field('evidenceDigest', 'Evidence digest'),
+            field('correlation.runId', 'Run'),
+            field('correlation.workflowName', 'Workflow'),
+            field('correlation.nodeId', 'Node'),
+            field('correlation.wbs', 'WBS'),
+        ],
+        summary: ({ data }) => {
+            const id = s(data, 'decisionId');
+            const maker = s(data, 'maker');
+            return maker !== undefined
+                ? `[decision] ${id ?? 'decision'} asking ${maker}`
+                : `[decision] ${id ?? 'decision'} asking maker`;
+        },
+        outcome: unsupported,
+    },
+    'decision.success': {
+        description: 'A decision invocation returned an accepted model answer (no fallback).',
+        fields: [
+            field('decisionId', 'Decision'),
+            field('value', 'Answer'),
+            field('confidence', 'Confidence'),
+            field('maker', 'Maker'),
+        ],
+        retain: [
+            field('invocationId', 'Invocation'),
+            field('caller', 'Caller'),
+            field('correlation.runId', 'Run'),
+            field('correlation.workflowName', 'Workflow'),
+            field('correlation.nodeId', 'Node'),
+            field('correlation.wbs', 'WBS'),
+        ],
+        summary: ({ data }) => {
+            const id = s(data, 'decisionId');
+            const value = s(data, 'value');
+            return value !== undefined
+                ? `[decision] ${id ?? 'decision'} answered ${value}`
+                : `[decision] ${id ?? 'decision'} answered`;
+        },
+        outcome: derivedFromValue('value'),
+    },
+    'decision.failure': {
+        description: 'A decision invocation served the declared fallback instead of a model answer.',
+        fields: [
+            field('decisionId', 'Decision'),
+            field('reason', 'Reason'),
+            field('fallbackValue', 'Fallback'),
+            field('confidence', 'Confidence'),
+            field('maker', 'Maker'),
+            field('error', 'Error'),
+        ],
+        retain: [
+            field('invocationId', 'Invocation'),
+            field('caller', 'Caller'),
+            field('correlation.runId', 'Run'),
+            field('correlation.workflowName', 'Workflow'),
+            field('correlation.nodeId', 'Node'),
+            field('correlation.wbs', 'WBS'),
+        ],
+        summary: ({ data }) => {
+            const id = s(data, 'decisionId');
+            const reason = s(data, 'reason');
+            return reason !== undefined
+                ? `[decision] ${id ?? 'decision'} fell back (${reason})`
+                : `[decision] ${id ?? 'decision'} fell back`;
+        },
+        outcome: derivedFromValue('reason'),
+    },
+    'decision.end': {
+        description: 'A decision invocation finished, with the outcome source and wall-clock duration.',
+        fields: [
+            field('decisionId', 'Decision'),
+            field('durationMs', 'Duration ms'),
+            field('value', 'Answer'),
+            field('source', 'Source'),
+            field('reason', 'Reason'),
+            field('maker', 'Maker'),
+            field('confidence', 'Confidence'),
+        ],
+        retain: [
+            field('invocationId', 'Invocation'),
+            field('caller', 'Caller'),
+            field('correlation.runId', 'Run'),
+            field('correlation.workflowName', 'Workflow'),
+            field('correlation.nodeId', 'Node'),
+            field('correlation.wbs', 'WBS'),
+        ],
+        summary: ({ data }) => {
+            const id = s(data, 'decisionId');
+            const source = s(data, 'source');
+            return source !== undefined
+                ? `[decision] ${id ?? 'decision'} finished via ${source}`
+                : `[decision] ${id ?? 'decision'} finished`;
+        },
+        outcome: derivedFromValue('reason'),
+    },
+    'decision.rejected': {
+        description: 'A caller mistake refused a decision before any maker call (unknown id, maker, or parse).',
+        fields: [
+            field('decisionId', 'Decision'),
+            field('errorKind', 'Error kind'),
+            field('message', 'Message'),
+            field('maker', 'Maker'),
+        ],
+        retain: [
+            field('invocationId', 'Invocation'),
+            field('caller', 'Caller'),
+            field('correlation.runId', 'Run'),
+            field('correlation.workflowName', 'Workflow'),
+            field('correlation.nodeId', 'Node'),
+            field('correlation.wbs', 'WBS'),
+        ],
+        summary: ({ data }) => {
+            const id = s(data, 'decisionId');
+            const kind = s(data, 'errorKind');
+            return kind !== undefined
+                ? `[decision] ${id ?? 'decision'} rejected (${kind})`
+                : `[decision] ${id ?? 'decision'} rejected`;
+        },
+        outcome: derivedFromValue('errorKind'),
     },
 } satisfies Record<SystemEventName, SystemEventPresenterSpec>;
 

@@ -53,6 +53,7 @@ import {
     normalizePersistedWorkflowLayer,
     RunDao,
     redirectRunStorageReferences,
+    SystemEventDao,
     transferRunTables,
 } from '@gobing-ai/spur-domain';
 import {
@@ -60,11 +61,13 @@ import {
     DbWorkflowPersistenceAdapter,
     WorkflowService as EngineWorkflowService,
 } from '@gobing-ai/ts-dual-workflow-engine';
+import { EventBus } from '@gobing-ai/ts-infra';
 import { createNodeFileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import { createWorkflowActionTraceWriter } from '../workflow/action-trace';
 import { DecideActionRunner, DecideOptionsSchema } from '../workflow/actions/decide';
 import { resolveDurableArtifactPath } from '../workflow/actions/run-path';
 import { parseFeatureVerificationReceipt } from '../workflow/feature-verification-receipt';
+import type { WorkflowObservabilityBus } from '../workflow/observability';
 import { computeProofInputFingerprint, readProofInputContents } from '../workflow/proof-input-fingerprint';
 import { InvalidWorkflowRunIdError } from '../workflow/run-record';
 import { splitLaunchCommand } from '../workflow/split-launch-command';
@@ -76,6 +79,7 @@ import {
     type WorkflowLayerId,
 } from '../workflow/workflow-resolver';
 import { ensureDurablePlaneIgnored, runStoragePaths } from './run-storage';
+import { registerSystemEventTap, type SystemEventBus, type SystemEventTap } from './system-event-tap';
 import { parseVerifyVerdict } from './verify-verdict';
 import { workflowVersionLiteral } from './workflow-service';
 
@@ -826,6 +830,12 @@ export interface InlineDecideInput {
      * boundary (the plugin delegate) — app services never load Spur config (ADR-082).
      */
     readonly enabled: boolean;
+    /** Real run id for decision-event correlation; defaults to the 0941 placeholder. */
+    readonly runId?: string;
+    /** Real node id for decision-event correlation; defaults to the 0941 placeholder. */
+    readonly node?: string;
+    /** Bus carrying cataloged `decision.*` events (task 1095); absent ⇒ no events. */
+    readonly observabilityBus?: WorkflowObservabilityBus;
 }
 
 /** Result of {@link runDecideForInlineRun}: the decision row plus the resultFile it was written to. */
@@ -866,10 +876,13 @@ export async function runDecideForInlineRun(input: InlineDecideInput): Promise<I
             error: `decide: invalid options — ${parsed.error.issues.map((i) => i.message).join('; ')}`,
         };
     }
-    const runner = new DecideActionRunner(createNodeFileSystem(), { enabled: input.enabled });
+    const runner = new DecideActionRunner(createNodeFileSystem(), {
+        enabled: input.enabled,
+        ...(input.observabilityBus !== undefined ? { observabilityBus: input.observabilityBus } : {}),
+    });
     const result = await runner.execute(raw as Record<string, unknown>, {
-        runId: 'inline-decide',
-        stateOrNodeId: 'decide',
+        runId: input.runId ?? 'inline-decide',
+        stateOrNodeId: input.node ?? 'decide',
         workdir: resolve(input.workdir),
         vars: {},
         env: {},
@@ -1527,34 +1540,61 @@ export async function runInlineRunDecide(input: InlineRunDecideInput): Promise<n
         process.stdout.write(`${JSON.stringify({ ok: false, runId: input.runId, error })}\n`);
         return 1;
     };
-    let outcome: InlineDecideOutcome;
+    // Decision lifecycle events (task 1095): a local bus tapped into the project DB's
+    // `system_events` ledger — the same pattern as the 0941 trace writer above, so inline
+    // decide rows persist like engine-driven workflow rows. Closed in `finally`.
+    let projectDb: InlineRunProjectDb | undefined;
+    let tap: SystemEventTap | undefined;
     try {
-        outcome = await runDecideForInlineRun({
-            workdir: process.cwd(),
-            optionsFile: input.optionsFile,
-            enabled: input.enabled,
+        projectDb = await openInlineRunProjectDb(process.cwd());
+        const bus: WorkflowObservabilityBus = new EventBus();
+        // SAFETY: the same EventBus instance is bridged as the system-event tap (structurally
+        // nominal types over one ts-infra EventBus; ADR-044 event bridge, as in the CLI).
+        tap = registerSystemEventTap(bus as unknown as SystemEventBus, new SystemEventDao(projectDb.adapter), {
+            warn: (msg: string, data?: Record<string, unknown>) => {
+                appendInlineRunLogLine(
+                    input.runId,
+                    `decision-event-persist-failed run=${input.runId}: ${msg}${data === undefined ? '' : ` ${JSON.stringify(data)}`}`,
+                );
+            },
+            debug: () => {},
         });
-    } catch (error) {
-        return decideFailed(error instanceof Error ? error.message : String(error));
+        let outcome: InlineDecideOutcome;
+        try {
+            outcome = await runDecideForInlineRun({
+                workdir: process.cwd(),
+                optionsFile: input.optionsFile,
+                enabled: input.enabled,
+                runId: input.runId,
+                node: input.node,
+                observabilityBus: bus,
+            });
+        } catch (error) {
+            return decideFailed(error instanceof Error ? error.message : String(error));
+        }
+        if (!outcome.ok) return decideFailed(outcome.error ?? 'decide failed without an error message');
+        await tap.flush();
+        process.stdout.write(`${JSON.stringify({ runId: input.runId, node: input.node, ...outcome, ok: true })}\n`);
+        // 0976 R2: the run log names the decision's provenance, so a declared-default fallback is
+        // never read as a model decision. Best-effort through the same run-log appender.
+        appendInlineRunLogLine(
+            input.runId,
+            `decide node=${input.node} value=${outcome.value ?? ''} source=${outcome.source ?? 'default'} reason=${outcome.reason ?? ''}`,
+        );
+        // Trace row is best-effort, exactly like --action: an emission failure never wedges the run.
+        return runInlineRunTrace({
+            runId: input.runId,
+            close: false,
+            node: input.node,
+            kind: 'decide',
+            status: 'done',
+            ok: true,
+            durationMs: outcome.durationMs ?? 0,
+        });
+    } finally {
+        tap?.unsubscribe();
+        projectDb?.close();
     }
-    if (!outcome.ok) return decideFailed(outcome.error ?? 'decide failed without an error message');
-    process.stdout.write(`${JSON.stringify({ runId: input.runId, node: input.node, ...outcome, ok: true })}\n`);
-    // 0976 R2: the run log names the decision's provenance, so a declared-default fallback is
-    // never read as a model decision. Best-effort through the same run-log appender.
-    appendInlineRunLogLine(
-        input.runId,
-        `decide node=${input.node} value=${outcome.value ?? ''} source=${outcome.source ?? 'default'} reason=${outcome.reason ?? ''}`,
-    );
-    // Trace row is best-effort, exactly like --action: an emission failure never wedges the run.
-    return runInlineRunTrace({
-        runId: input.runId,
-        close: false,
-        node: input.node,
-        kind: 'decide',
-        status: 'done',
-        ok: true,
-        durationMs: outcome.durationMs ?? 0,
-    });
 }
 
 /** Input for `runInlineRunPersistOut` (`--persist-out`, 0975 R1). */
