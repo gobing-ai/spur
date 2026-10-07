@@ -257,7 +257,9 @@ export interface BatchTask {
 
 /** Truncate to `TITLE_CAP` characters, ellipsis included in the count. */
 function truncateTitle(name: string): string {
-    return name.length > TITLE_CAP ? `${name.slice(0, TITLE_CAP - 1)}…` : name;
+    if (name.length <= TITLE_CAP) return name;
+    // Drop a dangling high surrogate so the cut never splits an astral character.
+    return `${name.slice(0, TITLE_CAP - 1).replace(/[\uD800-\uDBFF]$/, '')}…`;
 }
 
 /**

@@ -158,7 +158,9 @@ function insertOnEntry(items, stateId, def) {
   return [...items.slice(0, at), item, ...items.slice(at)];
 }
 function truncateTitle(name) {
-  return name.length > TITLE_CAP ? `${name.slice(0, TITLE_CAP - 1)}…` : name;
+  if (name.length <= TITLE_CAP)
+    return name;
+  return `${name.slice(0, TITLE_CAP - 1).replace(/[\uD800-\uDBFF]$/, "")}…`;
 }
 function buildBatchPlan(tasks) {
   const waves = [];

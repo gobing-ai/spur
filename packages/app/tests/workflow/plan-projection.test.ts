@@ -282,6 +282,14 @@ describe('buildBatchPlan (1104 AC5)', () => {
         expect(title?.slice(5).length).toBe(60);
         expect(title?.endsWith('…')).toBe(true);
     });
+
+    test('truncation never splits a surrogate pair at the cut', () => {
+        // 58 ASCII + astral emoji straddles the 59-unit cut point.
+        const waves = buildBatchPlan([{ wbs: '0001', name: `${'x'.repeat(58)}😀${'y'.repeat(20)}` }]);
+        const title = (waves.at(0) ?? []).find((i) => i.id === 'task.0001')?.title ?? '';
+        expect(title.endsWith('…')).toBe(true);
+        expect(title.isWellFormed()).toBe(true);
+    });
 });
 
 describe('taskPhaseChildren (1104 R5)', () => {
