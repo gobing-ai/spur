@@ -64,6 +64,7 @@ const PASS_VERDICT = {
     requirements: [{ id: 'R1', status: 'MET', evidence: 'a' }],
     acceptanceCriteria: [],
     source: 'test',
+    confidence: 'HIGH',
 };
 
 /**

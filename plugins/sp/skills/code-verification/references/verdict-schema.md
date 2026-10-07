@@ -35,8 +35,20 @@ interface VerifyVerdict {
     status: 'pass' | 'fail' | 'warn';
     evidence: string;
   }>;
+  /** Verifier confidence (task 1068 R3). REQUIRED for PASS — the done gate denies
+   *  a confidence-less PASS. Accepted case-insensitively, normalized to uppercase. */
+  confidence?: 'HIGH' | 'MEDIUM' | 'LOW';
 }
 ```
+
+## Confidence level (task 1068 R3)
+
+A PASS verdict must state the verifier's confidence: `"confidence": "HIGH" | "MEDIUM" | "LOW"`.
+The value is case-insensitive on read (normalized to uppercase), but a present value outside the
+enum invalidates the artifact, and a PASS with the field absent is denied at the `* → done`
+transition with a remediation naming the field (`--force-done` remains the documented escape).
+The verify answer's `Confidence:` lint rule (producer side) already guarantees the field for
+pipeline-produced artifacts; this closes the hand-authored / pre-1068 artifact hole.
 
 ## Compatibility alias: `scenario` row key
 

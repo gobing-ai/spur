@@ -23,6 +23,19 @@ const passArtifact: VerdictArtifact = {
     ],
     acceptanceCriteria: [],
     source: 'spur task verdict',
+    confidence: 'HIGH',
+};
+
+/** PASS that omits the verifier's confidence — denied at the done gate (1068 R3). */
+const confidencelessPass: VerdictArtifact = {
+    wbs: '0299',
+    verdict: 'PASS',
+    requirements: [
+        { id: 'R1', status: 'MET', evidence: 'a' },
+        { id: 'R2', status: 'MET', evidence: 'b' },
+    ],
+    acceptanceCriteria: [],
+    source: 'spur task verdict',
 };
 
 const partialArtifact: VerdictArtifact = {
@@ -266,6 +279,7 @@ describe('evaluateDoneTransition', () => {
                 { name: 'coverage', status: 'warn', severity: 'advisory', evidence: 'near-miss' },
             ],
             source: 'spur task verdict',
+            confidence: 'HIGH',
         };
         const out = evaluateDoneTransition(baseInput({ artifact }));
         expect(out.kind).toBe('allow');
@@ -680,5 +694,73 @@ describe('0721 — hollow MET evidence in a persisted artifact', () => {
             expect(outcome.message).toContain('PARTIAL');
             expect(outcome.message).toContain('self-inconsistent');
         }
+    });
+});
+
+// ─── 1068 R3 — confidence-level verification ───────────────────────────
+
+describe('1068 R3 — PASS must state the verifier confidence', () => {
+    test('PASS without confidence → deny with remediation naming the field', () => {
+        const out = evaluateDoneTransition({
+            wbs: '0299',
+            taskFilePath: TASK_PATH,
+            currentStatus: 'testing',
+            targetStatus: 'done',
+            forced: false,
+            artifact: confidencelessPass,
+        });
+        expect(out.kind).toBe('deny');
+        if (out.kind === 'deny') {
+            expect(out.verdict).toBe('PASS');
+            expect(out.message).toContain('confidence');
+            expect(out.message).toContain('--force-done');
+        }
+    });
+
+    test('PASS with confidence → allow (control)', () => {
+        expect(evaluateDoneTransition(baseInput({ artifact: passArtifact })).kind).toBe('allow');
+    });
+
+    test('non-PASS artifacts deny regardless of confidence', () => {
+        const out = evaluateDoneTransition(baseInput({ artifact: partialArtifact }));
+        expect(out.kind).toBe('deny');
+    });
+
+    function memFs(files: Record<string, string>): FileSystem {
+        return {
+            exists: async (p: string) => p in files,
+            readFile: async (p: string) => {
+                const c = files[p];
+                if (c === undefined) throw new Error(`ENOENT: ${p}`);
+                return c;
+            },
+        } as unknown as FileSystem;
+    }
+    const RUN = '/proj/.spur/run';
+
+    test('reader normalizes lowercase confidence through readVerdictArtifact', async () => {
+        const fs = memFs({
+            [`${RUN}/0001-verdict.json`]: JSON.stringify({
+                verdict: 'PASS',
+                confidence: 'low',
+                requirements: [{ id: 'R1', status: 'MET', evidence: 'a' }],
+            }),
+        });
+        const out = await readVerdictArtifact(fs, RUN, '0001');
+        expect(out.artifact?.confidence).toBe('LOW');
+        expect(out.readError).toBeUndefined();
+    });
+
+    test('reader fails closed on a non-enum confidence value', async () => {
+        const fs = memFs({
+            [`${RUN}/0001-verdict.json`]: JSON.stringify({
+                verdict: 'PASS',
+                confidence: 'SURE',
+                requirements: [{ id: 'R1', status: 'MET', evidence: 'a' }],
+            }),
+        });
+        const out = await readVerdictArtifact(fs, RUN, '0001');
+        expect(out.artifact).toBeUndefined();
+        expect(out.readError).toContain('confidence');
     });
 });

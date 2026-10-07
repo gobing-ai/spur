@@ -44,6 +44,9 @@ export type VerdictAggregate = 'PASS' | 'PARTIAL' | 'FAIL' | 'UNKNOWN';
 /** Row-level status (matches `VerdictRequirement.status` / AC `status`). */
 export type VerdictRowStatus = 'MET' | 'PARTIAL' | 'UNMET';
 
+/** Verifier confidence levels (mirrors `verify-verdict.ts` CONFIDENCE_LEVELS; leaf isolation). */
+export type VerdictConfidence = 'HIGH' | 'MEDIUM' | 'LOW';
+
 /** Minimal shape this module reads from durable evidence or legacy scratch. */
 export interface VerdictArtifact {
     wbs?: string;
@@ -64,6 +67,8 @@ export interface VerdictArtifact {
         evidence?: string;
     }[];
     source?: string;
+    /** Verifier's stated confidence (task 1068 R3); required for PASS at the done gate. */
+    confidence?: VerdictConfidence;
 }
 
 /** What the guard decided. */
@@ -156,6 +161,23 @@ async function readVerdictFrom(fs: FileSystem, path: string, wbs: string): Promi
                 missing: false,
             };
         }
+    }
+    // 1068 R3: carry the verifier's confidence through, normalized like every
+    // other enum field. A present-but-invalid value fails closed (readError →
+    // deny) — the canonical parser invalidates the whole artifact on the same
+    // input, so the guard must not read a stricter artifact as usable.
+    if ('confidence' in parsed) {
+        const rawConfidence: unknown = parsed.confidence;
+        const up = typeof rawConfidence === 'string' ? rawConfidence.toUpperCase() : '';
+        if (up !== 'HIGH' && up !== 'MEDIUM' && up !== 'LOW') {
+            return {
+                artifact: undefined,
+                path,
+                readError: `invalid confidence field at ${path}: expected HIGH|MEDIUM|LOW, actual ${JSON.stringify(rawConfidence)}`,
+                missing: false,
+            };
+        }
+        parsed.confidence = up;
     }
     return { artifact: parsed as VerdictArtifact, path, missing: false };
 }
@@ -382,6 +404,26 @@ export function evaluateDoneTransition(input: GuardInput): GuardOutcome {
     // UNKNOWN (deny), closing the "vacuously PASS" softening at the done boundary.
     const internallyConsistentPass = artifact.verdict !== 'PASS' || reqs.length > 0 || acs.length > 0;
     const effective: VerdictAggregate = internallyConsistentPass ? harshnessMax(artifact.verdict, computed) : 'UNKNOWN';
+
+    // 1068 R3: a PASS must state the verifier's confidence — the answer lint
+    // already demands the `Confidence:` line at derivation time (so every
+    // pipeline-produced artifact carries it); this closes the hand-edited /
+    // pre-1068 artifact hole at the final authority. Non-PASS artifacts are
+    // denied below regardless, so the check is PASS-only.
+    if (effective === 'PASS' && artifact.confidence === undefined) {
+        return {
+            kind: 'deny',
+            verdict: 'PASS',
+            message: [
+                `Cannot transition task ${wbs} to done: PASS verdict does not state a confidence level.`,
+                `  task:     ${taskFilePath}`,
+                `  verdict:  ${verdictPath} (missing \`confidence\`)`,
+                `  remediation: add "confidence": "HIGH|MEDIUM|LOW" to the artifact ` +
+                    `(re-run \`/sp:dev-verify ${wbs}\`), ` +
+                    `or override with \`spur task update ${wbs} done --force-done --reason "<why>"\`.`,
+            ].join('\n'),
+        };
+    }
 
     if (effective === 'PASS') {
         return { kind: 'allow', reason: 'pass' };

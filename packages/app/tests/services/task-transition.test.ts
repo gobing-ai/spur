@@ -13,6 +13,7 @@ const PASS_ARTIFACT = {
     requirements: [{ id: 'R1', status: 'MET' as const, evidence: 'a' }],
     acceptanceCriteria: [],
     source: 'test',
+    confidence: 'HIGH' as const,
 };
 
 const TASK_HEAD = [
