@@ -362,7 +362,7 @@ spur agent run "Generate a summary" --mode json --json
 spur agent run "Run the tests" --cwd ./packages/domain
 
 # Fleet occupant: prepend pending inbox messages for an agent spec
-spur agent run "Work on task 0089" --spec reviewer-1 --drain
+spur agent run "Work on task 0089" --spec myapp-reviewer-1 --drain
 ```
 
 **Exit codes** for `spur agent run`: 0 success · 1 agent-not-found / known-but-unusable ·

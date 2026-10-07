@@ -31,7 +31,7 @@ spur agent run [options] <prompt>
 | Flag | Description |
 |---|---|
 | `--agent <name>` | Role, executor, agent binary, `auto`, or `inline`. A **role** (`scribe`/`coder`/`reviewer`/`planner`) selects the starting tier; an **executor** pins a configured profile; a bare binary name works with a one-time warning; `auto` (default) resolves via the `agent` config block. Explicit `inline` requests host-session execution; on headless surfaces (this command is headless) a role/tier fallback resolves with one warning (ADR-087 — substitution over rejection; the G5 exit-2 rejection is retired). `spur agent run` always starts a subprocess. |
-| `--spec <id>` | Agent spec id (occupant addressing; a fleet member such as `coder-1`); pairs with `--drain` |
+| `--spec <id>` | Agent spec id (occupant addressing; a fleet member such as `myapp-coder-1`); pairs with `--drain` |
 | `--continue` | Resume the previous agent session |
 | `--model <name>` | Agent model argument (explicit `--model` wins over the configured one) |
 | `--mode <mode>` | Agent output mode: `text` \| `json` (default: `text`) |
@@ -88,7 +88,7 @@ spur agent run "Refactor the DB layer" --agent gemini --model gemini-2.0-flash
 spur agent run "Summarize the diff" --agent grok
 spur agent run "Generate a summary" --mode json --json
 spur agent run "Run the tests" --cwd ./packages/domain
-spur agent run "Work on task 0089" --spec reviewer-1 --drain
+spur agent run "Work on task 0089" --spec myapp-reviewer-1 --drain
 ```
 
 ### JSON shape
@@ -216,6 +216,8 @@ spur agent list [options]
 
 With `--specs`, each row carries live run status merged from the server's supervisor: trailing `status` column plus `pid=<n>` where a process exists, then the member session (`<mode>` + `id=<8-char short>`; `-` when none).
 When `spur self serve` is unreachable, the listing falls back to all `stopped` with a stderr warning.
+In `--json` (here and in `agent status`), each spec carries `source`: `file` (with `path` to its
+`.spur/agents/<id>.yaml`) or `fleet` (derived from `agent.fleet`; no `path`).
 
 Detected agents (canonical ids from `ts-ai-runner` `DISPLAY_ORDER`, 0.4.8+): `claude`, `codex`,
 `gemini`, `pi`, `omp`, `opencode`, `antigravity-cli`, `openclaw`, `hermes`, `grok`.
@@ -325,7 +327,7 @@ spur agent wait reviewer --until working --until invoke-exit --timeout 30000 --j
 spur agent wait --inbox coder-g1 --timeout 60000   # guest: block until queued work arrives
 ```
 
-## spur agent loop (supervisor-internal)
+## spur agent loop
 
 ```
 spur agent loop [options]
@@ -377,8 +379,9 @@ An agent spec is the addressable identity behind `--spec`, `wait`, `start`/`stop
 `message --to`. `spur agent list --specs` merges two sources:
 
 1. Hand-authored `.spur/agents/*.yaml` files.
-2. Members declared under `agent.fleet.members` in project config (ids default to
-   `<role>-<n>`, e.g. `planner-1`, `coder-1`, `reviewer-1`). On an id clash the fleet
+2. Members declared under `agent.fleet.members` in project config. Spec ids are
+   `<project-slug>-<member-id>`; a member id defaults to `<role>-<n>` (project `myapp` →
+   `myapp-planner-1`, `myapp-coder-1`, `myapp-reviewer-1`). On an id clash the fleet
    declaration wins. Fleet specs are derived in memory — nothing is written to `.spur/agents/`,
    and stale `fleet:generated` files there are ignored.
 

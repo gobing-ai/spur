@@ -85,6 +85,7 @@ describe('spur agent list --specs', () => {
             const payload = JSON.parse(out.messages.at(-1) ?? '{}');
             expect(payload.specs[0].id).toBe('coder');
             expect(payload.specs[0].path).toBe('.spur/agents/coder.yaml');
+            expect(payload.specs[0].source).toBe('file');
         } finally {
             await cleanup();
         }
@@ -140,6 +141,17 @@ describe('spur agent list --specs', () => {
             const plain = payload.specs.find((s: { id: string }) => s.id === 'alpha-cheap-exec');
             expect(plain?.role).toBeUndefined();
             expect(plain?.executor).toBe('cheap-exec');
+            // Fleet specs are derived in memory: no backing file, so no `path` (it would
+            // name a file that does not exist); `source` says where the spec came from.
+            expect(reviewer?.source).toBe('fleet');
+            expect(reviewer?.path).toBeUndefined();
+
+            out.messages.length = 0;
+            await main(['agent', 'status', '--json'], { cwd, output: out, dbUrl: ':memory:' });
+            const status = JSON.parse(out.messages.at(-1) ?? '{}');
+            const reviewerRow = status.agents.find((s: { id: string }) => s.id === 'alpha-reviewer-1');
+            expect(reviewerRow?.source).toBe('fleet');
+            expect(reviewerRow?.path).toBeUndefined();
         } finally {
             await cleanup();
         }
@@ -150,7 +162,11 @@ describe('spur agent list --specs', () => {
         try {
             const code = await main(['agent', 'list', '--specs'], { cwd, output: out, dbUrl: ':memory:' });
             expect(code).toBe(0);
-            expect(out.messages.join('\n')).toMatch(/No agent specs found/);
+            expect(out.messages.join('\n')).toBe('No agent specs found (.spur/agents/*.yaml or agent.fleet members)');
+
+            out.messages.length = 0;
+            expect(await main(['agent', 'status'], { cwd, output: out, dbUrl: ':memory:' })).toBe(0);
+            expect(out.messages.join('\n')).toBe('No agent specs found (.spur/agents/*.yaml or agent.fleet members)');
         } finally {
             await cleanup();
         }

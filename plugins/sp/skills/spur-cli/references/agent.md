@@ -153,15 +153,16 @@ id clash; stale `fleet:generated` files are ignored) — **with live run status 
 supervisor**: each row carries a trailing status column
 (`running` / `stopped` / `errored` / `unknown`), `pid=<n>` where a process exists, and the member
 session (0897): the session mode plus a shortened resume id (`resume id=3f9c2a1d`), or `-` when the
-member has no recorded session. When `spur self serve` is unreachable, the listing falls back to all
+member has no recorded session. `--json` rows carry `source: file` (plus `path`) or `source: fleet`
+(no backing file, so no `path`). When `spur self serve` is unreachable, the listing falls back to all
 `stopped` with a stderr warning. `--server <url>` targets the supervisor API; without it the URL is
 this project's serve — the port in the cwd's project-registry entry (`http://localhost:<port>/api`),
 falling back to `http://localhost:3000/api` only when the project has no live entry (1088 R1).
 
 ```bash
 spur agent list --specs
-# planner-1	claude	planner	claude	orchestrator	running pid=4132	resume id=3f9c2a1d
-# coder-1	pi	coder	pi	implements	stopped	one-shot
+# myapp-planner-1	claude	planner	claude	orchestrator	running pid=4132	resume id=3f9c2a1d
+# myapp-coder-1	pi	coder	pi	implements	stopped	one-shot
 ```
 
 ## `status` - live status + member session per spec
@@ -182,7 +183,7 @@ unreachable server reports every spec `stopped` with no session. `--server <url>
 
 ```bash
 spur agent report --state working --seq 1759665600000000000
-spur agent report --state blocked --seq 1759665600000000000 --spec coder-1 --json
+spur agent report --state blocked --seq 1759665600000000000 --spec myapp-coder-1 --json
 ```
 
 | Flag | Description |
@@ -298,8 +299,8 @@ buffer is only a live view.
 ## `start` - start a supervised process
 
 ```bash
-spur agent start coder-1
-spur agent start coder-1 --json
+spur agent start myapp-coder-1
+spur agent start myapp-coder-1 --json
 ```
 
 Posts to the `spur self serve` supervisor API
@@ -312,8 +313,8 @@ when the server is unreachable or the start fails.
 ## `stop` - stop a supervised process
 
 ```bash
-spur agent stop coder-1
-spur agent stop coder-1 --json
+spur agent stop myapp-coder-1
+spur agent stop myapp-coder-1 --json
 ```
 
 Posts to the supervisor API

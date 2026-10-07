@@ -1052,6 +1052,19 @@ function formatSessionColumn(session: MemberSessionObservation | undefined): str
 }
 
 /** `spur agent list [--json] [--specs]` — optionally list fleet agent specs instead of detection. */
+const NO_AGENT_SPECS_MESSAGE = 'No agent specs found (.spur/agents/*.yaml or agent.fleet members)';
+
+/**
+ * Where a listed spec came from. Fleet members are derived in memory from
+ * `agent.fleet` (G72 R2) and have no backing file, so only hand-authored specs
+ * carry a `path`.
+ */
+function specOrigin(spec: AgentSpec): { source: 'fleet' } | { source: 'file'; path: string } {
+    return spec.tags?.includes('fleet:generated')
+        ? { source: 'fleet' }
+        : { source: 'file', path: `.spur/agents/${spec.id}.yaml` };
+}
+
 async function runAgentList(
     svc: AgentService,
     context: CliContext,
@@ -1066,7 +1079,7 @@ async function runAgentList(
             context.output.write(toEnvelopeJson({ specs: [] }, { enveloped: opts.jsonEnvelope }));
             return 0;
         }
-        context.output.write('No agent specs found in .spur/agents/');
+        context.output.write(NO_AGENT_SPECS_MESSAGE);
         return 0;
     }
     // The CLI process never owns the supervisor — specs are spawned by `spur serve` —
@@ -1103,7 +1116,7 @@ async function runAgentList(
                             : {}),
                         ...(spec.executor !== undefined ? { executor: spec.executor } : {}),
                         ...specFacts(spec.id),
-                        path: `.spur/agents/${spec.id}.yaml`,
+                        ...specOrigin(spec),
                     })),
                 },
                 { enveloped: opts.jsonEnvelope },
@@ -1145,7 +1158,7 @@ async function runAgentStatus(
             context.output.write(toEnvelopeJson({ agents: [] }, { enveloped: opts.jsonEnvelope }));
             return 0;
         }
-        context.output.write('No agent specs found in .spur/agents/');
+        context.output.write(NO_AGENT_SPECS_MESSAGE);
         return 0;
     }
     const server = await resolveAgentServer(context.cwd, opts.server, { warn: (m) => context.output.error(m) });
@@ -1164,7 +1177,7 @@ async function runAgentStatus(
             status: proc === undefined ? ('stopped' as const) : proc.status,
             ...(proc?.pid !== undefined && proc.pid !== null ? { pid: proc.pid } : {}),
             ...(proc?.session !== undefined ? { session: proc.session } : {}),
-            path: `.spur/agents/${spec.id}.yaml`,
+            ...specOrigin(spec),
         };
     });
     if (opts.json) {
