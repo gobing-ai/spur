@@ -616,6 +616,14 @@ resolve before the tree is cut). Under `--triage` the findings are bucketed acro
 (identical `file:line` findings deduped). WT-4 success reads as "every direct fix passed its check and the
 project gate is green"; anything else takes WT-5. Contract: [dev-operations.md § 2. review](dev-operations.md#2-review).
 
+**Wayfinding `dev-find-way` (run of one, mandatory).** `/sp:dev-find-way` always runs this
+lifecycle — an omitted flag is create mode, never in-place. Marker `command` is `dev-find-way`,
+`selector` is `chart:<destination-slug>` or `<feature-id>:<wbs>`, branch is
+`sp/wayfind-<slug|wbs>-<short-id>`. It skips `quickReadiness` (admission is "the feature/ticket
+resolves and no other `dev-find-way` marker holds the ticket"). WT-4 success reads as "the map
+checks clean (chart) or the one ticket reached `done` (work)"; anything else takes WT-5. Contract:
+[dev-operations.md § 12a. find-way](dev-operations.md#12a-find-way).
+
 One flag, two modes (see the glossary entry for the ownership rule). Bare `--worktree` is **create
 mode** (cut a fresh branch + sibling tree). `--worktree <name>` is **reuse mode** (attach to a tree
 that already exists); name resolution (§ WT-2 below) runs before WT-1. The deltas each mode applies

@@ -173,7 +173,8 @@ offers `--continue` and `--next` as competing options only when the batch was in
 After the main step completes, run the wrap hop (learnings, metrics, doc-sync). On `dev-runall`
 with `--next`, wrap runs **once for the batch** after every task reaches terminal status, mirroring
 the batch-once shippable gate `dev-verifyall` uses. Without `--next`, `--wrap` is wrap-without-
-chaining — the single task or batch wraps without advancing the lifecycle.
+chaining — the single task or batch wraps without advancing the lifecycle. On `dev-find-way` it
+wraps the one resolved ticket inside the worktree before the merge, and is skipped in chart mode.
 
 ### `--force` — bypass a named guard
 
@@ -463,11 +464,13 @@ of `--fix auto` ([`--fix`](#flag-fix)).
 
 **Anchor:** `#flag-worktree`.
 
-Batch commands plus single-task `dev-run` and review triage (`dev-refineall`, `dev-runall`,
-`dev-verifyall`, `dev-run`, `dev-review`): run the entire driver loop inside an isolated git
+Batch commands plus single-task `dev-run`, review triage and wayfinding (`dev-refineall`, `dev-runall`,
+`dev-verifyall`, `dev-run`, `dev-review`, `dev-find-way`): run the entire driver loop inside an isolated git
 worktree instead of the operator's working directory. On `dev-review` the flag requires `--triage`
 and wraps the review-plus-triage pass
-([dev-operations.md § 2. review](dev-operations.md#2-review)). One flag, two modes:
+([dev-operations.md § 2. review](dev-operations.md#2-review)). On `dev-find-way` isolation is
+mandatory: omitting the flag means create mode
+([dev-operations.md § 12a. find-way](dev-operations.md#12a-find-way)). One flag, two modes:
 
 - **Create mode** — bare `--worktree` (no value). Cut a fresh branch from the current HEAD's ref,
   create a sibling worktree with a derived name, run the batch there. On a fully successful batch

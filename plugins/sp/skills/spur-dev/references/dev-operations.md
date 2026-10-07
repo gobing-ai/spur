@@ -84,7 +84,8 @@ each would be scope creep for one-liner procedures.
 | 11  | handover   | `dev-handover`      | `inline`          | structured doc generation                                                          | `"<blocker description>"`                                                                                                                                                                              |
 | 11a | job-dump   | `dev-job-dump`      | `Skill()`         | `sp:spur-dev` (`job-dump`) | `--file <path>` |
 | 11b | job-resume | `dev-job-resume`    | `Skill()`         | `sp:spur-dev` (`job-resume`) | `--file <path>` |
-| 12  | brainstorm | `dev-brainstorm`    | `Skill()`         | `sp:brainstorm` (`dev-brainstorm`)                                                 | `<topic> [--depth <basic\|detailed\|comprehensive>] [--options <n>] [--agent <inline\|auto\|name>] [--skip-discovery] [--wayfind] [--task [<feature-id>]] [--feature [<parent-id>]] [--next]`          |
+| 12  | brainstorm | `dev-brainstorm`    | `Skill()`         | `sp:brainstorm` (`dev-brainstorm`)                                                 | `<topic> [--depth <basic\|detailed\|comprehensive>] [--options <n>] [--agent <inline\|auto\|name>] [--skip-discovery] [--task [<feature-id>]] [--feature [<parent-id>]] [--next]`          |
+| 12a | find-way   | `dev-find-way`      | `Skill()`         | `sp:wayfinder` (worktree-isolated)                                                 | `<idea> \| <feature-id> [<wbs>] [--agent <inline\|auto\|name>] [--auto] [--worktree [<name>]] [--wrap]` |
 | 13  | runall     | `dev-runall`        | `Skill()` → agent | `sp:spur-dev` (`runall`) → `sp:super-planner`                                      | `--tasks <selector> [--feature <id>] [--mode <sequential\|parallel>] [--keep-going] [--auto] [--agent <inline\|auto\|name>] [--json] [--wrap] [--next] [--continue] [--worktree [<name>]] [--no-summary]`                      |
 | 13a | parallel   | `dev-parallel`      | `Skill()`         | `sp:parallel-execution`                                                            | `--tasks <selector> [--feature <id>] [--mode <fan-out\|review-panel\|investigation>] [--agent <inline\|auto\|name>] [--json]`                                                                          |
 | 14  | wrap       | `dev-wrap`          | `Skill()`         | `spur workflow run` (wrapup-pipeline)                                              | `<wbs> [--agent <inline\|auto\|name>] [--auto] [--merge] [--dry-run]`                                                                                                                                 |
@@ -441,6 +442,15 @@ gate commands, pending questions and approval requirements.>
   Report the new task WBS and file path; the task lands at `todo`, ready for `/sp:dev-refine`.
 
 - **Delegation:** `Skill(skill="sp:brainstorm", args="dev-brainstorm --context <decision-tree> --options <n>")`
+- **Scope boundary:** brainstorm never charts a multi-session map. A foggy destination stops the run with a recommendation to use `/sp:dev-find-way` (§ 12a).
+
+### 12a. find-way
+
+- **Purpose:** Wayfinding — chart a multi-session investigation map for a foggy destination (`<idea>`), or resolve exactly one ticket of an existing map (`<feature-id> [<wbs>]`).
+- **Isolation (mandatory):** every invocation runs in a git worktree + branch per [execution-batch.md § Worktree isolation](execution-batch.md#worktree-isolation---worktree-name) as a run of one — marker `command: dev-find-way`, `selector` `chart:<slug>` or `<feature-id>:<wbs>`, branch `sp/wayfind-<slug|wbs>-<short-id>`. Omitted `--worktree` equals bare `--worktree` (create); `--worktree <name>` adopts. No in-place or branch-switch mode.
+- **Parallel sessions:** frontier selection excludes tickets held by other `dev-find-way` markers (`active`/`retained`) in the invoking tree's `.spur/run/`, because a `wip` claim is invisible outside its worktree until the merge.
+- **`--wrap`:** work mode only — `/sp:dev-wrap <wbs>` inside the worktree after the ticket reaches `done`, before the WT-3b commit; skipped with a reason in chart mode.
+- **Delegation:** `Skill(skill="sp:wayfinder", args="$ARGUMENTS")` inside the worktree.
 
 ### 13. runall
 

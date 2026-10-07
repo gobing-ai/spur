@@ -208,7 +208,8 @@ describe('sp plugin — command flag parity with dev-operations.md (R8/R9, task 
             extractFlags(allDevHints.get(n) ?? '').has('--agent'),
         );
         // 0885: dev-refactor joins the mode-aware set (references the inline-default contract).
-        expect(agentCommands.length).toBe(26);
+        // dev-find-way joins it (wayfinder split out of dev-brainstorm).
+        expect(agentCommands.length).toBe(27);
     });
 
     // ---------- compatibility alias owning-contract assertions ----------
