@@ -22,15 +22,15 @@ Decisions resolve first-wins across three layers:
 | Layer | Root | Notes |
 | ----- | ---- | ----- |
 | `project` | `<cwd>/.spur/decisions/*.yaml` | Highest precedence |
-| `registered` | programmatic catalog registrations | Agents register in-process |
+| `registered` | folders listed in config `decisions.paths` | Operator-added catalogs |
 | `shared` | `decisions/` under the bundled config root | Shipped catalogs (`config/decisions/` in-repo) |
 
 The bundled shared catalog ships `task-triage`, `failure-class`, and `review-failure-class` (all
 `choice` type, param `wbs`). Duplicate ids across layers keep the higher layer; duplicates inside
 one file are a load error.
 
-**Config keys** (under `decisions:` in `config.global.yaml` or project config):
-`paths` (extra catalog folders joined to the registered layer), `maker` (default DecisionMaker
+**Config keys** (under `decisions:` in the global `~/.config/spur/config.yaml` or project `.spur/config.yaml`):
+`paths` (extra catalog folders forming the `registered` layer), `maker` (default DecisionMaker
 for every decision point), `makers` (per-decision-id overrides). An unregistered maker name is a
 config error, never a silent fallback (design §3.6).
 
@@ -47,7 +47,7 @@ All verbs support `--json` (bare payload) and `--json-envelope` (`{ok, data|erro
 ADR-091). Failure output for `--json` commands uses the canonical error envelope only under
 `--json-envelope`; plain `--json` keeps the human message on stderr.
 
-**Exit codes:** `status` exits 1 on catalog load errors; `show` exits 1 on unknown id; `list` exits 0
+**Exit codes:** `status` exits 1 on any catalog load error or maker-config error; `show` exits 1 on unknown id; `list` exits 0
 (design §3.4 — load errors surface via `status`) except for an invalid `--layer` value (exit 1).
 Error envelopes use `NOT_FOUND` for an unknown id and `VALIDATION_FAILED` for every other caller mistake.
 
@@ -87,7 +87,7 @@ spur decision show task-triage                      # inspect contract before se
 spur decision run task-triage --param wbs=1093 --json
 spur decision run failure-class --param wbs=1093 \
     --evidence .spur/run/<runId>-test-output.txt    # redacted evidence -> instructions
-spur decision status --json | jq '.data.errors'     # audit catalog health
+spur decision status --json | jq '.loadErrors'      # audit catalog health
 ```
 
 ## References

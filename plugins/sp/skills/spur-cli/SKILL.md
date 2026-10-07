@@ -1,6 +1,6 @@
 ---
 name: spur-cli
-description: "Reference and operate the complete `spur` CLI surface: task, feature, rule, workflow, builder, agent, message, self, history, and projects. Use for verb or flag lookup, machine-readable output and exit contracts, or CLI-gated corpus writes. Triggers: \"spur task\", \"spur history\", \"spur projects\", \"create a task\", \"task check\", and any Spur CLI convention. Not for planning or execution lifecycle orchestration (`sp:spur-dev`)."
+description: "Reference and operate the complete `spur` CLI surface: task, feature, rule, workflow, builder, agent, message, decision, self, history, and projects. Use for verb or flag lookup, machine-readable output and exit contracts, or CLI-gated corpus writes. Triggers: \"spur task\", \"spur history\", \"spur projects\", \"spur decision\", \"spur agent join\", \"create a task\", \"task check\", and any Spur CLI convention. Not for planning or execution lifecycle orchestration (`sp:spur-dev`)."
 license: Apache-2.0
 metadata:
   author: spur
@@ -17,6 +17,7 @@ metadata:
     - builder
     - agent
     - message
+    - decision
     - self
     - history
     - projects
@@ -44,7 +45,7 @@ Pick the noun, read its reference. Each Tier A and Tier B reference owns that no
 | **Tier A** | **rule** | Constraint quality gate: run presets, author rules, fine-tune, validate rule files/presets, extend engine | [references/rules.md](references/rules.md) |
 | **Tier A** | **workflow** | Dual-mode workflow runtime: author state-machine / transition-flow workflows, validate, run, read traces | [references/workflows.md](references/workflows.md) |
 | **Tier A** | **builder** | Release plumbing: bump a package (or the `workspace:`-pinned set) with `bump-ver`, delete release tags with `drop-tags`, commit + tag + optional push | [references/builder.md](references/builder.md) |
-| **Tier B** | **agent** | Coding-agent execution surface: run prompts via detected/named agents, list agent specs, start/stop supervised processes, readiness check | [references/agent.md](references/agent.md) |
+| **Tier B** | **agent** | Coding-agent execution surface: run prompts via detected/named agents, list agent specs (incl. `agent.fleet` members), start/stop supervised processes, fleet `report`/`join`/`leave`/`wait`/`trace`, readiness check | [references/agent.md](references/agent.md) |
 | **Tier B** | **message** | Durable inter-agent messaging: send, inbox, reply, watch | [references/message.md](references/message.md) |
 | **Tier B** | **self** | Self-management verbs: scaffold (`init`), database maintenance (`maintain`), schema migrations (`migrate`), local web server (`serve`), status overview (`status`); `self init` runs post-scaffold validation probes & layout classification | [references/self.md](references/self.md) |
 | **Tier B** | **history** | Import agent histories, aggregate forensic artifacts, render reports, and run the checkpoint-resumed daily pipeline | [references/history.md](references/history.md) |
@@ -142,6 +143,8 @@ and spreading it; full contract in `docs/04_DESIGN.md` §1.0.1.
   [dispatch-surface rule](../parallel-execution/references/dispatch-surface.md).
 - **[references/message.md](references/message.md)** - durable inter-agent messaging (`send`,
   `inbox`, `reply`, `watch`).
+- **[references/decision.md](references/decision.md)** - decision catalog (`list`, `show`, `run`,
+  `status`); offline by default via the built-in `typesafe` maker.
 - **[references/self.md](references/self.md)** - `spur self init|maintain|migrate|serve|status` CLI verbs
   (the five legacy top-level nouns remain hidden aliases). `self init` runs post-scaffold init
   validation (Phase 1.5/1.6 probes).

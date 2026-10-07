@@ -14,6 +14,20 @@
 | `run <id>` | Serve one outcome with `--param` inputs and redacted `--evidence` files |
 | `status` | Layer counts, registered makers, per-decision maker resolution, load errors |
 
+## Catalog layers and config
+
+Decisions resolve first-wins across three layers:
+
+| Layer | Source |
+|---|---|
+| `project` | `<project>/.spur/decisions/*.yaml` |
+| `registered` | Extra catalog folders listed in config `decisions.paths` |
+| `shared` | Bundled catalogs (`config/decisions/`; ships `task-triage`, `failure-class`, `review-failure-class`) |
+
+Config keys under `decisions:` (global `~/.config/spur/config.yaml` or project `.spur/config.yaml`):
+`paths`, `maker` (default DecisionMaker), `makers` (per-decision-id overrides). An unregistered
+maker name is a config error, never a silent fallback.
+
 ## spur decision list
 
 ```
@@ -68,6 +82,13 @@ spur decision run [options] <id>
 Every backend-observed outcome serves with exit 0 (envelope carries `source`/`confidence`);
 exit 1 is reserved for caller mistakes caught before the backend. Never writes a resultFile.
 
+With no backend configured, the built-in `typesafe` maker serves the catalog fallback:
+
+```json
+{ "id": "task-triage", "type": "choice", "value": "standard", "source": "default",
+  "reason": "no-backend", "confidence": null, "maker": "typesafe", "makerSource": "catalog-default" }
+```
+
 ## spur decision status
 
 ```
@@ -79,5 +100,8 @@ spur decision status [options]
 | `--json` | Output machine-readable JSON |
 | `--json-envelope` | Wrap `--json` output in the `{ok, data}` envelope |
 
-Exit 0 on a clean catalog; exit 1 when any layer reports load errors (errors are listed either
-way).
+Exit 0 on a clean catalog; exit 1 on any catalog load error or maker-config error (an unregistered
+maker named in config). Errors are listed either way.
+
+`--json` payload: `{ ok, layers: {project, registered, shared}, loadErrors, duplicateIds,
+registeredMakers, configDecisionMakers, perDecision: [{id, maker, source, registered}] }`.
