@@ -4,7 +4,7 @@ name: Add per-state display phase metadata to the workflow engine state schema
 status: wip
 template: feature-impl
 created_at: 2026-10-07T06:14:15.476Z
-updated_at: "2026-10-07T07:40:28.415Z"
+updated_at: "2026-10-07T15:56:46.976Z"
 feature_id: I13
 
 priority: P1
@@ -143,9 +143,23 @@ R2 remainder (operator): push branch, push tags (aggregate tag triggers publish.
 
 <!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
 
+Gates (2026-10-07, inline batch dev-runall feature:I13):
+
+- ts-libs `bun run check` (packages/dual-workflow-engine): 524 pass / 0 fail (biome + tsc + suite).
+- Spur `bun run spur-check`: 10369 pass / 0 fail; recommended-post-check rules clean.
+- `spur workflow validate`: 9/9 config/workflows/*.yaml valid on engine 0.5.17.
+- Release: @gobing-ai/ts-dual-workflow-engine@0.5.17 published (aggregate tag run 37643951160); Spur pin ^0.5.17 adopted in af6976e8c.
+
 ### Review
 
 <!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+
+Review + verify (2026-10-07, fresh-context reviewer subagent):
+
+- Review verdict: pass — 0 P1/P2, 1 P3 (ts-libs schema.test.ts:600-608 parity test could assert required/minLength/enum too; non-blocking, ts-libs backlog).
+- Verify verdict: PASS — R1, R2, R3 PASS; AC1–AC4 PASS.
+- Evidence: .spur/run/evidence/1103-review-verdict.json, .spur/run/evidence/1103-verify-verdict.json.
+- Implementation: ts-libs sp/task-1103-display-metadata b11ee9b8 (feat) + cd827528 (release bump).
 
 ### References
 
