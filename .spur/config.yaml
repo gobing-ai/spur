@@ -96,6 +96,10 @@ builder:
     # registry (apps/cli/src/version-carriers.ts).
     versionCarriers:
       - type: ts-literal
+      # The private desktop shell has no workspace dependents, so `--all` would
+      # skip it; carry its package.json version with the release explicitly.
+      - type: plugin-manifest
+        paths: [apps/desktop/package.json]
 
 # ── Planning (design §2.1 / §9) ──
 tasks:
