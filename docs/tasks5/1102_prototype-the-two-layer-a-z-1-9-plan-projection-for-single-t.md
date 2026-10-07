@@ -1,12 +1,14 @@
 ---
 schema_version: 1
 name: Prototype the two-layer A-Z/1-9 plan projection for single-task and batch runs
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-10-07T05:39:25.241Z
-updated_at: "2026-10-07T05:54:50.484Z"
+updated_at: "2026-10-07T06:12:00.945Z"
 feature_id: I13
 
+done_forced: "true"
+done_reason: "wayfinder prototype ticket; no task pipeline run, verify PASS recorded from answer file"
 ---
 
 ## 1102. Prototype the two-layer A-Z/1-9 plan projection for single-task and batch runs
@@ -23,12 +25,12 @@ contract can be reviewed against real output before graduation.
 
 ### Requirements
 
-- [ ] R1. Prototype phase grouping for `task-pipeline.yaml` and `idea-pipeline.yaml`: a per-state display phase (rough form: optional YAML metadata or a side table) that maps happy-path states to letters B..; failure/loop/terminal states are hidden from the initial plan and inserted as the next digit under their phase only when entered.
-- [ ] R2. Prototype a single-task projection: letter A = Prepare (A1 Quick readiness, A2 Prepare Git, A3 Publish plan), B.. = workflow phases, digits = steps; render it for both pipelines and attach the output.
-- [ ] R3. Prototype a batch projection: A = Prepare batch, one letter per task (B..Y, title as `B 0812 <title>`), digits = that task's phases, Z = Batch report; batches over 24 tasks split into waves, each wave its own A..Z plan. Render it for a real `feature:<id>` set.
-- [ ] R4. Enforce the A-Z / 1-9 cap: show where fold/wave logic lives and that a definition whose phase exceeds 9 steps fails a validation check at authoring time (`spur workflow validate` or equivalent), never emitting AA or A10.
-- [ ] R5. Show the progress update sequence for one realistic run (including a test-fix loop and a skipped conditional step) as a list of native-todo payload snapshots, proving labels stay stable and outcomes stay truthful per 0814 R6.
-- [ ] R6. Prototype per-host rendering from the 1101 matrix (`docs/analysis/2026-10-native-todo-adoption-audit.md` § R1): put the two-layer label in the item text (only omp nests natively). Handle both update styles, per-item create/update (Claude Code `TaskCreate`/`TaskUpdate`, pi `todo`) and full-list rewrite (Codex `update_plan`, Gemini `write_todos`, OpenCode `todowrite`, Grok `todo_write`). Map statuses where `skipped` does not exist (render it in the text and never mark it completed). Show R5's snapshots in one per-item host and one full-list host.
+- [x] R1. Prototype phase grouping for `task-pipeline.yaml` and `idea-pipeline.yaml`: a per-state display phase (rough form: optional YAML metadata or a side table) that maps happy-path states to letters B..; failure/loop/terminal states are hidden from the initial plan and inserted as the next digit under their phase only when entered.
+- [x] R2. Prototype a single-task projection: letter A = Prepare (A1 Quick readiness, A2 Prepare Git, A3 Publish plan), B.. = workflow phases, digits = steps; render it for both pipelines and attach the output.
+- [x] R3. Prototype a batch projection: A = Prepare batch, one letter per task (B..Y, title as `B 0812 <title>`), digits = that task's phases, Z = Batch report; batches over 24 tasks split into waves, each wave its own A..Z plan. Render it for a real `feature:<id>` set.
+- [x] R4. Enforce the A-Z / 1-9 cap: show where fold/wave logic lives and that a definition whose phase exceeds 9 steps fails a validation check at authoring time (`spur workflow validate` or equivalent), never emitting AA or A10.
+- [x] R5. Show the progress update sequence for one realistic run (including a test-fix loop and a skipped conditional step) as a list of native-todo payload snapshots, proving labels stay stable and outcomes stay truthful per 0814 R6.
+- [x] R6. Prototype per-host rendering from the 1101 matrix (`docs/analysis/2026-10-native-todo-adoption-audit.md` § R1): put the two-layer label in the item text (only omp nests natively). Handle both update styles, per-item create/update (Claude Code `TaskCreate`/`TaskUpdate`, pi `todo`) and full-list rewrite (Codex `update_plan`, Gemini `write_todos`, OpenCode `todowrite`, Grok `todo_write`). Map statuses where `skipped` does not exist (render it in the text and never mark it completed). Show R5's snapshots in one per-item host and one full-list host.
 
 ### Acceptance Criteria
 
@@ -86,15 +88,56 @@ prototype output the operator reviews, not a decision this ticket makes final.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Prototype: `docs/analysis/2026-10-plan-projection-prototype.ts` (run from repo root; 37 assert self-checks, exits nonzero on failure). Rendered output: `docs/analysis/2026-10-plan-projection-prototype.md`. State lists are read live from `spur workflow show <yaml> --format todo --json` (`docs/analysis/2026-10-plan-projection-prototype.ts:361`), so the only new input is the phase table.
+
+- **R1 phase grouping** — side table `PHASES` at `docs/analysis/2026-10-plan-projection-prototype.ts:40`; each state is `plan` or `on-entry`. task-pipeline: B Implement, C Test, D Review, E Verify & record; idea-pipeline: B Discover … F Hand off. task-pipeline 16 states → 15 plan items; `escalate`, `test-fail-triage`, `test-fix`, `test-recheck`, `review-fail-triage`, `approve` appear only when entered; terminal states never appear (`docs/analysis/2026-10-plan-projection-prototype.md:7-27`).
+- **R2 single-task** — `singlePlan` at `docs/analysis/2026-10-plan-projection-prototype.ts:157`: A Prepare (A1–A3) + phases. Rendered for both pipelines at `docs/analysis/2026-10-plan-projection-prototype.md:7-56`. Item text is `<label> <title> · <state-id>` so the agent and the run log share one key.
+- **R3 batch** — `batchWaves` at `docs/analysis/2026-10-plan-projection-prototype.ts:282`: A Prepare batch (A1–A4), one letter per task (B..Y) with digits = the 4 phases, Z report, waves of 24. E71 (9 tasks) → 51 items (`docs/analysis/2026-10-plan-projection-prototype.md:58-114`); D62 (29 tasks) → 2 waves of 126 + 31 items (`docs/analysis/2026-10-plan-projection-prototype.md:116-155`). Order is WBS; the real driver topo-sorts.
+- **R4 cap** — `letter`/`child` throw past Z / 9 (`docs/analysis/2026-10-plan-projection-prototype.ts:124-132`); `validate` rejects > 25 phases, > 9 states per phase (counting on-entry), unknown/terminal/duplicate/unassigned states (`docs/analysis/2026-10-plan-projection-prototype.ts:134`). Batches fold into waves; the cap is static because re-entry reuses the label with an `attempt N` note. Graduation home: the validator next to `buildWorkflowSteps` (`packages/app/src/workflow/step-reporter.ts:255-278`) run by `spur workflow validate`.
+- **R5 run** — `Tracker` at `docs/analysis/2026-10-plan-projection-prototype.ts:178` replays precheck → implement → test (fail) → test-fix (C2 inserted) → test-recheck (C3) → triage → verify (fast mode, D2 review skipped) → verify PARTIAL → test-fix attempt 2 → … → record → done. Seven snapshots at `docs/analysis/2026-10-plan-projection-prototype.md:157-304`. Rules: forward move past a phase marks unentered steps skipped (`closePhase`, `docs/analysis/2026-10-plan-projection-prototype.ts:240`); loop-back leaves the later phase open; the first failed gate stays failed.
+- **R6 hosts** — `codexPayload` (`docs/analysis/2026-10-plan-projection-prototype.ts:325`) and `claudeOps` (`docs/analysis/2026-10-plan-projection-prototype.ts:330`) render the same snapshots; status map at `docs/analysis/2026-10-plan-projection-prototype.ts:311`. skipped/failed/unattempted → host `pending` + `[outcome]` in the text, never `completed`. Output at `docs/analysis/2026-10-plan-projection-prototype.md:306-408`.
+
+Findings for the map:
+
+1. **Per-item hosts append inserted items at the end** — Claude Code order `… E1 E2 C2 C3` vs full-list `… C1 C2 C3 D …` (`docs/analysis/2026-10-plan-projection-prototype.md:407-408`). Labels keep identity; the order cannot be fixed without recreating items.
+2. **Batch lists are large** — a full wave is 126 items. Acceptable for full-list hosts; noisy on per-item hosts (126 `TaskCreate` calls at publish).
+3. **Status vocabulary** — the prototype uses `pending` + text for skipped everywhere; Gemini/OpenCode/Grok could use `cancelled`. Unresolved choice.
+4. **Phase table home and public surface** — the side table must move into workflow YAML or next to `step-reporter.ts`, and `workflow show --format todo` emitting this plan is a public-surface change needing consent.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `docs/analysis/2026-10-plan-projection-prototype.ts:40`: PHASES side table, plan/on-entry per state; rendered `docs/analysis/2026-10-plan-projection-prototype.md:7-27` |
+| R2 | MET | `docs/analysis/2026-10-plan-projection-prototype.ts:157`: singlePlan, A Prepare A1-A3 plus phases; both pipelines at `docs/analysis/2026-10-plan-projection-prototype.md:7-56` |
+| R3 | MET | `docs/analysis/2026-10-plan-projection-prototype.ts:282`: batchWaves; E71 and D62 (2 waves) at `docs/analysis/2026-10-plan-projection-prototype.md:58-155` |
+| R4 | MET | `docs/analysis/2026-10-plan-projection-prototype.ts:124-155`: letter/child throw past Z/9, validate rejects >9 states and >25 phases; asserts at `docs/analysis/2026-10-plan-projection-prototype.ts:422` |
+| R5 | MET | `docs/analysis/2026-10-plan-projection-prototype.ts:178`: Tracker run with test-fix loop, skipped review, verify loop-back; snapshots `docs/analysis/2026-10-plan-projection-prototype.md:157-304` |
+| R6 | MET | `docs/analysis/2026-10-plan-projection-prototype.ts:311-350`: status map, codexPayload, claudeOps; payloads `docs/analysis/2026-10-plan-projection-prototype.md:306-408` |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Single-task plan shows phases, not raw FSM states (req: R1, R2) | MET | command | `bun docs/analysis/2026-10-plan-projection-prototype.ts` exit 0; asserts "no terminal/failure state" and "no on-entry state in the initial plan" pass for both pipelines (`docs/analysis/2026-10-plan-projection-prototype.ts:396-410`) |
+| AC2 — Batch plan maps one letter per task within A-Z (req: R3) | MET | command | same run renders E71 (9 tasks, B..J, Z report) from `spur task list --feature E71 --json` (`docs/analysis/2026-10-plan-projection-prototype.md:58-114`) |
+| AC3 — Cap is never exceeded (req: R4) | MET | command | same run asserts 10-state phase and 26 phases rejected, the label builder throws for A10, 60 tasks fold to 3 waves, all labels match `^[A-Z][1-9]?$`; `grep -cE` for AA/A10 labels in output returned 0 (`docs/analysis/2026-10-plan-projection-prototype.ts:422`) |
+| AC4 — Progress snapshots stay stable and truthful (req: R5) | MET | command | same run asserts label stability across 7 snapshots, test-fix took C2, review ends skipped, first gate stays failed (`docs/analysis/2026-10-plan-projection-prototype.ts:481`) |
+| AC5 — Same plan renders on per-item and full-list hosts (req: R6) | MET | command | same run asserts identical item text across Codex and Claude Code payloads and no skipped item marked completed (`docs/analysis/2026-10-plan-projection-prototype.md:306-408`) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -105,4 +148,7 @@ prototype output the operator reviews, not a decision this ticket makes final.
 ### History
 
 - 2026-10-07T05:40:45.907Z backlog → todo (system)
+- 2026-10-07T06:05:16.846Z todo → wip (system)
+- 2026-10-07T06:11:59.771Z wip → testing (system)
+- 2026-10-07T06:12:00.751Z testing → done (system)
 

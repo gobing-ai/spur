@@ -6,7 +6,7 @@ status: backlog
 priority: P2
 tags: ["wayfinder-map"]
 created_at: "2026-10-07T05:39:04.812Z"
-updated_at: "2026-10-07T05:55:03.299Z"
+updated_at: "2026-10-07T06:12:25.471Z"
 ---
 
 # I13: Two-layer plan and progress visibility for dev workflows
@@ -67,8 +67,17 @@ Skills to consult: `sp:spur-dev` (inline-pipeline-driver, cross-cutting, executi
 
 ### Open questions
 
-- None open at charting. Graduation (after 1101 + 1102) needs operator consent for any public `spur workflow show`
-  output change and for the per-state phase assignment the prototype proposes.
+- **Phase table and its home.** Approve the task/idea-pipeline phase assignment in
+  `docs/analysis/2026-10-plan-projection-prototype.ts:40`, and choose where it lives: per-state YAML metadata in
+  `config/workflows/*.yaml` or a side table next to `step-reporter.ts`. Also consent to `spur workflow show --format todo`
+  emitting the labeled two-layer plan (public surface). Only the operator can approve a public-surface change; this blocks
+  graduating the generator task.
+- **Skipped/failed status on hosts that have `cancelled`.** The prototype maps skipped/failed to `pending` plus an
+  `[outcome]` text suffix on every host. Gemini, OpenCode and Grok could use `cancelled` instead, at the cost of per-host
+  divergence. This is a UX preference and blocks the per-host rendering spec.
+- **Batch publish size.** Publishing every phase digit up front makes a full 24-task wave 126 items (126 `TaskCreate`
+  calls on Claude Code). The alternative is to publish task letters up front and add digits when a task starts, which
+  breaks the publish-everything-first rule. This trades transparency against noise and blocks the batch contract.
 
 ### Decisions so far
 
@@ -82,11 +91,17 @@ Skills to consult: `sp:spur-dev` (inline-pipeline-driver, cross-cutting, executi
   across 24 runs the list appears late (median ~40 calls in), workflow plan shown in 1/16, 0 two-layer labels; the root cause is a
   hand-written prose contract (C1–C7 in `docs/analysis/2026-10-native-todo-adoption-audit.md`). Labels go in item text (only omp
   nests); the parent host owns the list, since Claude Code subagents cannot hold task tools. Per-host rendering graduated to 1102 R6.
+- [1102 Prototype the two-layer A-Z/1-9 plan projection for single-task and batch runs](docs/tasks5/1102_prototype-the-two-layer-a-z-1-9-plan-projection-for-single-t.md) —
+  the prototype (`docs/analysis/2026-10-plan-projection-prototype.ts`, 37 asserts) derives the plan from `workflow show --format todo`
+  plus one phase side table: task-pipeline has 16 states and 15 plan items, E71 renders 51 items, D62 renders 2 waves. The cap
+  holds through validation (≤ 9 states per phase, ≤ 25 phases) and re-entry, which reuses the label with an `attempt N` note.
+  Moving forward marks unentered steps skipped, and a loop-back leaves later phases open. Per-item hosts append inserted steps
+  at the end, so labels carry identity and order drifts.
 
 ### Not yet specified
 
 - Return path for worker progress to the parent-owned list (`spur message` vs batch ledger polling) in `dev-parallel` / `super-planner`.
-- Label stability across retry, pause/resume and compaction (re-derivation from run state vs persisted labels).
+- Label stability across pause/resume and compaction (re-derivation from run state vs persisted labels); in-run re-entry is settled by 1102.
 - Parity of the same labels in the subprocess path (`spur workflow run`, `spur workflow progress`) and the Board.
 - Non-workflow skill-only batches (`refineall`, `verifyall`) — what their phases are.
 
