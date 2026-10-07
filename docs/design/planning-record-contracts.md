@@ -3,8 +3,8 @@ kind: design
 title: "Planning records and lifecycle contracts"
 status: implemented
 created_at: 2026-09-09
-updated_at: 2026-10-05
-related: ["1055", "1061", "1089"]
+updated_at: 2026-10-07
+related: ["1055", "1061", "1089", "1109"]
 tags: [contract, planning]
 ---
 

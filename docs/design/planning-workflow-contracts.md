@@ -3,8 +3,8 @@ kind: design
 title: "Planning workflow and operation contracts"
 status: implemented
 created_at: 2026-09-09
-updated_at: 2026-10-05
-related: ["0889", "0898", "0949", "0976", "0958", "1090"]
+updated_at: 2026-10-07
+related: ["0889", "0898", "0949", "0976", "0958", "1090", "1111"]
 tags: [contract, planning, workflow]
 ---
 
@@ -97,6 +97,10 @@ demonstrate stands on its own and governs any future candidate. Composition, act
 
 **Vars.** `wbs`, `profile`, `spurBin`, `agent`, `implementAgent`, `stepTimeoutMs`, `implementTimeoutMs`,
 `maxImplementReqs`, `maxImplementPlanItems`, `qualityGateCmd`, `qualityGateMaxFixAttempts`, `gateProbeCmd`,
+`deferQualityGate` (default `"false"`; an opt-in parallel batch sets `"true"` so each task writes
+`DEFERRED` from the light tier and the batch runs one `full` gate on the integrated base ref over the
+merged slices before the deferred feature sync — ADR-124's 2026-10-07 clarification, detail in
+[`workflow-catalogue-refactor.md`](workflow-catalogue-refactor.md) §4),
 `formatCmd`, `implementScopeGuard`, `mutationPolicy`, `__hitlAnswer`, `__hitlInput`, `maxEscalations`
 (default `2`), `escalationQuestion` (runtime-written from the question file), `deferFeatureSync`
 (default `"false"`; a parallel batch sets `"true"` to defer the post-record feature sync to batch
@@ -112,7 +116,10 @@ probe, the `/sp:dev-fixall` input and the recheck; `formatCmd` (default `bun run
 post-implement auto-format; `gateProbeCmd` (default `bun run lint`) is the cheap red-detector run before
 the full gate on `test-recheck` only — a red probe records `FAIL` and skips the full gate (empty ⇒ pre-0587
 behavior, full gate every recheck). `review` is only ever entered through a **full green** `qualityGateCmd` —
-only the full gate writes `PASS` (task 0587 R3). `formatCmd` is invoked best-effort (`${vars.formatCmd} ; exit 0`) — a
+only the full gate writes `PASS` (task 0587 R3) — with the single opt-in exception of
+`deferQualityGate: "true"` in a parallel batch, where the `test`/`test-recheck` guards also accept the
+`DEFERRED` token the light tier wrote and the batch's integrated `full` gate is what issues `PASS`.
+`formatCmd` is invoked best-effort (`${vars.formatCmd} ; exit 0`) — a
 missing or failing formatter must not abort a run, because `qualityGateCmd` at `test` is the gate
 that actually decides. **Implement-only pin (task 0454):** `implementAgent` is used only by the
 implement `agent.run` hop; override with `--vars '{"implementAgent":"pi-zai"}'` without retargeting
