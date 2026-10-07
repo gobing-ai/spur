@@ -31,9 +31,11 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 
 ## Implementation
 
-- **Publish the generated plan first (1105):** run `spur workflow show <resolved-file> --no-logo
-  --format todo --json` and publish every `.plan` row's `text` verbatim as the host todo list (the
-  `steps[]` inventory when `.plan` is `null`) before readiness, Git, or isolation work —
+- **Publish the generated plan first (1105):** your first tool call — before invoking the skill,
+  reading any reference, or showing the task — is `spur workflow show task-pipeline.yaml --no-logo
+  --format todo --json` (the CLI resolves the project→registered→shared layer); then publish every
+  `.plan` row's `text` verbatim as the host todo list (the `steps[]` inventory when `.plan` is
+  `null`) before readiness, Git, or isolation work —
   [shared startup contract](../skills/spur-dev/references/cross-cutting.md#shared-startup-contract-task-0814-r1r3r4r6r7r8)
   step 1 / [inline pipeline driver](../skills/spur-dev/references/inline-pipeline-driver.md) run
   setup step 5.

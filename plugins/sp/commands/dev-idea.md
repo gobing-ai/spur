@@ -52,8 +52,9 @@ Flag → vars: `--auto` sets `profile=auto`, `idea_approved=true`, `design_appro
 
 ## Implementation
 
-- **Publish the generated plan first (1105):** resolve `idea-pipeline.yaml` and run `spur workflow
-  show <resolved-file> --no-logo --format todo --json`, then publish every `.plan` row's `text`
+- **Publish the generated plan first (1105):** your first tool call — before invoking the skill or
+  reading any reference — is `spur workflow show idea-pipeline.yaml --no-logo --format todo --json`
+  (the CLI resolves the project→registered→shared layer); then publish every `.plan` row's `text`
   verbatim as the host todo list (the `steps[]` inventory when `.plan` is `null`) before the
   pipeline's first stage — [inline pipeline driver](../skills/spur-dev/references/inline-pipeline-driver.md)
   run setup step 5.
