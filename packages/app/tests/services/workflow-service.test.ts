@@ -208,7 +208,7 @@ function makeCtx(cwd = process.cwd(), spurConfig?: SpurConfig) {
 }
 
 describe('WorkflowAppService', () => {
-    test('DecisionMaker evidence mode reads retained registered summaries after scratch removal', async () => {
+    test('DecisionMaker evidence mode routes retained registered summaries through the catalog decision after scratch removal', async () => {
         const dir = await mkdtemp(join(tmpdir(), 'spur-wf-decision-'));
         const file = join(dir, 'decision.yaml');
         await writeFile(
@@ -259,8 +259,10 @@ terminalStates: [done]
         try {
             for (const enabled of [false, true]) {
                 await mkdir(join(dir, '.spur/run'), { recursive: true });
-                let calls = 0;
-                let evidence = '';
+                // 1099: evidence-mode confirm gates decide through the catalog service the
+                // composition root injects, so the context-level legacy decisionMaker is never
+                // consulted; this counter only proves that boundary (R3 keeps it for select/legacy).
+                let legacyMakerCalls = 0;
                 const ctx = makeCtx(dir, spurConfigSchema.parse({ workflow: { hitlDecisionMaker: enabled } }));
                 const executor = new TestProcessExecutor();
                 const run = executor.run.bind(executor);
@@ -303,9 +305,8 @@ terminalStates: [done]
                         createDecisionMaker({
                             driver: {
                                 name: 'fake',
-                                ask: async (req) => {
-                                    calls++;
-                                    evidence = JSON.stringify(req.state);
+                                ask: async () => {
+                                    legacyMakerCalls++;
                                     return {
                                         question: {
                                             kind: 'choice',
@@ -318,19 +319,38 @@ terminalStates: [done]
                             },
                         }),
                 });
-                const result = await service.run(file, { runId: `decision-${enabled}` });
-                expect(result.status).toBe('done');
-                expect(calls).toBe(enabled ? 1 : 0);
-                if (enabled) {
-                    expect(evidence).toContain('"kind":"shell"');
-                    expect(evidence).toContain('summary');
+                // No decision backend may leak from the environment (env-var hygiene, as the
+                // 1099 catalog tests): the bundled `typesafe` maker then serves its fallback.
+                const savedKey = getEnvVar('TYPESAFE_API_KEY');
+                if (enabled) setEnvVar('TYPESAFE_API_KEY', undefined);
+                let result: Awaited<ReturnType<typeof service.run>>;
+                try {
+                    result = await service.run(file, { runId: `decision-${enabled}` });
+                } finally {
+                    if (enabled) setEnvVar('TYPESAFE_API_KEY', savedKey);
                 }
+                expect(result.status).toBe('done');
+                expect(legacyMakerCalls).toBe(0);
                 const rows = await new ActionRunDao(await ctx.getDb()).actionRowsByRunId(`decision-${enabled}`);
                 const answer = JSON.parse(rows.find((row) => row.kind === 'hitl.confirm')?.result_json ?? '{}');
-                expect(answer.setVars).toEqual({
-                    approval: enabled ? 'yes' : '',
-                    decisionStatus: enabled ? 'accepted' : 'deferred',
-                });
+                expect(answer.setVars).toEqual({ approval: '', decisionStatus: 'deferred' });
+                if (enabled) {
+                    // `no-backend` proves the full evidence pipeline ran — producer selection,
+                    // the retained registered summary envelope read after scratch removal and
+                    // the serialized bound — and the catalog decide served its fallback. Any
+                    // earlier evidence failure defers with a different reason and never decides.
+                    expect(answer.data.decision).toMatchObject({
+                        mode: 'evidence',
+                        outcome: 'deferred',
+                        reason: 'no-backend',
+                    });
+                } else {
+                    expect(answer.data.decision).toMatchObject({
+                        mode: 'evidence',
+                        outcome: 'deferred',
+                        reason: 'disabled',
+                    });
+                }
             }
         } finally {
             await rm(dir, { recursive: true });
