@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Raise implementTimeoutMs default to 45 minutes
-status: todo
+status: wip
 template: feature-impl
 created_at: 2026-10-07T07:29:49.093Z
-updated_at: "2026-10-07T16:17:18.408Z"
+updated_at: "2026-10-07T20:34:53.009Z"
 feature_id: H15
 
 priority: P2
@@ -82,7 +82,48 @@ estimate_hours: 2
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Raised the implement default budget to 45 min and amended the inline driver so the YAML budget reaches the host whenever its dispatch tool accepts a timeout. No runtime code changed. AC1 — Implement dispatch budget defaults to 45 minutes on subprocess and inline hosts and exhaustion is visible (req: R1, R2, R3, R4, R5).
+
+| Req | `file:line` | Change |
+| --- | --- | --- |
+| R1 | `config/workflows/task-pipeline.yaml:126` | `implementTimeoutMs: "2700000"` (was `"1800000"`) |
+| R1 | `config/workflows/task-pipeline.yaml:123` | Superseding comment: 45 min default governs subprocess surfaces; a reasoned default, not a proven bound (P1: one implement still hit 45 min and resumed) |
+| R2 | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:641` | Timeout boundary amended: host dispatch tool with a timeout param gets the resolved YAML `timeoutMs` (implement → `implementTimeoutMs`), logged as `host timeout <ms> (yaml timeoutMs)` |
+| R2 | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:644` | Fallback logged as `host timeout <ms> (platform subagent limit)`; no-replay / resume-from-partial-tree rules unchanged |
+| R2 | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:440` | `agent.run` bullet reworded: `timeoutMs` not applicable only for host-inline actions; dispatched subagents pass it when supported |
+| R3 | `config/workflows/task-pipeline.yaml:311` | Implement `agent.run` still reads `timeoutMs: ${vars.implementTimeoutMs}`, so `--vars '{"implementTimeoutMs":"..."}'` overrides without YAML edits (name unchanged) |
+| R4 | `packages/app/src/workflow/actions/agent-run.ts:1281` | Unchanged `configured timeout` exhaustion message (verification only) |
+| R4 | `packages/app/tests/workflow/actions/agent-run.test.ts:1378` | Unchanged `configured timeout` assertion, green |
+| R5 | `plugins/sp/tests/skill-structure.test.ts:762` | Asserts `implementTimeoutMs: "2700000"` |
+| R5 | `docs/design/planning-workflow-contracts.md:258` | Contract states the `implementTimeoutMs` 45 min default and inline pass-through |
+| R5 | `plugins/sp/hooks/context-session-start.ts:77` | Comment now says `implementTimeoutMs` (45 min) |
+
+Notes:
+- `apps/cli/config/workflows/task-pipeline.yaml` regenerated via `bun run --filter @gobing-ai/spur build:bundle` (gitignored; carries `implementTimeoutMs: "2700000"`).
+- `plugins/sp/skills/spur-dev/references/execution-workflow.md:349-350` cites the 30 min figure as historical run evidence (`ca130182`), not the default, so it was left as is. `:311` does not state a value.
+- `stepTimeoutMs` left untouched (out of scope).
+- The 0727 phrase "the host platform's subagent limit, not the YAML timeoutMs" survives in the fallback clause, so `scripts/commands/inline-execution-contract.test.ts:331` stays green without edits.
+
+Narrow test evidence:
+
+```
+(cd plugins/sp && bun test tests/skill-structure.test.ts)
+ 91 pass
+ 0 fail
+ 886 expect() calls
+Ran 91 tests across 1 file.
+
+(cd packages/app && bun test tests/workflow/actions/agent-run.test.ts)
+ 164 pass
+ 0 fail
+ 493 expect() calls
+Ran 164 tests across 1 file.
+
+bun test scripts/commands/inline-execution-contract.test.ts
+ 21 pass
+ 0 fail
+ 249 expect() calls
+```
 
 ### Testing
 
@@ -103,6 +144,7 @@ estimate_hours: 2
 ### History
 
 - 2026-10-07T07:34:13.557Z backlog → todo (system)
+- 2026-10-07T20:34:53.009Z todo → wip (system)
 
 ### Notes
 

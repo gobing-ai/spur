@@ -74,7 +74,7 @@ interface SessionFileBody {
  *
  * 1. {@link AGENT_RUN_ID_ENV} present → this process is a descendant of an agent run, definitively.
  *    Reuse the recorded session with no time bound: a pipeline step legitimately runs for the full
- *    `implementTimeoutMs` (30 min) and longer batches run for hours, so any wall-clock window would
+ *    `implementTimeoutMs` (45 min) and longer batches run for hours, so any wall-clock window would
  *    eventually split a run that is demonstrably still in flight.
  * 2. No marker → fall back to the {@link SESSION_REUSE_IDLE_MS} window on the `started` stamp, for
  *    hosts that nest without propagating a correlation.

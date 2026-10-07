@@ -116,11 +116,14 @@ vars:
     # run unbounded — if a hop still hits this wall, STOP and record it.
     stepTimeoutMs: "1800000"
     # Timeout for the `implement` step specifically (R2a). Implementation is the
-    # heaviest agent.run step (full read/write/test-probe loop) and has timed out
-    # at the 600s default in five consecutive dogfood runs (bugs 742/744/746/748),
-    # a 100% failure rate at that budget. 30 min gives real headroom; STOP and
-    # record honestly rather than raising it further without operator sign-off.
-    implementTimeoutMs: "1800000"
+    # heaviest agent.run step (full read/write/test-probe loop); the old 600s default
+    # failed five consecutive dogfood runs (bugs 742/744/746/748). Default is 45 min
+    # (task 1108): it governs subprocess surfaces (`spur workflow run`, parallel,
+    # headless); inline hosts receive it only when their dispatch tool accepts a
+    # timeout (inline-pipeline-driver.md § Timeout boundary). 45 min is a reasoned
+    # default, not a proven bound — in P1 one implement still hit 45 min and resumed.
+    # Override per run: `--vars '{"implementTimeoutMs":"3600000"}'`.
+    implementTimeoutMs: "2700000"
     # Answer captured by the approve gate's hitl.confirm (R1): "yes" | "no" | "cancel".
     # Empty by default; only meaningful once the approve state has been entered.
     __hitlAnswer: ""
