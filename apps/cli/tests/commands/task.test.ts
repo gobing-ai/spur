@@ -2219,6 +2219,8 @@ Only this section exists.
                     requirements: [{ id: 'r1', status: 'MET', evidence: 'stub' }],
                     acceptanceCriteria: [],
                     checks: [{ name: 'stub', status: 'pass', evidence: 'stub' }],
+                    // 1117: the done gate requires the verifier's stated confidence.
+                    confidence: 'HIGH',
                 })}\n`,
             );
 
@@ -2448,6 +2450,8 @@ Only this section exists.
                 requirements: [{ id: 'R1', status: 'MET', evidenceType: '', evidence: 'tests pass' }],
                 acceptanceCriteria: [],
                 checks: [{ name: 'Security', status: 'P1', evidence: 'no bypass' }],
+                // 1117: the done gate requires the verifier's stated confidence.
+                confidence: 'HIGH',
             })}\n`,
         );
         const recordOutput = createCapturedOutput();
@@ -2923,6 +2927,9 @@ Only this section exists.
         ],
         acceptanceCriteria: [],
         source: 'spur task verdict',
+        // 1117: the done gate certifies a PASS only when the artifact states the
+        // verifier's confidence, so a PASS fixture must carry one.
+        confidence: 'HIGH',
     };
     const PARTIAL_VERDICT = {
         wbs: 'PLACEHOLDER',
@@ -2985,6 +2992,49 @@ Only this section exists.
         const msg = output.errors.join('\n') + output.messages.join('\n');
         expect(msg).toContain('missing verify verdict artifact');
         expect(await readStatus(wbs)).toBe('testing');
+    });
+
+    test('done guard: 1117 — a PASS artifact without a confidence level is denied', async () => {
+        // WHY: the pipeline's own completion guards read `confidence`, but the CLI-layer
+        // gate — which the pipeline itself passes through via `task update done
+        // --no-lifecycle` — did not, so a hand-written PASS artifact certified exactly
+        // like a HIGH-confidence one. The gate now requires the level.
+        const wbs = await seedTaskAtTesting('guard no-confidence');
+        const { confidence: _dropped, ...noConfidence } = PASS_VERDICT;
+        await writeVerdict(wbs, { ...noConfidence, wbs });
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'update', wbs, 'done', '--no-lifecycle'], { cwd, output });
+        expect(exitCode).toBe(1);
+        const msg = output.errors.join('\n') + output.messages.join('\n');
+        expect(msg).toContain('no usable confidence level (absent)');
+        expect(msg).toContain('HIGH | MEDIUM | LOW');
+        expect(msg).toContain('--force-done');
+        expect(await readStatus(wbs)).toBe('testing');
+    });
+
+    test('done guard: 1117 — an out-of-vocabulary confidence value is denied', async () => {
+        // On the CLI path the structural check gate (`L4.malformed-verdict-artifact`,
+        // zod) rejects the bad enum before the guard is reached; the guard's own
+        // vocabulary branch covers the callers that skip that gate (e.g. --no-lifecycle
+        // without a check gate). Assert the observable contract either way.
+        const wbs = await seedTaskAtTesting('guard bad-confidence');
+        await writeVerdict(wbs, { ...PASS_VERDICT, wbs, confidence: 'SURE' });
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'update', wbs, 'done', '--no-lifecycle'], { cwd, output });
+        expect(exitCode).toBe(1);
+        const msg = output.errors.join('\n') + output.messages.join('\n');
+        expect(msg).toMatch(/confidence/i);
+        expect(msg).toContain('HIGH');
+        expect(await readStatus(wbs)).toBe('testing');
+    });
+
+    test('done guard: 1117 — LOW confidence still advances (the pipeline owns the ack policy)', async () => {
+        const wbs = await seedTaskAtTesting('guard low-confidence');
+        await writeVerdict(wbs, { ...PASS_VERDICT, wbs, confidence: 'LOW' });
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'update', wbs, 'done', '--no-lifecycle'], { cwd, output });
+        expect(exitCode).toBe(0);
+        expect(await readStatus(wbs)).toBe('done');
     });
 
     test('done guard: no verdict file + --force-done → allow with audit trail', async () => {

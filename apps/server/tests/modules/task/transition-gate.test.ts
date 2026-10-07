@@ -61,6 +61,9 @@ const UNGATED_TASK = [...TASK_HEAD, '### Background', '', 'Text', ''].join('\n')
 const PASS_VERDICT = {
     wbs: '0001',
     verdict: 'PASS',
+    // Task 1085: a PASS artifact must carry the verifier's stated confidence
+    // level or the shared done gate rejects it before the structural gate runs.
+    confidence: 'HIGH',
     requirements: [{ id: 'R1', status: 'MET', evidence: 'a' }],
     acceptanceCriteria: [],
     source: 'test',

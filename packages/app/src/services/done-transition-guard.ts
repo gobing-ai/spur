@@ -26,6 +26,13 @@
  *     module. `task-verdict.test.ts` unit-checks the rule itself; the
  *     cross-check is in `done-transition-guard.test.ts` ("R10 — agrees with
  *     deriveVerdict on every shape").
+ *   - Confidence gate (task 1117): a PASS artifact must carry the verifier's
+ *     stated confidence (`HIGH | MEDIUM | LOW`, task 1068) before the gate
+ *     certifies it. `confidence` was previously read only by the pipeline's own
+ *     completion guards (`task-pipeline.yaml`), so the same artifact could slide
+ *     to `done` through a hand-driven `task update <wbs> done` with no level at
+ *     all, or with a value outside the vocabulary. LOW stays *valid* here — the
+ *     acknowledgement policy for LOW is the pipeline's decision, not this gate's.
  *   - Override (R3): `done_forced: true` + `done_reason: <text>` frontmatter
  *     fields. The CLI sets them via a transition-scoped write so the override
  *     is auditable in-file (no sidecar FS surface).
@@ -64,6 +71,13 @@ export interface VerdictArtifact {
         evidence?: string;
     }[];
     source?: string;
+    /**
+     * Verifier's stated confidence (task 1068). Typed `unknown` on purpose: the
+     * artifact is `JSON.parse`d, not zod-validated, at this layer, so the gate
+     * must be able to *see* an out-of-vocabulary value (task 1117) instead of
+     * trusting a type that the JSON never enforced.
+     */
+    confidence?: unknown;
 }
 
 /** What the guard decided. */
@@ -231,6 +245,72 @@ export function computeAggregate(artifact: VerdictArtifact): VerdictAggregate {
     });
 }
 
+// ─── Confidence gate (task 1117) ───────────────────────────────────────
+
+/**
+ * The closed confidence vocabulary the verify answer contract fixes (task 1068).
+ * Duplicated here deliberately, exactly like the aggregation rule above: this
+ * leaf module must not pull the `verify-answer-lint` / `task-verdict` parser (and
+ * its `AnswerText` dependency) in for a three-word enum.
+ */
+const CONFIDENCE_LEVELS = ['HIGH', 'MEDIUM', 'LOW'] as const;
+
+/** A confidence level in canonical (upper-case) form. */
+export type ConfidenceLevel = (typeof CONFIDENCE_LEVELS)[number];
+
+/** What the artifact's `confidence` field says, judged against the vocabulary. */
+export type ConfidenceSignal =
+    | { kind: 'level'; level: ConfidenceLevel }
+    | { kind: 'missing' }
+    | { kind: 'invalid'; raw: string };
+
+/**
+ * Read the artifact's `confidence` field. Missing and invalid both fail the done
+ * gate; `LOW` is a valid *level* (the LOW acknowledgement policy belongs to the
+ * pipeline's completion guard, not here). Matching is case-insensitive to stay
+ * consistent with the answer-file lint (`/^(HIGH|MEDIUM|LOW)$/i`, task 1068).
+ */
+export function readConfidence(artifact: VerdictArtifact): ConfidenceSignal {
+    const raw = artifact.confidence;
+    if (raw === undefined || raw === null) return { kind: 'missing' };
+    if (typeof raw === 'string') {
+        const upper = raw.trim().toUpperCase();
+        const level = CONFIDENCE_LEVELS.find((candidate) => candidate === upper);
+        if (level !== undefined) return { kind: 'level', level };
+    }
+    return { kind: 'invalid', raw: typeof raw === 'string' ? raw : (JSON.stringify(raw) ?? String(raw)) };
+}
+
+/**
+ * Build the actionable denial for a PASS artifact that cannot show a usable
+ * confidence level. Names the task, the artifact path, what was found, the
+ * expected line, and both remediations (re-verify, or the operator override).
+ */
+export function formatConfidenceDenial(args: {
+    wbs: string;
+    taskFilePath: string;
+    verdictPath: string;
+    signal: ConfidenceSignal;
+}): string {
+    const { wbs, taskFilePath, verdictPath, signal } = args;
+    const found =
+        signal.kind === 'missing'
+            ? 'absent'
+            : signal.kind === 'invalid'
+              ? `invalid \`${signal.raw}\``
+              : `level \`${signal.level}\``;
+    return [
+        `Cannot transition task ${wbs} to done: verdict artifact has no usable confidence level (${found}).`,
+        `  task:     ${taskFilePath}`,
+        `  verdict:  ${verdictPath}`,
+        `  expected: a \`confidence\` field of HIGH | MEDIUM | LOW (task 1068) — the verifier's own`,
+        `            statement of how strongly it stands behind the PASS.`,
+        `  remediation: re-run \`/sp:dev-verify ${wbs}\` so the answer file carries a \`Confidence:\` line`,
+        `               (the artifact is derived from it), or override with ` +
+            `\`spur task update ${wbs} done --force-done --reason "<why>"\`.`,
+    ].join('\n');
+}
+
 // ─── Denial message (R2) ───────────────────────────────────────────────
 
 /**
@@ -322,7 +402,10 @@ export function formatNoopMessage(wbs: string, status: string): string {
  *   4. Malformed/unreadable artifact → deny naming the read error (caller).
  *   5. R10 consistency: recompute aggregate; if it contradicts the stored
  *      `verdict`, treat as the harsher of the two and name the inconsistency.
- *   6. PASS → allow; anything else → deny with the actionable message.
+ *   6. PASS → allow; anything else → deny with the actionable message. Only on
+ *      the PASS branch is the confidence gate consulted (task 1117): a missing or
+ *      out-of-vocabulary level denies here, while a non-PASS artifact already
+ *      denies for the reason that actually matters.
  */
 export function evaluateDoneTransition(input: GuardInput): GuardOutcome {
     const { wbs, taskFilePath, currentStatus, targetStatus, forced, reason, artifact, readError } = input;
@@ -384,6 +467,17 @@ export function evaluateDoneTransition(input: GuardInput): GuardOutcome {
     const effective: VerdictAggregate = internallyConsistentPass ? harshnessMax(artifact.verdict, computed) : 'UNKNOWN';
 
     if (effective === 'PASS') {
+        // Task 1117: a PASS is only certifiable when the artifact states the
+        // verifier's confidence. `verdict: 'PASS'` is carried on the deny so the
+        // CLI can report *why* a PASS artifact failed, instead of "verdict PASS".
+        const signal = readConfidence(artifact);
+        if (signal.kind !== 'level') {
+            return {
+                kind: 'deny',
+                verdict: 'PASS',
+                message: formatConfidenceDenial({ wbs, taskFilePath, verdictPath, signal }),
+            };
+        }
         return { kind: 'allow', reason: 'pass' };
     }
 

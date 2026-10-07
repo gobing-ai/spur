@@ -6,6 +6,7 @@ import {
     formatDenialMessage,
     formatNoopMessage,
     type GuardInput,
+    readConfidence,
     readVerdictArtifact,
     type VerdictArtifact,
     type VerdictRowStatus,
@@ -23,6 +24,7 @@ const passArtifact: VerdictArtifact = {
     ],
     acceptanceCriteria: [],
     source: 'spur task verdict',
+    confidence: 'HIGH',
 };
 
 const partialArtifact: VerdictArtifact = {
@@ -266,6 +268,7 @@ describe('evaluateDoneTransition', () => {
                 { name: 'coverage', status: 'warn', severity: 'advisory', evidence: 'near-miss' },
             ],
             source: 'spur task verdict',
+            confidence: 'HIGH',
         };
         const out = evaluateDoneTransition(baseInput({ artifact }));
         expect(out.kind).toBe('allow');
@@ -296,6 +299,79 @@ describe('evaluateDoneTransition', () => {
         const out = evaluateDoneTransition(baseInput({ artifact }));
         expect(out.kind).toBe('deny');
         if (out.kind === 'deny') expect(out.verdict).toBe('UNKNOWN');
+    });
+});
+
+// ─── 1117: the done gate requires a usable confidence level ────────────
+
+/** A certifiable PASS artifact, parameterized by its `confidence` field. */
+function passWithConfidence(confidence: unknown): VerdictArtifact {
+    return {
+        wbs: '0299',
+        verdict: 'PASS',
+        requirements: [{ id: 'R1', status: 'MET', evidence: 'a' }],
+        acceptanceCriteria: [],
+        source: 'spur task verdict',
+        ...(confidence === undefined ? {} : { confidence }),
+    };
+}
+
+describe('1117 — confidence gate', () => {
+    test.each(['HIGH', 'MEDIUM', 'LOW'])('readConfidence accepts %s', (level) => {
+        expect(readConfidence(passWithConfidence(level))).toEqual({ kind: 'level', level });
+    });
+
+    test('readConfidence is case-insensitive and trims (matches the answer lint)', () => {
+        expect(readConfidence(passWithConfidence(' high '))).toEqual({ kind: 'level', level: 'HIGH' });
+    });
+
+    test('readConfidence reports a missing field, an unknown value, and a non-string value', () => {
+        expect(readConfidence(passWithConfidence(undefined))).toEqual({ kind: 'missing' });
+        expect(readConfidence(passWithConfidence(null))).toEqual({ kind: 'missing' });
+        expect(readConfidence(passWithConfidence('SURE'))).toEqual({ kind: 'invalid', raw: 'SURE' });
+        expect(readConfidence(passWithConfidence(3))).toEqual({ kind: 'invalid', raw: '3' });
+    });
+
+    test('a PASS with no confidence field is denied, naming the gap and both remedies', () => {
+        const out = evaluateDoneTransition(baseInput({ artifact: passWithConfidence(undefined) }));
+        expect(out.kind).toBe('deny');
+        if (out.kind === 'deny') {
+            expect(out.verdict).toBe('PASS');
+            expect(out.message).toContain('no usable confidence level (absent)');
+            expect(out.message).toContain('.spur/run/0299-verdict.json');
+            expect(out.message).toContain('HIGH | MEDIUM | LOW');
+            expect(out.message).toContain('/sp:dev-verify 0299');
+            expect(out.message).toContain('--force-done');
+        }
+    });
+
+    test('a PASS with an out-of-vocabulary confidence is denied, quoting the value', () => {
+        const out = evaluateDoneTransition(baseInput({ artifact: passWithConfidence('SURE') }));
+        expect(out.kind).toBe('deny');
+        if (out.kind === 'deny') expect(out.message).toContain('invalid `SURE`');
+    });
+
+    test('LOW is a valid level here — the acknowledgement policy is the pipeline guard', () => {
+        expect(evaluateDoneTransition(baseInput({ artifact: passWithConfidence('LOW') })).kind).toBe('allow');
+    });
+
+    test('the operator override still clears a missing confidence (forced allow)', () => {
+        const out = evaluateDoneTransition(
+            baseInput({ artifact: passWithConfidence(undefined), forced: true, reason: 'docs-only close' }),
+        );
+        expect(out.kind).toBe('allow');
+        if (out.kind === 'allow') expect(out.reason).toBe('forced');
+    });
+
+    test('a non-PASS artifact denies for its verdict, not for the confidence field', () => {
+        const out = evaluateDoneTransition(
+            baseInput({ artifact: { ...passWithConfidence(undefined), verdict: 'FAIL' } }),
+        );
+        expect(out.kind).toBe('deny');
+        if (out.kind === 'deny') {
+            expect(out.verdict).toBe('FAIL');
+            expect(out.message).toContain('verify verdict is FAIL');
+        }
     });
 });
 
