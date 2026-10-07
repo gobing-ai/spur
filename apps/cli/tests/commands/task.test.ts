@@ -2219,7 +2219,7 @@ Only this section exists.
                     requirements: [{ id: 'r1', status: 'MET', evidence: 'stub' }],
                     acceptanceCriteria: [],
                     checks: [{ name: 'stub', status: 'pass', evidence: 'stub' }],
-                    // 1117: the done gate requires the verifier's stated confidence.
+                    // 1123: the done gate requires the verifier's stated confidence.
                     confidence: 'HIGH',
                 })}\n`,
             );
@@ -2450,7 +2450,7 @@ Only this section exists.
                 requirements: [{ id: 'R1', status: 'MET', evidenceType: '', evidence: 'tests pass' }],
                 acceptanceCriteria: [],
                 checks: [{ name: 'Security', status: 'P1', evidence: 'no bypass' }],
-                // 1117: the done gate requires the verifier's stated confidence.
+                // 1123: the done gate requires the verifier's stated confidence.
                 confidence: 'HIGH',
             })}\n`,
         );
@@ -2927,7 +2927,7 @@ Only this section exists.
         ],
         acceptanceCriteria: [],
         source: 'spur task verdict',
-        // 1117: the done gate certifies a PASS only when the artifact states the
+        // 1123: the done gate certifies a PASS only when the artifact states the
         // verifier's confidence, so a PASS fixture must carry one.
         confidence: 'HIGH',
     };
@@ -2994,7 +2994,7 @@ Only this section exists.
         expect(await readStatus(wbs)).toBe('testing');
     });
 
-    test('done guard: 1117 — a PASS artifact without a confidence level is denied', async () => {
+    test('done guard: 1123 — a PASS artifact without a confidence level is denied', async () => {
         // WHY: the pipeline's own completion guards read `confidence`, but the CLI-layer
         // gate — which the pipeline itself passes through via `task update done
         // --no-lifecycle` — did not, so a hand-written PASS artifact certified exactly
@@ -3012,7 +3012,7 @@ Only this section exists.
         expect(await readStatus(wbs)).toBe('testing');
     });
 
-    test('done guard: 1117 — an out-of-vocabulary confidence value is denied', async () => {
+    test('done guard: 1123 — an out-of-vocabulary confidence value is denied', async () => {
         // On the CLI path the structural check gate (`L4.malformed-verdict-artifact`,
         // zod) rejects the bad enum before the guard is reached; the guard's own
         // vocabulary branch covers the callers that skip that gate (e.g. --no-lifecycle
@@ -3028,7 +3028,7 @@ Only this section exists.
         expect(await readStatus(wbs)).toBe('testing');
     });
 
-    test('done guard: 1117 — LOW confidence still advances (the pipeline owns the ack policy)', async () => {
+    test('done guard: 1123 — LOW confidence still advances (the pipeline owns the ack policy)', async () => {
         const wbs = await seedTaskAtTesting('guard low-confidence');
         await writeVerdict(wbs, { ...PASS_VERDICT, wbs, confidence: 'LOW' });
         const output = createCapturedOutput();

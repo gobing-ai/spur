@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Require a usable confidence level at the done gate (artifact presence + vocabulary)
-status: backlog
+status: cancelled
 template: standard
 created_at: 2026-10-07T21:00:41.067Z
-updated_at: "2026-10-07T21:00:41.318Z"
+updated_at: "2026-10-07T21:43:08.193Z"
 
 ---
 
@@ -27,6 +27,10 @@ Captured from the creation title: "Require a usable confidence level at the done
 <!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
      condition. Not a parking lot for open questions — an unanswered question here means the task
      is not ready to hand off. Keep empty if none. -->
+
+#### Q&A entry — 2026-10-07T21:43:07.674Z
+
+- Superseded (2026-10-07, batch af68 merge): main independently landed the same confidence gate as task 1068 R3 (commit e47641d91 — done-transition-guard normalization + PASS-deny, guard/CLI/server tests, verdict-schema doc). This task's parallel implementation (found pre-committed in the runall worktree, completed as 164799b39) is dropped in favor of main's; the branch's additive CLI denial tests ride along in the merge. Renumbered 1117 → 1123 to release the id for main's defect batch.
 
 ### Design
 
@@ -53,3 +57,6 @@ Captured from the creation title: "Require a usable confidence level at the done
 <!-- Links to features, docs, ADRs, related tasks, or external references. -->
 
 ### History
+
+- 2026-10-07T21:43:08.193Z backlog → cancelled (system)
+
