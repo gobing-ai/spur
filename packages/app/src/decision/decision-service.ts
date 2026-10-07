@@ -232,10 +232,10 @@ export class DecisionService {
             makerSource: source,
             catalogLayer: description.layer,
             inputKeys: Object.keys(input ?? {}),
-            ...(typeof input?.['instructions'] === 'string'
+            ...(typeof input?.instructions === 'string'
                 ? {
                       evidenceDigest: `sha256:${createHash('sha256')
-                          .update(input['instructions'] as string, 'utf8')
+                          .update(input.instructions as string, 'utf8')
                           .digest('hex')}`,
                   }
                 : {}),

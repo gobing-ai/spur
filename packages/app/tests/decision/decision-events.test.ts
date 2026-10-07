@@ -102,16 +102,16 @@ describe('decision-events emitter (task 1095, design §3.2)', () => {
             confidence: 0.9,
         });
         expect(events.map((e) => e.name)).toEqual(['decision.start', 'decision.success', 'decision.end']);
-        expect(new Set(events.map((e) => e.payload['invocationId'])).size).toBe(1);
-        expect(events.every((e) => e.payload['decisionId'] === 'pick-lane')).toBe(true);
-        expect(events.every((e) => e.payload['caller'] === 'cli')).toBe(true);
+        expect(new Set(events.map((e) => e.payload.invocationId)).size).toBe(1);
+        expect(events.every((e) => e.payload.decisionId === 'pick-lane')).toBe(true);
+        expect(events.every((e) => e.payload.caller === 'cli')).toBe(true);
         const start = events[0]?.payload as Record<string, unknown>;
-        expect(start['severity']).toBe('info');
-        expect(start['makerSource']).toBe('catalog-default');
-        expect(start['inputKeys']).toEqual(['lane']);
-        expect((start['correlation'] as Record<string, unknown>)['runId']).toBe('r-1');
-        expect((start['correlation'] as Record<string, unknown>)['wbs']).toBe('1095');
-        expect(events[1]?.payload['severity']).toBe('info');
+        expect(start.severity).toBe('info');
+        expect(start.makerSource).toBe('catalog-default');
+        expect(start.inputKeys).toEqual(['lane']);
+        expect((start.correlation as Record<string, unknown>).runId).toBe('r-1');
+        expect((start.correlation as Record<string, unknown>).wbs).toBe('1095');
+        expect(events[1]?.payload.severity).toBe('info');
         expect(events[2]?.payload).toMatchObject({ durationMs: 12, source: 'model', reason: 'accepted' });
     });
 
@@ -155,7 +155,7 @@ describe('decision-events emitter (task 1095, design §3.2)', () => {
             },
         );
         invocation2.fail({ reason: 'error', fallbackValue: 'slow', confidence: null, maker: 'none' });
-        expect(events2[1]?.payload['severity']).toBe('error');
+        expect(events2[1]?.payload.severity).toBe('error');
     });
 
     test('rejected is a single event with a closed errorKind and a redacted bounded message', () => {
@@ -168,12 +168,12 @@ describe('decision-events emitter (task 1095, design §3.2)', () => {
         );
         expect(events.map((e) => e.name)).toEqual(['decision.rejected']);
         const payload = events[0]?.payload as Record<string, unknown>;
-        expect(payload['severity']).toBe('error');
-        expect(payload['errorKind']).toBe('error');
+        expect(payload.severity).toBe('error');
+        expect(payload.errorKind).toBe('error');
         // redactAndBound appends an ellipsis after the 512-char bound.
-        expect((payload['message'] as string).length).toBeLessThanOrEqual(513);
-        expect(payload['message']).not.toContain('abc123');
-        expect(payload['invocationId']).not.toBeUndefined();
+        expect((payload.message as string).length).toBeLessThanOrEqual(513);
+        expect(payload.message).not.toContain('abc123');
+        expect(payload.invocationId).not.toBeUndefined();
     });
 
     test('an undefined bus is a full no-op and a throwing listener never propagates', () => {
@@ -294,10 +294,10 @@ describe('DecisionService decision events (task 1095 R6/R7)', () => {
             minConfidence: 0.8,
             severity: 'info',
         });
-        expect(start['inputKeys']).toEqual([]);
+        expect(start.inputKeys).toEqual([]);
         const end = events[2]?.payload as Record<string, unknown>;
         expect(end).toMatchObject({ source: 'default', reason: 'no-backend', maker: 'typesafe' });
-        expect(typeof end['durationMs']).toBe('number');
+        expect(typeof end.durationMs).toBe('number');
     });
 
     test('caller mistakes emit decision.rejected before any lifecycle event', async () => {
@@ -316,7 +316,7 @@ describe('DecisionService decision events (task 1095 R6/R7)', () => {
             service.decide('pick-lane', {}, { maker: 'missing-maker', bus: bus as never, context: { caller: 'cli' } }),
         ).rejects.toThrow();
         expect(events.map((e) => e.name)).toEqual(['decision.rejected', 'decision.rejected']);
-        expect(events[1]?.payload['maker']).toBe('missing-maker');
+        expect(events[1]?.payload.maker).toBe('missing-maker');
     });
 });
 
@@ -388,9 +388,9 @@ describe('decision events × system-event ledger (task 1095 AC5)', () => {
             fallbackValue: 'slow',
             caller: 'cli',
         });
-        expect(envelope.context.correlation['runId']).toBe('r-ledger');
+        expect(envelope.context.correlation.runId).toBe('r-ledger');
         // Declared nested retain path survives projection; the envelope context keeps only run/entity.
-        expect((envelope.data['correlation'] as Record<string, unknown>)['wbs']).toBe('1095');
+        expect((envelope.data.correlation as Record<string, unknown>).wbs).toBe('1095');
     });
 
     test('decision.rejected persists errorKind; the metadata-only projection drops `message`', async () => {
@@ -408,10 +408,10 @@ describe('decision events × system-event ledger (task 1095 AC5)', () => {
             data: Record<string, unknown>;
             presentation: { summary: string };
         };
-        expect(envelope.data['errorKind']).toBe('error');
+        expect(envelope.data.errorKind).toBe('error');
         // Residual (documented): the metadata-only OMITTED_KEY list drops any top-level
         // `message` key, so the redacted message survives only in the derived summary.
-        expect(envelope.data['message']).toBeUndefined();
+        expect(envelope.data.message).toBeUndefined();
         expect(envelope.presentation.summary).toContain('rejected');
     });
 });
@@ -463,7 +463,7 @@ describe('DecideActionRunner decision events (task 1095 R8)', () => {
             maker: 'none',
             makerSource: 'inline',
         });
-        expect(start['correlation']).toEqual({ runId: 'r-run', nodeId: 'decide' });
+        expect(start.correlation).toEqual({ runId: 'r-run', nodeId: 'decide' });
         expect(events[1]?.payload).toMatchObject({ reason: 'no-backend', fallbackValue: 'no', maker: 'none' });
     });
 });
