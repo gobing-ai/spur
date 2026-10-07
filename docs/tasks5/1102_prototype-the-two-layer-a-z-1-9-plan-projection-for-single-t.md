@@ -4,7 +4,7 @@ name: Prototype the two-layer A-Z/1-9 plan projection for single-task and batch 
 status: todo
 template: feature-impl
 created_at: 2026-10-07T05:39:25.241Z
-updated_at: "2026-10-07T05:44:22.262Z"
+updated_at: "2026-10-07T05:54:50.484Z"
 feature_id: I13
 
 ---
@@ -28,6 +28,7 @@ contract can be reviewed against real output before graduation.
 - [ ] R3. Prototype a batch projection: A = Prepare batch, one letter per task (B..Y, title as `B 0812 <title>`), digits = that task's phases, Z = Batch report; batches over 24 tasks split into waves, each wave its own A..Z plan. Render it for a real `feature:<id>` set.
 - [ ] R4. Enforce the A-Z / 1-9 cap: show where fold/wave logic lives and that a definition whose phase exceeds 9 steps fails a validation check at authoring time (`spur workflow validate` or equivalent), never emitting AA or A10.
 - [ ] R5. Show the progress update sequence for one realistic run (including a test-fix loop and a skipped conditional step) as a list of native-todo payload snapshots, proving labels stay stable and outcomes stay truthful per 0814 R6.
+- [ ] R6. Prototype per-host rendering from the 1101 matrix (`docs/analysis/2026-10-native-todo-adoption-audit.md` § R1): put the two-layer label in the item text (only omp nests natively). Handle both update styles, per-item create/update (Claude Code `TaskCreate`/`TaskUpdate`, pi `todo`) and full-list rewrite (Codex `update_plan`, Gemini `write_todos`, OpenCode `todowrite`, Grok `todo_write`). Map statuses where `skipped` does not exist (render it in the text and never mark it completed). Show R5's snapshots in one per-item host and one full-list host.
 
 ### Acceptance Criteria
 
@@ -54,6 +55,11 @@ Scenario: AC4 — Progress snapshots stay stable and truthful (req: R5)
   Given a run with a test-fix loop and a skipped conditional step
   When the payload snapshots are produced
   Then inserted steps take the next digit under their phase, earlier labels never change, and skipped work is not marked completed
+
+Scenario: AC5 — Same plan renders on per-item and full-list hosts (req: R6)
+  Given the R5 run snapshots
+  When they are rendered for a per-item host and a full-list host
+  Then both show identical labels and text, statuses map to each host's vocabulary, and no skipped step is marked completed
 ```
 
 ### Q&A
