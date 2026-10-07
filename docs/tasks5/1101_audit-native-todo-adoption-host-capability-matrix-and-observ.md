@@ -4,8 +4,8 @@ name: "Audit native todo adoption: host capability matrix and observed behavior 
 status: todo
 template: feature-impl
 created_at: 2026-10-07T05:39:24.638Z
-updated_at: "2026-10-07T05:40:45.583Z"
-feature_id: Q
+updated_at: "2026-10-07T05:44:21.755Z"
+feature_id: I13
 
 ---
 
@@ -13,7 +13,7 @@ feature_id: Q
 
 ### Background
 
-Wayfinder ticket (`wayfinder:research`) on map **Q — Two-layer plan and progress visibility for dev workflows**.
+Wayfinder ticket (`wayfinder:research`) on map **I13 — Two-layer plan and progress visibility for dev workflows**.
 
 Task 0814 (R5/R6) already specified a bootstrap checklist, stable A/A1 labels and truthful native-todo
 progress, and `packages/app/src/workflow/step-reporter.ts` ships the helpers — yet the operator reports
@@ -90,7 +90,7 @@ official docs over memory. Read run evidence with `spur history`/run records, ne
 
 ### References
 
-- Map: `docs/features/Q_two-layer-plan-and-progress-visibility-for-dev-workflows.md`
+- Map: `docs/features/I13_two-layer-plan-and-progress-visibility-for-dev-workflows.md`
 - Prior contract: tasks 0695, 0727, 0768, 0814; `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:131-187`; `plugins/sp/skills/spur-dev/references/cross-cutting.md:244`
 - Helpers: `packages/app/src/workflow/step-reporter.ts:255-278` (labels), `:390` (`renderProgressMarkdown`)
 

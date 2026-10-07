@@ -4,8 +4,8 @@ name: Prototype the two-layer A-Z/1-9 plan projection for single-task and batch 
 status: todo
 template: feature-impl
 created_at: 2026-10-07T05:39:25.241Z
-updated_at: "2026-10-07T05:40:45.907Z"
-feature_id: Q
+updated_at: "2026-10-07T05:44:22.262Z"
+feature_id: I13
 
 ---
 
@@ -13,12 +13,12 @@ feature_id: Q
 
 ### Background
 
-Wayfinder ticket (`wayfinder:prototype`) on map **Q — Two-layer plan and progress visibility for dev workflows**.
+Wayfinder ticket (`wayfinder:prototype`) on map **I13 — Two-layer plan and progress visibility for dev workflows**.
 
 Charting found the current plan is not a plan: `spur workflow show <task-pipeline> --format todo` lists all
 16 declared FSM states (incl. `escalate`, `test-fix`, `triage`, `failed`, `cancelled`) as Layer 1, the
 bootstrap rows `A..D` reuse the same letters as the workflow rows, and `columnLabel` emits `AA, AB…`
-past Z. Operator decisions (map Q, Decisions so far) fix the model; this ticket prototypes it so the
+past Z. Operator decisions (map I13, Decisions so far) fix the model; this ticket prototypes it so the
 contract can be reviewed against real output before graduation.
 
 ### Requirements
@@ -92,7 +92,7 @@ prototype output the operator reviews, not a decision this ticket makes final.
 
 ### References
 
-- Map: `docs/features/Q_two-layer-plan-and-progress-visibility-for-dev-workflows.md`
+- Map: `docs/features/I13_two-layer-plan-and-progress-visibility-for-dev-workflows.md`
 - Prior contract: tasks 0695, 0727, 0768, 0814; `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:131-187`; `plugins/sp/skills/spur-dev/references/cross-cutting.md:244`
 - Helpers: `packages/app/src/workflow/step-reporter.ts:255-278` (labels), `:390` (`renderProgressMarkdown`)
 
