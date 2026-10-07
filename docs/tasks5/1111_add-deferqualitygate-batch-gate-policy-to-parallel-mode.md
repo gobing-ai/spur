@@ -4,9 +4,10 @@ name: Add deferQualityGate batch gate policy to parallel mode
 status: todo
 template: feature-impl
 created_at: 2026-10-07T07:29:50.343Z
-updated_at: "2026-10-07T07:34:14.542Z"
+updated_at: "2026-10-07T07:35:01.733Z"
 feature_id: R
 
+dependencies: ["1107"]
 ---
 
 ## 1111. Add deferQualityGate batch gate policy to parallel mode
