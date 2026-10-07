@@ -141,7 +141,7 @@ Classes:
 | task-pipeline · `review-fail-triage` (`:683`) | inline `decide` | adopt | `review-failure-class` · fix/stop · fix |
 | idea-pipeline · recommendation (`idea-pipeline.yaml:146`) | awk over `## Recommendation` → `unknown` pauses | rescue-only | `idea-recommendation` · proceed/reshape/drop · *pause* (fallback writes `unknown`) |
 | idea-pipeline · `needs_design` (`:132`) | agent-written JSON. A missing or corrupt file means design. | rescue-only | `needs-design` · noul · yes |
-| history-anatomy · validation verdict (`history-anatomy.yaml:236`) | shell normalization of `Verdict:` lines | rescue-only | `anatomy-validation-verdict` · PASS/FAIL · FAIL. Any exact `Verdict: FAIL` line short-circuits to FAIL without calling a maker. |
+| history-anatomy · validation verdict (`history-anatomy.yaml:270`) | shell normalization of `Verdict:` lines; rescue shell step after it | rescue-only | `anatomy-validation-verdict` · PASS/FAIL · FAIL. Any exact `Verdict: FAIL` line short-circuits to FAIL without calling a maker. |
 | 7 operator gates: idea-eval, feature-check, design-approval, batch-create (`idea-pipeline.yaml:160/299/379/439`), task-pipeline approve (`task-pipeline.yaml:706`), wayfinder (`wayfinder-resolution.yaml:163`), wrapup branch cleanup (`wrapup-pipeline.yaml:443`) | `hitl.confirm` `mode: never` | keep-human (bundled). In evidence-mode overrides, the decision is catalog-backed. | `gate-evidence` · yes/no · defer to operator |
 | pr-review preflight/hygiene/precheck; wayfinder precheck/final; wrapup gates; feature-verification; history structure-gate; task-pipeline `command.gate`s | exact status files | keep-deterministic | — |
 | feature-lifecycle, task-lifecycle | status transitions | keep-deterministic | — |
