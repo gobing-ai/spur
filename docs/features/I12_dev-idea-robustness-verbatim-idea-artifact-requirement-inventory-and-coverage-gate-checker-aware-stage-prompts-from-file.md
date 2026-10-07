@@ -2,11 +2,11 @@
 schema_version: 1
 id: "I12"
 name: "dev-idea robustness: verbatim idea artifact, requirement inventory and coverage gate, checker-aware stage prompts, --from-file"
-status: active
+status: done
 priority: P2
 tags: []
 created_at: "2026-09-17T18:19:19.703Z"
-updated_at: "2026-09-24T20:12:21.014Z"
+updated_at: "2026-10-07T22:26:25.060Z"
 ---
 
 # I12: dev-idea robustness: verbatim idea artifact, requirement inventory and coverage gate, checker-aware stage prompts, --from-file
@@ -80,6 +80,7 @@ Scenario: R7 — Generated bundle and baselines stay green
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 0887 | idea-pipeline robustness: verbatim idea artifact, requirement inventory + coverage gate, task-check-aware stage prompts, --from-file, inline trace startedAt | done |
+| 0887 | idea-pipeline robustness: verbatim idea artifact, requirement inventory + coverage gate, task-check-aware stage prompts, --from-file, inline trace startedAt | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -89,4 +90,6 @@ Scenario: R7 — Generated bundle and baselines stay green
 - 2026-09-17T22:56:51.594Z backlog → active (system)
 - 2026-09-24T20:01:33.852Z active → verifying (system)
 - 2026-09-24T20:12:21.014Z verifying → active (system)
+- 2026-10-07T22:26:24.992Z active → verifying (system)
+- 2026-10-07T22:26:25.060Z verifying → done (system)
 
