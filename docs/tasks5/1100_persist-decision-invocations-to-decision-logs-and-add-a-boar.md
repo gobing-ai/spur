@@ -1,0 +1,177 @@
+---
+schema_version: 1
+name: Persist decision invocations to decision_logs and add a Board Decisions tab
+status: todo
+template: feature-impl
+created_at: 2026-10-07T02:58:40.297Z
+updated_at: "2026-10-07T03:13:51.155Z"
+feature_id: P1
+
+dependencies: ["1095"]
+---
+
+## 1100. Persist decision invocations to decision_logs and add a Board Decisions tab
+
+### Background
+
+Slice S3b of `docs/design/decision-observability-and-adoption.md` (§3.5–§3.6) covers feature P1 R14–R15.
+
+Task 1095's `decision.*` events are metadata-only and capped together with every other source. So once a decision has been served, nobody can see what input the maker saw, what it answered, or where the time went. This task adds:
+
+- a `decision_logs` table that stores one row per invocation, keyed by `invocationId` so it joins the events;
+- a Board Observability **Decisions** tab to query and inspect those rows.
+
+The UI contract is in root `DESIGN.md` § Product UI — Decisions.
+
+### Requirements
+
+- [ ] R0. Scope boundary: the `decision.*` lifecycle events from task 1095 stay in `system_events`, together with every other source. This task does not move, copy or widen them. `decision_logs` stores decision records (one per invocation), not events, and the two join on `invocationId`.
+- [ ] R1. Add migration `0052_spur_cli_decision_logs`:
+  - The file `drizzle/0052_spur_cli_decision_logs.sql` must be byte-compatible with a new `DECISION_LOGS_SCHEMA_SQL` constant in `packages/domain/src/migrations.ts`, registered after `0051_spur_cli_coordination_runs_parent` (`migrations.ts:1584`).
+  - It creates `decision_logs` with the columns of design §3.5 and a `maker_name` column holding the registered `DecisionMaker` name (the registry key, `ServedDecision.maker`; null only for a `rejected` row that failed before a maker resolved), and the indexes `(started_at)`, `(decision_id, started_at)`, `(maker_name, started_at)` and `(run_id)`.
+  - It uses `CREATE TABLE IF NOT EXISTS` and is idempotent.
+- [ ] R2. Add `packages/domain/src/dao/decision-log-dao.ts` (raw SQL over `DbAdapter`, the same pattern as `SystemEventDao`, `packages/domain/src/dao/system-event-dao.ts:229`). Export it from the domain index.
+  - `insert(row)` inserts the row, then prunes everything beyond the newest 10,000 by `started_at`.
+  - `list(spec{since?, decisionId?, makerName?, outcome?, caller?, runId?, limit, before?})` returns newest-first summary rows without `input_json`, `question` or `phases_json`, plus `nextCursor` (`started_at|id`).
+  - `summary(spec)` returns `count`, `accepted`, `fallback`, `rejected` and the `duration_ms` values for the filtered set.
+  - `facets(spec{since?})` returns the distinct decision ids and `maker_name` values.
+  - `get(id)` returns the full row or null.
+- [ ] R3. Record at the 1095 emitter seam (`packages/app/src/decision/decision-events.ts`):
+  - The invocation handle gains `phase(name)` marks. Phases are `resolve`, `evidence`, `maker-init`, `maker-call` and `serve`.
+  - It accepts an optional `decisionLog?: DecisionLogDao` plus `{ secrets, mode }`, where `mode` is the `decisions.log` value.
+  - At `end` or `rejected`, it inserts exactly one row built per §3.5:
+    - input redacted with `redactAndBound` and the configured secrets (`configuredSecretValues(env)`), at most 16 KiB;
+    - question and error at most 2 KiB each;
+    - `maker_name` set from the resolved maker name.
+    - `outcome` set to `accepted` (`source` model and `reason` accepted), `fallback`, or `rejected`.
+  - The insert is best-effort: a failure goes to the warn sink and never changes the decision result or the error thrown to the caller.
+- [ ] R4. Pass the DAO from every caller that 1095 wired:
+  - `spur decision run` (`apps/cli/src/commands/decision.ts`) uses `new DecisionLogDao(await context.getDb())`, with `DecideOptions.decisionLog`;
+  - the workflow decide runner uses a `DecideActionDeps.decisionLog` wired in `packages/app/src/workflow/builtins.ts`, from the workflow service DB;
+  - the inline driver (`packages/app/src/services/inline-run-setup.ts`, `runInlineRunDecide`) uses `projectDb.adapter`;
+  - the evidence-mode gate path (task 1099, `packages/app/src/services/workflow-service.ts`, `buildDecisionEvaluator`) uses the workflow service DB, when 1099 has landed. If 1099 has not landed, leave this caller out and record that in Solution.
+- [ ] R5. Config: `DecisionsConfigSchema` (`packages/config/src/index.ts:824`) gains a single key, `log: z.enum(['full', 'metadata', 'off']).default('full')`.
+  - `off` writes no rows.
+  - `metadata` writes rows with null `input_json` and `question`.
+  - None of the values affects `decision.*` events.
+  - Update the config design satellite that documents `decisions.*`.
+- [ ] R6. Contracts and server:
+  - Add Zod schemas `decisionLogRowSchema`, `decisionLogDetailSchema` and `decisionLogListResponseSchema` (rows, summary{count, acceptedRate, fallbackRate, p95DurationMs}, facets{decisionIds, makers}, nextCursor) in `packages/contracts/src/observability.ts`.
+  - Add an app query service, `packages/app/src/decision/decision-log-query.ts`, that computes rates and the nearest-rank p95.
+  - Mount `GET /api/observability/decisions` and `GET /api/observability/decisions/:id` (404 when the row is missing; 400 on an invalid `outcome`, `caller` or `limit`) in `apps/server/src/modules/observability/index.ts`, next to `routing-summary` (`:360`).
+  - Add both routes to the route doc comment at `:343`.
+- [ ] R7. Board tab:
+  - Add `apps/web/src/modules/observability/DecisionsTab.tsx` and `DecisionDetailDrawer.tsx`, following root `DESIGN.md` § Product UI — Decisions.
+  - Register `{ id: 'decisions', label: 'Decisions' }` after `routing` in `OBSERVABILITY_TABS` (`apps/web/src/modules/observability/tabs.ts`), and update the exact-list test `apps/web/tests/modules/observability/tabs.test.ts`.
+  - Reuse `fetchWithTimeout`/`resolveApiUrl` (`apps/web/src/lib/rpc-client`), `timeRangeSince`/`SegmentedToggle` (`ObservabilityFilters.tsx`), `formatDuration` (`SystemEventsTab.tsx`), `KpiCard` (exported from `SummaryTab.tsx:85`; currently module-private) and the `@/ui` primitives.
+  - "View run events" uses the existing `{ tab: 'system-events', runId }` nav intent.
+- [ ] R8. No new public `spur` noun, verb or flag. No new dependency.
+
+### Acceptance Criteria
+
+- [ ] AC1 — Every decision invocation is recorded in the decision log
+- [ ] AC2 — The Board Decisions tab lists and explains recorded decisions
+
+### Q&A
+
+- Kept: one dedicated table instead of widening the event payload policy. The metadata-only event invariant (event-tracking §8) stays intact, and debug bodies stay out of the shared SSE ledger.
+- Rejected calls get a row with outcome `rejected` and a null value, so caller mistakes such as bad params can be debugged from the same place.
+- Retention is a fixed 10,000-row cap, matching the event ledger's per-prefix cap. A configurable cap is deferred until someone needs it.
+- Input capture is on by default (`decisions.log: full`), because the database is local-first and the stored text is redacted and bounded. `metadata` is the opt-out for sensitive projects. Revised per operator: the two flags `log.enabled` and `log.captureInput` were collapsed into this one enum, since `enabled: false` with `captureInput: true` was a meaningless combination.
+- Revised per operator: `decision.*` events stay in `system_events`, and `decision_logs` holds decision records only (R0).
+- Revised per operator: an explicit `maker_name` column (the registered `DecisionMaker` name, indexed) supports per-maker analysis and selecting data for fine-tuning. The maker's model id is not stored, because makers do not report it to the hub. Add a `maker_model` column when a maker exposes it.
+- There is no CLI reader (for example `spur decision logs`). That would be a public-surface change, and the Board plus the API cover the request. Add one with operator consent if a terminal workflow needs it.
+- Dependencies: task 1095 (emitter module, invocation id, caller wiring). Task 1099's gate path is wired only if it has landed, and otherwise recorded in Solution, so 1100 does not block on 1099.
+- The open-design MCP server was unavailable during refinement, so the UI contract was derived from the shipped Jobs and System Events tabs and recorded in `DESIGN.md`.
+
+### Design
+
+**Chosen: a dedicated table written once per invocation at the 1095 emitter seam.** The contract is in `docs/design/decision-observability-and-adoption.md` §3.5–§3.6, and the UI rules are in `DESIGN.md` § Product UI — Decisions.
+
+**Rejected:**
+- *A wider `system_events` payload policy for `decision.*`.* It would break the metadata-only invariant of event-tracking §8, put task text and diffs into the shared, capped, SSE-streamed ledger, and still give no single row per invocation.
+- *A bus tap that writes the log.* Events deliberately do not carry the input, so a tap cannot see what the row needs.
+- *Per-phase rows.* A single row with `phases_json` is enough for a timeline and keeps the query one-table.
+
+**Seams (file:line):**
+
+| Concern | Location |
+| --- | --- |
+| Migrations | `packages/domain/src/migrations.ts:1584` (last entry, 0051), `drizzle/0051_spur_cli_coordination_runs_parent.sql` (header style) |
+| DAO pattern | `packages/domain/src/dao/system-event-dao.ts:229` |
+| Redaction | `packages/app/src/observability/agent-execution.ts:338` (`redactAndBound`), `configuredSecretValues` (exported from `packages/app/src/index.ts:40`) |
+| Emitter | `packages/app/src/decision/decision-events.ts` (task 1095) |
+| CLI | `apps/cli/src/commands/decision.ts` (run action) |
+| Workflow | `packages/app/src/workflow/builtins.ts:108`, `packages/app/src/services/workflow-service.ts:2044`/`:2163` |
+| Inline driver | `packages/app/src/services/inline-run-setup.ts` `runInlineRunDecide` |
+| Config | `packages/config/src/index.ts:824` |
+| Contracts | `packages/contracts/src/observability.ts` |
+| Server | `apps/server/src/modules/observability/index.ts:343-360` |
+| Web | `apps/web/src/modules/observability/tabs.ts`, `JobsTab.tsx` (fetch, paging, abort pattern), `JobDetailDrawer.tsx` (drawer pattern), `SummaryTab.tsx:85` (`KpiCard`), `ObservabilityFilters.tsx` |
+
+**Invariants:**
+- Exactly one row per invocation id, including rejected calls.
+- Configured secrets never reach `input_json`, `question` or `error`.
+- Logging can never change a decision result, an exit code or a thrown caller error.
+- Events stay metadata-only and unchanged.
+- The Board tab is read-only and never calls a maker.
+- The server stays a thin transport: aggregation runs in the app query service, and SQL lives in the domain DAO (ADR-021).
+
+**UI design source.** The open-design MCP server was disconnected while this task was refined, so the UI contract was written from the shipped Jobs and System Events patterns into `DESIGN.md`. If open-design is available at pickup, an optional mock may refine the layout, but `DESIGN.md` stays authoritative.
+
+**Execution budget:**
+- About 14 files across domain, app, config, contracts, server and web, plus 2 docs.
+- `requireDiff: true`.
+- No public CLI surface change and no new dependency.
+
+### Plan
+
+1. Write the failure list first:
+   - A configured secret in an input or evidence value reaches `input_json`.
+   - A rejected CLI call writes no row, or writes two.
+   - A DB insert failure changes the `spur decision run` exit code.
+   - Retention pruning deletes the newest rows.
+   - `decisions.log: metadata` still stores input.
+   - `decisions.log: off` still writes rows, or suppresses events.
+   - `maker_name` is missing, or holds the source instead of the registered name.
+   - `decision_id` filtering leaks other ids.
+   - The cursor skips or duplicates rows that share a `started_at`.
+   - The p95 of a single sample is wrong.
+   - An invalid `outcome` query returns 500 instead of 400.
+   - The drawer shows a null input as `null` instead of "Input not recorded (decisions.log: metadata)".
+   - Keyboard Enter or Escape does not open or close the drawer.
+2. Domain: add the DDL constant and the `0052` drizzle file, register the migration, and add `DecisionLogDao` (insert, prune, list, summary, facets, get) with in-memory SQLite DAO checks (AGENTS.md: DAO tests use in-memory SQLite).
+3. Config: add the `decisions.log` schema and its defaults.
+4. App: add phase marks and the log write in `decision-events.ts`, thread `decisionLog` through `DecideOptions`, `DecideActionDeps` and the inline driver, and add the `decision-log-query.ts` service.
+5. Wire the CLI `decision run` DAO and, if 1099 has landed, the gate evaluator.
+6. Contracts: add the schemas. Server: add the two routes.
+7. Web: export `KpiCard`, add `DecisionsTab` and `DecisionDetailDrawer`, register the tab, and update the tabs exact-list test.
+8. Docs: config satellite (`decisions.log`). §3.5–§3.6 and `DESIGN.md` are already written; correct them if the implementation diverges.
+9. E2E, in a temporary project with no maker backend and a secret configured in env:
+   - Run `spur decision run task-triage --param wbs=<secret-bearing value>` twice and `spur decision run nope` once.
+   - Check the database directly: 3 `decision_logs` rows (2 fallback with reason `no-backend` and `maker_name` equal to the effective maker from `spur decision show`, 1 rejected), the ids equal the `decision.*` event `invocationId`s, and the secret is absent from every column.
+   - Start `spur serve`. Check that `GET /api/observability/decisions?outcome=fallback` returns 2 rows with `summary.count` 2, and that `GET /api/observability/decisions/<id>` returns the input and phases.
+   - Save the outputs as `.spur/run/1100-decision-logs.json`.
+   - Browser-check the Board Observability → Decisions tab: KPI strip, filters, drawer, and keyboard open and close. Save a screenshot as `.spur/run/1100-decisions-tab.png`.
+10. Gates: `bun run spur-check`, `bun run test-cf`, `bun run build`.
+
+### Solution
+
+<!-- Filled during implementation: file:line change map and concise rationale. -->
+
+### Testing
+
+<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+
+### Review
+
+<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+
+### References
+
+<!-- Links to the parent feature, design docs, related tasks, or external references. -->
+
+### History
+
+- 2026-10-07T03:03:14.755Z backlog → todo (system)
+

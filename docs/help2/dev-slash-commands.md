@@ -21,6 +21,7 @@ runs a parallel process.
 | `/sp:dev-next` | Router | Status-aware router: pick and dispatch the single best next step (`--dry-run` previews) |
 | `/sp:dev-idea` | Planning | Unified entry: vague idea → feature + acceptance criteria + task batch; stops at handoff |
 | `/sp:dev-brainstorm` | Planning | Grilling interview → options with trade-offs → landed artifact (`--task` or `--feature`) |
+| `/sp:dev-find-way` | Planning | Wayfinder for foggy destinations: chart a map, or resolve one ticket — always in its own git worktree + branch |
 | `/sp:dev-plan` | Planning | Feature → BDD acceptance criteria → check gate → decomposed task batch |
 | `/sp:dev-refine` | Planning→Exec | Fill one task's acceptance criteria, design, and plan just-in-time via Q&A |
 | `/sp:dev-run` | Execution | Run one task through its full pipeline; `--mode implement` for just the code step |

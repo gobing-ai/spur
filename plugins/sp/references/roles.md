@@ -62,7 +62,7 @@ roles:
     stages: [verify, review, dogfood]
   - id: planner
     tier: capable-2
-    commands: [dev-plan, dev-refine, dev-brainstorm, dev-idea, dev-runall, dev-parallel, dev-next, dev-job-resume, dev-arch, dev-refineall, dev-find-next, dev-feature-change]
+    commands: [dev-plan, dev-refine, dev-brainstorm, dev-find-way, dev-idea, dev-runall, dev-parallel, dev-next, dev-job-resume, dev-arch, dev-refineall, dev-find-next, dev-feature-change]
     stages: [plan, refine, brainstorm]
 ```
 

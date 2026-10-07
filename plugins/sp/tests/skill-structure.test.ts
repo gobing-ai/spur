@@ -1600,7 +1600,7 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         expect(pkg.scripts.eval).not.toContain('.test.ts');
     });
 
-    test('R51 — wayfinder skill anatomy + brainstorm escalation reference (task 0216 R1/R2/R5)', () => {
+    test('R51 — wayfinder skill anatomy + dev-find-way worktree entry (task 0216 R1/R2/R5)', () => {
         // R1: wayfinder SKILL.md exists with full anatomy.
         const wayfinder = readFileSync(join(SKILLS_DIR, 'wayfinder', 'SKILL.md'), 'utf8');
         for (const section of [
@@ -1630,17 +1630,23 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         expect(wayfinder).not.toContain('wayfinder:map');
         expect(wayfinder).not.toContain('issue tracker');
 
-        // R2: brainstorm SKILL.md references wayfinder in its escalation path.
+        // R2: brainstorm never charts — its scope check stops and recommends /sp:dev-find-way.
         const brainstorm = readFileSync(join(SKILLS_DIR, 'brainstorm', 'SKILL.md'), 'utf8');
-        expect(brainstorm).toContain('sp:wayfinder');
-        expect(brainstorm).toContain('## Wayfinding Escalation');
-        expect(brainstorm).toContain('scope check');
-        expect(brainstorm).toContain('multi-session investigation');
+        expect(brainstorm).toContain('## Scope Check');
+        expect(brainstorm).toContain('/sp:dev-find-way');
+        expect(brainstorm).not.toContain('sp:wayfinder');
 
-        // R3: --wayfind flag is documented in both surfaces.
+        // R3: wayfinding has its own command; dev-brainstorm is generic. Isolation is always
+        // worktree + branch — never a branch switch in a shared tree.
         const devBrainstorm = readFileSync(join(PLUGIN_ROOT, 'commands', 'dev-brainstorm.md'), 'utf8');
-        expect(devBrainstorm).toContain('--wayfind');
-        expect(devBrainstorm).toContain('sp:wayfinder');
+        expect(devBrainstorm).not.toContain('--wayfind');
+        expect(devBrainstorm).not.toContain('sp:wayfinder');
+        const devFindWay = readFileSync(join(PLUGIN_ROOT, 'commands', 'dev-find-way.md'), 'utf8');
+        expect(devFindWay).toContain('Skill(skill="sp:wayfinder"');
+        expect(devFindWay).toContain('--worktree');
+        expect(devFindWay).toContain('--wrap');
+        expect(wayfinder).toContain('**Worktree first.**');
+        expect(wayfinder).not.toContain('git checkout -b wayfind/');
 
         // R4: "work through the map" operational mode is documented in wayfinder.
         expect(wayfinder).toContain('### Work Through the Map');

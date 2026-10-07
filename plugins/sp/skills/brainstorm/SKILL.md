@@ -26,7 +26,6 @@ metadata:
 see_also:
   - sp:source-driven-development
   - sp:spur-cli
-  - sp:wayfinder
 ---
 
 # sp:brainstorm — Structured Ideation Workflow
@@ -35,7 +34,6 @@ Generate solution options with trade-offs, recommendations, and confidence scori
 
 **Key distinction:**
 - **`sp:brainstorm`** = Ideation: generate approaches with trade-offs
-- **`sp:wayfinder`** = Wayfinding: chart a multi-session map when the destination itself is foggy
 - **research** = verify and synthesize information (delegate inline by default — see [inline-default contract](../spur-dev/references/cross-cutting.md#inline-default-execution-surface))
 - **`sp:spur-dev`** = Task creation: structured task breakdown (planning half)
 - **`sp:source-driven-development`** = Verification: source-first claim validation
@@ -65,14 +63,13 @@ Activate sp:brainstorm when:
 | "research approaches" | User wants evidence-backed options |
 | "what are my options?" | User wants multiple solutions |
 | "how should I approach X?" | User wants recommendation with reasoning |
-| "wayfind" / "chart a course" | User needs a multi-session investigation map — escalate to `sp:wayfinder` (Phase 2) |
 
 **NOT for:**
 - Pure research (delegate to research skills inline by default; escalate via `spur agent run` only on a subprocess trigger)
 - Task creation without ideation (use `sp:spur-dev` instead)
 - Fact-checking or verification only (use `sp:source-driven-development` instead)
 - Task file operations (use `sp:spur-cli` instead)
-- Multi-session investigation when the destination itself is foggy (use `sp:wayfinder` instead)
+- Multi-session investigation when the destination itself is foggy (recommend `/sp:dev-find-way`; see [Scope Check](#scope-check-end-of-phase-1))
 
 ## Core Principles
 
@@ -317,51 +314,16 @@ non-deterministic intent into a reliable sequence, not bare forwarders (ADR-016)
 
 ---
 
-## Wayfinding Escalation (Phase 2)
+## Scope Check (end of Phase 1)
 
-When the discovery interview (Phase 1 of `/sp:dev-brainstorm`) surfaces that **the destination itself is foggy** — the spec can't be written in one session because too many decisions are unresolved — brainstorm escalates to `sp:wayfinder` instead of proceeding to ideation.
+Before ideation, ask: **"Can this be spec'd in one session, or is the destination itself still foggy?"**
 
-### Scope Check
-
-At the end of Phase 1, before ideation begins, run this scope check:
-
-> **"Can this be spec'd in one session, or is the destination itself still foggy?"**
-
-**Signals that wayfinding is needed:**
-- The topic touches ≥3 subsystems or unknown boundaries
-- Key decisions depend on research not yet done
-- The operator can describe the goal but not the shape of the solution
-- Multiple "it depends" answers in the discovery interview
-- The operator uses fog language: "I'm not sure yet", "we need to explore", "it depends on what we find"
-
-**Signals that standard ideation suffices:**
-- The destination is clear; only the approach is in question
-- All key decisions can be made from existing knowledge
-- The operator can enumerate the constraints and trade-offs
-
-### Escalation Path
-
-When the scope check indicates a foggy destination, offer the escalation:
-
-> *"This is a multi-session investigation. Want me to chart a wayfinder map so we can work through it one decision at a time?"*
-
-The operator **confirms** before wayfinding begins — never silently escalate. A 30-minute quick-answer need might touch a big domain without requiring a multi-session map.
-
-On confirmation, delegate to `sp:wayfinder` for the "Chart the map" mode. The resolved decision tree from Phase 1 seeds the map's **## Notes** and initial **## Not yet specified** sections.
-
-### `--wayfind` Flag
-
-When `/sp:dev-brainstorm` is invoked with `--wayfind`, the scope check is **skipped** — the operator has pre-approved the escalation. After the discovery interview, proceed directly to `sp:wayfinder` charting without the confirmation prompt.
-
-Use `--wayfind` when:
-- The operator already knows this is a multi-session investigation
-- A previous session recommended wayfinding
-- The topic is explicitly exploratory ("explore the solution space for X")
-
-### Integration with the Design Approval Gate
-
-A wayfinding escalation **replaces** the standard ideation output. The map feature (with its destination, notes, fog, and child tickets) is the artifact. The `needs_design` signal is not emitted — wayfinding defers design until the route to the destination is clear. When the last ticket resolves, the final session hands off to standard `sp:brainstorm` → `sp:spec-decomposition` with a now-clear destination.
+Fog signals: the topic touches ≥3 subsystems or unknown boundaries; key decisions depend on research
+not yet done; the operator can name the goal but not the solution's shape; repeated "it depends"
+answers. When they dominate, **stop** — do not ideate toward a destination that isn't there. Report
+the resolved decision tree and recommend `/sp:dev-find-way "<topic>"`, which owns multi-session
+investigation maps. Brainstorm never charts a map itself.
 
 ---
 
-**Remember:** Ideation ≠ Research. Generate approaches with trade-offs. Delegate verification to `sp:source-driven-development`. Delegate synthesis/research inline (escalate to `spur agent run` only on a subprocess trigger). Delegate task creation to `sp:spur-dev`. When the destination itself is foggy, escalate to `sp:wayfinder` — never force a spec that isn't ready.
+**Remember:** Ideation ≠ Research. Generate approaches with trade-offs. Delegate verification to `sp:source-driven-development`. Delegate synthesis/research inline (escalate to `spur agent run` only on a subprocess trigger). Delegate task creation to `sp:spur-dev`. When the destination itself is foggy, stop and recommend `/sp:dev-find-way` — never force a spec that isn't ready.

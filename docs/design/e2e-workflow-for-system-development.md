@@ -607,6 +607,7 @@ paused run ids back to the operator.
 | Command | Workflow | Required flags/options | Contract |
 | --- | --- | --- | --- |
 | `/sp:dev-brainstorm` | (no pipeline) | `"<topic>"`, `--depth`, `--options`, `--task` / `--feature`, `--next`, `--agent` | Inline grilling interview + `sp:brainstorm` ideation; exits to `--task` (one task) or `--feature` (validated feature). |
+| `/sp:dev-find-way` | (no pipeline; worktree lifecycle) | `"<idea>"` \| `<feature-id> [<wbs>]`, `--worktree [<name>]`, `--wrap`, `--auto`, `--agent` | `sp:wayfinder` chart or one-ticket resolution inside a mandatory git worktree + branch; FF-merge on success, retain on failure. |
 | `/sp:dev-plan` | `.spur/workflows/planning-pipeline.yaml` | `"<desc>"`, `--feature`, `--parent`, `--design`, `--auto`, `--agent` | Known idea/slug to design handoff via `sp:spur-dev plan`. |
 | `/sp:dev-refine` | (no pipeline) | `<wbs>`, `--focus`, `--auto`, `--next`, `--agent` | Task requirements gap analysis + section writes; chains to `dev-run --mode implement` under `--next`. |
 | `/sp:dev-run` | `.spur/workflows/task-pipeline.yaml` | `<wbs>`, `--mode full\|implement`, `--auto`, `--wrap`, `--continue`, `--agent` | One task through execution; implement mode is inline by default, while full workflow actions remain subprocess-backed. |
