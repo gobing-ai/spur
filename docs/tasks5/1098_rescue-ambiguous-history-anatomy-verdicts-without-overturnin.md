@@ -4,7 +4,7 @@ name: Rescue ambiguous history-anatomy verdicts without overturning FAIL
 status: todo
 template: feature-impl
 created_at: 2026-10-07T01:02:20.692Z
-updated_at: "2026-10-07T01:19:57.308Z"
+updated_at: "2026-10-07T06:10:48.428Z"
 feature_id: P1
 priority: P2
 tags:
@@ -88,11 +88,27 @@ Slice S6 of docs/design/decision-observability-and-adoption.md §5. history-anat
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**Chosen: extend the existing normalization region** (`config/workflows/history-anatomy.yaml`, validate state) instead of adding a new state; the 0771 guard and `assert-clean` stay the authorities.
+
+Change map:
+
+- `config/decisions/history-anatomy.yaml` (new) — shared-layer catalog with `anatomy-validation-verdict` (`type: choice`, criteria `PASS`/`FAIL`, `fallback: FAIL`, `minConfidence: 0.8` per ADR-125). Verified with `spur decision show anatomy-validation-verdict --json`.
+- `config/workflows/history-anatomy.yaml:235-274` — the 2026-09-13 normalization step (:235-252) is byte-identical to before; the rescue is a second shell action right after it (:253-274), so each stays inside the ADR-115 shell tier (10 logical commands each, warn band; a single merged step measured 18 and fails the shared-workflow composition gate). The rescue runs only when the artifact is still undecidable after normalization — final line not exactly `Verdict: PASS` and zero exact `Verdict: FAIL` lines — calls `$spurBin decision run anatomy-validation-verdict --evidence "$f" --json`, and appends `Verdict: PASS` only when `source == "model"` and `value == "PASS"` (jq `// .data.*` arms also accept the ADR-091 envelope shape); a fallback, non-model source, jq failure or maker failure appends `Verdict: FAIL`, enforced by the hard `[ "$v" = "PASS" ] || v="FAIL"` default. The zero-FAIL guard short-circuits before the maker call, so a deterministic FAIL is never overturned (AC1).
+- `apps/cli/tests/workflow-decision-scan.test.ts` (new) — R4 scan: the five deterministic-status workflows (pr-review, wayfinder-resolution, wrapup-pipeline, feature-verification, history-anatomy) contain no `kind: decide`, and `decision run` appears exactly once — inside the allowlisted rescue step, after the zero-FAIL short-circuit, with the model-only PASS rule and the hard FAIL default asserted textually.
+- `docs/design/decision-observability-and-adoption.md:144` — §4 table anchor moved from the normalization step (`:236`) to the rescue maker call (`:270`) so the row points at the decision point (T3 sync).
+
+Start condition (R5): `spur decision status --reliability --json` shows `anatomy-validation-verdict` with `evidence: recorded, samples: 2` (`fallbacks: {no-backend: 2}`, maker `typesafe`; gathered via `spur decision run` probes 2026-10-07) — the 1096 report has recorded evidence for the id.
+
+E2E evidence: `.spur/run/1098-verdicts.json` — the validate state's normalization + rescue commands extracted from the YAML and run against four fixtures: exact FAIL → `Verdict: FAIL`, no decision rows; FAIL plus PASS → `Verdict: FAIL`, no decision rows; prose only → `Verdict: FAIL` with `decision.start`/`decision.failure`/`decision.end` rows; single leading PASS → `Verdict: PASS` from normalization, no decision rows.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Failure list from the Plan, each covered: (a) both `Verdict: PASS` and `Verdict: FAIL` → fixture `fail-plus-pass` makes no maker call (zero decision rows); (b) no-backend fallback → fixture `prose-only` writes `Verdict: FAIL`, never PASS; (c) single correct leading `Verdict: PASS` → fixture `single-leading-pass` resolves by normalization with zero decision rows; (d) the 2026-09-13 normalization step is unchanged (git diff byte-identical) and still passes its fixture.
+- `bun test apps/cli/tests/workflow-decision-scan.test.ts` — 2 pass, 19 assertions (R4 placement scan).
+- E2E (no backend): `bun .spur/tmp/1098-e2e.ts` extracted the folded normalization+rescue commands from the YAML and ran the four fixtures — all final lines and event expectations pass; artifact `.spur/run/1098-verdicts.json`.
+- `spur workflow validate config/workflows/history-anatomy.yaml` — valid, composition findings warn-only (normalization 10, rescue 10 logical commands — both inside the ADR-115 6-10 warn band; no error-level findings).
+- `spur decision show anatomy-validation-verdict --json` — serves choice PASS/FAIL, fallback FAIL, maker `typesafe` (catalog-default), layer shared.
+- Gate: `bun run spur-check` — PASS (biome + typecheck all workspaces clean; 10354 tests, 0 fail; pre-check 50 rules, post-check 2 rules). Third run required two pre-gate fixes (TS noUncheckedIndexedAccess in the new test; `sp-runtime-path` forbidden literal `config/…` in its doc comment).
 
 ### Review
 

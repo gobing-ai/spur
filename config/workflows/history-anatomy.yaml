@@ -252,6 +252,28 @@ states:
             fi
       - kind: shell
         options:
+          # 1098 ambiguous-verdict rescue (design §5 S6, rescue-only): runs AFTER the
+          # normalization step and only when the artifact is still undecidable — final
+          # line not `Verdict: PASS` and ZERO exact `Verdict: FAIL` lines (zero PASS
+          # lines or several). The catalog decision `anatomy-validation-verdict`
+          # classifies the artifact. `Verdict: PASS` is appended ONLY from a model
+          # answer (source == "model" and value == "PASS"; the jq `// .data.*` arms
+          # also accept the ADR-091 envelope shape); a fallback, a non-model source,
+          # a jq failure or any maker failure appends `Verdict: FAIL`. The zero-FAIL
+          # guard short-circuits BEFORE the maker call, so a deterministic FAIL is
+          # never overturned (AC1) and the 0771 guard/assert-clean stay the
+          # authorities. Separate action from normalization to stay inside the
+          # ADR-115 composition budget (§1.2 shell tier).
+          command: >-
+            f=.spur/run/$__runId-validation.txt;
+            if [ -f "$f" ] && [ "$(grep -cx 'Verdict: FAIL' "$f")" = 0 ] && ! tail -n 1 "$f" | grep -qx 'Verdict: PASS'; then
+              d=$("$spurBin" decision run anatomy-validation-verdict --evidence "$f" --json || true);
+              v=$(printf '%s' "$d" | jq -r 'if (.source // .data.source) == "model" and (.value // .data.value) == "PASS" then "PASS" else "FAIL" end' 2>/dev/null);
+              [ "$v" = "PASS" ] || v="FAIL";
+              printf 'Verdict: %s\n' "$v" >> "$f";
+            fi
+      - kind: shell
+        options:
           command: >-
             eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/history-anatomy-cache.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/history-anatomy-cache.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; "$RUNNER" "$S" assert-clean --baseline .spur/run/$__runId-baseline-validate.txt --expect .spur/run/$__runId-validation.txt
 
