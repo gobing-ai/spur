@@ -4,14 +4,14 @@ name: Migrate workflow decide action to catalog references
 status: blocked
 template: feature-impl
 created_at: 2026-10-06T17:55:55.426Z
-updated_at: "2026-10-06T18:16:39.318Z"
+updated_at: "2026-10-07T01:03:52.529Z"
 feature_id: P1
 priority: P2
 tags:
   - decision
   - workflow
 
-dependencies: ["1092", "1093"]
+dependencies: ["1092", "1093", "1096"]
 ---
 
 ## 1094. Migrate workflow decide action to catalog references
