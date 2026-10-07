@@ -4,7 +4,7 @@ name: Add per-state display phase metadata to the workflow engine state schema
 status: done
 template: feature-impl
 created_at: 2026-10-07T06:14:15.476Z
-updated_at: "2026-10-07T19:07:32.902Z"
+updated_at: "2026-10-07T19:25:30.625Z"
 feature_id: I13
 
 priority: P1
@@ -44,9 +44,9 @@ a state is rejected today. Per AGENTS.md, fix the released engine facade rather 
 
 ### Requirements
 
-- [ ] R1. Add an optional, behavior-free per-state `display` field to the engine `StateDef` type, the state-machine zod schema and the engine state-machine JSON schema: `display: { phase: string, phaseTitle?: string, title?: string, show?: 'plan' | 'on-entry' }`, itself strict. The engine never reads it at run time.
-- [ ] R2. Prepare the engine release (version bump, CHANGELOG, ADR/ARCHITECTURE/README notes) in ts-libs; after the operator pushes the release tag, bump the Spur catalog pin (`package.json:35`) and `bun install`; every bundled workflow still loads and validates unchanged.
-- [ ] R3. Engine tests cover: field accepted, unknown `display` sub-keys rejected, invalid `show` rejected, absent field leaves the parsed definition unchanged.
+- [x] R1. Add an optional, behavior-free per-state `display` field to the engine `StateDef` type, the state-machine zod schema and the engine state-machine JSON schema: `display: { phase: string, phaseTitle?: string, title?: string, show?: 'plan' | 'on-entry' }`, itself strict. The engine never reads it at run time.
+- [x] R2. Prepare the engine release (version bump, CHANGELOG, ADR/ARCHITECTURE/README notes) in ts-libs; after the operator pushes the release tag, bump the Spur catalog pin (`package.json:35`) and `bun install`; every bundled workflow still loads and validates unchanged.
+- [x] R3. Engine tests cover: field accepted, unknown `display` sub-keys rejected, invalid `show` rejected, absent field leaves the parsed definition unchanged.
 
 ### Acceptance Criteria
 
@@ -143,14 +143,24 @@ R2 remainder (operator): push branch, push tags (aggregate tag triggers publish.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
 
-Gates (2026-10-07, inline batch dev-runall feature:I13):
+- Verdict: PASS (from verdict artifact)
+- Confidence: MEDIUM
 
-- ts-libs `bun run check` (packages/dual-workflow-engine): 524 pass / 0 fail (biome + tsc + suite).
-- Spur `bun run spur-check`: 10369 pass / 0 fail; recommended-post-check rules clean.
-- `spur workflow validate`: 9/9 config/workflows/*.yaml valid on engine 0.5.17.
-- Release: @gobing-ai/ts-dual-workflow-engine@0.5.17 published (aggregate tag run 37643951160); Spur pin ^0.5.17 adopted in af6976e8c.
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | @gobing-ai/ts-dual-workflow-engine `src/types.ts` line 70 StateDisplay and line 105 display?; `src/schema.ts` line 77 StateDisplaySchema; `schemas/state-machine-workflow.schema.json` line 49 |
+| R2 | MET | Spur catalog pin `package.json:35` = ^0.5.17; engine release 0.5.17 per @gobing-ai/ts-dual-workflow-engine `package.json` line 3; installed copy carries display |
+| R3 | MET | @gobing-ai/ts-dual-workflow-engine `tests/schema.test.ts` line 482 (accepted), line 533 (unknown sub-key rejected), line 557 (invalid show rejected), line 589 (absent field unchanged) |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — A state may declare display metadata (req: R1, R3) | MET | test | `bun test tests/schema.test.ts tests/state-machine.test.ts` in ts-libs dual-workflow-engine: 106 pass / 0 fail this run; @gobing-ai/ts-dual-workflow-engine `tests/schema.test.ts` lines 482-531 |
+| AC2 — Malformed display metadata is rejected (req: R1, R3) | MET | test | same run; @gobing-ai/ts-dual-workflow-engine `tests/schema.test.ts` lines 533-588 reject unknown sub-key, show "always", empty phase |
+| AC3 — Display metadata has no run-time effect (req: R1, R3) | MET | test | same run; @gobing-ai/ts-dual-workflow-engine `tests/state-machine.test.ts` line 839 run-inert suite compares annotated vs plain runs |
+| AC4 — Spur adopts the release with no workflow change (req: R2) | MET | command | `spur workflow validate` over all 9 `config/workflows/*.yaml` returned valid this run (exit 0); pin at `package.json:35`; `bun run plugin-smoke` PASS; `bun run spur-check` 10323 pass / 12 fail, failures unrelated to 1103 (1068 confidence fixture gap at `apps/cli/tests/commands/task.test.ts:2917`, sandbox git/Chromium) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 

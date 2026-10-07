@@ -4,7 +4,7 @@ name: Prototype the two-layer A-Z/1-9 plan projection for single-task and batch 
 status: done
 template: feature-impl
 created_at: 2026-10-07T05:39:25.241Z
-updated_at: "2026-10-07T06:12:00.945Z"
+updated_at: "2026-10-07T19:25:28.974Z"
 feature_id: I13
 
 done_forced: "true"
@@ -113,20 +113,20 @@ Findings for the map:
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `docs/analysis/2026-10-plan-projection-prototype.ts:40`: PHASES side table, plan/on-entry per state; rendered `docs/analysis/2026-10-plan-projection-prototype.md:7-27` |
-| R2 | MET | `docs/analysis/2026-10-plan-projection-prototype.ts:157`: singlePlan, A Prepare A1-A3 plus phases; both pipelines at `docs/analysis/2026-10-plan-projection-prototype.md:7-56` |
-| R3 | MET | `docs/analysis/2026-10-plan-projection-prototype.ts:282`: batchWaves; E71 and D62 (2 waves) at `docs/analysis/2026-10-plan-projection-prototype.md:58-155` |
-| R4 | MET | `docs/analysis/2026-10-plan-projection-prototype.ts:124-155`: letter/child throw past Z/9, validate rejects >9 states and >25 phases; asserts at `docs/analysis/2026-10-plan-projection-prototype.ts:422` |
-| R5 | MET | `docs/analysis/2026-10-plan-projection-prototype.ts:178`: Tracker run with test-fix loop, skipped review, verify loop-back; snapshots `docs/analysis/2026-10-plan-projection-prototype.md:157-304` |
-| R6 | MET | `docs/analysis/2026-10-plan-projection-prototype.ts:311-350`: status map, codexPayload, claudeOps; payloads `docs/analysis/2026-10-plan-projection-prototype.md:306-408` |
+| R1 | MET | `docs/analysis/2026-10-plan-projection-prototype.md:7-56`: per-state phase grouping rendered for task-pipeline and idea-pipeline; self-checks `docs/analysis/2026-10-plan-projection-prototype.md:412-417` (phase tables validate, no terminal/on-entry state in initial plan) |
+| R2 | MET | `docs/analysis/2026-10-plan-projection-prototype.md:7-28`: single-task projection A Prepare (A1–A3) plus workflow phases B.. with digit steps; idea-pipeline at `docs/analysis/2026-10-plan-projection-prototype.md:29-56` |
+| R3 | MET | `docs/analysis/2026-10-plan-projection-prototype.md:58-155`: E71 9-task one-wave batch and D62 29-task two-wave batch; self-checks `docs/analysis/2026-10-plan-projection-prototype.md:421-423` |
+| R4 | MET | `docs/analysis/2026-10-plan-projection-prototype.md:418-420`: validator rejects a 10-state phase and 26 phases, label builder throws instead of emitting A10 |
+| R5 | MET | `docs/analysis/2026-10-plan-projection-prototype.md:157-304`: seven snapshots incl. test-fix insertion, skipped review, verify loop-back; self-checks `docs/analysis/2026-10-plan-projection-prototype.md:424-445` |
+| R6 | MET | `docs/analysis/2026-10-plan-projection-prototype.md:306-408`: per-item and full-list host payloads from the 1101 matrix; self-checks `docs/analysis/2026-10-plan-projection-prototype.md:446-448` |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Single-task plan shows phases, not raw FSM states (req: R1, R2) | MET | command | `bun docs/analysis/2026-10-plan-projection-prototype.ts` exit 0; asserts "no terminal/failure state" and "no on-entry state in the initial plan" pass for both pipelines (`docs/analysis/2026-10-plan-projection-prototype.ts:396-410`) |
-| AC2 — Batch plan maps one letter per task within A-Z (req: R3) | MET | command | same run renders E71 (9 tasks, B..J, Z report) from `spur task list --feature E71 --json` (`docs/analysis/2026-10-plan-projection-prototype.md:58-114`) |
-| AC3 — Cap is never exceeded (req: R4) | MET | command | same run asserts 10-state phase and 26 phases rejected, the label builder throws for A10, 60 tasks fold to 3 waves, all labels match `^[A-Z][1-9]?$`; `grep -cE` for AA/A10 labels in output returned 0 (`docs/analysis/2026-10-plan-projection-prototype.ts:422`) |
-| AC4 — Progress snapshots stay stable and truthful (req: R5) | MET | command | same run asserts label stability across 7 snapshots, test-fix took C2, review ends skipped, first gate stays failed (`docs/analysis/2026-10-plan-projection-prototype.ts:481`) |
-| AC5 — Same plan renders on per-item and full-list hosts (req: R6) | MET | command | same run asserts identical item text across Codex and Claude Code payloads and no skipped item marked completed (`docs/analysis/2026-10-plan-projection-prototype.md:306-408`) |
+| AC1 — Single-task plan shows phases, not raw FSM states (req: R1, R2) | MET | command | `bun docs/analysis/2026-10-plan-projection-prototype.ts` exit 0 this run, output byte-identical to `docs/analysis/2026-10-plan-projection-prototype.md:1-448`; self-checks `docs/analysis/2026-10-plan-projection-prototype.md:412-417` pass |
+| AC2 — Batch plan maps one letter per task within A-Z (req: R3) | MET | command | same run; `docs/analysis/2026-10-plan-projection-prototype.md:421-423` 60 tasks fold to 3 waves of ≤24, every label matches ^[A-Z][1-9]?$, D62 splits into 2 waves |
+| AC3 — Cap is never exceeded (req: R4) | MET | command | same run; `docs/analysis/2026-10-plan-projection-prototype.md:418-420` validator rejects 10-step phase and 26 phases, A10 throws |
+| AC4 — Progress snapshots stay stable and truthful (req: R5) | MET | command | same run; `docs/analysis/2026-10-plan-projection-prototype.md:424-445` labels stable across loop-back, inserted test-fix takes C2, review ends skipped, nothing pending after done |
+| AC5 — Same plan renders on per-item and full-list hosts (req: R6) | MET | command | same run; `docs/analysis/2026-10-plan-projection-prototype.md:446-448` skipped/failed never completed on either host, identical item text |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
