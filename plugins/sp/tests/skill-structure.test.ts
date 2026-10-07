@@ -894,7 +894,11 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
             // every task run — repaired by 1090 (out-of-scope, operator-approved) and carried here
             // as part of 1091's own commit. Not permanent — candidate for the references/ split
             // this comment asks for.
-            'code-verification': 35_468,
+            // 1109/1110 R1 (H15): the basename-anchor rejection class was RELOCATED to
+            // references/verdict-schema.md (§ Basename-only anchors) because this body is at its
+            // baseline; the +41 B left here is the pointer inside the concrete-anchors line plus a
+            // net -59 B trim of the variants note. Split, not grown.
+            'code-verification': 35_509,
             wayfinder: 26_264,
             // 0622 R9: +921B of live-matrix reconciliation (section table, SPUR_BIN
             // refusal, artifact-size discipline). Not permanent — split into references.

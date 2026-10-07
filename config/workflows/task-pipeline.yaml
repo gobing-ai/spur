@@ -296,6 +296,10 @@ states:
             options:
                 agent: ${vars.implementAgent}
                 # Pure slash command only (ADR-043). Anti-recursion / implement discipline
+                # The worker's brief is OWNED BY the skill, not restated here (task 1110 R3):
+                # see `plugins/sp/skills/code-implementation/SKILL.md` (targeted-probe scope
+                # `:98-118`, dependency-aware changed-path checks `:120-138`, Solution anchor form
+                # in Red Flags `:187`). The YAML only names the entry command.
                 # Declared Layer-1 role (0538 R2/0710 R7): routing reason; no executor pin — role routing feeds the distinctness gate.
                 role: coder
                 # B7 R3/R6 (0894): coder stages reuse the role session — the test-fix hop
@@ -733,6 +737,11 @@ states:
       description: >
           Observe-only functional verification (BDD + traceability) via /sp:dev-verify --fix none
           (task 0703 R1, ADR-071): the verifier certifies the state, it never repairs its own subject.
+          The answer-shape contract this stage enforces is OWNED BY the skill, not restated here
+          (task 1110 R3): see `plugins/sp/skills/code-verification/SKILL.md` § Answer-File Schema
+          Contract (`:340-375`), with the row-id/evidence vocabularies in
+          `plugins/sp/skills/code-verification/references/verdict-schema.md`. The YAML only names
+          the lint that consumes it (`task verdict --from-answer`).
           A live digest compare BEFORE the agent refuses to certify a state that drifted after the
           quality/review evidence was produced (R2). The agent's
           captured answer is written to `.spur/run/<wbs>-verify-answer.txt` and MUST follow
