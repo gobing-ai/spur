@@ -2,11 +2,11 @@
 schema_version: 1
 id: "I13"
 name: "Two-layer plan and progress visibility for dev workflows"
-status: backlog
+status: verifying
 priority: P2
 tags: ["wayfinder-map"]
 created_at: "2026-10-07T05:39:04.812Z"
-updated_at: "2026-10-07T06:15:18.524Z"
+updated_at: "2026-10-07T17:59:07.656Z"
 ---
 
 # I13: Two-layer plan and progress visibility for dev workflows
@@ -40,9 +40,9 @@ acceptance criteria are authored when tickets graduate into implementation tasks
 | --- | ---- | ------ |
 | 1101 | Audit native todo adoption: host capability matrix and observed behavior of recent dev runs | done |
 | 1102 | Prototype the two-layer A-Z/1-9 plan projection for single-task and batch runs | done |
-| 1103 | Add per-state display phase metadata to the workflow engine state schema | todo |
-| 1104 | Generate the two-layer A-Z/1-9 plan from workflow YAML phases in workflow show and validate | todo |
-| 1105 | Publish the generated two-layer plan first in dev workflow skills and commands | todo |
+| 1103 | Add per-state display phase metadata to the workflow engine state schema | done |
+| 1104 | Generate the two-layer A-Z/1-9 plan from workflow YAML phases in workflow show and validate | done |
+| 1105 | Publish the generated two-layer plan first in dev workflow skills and commands | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -112,4 +112,6 @@ Skills to consult: `sp:spur-dev` (inline-pipeline-driver, cross-cutting, executi
 ## History
 
 - 2026-10-07T05:44:13.363Z moved Q → I13 (system)
+- 2026-10-07T17:59:03.442Z backlog → active (system)
+- 2026-10-07T17:59:07.656Z active → verifying (system)
 
