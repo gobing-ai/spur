@@ -3,7 +3,7 @@ import type { DecisionMaker } from '@gobing-ai/ts-ai-runner';
 import type { ActionResult, ActionRunContext, ActionRunner } from '@gobing-ai/ts-dual-workflow-engine';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { z } from 'zod';
-import { beginDecisionInvocation } from '../../decision/decision-events';
+import { beginDecisionInvocation, decisionCorrelationFromVars } from '../../decision/decision-events';
 import type { SystemEventBus } from '../../services/system-event-tap';
 import { DEFAULT_MIN_CONFIDENCE, runDecide } from '../decide';
 import type { WorkflowObservabilityBus } from '../observability';
@@ -115,7 +115,14 @@ export class DecideActionRunner implements ActionRunner {
                 {
                     decisionId: options.id,
                     caller: 'workflow',
-                    correlation: { runId: context.runId, nodeId: context.stateOrNodeId },
+                    // Task 1113 R3: full correlation — workflowName/wbs from the run
+                    // vars (__workflowName injected on the __runId seam), node id from
+                    // the engine context, runId from the context of record.
+                    correlation: decisionCorrelationFromVars({
+                        ...(context.vars as Record<string, string | undefined>),
+                        __runId: context.runId,
+                        __nodeId: context.stateOrNodeId,
+                    }) ?? { runId: context.runId, nodeId: context.stateOrNodeId },
                 },
                 {
                     type: options.method,

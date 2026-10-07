@@ -7,9 +7,11 @@ import {
     DecisionMakerRegistry,
     type DecisionResult,
     type DecisionSummary,
+    resolveDecisionInput,
     UnknownDecisionError,
     UnknownDecisionMakerError,
 } from '@gobing-ai/ts-ai-decision';
+import { redactAndBound } from '../observability/agent-execution';
 import type { SystemEventBus } from '../services/system-event-tap';
 import {
     type DecisionLayerId,
@@ -226,18 +228,35 @@ export class DecisionService {
             emitDecisionRejected(options?.bus, ctx, error, name);
             throw error;
         }
+        // Task 1113 R1: validate the caller input with the same upstream resolver the
+        // hub runs, BEFORE decision.start — a bad parameter must emit only
+        // decision.rejected (errorKind `input`), never open a lifecycle the
+        // reliability report would read as a maker fault (design §3.1).
+        const decisionDefinition = file?.catalog.decisions[id];
+        if (decisionDefinition === undefined) {
+            // Unreachable after describe() success; fail closed rather than cast.
+            const error = new UnknownDecisionError(`decision "${id}" is not served by any loaded catalog`, id);
+            emitDecisionRejected(options?.bus, ctx, error);
+            throw error;
+        }
+        try {
+            resolveDecisionInput(decisionDefinition, input as Parameters<typeof resolveDecisionInput>[1]);
+        } catch (error) {
+            emitDecisionRejected(options?.bus, ctx, error);
+            throw error;
+        }
+        const digestSource = evidenceDigestSource(input);
         const invocation = beginDecisionInvocation(options?.bus, ctx, {
             type: description.type,
             maker: name,
             makerSource: source,
             catalogLayer: description.layer,
             inputKeys: Object.keys(input ?? {}),
-            ...(typeof input?.instructions === 'string'
-                ? {
-                      evidenceDigest: `sha256:${createHash('sha256')
-                          .update(input.instructions as string, 'utf8')
-                          .digest('hex')}`,
-                  }
+            // Task 1113 R5: digest the evidence-bearing input consistently — the
+            // implicit instructions channel when it is a non-empty string, else a
+            // string `evidence` input (the gate path passes evidence there).
+            ...(digestSource !== undefined
+                ? { evidenceDigest: `sha256:${createHash('sha256').update(digestSource, 'utf8').digest('hex')}` }
                 : {}),
             minConfidence: description.minConfidence,
         });
@@ -255,6 +274,18 @@ export class DecisionService {
                 });
             }
             return { ...outcome, makerSource: source };
+        } catch (error) {
+            // Task 1113 R2 backstop: an unexpected post-start throw must still keep
+            // the fixed order start → failure → end (the old bare finally emitted
+            // only end, leaving the lifecycle without a terminal failure event).
+            invocation.fail({
+                reason: 'error',
+                fallbackValue: description.fallback,
+                confidence: null,
+                maker: name,
+                error: redactAndBound(error instanceof Error ? error.message : String(error), [], 512),
+            });
+            throw error;
         } finally {
             // Always close the lifecycle, even if a maker throw escaped the hub.
             invocation.end(
@@ -353,6 +384,17 @@ export class DecisionService {
 
 /** Per-process cache of DecisionService instances, keyed by cwd + shared root (design §3.3). */
 const serviceCache = new Map<string, Promise<DecisionService>>();
+
+/**
+ * Task 1113 R5 digest source: the implicit `instructions` channel when it is a
+ * non-empty string, else a string `evidence` input (gate events pass their
+ * evidence there so gate lifecycle rows carry `evidenceDigest`).
+ */
+function evidenceDigestSource(input: Record<string, unknown> | undefined): string | undefined {
+    if (typeof input?.instructions === 'string' && input.instructions !== '') return input.instructions;
+    if (typeof input?.evidence === 'string') return input.evidence;
+    return undefined;
+}
 
 /**
  * Get or build the process-wide service for `cwd`. Config must be the same

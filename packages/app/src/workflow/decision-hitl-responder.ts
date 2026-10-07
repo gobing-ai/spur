@@ -76,6 +76,12 @@ export interface DecisionEvaluationDeps {
     decisionService?: () => Promise<DecisionService>;
     /** Workflow observability bus carrying the cataloged `decision.*` events (task 1095). */
     bus?: SystemEventBus;
+    /**
+     * Task 1113 R3: resolves `{ workflowName, wbs }` for the gated run so gate
+     * lifecycle events carry full correlation. Failures are swallowed —
+     * correlation is best-effort (design §5). Wired in buildDecisionEvaluator.
+     */
+    runCorrelation?: (runId: string) => Promise<{ workflowName?: string; wbs?: string }>;
 }
 
 /** Discriminated evaluation result consumed by the HITL actions. */
@@ -464,7 +470,13 @@ async function evaluateEvidence(
                     ...(deps.bus !== undefined ? { bus: deps.bus } : {}),
                     context: {
                         caller: 'gate',
-                        correlation: { runId: request.runId, nodeId: request.node },
+                        // Task 1113 R3: merge run correlation (workflowName/wbs from
+                        // persisted state); a lookup failure stays out of the events.
+                        correlation: {
+                            runId: request.runId,
+                            nodeId: request.node,
+                            ...((await deps.runCorrelation?.(request.runId).catch(() => ({}))) ?? {}),
+                        },
                     },
                 },
             );

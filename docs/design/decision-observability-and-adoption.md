@@ -55,8 +55,8 @@ Feature P1 owns two things:
 
 | Event | When | Severity |
 | --- | --- | --- |
-| `decision.rejected` | A caller mistake throws (`UnknownDecisionError`, `UnknownDecisionMakerError`, `DecisionCatalogError`). It fires before any maker call, and no `start` follows. | error |
-| `decision.start` | The decision id and maker are resolved, and the maker is about to be called. | info |
+| `decision.rejected` | A caller mistake throws (`UnknownDecisionError`, `UnknownDecisionMakerError`, `DecisionCatalogError`, and — since task 1113 — `DecisionInputError` from pre-validation). It fires before any maker call, and no `start` follows. | error |
+| `decision.start` | The decision id, input and maker are resolved (input is validated by `resolveDecisionInput` before this fires), and the maker is about to be called. | info |
 | `decision.success` | `source: model`, `reason: accepted` | info |
 | `decision.failure` | `source: default`, and the reason is one of `low-confidence`, `no-backend`, `timeout`, `error` | warning (`error` reason → error) |
 | `decision.end` | Always fires after `start`, after `success`/`failure`. | info |
@@ -65,6 +65,24 @@ The order is fixed: `start → (success | failure) → end`, or `rejected` alone
 call share an `invocationId`, a uuid minted at `start`. `decision.failure` means a fallback was
 served. It does not mean a crash: the caller still receives a value. The `inferSeverity` suffix
 rule does not match `failure`, so the producer stamps `severity` in the payload (event-tracking §8).
+Since task 1113, a caller-input mistake is caught before `start`: `DecisionService.decide`
+pre-validates with the same upstream `resolveDecisionInput` the hub runs, so a bad parameter emits
+`rejected` with `errorKind: 'input'` and never opens a lifecycle (no maker call, no `start`). An
+unexpected post-start throw is a backstop: the service emits `failure` (`reason: 'error'`) before
+`end`, keeping the fixed order.
+
+Correlation sources (task 1113). The engine injects a `__workflowName` run var next to `__runId`
+on the run-var seam (`workflow-service.ts`); the shell action additionally exports `__nodeId` to
+child env. The workflow `decide` action and the gate build correlation via
+`decisionCorrelationFromVars` / `loadRunCorrelation` (read from the run row + effective-vars
+snapshot), so `workflowName` and `wbs` are present when the run has them. `wbs` is included only
+when it matches `^\d{4}$` and is not `0000` (the placeholder default counts as absent).
+Rescue shell steps that call `spur decision run` adopt the run from env: a non-empty `__runId`
+makes every command event carry `caller: 'workflow'` plus the full correlation (`__workflowName`,
+`__nodeId`, `wbs`); without `__runId` behavior is unchanged (`caller: 'cli'`, no correlation).
+Correlation values pass through the standard ledger redaction, so a name containing an
+`sk-…`-shaped substring (for example `task-pipeline`) is masked in persisted rows; `runId`,
+`nodeId` and `wbs` survive and remain the join keys.
 
 ### 3.2 Payloads (metadata-only)
 
@@ -95,10 +113,15 @@ instance per process. Payloads are built in one module, `packages/app/src/decisi
 Until S4, the workflow inline-question `decide` runner emits through the same module (caller
 `workflow`, makerSource `inline`; reason `disabled` emits nothing). The flow is:
 
-1. Resolution errors emit `rejected`, then rethrow.
+1. Resolution and input errors emit `rejected` (input mistakes carry `errorKind: 'input'`), then
+   rethrow. Input validation runs before `start`.
 2. `start` fires around `hub.decide`.
-3. The result maps to `success` or `failure`.
+3. The result maps to `success` or `failure` (`failure` also covers an unexpected post-start
+   throw: the service emits it with `reason: 'error'` before rethrowing).
 4. `end` always fires.
+
+The per-call digest source is `instructions` when it is a non-empty string, else a string
+`evidence` input (the gate path), so gate events carry `evidenceDigest`.
 
 Emission is best-effort. A bus listener error never changes the decision result. The new source
 `decision` gets a `SOURCE_PROFILES` row with producer `spur` and subsystem `decision`.

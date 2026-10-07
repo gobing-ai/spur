@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, test } from 'bun:test';
+import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -8,9 +9,15 @@ import type {
     SystemEventRetentionQuota,
     SystemEventRow,
 } from '@gobing-ai/spur-domain';
+import { DecisionInputError } from '@gobing-ai/ts-ai-decision';
 import { EventBus } from '@gobing-ai/ts-infra';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
-import { beginDecisionInvocation, emitDecisionRejected } from '../../src/decision/decision-events';
+import {
+    beginDecisionInvocation,
+    decisionCorrelationFromVars,
+    decisionErrorKind,
+    emitDecisionRejected,
+} from '../../src/decision/decision-events';
 import { getDecisionService } from '../../src/decision/decision-service';
 import { systemEventCatalogEntry } from '../../src/services/event-names';
 import { registerSystemEventTap } from '../../src/services/system-event-tap';
@@ -317,6 +324,121 @@ describe('DecisionService decision events (task 1095 R6/R7)', () => {
         ).rejects.toThrow();
         expect(events.map((e) => e.name)).toEqual(['decision.rejected', 'decision.rejected']);
         expect(events[1]?.payload.maker).toBe('missing-maker');
+    });
+
+    test('input validation emits only decision.rejected with errorKind input (task 1113 R1)', async () => {
+        const root = await newRoot();
+        await writeCatalog(root, CATALOG);
+        const service = await getDecisionService(null as never, root, join(root, 'shared'));
+        const { bus, events } = capture();
+
+        // An undeclared input key is a caller mistake: rejected BEFORE decision.start,
+        // so the reliability report never reads it as a maker fault.
+        await expect(
+            service.decide('pick-lane', { bogus: 1 }, { bus: bus as never, context: { caller: 'cli' } }),
+        ).rejects.toThrow('Unknown parameter "bogus"');
+        expect(events.map((e) => e.name)).toEqual(['decision.rejected']);
+        expect(events[0]?.payload).toMatchObject({ errorKind: 'input', caller: 'cli' });
+    });
+
+    test('a post-start hub throw keeps the fixed start → failure → end order (task 1113 R2)', async () => {
+        const root = await newRoot();
+        await writeCatalog(root, CATALOG);
+        const service = await getDecisionService(null as never, root, join(root, 'shared'));
+        const { bus, events } = capture();
+        // The hub is constructed inside the service; swap in a throwing one to force
+        // the post-start error path the old bare finally papered over. describe must
+        // keep working — decide resolves the description through the hub first.
+        const realHub = (service as unknown as { hub: { describe: (id: string) => unknown } }).hub;
+        (service as unknown as { hub: unknown }).hub = {
+            describe: (id: string) => realHub.describe(id),
+            decide: async () => {
+                throw new Error('maker exploded');
+            },
+        };
+
+        await expect(
+            service.decide('pick-lane', {}, { bus: bus as never, context: { caller: 'cli' } }),
+        ).rejects.toThrow('maker exploded');
+        expect(events.map((e) => e.name)).toEqual(['decision.start', 'decision.failure', 'decision.end']);
+        expect(events[1]?.payload).toMatchObject({ reason: 'error', fallbackValue: 'slow', confidence: null });
+        expect(String(events[1]?.payload.error)).toContain('maker exploded');
+        expect(events[2]?.payload).toMatchObject({ reason: 'error', maker: 'typesafe' });
+    });
+
+    test('evidenceDigest prefers non-empty instructions, else a string evidence input (task 1113 R5)', async () => {
+        const root = await newRoot();
+        await writeCatalog(root, CATALOG);
+        // A decision that declares the `evidence` parameter: the gate path passes its
+        // evidence there, so the digest source falls back to it (design §3.1 R5).
+        const shared = join(root, 'shared', 'decisions');
+        await writeFile(
+            join(shared, 'evidence.yaml'),
+            [
+                'version: 1',
+                'defaults:',
+                '    minConfidence: 0.8',
+                '    maker: typesafe',
+                'decisions:',
+                '    gated-evidence:',
+                '        type: choice',
+                '        criteria:',
+                '            a: a',
+                '            b: b',
+                '        fallback: a',
+                '        parameters:',
+                '            evidence:',
+                '                type: string',
+                "                default: ''",
+                '',
+            ].join('\n'),
+        );
+        const service = await getDecisionService(null as never, root, join(root, 'shared'));
+        const { bus, events } = capture();
+        await service.decide(
+            'pick-lane',
+            { instructions: 'evidence text' },
+            { bus: bus as never, context: { caller: 'cli' } },
+        );
+        const digest = (events[0]?.payload as Record<string, unknown>).evidenceDigest;
+        expect(digest).toBe(`sha256:${createHash('sha256').update('evidence text', 'utf8').digest('hex')}`);
+
+        const second = capture();
+        await service.decide(
+            'gated-evidence',
+            { evidence: 'raw evidence' },
+            {
+                bus: second.bus as never,
+                context: { caller: 'cli' },
+            },
+        );
+        const digest2 = (second.events[0]?.payload as Record<string, unknown>).evidenceDigest;
+        expect(digest2).toBe(`sha256:${createHash('sha256').update('raw evidence', 'utf8').digest('hex')}`);
+    });
+});
+
+describe('run correlation producers (task 1113 R3/R4)', () => {
+    test('decisionCorrelationFromVars reads __runId/__workflowName/__nodeId/wbs', () => {
+        expect(
+            decisionCorrelationFromVars({
+                __runId: 'r-9',
+                __workflowName: 'task-pipeline',
+                __nodeId: 'decide',
+                wbs: '1113',
+            }),
+        ).toEqual({ runId: 'r-9', workflowName: 'task-pipeline', nodeId: 'decide', wbs: '1113' });
+    });
+
+    test('placeholder and malformed values stay absent; no __runId means no correlation', () => {
+        expect(decisionCorrelationFromVars({ __runId: 'r-9', wbs: '0000' })).toEqual({ runId: 'r-9' });
+        expect(decisionCorrelationFromVars({ __runId: 'r-9', wbs: 'abc' })).toEqual({ runId: 'r-9' });
+        expect(decisionCorrelationFromVars({ __runId: 'r-9', wbs: '12345' })).toEqual({ runId: 'r-9' });
+        expect(decisionCorrelationFromVars({})).toBeUndefined();
+        expect(decisionCorrelationFromVars({ __runId: '' })).toBeUndefined();
+    });
+
+    test('decisionErrorKind maps DecisionInputError to input (task 1113 R1)', () => {
+        expect(decisionErrorKind(new DecisionInputError('bad', 'pick-lane', 'lane'))).toBe('input');
     });
 });
 

@@ -74,6 +74,7 @@ import { type DecisionEvaluator, evaluateDecision } from '../workflow/decision-h
 import type { FleetDispatchDeps } from '../workflow/fleet-dispatch';
 import { ObservableWorkflowAdapter, type WorkflowObservabilityBus } from '../workflow/observability';
 import { projectWorkflowProgress } from '../workflow/progress-projection';
+import { loadRunCorrelation } from '../workflow/run-correlation';
 import {
     type CheckpointReclamationResult,
     inspectWorkflowRunRecord,
@@ -800,6 +801,10 @@ export class WorkflowAppService {
                 ...mergedCallerVars,
             }),
             __runId: runId,
+            // Task 1113 R3: full run correlation rides the same engine-var seam —
+            // decide producers read __workflowName (and the snapshot-restored wbs)
+            // so every decision event joins back to this run (feature P1 R7).
+            __workflowName: workflow.name,
             // 0759 R5: inject the canonical definition digest on the same seam as __runId so a
             // pipeline can stamp it into its verdict proof block — verified-outcome then binds
             // the record to the certifying run AND its exact definition (a stale-definition
@@ -2177,6 +2182,10 @@ export class WorkflowAppService {
                     // 1099: evidence-mode confirm gates decide through the catalog decision
                     // `gate-evidence` (same construction the `decision` CLI serves).
                     decisionService: () => getDecisionService(this.ctx.spurConfig ?? null, this.ctx.cwd),
+                    // Task 1113 R3: gate events join the run — workflowName from the run
+                    // row, wbs from the snapshot's effective vars (never throws).
+                    runCorrelation: async (runId) =>
+                        loadRunCorrelation(new DbWorkflowPersistenceAdapter(await this.ctx.getDb()), runId),
                     // SAFETY: WorkflowObservabilityBus and SystemEventBus are nominal names over
                     // one structural ts-infra EventBus instance (ADR-044 event bridge), decide.ts.
                     ...(bus !== undefined ? { bus: bus as unknown as SystemEventBus } : {}),

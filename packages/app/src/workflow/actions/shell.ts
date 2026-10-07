@@ -104,6 +104,9 @@ export class StreamingShellActionRunner implements ActionRunner {
         // the command string (engine template pre-resolution) is the bug this replaces; the
         // engine still pre-resolves `${vars.*}` in any option, so shell commands must use `$NAME`.
         const env = childProcessEnv(context.vars);
+        // Task 1113 R4: the node id rides shell env (not a run var) so a rescue
+        // `decision run` adopts the calling run with full correlation.
+        env.__nodeId = context.stateOrNodeId;
         const wfShellEnv = options.__wfShellEnv;
         if (wfShellEnv !== null && typeof wfShellEnv === 'object') {
             for (const [k, v] of Object.entries(wfShellEnv)) {

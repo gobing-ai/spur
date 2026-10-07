@@ -136,7 +136,9 @@ describe('idea-pipeline discovery rescue steps (task 1097)', () => {
         expect(invocationIds.size).toBe(1);
         for (const row of rows) {
             expect(row.data.decisionId).toBe('idea-recommendation');
-            expect(row.data.caller).toBe('cli');
+            // 1113 R4: the hermetic env sets __runId, so the rescue adopts the run.
+            expect(row.data.caller).toBe('workflow');
+            expect(row.data.correlation).toEqual({ runId: 'r' });
         }
         const failure = rows.find((r) => r.event === 'decision.failure');
         expect(failure?.data.reason).toBe('no-backend');
@@ -168,7 +170,8 @@ describe('idea-pipeline discovery rescue steps (task 1097)', () => {
         expect(invocationIds.size).toBe(1);
         for (const row of rows) {
             expect(row.data.decisionId).toBe('needs-design');
-            expect(row.data.caller).toBe('cli');
+            expect(row.data.caller).toBe('workflow');
+            expect(row.data.correlation).toEqual({ runId: 'r' });
         }
         const failure = rows.find((r) => r.event === 'decision.failure');
         expect(failure?.data.fallbackValue).toBe('design');

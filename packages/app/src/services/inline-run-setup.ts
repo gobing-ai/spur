@@ -69,6 +69,7 @@ import { resolveDurableArtifactPath } from '../workflow/actions/run-path';
 import { parseFeatureVerificationReceipt } from '../workflow/feature-verification-receipt';
 import type { WorkflowObservabilityBus } from '../workflow/observability';
 import { computeProofInputFingerprint, readProofInputContents } from '../workflow/proof-input-fingerprint';
+import { loadRunCorrelation } from '../workflow/run-correlation';
 import { InvalidWorkflowRunIdError } from '../workflow/run-record';
 import { splitLaunchCommand } from '../workflow/split-launch-command';
 import { isBookkeepingWorkflow, isTerminalReason, TERMINAL_REASONS } from '../workflow/terminal-reason';
@@ -836,6 +837,12 @@ export interface InlineDecideInput {
     readonly node?: string;
     /** Bus carrying cataloged `decision.*` events (task 1095); absent ⇒ no events. */
     readonly observabilityBus?: WorkflowObservabilityBus;
+    /**
+     * Task 1113 R3: correlation vars (`__workflowName`, `wbs`) resolved from the
+     * run row + snapshot by the caller; passed as the action's run vars so
+     * decide events carry full run correlation. Absent ⇒ `{}` (placeholder runs).
+     */
+    readonly correlationVars?: Record<string, string>;
 }
 
 /** Result of {@link runDecideForInlineRun}: the decision row plus the resultFile it was written to. */
@@ -884,7 +891,7 @@ export async function runDecideForInlineRun(input: InlineDecideInput): Promise<I
         runId: input.runId ?? 'inline-decide',
         stateOrNodeId: input.node ?? 'decide',
         workdir: resolve(input.workdir),
-        vars: {},
+        vars: input.correlationVars ?? {},
         env: {},
     });
     if (!result.ok || result.data === undefined) {
@@ -1568,6 +1575,11 @@ export async function runInlineRunDecide(input: InlineRunDecideInput): Promise<n
                 runId: input.runId,
                 node: input.node,
                 observabilityBus: bus,
+                // Task 1113 R3: inline runs persist a workflow_runs row — load the
+                // correlation the same way the gate does so decide events join the run.
+                correlationVars: {
+                    ...(await loadRunCorrelation(new DbWorkflowPersistenceAdapter(projectDb.adapter), input.runId)),
+                },
             });
         } catch (error) {
             return decideFailed(error instanceof Error ? error.message : String(error));

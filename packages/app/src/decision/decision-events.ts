@@ -13,9 +13,15 @@
  * never change the returned decision or a caller's thrown error.
  */
 
-import { DecisionCatalogError, UnknownDecisionError, UnknownDecisionMakerError } from '@gobing-ai/ts-ai-decision';
+import {
+    DecisionCatalogError,
+    DecisionInputError,
+    UnknownDecisionError,
+    UnknownDecisionMakerError,
+} from '@gobing-ai/ts-ai-decision';
 import { redactAndBound } from '../observability/agent-execution';
 import type { SystemEventBus } from '../services/system-event-tap';
+import { wbsFromVar } from '../workflow/run-correlation';
 import type { DecisionMakerSource } from './decision-service';
 
 /** Upper bound for the redacted `message` carried by `decision.rejected` (§3.2). */
@@ -94,11 +100,37 @@ export interface DecisionInvocation {
 }
 
 /** Closed error-kind vocabulary for `decision.rejected` (§3.2). */
-export function decisionErrorKind(error: unknown): 'catalog' | 'error' | 'unknown-decision' | 'unknown-decision-maker' {
+export function decisionErrorKind(
+    error: unknown,
+): 'catalog' | 'error' | 'input' | 'unknown-decision' | 'unknown-decision-maker' {
     if (error instanceof UnknownDecisionError) return 'unknown-decision';
+    // Task 1113 R1: a caller-supplied parameter mistake reports `input`, not a
+    // generic error, so reliability counts never read rejections as faults.
+    if (error instanceof DecisionInputError) return 'input';
     if (error instanceof UnknownDecisionMakerError) return 'unknown-decision-maker';
     if (error instanceof DecisionCatalogError) return 'catalog';
     return 'error';
+}
+
+/**
+ * Build run correlation from producer vars (task 1113 R3/R4). The workflow
+ * decide action passes engine context vars, the CLI passes `getEnvVars()` (the
+ * shell action exports workflow vars as env, including `__runId`). `__runId`
+ * empty ⇒ no correlation at all; a `wbs` counts only under the R3 rule
+ * (four-digit, not the `0000` placeholder). Absent values stay absent.
+ */
+export function decisionCorrelationFromVars(vars: Record<string, string | undefined>): DecisionCorrelation | undefined {
+    const runId = vars.__runId;
+    if (runId === undefined || runId === '') return undefined;
+    const wbs = wbsFromVar(vars.wbs);
+    return {
+        runId,
+        ...(vars.__workflowName !== undefined && vars.__workflowName !== ''
+            ? { workflowName: vars.__workflowName }
+            : {}),
+        ...(vars.__nodeId !== undefined && vars.__nodeId !== '' ? { nodeId: vars.__nodeId } : {}),
+        ...(wbs !== undefined ? { wbs } : {}),
+    };
 }
 
 /**

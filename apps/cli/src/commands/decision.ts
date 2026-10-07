@@ -2,7 +2,9 @@ import { resolve } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
 import {
     DECIDE_EVIDENCE_MAX_CHARS,
+    DecisionInputError,
     type DecisionStatus,
+    decisionCorrelationFromVars,
     decisionReliability,
     emitDecisionRejected,
     getDecisionService,
@@ -10,6 +12,7 @@ import {
     type SystemEventBus,
     UnknownDecisionError,
 } from '@gobing-ai/spur-app';
+import { getEnvVars } from '@gobing-ai/spur-config';
 import { SystemEventDao } from '@gobing-ai/spur-domain';
 import { EventBus } from '@gobing-ai/ts-infra';
 import type { CliContext } from '../context';
@@ -142,13 +145,20 @@ export function registerDecisionCommand(program: Command, context: CliContext): 
             // `system_events` and flush before process exit.
             const bus = new EventBus() as SystemEventBus;
             const ledger = await attachSystemEventLedger(bus, context);
+            // Task 1113 R4: a rescue `decision run` inside a workflow shell adopts the
+            // calling run — the shell action exports workflow vars as env, so env vars
+            // become full correlation (runId/workflowName/nodeId/wbs). Without __runId
+            // the context stays plain `cli` (behavior unchanged).
+            const correlation = decisionCorrelationFromVars(getEnvVars());
+            const callContext =
+                correlation !== undefined ? { caller: 'workflow' as const, correlation } : { caller: 'cli' as const };
             try {
                 const service = await getDecisionService(context.spurConfig ?? null, context.cwd);
                 let description: ReturnType<typeof service.describe>;
                 try {
                     description = service.describe(id); // unknown id exits before any work
                 } catch (error) {
-                    emitDecisionRejected(bus, { decisionId: id, caller: 'cli' }, error);
+                    emitDecisionRejected(bus, { decisionId: id, ...callContext }, error);
                     throw error;
                 }
 
@@ -172,7 +182,7 @@ export function registerDecisionCommand(program: Command, context: CliContext): 
                         );
                     }
                 } catch (error) {
-                    emitDecisionRejected(bus, { decisionId: id, caller: 'cli' }, error);
+                    emitDecisionRejected(bus, { decisionId: id, ...callContext }, error);
                     throw error;
                 }
 
@@ -180,13 +190,13 @@ export function registerDecisionCommand(program: Command, context: CliContext): 
                 try {
                     input = parseParams(id, description.parameters, options.param ?? [], evidence);
                 } catch (error) {
-                    emitDecisionRejected(bus, { decisionId: id, caller: 'cli' }, error);
+                    emitDecisionRejected(bus, { decisionId: id, ...callContext }, error);
                     throw error;
                 }
                 const result = await service.decide(id, input, {
                     maker: options.maker,
                     bus,
-                    context: { caller: 'cli' },
+                    context: callContext,
                 });
                 if (options.json === true) {
                     context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope === true }));
@@ -316,32 +326,35 @@ function parseParams(
     const input: Record<string, unknown> = {};
     for (const pair of pairs) {
         const eq = pair.indexOf('=');
-        if (eq <= 0) throw new Error(`invalid --param "${pair}": expected k=v`);
+        if (eq <= 0) throw new DecisionInputError(`invalid --param "${pair}": expected k=v`, id, '');
         const key = pair.slice(0, eq);
         const raw = pair.slice(eq + 1);
         const def = declared[key] as { type?: string } | undefined;
         if (def === undefined) {
-            throw new Error(
+            throw new DecisionInputError(
                 `unknown --param "${key}" for decision "${id}"; declared parameters: ${Object.keys(declared).join(', ')}`,
+                id,
+                key,
             );
         }
         switch (def.type) {
             case 'number': {
                 const value = Number(raw);
-                if (!Number.isFinite(value)) throw new Error(`--param ${key} expects a finite number, got "${raw}"`);
+                if (!Number.isFinite(value))
+                    throw new DecisionInputError(`--param ${key} expects a finite number, got "${raw}"`, id, key);
                 input[key] = value;
                 break;
             }
             case 'boolean':
                 if (raw !== 'true' && raw !== 'false')
-                    throw new Error(`--param ${key} expects true|false, got "${raw}"`);
+                    throw new DecisionInputError(`--param ${key} expects true|false, got "${raw}"`, id, key);
                 input[key] = raw === 'true';
                 break;
             case 'json':
                 try {
                     input[key] = JSON.parse(raw);
                 } catch {
-                    throw new Error(`--param ${key} expects valid JSON, got "${raw}"`);
+                    throw new DecisionInputError(`--param ${key} expects valid JSON, got "${raw}"`, id, key);
                 }
                 break;
             default:

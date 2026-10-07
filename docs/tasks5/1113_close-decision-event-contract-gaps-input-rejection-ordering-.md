@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: "Close decision event contract gaps: input rejection ordering and full run correlation"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-10-07T16:26:13.398Z
-updated_at: "2026-10-07T17:20:44.936Z"
+updated_at: "2026-10-07T20:00:49.273Z"
 feature_id: P1
 
 tags: ["decision"]
 dependencies: ["1095"]
 priority: P2
 estimate_hours: 6
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1113-verdict.json
 ---
 
 ## 1113. Close decision event contract gaps: input rejection ordering and full run correlation
@@ -40,20 +42,20 @@ Also: the gate path passes its evidence as input key `evidence`, but the service
 
 ### Requirements
 
-- [ ] R1. `DecisionService.decide` validates the input before `decision.start` by calling `resolveDecisionInput(definition, input)` from `@gobing-ai/ts-ai-decision`. `definition` is `file.catalog.decisions[id]`, the parsed catalog entry, which already carries the implicit `instructions` parameter (`dist/catalog.js:224`). A `DecisionInputError` emits one `decision.rejected` with the new `errorKind: 'input'` (extend `decisionErrorKind`, `packages/app/src/decision/decision-events.ts:97`) and no `start`, then rethrows the same error. CLI `parseParams` throws `DecisionInputError(message, id, key)` in place of plain `Error`, so CLI parse failures also report `input`.
-- [ ] R2. Backstop: if `hub.decide` throws after `start`, the service emits `decision.failure` before `decision.end`, then rethrows. The failure carries reason `error`, a redacted and bounded `error` message, and `fallbackValue` = `description.fallback`. The order stays `start → failure → end`. Today's `finally` that emits only `end` goes away.
-- [ ] R3. Engine runs carry a `__workflowName` run var, injected next to `__runId` in `workflow-service.ts:802`. The resume path restores it from the effective-vars snapshot, as it does `__runId`. The workflow decide action (`packages/app/src/workflow/actions/decide.ts:118`) passes `workflowName` from `context.vars.__workflowName` and `wbs` from `context.vars.wbs` in `correlation`. The evidence-mode gate (`packages/app/src/workflow/decision-hitl-responder.ts:467`) gets both through a new optional evaluator dep, `runCorrelation(runId)`, wired in `buildDecisionEvaluator` (`workflow-service.ts:2117`). It reads `workflow_name` from `loadRun(runId)` and `wbs` from `loadLatestStateSnapshot(runId).data.effectiveVars`. The lookup is the shared helper `loadRunCorrelation(persistence, runId)` (new, `packages/app/src/workflow/run-correlation.ts`). The inline-run driver (`runDecideForInlineRun`, `packages/app/src/services/inline-run-setup.ts:864`) uses the same helper against the project DB it already opens (`:1545`) and passes the result as `vars: { __workflowName, wbs }` in place of `vars: {}`. If the lookup fails, the fields are left out. A `wbs` is passed only when it matches `^\d{4}$` and is not `0000`. Absent values stay absent; nothing is inferred.
-- [ ] R4. `spur decision run` adopts the calling run when the `__runId` env var is non-empty. The shell action exports workflow vars as env (`packages/app/src/workflow/actions/shell.ts:106`), and `shell.ts` now also sets `__nodeId` = `context.stateOrNodeId`. Every event the command emits, the three pre-decide rejections and the served lifecycle alike, then carries `caller: 'workflow'` and `correlation` `{ runId, workflowName?, nodeId?, wbs? }`, built from `__runId`, `__workflowName`, `__nodeId` and `wbs` under the R3 `wbs` rule. Without `__runId`, behavior is unchanged: `caller: 'cli'` and no correlation. No new flag, verb or noun.
-- [ ] R5. The service digests the evidence-bearing input consistently: `instructions` when it is a non-empty string, else a string `evidence` input. Gate events then carry `evidenceDigest`.
-- [ ] R6. Update design §3.1–§3.3 (`docs/design/decision-observability-and-adoption.md`) for `errorKind: 'input'`, the `__workflowName`/`__nodeId` sources and the env-adopted correlation of R4.
+- [x] R1. `DecisionService.decide` validates the input before `decision.start` by calling `resolveDecisionInput(definition, input)` from `@gobing-ai/ts-ai-decision`. `definition` is `file.catalog.decisions[id]`, the parsed catalog entry, which already carries the implicit `instructions` parameter (`dist/catalog.js:224`). A `DecisionInputError` emits one `decision.rejected` with the new `errorKind: 'input'` (extend `decisionErrorKind`, `packages/app/src/decision/decision-events.ts:97`) and no `start`, then rethrows the same error. CLI `parseParams` throws `DecisionInputError(message, id, key)` in place of plain `Error`, so CLI parse failures also report `input`.
+- [x] R2. Backstop: if `hub.decide` throws after `start`, the service emits `decision.failure` before `decision.end`, then rethrows. The failure carries reason `error`, a redacted and bounded `error` message, and `fallbackValue` = `description.fallback`. The order stays `start → failure → end`. Today's `finally` that emits only `end` goes away.
+- [x] R3. Engine runs carry a `__workflowName` run var, injected next to `__runId` in `workflow-service.ts:802`. The resume path restores it from the effective-vars snapshot, as it does `__runId`. The workflow decide action (`packages/app/src/workflow/actions/decide.ts:118`) passes `workflowName` from `context.vars.__workflowName` and `wbs` from `context.vars.wbs` in `correlation`. The evidence-mode gate (`packages/app/src/workflow/decision-hitl-responder.ts:467`) gets both through a new optional evaluator dep, `runCorrelation(runId)`, wired in `buildDecisionEvaluator` (`workflow-service.ts:2117`). It reads `workflow_name` from `loadRun(runId)` and `wbs` from `loadLatestStateSnapshot(runId).data.effectiveVars`. The lookup is the shared helper `loadRunCorrelation(persistence, runId)` (new, `packages/app/src/workflow/run-correlation.ts`). The inline-run driver (`runDecideForInlineRun`, `packages/app/src/services/inline-run-setup.ts:864`) uses the same helper against the project DB it already opens (`:1545`) and passes the result as `vars: { __workflowName, wbs }` in place of `vars: {}`. If the lookup fails, the fields are left out. A `wbs` is passed only when it matches `^\d{4}$` and is not `0000`. Absent values stay absent; nothing is inferred.
+- [x] R4. `spur decision run` adopts the calling run when the `__runId` env var is non-empty. The shell action exports workflow vars as env (`packages/app/src/workflow/actions/shell.ts:106`), and `shell.ts` now also sets `__nodeId` = `context.stateOrNodeId`. Every event the command emits, the three pre-decide rejections and the served lifecycle alike, then carries `caller: 'workflow'` and `correlation` `{ runId, workflowName?, nodeId?, wbs? }`, built from `__runId`, `__workflowName`, `__nodeId` and `wbs` under the R3 `wbs` rule. Without `__runId`, behavior is unchanged: `caller: 'cli'` and no correlation. No new flag, verb or noun.
+- [x] R5. The service digests the evidence-bearing input consistently: `instructions` when it is a non-empty string, else a string `evidence` input. Gate events then carry `evidenceDigest`.
+- [x] R6. Update design §3.1–§3.3 (`docs/design/decision-observability-and-adoption.md`) for `errorKind: 'input'`, the `__workflowName`/`__nodeId` sources and the env-adopted correlation of R4.
 
 **Out of scope:** decision log rows (task 1100); any change to the reliability report query.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — A caller mistake emits decision.rejected before any maker call
-- [ ] AC2 — Decision event payloads stay metadata-only and carry run correlation
-- [ ] AC3 — Decision events persist to the system event ledger
+- [x] AC1 — A caller mistake emits decision.rejected before any maker call
+- [x] AC2 — Decision event payloads stay metadata-only and carry run correlation
+- [x] AC3 — Decision events persist to the system event ledger
 
 ### Q&A
 
@@ -120,15 +122,99 @@ Also: the gate path passes its evidence as input key `evidence`, but the service
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `apps/cli/src/commands/decision.ts:148` |
+| `apps/cli/src/commands/decision.ts:15` |
+| `apps/cli/src/commands/decision.ts:161` |
+| `apps/cli/src/commands/decision.ts:185` |
+| `apps/cli/src/commands/decision.ts:193` |
+| `apps/cli/src/commands/decision.ts:199` |
+| `apps/cli/src/commands/decision.ts:329` |
+| `apps/cli/src/commands/decision.ts:334` |
+| `apps/cli/src/commands/decision.ts:336` |
+| `apps/cli/src/commands/decision.ts:343` |
+| `apps/cli/src/commands/decision.ts:350` |
+| `apps/cli/src/commands/decision.ts:357` |
+| `apps/cli/src/commands/decision.ts:5` |
+| `apps/cli/src/commands/decision.ts:7` |
+| `apps/cli/tests/workflow/idea-pipeline-rescue.test.ts:139` |
+| `apps/cli/tests/workflow/idea-pipeline-rescue.test.ts:173` |
+| `docs/design/decision-observability-and-adoption.md:116` |
+| `docs/design/decision-observability-and-adoption.md:119` |
+| `docs/design/decision-observability-and-adoption.md:123` |
+| `docs/design/decision-observability-and-adoption.md:58` |
+| `docs/design/decision-observability-and-adoption.md:68` |
+| `packages/app/src/decision/decision-events.ts:103` |
+| `packages/app/src/decision/decision-events.ts:107` |
+| `packages/app/src/decision/decision-events.ts:115` |
+| `packages/app/src/decision/decision-events.ts:16` |
+| `packages/app/src/decision/decision-events.ts:24` |
+| `packages/app/src/decision/decision-service.ts:10` |
+| `packages/app/src/decision/decision-service.ts:14` |
+| `packages/app/src/decision/decision-service.ts:231` |
+| `packages/app/src/decision/decision-service.ts:255` |
+| `packages/app/src/decision/decision-service.ts:277` |
+| `packages/app/src/decision/decision-service.ts:388` |
+| `packages/app/src/index.ts:10` |
+| `packages/app/src/index.ts:26` |
+| `packages/app/src/services/inline-run-setup.ts:1578` |
+| `packages/app/src/services/inline-run-setup.ts:72` |
+| `packages/app/src/services/inline-run-setup.ts:840` |
+| `packages/app/src/services/inline-run-setup.ts:894` |
+| `packages/app/src/services/workflow-service.ts:2185` |
+| `packages/app/src/services/workflow-service.ts:77` |
+| `packages/app/src/services/workflow-service.ts:804` |
+| `packages/app/src/workflow/actions/decide.ts:118` |
+| `packages/app/src/workflow/actions/decide.ts:6` |
+| `packages/app/src/workflow/actions/shell.ts:107` |
+| `packages/app/src/workflow/decision-hitl-responder.ts:473` |
+| `packages/app/src/workflow/decision-hitl-responder.ts:79` |
+| `packages/app/tests/decision/decision-events.test.ts:12` |
+| `packages/app/tests/decision/decision-events.test.ts:15` |
+| `packages/app/tests/decision/decision-events.test.ts:2` |
+| `packages/app/tests/decision/decision-events.test.ts:328` |
+| `plugins/sp/lib/inline-run.generated.mjs:1722` |
+| `plugins/sp/lib/inline-run.generated.mjs:1727` |
+| `plugins/sp/lib/inline-run.generated.mjs:1743` |
+| `packages/app/src/workflow/run-correlation.ts:1` |
+| `packages/app/tests/workflow/run-correlation.test.ts:1` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `DecisionService.decide` pre-validates with the upstream `resolveDecisionInput` before `beginDecisionInvocation` (packages/app/src/decision/decision-service.ts:206-232): a `DecisionInputError` emits exactly one `decision.rejected` with `errorKind: 'input'` and rethrows, no `start`. Test: packages/app/tests/decision/decision-events.test.ts "input validation emits only decision.rejected with errorKind input" asserts `['decision.rejected']` and rejects with `Unknown parameter "bogus"`. `decisionErrorKind` maps `DecisionInputError` → `'input'` (packages/app/src/decision/decision-events.ts). CLI `parseParams` throws `DecisionInputError(message, id, key)` at all 4 sites (apps/cli/src/commands/decision.ts); E2E: `bun run apps/cli/src/index.ts decision run gate-evidence --param bogus=1` persisted `errorKind: "input", caller: "cli"` (`.spur/run/1113-correlation.json` sev_af3ae81f). |
+| R2 | MET | `catch` before `finally` emits `decision.failure` (`reason: 'error'`, `fallbackValue: description.fallback`, `confidence: null`, redacted ≤512 `error`) then rethrow; bare `finally`-only-end removed (packages/app/src/decision/decision-service.ts:236-268). Test: "a post-start hub throw keeps the fixed start → failure → end order" swaps a throwing hub (describe preserved) and asserts the exact order plus failure payload fields (packages/app/tests/decision/decision-events.test.ts:340-366). |
+| R3 | MET | `__workflowName` run var injected next to `__runId` (packages/app/src/services/workflow-service.ts:802 seam); engine restores it from the effective-vars snapshot on resume. Shared `loadRunCorrelation` (packages/app/src/workflow/run-correlation.ts) reads `run.workflow_name` + `snapshot.data.effectiveVars`, never throws, `wbs` only when `^\d{4}$` and not `0000` (packages/app/tests/workflow/run-correlation.test.ts, 4/4: run row + snapshot read, absent fields stay absent, `0000` dropped, failure returns `{}`). Wired into the gate evaluator dep `runCorrelation` (packages/app/src/workflow/decision-hitl-responder.ts:64 `DecisionEvaluationDeps`, merge with swallow), the decide action via `decisionCorrelationFromVars` (packages/app/src/workflow/actions/decide.ts), and the inline driver `correlationVars` (packages/app/src/services/inline-run-setup.ts:1580, `Record<string,string>` spread). Helper tests: `decisionCorrelationFromVars` full/placeholder/malformed/no-`__runId` cases (packages/app/tests/decision/decision-events.test.ts:376-408). |
+| R4 | MET | Shell exports `env.__nodeId = context.stateOrNodeId` (packages/app/src/workflow/actions/shell.ts:109). CLI derives one `callContext` from `getEnvVars()` via `decisionCorrelationFromVars` (apps/cli/src/commands/decision.ts:152, `getEnvVars` imported from `@gobing-ai/spur-config` at apps/cli/src/commands/decision.ts:15) — `caller: 'workflow'` + correlation when `__runId` non-empty, else `caller: 'cli'` unchanged — applied at all 3 `emitDecisionRejected` sites and `service.decide`. E2E rescue: `__runId=wf-inline-runall-p1-af68-105904 __workflowName=task-pipeline __nodeId=decide wbs=1113 bun run apps/cli/src/index.ts decision run gate-evidence --param bogus=1` persisted `caller: "workflow"` with correlation `{runId, workflowName, nodeId, wbs}` and `system_events.run_id` set (`.spur/run/1113-correlation.json` sev_52361c18; control row without env keeps `caller: "cli"`, run_id null). `workflow trace <runId>` lists decision events (trace artifact in same file). 1097 rescue pins updated to the new contract (`caller: 'workflow'`, `correlation {runId:'r'}`, apps/cli/tests/workflow/idea-pipeline-rescue.test.ts, 4/4). |
+| R5 | MET | `evidenceDigestSource`: non-empty string `instructions` first, else string `evidence` input (packages/app/src/decision/decision-service.ts). Test: "evidenceDigest prefers non-empty instructions, else a string evidence input" computes both digests against `sha256(...)` expectations using a catalog decision that declares `evidence` (the gate input shape) (packages/app/tests/decision/decision-events.test.ts:368-404). Gate events now carry `evidenceDigest`. |
+| R6 | MET | Design §3.1-§3.3 updated for `errorKind: 'input'` pre-validation ordering, the R2 backstop, `__workflowName`/`__nodeId` sources, env-adopted correlation of R4, the wbs rule, and the digest-source note including the `sk-…`-shaped redaction caveat (docs/design/decision-observability-and-adoption.md §3.1-§3.3, same commit). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R6 — A caller mistake emits decision.rejected before any maker call | MET | test | Input mistake emits `rejected` before any maker call: decision-events test asserts exactly `['decision.rejected']` with no `decision.start` on undeclared input; CLI E2E shows the same shape through the real command. |
+| R7 — Decision event payloads stay metadata-only and carry run correlation | MET | test | Payloads stay metadata-only (1095 projection suite still green in packages/app/tests/decision/decision-events.test.ts) and carry correlation: `decisionCorrelationFromVars` + `loadRunCorrelation` unit tests plus the E2E row with full `{runId, workflowName, nodeId, wbs}` correlation. |
+| R8 — Decision events persist to the system event ledger | MET | test | Persistence through the real tap: 1106's gate-persistence suite (packages/app/tests/workflow/decision-gate-persistence.test.ts) still green; E2E rescue rows landed in `.spur/spur.db` `system_events` with `event_name='decision.rejected'` and populated `run_id` (captured in `.spur/run/1113-correlation.json`). |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -137,4 +223,7 @@ Also: the gate path passes its evidence as input key `evidence`, but the service
 ### History
 
 - 2026-10-07T16:29:37.656Z backlog → todo (system)
+- 2026-10-07T18:32:31.160Z todo → wip (system)
+- 2026-10-07T19:58:36.654Z wip → testing (system)
+- 2026-10-07T20:00:49.259Z testing → done (system)
 

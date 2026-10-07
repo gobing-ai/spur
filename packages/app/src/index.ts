@@ -7,6 +7,9 @@ export {
     type RetroCorrelationWindow,
     RetroCorrelator,
 } from '@gobing-ai/spur-domain';
+// Task 1113 R4: the CLI re-throws caller input mistakes as DecisionInputError so
+// errorKind `input` survives without depending on ts-ai-decision directly.
+export { DecisionInputError } from '@gobing-ai/ts-ai-decision';
 export type { PlanningFolders } from './config/planning-folders';
 export { resolvePlanningFolders } from './config/planning-folders';
 // Decision lifecycle events (task 1095): payload-owned emitter surface.
@@ -20,6 +23,7 @@ export {
     type DecisionInvocationContext,
     type DecisionStartFields,
     type DecisionTerminalFields,
+    decisionCorrelationFromVars,
     decisionErrorKind,
     emitDecisionRejected,
 } from './decision/decision-events';
