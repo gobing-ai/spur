@@ -3,12 +3,18 @@ import type { Command } from '@commander-js/extra-typings';
 import {
     DECIDE_EVIDENCE_MAX_CHARS,
     type DecisionStatus,
+    decisionReliability,
+    emitDecisionRejected,
     getDecisionService,
     redactAndBound,
+    type SystemEventBus,
     UnknownDecisionError,
 } from '@gobing-ai/spur-app';
+import { SystemEventDao } from '@gobing-ai/spur-domain';
+import { EventBus } from '@gobing-ai/ts-infra';
 import type { CliContext } from '../context';
 import { toEnvelopeJson, toJson, writeJsonError } from '../output';
+import { attachSystemEventLedger } from '../system-event-ledger';
 import { SHARED_OPTIONS } from './shared-options';
 
 /**
@@ -131,31 +137,57 @@ export function registerDecisionCommand(program: Command, context: CliContext): 
         .option(...SHARED_OPTIONS.json)
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (id, options) => {
+            // CLI-local decision-event bus with the same durable ledger tap as
+            // `spur agent run` (task 0370 pattern): lifecycle events persist to
+            // `system_events` and flush before process exit.
+            const bus = new EventBus() as SystemEventBus;
+            const ledger = await attachSystemEventLedger(bus, context);
             try {
                 const service = await getDecisionService(context.spurConfig ?? null, context.cwd);
-                const description = service.describe(id); // unknown id exits before any work
+                let description: ReturnType<typeof service.describe>;
+                try {
+                    description = service.describe(id); // unknown id exits before any work
+                } catch (error) {
+                    emitDecisionRejected(bus, { decisionId: id, caller: 'cli' }, error);
+                    throw error;
+                }
 
                 // Evidence before any backend interaction: an unreadable declared file is
                 // a caller mistake (design §3.4). Redaction uses the built-in SECRET_PATTERN
                 // only — secrets are deliberately not threaded (workflow decide parity).
                 let evidence: string[] | undefined;
-                if (options.evidence !== undefined && options.evidence.length > 0) {
-                    evidence = await Promise.all(
-                        options.evidence.map(async (file) => {
-                            const path = resolve(context.cwd, file);
-                            let text: string;
-                            try {
-                                text = await context.fs.readFile(path);
-                            } catch {
-                                throw new Error(`evidence file "${file}" is unreadable (cwd ${context.cwd})`);
-                            }
-                            return redactAndBound(text, [], DECIDE_EVIDENCE_MAX_CHARS);
-                        }),
-                    );
+                try {
+                    if (options.evidence !== undefined && options.evidence.length > 0) {
+                        evidence = await Promise.all(
+                            options.evidence.map(async (file) => {
+                                const path = resolve(context.cwd, file);
+                                let text: string;
+                                try {
+                                    text = await context.fs.readFile(path);
+                                } catch {
+                                    throw new Error(`evidence file "${file}" is unreadable (cwd ${context.cwd})`);
+                                }
+                                return redactAndBound(text, [], DECIDE_EVIDENCE_MAX_CHARS);
+                            }),
+                        );
+                    }
+                } catch (error) {
+                    emitDecisionRejected(bus, { decisionId: id, caller: 'cli' }, error);
+                    throw error;
                 }
 
-                const input = parseParams(id, description.parameters, options.param ?? [], evidence);
-                const result = await service.decide(id, input, { maker: options.maker });
+                let input: Record<string, unknown>;
+                try {
+                    input = parseParams(id, description.parameters, options.param ?? [], evidence);
+                } catch (error) {
+                    emitDecisionRejected(bus, { decisionId: id, caller: 'cli' }, error);
+                    throw error;
+                }
+                const result = await service.decide(id, input, {
+                    maker: options.maker,
+                    bus,
+                    context: { caller: 'cli' },
+                });
                 if (options.json === true) {
                     context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope === true }));
                 } else {
@@ -165,7 +197,12 @@ export function registerDecisionCommand(program: Command, context: CliContext): 
                     );
                 }
             } catch (error) {
+                // Rejections thrown from inside `decide` are already emitted by the
+                // service; every pre-decide caller mistake was emitted at its site above.
                 fail(context, options, error);
+            } finally {
+                await ledger.flush();
+                ledger.unsubscribe();
             }
         });
 
@@ -176,13 +213,60 @@ export function registerDecisionCommand(program: Command, context: CliContext): 
                 'Configured default maker, per-decision effective maker and source,',
                 'registered makers, per-layer catalog counts, load errors and duplicate',
                 'ids. Exits 0 when clean; exits 1 on any catalog or maker-config error.',
+                '',
+                'With --reliability, reports recorded decision outcomes per decision',
+                'and maker from the `decision.end` ledger instead (task 1096): samples,',
+                'acceptedRate, fallbacks by reason, medianConfidence, p50/p95 durationMs',
+                'and firstSeen/lastSeen. Catalog ids with no recorded rows report',
+                "evidence: 'none'. Reads recorded rows only — never calls a maker — and",
+                'exits 0 on a successful report.',
             ].join('\n'),
         )
+        .option('--reliability', 'report recorded decision outcomes per decision and maker from the ledger')
+        .option('--since <iso>', 'with --reliability: only rows at or after this ISO timestamp')
         .option(...SHARED_OPTIONS.json)
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (options) => {
             try {
                 const service = await getDecisionService(context.spurConfig ?? null, context.cwd);
+                if (options.reliability === true) {
+                    if (options.since !== undefined && Number.isNaN(Date.parse(options.since))) {
+                        throw new Error(`invalid --since "${options.since}": expected an ISO timestamp`);
+                    }
+                    const dao = new SystemEventDao(await context.getDb());
+                    const report = await decisionReliability(dao, {
+                        ...(options.since !== undefined ? { since: options.since } : {}),
+                        catalog: service.status().perDecision.map((row) => ({
+                            decisionId: row.id,
+                            maker: row.maker,
+                        })),
+                    });
+                    if (options.json === true) {
+                        context.output.write(toEnvelopeJson(report, { enveloped: options.jsonEnvelope === true }));
+                    } else {
+                        for (const group of report.groups) {
+                            context.output.write(
+                                [
+                                    group.decisionId,
+                                    group.maker,
+                                    group.evidence,
+                                    String(group.samples),
+                                    group.acceptedRate.toFixed(4),
+                                    toJson(group.fallbacks),
+                                    group.medianConfidence === null ? '-' : String(group.medianConfidence),
+                                    group.p50DurationMs === null ? '-' : String(group.p50DurationMs),
+                                    group.p95DurationMs === null ? '-' : String(group.p95DurationMs),
+                                    group.firstSeen ?? '-',
+                                    group.lastSeen ?? '-',
+                                ].join('\t'),
+                            );
+                        }
+                    }
+                    return;
+                }
+                if (options.since !== undefined) {
+                    throw new Error('--since is only valid together with --reliability');
+                }
                 const status: DecisionStatus = service.status();
                 if (options.json === true) {
                     context.output.write(toEnvelopeJson(status, { enveloped: options.jsonEnvelope === true }));

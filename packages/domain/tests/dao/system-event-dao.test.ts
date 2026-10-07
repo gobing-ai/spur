@@ -1355,3 +1355,294 @@ describe('SystemEventDao.routingSummary (task 0546)', () => {
         adapter.close();
     });
 });
+
+// ---------------------------------------------------------------------------
+// Tests: decisionSummary — recorded decision outcomes per (decision × maker)
+// (task 1096 R1/R2). Rows are shaped exactly as the tap persists them:
+// payload_json is the v2 envelope and the decision facts ride `$.data.*`
+// (metadata-only projection of the decision.end presenter fields).
+// ---------------------------------------------------------------------------
+
+/** decision.end payload as the 1095 emitter + tap persist it (facts under $.data). */
+function decisionEndPayload(fields: {
+    decisionId: string;
+    maker: string;
+    source?: string;
+    reason?: string;
+    durationMs?: number;
+    confidence?: number | null;
+}): string {
+    return envelope({
+        caller: 'cli',
+        decisionId: fields.decisionId,
+        maker: fields.maker,
+        ...(fields.source !== undefined ? { source: fields.source } : {}),
+        ...(fields.reason !== undefined ? { reason: fields.reason } : {}),
+        ...(fields.durationMs !== undefined ? { durationMs: fields.durationMs } : {}),
+        ...(fields.confidence !== undefined ? { confidence: fields.confidence } : {}),
+    });
+}
+
+async function insertDecisionEnd(dao: SystemEventDao, id: string, at: string, payload: string): Promise<void> {
+    await dao.insert({ id, event_name: 'decision.end', occurred_at: at, payload_json: payload });
+}
+
+describe('SystemEventDao.decisionSummary (task 1096)', () => {
+    test('R1: a known dataset yields per-group samples, accepted, fallbacks and raw values', async () => {
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(adapter);
+        const dao = new SystemEventDao(adapter);
+
+        // task-triage × typesafe: 3 samples, 1 accepted, fallback no-backend,
+        // mixed confidence (one null) and a three-value duration set.
+        await insertDecisionEnd(
+            dao,
+            'de1',
+            '2026-10-06T01:00:00.000Z',
+            decisionEndPayload({
+                decisionId: 'task-triage',
+                maker: 'typesafe',
+                source: 'model',
+                durationMs: 30,
+                confidence: 0.9,
+            }),
+        );
+        await insertDecisionEnd(
+            dao,
+            'de2',
+            '2026-10-06T02:00:00.000Z',
+            decisionEndPayload({
+                decisionId: 'task-triage',
+                maker: 'typesafe',
+                source: 'default',
+                reason: 'no-backend',
+                durationMs: 10,
+                confidence: null,
+            }),
+        );
+        await insertDecisionEnd(
+            dao,
+            'de3',
+            '2026-10-06T03:00:00.000Z',
+            decisionEndPayload({
+                decisionId: 'task-triage',
+                maker: 'typesafe',
+                source: 'default',
+                reason: 'no-backend',
+                durationMs: 20,
+                confidence: 0.7,
+            }),
+        );
+        // failure-class × inline: one fallback with a different reason.
+        await insertDecisionEnd(
+            dao,
+            'de4',
+            '2026-10-06T04:00:00.000Z',
+            decisionEndPayload({
+                decisionId: 'failure-class',
+                maker: 'inline',
+                source: 'default',
+                reason: 'low-confidence',
+                durationMs: 5,
+                confidence: 0.2,
+            }),
+        );
+
+        const groups = await dao.decisionSummary();
+        expect(groups).toHaveLength(2);
+        // Highest sample count first, then deterministic key order.
+        const triage = groups[0];
+        expect(triage).toMatchObject({
+            decisionId: 'task-triage',
+            maker: 'typesafe',
+            samples: 3,
+            accepted: 1,
+            fallbacks: { 'no-backend': 2 },
+            firstSeen: '2026-10-06T01:00:00.000Z',
+            lastSeen: '2026-10-06T03:00:00.000Z',
+        });
+        expect(triage?.durationMs).toEqual([30, 10, 20]);
+        expect(triage?.confidence).toEqual([0.9, 0.7]); // null dropped, row still a sample
+
+        const failure = groups[1];
+        expect(failure).toMatchObject({
+            decisionId: 'failure-class',
+            maker: 'inline',
+            samples: 1,
+            accepted: 0,
+            fallbacks: { 'low-confidence': 1 },
+        });
+
+        adapter.close();
+    });
+
+    test('R1: mixed makers for one decision id form separate groups', async () => {
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(adapter);
+        const dao = new SystemEventDao(adapter);
+
+        await insertDecisionEnd(
+            dao,
+            'm1',
+            '2026-10-06T01:00:00.000Z',
+            decisionEndPayload({ decisionId: 'gate-evidence', maker: 'typesafe', source: 'model', durationMs: 1 }),
+        );
+        await insertDecisionEnd(
+            dao,
+            'm2',
+            '2026-10-06T02:00:00.000Z',
+            decisionEndPayload({
+                decisionId: 'gate-evidence',
+                maker: 'inline',
+                source: 'default',
+                reason: 'timeout',
+                durationMs: 2,
+            }),
+        );
+
+        const groups = await dao.decisionSummary();
+        // Equal counts tie-break on the group keys (maker ASC), per the SQL ORDER BY.
+        expect(groups.map((g) => [g.decisionId, g.maker])).toEqual([
+            ['gate-evidence', 'inline'],
+            ['gate-evidence', 'typesafe'],
+        ]);
+
+        adapter.close();
+    });
+
+    test('R1: only decision.end rows count — rejected, start and non-decision events are excluded', async () => {
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(adapter);
+        const dao = new SystemEventDao(adapter);
+
+        await insertDecisionEnd(
+            dao,
+            'x1',
+            '2026-10-06T01:00:00.000Z',
+            decisionEndPayload({
+                decisionId: 'task-triage',
+                maker: 'typesafe',
+                source: 'default',
+                reason: 'no-backend',
+                durationMs: 1,
+            }),
+        );
+        // A rejected caller mistake must never count as a sample (failure list).
+        await dao.insert({
+            id: 'x2',
+            event_name: 'decision.rejected',
+            occurred_at: '2026-10-06T01:01:00.000Z',
+            payload_json: envelope({ decisionId: 'task-triage', caller: 'cli', errorKind: 'unknown-decision' }),
+        });
+        await dao.insert({
+            id: 'x3',
+            event_name: 'decision.start',
+            occurred_at: '2026-10-06T01:02:00.000Z',
+            payload_json: envelope({ decisionId: 'task-triage', maker: 'typesafe' }),
+        });
+        // A non-decision source must not leak into the groups (failure list).
+        await dao.insert({
+            id: 'x4',
+            event_name: 'task.updated',
+            occurred_at: '2026-10-06T01:03:00.000Z',
+            payload_json: envelope({ decisionId: 'task-triage', maker: 'typesafe', source: 'model' }),
+        });
+
+        const groups = await dao.decisionSummary();
+        expect(groups).toHaveLength(1);
+        expect(groups[0]).toMatchObject({ decisionId: 'task-triage', samples: 1, accepted: 0 });
+
+        adapter.close();
+    });
+
+    test('R1: null confidence is excluded from raw values but the row still counts; p95 input rides the group', async () => {
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(adapter);
+        const dao = new SystemEventDao(adapter);
+
+        await insertDecisionEnd(
+            dao,
+            'n1',
+            '2026-10-06T01:00:00.000Z',
+            decisionEndPayload({
+                decisionId: 'd',
+                maker: 'm',
+                source: 'default',
+                reason: 'error',
+                durationMs: 7,
+                confidence: null,
+            }),
+        );
+        // Row without any confidence/duration facts: still a sample.
+        await insertDecisionEnd(
+            dao,
+            'n2',
+            '2026-10-06T02:00:00.000Z',
+            decisionEndPayload({ decisionId: 'd', maker: 'm', source: 'model' }),
+        );
+
+        const groups = await dao.decisionSummary();
+        expect(groups).toHaveLength(1);
+        expect(groups[0]).toMatchObject({ samples: 2, accepted: 1, fallbacks: { error: 1 } });
+        expect(groups[0]?.confidence).toEqual([]);
+        expect(groups[0]?.durationMs).toEqual([7]);
+
+        adapter.close();
+    });
+
+    test('R1: non-JSON or partial payloads are excluded, not imputed as an unknown group', async () => {
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(adapter);
+        const dao = new SystemEventDao(adapter);
+
+        await insertDecisionEnd(dao, 'p1', '2026-10-06T01:00:00.000Z', '{not json');
+        await insertDecisionEnd(dao, 'p2', '2026-10-06T02:00:00.000Z', envelope({ caller: 'cli' }));
+
+        expect(await dao.decisionSummary()).toEqual([]);
+
+        adapter.close();
+    });
+
+    test('R1: since and decisionId filters narrow the aggregation', async () => {
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(adapter);
+        const dao = new SystemEventDao(adapter);
+
+        await insertDecisionEnd(
+            dao,
+            'f1',
+            '2026-10-05T00:00:00.000Z',
+            decisionEndPayload({ decisionId: 'a', maker: 'm', source: 'model', durationMs: 1 }),
+        );
+        await insertDecisionEnd(
+            dao,
+            'f2',
+            '2026-10-07T00:00:00.000Z',
+            decisionEndPayload({ decisionId: 'a', maker: 'm', source: 'model', durationMs: 2 }),
+        );
+        await insertDecisionEnd(
+            dao,
+            'f3',
+            '2026-10-07T01:00:00.000Z',
+            decisionEndPayload({ decisionId: 'b', maker: 'm', source: 'model', durationMs: 3 }),
+        );
+
+        const sinceFiltered = await dao.decisionSummary({ since: '2026-10-06T00:00:00.000Z' });
+        expect(sinceFiltered.map((g) => g.decisionId)).toEqual(['a', 'b']);
+        expect(sinceFiltered[0]).toMatchObject({ samples: 1, firstSeen: '2026-10-07T00:00:00.000Z' });
+
+        const idFiltered = await dao.decisionSummary({ decisionId: 'b' });
+        expect(idFiltered).toHaveLength(1);
+        expect(idFiltered[0]).toMatchObject({ decisionId: 'b', samples: 1 });
+
+        adapter.close();
+    });
+
+    test('R1: an empty ledger returns an empty aggregation', async () => {
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(adapter);
+        const dao = new SystemEventDao(adapter);
+        expect(await dao.decisionSummary()).toEqual([]);
+        adapter.close();
+    });
+});

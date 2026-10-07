@@ -97,6 +97,8 @@ spur decision status [options]
 
 | Option | Description |
 |---|---|
+| `--reliability` | Report recorded decision outcomes per decision and maker from the `decision.end` ledger (task 1096) instead of the readiness view |
+| `--since <iso>` | With `--reliability`: only rows at or after this ISO timestamp |
 | `--json` | Output machine-readable JSON |
 | `--json-envelope` | Wrap `--json` output in the `{ok, data}` envelope |
 
@@ -105,3 +107,8 @@ maker named in config). Errors are listed either way.
 
 `--json` payload: `{ ok, layers: {project, registered, shared}, loadErrors, duplicateIds,
 registeredMakers, configDecisionMakers, perDecision: [{id, maker, source, registered}] }`.
+
+With `--reliability`, reads recorded rows only (never calls a maker) and exits 0 on a successful
+report. `--json` payload: `{ generatedAt, groups: [{decisionId, maker, evidence: 'recorded' |
+'none', samples, accepted, acceptedRate, fallbacks, medianConfidence, p50DurationMs,
+p95DurationMs, firstSeen, lastSeen}] }`; catalog ids with zero rows report `evidence: 'none'`.

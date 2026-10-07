@@ -2,11 +2,11 @@
 schema_version: 1
 id: "P1"
 name: "Spur decision production readiness: events and workflow adoption"
-status: backlog
+status: active
 priority: P2
 tags: []
 created_at: "2026-10-06T18:15:41.140Z"
-updated_at: "2026-10-07T00:59:48.013Z"
+updated_at: "2026-10-07T03:48:25.544Z"
 ---
 
 # P1: Workflow decision points adopt spur decision catalogs
@@ -163,7 +163,7 @@ Feature: Spur decision production readiness: events and workflow adoption
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 1094 | Migrate workflow decide action to catalog references | blocked |
-| 1095 | Emit decision lifecycle events and persist them to the system event ledger | todo |
+| 1095 | Emit decision lifecycle events and persist them to the system event ledger | testing |
 | 1096 | Report decision reliability from recorded decision events | todo |
 | 1097 | Rescue unparseable idea-pipeline recommendation and needs-design signals with catalog decisions | todo |
 | 1098 | Rescue ambiguous history-anatomy verdicts without overturning FAIL | todo |
@@ -173,3 +173,6 @@ Feature: Spur decision production readiness: events and workflow adoption
 ## Notes
 
 ## History
+
+- 2026-10-07T03:48:25.544Z backlog → active (system)
+

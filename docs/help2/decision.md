@@ -59,3 +59,9 @@ missing required parameter, type-invalid parameter, unregistered maker, unreadab
 
 Layer counts, registered makers, per-decision maker resolution, and load errors. Exit 0 on a clean
 catalog; exit 1 when any layer reports load errors (errors are listed either way).
+
+With `--reliability [--since <iso>]`, report recorded decision outcomes per decision and maker from
+the `decision.end` ledger instead (task 1096): samples, acceptedRate, fallbacks by reason,
+medianConfidence, p50/p95 durationMs and firstSeen/lastSeen; catalog ids without rows report
+`evidence: 'none'`. Reads recorded rows only — never calls a maker — and exits 0 on a successful
+report.

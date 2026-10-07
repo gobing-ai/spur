@@ -80,6 +80,8 @@ export {
 } from './run-transfer';
 export {
     type CreateSystemEventInput,
+    type DecisionSummaryGroup,
+    type DecisionSummaryQuery,
     type EventSummaryRecentError,
     type EventSummaryResult,
     type EventSummarySpec,

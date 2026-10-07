@@ -1,9 +1,9 @@
 ---
 kind: design
 title: Decision observability and staged workflow adoption
-status: proposed
+status: accepted
 created_at: 2026-10-06
-updated_at: 2026-10-06
+updated_at: 2026-10-07
 related: [ADR-134, ADR-125, feature P, feature P1, decision-catalog.md]
 tags: [decision, events, workflow, observability]
 ---
@@ -142,7 +142,7 @@ Classes:
 | idea-pipeline · recommendation (`idea-pipeline.yaml:146`) | awk over `## Recommendation` → `unknown` pauses | rescue-only | `idea-recommendation` · proceed/reshape/drop · *pause* (fallback writes `unknown`) |
 | idea-pipeline · `needs_design` (`:132`) | agent-written JSON. A missing or corrupt file means design. | rescue-only | `needs-design` · noul · yes |
 | history-anatomy · validation verdict (`history-anatomy.yaml:236`) | shell normalization of `Verdict:` lines | rescue-only | `anatomy-validation-verdict` · PASS/FAIL · FAIL. Any exact `Verdict: FAIL` line short-circuits to FAIL without calling a maker. |
-| 7 operator gates: idea-eval, feature-check, design-approval, batch-create (`idea-pipeline.yaml:164/303/383/443`), task-pipeline approve (`task-pipeline.yaml:710`), wayfinder (`wayfinder-resolution.yaml:167`), wrapup branch cleanup (`wrapup-pipeline.yaml:447`) | `hitl.confirm` `mode: never` | keep-human (bundled). In evidence-mode overrides, the decision is catalog-backed. | `gate-evidence` · yes/no · defer to operator |
+| 7 operator gates: idea-eval, feature-check, design-approval, batch-create (`idea-pipeline.yaml:160/299/379/439`), task-pipeline approve (`task-pipeline.yaml:706`), wayfinder (`wayfinder-resolution.yaml:163`), wrapup branch cleanup (`wrapup-pipeline.yaml:443`) | `hitl.confirm` `mode: never` | keep-human (bundled). In evidence-mode overrides, the decision is catalog-backed. | `gate-evidence` · yes/no · defer to operator |
 | pr-review preflight/hygiene/precheck; wayfinder precheck/final; wrapup gates; feature-verification; history structure-gate; task-pipeline `command.gate`s | exact status files | keep-deterministic | — |
 | feature-lifecycle, task-lifecycle | status transitions | keep-deterministic | — |
 
@@ -174,5 +174,7 @@ decision fallback reproduces today's behavior.
   explicitly so that dashboards do not read it as a crash.
 - **Rescue latency.** A maker is called only when the deterministic parse fails, so the happy
   path costs nothing.
-- **Open: report surface.** The choice is between a flag on `decision status` and a new verb. It
-  is decided in S3 with operator consent if it touches the public surface.
+- **Report surface (closed 2026-10-07, task 1096).** Chosen: `spur decision status --reliability
+  [--since <iso>] [--json]` — `status` already owns readiness reporting, so a flag is the smaller
+  surface change; operator consent for the new public flag was granted. A separate `decision
+  report` verb was rejected.

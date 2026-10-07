@@ -148,6 +148,40 @@ export interface RoutingSummaryQuery {
     until?: string;
 }
 
+/** Filter options for {@link SystemEventDao.decisionSummary} (task 1096 R1). */
+export interface DecisionSummaryQuery {
+    /** Inclusive lower bound (ISO timestamp); unset scans the whole ledger. */
+    since?: string;
+    /** Restrict the aggregation to one decision id. */
+    decisionId?: string;
+}
+
+/**
+ * One (decisionId × maker) group aggregated over `decision.end` rows
+ * (task 1096 R1). Raw `durationMs`/`confidence` values ride the group so the
+ * app layer computes percentiles without a second query; rows whose payload
+ * lacks a usable decisionId/maker (non-JSON or partial) are excluded rather
+ * than imputed as an unknown group, mirroring {@link routingSummary} (R5).
+ */
+export interface DecisionSummaryGroup {
+    decisionId: string;
+    maker: string;
+    /** Number of `decision.end` rows in the group — one per invocation; a rejected call never produces `end`. */
+    samples: number;
+    /** Rows whose `$.data.source` is `model` — the answer was accepted, no fallback served. */
+    accepted: number;
+    /** Fallback counts by `$.data.reason` over `source = 'default'` rows in the group. */
+    fallbacks: Record<string, number>;
+    /** Earliest `occurred_at` in the group. */
+    firstSeen: string;
+    /** Latest `occurred_at` in the group. */
+    lastSeen: string;
+    /** Numeric `$.data.durationMs` values (percentile input; null/non-numeric excluded). */
+    durationMs: number[];
+    /** Numeric `$.data.confidence` values (median input; nulls excluded — median reports null when empty). */
+    confidence: number[];
+}
+
 /**
  * Default "bounded recent" window for {@link SystemEventDao.routingSummary}
  * (task 0546 frozen names — "no unbounded scan"). One week of ledger.
@@ -522,6 +556,135 @@ export class SystemEventDao {
         } catch (error) {
             if (error instanceof Error && error.message.includes('no such table: system_events')) {
                 return { window: { since, until }, pairs: [] };
+            }
+            throw error;
+        }
+    }
+
+    /**
+     * Aggregate recorded decision outcomes per (decisionId × maker) from
+     * `decision.end` rows in one SQL round trip (task 1096 R1), following the
+     * {@link routingSummary} pattern. Only `decision.end` rows count — each
+     * invocation closes exactly once, and a rejected call (caller mistake)
+     * never produces `end`, so caller mistakes never lower acceptance.
+     * Confidence rides the end row's `$.data.confidence` (task 1095), so the
+     * report needs no join.
+     *
+     * `accepted` counts `$.data.source = 'model'`; `fallbacks` counts rows by
+     * `$.data.reason` among `source = 'default'`. Rows with a NULL decisionId
+     * or maker (non-JSON or partial payloads) are excluded from groups rather
+     * than imputed as an unknown id. Raw duration/confidence values are
+     * returned for app-side percentiles; null and non-numeric values are
+     * dropped from those arrays only — the row still counts as a sample.
+     *
+     * Mirrors {@link query}'s safety pattern: a missing table returns `[]`.
+     */
+    async decisionSummary(spec: DecisionSummaryQuery = {}): Promise<DecisionSummaryGroup[]> {
+        // Shared WHERE builder so both passes bind since/decisionId identically.
+        const buildFilter = (): { clauses: string[]; params: Array<string> } => {
+            const clauses = [
+                "event_name = 'decision.end'",
+                'json_valid(payload_json) = 1',
+                "json_extract(payload_json, '$.data.decisionId') IS NOT NULL",
+                "json_extract(payload_json, '$.data.maker') IS NOT NULL",
+            ];
+            const params: Array<string> = [];
+            if (spec.since !== undefined) {
+                params.push(spec.since);
+                clauses.push(`occurred_at >= ?${params.length}`);
+            }
+            if (spec.decisionId !== undefined) {
+                params.push(spec.decisionId);
+                clauses.push(`json_extract(payload_json, '$.data.decisionId') = ?${params.length}`);
+            }
+            return { clauses, params };
+        };
+        try {
+            const groupFilter = buildFilter();
+            const rows = await this.db.queryAll<{
+                decision_id: string;
+                maker: string;
+                samples: number;
+                accepted: number | null;
+                first_seen: string;
+                last_seen: string;
+                durations_json: string | null;
+                confidences_json: string | null;
+            }>(
+                `SELECT
+                    json_extract(payload_json, '$.data.decisionId') AS decision_id,
+                    json_extract(payload_json, '$.data.maker') AS maker,
+                    COUNT(*) AS samples,
+                    SUM(CASE WHEN json_extract(payload_json, '$.data.source') = 'model' THEN 1 ELSE 0 END) AS accepted,
+                    MIN(occurred_at) AS first_seen,
+                    MAX(occurred_at) AS last_seen,
+                    json_group_array(
+                        CASE WHEN typeof(json_extract(payload_json, '$.data.durationMs')) IN ('integer', 'real')
+                             THEN json_extract(payload_json, '$.data.durationMs') END
+                    ) AS durations_json,
+                    json_group_array(
+                        CASE WHEN typeof(json_extract(payload_json, '$.data.confidence')) IN ('integer', 'real')
+                             THEN json_extract(payload_json, '$.data.confidence') END
+                    ) AS confidences_json
+                 FROM system_events
+                 WHERE ${groupFilter.clauses.join('\n                   AND ')}
+                 GROUP BY decision_id, maker
+                 -- Deterministic tie order: samples DESC, then the group keys —
+                 -- equal-count groups must not come back in optimizer-dependent order.
+                 ORDER BY samples DESC, decision_id ASC, maker ASC`,
+                ...groupFilter.params,
+            );
+            const fallbackFilter = buildFilter();
+            const fallbackRows = await this.db.queryAll<{
+                decision_id: string;
+                maker: string;
+                reason: string;
+                count: number;
+            }>(
+                `SELECT
+                    json_extract(payload_json, '$.data.decisionId') AS decision_id,
+                    json_extract(payload_json, '$.data.maker') AS maker,
+                    json_extract(payload_json, '$.data.reason') AS reason,
+                    COUNT(*) AS count
+                 FROM system_events
+                 WHERE ${fallbackFilter.clauses.join('\n                   AND ')}
+                   AND json_extract(payload_json, '$.data.source') = 'default'
+                   AND json_extract(payload_json, '$.data.reason') IS NOT NULL
+                 GROUP BY decision_id, maker, reason`,
+                ...fallbackFilter.params,
+            );
+            const fallbacksByGroup = new Map<string, Record<string, number>>();
+            for (const row of fallbackRows) {
+                const key = `${row.decision_id}\u0000${row.maker}`;
+                const bucket = fallbacksByGroup.get(key) ?? {};
+                bucket[row.reason] = Number(row.count);
+                fallbacksByGroup.set(key, bucket);
+            }
+            return rows.map((row) => {
+                const key = `${row.decision_id}\u0000${row.maker}`;
+                const numeric = (json: string | null): number[] => {
+                    try {
+                        const parsed: unknown = JSON.parse(json ?? '[]');
+                        return Array.isArray(parsed) ? parsed.filter((v): v is number => typeof v === 'number') : [];
+                    } catch {
+                        return [];
+                    }
+                };
+                return {
+                    decisionId: row.decision_id,
+                    maker: row.maker,
+                    samples: Number(row.samples),
+                    accepted: Number(row.accepted ?? 0),
+                    fallbacks: fallbacksByGroup.get(key) ?? {},
+                    firstSeen: row.first_seen,
+                    lastSeen: row.last_seen,
+                    durationMs: numeric(row.durations_json),
+                    confidence: numeric(row.confidences_json),
+                };
+            });
+        } catch (error) {
+            if (error instanceof Error && error.message.includes('no such table: system_events')) {
+                return [];
             }
             throw error;
         }

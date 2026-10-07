@@ -178,5 +178,5 @@
 [done] **N**: 0451 pipeline post-mortem: process and infrastructure hardening ([N_0451-pipeline-post-mortem-process-and-infrastructure-hardening.md](./N_0451-pipeline-post-mortem-process-and-infrastructure-hardening.md))
 [backlog] **O**: Observability run-detail refinements ([O_observability-run-detail-refinements.md](./O_observability-run-detail-refinements.md))
 [done] **P**: Decision catalogs and the spur decision noun ([P_decision-catalogs-and-the-spur-decision-noun.md](./P_decision-catalogs-and-the-spur-decision-noun.md))
-    └── [backlog] **P1**: Spur decision production readiness: events and workflow adoption ([P1_workflow-decision-points-adopt-spur-decision-catalogs.md](./P1_workflow-decision-points-adopt-spur-decision-catalogs.md))
+    └── [active] **P1**: Spur decision production readiness: events and workflow adoption ([P1_workflow-decision-points-adopt-spur-decision-catalogs.md](./P1_workflow-decision-points-adopt-spur-decision-catalogs.md))
 <!-- END AUTO-GENERATED -->
