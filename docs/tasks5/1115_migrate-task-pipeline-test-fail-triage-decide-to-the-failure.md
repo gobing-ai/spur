@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Migrate task-pipeline test-fail-triage decide to the failure-class catalog decision
-status: blocked
+status: todo
 template: feature-impl
 created_at: 2026-10-07T16:29:03.102Z
-updated_at: "2026-10-07T18:56:02.692Z"
+updated_at: "2026-10-07T22:43:06.819Z"
 feature_id: P1
 
 dependencies: ["1094"]
@@ -114,4 +114,5 @@ Blocked until the evidence bar in the feature P1 Entry condition is met for `fai
 ### History
 
 - 2026-10-07T16:29:38.473Z backlog → blocked (system)
+- 2026-10-07T22:43:06.819Z blocked → todo (system)
 

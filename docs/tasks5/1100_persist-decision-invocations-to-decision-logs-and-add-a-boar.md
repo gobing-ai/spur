@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Persist decision invocations to decision_logs and add a Board Decisions tab
-status: blocked
+status: todo
 template: feature-impl
 created_at: 2026-10-07T02:58:40.297Z
-updated_at: "2026-10-07T21:34:39.103Z"
+updated_at: "2026-10-07T22:43:01.796Z"
 feature_id: P1
 
 dependencies: ["1095", "1113"]
@@ -228,4 +228,5 @@ If 1094 has not landed when this task is picked up, wire only the paths that exi
 - 2026-10-07T03:03:14.755Z backlog → todo (system)
 - 2026-10-07T21:32:09.684Z todo → wip (system)
 - 2026-10-07T21:34:39.103Z wip → blocked (system)
+- 2026-10-07T22:43:01.796Z blocked → todo (system)
 

@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Migrate task-pipeline triage decide to the task-triage catalog decision
-status: blocked
+status: todo
 template: feature-impl
 created_at: 2026-10-07T16:29:02.797Z
-updated_at: "2026-10-07T18:56:00.625Z"
+updated_at: "2026-10-07T22:42:55.050Z"
 feature_id: P1
 
 dependencies: ["1094"]
@@ -115,4 +115,5 @@ Blocked until the evidence bar in the feature P1 Entry condition is met for `tas
 ### History
 
 - 2026-10-07T16:29:38.239Z backlog → blocked (system)
+- 2026-10-07T22:42:55.050Z blocked → todo (system)
 

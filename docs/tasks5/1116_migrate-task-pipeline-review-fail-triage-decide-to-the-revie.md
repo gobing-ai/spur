@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Migrate task-pipeline review-fail-triage decide to the review-failure-class catalog decision
-status: blocked
+status: todo
 template: feature-impl
 created_at: 2026-10-07T16:29:03.402Z
-updated_at: "2026-10-07T18:56:04.371Z"
+updated_at: "2026-10-07T22:42:49.476Z"
 feature_id: P1
 
 dependencies: ["1094"]
@@ -125,4 +125,5 @@ The S8 deprecation clock goes in the feature Notes through `spur feature update 
 ### History
 
 - 2026-10-07T16:29:38.703Z backlog → blocked (system)
+- 2026-10-07T22:42:49.476Z blocked → todo (system)
 
