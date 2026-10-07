@@ -4,8 +4,8 @@ name: Ship verify-answer contract and implement briefs as spur-dev references
 status: todo
 template: feature-impl
 created_at: 2026-10-07T07:29:49.913Z
-updated_at: "2026-10-07T07:34:14.227Z"
-feature_id: R
+updated_at: "2026-10-07T15:57:58.873Z"
+feature_id: H15
 
 ---
 

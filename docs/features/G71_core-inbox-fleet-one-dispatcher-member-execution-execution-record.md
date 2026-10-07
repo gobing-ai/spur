@@ -77,7 +77,7 @@ Feature: Core inbox fleet: one dispatcher, member execution, execution record
 | 1074 | Make fleet members drain their inbox and let the orchestrator converse | done |
 | 1075 | Resume wip fleet work with --continue and stop deriving member ids from executors | done |
 | 1076 | Record every agent run and fleet turn as a durable execution record with spur agent trace | done |
-| 1077 | Prove the inbox-only fleet end to end with a repeatable receipt | todo |
+| 1077 | Prove the inbox-only fleet end to end with a repeatable receipt | done |
 | 1091 | Dispatch a task created after the fleet loops start, and finalize a killed member turn | done |
 <!-- END AUTO-GENERATED -->
 

@@ -4,8 +4,8 @@ name: Record runall-P1 pilot evidence for scoped-gate and budget adoption (featu
 status: todo
 template: feature-impl
 created_at: 2026-10-07T07:29:48.676Z
-updated_at: "2026-10-07T07:34:13.238Z"
-feature_id: R
+updated_at: "2026-10-07T15:58:30.990Z"
+feature_id: H15
 
 ---
 
@@ -61,5 +61,5 @@ The i31 baseline (`docs/reports/i31/0912-workflow-baseline.md`) marks scoped-gat
 
 ### Notes
 
-Source anchors for the numbers: batch commits `c59d9312c`…`4f682cb96` + wrap `01b2ca063` + merge `90a435a0f` (git history is the durable record); scratch state `/tmp/p1-batch-state.json` may be gone — do not depend on it. Report contract: see `sp:spur-dev` plan/report templates (`references/document-authoring.md`); place under `docs/reports/` following the i31 baseline's sibling layout. Do not edit the ADR text of D62 itself — cite it from the baseline rows and the report; adoption wording belongs to the decision owner.
+Re-homed: created under transient root feature "R", then moved to H15 (spur-dev umbrella family, owner of 0931 parallel batch isolation) with the rest of the batch-execution performance set. Source anchors for the numbers: batch commits `c59d9312c`…`4f682cb96` + wrap `01b2ca063` + merge `90a435a0f` (git history is the durable record); scratch state `/tmp/p1-batch-state.json` may be gone — do not depend on it. Report contract: see `sp:spur-dev` plan/report templates (`references/document-authoring.md`); place under `docs/reports/` following the i31 baseline's sibling layout. Do not edit the ADR text of D62 itself — cite it from the baseline rows and the report; adoption wording belongs to the decision owner.
 

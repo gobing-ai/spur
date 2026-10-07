@@ -182,11 +182,13 @@ Feature: Spur decision production readiness: events and workflow adoption
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 1094 | Migrate workflow decide action to catalog references | blocked |
-| 1095 | Emit decision lifecycle events and persist them to the system event ledger | testing |
-| 1096 | Report decision reliability from recorded decision events | todo |
-| 1097 | Rescue unparseable idea-pipeline recommendation and needs-design signals with catalog decisions | todo |
-| 1098 | Rescue ambiguous history-anatomy verdicts without overturning FAIL | todo |
-| 1099 | Route evidence-mode operator gates through catalog decisions | todo |
+| 1095 | Emit decision lifecycle events and persist them to the system event ledger | done |
+| 1096 | Report decision reliability from recorded decision events | done |
+| 1097 | Rescue unparseable idea-pipeline recommendation and needs-design signals with catalog decisions | done |
+| 1098 | Rescue ambiguous history-anatomy verdicts without overturning FAIL | done |
+| 1099 | Route evidence-mode operator gates through catalog decisions | done |
+| 1100 | Persist decision invocations to decision_logs and add a Board Decisions tab | todo |
+| 1106 | Harden decision-catalog test evidence: pin rescue ordering and persisted gate rows | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

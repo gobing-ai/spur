@@ -39,7 +39,10 @@ acceptance criteria are authored when tickets graduate into implementation tasks
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 1101 | Audit native todo adoption: host capability matrix and observed behavior of recent dev runs | done |
-| 1102 | Prototype the two-layer A-Z/1-9 plan projection for single-task and batch runs | todo |
+| 1102 | Prototype the two-layer A-Z/1-9 plan projection for single-task and batch runs | done |
+| 1103 | Add per-state display phase metadata to the workflow engine state schema | todo |
+| 1104 | Generate the two-layer A-Z/1-9 plan from workflow YAML phases in workflow show and validate | todo |
+| 1105 | Publish the generated two-layer plan first in dev workflow skills and commands | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

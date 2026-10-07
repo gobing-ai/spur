@@ -4,8 +4,8 @@ name: Auto-repair task-check anchor warnings via task migrate-anchors in the dri
 status: todo
 template: feature-impl
 created_at: 2026-10-07T07:29:49.499Z
-updated_at: "2026-10-07T07:34:13.876Z"
-feature_id: R
+updated_at: "2026-10-07T15:57:58.481Z"
+feature_id: H15
 
 ---
 

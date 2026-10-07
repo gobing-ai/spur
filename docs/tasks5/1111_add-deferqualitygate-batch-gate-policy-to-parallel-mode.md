@@ -4,8 +4,8 @@ name: Add deferQualityGate batch gate policy to parallel mode
 status: todo
 template: feature-impl
 created_at: 2026-10-07T07:29:50.343Z
-updated_at: "2026-10-07T07:35:01.733Z"
-feature_id: R
+updated_at: "2026-10-07T15:57:59.291Z"
+feature_id: H15
 
 dependencies: ["1107"]
 ---

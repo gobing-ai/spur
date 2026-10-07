@@ -115,6 +115,7 @@ Feature: Corpus gate integrity
 | 1011 | Server feature refresh reports skipped with reasons (1008 P3-5) | done |
 | 1040 | task record must re-pull newer verdict artifact; refresh done_reason on re-close | done |
 | 1042 | Reject foreign-task verdict artifacts in shared completion and feature gates | done |
+| 1112 | Narrow gate-language checker vocabulary against composition prose false positives | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
