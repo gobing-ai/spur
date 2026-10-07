@@ -121,7 +121,8 @@ vars:
     # (task 1108): it governs subprocess surfaces (`spur workflow run`, parallel,
     # headless); inline hosts receive it only when their dispatch tool accepts a
     # timeout (inline-pipeline-driver.md § Timeout boundary). 45 min is a reasoned
-    # default, not a proven bound — in P1 one implement still hit 45 min and resumed.
+    # default, not a proven bound — in P1 one implement still hit 45 min and resumed
+    # (docs/reports/i31/1107-runall-p1-pilot.md:70).
     # Override per run: `--vars '{"implementTimeoutMs":"3600000"}'`.
     implementTimeoutMs: "2700000"
     # Answer captured by the approve gate's hitl.confirm (R1): "yes" | "no" | "cancel".
@@ -158,6 +159,11 @@ vars:
     # with the same package-manager surface (this monorepo is Bun-only):
     # `--vars '{"qualityGateCmd":"bun run lint && bun run test"}'`. Soft probe, hard recheck,
     # and the fixall slash input all use this same var so the command stays single-sourced.
+    # INVARIANT (ADR-124, clarified 2026-10-07 by task 1111 R5): only the FULL tier writes PASS.
+    # Under the opt-in `deferQualityGate` policy the per-task token is DEFERRED (light tier) and
+    # the "review runs only after a green full gate" invariant moves to BATCH scope — nothing is
+    # reported PASS without the integrated full gate on the base ref. Default "false" = per-task
+    # full gate, unchanged.
     # TRUSTED CONFIG ONLY — this string is executed via `sh -c` (see test/test-recheck). Never
     # interpolate untrusted operator/LLM input into qualityGateCmd (task 0436 SECUA residual).
     # NO `format` PREFIX: `implement` already ran `$formatCmd` on its way out, and `test`
@@ -207,6 +213,14 @@ vars:
     # (default) = on; set to "off" to bypass:
     # `--vars '{"implementScopeGuard":"off"}'`.
     implementScopeGuard: ""
+    # 1111 R1: opt-in parallel-batch gate policy. When "true", `test` / `test-recheck` run the
+    # LIGHT tier for per-task early feedback and write `DEFERRED` (light PASS) or `FAIL` to
+    # `.spur/run/<wbs>-test-gate.status` — never `PASS`, because that token means the full
+    # project gate ran green on this tree. The batch orchestrator owes ONE integrated full gate
+    # on the base ref over the merged slices (1111 R3). Default "false" = unchanged behavior,
+    # and a stray `DEFERRED` file fails the guards. Sequential/inline runs never set it:
+    # `--defer-gate` requires `--mode parallel`.
+    deferQualityGate: "false"
     # 0931 R5: parallel batches defer the per-task feature sync so a task branch never
     # touches feature files or docs/features/INDEX.md. When "true", the record step's
     # post-record shell appends a deferral note and skips the sync; the parallel batch
@@ -298,6 +312,10 @@ states:
             options:
                 agent: ${vars.implementAgent}
                 # Pure slash command only (ADR-043). Anti-recursion / implement discipline
+                # The worker's brief is OWNED BY the skill, not restated here (task 1110 R3):
+                # see `plugins/sp/skills/code-implementation/SKILL.md` (targeted-probe scope
+                # `:98-118`, dependency-aware changed-path checks `:120-138`, Solution anchor form
+                # in Red Flags `:187`). The YAML only names the entry command.
                 # Declared Layer-1 role (0538 R2/0710 R7): routing reason; no executor pin — role routing feeds the distinctness gate.
                 role: coder
                 # B7 R3/R6 (0894): coder stages reuse the role session — the test-fix hop
@@ -361,6 +379,17 @@ states:
           - kind: shell
             options:
                 command: "$formatCmd ; exit 0"
+          # 1109 R3: qualify this task's unique basename anchors to repo-relative paths.
+          # Placement is load-bearing: it runs AFTER implement's mutations (and the format
+          # above) but BEFORE the `test` stage's `proof.fingerprint` capture, so a rewrite in
+          # a digest section cannot invalidate the proof. `--wbs` scopes the pass to this
+          # task's resolved file — the unscoped form rewrites ~119 unrelated task files.
+          # Non-fatal (`; exit 0`): the done gate still reports anything left, and this step
+          # deliberately does NOT address line drift or `L4.anchor-subject-mismatch`
+          # (those need the implementer to re-anchor). Scope contract: task 1109 R5.
+          - kind: shell
+            options:
+                command: "$spurBin task migrate-anchors --wbs $wbs --json ; exit 0"
 
     # ── escalate hop (operator-question pause, 0933) ──────────────────────────
     # The implement agent paused on an operator question: it wrote
@@ -469,7 +498,7 @@ states:
           - kind: shell
             options:
                 command: >-
-                    eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/quality-gate.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/quality-gate.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; if [ -f "$S" ]; then "$RUNNER" "$S" run; else echo "quality gate failed closed — quality-gate script not found — run 'superskill install sp --marketplace gobing-ai/spur'" >&2; printf 'FAIL\n' > ".spur/run/$wbs-test-gate.status"; fi; exit 0
+                    eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/quality-gate.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/quality-gate.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; M=run; [ "$deferQualityGate" = "true" ] && M=deferred; if [ -f "$S" ]; then "$RUNNER" "$S" "$M"; else echo "quality gate failed closed — quality-gate script not found — run 'superskill install sp --marketplace gobing-ai/spur'" >&2; printf 'FAIL\n' > ".spur/run/$wbs-test-gate.status"; fi; exit 0
 
     - id: test-fix
       display:
@@ -569,7 +598,7 @@ states:
           - kind: shell
             options:
                 command: >-
-                    eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/quality-gate.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/quality-gate.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; if [ -f "$S" ]; then "$RUNNER" "$S" recheck; else echo "quality gate failed closed — quality-gate script not found — run 'superskill install sp --marketplace gobing-ai/spur'" >&2; printf 'FAIL\n' > ".spur/run/$wbs-test-gate.status"; fi; exit 0
+                    eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/quality-gate.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/quality-gate.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; M=recheck; [ "$deferQualityGate" = "true" ] && M=deferred; if [ -f "$S" ]; then "$RUNNER" "$S" "$M"; else echo "quality gate failed closed — quality-gate script not found — run 'superskill install sp --marketplace gobing-ai/spur'" >&2; printf 'FAIL\n' > ".spur/run/$wbs-test-gate.status"; fi; exit 0
 
     - id: triage
       display:
@@ -770,6 +799,11 @@ states:
       description: >
           Observe-only functional verification (BDD + traceability) via /sp:dev-verify --fix none
           (task 0703 R1, ADR-071): the verifier certifies the state, it never repairs its own subject.
+          The answer-shape contract this stage enforces is OWNED BY the skill, not restated here
+          (task 1110 R3): see `plugins/sp/skills/code-verification/SKILL.md` § Answer-File Schema
+          Contract (`:340-375`), with the row-id/evidence vocabularies in
+          `plugins/sp/skills/code-verification/references/verdict-schema.md`. The YAML only names
+          the lint that consumes it (`task verdict --from-answer`).
           A live digest compare BEFORE the agent refuses to certify a state that drifted after the
           quality/review evidence was produced (R2). The agent's
           captured answer is written to `.spur/run/<wbs>-verify-answer.txt` and MUST follow
@@ -1070,9 +1104,11 @@ transitions:
       guard:
           kind: shell
           options:
+              # 1111 R2: `DEFERRED` is accepted ONLY when the opt-in var is "true" — with the
+              # default "false" a stray DEFERRED file fails the guard exactly like a corrupt one.
               command: >-
                   gate_status="$(cat .spur/run/$wbs-test-gate.status 2>/dev/null)";
-                  test "$gate_status" = PASS
+                  test "$gate_status" = PASS || { test "$gate_status" = DEFERRED && test "$deferQualityGate" = "true"; }
     - from: test
       to: test-fail-triage
       description: Quality gate red — classify the failure before the repair hop (0943 R3).
@@ -1103,9 +1139,10 @@ transitions:
       guard:
           kind: shell
           options:
+              # 1111 R2: same var-gated acceptance of the deferred token as `test → triage`.
               command: >-
                   gate_status="$(cat .spur/run/$wbs-test-gate.status 2>/dev/null)";
-                  test "$gate_status" = PASS
+                  test "$gate_status" = PASS || { test "$gate_status" = DEFERRED && test "$deferQualityGate" = "true"; }
     - from: test-recheck
       to: test-fail-triage
       description: Still red after fixall — classify the failure (0943 R3).

@@ -1009,13 +1009,38 @@ export function registerTaskCommand(program: Command, context: CliContext): void
     task.command('migrate-anchors')
         .summary('Qualify in-repo evidence anchors to repo-relative paths (0583 R1–R3).')
         .option(...SHARED_OPTIONS.dryRunTaskReport)
+        .option('--wbs <wbs>', 'Scope the pass to one task file (unknown wbs fails without writing)')
         .option(...SHARED_OPTIONS.json)
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (options) => {
             try {
                 const dryRun = options.dryRun === true;
+                const wbs = typeof options.wbs === 'string' && options.wbs.length > 0 ? options.wbs : undefined;
+                let scopedFiles: string[] | undefined;
+                if (wbs !== undefined) {
+                    // 1109 R2: resolve the scope through the task locator so an unknown wbs
+                    // fails BEFORE the pass runs (the qualifier never has to infer "nothing
+                    // matched" from an empty report) and the pass is scoped to the exact
+                    // file, not to a filename pattern.
+                    // `migrate-anchors` has no `--folder` option: the locator resolves
+                    // through the same configured task folders the unscoped pass walks.
+                    const locator = await makeService(context, undefined);
+                    const resolved = await locator.getFilePath(wbs);
+                    if (resolved === null) {
+                        writeJsonError(
+                            context.output,
+                            options,
+                            `Task ${wbs} not found — \`spur task migrate-anchors --wbs\` scopes an existing task file; run without --wbs for the corpus-wide pass`,
+                            'NOT_FOUND',
+                        );
+                        context.setExitCode(1);
+                        return;
+                    }
+                    scopedFiles = [resolved];
+                }
                 const report = await anchorQualify(context.fs, {
                     dryRun,
+                    ...(scopedFiles === undefined ? {} : { files: scopedFiles }),
                     // Scope the tracked-file index to THIS invocation's project rather
                     // than letting it fall back to `process.cwd()`.
                     projectRoot: context.cwd,
@@ -1047,7 +1072,16 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                 if (options.json) {
                     context.output.write(
                         toEnvelopeJson(
-                            { ok: true, dryRun, qualified, reasons, ambiguous, skipped, ...report },
+                            {
+                                ok: true,
+                                dryRun,
+                                ...(wbs === undefined ? {} : { wbs }),
+                                qualified,
+                                reasons,
+                                ambiguous,
+                                skipped,
+                                ...report,
+                            },
                             { enveloped: options.jsonEnvelope },
                         ),
                     );

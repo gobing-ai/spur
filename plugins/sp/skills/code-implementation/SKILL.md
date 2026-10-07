@@ -104,6 +104,13 @@ only burns wall clock and context budget.
 
 - **Run only targeted probes** to validate your changes: `bun test <file>`,
   `bun test <file> --test-name-pattern "<test>"`, or `bunx tsc --noEmit` on a single package.
+- **Run Spur through this tree's own entry point, never a bare `spur` (task 1110 R2).** Use the
+  invocation the pipeline supplies (`${vars.spurBin}`, e.g. `bun apps/cli/src/index.ts`) from the
+  execution tree — a bare `spur` on `PATH` resolves to the published bundle in `~/.bun/bin` or
+  `~/node_modules`, so a guard, a `task check` or a `task record` silently runs a different build
+  against a different tree. Same rule for the working directory: each shell call starts fresh, so
+  re-select the execution tree inside the call (`cd -- "$TREE"` plus the identity check) instead of
+  relying on a `cd` a previous call left behind.
 - **NEVER run** `bun run test`, `bun run spur-check`, `bun run check`, or any other full-suite /
   project-gate command from inside implement. These belong to the pipeline's `test` hop.
 - **Full-suite budget: at most 2 per task** (task 0436 R2) — counted across the whole task run

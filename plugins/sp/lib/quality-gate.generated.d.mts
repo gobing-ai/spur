@@ -96,6 +96,12 @@ export declare interface LightGateResult {
     receiptFile: string;
 }
 export declare function runLightGate(env: QualityGateEnv, options?: QualityGateOptions): LightGateResult;
+export declare interface DeferredGateResult {
+    status: 'DEFERRED' | 'FAIL';
+    light: LightGateResult;
+    statusFile: string;
+}
+export declare function runDeferredGate(env: QualityGateEnv, options?: QualityGateOptions): DeferredGateResult;
 export declare function runShellCommand(cmd: string, cwd: string | undefined): { output: string; code: number };
 export declare function runQualityGate(
     mode: 'run' | 'recheck',

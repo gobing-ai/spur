@@ -254,11 +254,21 @@ function runInlineSmoke(
                 // the attempt counter and executes qualityGateCmd; recheck runs gateProbeCmd
                 // first (bun run lint is red in this sandbox, so the probe IS the recheck
                 // verdict, gate skipped). Both always leave status/findings/log for the guards.
-                if (command.includes('quality-gate.ts') && command.includes('"$RUNNER" "$S" run')) {
+                // 1111: the gate shell selects the mode through `M` (run|recheck|deferred), so the
+                // stub keys on the assignment + the `"$M"` invocation instead of a literal mode.
+                if (
+                    command.includes('quality-gate.ts') &&
+                    command.includes('M=run;') &&
+                    command.includes('"$RUNNER" "$S" "$M"')
+                ) {
                     command =
                         'mkdir -p .spur/run; : > ".spur/run/$wbs-test-gate.log"; echo 0 > ".spur/run/$wbs-test-fix-attempt"; if $qualityGateCmd; then s=PASS; else s=FAIL; fi; printf "%s\\n" "$s" > ".spur/run/$wbs-test-gate.status"; : > ".spur/run/$wbs-test-gate.findings"; printf "proof-digest: %s\\n" "$proofDigest" >> ".spur/run/$wbs-test-gate.log"';
                 }
-                if (command.includes('quality-gate.ts') && command.includes('"$RUNNER" "$S" recheck')) {
+                if (
+                    command.includes('quality-gate.ts') &&
+                    command.includes('M=recheck;') &&
+                    command.includes('"$RUNNER" "$S" "$M"')
+                ) {
                     command =
                         'mkdir -p .spur/run; : > ".spur/run/$wbs-test-gate.log"; if $gateProbeCmd; then s=PASS; else s=FAIL; fi; if [ "$s" = PASS ]; then if $qualityGateCmd; then s=PASS; else s=FAIL; fi; fi; printf "%s\\n" "$s" > ".spur/run/$wbs-test-gate.status"; : > ".spur/run/$wbs-test-gate.findings"; printf "proof-digest: %s\\n" "$proofDigest" >> ".spur/run/$wbs-test-gate.log"';
                 }

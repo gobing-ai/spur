@@ -258,14 +258,21 @@ the active tasks folder (or `--folder`).
 
 ## `migrate-anchors`
 
-Qualify ambiguous in-repo evidence anchors to repo-relative paths across the task corpus. Run
+Qualify in-repo evidence anchors to repo-relative paths across the task corpus. Run
 `--dry-run` first: unambiguous matches are reported in `qualified`, multiple matches in `ambiguous`
 without rewriting, and schema-incompatible files in `skipped`. The write path uses the planning
 service rather than raw file edits.
 
+**`--wbs <wbs>` scopes the pass to one task file** (task 1109 R1) — the wbs is resolved through the
+task locator and exactly that file is scanned, so the pipeline's implement stage can auto-repair a
+task's unique basename anchors without the corpus-wide pass rewriting unrelated files (the unscoped
+apply rewrote 119 on 2026-10-07). An unknown wbs exits `1` with an actionable message and writes
+nothing. Ambiguous basenames are still reported and left untouched in scoped mode.
+
 ```bash
 spur task migrate-anchors --dry-run --json
 spur task migrate-anchors --json
+spur task migrate-anchors --wbs 1109 --json     # one task file only
 ```
 
 ## `resolve <file-path>`
@@ -436,7 +443,7 @@ spur task sections <wbs> <init|add|list> [name] [--folder] [--json]
 spur task list     [--status <s>] [--phase <p>] [--parent <wbs>] [--feature <id>] [--folder] [--json]
 spur task refresh  [--folder] [--json]
 spur task migrate  [--dry-run] [--folder] [--json]
-spur task migrate-anchors [--dry-run] [--json]
+spur task migrate-anchors [--wbs <wbs>] [--dry-run] [--json]
 spur task refresh-roster <wbs> [--folder] [--json]
 spur task batch-create --file <path> [--skip-ready | --agent <selector>] [--folder] [--json]
 spur task record   <wbs> [--verdict-file <p>] [--solution-from-diff] [--transition <s>] [--folder] [--json]

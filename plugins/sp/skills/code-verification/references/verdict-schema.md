@@ -150,6 +150,23 @@ the run actually verified. Since 0804 R9 the checker ignores complete parsed cit
 scanning for subjects, so a citation's filename (including snake_case paths) can never become a
 false subject — a real absent symbol, nonexistent file, or invalid range still reports.
 
+## Basename-only anchors are unresolved anchors (task 1110 R1)
+
+`spur task verdict --from-answer` accepts the citation *shape*, but the `--as done` gate resolves
+every Testing/Solution anchor against the repo root. A basename citation — `decision-events.ts:83`,
+`task.test.ts:42` — reports `L4.anchor-unresolved` at **error** and blocks
+`spur task update <wbs> done`, because the gate cannot tell which file the row meant. Write the
+repo-root-relative form from the first pass:
+
+- Right: `packages/app/src/decision/decision-events.ts:83`, `apps/cli/tests/commands/task.test.ts:42`
+- Wrong: `decision-events.ts:83`, `../services/foo.ts:12`, `@gobing-ai/ts-x/src/persistence.ts:108`
+  (a scoped package is never repo-relative — use the external named-origin form below)
+
+The pipeline's implement stage also runs a scoped `spur task migrate-anchors --wbs <wbs>` pass
+before the proof capture (task 1109), but it qualifies **unique** basenames only: an ambiguous
+basename (two tracked files share it) is reported and left untouched, and line drift and
+`L4.anchor-subject-mismatch` are never repaired by that pass — those remain the author's rows.
+
 ## Source citations for external claims (task 1070)
 
 A Requirement/AC evidence cell that asserts an external API/library claim must carry a verifiable

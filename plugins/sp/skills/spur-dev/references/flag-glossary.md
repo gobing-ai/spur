@@ -146,6 +146,33 @@ Batch operation only (`dev-refineall`, `dev-runall`). When a task in the batch
 fails, skip its in-batch dependents and continue the independent ones, instead of the default
 halt-on-first-failure. Never silently retried; the failure is still reported.
 
+### `--defer-gate` — opt-in parallel-batch gate policy (task 1111 / H15)
+
+**Applies to:** `/sp-dev-runall --mode parallel`, `/sp-dev-parallel --mode fan-out`.
+**Default:** off — every task pipeline runs its own FULL project gate inside its worktree.
+
+With `--defer-gate`, each task's `test` / `test-recheck` hop runs the **light tier** (changed-scope
+format, per-workspace typecheck, related tests) and writes `DEFERRED` — never `PASS` — to
+`.spur/run/<wbs>-test-gate.status`. The orchestrator then owes **one integrated full gate** on the
+base ref over the merged slices, **before** the deferred feature sync; on FAIL the batch verdict is
+FAIL, the feature sync is skipped, and the report lists a per-branch re-gate command for each
+branch newest-first (no automatic bisect). Report rows of deferred tasks carry `gate: deferred`.
+
+Two properties are load-bearing and are asserted structurally:
+
+- **Early feedback survives.** The light tier still runs per task, so an obviously broken slice
+  fails inside its own worktree instead of at the end of the batch (the reason ADR-124 rejected an
+  unconditional single end-of-run gate).
+- **The full tier is still the only `PASS` writer.** Only the integrated run can claim a green
+  project gate; the per-task token is `DEFERRED`, and the `test → triage` /
+  `test-recheck → triage` guards accept it only while `deferQualityGate = "true"`.
+
+`--defer-gate` without `--mode parallel` is rejected — the flag exists to move one full gate from N
+worktrees to the one place the integrated tree exists. Sequential and inline batches never set the
+var. ADR-124 carries the dated clarification.
+
+**Anchor:** `#flag-defer-gate`.
+
 ### `--concurrency <n>` — parallel batch worker bound
 
 **Anchor:** `#flag-concurrency`.

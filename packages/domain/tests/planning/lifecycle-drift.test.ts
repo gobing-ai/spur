@@ -302,8 +302,11 @@ describe('task-pipeline.yaml structure (task 0062)', () => {
             expect(cmds, `${gateState}: gate hop must delegate to quality-gate.ts`).toContain(
                 'quality-gate.ts"+" RUNNER=bun',
             );
+            // 1111: the mode rides the `M` var (run|recheck|deferred) so the opt-in deferred
+            // policy swaps the tier without a second dispatch line.
+            expect(cmds, `${gateState}: gate hop must run the script via the resolver`).toContain(`M=${verb};`);
             expect(cmds, `${gateState}: gate hop must run the script via the resolver`).toContain(
-                `"$RUNNER" "$S" ${verb}`,
+                '"$RUNNER" "$S" "$M"',
             );
         }
         expect(gateCore).toContain('-test-gate.log');

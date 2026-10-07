@@ -74,3 +74,20 @@ CHECK-PASS: 16 runs (done:9 failed:4 nonterminal:3), 4 digests, 7 findings, pilo
 $ bun run docs/reports/i31/0912-check.ts --self-test
 SELF-PASS: all deliberate invalid cases detected
 ```
+
+## Addendum (2026-10-07, task 1107)
+
+Append-only. No row above is edited; this addendum records the pilot sample the `:55` criterion asks for and the verdict reached against it.
+
+**Source:** `docs/reports/i31/1107-runall-p1-pilot.md` — pilot batch `runall-P1-20261006-02` (P1 tasks 1095–1099).
+
+**Verdict: `partial — INSUFFICIENT_EVIDENCE retained`.** The sample count is satisfied (five merged code-changing runs, `durable`); the two retention elements are not.
+
+| `:55` criterion element | Result |
+| --- | --- |
+| Sample 3 code-changing runs | met — 1095–1099, all merged |
+| Retained failing-gate output | not met — gate logs lived in per-task worktrees removed after merge; only transcript summaries survive |
+| Diff attribution | not met — full-tree `spur run spur-check` gates, no per-task diff attribution (F4 observed again) |
+
+**F3 note (no row change):** the two implement-stage kills in this batch carry host kill strings (`Subagent timed out after 1800000ms` / `2700000ms`), identifying the host subagent limit as the governing bound rather than the YAML `implementTimeoutMs` — see `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:600-612`. The F3 row's "cause unknown" is therefore narrowed but not retired: the lost-work shape was not measured in this batch. Fix owner: 1108.
+

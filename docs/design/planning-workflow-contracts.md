@@ -3,8 +3,8 @@ kind: design
 title: "Planning workflow and operation contracts"
 status: implemented
 created_at: 2026-09-09
-updated_at: 2026-10-05
-related: ["0889", "0898", "0949", "0976", "0958", "1090"]
+updated_at: 2026-10-07
+related: ["0889", "0898", "0949", "0976", "0958", "1090", "1111"]
 tags: [contract, planning, workflow]
 ---
 
@@ -97,6 +97,10 @@ demonstrate stands on its own and governs any future candidate. Composition, act
 
 **Vars.** `wbs`, `profile`, `spurBin`, `agent`, `implementAgent`, `stepTimeoutMs`, `implementTimeoutMs`,
 `maxImplementReqs`, `maxImplementPlanItems`, `qualityGateCmd`, `qualityGateMaxFixAttempts`, `gateProbeCmd`,
+`deferQualityGate` (default `"false"`; an opt-in parallel batch sets `"true"` so each task writes
+`DEFERRED` from the light tier and the batch runs one `full` gate on the integrated base ref over the
+merged slices before the deferred feature sync — ADR-124's 2026-10-07 clarification, detail in
+[`workflow-catalogue-refactor.md`](workflow-catalogue-refactor.md) §4),
 `formatCmd`, `implementScopeGuard`, `mutationPolicy`, `__hitlAnswer`, `__hitlInput`, `maxEscalations`
 (default `2`), `escalationQuestion` (runtime-written from the question file), `deferFeatureSync`
 (default `"false"`; a parallel batch sets `"true"` to defer the post-record feature sync to batch
@@ -112,7 +116,10 @@ probe, the `/sp:dev-fixall` input and the recheck; `formatCmd` (default `bun run
 post-implement auto-format; `gateProbeCmd` (default `bun run lint`) is the cheap red-detector run before
 the full gate on `test-recheck` only — a red probe records `FAIL` and skips the full gate (empty ⇒ pre-0587
 behavior, full gate every recheck). `review` is only ever entered through a **full green** `qualityGateCmd` —
-only the full gate writes `PASS` (task 0587 R3). `formatCmd` is invoked best-effort (`${vars.formatCmd} ; exit 0`) — a
+only the full gate writes `PASS` (task 0587 R3) — with the single opt-in exception of
+`deferQualityGate: "true"` in a parallel batch, where the `test`/`test-recheck` guards also accept the
+`DEFERRED` token the light tier wrote and the batch's integrated `full` gate is what issues `PASS`.
+`formatCmd` is invoked best-effort (`${vars.formatCmd} ; exit 0`) — a
 missing or failing formatter must not abort a run, because `qualityGateCmd` at `test` is the gate
 that actually decides. **Implement-only pin (task 0454):** `implementAgent` is used only by the
 implement `agent.run` hop; override with `--vars '{"implementAgent":"pi-zai"}'` without retargeting
@@ -252,11 +259,12 @@ transition.
 **`task_run_links` pipeline linkage (kind=pipeline, R4):** resolved by task 0436 — `spur task record`
 now auto-creates the `pipeline` run-link when recording a PASS verdict to `done`, so no link-writing
 CLI verb is needed from a shell step.
-**Step timeout (ADR-026 amendment, 2026-06-23, task 0107; raised task 0398 R4):** each `agent.run`
+**Step timeout (ADR-026 amendment, 2026-06-23, task 0107; raised task 0398 R4; implement budget raised task 1108):** each `agent.run`
 step carries a `timeoutMs` option — `${vars.stepTimeoutMs}` for review/verify/test-fix and
 `${vars.implementTimeoutMs}` for the heavier implement hop, defaulting to `"1800000"` (30 min) and
-`"2700000"` (45 min, task 1108 — a reasoned default, not a proven bound) respectively. Inline
-dispatch passes the YAML budget to the host only when its dispatch tool accepts a timeout
+`"2700000"` (45 min, task 1108 — a reasoned default, not a proven bound) respectively. The
+implement budget governs subprocess surfaces; inline dispatch passes it to the host only where the
+host's dispatch tool accepts a timeout, and the host's own limit is the boundary otherwise
 (`inline-pipeline-driver.md` § Timeout boundary).
 On elapse the ts-libs `ProcessExecutor` kills the subprocess (never abandons it); the agent step
 exits non-zero → `ok:false` → pipeline routes to `failed`, and a partial-work handoff artifact is

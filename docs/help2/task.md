@@ -229,11 +229,13 @@ excluded from the rollup. The batch-verify replacement for ad-hoc prose rollups.
 
 ```bash
 spur task migrate [--dry-run] [--json]
-spur task migrate-anchors [--dry-run] [--json]
+spur task migrate-anchors [--wbs <wbs>] [--dry-run] [--json]
 ```
 
 One-time maintenance passes: corpus normalization, and qualification of stale `file:line`
 anchors. Both are idempotent; `--dry-run` reports without writing. Not part of the daily loop.
+`--wbs` scopes `migrate-anchors` to one task file, which is how the pipeline's implement step
+repairs a single task's anchors without rewriting the rest of the corpus.
 
 ## See also
 

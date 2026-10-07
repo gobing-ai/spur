@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.69.0
+version: 1.70.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-10-05
+updated_at: 2026-10-07
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -1204,6 +1204,14 @@ unit:
   (`deferFeatureSync`), so their branches never touch feature files or the generated feature index;
   after the last integration the orchestrator runs the bounded sync plus one `feature refresh` per
   touched feature on the base ref and commits it once.
+- **One integrated full gate per batch (opt-in).** With `deferQualityGate: "true"`
+  (`--defer-gate` on a parallel `/sp:dev-runall` or `/sp:dev-parallel`), each task's `test` state runs
+  the light tier and records `DEFERRED` — never `PASS` — so the batch's one `full` gate runs on the
+  integrated base ref over the merged slices, before the deferred corpus sync. The per-task
+  "review only after a green full gate" invariant therefore holds at batch scope; default off keeps
+  the per-task `full` gate, and an integrated FAIL fails the batch without running the sync. ADR-124's
+  2026-10-07 clarification owns the scope change; detail in
+  [workflow catalogue refactor](design/workflow-catalogue-refactor.md) §4.
 
 Driver contract, marker lifecycle and the retained-worktree resume/discard commands:
 [execution-batch.md](../plugins/sp/skills/spur-dev/references/execution-batch.md).

@@ -1,7 +1,7 @@
 ---
 description: Fan out independent tasks or investigations in parallel via subagents — choose the right pattern and synthesize results
 role: planner
-argument-hint: "--tasks <selector> [--feature <id>] [--mode <fan-out|review-panel|investigation>] [--agent <inline|auto|name>] [--json]"
+argument-hint: "--tasks <selector> [--feature <id>] [--mode <fan-out|review-panel|investigation>] [--agent <inline|auto|name>] [--json] [--defer-gate]"
 allowed-tools: ["Bash", "Read", "Skill"]
 ---
 
@@ -18,12 +18,13 @@ Wraps the **sp:parallel-execution** skill.
 | `--mode` `<fan-out\|review-panel\|investigation>` | Fan-out pattern. | fan-out |
 | `--agent` `<inline\|auto\|name>` | Who runs each dispatched slice. Parallel fan-out is dispatch, so explicit `--agent inline` runs the batch **sequentially in the host session** with a printed notice (zero dispatch); omit keeps the default fan-out semantics; `auto` tier-resolves an executor; a name pins that executor. | omit |
 | `--json` | Emit structured JSON. | off |
+| `--defer-gate` | Opt-in parallel-batch gate policy (task 1111): each task's `test` hop runs the light tier and writes `DEFERRED`; the batch runs one integrated full gate on the base ref before the feature sync. Requires `--mode parallel`; default off. | off |
 
 For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).
 
 ## Usage
 
-/sp:dev-parallel --tasks <selector> [--feature <id>] [--mode <fan-out|review-panel|investigation>] [--agent <inline|auto|name>] [--json]
+/sp:dev-parallel --tasks <selector> [--feature <id>] [--mode <fan-out|review-panel|investigation>] [--agent <inline|auto|name>] [--json] [--defer-gate]
 
 ## Implementation
 

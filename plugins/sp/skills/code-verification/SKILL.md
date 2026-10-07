@@ -165,7 +165,7 @@ classifies it as external and never raises `L4.stale-line-anchor` for it (R1). D
 that lives in this repo — in-repo evidence MUST use the repo-relative backtick form
 `` `path:line` `` / `` `path:start-end` ``, and citing it in the external form still reports (R2).
 
-**Concrete anchors (0804 R9):** cite existing `file:line`s, never globs — `references/verdict-schema.md`.
+**Concrete anchors (0804 R9):** existing `file:line`s only, never globs, always repo-root-relative — a basename is `L4.anchor-unresolved` at the `--as done` gate (`references/verdict-schema.md`).
 
 ### Step 5 — Acceptance Criteria guard
 
@@ -362,9 +362,8 @@ Confidence: HIGH
 The per-requirement traceability table MUST use `| Req | Status | Evidence |` (exactly this header, no `R#`/`R`/`Requirement` variant — `Status` in column 2 — and no extra columns between Req and Status). The Acceptance Criteria table MUST use `| AC | Status | Evidence Type | Evidence |`.
 The answer MUST carry exactly one `Confidence: HIGH|MEDIUM|LOW` line (task 1068): the verifier's stated confidence in the verdict — HIGH = fresh executable evidence + re-read anchors this run; MEDIUM = partial reliance on prior evidence, external/delegated outcomes, or an unstable tree; LOW = key evidence not re-executed. A missing or out-of-vocabulary line fails lint (`confidence-missing` / `confidence-value`) and blocks derivation; the value lands in the verdict artifact's `confidence` field and the recorded `## Testing` section.
 The answer MUST cite a source for external API/library claims in Requirement/AC evidence cells: a cell asserting a scoped-package (`@scope/name`), `node_modules/`, semver-version (`x.y.z`), or backticked function-call (`` `name(args)` ``) claim is rejected with `evidence-citation` unless the SAME cell carries a citation — a repo `path:line(-end)` (backticked or bare), the external named-origin form (@origin `path` line N), or a URL. Cross-cell references ("receipt above") do not count; marker-free receipts ("bun test 398 pass / 0 fail") need no citation.
-**MUST NOT:** place a `Severity` column between `Req` and `Status` in the authoring contract.
-The parser is tolerant of these variants (defense-in-depth), but the authoring contract is
-canonical.
+**MUST NOT:** place a `Severity` column between `Req` and `Status`. The parser tolerates variants
+as defense-in-depth; this contract is canonical.
 
 Under the pipeline, the verifier owns the answer file `.spur/run/<wbs>-verify-answer.txt` (0726
 R3): `Verdict: PARTIAL` first, append one row at a time, replace the verdict line only when all

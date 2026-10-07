@@ -46,7 +46,7 @@ re-reading or re-tokenizing the task.
 | `list` | List tasks, filtered | `--status <s>` `--phase <p>` `--parent <wbs>` `--feature <id>` `--folder` `--json` |
 | `refresh` | Re-scan the corpus and report counts (**`kanban.md` retired** — web Task Kanban is SSOT) | `--folder` `--json` |
 | `migrate` | One-time A17 corpus normalization pass | `--dry-run` `--folder` `--json` |
-| `migrate-anchors` | Qualify in-repo evidence anchors to repo-relative paths (0583 R1–R3) | `--dry-run` `--json` |
+| `migrate-anchors` | Qualify in-repo evidence anchors to repo-relative paths (0583 R1–R3); `--wbs` scopes to one task file (1109 R1) | `--wbs` `--dry-run` `--json` |
 | `refresh-roster <wbs>` | Regenerate a parent task's sub-task roster block in `## Plan` | `--folder` `--json` |
 | `batch-create` | Create many tasks from a validated JSON array | `--file <path>` `--skip-ready` `--agent <selector>` `--folder` `--json` |
 | `record <wbs>` | Write `Testing` from a verify verdict (deterministic); bare-`## Review` fallback only; optional Solution + transition | `--verdict-file <path>` `--solution-from-diff` `--transition <status>` `--folder` `--json` |

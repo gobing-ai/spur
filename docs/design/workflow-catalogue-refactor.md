@@ -3,8 +3,8 @@ kind: design
 title: "Workflow catalogue refactor — measured, decision-explicit, check-deduplicated, fleet-optional"
 status: implemented
 created_at: 2026-09-23
-updated_at: 2026-09-26
-related: [D64, "0937", "0938", "0939", "0940", "0941", "0942", "0943", "0944", "0945", "0946", "0976"]
+updated_at: 2026-10-07
+related: [D64, "0937", "0938", "0939", "0940", "0941", "0942", "0943", "0944", "0945", "0946", "0976", "1111"]
 tags: [system, D64, workflow]
 ---
 
@@ -85,6 +85,15 @@ value-import it (standalone contract): it takes the digest the pipeline already 
 the current fingerprint → reuse (trace row `check.reused`). Otherwise run `full`. The invariant
 "`review` is entered only after a green full gate" (task-pipeline vars comment) is preserved by
 construction: only `full` writes the receipt consulted at `review`.
+
+**Deferred tier (task 1111, opt-in).** `quality-gate.ts deferred` serves the opt-in parallel-batch
+policy (`deferQualityGate: "true"`, `--defer-gate`): it runs the light tier for per-task early
+feedback and writes `DEFERRED` (light PASS) or `FAIL` to `<wbs>-test-gate.status` — never `PASS`.
+The invariant above is therefore preserved at **batch** scope under that policy: the one full gate
+runs on the integrated base ref over the merged slices, and nothing is reported PASS without it.
+ADR-124's dated clarification owns the scope change; `flag-glossary.md#flag-defer-gate` owns the
+flag. The `test` state's proof-chain entry (`proof.fingerprint`, ADR-071) is untouched by
+deferral — only the final gate command changes.
 
 **Writers (0976).** `run` and `recheck` both persist the full-tier receipt for the digest they
 actually evaluated; a no-progress skip writes nothing, so a skip can never launder a FAIL receipt

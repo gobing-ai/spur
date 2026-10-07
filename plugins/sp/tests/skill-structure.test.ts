@@ -759,11 +759,37 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
 
         // R2a — implement step uses its own (longer) timeout budget, not the shared
         // stepTimeoutMs, and the rationale is documented inline (bugs 742/744/746/748).
+        // Raised 30 → 45 min by task 1108 (runall-P1 pilot: two 30 min kills mid-gate;
+        // the same default landed independently on main in 32c529a4a).
         expect(taskPipeline).toContain('implementTimeoutMs: "2700000"');
         const implementBlock = taskPipeline.split('  - id: implement\n')[1]?.split('  - id: test\n')[0] ?? '';
         const varsImplementTimeout = `$${'{vars.implementTimeoutMs}'}`;
         expect(implementBlock).toContain(`timeoutMs: ${varsImplementTimeout}`);
         expect(implementBlock).not.toContain(`timeoutMs: \${vars.stepTimeoutMs}`);
+
+        // 1109 R3 — the scoped anchor repair runs in the implement stage, after the format
+        // step and before the `test` state, so it can never invalidate the proof digest the
+        // test stage captures. Scoped and non-fatal by construction.
+        const anchorRepair = 'task migrate-anchors --wbs $wbs --json ; exit 0';
+        expect(implementBlock).toContain(anchorRepair);
+        expect(implementBlock.indexOf(anchorRepair)).toBeGreaterThan(
+            implementBlock.indexOf('command: "$formatCmd ; exit 0"'),
+        );
+
+        // 1111 R1/R2 — the opt-in deferred gate policy. Failure cases first: the var defaults
+        // to "false" (no behavior change), the deferred mode is reachable only through the var,
+        // and the triage guards accept DEFERRED only while the var is "true".
+        expect(taskPipeline).toContain('deferQualityGate: "false"');
+        const gateTestBlock = taskPipeline.split('  - id: test\n')[1]?.split('  - id: test-fix\n')[0] ?? '';
+        expect(gateTestBlock).toContain('M=run; [ "$deferQualityGate" = "true" ] && M=deferred');
+        const recheckBlock = taskPipeline.split('  - id: test-recheck\n')[1]?.split('  - id: triage\n')[0] ?? '';
+        expect(recheckBlock).toContain('M=recheck; [ "$deferQualityGate" = "true" ] && M=deferred');
+        const deferredGuard = 'test "$gate_status" = DEFERRED && test "$deferQualityGate" = "true"';
+        // Both triage edges (test and test-recheck) carry the var-gated acceptance.
+        const guardOccurrences = taskPipeline.split(deferredGuard).length - 1;
+        expect(guardOccurrences).toBe(2);
+        // The full tier is still the only PASS writer: the deferred mode never writes PASS
+        // (asserted in plugins/sp/tests/quality-gate-receipt.test.ts).
 
         // R2c — anti-recursion (bug-742) is structural + skill-level, not YAML prose (ADR-043).
         // 1) Pipeline agent.run input is a pure slash command that already selects implement mode.
@@ -884,7 +910,11 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
             // every task run — repaired by 1090 (out-of-scope, operator-approved) and carried here
             // as part of 1091's own commit. Not permanent — candidate for the references/ split
             // this comment asks for.
-            'code-verification': 35_468,
+            // 1109/1110 R1 (H15): the basename-anchor rejection class was RELOCATED to
+            // references/verdict-schema.md (§ Basename-only anchors) because this body is at its
+            // baseline; the +41 B left here is the pointer inside the concrete-anchors line plus a
+            // net -59 B trim of the variants note. Split, not grown.
+            'code-verification': 35_509,
             wayfinder: 26_264,
             // 0622 R9: +921B of live-matrix reconciliation (section table, SPUR_BIN
             // refusal, artifact-size discipline). Not permanent — split into references.

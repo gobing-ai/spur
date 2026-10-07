@@ -21,7 +21,11 @@ const IDEA_ACTION_BUDGET = 33;
 // router. Raising a budget here IS the change record; both additions are named in the commit.
 // 51 at v5 (1077): test-fix gains one review-lane evidence projection action so the repair
 // hop is not fed an empty findings set.
-const TASK_ACTION_BUDGET = 51;
+// 52 at 1109 R3: the implement stage gains one non-fatal scoped anchor-repair shell
+// (`task migrate-anchors --wbs $wbs`), placed after format and before the `test` proof capture
+// so a rewrite can never invalidate the digest. Named in the commit; raising the ratchet here
+// is the change record.
+const TASK_ACTION_BUDGET = 52;
 
 const WORKFLOWS_DIR = join(import.meta.dir, '../../../../config', 'workflows');
 
