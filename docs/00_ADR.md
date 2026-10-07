@@ -4,7 +4,7 @@ owns: WHY — lasting architectural choices, context and tradeoffs
 authority: authoritative
 version: 1.65.0
 owner: Robin Min
-updated_at: 2026-10-05
+updated_at: 2026-10-06
 read_before: any structural change; before diverging from a decision
 edit_rules: 99 §6.1
 sync: [T1, T2]
@@ -635,7 +635,7 @@ boundaries); PID-attach (TIOCSTI disabled/restricted). Detail: [agent fleet inbo
 - **Why:** Untracked shims become permanent compatibility debt, and a one-sided list rots into a
   silent suppression file — the same failure `corpus-check`'s two-sided baseline exists to end
   (ADR-050).
-- **Detail:** `03 §18`; `04 §2.5`; `plugins/sp/scripts/transition-shim-check.ts`; task 0541;
+- **Detail:** `03 §18`; `04 §2.5`; `scripts/commands/transition-shim-check.ts`; task 0541;
   shims registered by 0536/0537/0538/0542.
 
 **Current reading:** ADR-119 places this repo-wide check in `spur-check-feature`. The current helper is `scripts/commands/transition-shim-check.ts`; the original plugin path is retired.

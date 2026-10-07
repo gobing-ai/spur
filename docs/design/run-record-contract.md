@@ -3,7 +3,7 @@ kind: design
 title: "Run record — two-file contract + the Observability read plane"
 status: implemented
 created_at: 2026-08-18
-updated_at: 2026-10-04
+updated_at: 2026-10-06
 related: [E7, I6, D3, "0598", "0610", "0683", "0709", "0712", "0925", "1051", "1053", "1064"]
 tags: [contract, E7, I6, workflow, observability]
 ---
@@ -170,7 +170,7 @@ Every current reader of a `.spur/run/*` artifact, with `path:line`:
 | `task check --from-answer` | `apps/cli/src/commands/task.ts:896` | `.spur/run/<wbs>-verify-answer.txt` | yes | yes → answer moves to markdown section, but the *consumer* reads the verdict from cache |
 | `verifyall` | `apps/cli/src/commands/task.ts:966` | `.spur/run/verifyall-batch-input.json` | yes | yes → cache key |
 | workflow shell guards | `apps/cli/tests/commands/workflow.test.ts:632` (canonical `test "$(cat …-gate.status …)" = PASS`) | `.spur/run/<RUNID>-gate.status` | yes (between steps) | yes → cache `state.gates` |
-| feature-sync verdict mtime vector | `plugins/sp/scripts/feature-sync-bounded.ts:320` (`readVerdictMtimeVector`, called `:393`) | `-verdict.json` mtimes | yes (bounded loop) | yes → cache `state.verdict.updatedAt` |
+| feature-sync verdict mtime vector | `packages/app/src/services/feature-sync-suppression.ts:99` (`readVerdictMtimeVector`, called `feature-service.ts:728`) | `-verdict.json` mtimes | yes (bounded loop) | yes → cache `state.verdict.updatedAt` |
 | eval-pipeline snapshot | `scripts/commands/eval-pipeline.ts:370`/`:401` (`snapshotDir(run.runDir)`) | whole dir | yes | yes — snapshots the two files instead of N |
 | `WorkflowRunLogSink` | `apps/cli/src/commands/workflow.ts:374` | (writes) `.spur/run/<RUNID>.log` | writer | n/a — becomes the markdown writer |
 

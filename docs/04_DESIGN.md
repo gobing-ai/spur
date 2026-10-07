@@ -5,7 +5,7 @@ authority: derived
 version: 1.92.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
-updated_at: 2026-10-05
+updated_at: 2026-10-06
 read_before: changing a command, flag, env var, or schema
 edit_rules: 99 §6.5
 sync: [T3, T9]
@@ -468,8 +468,8 @@ See [contract detail](design/workflow-execution-economy.md).
 
 ## Desktop shell
 
-Electron (`apps/desktop`) is a thin shell around the Board. It spawns one child server on
-`127.0.0.1` and loads `/board`. It does not open SQLite. Launch mode, project root, binary
+Electron (`apps/desktop`) is a thin shell around the Board. It attaches to a verified live project
+server, or spawns one child server on `127.0.0.1`, and loads `/board`. It does not open SQLite. Launch mode, project root, binary
 override, the staged CLI companion for standalone-server history refresh, preload IPC, and the
 Windows/Linux window-controls overlay inset are the contract.
 

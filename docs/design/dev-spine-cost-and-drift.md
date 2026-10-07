@@ -2,7 +2,7 @@
 kind: design
 title: "dev-* Spine Cost + Drift Inventory (feature I6 / task 0594)"
 created_at: 2026-08-18
-updated_at: 2026-09-20
+updated_at: 2026-10-06
 related: [I6, I7, "0594", "0906"]
 tags: [system, I6, I7, plugin, workflow]
 ---
@@ -111,7 +111,7 @@ Both directions checked: *asserted-but-absent* and *available-but-unused*.
 
 | # | Noun | Finding | Class | CLI side | Plugin side | Status vs I2/I3 |
 | --- | --- | --- | --- | --- | --- | --- |
-| D1 | feature | `sp:wayfinder` documents `spur feature update <id> --section tags`, but `tags` is **frontmatter**, not a section; live CLI rejects a non-section `--section` and the correct route is `--field tags --value` | **semantic (flag→wrong operand)** | `apps/cli/src/commands/feature.ts` (`--section` validated against closed-world section set; `--field` for frontmatter) | `plugins/sp/skills/wayfinder/SKILL.md:123` | **NEW** — a semantic misuse existence-check parity structurally cannot catch. **RESOLVED 2026-09-20 (task 0906/F1):** recipe corrected to `--field tags --value wayfinder-map`; F2 semantic layer (`checkSectionOperand` in `plugins/sp/scripts/surface-drift-inventory.ts`) now enforces the class |
+| D1 | feature | `sp:wayfinder` documents `spur feature update <id> --section tags`, but `tags` is **frontmatter**, not a section; live CLI rejects a non-section `--section` and the correct route is `--field tags --value` | **semantic (flag→wrong operand)** | `apps/cli/src/commands/feature.ts` (`--section` validated against closed-world section set; `--field` for frontmatter) | `plugins/sp/skills/wayfinder/SKILL.md:123` | **NEW** — a semantic misuse existence-check parity structurally cannot catch. **RESOLVED 2026-09-20 (task 0906/F1):** recipe corrected to `--field tags --value wayfinder-map`; F2 semantic layer (`checkSectionOperand` in `plugins/sp/scripts/surface-drift-inventory.ts`, moved to `scripts/commands/` in A9) now enforces the class |
 | D2 | feature | `spur feature get` alias for `show` shipped post-I3 (0534); plugin facade documents `get` | **parity (verb added)** | `apps/cli/src/commands/feature.ts:47` (`.alias('get')`) | `spur-cli/references/features.md` | OK (both surfaces agree) |
 | D3 | agent | role-tier SSOT **moved into `packages/config`** post-I3 (c14dc3be) | **config/reference moved** | `packages/config` (task 0572) | `spur-cli/references/agent.md` | re-aligned (facade refs still name the verbs; ownership moved) |
 | D4 | workflow | `clean`/`cancel` split (bulk vs single-run) documented in facade and matches live | **parity (verb set)** | `apps/cli/src/commands/workflow.ts` | `spur-cli/references/workflows/operations.md` | OK |
