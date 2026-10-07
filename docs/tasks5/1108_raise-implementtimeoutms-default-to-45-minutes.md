@@ -4,7 +4,7 @@ name: Raise implementTimeoutMs default to 45 minutes
 status: wip
 template: feature-impl
 created_at: 2026-10-07T07:29:49.093Z
-updated_at: "2026-10-07T20:34:53.009Z"
+updated_at: "2026-10-07T21:10:53.625Z"
 feature_id: H15
 
 priority: P2
@@ -131,7 +131,43 @@ bun test scripts/commands/inline-execution-contract.test.ts
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review Report — 1108
+**Scope:** 1108 diff = commit 32c529a4a (6 files: `config/workflows/task-pipeline.yaml`, `docs/design/planning-workflow-contracts.md`, `plugins/sp/hooks/context-session-start.ts`, `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md`, `plugins/sp/tests/skill-structure.test.ts`, task file excluded) + generated `apps/cli/config/workflows/task-pipeline.yaml` (gitignored)
+**Dimensions:** functional, security, efficiency, correctness, usability, architecture
+**Verdict:** PASS
+##### Findings (ranked)
+
+| # | Priority | Dimension | Finding | Location | Disposition |
+|---|----------|-----------|---------|----------|-------------|
+| 1 | P4 (advisory) | correctness | The two frozen run-log boundary strings `host timeout <ms> (yaml timeoutMs)` / `(platform subagent limit)` have no contract-test guard; `inline-execution-contract.test.ts:331` pins only the surviving 0727 phrase, so the R2 pass-through clause could be reworded away silently. Optional `toContain` in that test if the strings are meant to stay frozen | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:641-644` | ACCEPTED |
+| 2 | P4 (advisory) | usability | The driver names pi's subagent `timeoutMs` as the example dispatch-tool timeout parameter. That is an external host-API claim with no source cited; it is used only as an example and the fallback clause covers hosts without the parameter | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:640` | ACCEPTED |
+
+##### Functional Traceability
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | `config/workflows/task-pipeline.yaml:126` `implementTimeoutMs: "2700000"`; comment at `:118-125` states the 45 min default, that it governs subprocess surfaces, and that it is "a reasoned default, not a proven bound". The superseded 30 min rationale was removed, so only one justification remains (per Notes) |
+| R2 | MET | `inline-pipeline-driver.md:639-648` amends the Timeout boundary (YAML pass-through when the tool accepts a timeout; fallback to the platform limit) with both frozen log strings. No-replay and resume-from-partial-tree text is unchanged at `:648-655`. The `agent.run` bullet at `:438-441` was reworded to match |
+| R3 | MET | `config/workflows/task-pipeline.yaml:311` `timeoutMs: ${vars.implementTimeoutMs}`; var name unchanged; override example at `:125`. Structure test `skill-structure.test.ts:762-765` asserts both the value and the implement-block binding |
+| R4 | MET | `packages/app/src/workflow/actions/agent-run.ts:1280` `configured timeout` message re-read and not touched by this commit (`git log 32c529a4a..HEAD` on the file is empty, and the file is not in the diff); assertion at `packages/app/tests/workflow/actions/agent-run.test.ts:1378` |
+| R5 | MET | `skill-structure.test.ts:762` asserts `"2700000"`; `planning-workflow-contracts.md:256-260` states 30 min stepTimeoutMs / 45 min implementTimeoutMs plus the inline pass-through; `context-session-start.ts:77` says 45 min; `execution-workflow.md:311` states no value and `:349-350` cites historical run `ca130182` (correctly left as is); generated `apps/cli/config/workflows/task-pipeline.yaml:126` carries `"2700000"` |
+
+| AC | Status | Evidence |
+|----|--------|----------|
+| AC1 — Implement dispatch budget defaults to 45 minutes on subprocess and inline hosts and exhaustion is visible | MET | R1–R5 rows above; `bun run spur-check` PASS (host-reported); narrow suites recorded in Solution (skill-structure 91/0, agent-run 164/0, inline-execution-contract 21/0) |
+
+##### Design Conformance
+
+| Claim | Status | Evidence |
+|-------|--------|----------|
+| No runtime code changes / no new agent-run.ts plumbing | DONE | The diff touches only YAML, Markdown, one comment line (`context-session-start.ts:77`), and one test literal |
+| No claim that 45m is sufficient | DONE | `task-pipeline.yaml:124` and `planning-workflow-contracts.md:258` both say "reasoned default, not a proven bound" |
+| `stepTimeoutMs` untouched | DONE | `task-pipeline.yaml:117` is still `"1800000"`; no hunk touches it |
+| `apps/cli/config/` regenerated, not hand-edited | DONE | Generated copy matches the SSOT at `:126`/`:311` |
+
+SECUA: no security surface (config default plus docs). Efficiency: a longer kill bound only lengthens the worst-case wait on a hung subprocess, an accepted tradeoff documented inline. Architecture: the single-budget/single-place rationale is sound, and it degrades safely on hosts without a timeout parameter. No scope creep.
+
+**Next:** proceed to verify; P4 rows are non-blocking.
 
 ### References
 
