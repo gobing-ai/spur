@@ -6,7 +6,7 @@ status: backlog
 priority: P2
 tags: ["wayfinder-map"]
 created_at: "2026-10-07T05:39:04.812Z"
-updated_at: "2026-10-07T06:12:25.471Z"
+updated_at: "2026-10-07T06:15:18.524Z"
 ---
 
 # I13: Two-layer plan and progress visibility for dev workflows
@@ -67,17 +67,7 @@ Skills to consult: `sp:spur-dev` (inline-pipeline-driver, cross-cutting, executi
 
 ### Open questions
 
-- **Phase table and its home.** Approve the task/idea-pipeline phase assignment in
-  `docs/analysis/2026-10-plan-projection-prototype.ts:40`, and choose where it lives: per-state YAML metadata in
-  `config/workflows/*.yaml` or a side table next to `step-reporter.ts`. Also consent to `spur workflow show --format todo`
-  emitting the labeled two-layer plan (public surface). Only the operator can approve a public-surface change; this blocks
-  graduating the generator task.
-- **Skipped/failed status on hosts that have `cancelled`.** The prototype maps skipped/failed to `pending` plus an
-  `[outcome]` text suffix on every host. Gemini, OpenCode and Grok could use `cancelled` instead, at the cost of per-host
-  divergence. This is a UX preference and blocks the per-host rendering spec.
-- **Batch publish size.** Publishing every phase digit up front makes a full 24-task wave 126 items (126 `TaskCreate`
-  calls on Claude Code). The alternative is to publish task letters up front and add digits when a task starts, which
-  breaks the publish-everything-first rule. This trades transparency against noise and blocks the batch contract.
+- None open.
 
 ### Decisions so far
 
@@ -85,7 +75,8 @@ Skills to consult: `sp:spur-dev` (inline-pipeline-driver, cross-cutting, executi
   workflow phases (e.g. Implement, Test, Review, Verify & record) with digit steps; failure/loop states hidden until entered,
   then inserted as the next digit under their phase. Replaces the separate bootstrap `A–D` rows.
 - Multi-task plan = letter per task, digit per phase: `A` Prepare batch, `B`..`Y` one task each (`B 0812 <title>`), `Z` Batch report;
-  >24 tasks split into waves, each its own `A`–`Z` plan.
+  >24 tasks split into waves, each its own `A`–`Z` plan. **Letters first** (operator, 2026-10-06): publish task letters up front and add a
+  task's phase digits when it starts, so a 24-task wave publishes 26 items rather than 126.
 - Cap is hard: fold/wave deterministically, never emit `AA` or `A10`; a definition that cannot fit fails validation at authoring time.
 - [1101 Audit native todo adoption: host capability matrix and observed behavior of recent dev runs](docs/tasks5/1101_audit-native-todo-adoption-host-capability-matrix-and-observ.md) —
   across 24 runs the list appears late (median ~40 calls in), workflow plan shown in 1/16, 0 two-layer labels; the root cause is a
@@ -97,6 +88,11 @@ Skills to consult: `sp:spur-dev` (inline-pipeline-driver, cross-cutting, executi
   holds through validation (≤ 9 states per phase, ≤ 25 phases) and re-entry, which reuses the label with an `attempt N` note.
   Moving forward marks unentered steps skipped, and a loop-back leaves later phases open. Per-item hosts append inserted steps
   at the end, so labels carry identity and order drifts.
+- Phase table approved as prototyped (`docs/analysis/2026-10-plan-projection-prototype.ts:40`) and lives in workflow YAML as
+  per-state display metadata. `spur workflow show --format todo` may emit the labeled plan (public-surface consent, operator 2026-10-06).
+  The engine's state schema is strict, so this needs an engine change first: graduated to 1103 → 1104 → 1105.
+- Skipped/failed/unattempted render as host `pending` plus an `[outcome]` text suffix on every host; `cancelled` is not used
+  (operator, 2026-10-06).
 
 ### Not yet specified
 
