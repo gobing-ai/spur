@@ -217,7 +217,8 @@ gates get catalog entries and lifecycle events.
 | S2 | Ledger wiring for `spur decision run` and the workflow bus, plus correlation passing | S1 |
 | S3 | Reliability report over `system_events` | S2 |
 | S3b | `decision_logs` table and Board Decisions tab (§3.5–§3.6, task 1100) | S2 |
-| S4 | Task 1094: catalog-reference `decide`, the three task-pipeline decision points, and the inline deprecation warning | S3 report shows evidence for `task-triage`, `failure-class`, `review-failure-class` |
+| S4 | Task 1094: catalog-reference `decide` and the inline deprecation warning (framework; no shipped workflow change) | S2, task 1113 |
+| S4a–c | Tasks 1114–1116: migrate `task-triage`, `failure-class`, `review-failure-class`, one per slice | 1094, plus S3 evidence for that id meeting the operator-recorded bar (reachable-maker samples only) |
 | S5 | `idea-recommendation` + `needs-design` catalog entries and rescue paths in idea-pipeline | S3 evidence for both ids (gathered with `spur decision run`) |
 | S6 | `anatomy-validation-verdict` rescue in history-anatomy | S3 evidence |
 | S7 | Evidence-mode operator gates use `gate-evidence` through `DecisionService` | S3 evidence |
