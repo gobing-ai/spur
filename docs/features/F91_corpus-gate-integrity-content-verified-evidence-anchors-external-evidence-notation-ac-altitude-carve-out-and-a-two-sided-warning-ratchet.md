@@ -2,11 +2,11 @@
 schema_version: 1
 id: "F91"
 name: "Corpus gate integrity: content-verified evidence anchors, external-evidence notation, AC-altitude carve-out, and a two-sided warning ratchet"
-status: verifying
+status: active
 priority: P2
 tags: []
 created_at: "2026-08-17T22:15:08.187Z"
-updated_at: "2026-10-02T00:25:03.283Z"
+updated_at: "2026-10-07T23:01:46.115Z"
 ---
 
 # F91: Corpus gate integrity: content-verified evidence anchors, external-evidence notation, AC-altitude carve-out, and a two-sided warning ratchet
@@ -194,4 +194,5 @@ R3 rename lands, F31's name field are feature-file writes from that task.
 - 2026-08-31T02:07:20.914Z active → verifying (system)
 - 2026-08-31T17:06:03.698Z verifying → active (system)
 - 2026-10-02T00:25:03.283Z active → verifying (system)
+- 2026-10-07T23:01:46.115Z verifying → active (system)
 
