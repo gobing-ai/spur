@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Persist decision invocations to decision_logs and add a Board Decisions tab
-status: todo
+status: blocked
 template: feature-impl
 created_at: 2026-10-07T02:58:40.297Z
-updated_at: "2026-10-07T17:22:53.585Z"
+updated_at: "2026-10-07T21:34:39.103Z"
 feature_id: P1
 
 dependencies: ["1095", "1113"]
@@ -112,6 +112,10 @@ The UI contract is in root `DESIGN.md` § Product UI — Decisions.
 - The handle opens at service entry (R3) because §3.5's `resolve` phase and a rejected row's `started_at` cannot be measured from a handle created after resolution.
 - `maker-init`/`maker-call` collapse into one `maker` phase: the upstream hub does both inside `decide`. Splitting them needs an upstream hook, which feature P1 keeps out of scope.
 - 1099 has landed, so the gate DAO wiring is unconditional.
+
+#### Q&A entry — 2026-10-07T21:34:38.671Z
+
+Halting marker (batch wf-inline-runall-p1-af68-105904, 2026-10-07): picked up at pipeline position 4/4, reverted to blocked before any implementation — host session reached its context budget (3 prior tasks consumed it). Tree verified clean at commit 96a402d6f; no 1100 code was written. Ready for a fresh session: the frozen plan, seams table, and failure list in this task file are complete and current.
 
 ### Design
 
@@ -222,4 +226,6 @@ If 1094 has not landed when this task is picked up, wire only the paths that exi
 ### History
 
 - 2026-10-07T03:03:14.755Z backlog → todo (system)
+- 2026-10-07T21:32:09.684Z todo → wip (system)
+- 2026-10-07T21:34:39.103Z wip → blocked (system)
 
