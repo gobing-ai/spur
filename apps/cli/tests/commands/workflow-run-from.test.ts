@@ -186,6 +186,8 @@ describe('spur workflow run --from / --from-run (task 1072)', () => {
         expect(readLines('marker.txt')).toEqual(['n2', 'n3']);
     });
 
+    // 7 sequential runCli subprocess spawns; each cold `bun run` start is ~0.5s, so
+    // under full-suite load this crosses bun's 5s default and gets SIGTERM'd (1072 AC2).
     test('AC2: every illegal start point exits 2 and writes no run row, record or artifact', async () => {
         const fixture = writeFixture('sm.yaml', SM_FIXTURE);
         const failure = writeFixture('failure.yaml', FAILURE_FIXTURE);
@@ -245,7 +247,7 @@ describe('spur workflow run --from / --from-run (task 1072)', () => {
 
         expect(listDir('.spur/memory/runs')).toEqual(before.runs);
         expect(listDir('.spur/run')).toEqual(before.artifacts);
-    });
+    }, 20000);
 
     test('AC2: the unknown-state refusal lists the startable ids', async () => {
         const fixture = writeFixture('sm.yaml', SM_FIXTURE);
