@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: Add per-state display phase metadata to the workflow engine state schema
-status: wip
+status: done
 template: feature-impl
 created_at: 2026-10-07T06:14:15.476Z
-updated_at: "2026-10-07T15:56:46.976Z"
+updated_at: "2026-10-07T16:00:36.777Z"
 feature_id: I13
 
 priority: P1
 ac_numbering: task-local
 ac_altitude: task-local
 estimate_hours: 3
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/run/1103-verdict.json
 ---
 
 ## 1103. Add per-state display phase metadata to the workflow engine state schema
@@ -41,10 +43,6 @@ a state is rejected today. Per AGENTS.md, fix the released engine facade rather 
    `apps/cli/src/config/embedded-schemas.ts:19`. Updating that copy belongs to 1104, which first writes `display` into YAML.
 
 ### Requirements
-
-- [ ] R1. Add an optional, behavior-free per-state `display` field to the engine `StateDef` type, the state-machine zod schema and the engine state-machine JSON schema: `display: { phase: string, phaseTitle?: string, title?: string, show?: 'plan' | 'on-entry' }`, itself strict. The engine never reads it at run time.
-- [ ] R2. Prepare the engine release (version bump, CHANGELOG, ADR/ARCHITECTURE/README notes) in ts-libs; after the operator pushes the release tag, bump the Spur catalog pin (`package.json:35`) and `bun install`; every bundled workflow still loads and validates unchanged.
-- [ ] R3. Engine tests cover: field accepted, unknown `display` sub-keys rejected, invalid `show` rejected, absent field leaves the parsed definition unchanged.
 
 ### Acceptance Criteria
 
@@ -161,6 +159,15 @@ Review + verify (2026-10-07, fresh-context reviewer subagent):
 - Evidence: .spur/run/evidence/1103-review-verdict.json, .spur/run/evidence/1103-verify-verdict.json.
 - Implementation: ts-libs sp/task-1103-display-metadata b11ee9b8 (feat) + cd827528 (release bump).
 
+Findings table (fresh-context review, 2026-10-07):
+
+| Priority | Finding | Location | Disposition |
+| --- | --- | --- | --- |
+| P1 | none found | — | — |
+| P2 | none found | — | — |
+| P3 | JSON-schema parity test asserts display presence/additionalProperties/key-set but not required:['phase']/minLength/enum constraints | ts-libs packages/dual-workflow-engine/tests/schema.test.ts:600-608 | Deferred — ts-libs backlog, non-blocking |
+| P4 | none found | — | — |
+
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
@@ -169,4 +176,6 @@ Review + verify (2026-10-07, fresh-context reviewer subagent):
 
 - 2026-10-07T06:21:14.115Z backlog → todo (system)
 - 2026-10-07T07:40:28.415Z todo → wip (system)
+- 2026-10-07T15:59:53.733Z wip → testing (system)
+- 2026-10-07T16:00:36.770Z testing → done (system)
 
