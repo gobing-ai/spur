@@ -4,7 +4,7 @@ name: Rescue unparseable idea-pipeline recommendation and needs-design signals w
 status: todo
 template: feature-impl
 created_at: 2026-10-07T01:02:20.691Z
-updated_at: "2026-10-07T01:19:57.131Z"
+updated_at: "2026-10-07T06:08:03.100Z"
 feature_id: P1
 priority: P2
 tags:
@@ -96,7 +96,27 @@ Slice S5 of docs/design/decision-observability-and-adoption.md §5. idea-pipelin
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Implemented the rescue-only decision adoption for the idea pipeline (design §4):
+
+- **R1** — `config/decisions/idea-pipeline.yaml:14` (version 1, shared layer): `idea-recommendation` (choice; criteria proceed/reshape/drop/unknown; `fallback: unknown`) and `needs-design` (choice; criteria design/skip; `fallback: design`), `defaults.minConfidence: 0.8`. Both serve via `decision show`; `layer: shared`.
+- **R2** — discovery onEnter rescue after the awk derivation (`config/workflows/idea-pipeline.yaml:149`): runs `$spurBin decision run idea-recommendation --evidence <eval-report> --json` ONLY when the derived file equals `unknown`; writes the answer only when `source == "model"` and it is in the closed vocabulary; every failure path exits 0 and leaves `unknown` (today's idea-eval pause route).
+- **R3** — needs-design rescue (`config/workflows/idea-pipeline.yaml:161`): valid boolean JSON short-circuits (no call); otherwise `decision run needs-design` decides, writing `{"needs_design": false}` only when `source == "model"` AND `value == "skip"`, else `{"needs_design": true}`. The `:274` route writer is unchanged.
+- **R4** — E2E-verified: parsed `proceed` + valid boolean produce 0 decision rows.
+- **Action budget** — `IDEA_ACTION_BUDGET` 31 → 33 in `packages/app/tests/workflow/pipeline-action-budget.test.ts:17` with a named 1097 comment.
+
+Workspace E2E: `apps/cli/tests/workflow/idea-pipeline-rescue.test.ts:99` extracts the onEnter shell commands from the workflow YAML, runs them via `sh -c` against a temp project with the source CLI, and asserts derived files plus the recorded decision lifecycle in `system_events` (one start→failure→end invocation sharing an invocationId, `reason: no-backend`, `source: default`, `caller: cli`). 4/4 pass. Regenerated bundle: `bun run --filter @gobing-ai/spur build:bundle` (new catalog staged at `apps/cli/config/decisions/idea-pipeline.yaml`; the tracked `plugins/sp/lib/inline-run.generated.mjs` is unchanged because only config, not code, changed this task).
+
+E2E artifact: `.spur/run/1097-rescue.json` — scenario (a) parsed `proceed` + valid needs_design → 0 decision rows; scenario (b) prose report → file stays `unknown`, 3 recorded rows (decision.start/failure/end, decisionId `idea-recommendation`, maker `typesafe`); scenario (c) corrupt needs-design JSON → `{"needs_design": true}` written via 3 needs-design rows.
+
+R5 reliability evidence (worktree DB, offline `typesafe` maker recorded via two `decision run` calls, then):
+
+```
+$ bun apps/cli/src/index.ts decision status --reliability --json
+[{"decisionId":"idea-recommendation","samples":1,"maker":"typesafe","fallbacks":{"no-backend":1},"acceptedRate":0},
+ {"decisionId":"needs-design","samples":1,"maker":"typesafe","fallbacks":{"no-backend":1},"acceptedRate":0}]
+```
+
+Both configured ids show ≥1 recorded sample with the configured (catalog-default) maker.
 
 ### Testing
 

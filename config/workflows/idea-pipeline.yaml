@@ -146,6 +146,29 @@ states:
             awk '/^## Recommendation/{f=1;next} f&&NF{r=tolower($0);exit}
             END{print (match(r,/^[*_ ]*(proceed|reshape|drop)/) ? substr(r,RSTART,RLENGTH) : "unknown")}'
             ".spur/run/$__runId-idea-eval-report.md" | tr -d '*_ ' > ".spur/run/$__runId-idea-recommendation.txt"
+      # 1097 R2 (design §4 rescue-only): the awk parse stays first; this rescue runs ONLY when
+      # the derived file is `unknown`. A model answer is written only when `source == "model"`
+      # and it lands in the closed vocabulary (proceed|reshape|drop) — every other outcome
+      # (spur missing/non-zero, unparseable output, model `unknown`) leaves `unknown` in place,
+      # which is today's idea-eval pause route. Exits 0 on every path (default onError: fail).
+      - kind: shell
+        options:
+          command: >-
+            f=".spur/run/$__runId-idea-recommendation.txt";
+            [ "$(cat "$f" 2>/dev/null)" = unknown ] || exit 0;
+            v="$($spurBin decision run idea-recommendation --evidence ".spur/run/$__runId-idea-eval-report.md" --json 2>/dev/null | jq -r 'if .source=="model" then .value else "unknown" end' 2>/dev/null)";
+            case "$v" in proceed|reshape|drop) printf '%s\n' "$v" > "$f" ;; esac
+      # 1097 R3 (same rescue-only pattern): a valid needs_design boolean short-circuits — no
+      # decision is called. On a missing/corrupt/non-boolean file the catalog decision decides:
+      # `{"needs_design": false}` only when `source == "model"` AND `value == "skip"`; otherwise
+      # `{"needs_design": true}` — today's behavior for a missing or corrupt file. The
+      # ac-generate route writer (:274) consumes this file unchanged. Exits 0 on every path.
+      - kind: shell
+        options:
+          command: >-
+            f=".spur/run/$__runId-idea-needs-design.json";
+            jq -e '.needs_design|type=="boolean"' "$f" >/dev/null 2>&1 && exit 0;
+            $spurBin decision run needs-design --evidence ".spur/run/$__runId-idea-eval-report.md" --json 2>/dev/null | jq -e '.source=="model" and .value=="skip"' >/dev/null 2>&1 && printf '{"needs_design": false}\n' > "$f" || printf '{"needs_design": true}\n' > "$f"
 
   - id: idea-eval
     description: >

@@ -1,0 +1,37 @@
+# Decision catalogs for the idea pipeline (feature P1 / task 1097, design §5 S5).
+#
+# Rescue-only adoption (design §4): the deterministic parses in
+# config/workflows/idea-pipeline.yaml stay FIRST — the awk derivation over
+# `## Recommendation` and the needs_design JSON read. These entries serve only
+# the output those parses cannot classify: recommendation `unknown`, or a
+# missing/corrupt needs_design JSON. Fallbacks reproduce today's routing
+# (`unknown` keeps the idea-eval pause; `design` keeps the system-design pass),
+# so no default can auto-create a feature.
+#
+# Resolution: this file ships in the shared layer (the installed package's
+# config/decisions/). A project can override it per basename through
+# .spur/decisions/ or decisions.paths (first layer wins, ADR-113 style).
+version: 1
+
+defaults:
+    # ADR-125 value, kept over the upstream 0.7 default.
+    minConfidence: 0.8
+
+decisions:
+    idea-recommendation:
+        type: choice
+        description: Which route does the idea evaluation report recommend?
+        criteria:
+            proceed: Build as evaluated — create the feature.
+            reshape: Build with the evaluation's reshaping — create the feature and fold it in.
+            drop: Do not build — cancel without creating a feature.
+            unknown: The report states no clear recommendation.
+        fallback: unknown
+
+    needs-design:
+        type: choice
+        description: Does this idea need a system-design pass before decomposition?
+        criteria:
+            design: Run the system-design stage before decomposition.
+            skip: Decompose directly — no system-design pass needed.
+        fallback: design

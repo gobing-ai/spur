@@ -10,8 +10,11 @@ import { parse as parseYaml } from 'yaml';
  * changes and are new work — lowering a budget here is the change record. Raised to 31 at
  * the A9×main merge: dev-idea decision-brief gates (0769 pattern) deliberately add one
  * recommendation-derivation shell action to idea-pipeline on main.
+ * 33 at 1097: the two rescue-only shell actions (recommendation `unknown`, corrupt needs-design
+ * JSON) after the derivation — each calls a catalog decision only on output the deterministic
+ * parse could not classify (design §4 / §5 S5).
  */
-const IDEA_ACTION_BUDGET = 31;
+const IDEA_ACTION_BUDGET = 33;
 // 50 at the session finding after 1088: the completion gate needs its own confidence action
 // (the proof-binding stamp must stay the state's last action and under the 800-char shell cap),
 // and `review-fail-triage` adds one decide action — the review-side twin of 0943's failure-class
