@@ -6,31 +6,39 @@ status: backlog
 priority: P2
 tags: []
 created_at: "2026-10-07T15:57:49.599Z"
-updated_at: "2026-10-07T15:57:57.279Z"
+updated_at: "2026-10-07T16:14:06.870Z"
 ---
 
 # H15: Batch execution performance productization: budget defaults, integrated gates, shipped worker briefs
 
 ## Goal
 
+Turn the batch-execution habits that carried runall-P1-20261006-02 (tasks 1095–1099) into shipped pipeline config, driver behavior and skill rules, so a downstream spur batch gets them without hand-authored driver-tree files — and record the pilot evidence honestly enough that D62's scoped-gate decision can cite it.
+
 ## Scope
 
-Productize the batch-execution performance enhancements proven during runall-P1-20261006-02 (P1 tasks 1095–1099): the session executed 5 task pipelines in ~40% less wall clock than the sequential baseline via five mechanisms that currently exist only as ad-hoc driver-tree habits and gitignored `.spur/run/` files. This feature turns them into shipped pipeline config, driver behavior, and plugin references so every downstream spur user gets them by default.
+Productize the batch-execution mechanisms used ad hoc during runall-P1-20261006-02 (P1 tasks 1095–1099, 2026-10-06). They currently exist only as driver-tree habits and gitignored `.spur/run/` files. The wall-clock benefit has not been measured against a baseline; 1107 records what is durably known and labels projections as projections.
 
-Covers: (1) evidence recording for the scoped-gate adoption decision D62 (baseline `docs/reports/i31/0912-workflow-baseline.md` marks F3/F4 INSUFFICIENT_EVIDENCE pending exactly this sample); (2) `implementTimeoutMs` default 30m → 45m; (3) driver auto-repair of anchor warnings via `task migrate-anchors`; (4) worker briefs (verify-answer contract, production-anchor implement context) shipped as spur-dev references instead of hand-authored per session; (5) a `deferQualityGate` batch gate policy for parallel mode mirroring the `deferFeatureSync` (0931 R5) defer-once pattern.
+Covers:
 
-Out of scope: checker vocabulary narrowing (filed separately under F91 — corpus-gate surface); resume-contract injection automation (pi host layer, not spur surface); `--concurrency` default change (no evidence); per-task review-on-merged-tree (in-pipeline reviews already parallelize).
+1. **Evidence (1107):** a source-labeled pilot report mapped against the i31 baseline criterion (`docs/reports/i31/0912-workflow-baseline.md:55`) that gates D62's F3/F4 scoped-gate decision.
+2. **Implement budget (1108):** `implementTimeoutMs` default 30m → 45m on subprocess surfaces, plus the inline driver passing the YAML budget as the host dispatch timeout where the host accepts one (the P1 kills were the host subagent limit, not the YAML value).
+3. **Anchor qualification (1109):** a task-scoped `spur task migrate-anchors --wbs` run after implement, before the proof capture, so unique basename anchors never reach the done gate as `L4.anchor-unresolved`.
+4. **Worker briefs (1110):** the verify-answer and implement-anchor rules folded into the existing `sp:code-verification` / `sp:code-implementation` skills — no second source of truth.
+5. **Deferred quality gate (1111):** an opt-in `deferQualityGate` policy for parallel batches — light tier per task, one integrated full gate per batch — with an ADR-124 clarification.
+
+Out of scope: gate-language checker vocabulary narrowing (1112 under F91 — corpus-gate surface); resume-contract injection automation (pi host layer); `--concurrency` default change (no evidence); per-task review on the merged tree; fixing line-drift anchors (not a qualification problem).
 
 ## Acceptance Criteria
 
 ```gherkin
 Feature: Batch execution performance productization
 
-  Scenario: R1 — Parallel batches run one integrated quality gate instead of per-task gates
-  Scenario: R2 — Implement agent runs default to a 45-minute budget and budget exhaustion is visible in run output
-  Scenario: R3 — Driver-level task-check anchor warnings self-repair through task migrate-anchors before failing
-  Scenario: R4 — Implement workers receive shipped verify-answer and production-anchor briefs without driver-tree hand authoring
-  Scenario: R5 — The runall-P1-20261006-02 pilot evidence is recorded and cited by the scoped-gate adoption decision D62
+  Scenario: R1 — Opt-in deferred quality gate runs one integrated full gate per parallel batch
+  Scenario: R2 — Implement dispatch budget defaults to 45 minutes on subprocess and inline hosts and exhaustion is visible
+  Scenario: R3 — Unique basename anchors in a task's Solution are qualified before the done gate without touching other tasks
+  Scenario: R4 — Verify and implement workers get answer-shape and anchor rules from the existing shipped skills
+  Scenario: R5 — The runall-P1-20261006-02 pilot evidence is recorded with source-labeled numbers and mapped against the D62 pilot criterion
 ```
 
 ## Tasks
