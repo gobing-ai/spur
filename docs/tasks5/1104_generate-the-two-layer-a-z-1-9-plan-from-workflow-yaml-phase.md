@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Generate the two-layer A-Z/1-9 plan from workflow YAML phases in workflow show and validate
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-10-07T06:14:17.109Z
-updated_at: "2026-10-07T17:00:01.544Z"
+updated_at: "2026-10-07T17:20:11.983Z"
 feature_id: I13
 
 dependencies: ["1103"]
@@ -12,6 +12,8 @@ priority: P1
 ac_numbering: task-local
 ac_altitude: task-local
 estimate_hours: 10
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1104-verdict.json
 ---
 
 ## 1104. Generate the two-layer A-Z/1-9 plan from workflow YAML phases in workflow show and validate
@@ -54,14 +56,6 @@ and approved `spur workflow show --format todo` emitting the labeled two-layer p
    route; the CLI public surface stays limited to `workflow show --format todo`.
 
 ### Requirements
-
-- [ ] R1. Add `display` to `apps/cli/schemas/state-machine-workflow.schema.json` (same shape as the 1103 engine field); annotate every non-terminal state of `config/workflows/task-pipeline.yaml` and `idea-pipeline.yaml` with the approved phases (prototype table); regenerate the bundle.
-- [ ] R2. Phased projection in `packages/app/src/workflow/step-reporter.ts`: `A Prepare` (A1–A3) plus one letter per phase from B, digits = `show: plan` states, item text `<label> <title> · <state-id>`; `on-entry` states take the next digit only when entered; terminal states never appear. Labels come from a capped labeler that throws past Z or past 9; the flat inventory for unannotated workflows keeps `columnLabel`.
-- [ ] R3. When a state-machine workflow declares `display` on any state, `spur workflow validate` rejects: a non-terminal state without `display`, a terminal state with `display`, more than 25 phases, more than 9 states in a phase (counting on-entry), conflicting `phaseTitle` values within one phase.
-- [ ] R4. `spur workflow show --format todo --json` adds a `plan` array of ready-to-publish items for annotated workflows (`null` otherwise); `steps` unchanged. Update `docs/design/cli-contracts.md` and `plugins/sp/skills/spur-cli/references/workflows.md`.
-- [ ] R5. Batch projection, reachable by agents through a plugin script `plugins/sp/scripts/batch-plan.ts` over a bundled core: `A` Prepare batch (A1–A4), one letter per task (`B 0812 <title>`), `Z` Batch report, waves of 24 tasks; **letters first** — the script's `task-children` mode produces a task's phase digits from that task's `workflow show` plan when the task starts.
-- [ ] R6. Host rendering: skipped / failed / unattempted / blocked map to host `pending` with an `[outcome]` text suffix on every host; only an observed completion is `completed`.
-- [ ] R7. Port the prototype's self-checks into `packages/app/tests/workflow/` tests (cap, validation, label stability across loop-back, skipped never completed, letters-first batch).
 
 ### Acceptance Criteria
 
@@ -189,11 +183,46 @@ Constraints honored: no lifecycle status transitions from this task; `plugins/sp
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | apps/cli/schemas/state-machine-workflow.schema.json:108; config/workflows/task-pipeline.yaml:216; idea-pipeline.yaml:82 |
+| R2 | MET | packages/app/src/workflow/plan-projection.ts:26,106 |
+| R3 | MET | plan-projection.ts:173 + workflow-service.ts:76 |
+| R4 | MET | apps/cli/src/commands/workflow.ts:1709; docs/design/cli-contracts.md:779 |
+| R5 | MET | plan-projection.ts:269; plugins/sp/scripts/batch-plan.ts:1; config/plugin-scripts.json:11 |
+| R6 | MET | plan-projection.ts:354,361 |
+| R7 | MET | packages/app/tests/workflow/plan-projection.test.ts:54 |
+| AC1 | MET | apps/cli/tests/workflow/display-plan.test.ts:29 |
+| AC2 | MET | display-plan.test.ts:47 |
+| AC3 | MET | display-plan.test.ts:156 + plan-projection.test.ts:193-233 |
+| AC4 | MET | plan-projection.test.ts:54,153 |
+| AC5 | MET | plan-projection.test.ts:251; plugins/sp/scripts/batch-plan.mjs |
+| AC6 | MET | plan-projection.test.ts:308,316 |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
 <!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+
+Review + verify (2026-10-07, fresh-context reviewer subagent):
+
+- Review verdict: pass — 0 P1/P2; P3 doc wording (docs/design/cli-contracts.md:779 "exact pre-1104 shape" vs additive plan:null); P4 UTF-16 surrogate edge in truncateTitle (plan-projection.ts:259). Both non-blocking.
+- Verify verdict: PASS — R1–R7, AC1–AC6 all MET.
+- Evidence: .spur/run/evidence/1104-review-verdict.json, .spur/run/1104-verdict.json.
+- Implementation: commit cb11ac0e6; gates spur-check 10393 pass/0 fail, plugin-smoke PASS, script-contract-check PASS.
+
+Findings table (fresh-context review, 2026-10-07):
+
+| Priority | Finding | Location | Disposition |
+| --- | --- | --- | --- |
+| P1 | none found | — | — |
+| P2 | none found | — | — |
+| P3 | Contract-doc wording overstates "exact pre-1104 shape" (todo --json now always carries plan, null when unannotated) | docs/design/cli-contracts.md:779 | Deferred — cosmetic doc nuance, non-blocking |
+| P4 | truncateTitle may split a surrogate pair at the 60-unit cut | packages/app/src/workflow/plan-projection.ts:259 | Deferred — cosmetic, all bundled titles BMP |
 
 ### References
 
@@ -202,4 +231,7 @@ Constraints honored: no lifecycle status transitions from this task; `plugins/sp
 ### History
 
 - 2026-10-07T06:23:30.237Z backlog → todo (system)
+- 2026-10-07T17:06:08.581Z todo → wip (system)
+- 2026-10-07T17:20:10.093Z wip → testing (system)
+- 2026-10-07T17:20:11.976Z testing → done (system)
 
