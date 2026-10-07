@@ -2,11 +2,11 @@
 schema_version: 1
 id: "E71"
 name: "Disposable run scratch with durable evidence and inspection"
-status: active
+status: done
 priority: P2
 tags: []
 created_at: "2026-09-30T19:53:48.380Z"
-updated_at: "2026-10-02T05:45:50.763Z"
+updated_at: "2026-10-07T00:12:34.683Z"
 ---
 
 # E71: Disposable run scratch with durable evidence and inspection
@@ -109,6 +109,7 @@ Feature: Disposable run scratch with durable evidence and inspection
 | 1045 | Add missing persist-out branch tests for non-ENOENT abort and external-key-conflict exclusion | done |
 | 1046 | Emit inline pipeline action rows so run close needs no post-hoc backfill | done |
 | 1049 | Block automatic worktree teardown when provenance is skipped for an external-key conflict | done |
+| 1089 | Keep worktree-batch evidence references and prior-task evidence resolvable after teardown | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -122,4 +123,6 @@ Feature: Disposable run scratch with durable evidence and inspection
 - 2026-10-02T04:16:01.957Z active → verifying (system)
 - 2026-10-02T04:16:02.520Z verifying → done (system)
 - 2026-10-02T05:45:50.763Z done → active (system)
+- 2026-10-07T00:12:34.017Z active → verifying (system)
+- 2026-10-07T00:12:34.683Z verifying → done (system)
 

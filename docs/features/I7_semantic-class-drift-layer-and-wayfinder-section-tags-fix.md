@@ -2,11 +2,11 @@
 schema_version: 1
 id: "I7"
 name: "Semantic-class drift layer and wayfinder --section tags fix"
-status: active
+status: verifying
 priority: P2
 tags: []
 created_at: "2026-08-19T05:34:31.142Z"
-updated_at: "2026-09-20T17:59:33.497Z"
+updated_at: "2026-10-07T00:12:26.512Z"
 ---
 
 # I7: Semantic-class drift layer and wayfinder --section tags fix
@@ -70,4 +70,5 @@ Do not re-derive the drift table; implement the ranked fix path items in scope.
 ## History
 
 - 2026-09-20T17:59:33.497Z backlog → active (system)
+- 2026-10-07T00:12:26.512Z active → verifying (system)
 

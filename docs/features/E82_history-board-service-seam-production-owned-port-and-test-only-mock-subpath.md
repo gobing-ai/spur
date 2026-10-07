@@ -2,11 +2,11 @@
 schema_version: 1
 id: "E82"
 name: "History Board service seam: production-owned port and test-only mock subpath"
-status: backlog
+status: done
 priority: P3
 tags: []
 created_at: "2026-09-26T04:49:52.460Z"
-updated_at: "2026-09-26T04:51:40.245Z"
+updated_at: "2026-10-07T00:09:56.713Z"
 ---
 
 # E82: History Board service seam: production-owned port and test-only mock subpath
@@ -71,3 +71,8 @@ Feature: History Board service seam: production-owned port and test-only mock su
 ## Notes
 
 ## History
+
+- 2026-10-07T00:09:51.005Z backlog → active (system)
+- 2026-10-07T00:09:56.193Z active → verifying (system)
+- 2026-10-07T00:09:56.713Z verifying → done (system)
+
