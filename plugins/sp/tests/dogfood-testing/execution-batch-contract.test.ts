@@ -130,6 +130,11 @@ describe('execution-batch spec contract (task 0720)', () => {
 });
 
 describe('execution-batch spec contract (task 0924)', () => {
+    test('WT-2 — create mode registers the worktree in projects.json', () => {
+        expect(SPEC).toContain('WT-2r — register the worktree in ~/.config/spur/projects.json');
+        expect(SPEC).toContain('spur projects add "../<repo>-<command>-<selector-slug>-<short-id>"');
+    });
+
     test('WT-4 — projects.json registry cleanup upon worktree removal', () => {
         expect(SPEC).toContain('WT-4c — clean up registry entry in ~/.config/spur/projects.json');
         expect(SPEC).toContain('spur projects remove "$WT_PATH"');

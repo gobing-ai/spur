@@ -40,6 +40,7 @@ A git worktree gives you an isolated working directory for a branch without stas
 ```bash
 git worktree add ../<project>-<branch> <branch>
 cd ../<project>-<branch>
+spur projects add . 2>/dev/null || true   # Register in projects.json for the Board project switcher
 ```
 
 **When to use worktrees:**

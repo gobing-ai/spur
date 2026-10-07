@@ -76,8 +76,9 @@ absolute path (name is display-only, unique by convention).
 
 ### 3.2 Registry freshness, process reclamation, and worktree teardown (feature K3)
 
-When isolated worktrees are created for `--worktree` runs, `spur serve` or command runs register
-the worktree path in `~/.config/spur/projects.json`. When the worktree is merged or deleted, the
+When isolated worktrees are created for `--worktree` runs, execution-batch WT-2 (create mode) and
+the `branch-workflow` worktree steps register the path with `spur projects add`; `spur serve` also
+upserts its project root at startup. Nothing registers a bare `git worktree add` on its own. When the worktree is merged or deleted, the
 entry becomes stale and any lingering serve process becomes an orphaned background daemon.
 
 **The `refreshProjects` operation** (`ProjectRegistry.refreshProjects`):

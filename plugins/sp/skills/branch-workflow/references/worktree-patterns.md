@@ -28,6 +28,7 @@ A git worktree gives you an isolated working directory linked to the same reposi
 ```bash
 git worktree add ../project-hotfix hotfix/critical-fix
 cd ../project-hotfix && bun install --frozen-lockfile
+spur projects add . 2>/dev/null || true   # list it in the Board project switcher
 ```
 
 The worktree directory is created alongside the main project. Name it `<project>-<branch>` for clarity.

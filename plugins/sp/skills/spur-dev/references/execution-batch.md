@@ -709,7 +709,13 @@ BRANCH="sp/<command>-<selector-slug>-<short-id>"     # e.g. sp/runall-h1-a3f2
 # short-id per attempt — before surfacing the error.
 git worktree add "../<repo>-<command>-<selector-slug>-<short-id>" -b "$BRANCH" "$BASE_REF" \
   || { git branch -D "$BRANCH"; false; }
+# WT-2r — register the worktree in ~/.config/spur/projects.json so the Board project switcher
+# lists it; WT-4c deregisters it. Best-effort: a registry failure never blocks the run.
+spur projects add "../<repo>-<command>-<selector-slug>-<short-id>" --json >/dev/null 2>&1 || true
 ```
+
+Reuse mode does not re-register: `projects add` rewrites `port` to `0`, which would clobber the
+port of a live serve in an adopted tree. A served tree is already registered by `spur serve`.
 
 **Worktree root is outside `.spur/` (0948 R9).** The default create path is that
 sibling directory, which sits next to the repository and not under it. Do not
