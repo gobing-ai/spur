@@ -553,6 +553,20 @@ Do not re-run the full suite per iteration, and do not `spur-check` before you h
 target. **Target:** full `spur-check` runs ≤2 per task (one during iteration, one final) instead of
 4 across a chain.
 
+**Isolation rerun for load-flakes (task 1112 review).** Under concurrent fleet load, subprocess-heavy
+tests can exceed bun's 5s default timeout. Five such timeouts were seen during 1112, and each one
+passed when run alone. A full gate that fails *only* on timeouts in tests outside the change scope
+does not earn another full-gate run:
+
+1. Rerun each timed-out test alone: `(cd <workspace> && bun test <file> --test-name-pattern <test>)`.
+2. **Green alone** → classify it as a load-flake. Cite the gate failure (test, elapsed ms) and the
+   isolated pass receipt in the verify evidence. The original full-gate run stands as the single
+   final gate.
+3. **Red alone**, or a failure that is not a timeout → it is a real failure. Fix it.
+4. If the same test load-flakes in two separate sessions, give it an explicit per-test timeout and
+   a WHY comment (see `plugins/sp/tests/inline-run-close-reason.test.ts:100-102`). Never raise the
+   global timeout, skip the test, or loop full-gate reruns.
+
 ## Auto-Decision Principles
 
 Seven principles governing `--auto` mode. `--auto` sets `profile=auto` in the workflow vars; the

@@ -4,7 +4,7 @@ name: Narrow gate-language checker vocabulary against composition prose false po
 status: done
 template: feature-impl
 created_at: 2026-10-07T07:29:50.751Z
-updated_at: "2026-10-08T07:54:58.742Z"
+updated_at: "2026-10-08T15:56:54.621Z"
 feature_id: F91
 
 ac_altitude: task-local
@@ -96,24 +96,24 @@ const GATE_CUES = /\b(until|after|once|before|pending|blocked|wait(?:ing)? for|r
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | packages/app/src/services/task-check.ts:447 unconditional GATE_TOKENS; gating-cue rule and WHY comment at packages/app/src/services/task-check.ts:450-454 |
-| R2 | MET | packages/app/tests/services/task-check.test.ts covers merged-back prose, approved-design prose, blocked-until and requires-approval sentences; task-service write-time test present; suites 329/329 green |
-| R3 | MET | plugins/sp/skills/spur-dev/references/ac-style-guide.md:103 documents the ambiguous-token cue rule |
-| R4 | MET | packages/app/src/services/task-check.ts:445 doc comment now sits on the L4.gate-language predicate function |
+| R1 | MET | `packages/app/src/services/task-check.ts:447` GATE_TOKENS unconditional; `packages/app/src/services/task-check.ts:448` AMBIGUOUS_GATE_TOKENS fire only with GATE_CUES (`packages/app/src/services/task-check.ts:452`) inside hasGateLanguage `packages/app/src/services/task-check.ts:454-461` |
+| R2 | MET | `packages/app/tests/services/task-check.test.ts:4252` composition prose silent; `packages/app/tests/services/task-check.test.ts:4259` human-confirmation prose warns; fresh 329 pass / 0 fail |
+| R3 | MET | `plugins/sp/skills/spur-dev/references/ac-style-guide.md:103-107` and `plugins/sp/skills/spec-decomposition/references/decomposition.md:565-568` describe the cue rule |
+| R4 | MET | `packages/app/src/services/task-check.ts:463-474` doc comment sits on hasSolutionFileLineCitation |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | composition/test prose produces no finding while true gate vocabulary still warns; full gate rc=0 10485 pass / 0 fail across 614 files (commit 36f274590 tree) |
+| AC1 | MET | test | `packages/app/tests/services/task-check.test.ts:4252` and `packages/app/tests/services/task-check.test.ts:4259`; 0700 R6 block `packages/app/tests/services/task-check.test.ts:4208`; `packages/app/tests/services/task-service.test.ts:2523`; fresh 329 pass / 0 fail |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
 Pipeline review ran in run d8b32b00-20d6-4142-a4e5-01a3d577158c (37 recorded rows) before the load-flake failure; salvage diff (6 files, +71/−18) re-reviewed against the request before merge 1b6857d00.
 
-| Priority | Dimension | Location | Finding |
-|----------|-----------|----------|----------|
-| P2 | process | packages/app/tests | Full-gate subprocess timeouts under concurrent fleet load are load-flakes (5 distinct, all isolation-green across sessions); record an isolation-rerun protocol so future gates do not burn reruns |
-| P4 | — | — | No blocking findings (verify verdict PASS; full gate rc=0, 10485 pass / 0 fail) |
+| Priority | Dimension | Location | Finding | Disposition |
+|----------|-----------|----------|---------|-------------|
+| P2 | process | packages/app/tests | Full-gate subprocess timeouts under concurrent fleet load are load-flakes (5 distinct, all isolation-green across sessions); record an isolation-rerun protocol so future gates do not burn reruns | FIXED — protocol recorded in `plugins/sp/skills/spur-dev/references/cross-cutting.md:556-568` (Isolation rerun for load-flakes), F91 verifyall 2026-10-08 |
+| P4 | — | — | No blocking findings (verify verdict PASS; full gate rc=0, 10485 pass / 0 fail) | — |
 
 ### References
 
