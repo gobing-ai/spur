@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: record's feature sync can mark a feature done before its feature-verification receipt exists
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-10-07T20:52:30.428Z
-updated_at: "2026-10-07T21:27:14.815Z"
+updated_at: "2026-10-08T07:06:29.212Z"
 
 feature_id: F3
 priority: P1
 ac_numbering: task-local
 ac_altitude: task-local
 estimate_hours: 3
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1119-verdict.json
 ---
 
 ## 1119. record's feature sync can mark a feature done before its feature-verification receipt exists
@@ -39,11 +41,11 @@ Related (same session, separate task): the receipt is digest-bound, so it also g
 
 ### Requirements
 
-- [ ] R1. When `deriveFeatureStatus` would propose hops ending in `done`, it also evaluates the feature with `asStatus: 'done'` (same `runDir`, plus an optional `receiptRunPort`). If any `L4.feature-receipt-*` error is present, the proposal stops at `verifying`: hops run only up to `verifying`, `to` is `verifying`, and the receipt findings are returned in `gateFindings`.
-- [ ] R2. Sync's role is unchanged and recorded: best-effort, never strict, never claiming `done` without a valid receipt. A receipt-only stop is not persisted as a repeated BLOCKED state, so the next `spur feature sync` after the receipt lands completes the feature without `--force`.
-- [ ] R3. `FeatureSyncOptions` gains an optional `receiptRunPort`; the CLI `feature sync` passes `makeReceiptRunPort(context)`, as `feature check` and `feature advance` already do.
-- [ ] R4. `spur feature sync <id> --json` output for a receipt-only stop names the `L4.feature-receipt-*` finding code and message, so a caller sees why `done` was withheld.
-- [ ] R5. Regression tests: all tasks done, L4 AC gate passing, no receipt → the feature ends at `verifying` with `L4.feature-receipt-missing` reported; with a valid receipt → the feature reaches `done`. Existing sync tests that expect `done` get a receipt fixture rather than a weakened assertion.
+- [x] R1. When `deriveFeatureStatus` would propose hops ending in `done`, it also evaluates the feature with `asStatus: 'done'` (same `runDir`, plus an optional `receiptRunPort`). If any `L4.feature-receipt-*` error is present, the proposal stops at `verifying`: hops run only up to `verifying`, `to` is `verifying`, and the receipt findings are returned in `gateFindings`.
+- [x] R2. Sync's role is unchanged and recorded: best-effort, never strict, never claiming `done` without a valid receipt. A receipt-only stop is not persisted as a repeated BLOCKED state, so the next `spur feature sync` after the receipt lands completes the feature without `--force`.
+- [x] R3. `FeatureSyncOptions` gains an optional `receiptRunPort`; the CLI `feature sync` passes `makeReceiptRunPort(context)`, as `feature check` and `feature advance` already do.
+- [x] R4. `spur feature sync <id> --json` output for a receipt-only stop names the `L4.feature-receipt-*` finding code and message, so a caller sees why `done` was withheld.
+- [x] R5. Regression tests: all tasks done, L4 AC gate passing, no receipt → the feature ends at `verifying` with `L4.feature-receipt-missing` reported; with a valid receipt → the feature reaches `done`. Existing sync tests that expect `done` get a receipt fixture rather than a weakened assertion.
 
 ### Acceptance Criteria
 
@@ -113,15 +115,48 @@ Scenario: AC2 — Sync with a valid receipt completes the feature (req: R1, R3, 
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Completion no longer outruns the feature-verification receipt: `deriveFeatureStatus` runs a second, receipt-only probe at the completion boundary and stops the proposal at `verifying`, reporting the `L4.feature-receipt-*` findings instead of building hops to `done`.
+
+Change map:
+
+- packages/app/src/services/feature-service.ts:55 — `FeatureSyncProposal.receiptPending?: boolean`. Deliberately not `gateBlocked`: the 1004 fingerprint cannot see the receipt file, so a receipt-only stop must not persist as a repeated BLOCKED state (R2). A receipt-pending proposal already at `verifying` has `from === to` and stays a no-op.
+- packages/app/src/services/feature-service.ts:65 — `FeatureSyncOptions.receiptRunPort?: FeatureReceiptRunPort` (R3), the same port shape the CLI's `makeReceiptRunPort` returns.
+- packages/app/src/services/feature-service.ts:441 — `deriveFeatureStatus(featureId, options?)`; packages/app/src/services/feature-service.ts:649 forwards the options from `runSyncFeature`.
+- packages/app/src/services/feature-service.ts:490 — shared `check` options factored out of `checkL4Gate` so the L4 AC gate and the receipt probe see identical dirs (multi-folder scan unchanged).
+- packages/app/src/services/feature-service.ts:530 — after the L4 AC gate passes, a second probe with `asStatus: 'done'` + the port; only `L4.feature-receipt-*` errors are consulted (R1). Any hit returns `to: 'verifying'`, `receiptPending: true`, findings in `gateFindings`, hops `backlog|blocked → ['active','verifying']`, `active → ['verifying']`, `verifying → []`. Today's stop-before-verifying outcomes keep their shape because the probe runs only after the ordinary gate passed.
+- apps/cli/src/commands/feature.ts:533 (sync `--all`) and apps/cli/src/commands/feature.ts:561 (sync `<id>`) pass `receiptRunPort: await makeReceiptRunPort(context)`, matching `feature check` / `feature advance` (R3).
+- apps/cli/src/commands/feature.ts:583 — human output prints each receipt finding when `receiptPending`; `--json` already serializes `proposal.gateFindings` with code + message (R4). A receipt-pending stop never exits non-zero, so the pipeline `record` step stays best-effort.
+
+Tests:
+
+- packages/app/tests/services/feature-service.test.ts:70 — `recordPassReceipt` fixture (real receipt helpers over the suite's tmp root); the three existing `done`-expecting sync tests now carry a receipt rather than a weakened assertion (R5); the new 1119 case proves the receipt-pending stop (`to: 'verifying'`, `receiptPending: true`, `L4.feature-receipt-missing`, no persisted BLOCKED file) and the no-`--force` completion once the receipt lands (R2).
+- apps/cli/tests/commands/feature.test.ts:804 — AC1: file-wins `verifying` fixture + done task, `sync --json` stays at `verifying` and names `L4.feature-receipt-missing`. apps/cli/tests/commands/feature.test.ts:861 — AC2: valid receipt + backed run row/artifact in the project DB, `sync --dry-run --json` releases `done` (`hops: ['done']`, no `receiptPending`, no `suppressed` replay). The applied verifying/done hops run lifecycle shell guards that cannot pass under `bun test` (`resolveSpurBin` resolves the test file), so the CLI asserts the derivation contract and the applied-path completion is covered by the service suite.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/services/feature-service.ts:534-542` second probe (`asStatus: 'done'` + `receiptRunPort`, filter `L4.feature-receipt-*` errors only, after L4 gate passes); stop at `to: 'verifying'` with `receiptPending`/`gateFindings` at `packages/app/src/services/feature-service.ts:544-568`; proven by `packages/app/tests/services/feature-service.test.ts:1019-1053` |
+| R2 | MET | `receiptPending` deliberately not `gateBlocked` (`packages/app/src/services/feature-service.ts:55`, rationale `:546-549`); no BLOCKED file persisted asserted `packages/app/tests/services/feature-service.test.ts:1054`; next sync without `--force` completes `:1056-1062`; role recorded in `docs/design/workflow-execution-economy.md:333` |
+| R3 | MET | `FeatureSyncOptions.receiptRunPort` `packages/app/src/services/feature-service.ts:65`, forwarded `:649`; CLI passes `makeReceiptRunPort(context)` for `sync --all` `apps/cli/src/commands/feature.ts:538-540` and `sync <id>` `:566-568` (port fn `:605`) |
+| R4 | MET | `--json` serializes `proposal.gateFindings` via `toEnvelopeJson(result)`; code+message asserted `apps/cli/tests/commands/feature.test.ts:845-852`; human output prints findings when `receiptPending` `apps/cli/src/commands/feature.ts:582-588`; exit code stays 0 (`apps/cli/tests/commands/feature.test.ts:844`) |
+| R5 | MET | Real-receipt fixture `recordPassReceipt` `packages/app/tests/services/feature-service.test.ts:49-83`; existing `done`-tests carry receipts, not weakened asserts (`:946`, `:992`, `:1127`); AC1 `apps/cli/tests/commands/feature.test.ts:761-857` (stays `verifying`, disk status, names `L4.feature-receipt-missing`); AC2 `:859-879` (`hops: ['done']`, no `receiptPending`, no `suppressed` replay) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -135,4 +170,6 @@ Scenario: AC2 — Sync with a valid receipt completes the feature (req: R1, R3, 
 ### History
 
 - 2026-10-07T21:27:14.815Z backlog → todo (system)
+- 2026-10-08T06:12:33.690Z todo → wip (system)
+- 2026-10-08T07:06:29.203Z wip → done (system)
 

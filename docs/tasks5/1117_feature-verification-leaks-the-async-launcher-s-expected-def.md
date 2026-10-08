@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: feature-verification leaks the async launcher's expected definition digest into verificationCmd
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-10-07T20:52:28.373Z
-updated_at: "2026-10-07T21:24:30.969Z"
+updated_at: "2026-10-08T05:30:03.398Z"
 
 feature_id: D3
 priority: P1
 ac_numbering: task-local
 ac_altitude: task-local
 estimate_hours: 2
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1117-verdict.json
 ---
 
 ## 1117. feature-verification leaks the async launcher's expected definition digest into verificationCmd
@@ -43,10 +45,10 @@ Impact: a verification pass reports phantom test failures, and the receipt recor
 
 ### Requirements
 
-- [ ] R1. The async worker consumes `SPUR_EXPECTED_DEFINITION_DIGEST` and `SPUR_ASYNC_WORKER` exactly once, at entry of both the `workflow run` and `workflow continue` actions, and removes both from `process.env` before any state executes, so no step child (shell, `agent.run`, guard, nested `spur`) inherits either.
-- [ ] R2. The digest check keeps its current behavior for the worker itself: a mismatching expected digest still refuses to start with the existing message.
-- [ ] R3. Code that currently re-reads `SPUR_ASYNC_WORKER` after entry (`recordSelfPid` in `run`, the resume-owner/`recordSelfPid` branch in `continue`) uses the value captured at entry, so behavior of the async worker itself is unchanged.
-- [ ] R4. A regression test in `apps/cli/tests/commands/workflow.test.ts` proves a step launched under the async-worker env sees neither variable, and that a nested `spur workflow run` on a different definition completes instead of refusing.
+- [x] R1. The async worker consumes `SPUR_EXPECTED_DEFINITION_DIGEST` and `SPUR_ASYNC_WORKER` exactly once, at entry of both the `workflow run` and `workflow continue` actions, and removes both from `process.env` before any state executes, so no step child (shell, `agent.run`, guard, nested `spur`) inherits either.
+- [x] R2. The digest check keeps its current behavior for the worker itself: a mismatching expected digest still refuses to start with the existing message.
+- [x] R3. Code that currently re-reads `SPUR_ASYNC_WORKER` after entry (`recordSelfPid` in `run`, the resume-owner/`recordSelfPid` branch in `continue`) uses the value captured at entry, so behavior of the async worker itself is unchanged.
+- [x] R4. A regression test in `apps/cli/tests/commands/workflow.test.ts` proves a step launched under the async-worker env sees neither variable, and that a nested `spur workflow run` on a different definition completes instead of refusing.
 
 ### Acceptance Criteria
 
@@ -118,15 +120,46 @@ Scenario: AC3 — A genuine digest mismatch still refuses (req: R2)
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Consume the launcher→worker handshake once at entry of the `workflow run` and `workflow continue` actions, so no step child inherits it. Single production file, mirroring the `SPUR_WORKFLOW_RUN_ACTIVE` precedent.
+
+- `apps/cli/src/commands/workflow.ts:106-118` — new module-private `takeAsyncWorkerEnv()` next to `clearWorkflowRunActive`: captures `SPUR_EXPECTED_DEFINITION_DIGEST` + `SPUR_ASYNC_WORKER==='1'` and removes both from `process.env` (via the `@gobing-ai/spur-config` env helpers) before returning them.
+- `apps/cli/src/commands/workflow.ts:630` — `run` action calls it as its first statement (before the nested-run guard, resolution, and any spawn); the captured `expectedDigest` drives the worker's own startup check (`apps/cli/src/commands/workflow.ts:957-979`, refusal message and behavior unchanged) and `isAsyncWorker` drives `recordSelfPid` (`apps/cli/src/commands/workflow.ts:1178`).
+- `apps/cli/src/commands/workflow.ts:1240,1449` — `continue` action consumes at entry; the resume-owner branch uses the captured `isAsyncWorker` instead of re-reading the env.
+- Launcher untouched: `spawnAsyncWorkflowWorker` at `apps/cli/src/commands/workflow.ts:124-145` builds the worker env explicitly and re-injects both variables, so removing them from the parent cannot affect the worker it launches. `SPUR_RUN_ID` lineage and all other env vars unchanged.
+
+Rationale: the two variables have exactly one legitimate consumer each (the worker's own startup digest check and pid/resume-owner recording). Removing them at worker entry covers every child kind (shell steps, `agent.run`, guards, nested `spur`) at one boundary — per-child `env` filtering would need edits in every executor and misses future ones.
+
+AC1 mechanism note: the task's scenario writes `${SPUR_EXPECTED_DEFINITION_DIGEST:-unset}` from the step, but the engine's shell-template pass resolves every `${...}` ref in a shell `command` and throws on non-`vars.`/`env.` refs, so `${VAR:-unset}` cannot survive authoring. The regression test asserts the identical property with brace-free `$NAME` + `-n` probes: the step child classifies each variable as `set`/`unset` and the file must read `unset unset`.
+
+Tests (`apps/cli/tests/commands/workflow.test.ts`):
+- `apps/cli/tests/commands/workflow.test.ts:292` (AC1/R1): step under the real digest + `SPUR_ASYNC_WORKER=1` probes both variables — file reads `unset unset`.
+- `apps/cli/tests/commands/workflow.test.ts:345` (AC2/R4): nested `spur workflow run` on a different definition completes (exit 0, JSON `status: done`, no "refusing to start") under the async-worker env.
+- `apps/cli/tests/commands/workflow.test.ts:407` (AC3/R2): a genuine expected-digest mismatch still refuses with the existing "differs from the expected digest" message and runs no state (marker file absent).
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | consume-once helper reads+removes both vars apps/cli/src/commands/workflow.ts:112-118; first statement of run (workflow.ts:627-628) and continue (:1240); no residual getEnvVar readers repo-wide; launcher re-injects child env (workflow.ts:134, :810) |
+| R2 | MET | refusal unchanged: expectedDigestMismatch apps/cli/src/commands/workflow.ts:365-377 same message, driven by captured digest at :979 |
+| R3 | MET | no post-entry re-reads: recordSelfPid apps/cli/src/commands/workflow.ts:1178; resume-owner branch :1449-1453 |
+| R4 | MET | AC1/AC2/AC3 tests apps/cli/tests/commands/workflow.test.ts:292/:345/:407; env restored in finally; stash-reverted regression signal (AC1+AC2 red, AC3 green without fix) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -141,4 +174,6 @@ Scenario: AC3 — A genuine digest mismatch still refuses (req: R2)
 ### History
 
 - 2026-10-07T21:24:30.969Z backlog → todo (system)
+- 2026-10-08T04:20:12.519Z todo → wip (system)
+- 2026-10-08T05:30:03.362Z wip → done (system)
 

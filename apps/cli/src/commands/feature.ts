@@ -535,6 +535,9 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
                         dryRun: options.dryRun,
                         forceConfirm: options.force,
                         force: options.force,
+                        // 1119: the completion-boundary receipt probe reads the same run store
+                        // `feature check` / `feature advance` already consult.
+                        receiptRunPort: await makeReceiptRunPort(context),
                     });
                     if (options.json) {
                         context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
@@ -560,6 +563,8 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
                         dryRun: options.dryRun,
                         forceConfirm: options.force,
                         force: options.force,
+                        // 1119: same run-store port as --all / check / advance.
+                        receiptRunPort: await makeReceiptRunPort(context),
                     });
                     if (options.json) {
                         context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
@@ -574,6 +579,13 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
                         context.output.write(
                             `Feature ${id}: [${tag}] ${result.proposal.from} -> ${result.proposal.to} (${result.proposal.reason})`,
                         );
+                        // 1119 R4: name the receipt finding so a caller sees why `done` was withheld.
+                        if (result.proposal.receiptPending) {
+                            for (const f of result.proposal.gateFindings ?? []) {
+                                const tag = f.severity === 'error' ? 'ERR' : 'WARN';
+                                context.output.write(`  [${tag}] ${f.layer} ${f.section}: ${f.message}`);
+                            }
+                        }
                     }
                 }
             } catch (err) {

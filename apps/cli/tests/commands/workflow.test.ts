@@ -11,6 +11,7 @@ import {
     _resetAgentServiceShimsForTest,
     buildWorkflowSteps,
     projectWorkflowProgress,
+    resolveWorkflowDefinition,
     type TimelineActionDecision,
     type TimelineEvent,
     type WorkflowProgressProjection,
@@ -34,6 +35,7 @@ import {
     waitForResumeClaim,
     waitForRunRegistration,
 } from '../../src/commands/workflow';
+import { EMBEDDED_SPUR_SCHEMAS } from '../../src/config/embedded-schemas';
 import { main } from '../../src/index';
 import type { CommandOutput } from '../../src/output';
 import { renderWorkflowMermaid } from '../../src/workflow/mermaid-render';
@@ -277,6 +279,178 @@ describe('workflow command (main)', () => {
         } finally {
             if (prior === undefined) removeEnvVar('SPUR_WORKFLOW_RUN_ACTIVE');
             else setEnvVar('SPUR_WORKFLOW_RUN_ACTIVE', prior);
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+
+    // ── 1117: the async launcher's handshake (SPUR_EXPECTED_DEFINITION_DIGEST +
+    // SPUR_ASYNC_WORKER) must be consumed at worker entry. A step child inherits the
+    // parent env, so a leaked expectation makes every nested `workflow run` on a
+    // different definition refuse with a phantom digest mismatch. The probes use
+    // brace-free `$NAME` expansion: the engine's template pass resolves every
+    // `${...}` ref in a shell command, so `${VAR:-unset}` would fail validation. ──
+    test('a step under the async-worker env sees neither the expected digest nor the worker flag (1117 AC1)', async () => {
+        const dir = await createTempProject();
+        const envProbe = join(dir, 'env-probe.txt');
+        const workflowFile = join(dir, 'async-env.yaml');
+        await writeFile(
+            workflowFile,
+            `name: cli-async-env-flow
+kind: state-machine
+initialState: start
+states:
+  - id: start
+    onEnter:
+      - kind: shell
+        options:
+          command: |
+            if [ -n "$SPUR_EXPECTED_DEFINITION_DIGEST" ]; then d=set; else d=unset; fi
+            if [ -n "$SPUR_ASYNC_WORKER" ]; then w=set; else w=unset; fi
+            printf '%s %s\\n' "$d" "$w" > '${envProbe}'
+  - id: done
+transitions:
+  - from: start
+    to: done
+terminalStates:
+  - done
+`,
+        );
+        // The real digest so the worker's own startup check passes and the step runs.
+        const { digest } = await resolveWorkflowDefinition(dir, workflowFile, {
+            embeddedSchemas: EMBEDDED_SPUR_SCHEMAS,
+        });
+        const priorDigest = getEnvVar('SPUR_EXPECTED_DEFINITION_DIGEST');
+        const priorWorker = getEnvVar('SPUR_ASYNC_WORKER');
+        setEnvVar('SPUR_EXPECTED_DEFINITION_DIGEST', digest);
+        setEnvVar('SPUR_ASYNC_WORKER', '1');
+        const output = createCapturedOutput();
+        try {
+            const exitCode = await main(['workflow', 'run', '--run-id', 'async-env-1', workflowFile], {
+                output,
+                cwd: dir,
+                dbUrl: ':memory:',
+            });
+
+            expect(exitCode).toBe(0);
+            expect((await readFile(envProbe, 'utf8')).trim()).toBe('unset unset');
+        } finally {
+            if (priorDigest === undefined) removeEnvVar('SPUR_EXPECTED_DEFINITION_DIGEST');
+            else setEnvVar('SPUR_EXPECTED_DEFINITION_DIGEST', priorDigest);
+            if (priorWorker === undefined) removeEnvVar('SPUR_ASYNC_WORKER');
+            else setEnvVar('SPUR_ASYNC_WORKER', priorWorker);
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('a nested workflow run on a different definition completes under the async worker (1117 AC2)', async () => {
+        const dir = await createTempProject();
+        const outerFile = join(dir, 'outer.yaml');
+        const nestedFile = join(dir, 'nested.yaml');
+        await writeFile(nestedFile, MINIMAL_WORKFLOW_YAML);
+        const nestedOut = join(dir, 'nested-out.json');
+        const nestedErr = join(dir, 'nested-err.txt');
+        const nestedExit = join(dir, 'nested-exit.txt');
+        const cliEntry = join(import.meta.dir, '..', '..', 'src', 'index.ts');
+        await writeFile(
+            outerFile,
+            `name: cli-nested-outer-flow
+kind: state-machine
+initialState: start
+states:
+  - id: start
+    onEnter:
+      - kind: shell
+        options:
+          command: |
+            unset SPUR_WORKFLOW_RUN_ACTIVE
+            bun run '${cliEntry}' workflow run '${nestedFile}' --run-id nested-1117 --json > '${nestedOut}' 2> '${nestedErr}'
+            echo $? > '${nestedExit}'
+  - id: done
+transitions:
+  - from: start
+    to: done
+terminalStates:
+  - done
+`,
+        );
+        const { digest } = await resolveWorkflowDefinition(dir, outerFile, {
+            embeddedSchemas: EMBEDDED_SPUR_SCHEMAS,
+        });
+        const priorDigest = getEnvVar('SPUR_EXPECTED_DEFINITION_DIGEST');
+        const priorWorker = getEnvVar('SPUR_ASYNC_WORKER');
+        setEnvVar('SPUR_EXPECTED_DEFINITION_DIGEST', digest);
+        setEnvVar('SPUR_ASYNC_WORKER', '1');
+        const output = createCapturedOutput();
+        try {
+            const exitCode = await main(['workflow', 'run', '--run-id', 'nested-outer-1', outerFile], {
+                output,
+                cwd: dir,
+                dbUrl: ':memory:',
+            });
+
+            expect(exitCode).toBe(0);
+            // The nested run on the different definition completed instead of refusing.
+            expect((await readFile(nestedExit, 'utf8')).trim()).toBe('0');
+            const nestedOutput = `${await readFile(nestedOut, 'utf8')}\n${await readFile(nestedErr, 'utf8')}`;
+            expect(nestedOutput).not.toContain('refusing to start');
+            expect(nestedOutput).not.toContain('differs from the expected digest');
+            expect(JSON.parse(await readFile(nestedOut, 'utf8'))).toMatchObject({ status: 'done' });
+        } finally {
+            if (priorDigest === undefined) removeEnvVar('SPUR_EXPECTED_DEFINITION_DIGEST');
+            else setEnvVar('SPUR_EXPECTED_DEFINITION_DIGEST', priorDigest);
+            if (priorWorker === undefined) removeEnvVar('SPUR_ASYNC_WORKER');
+            else setEnvVar('SPUR_ASYNC_WORKER', priorWorker);
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('a genuine expected-digest mismatch still refuses before any state runs (1117 AC3)', async () => {
+        const dir = await createTempProject();
+        const marker = join(dir, 'marker.txt');
+        const workflowFile = join(dir, 'mismatch.yaml');
+        await writeFile(
+            workflowFile,
+            `name: cli-digest-mismatch-flow
+kind: state-machine
+initialState: start
+states:
+  - id: start
+    onEnter:
+      - kind: shell
+        options:
+          command: |
+            printf 'ran' > '${marker}'
+  - id: done
+transitions:
+  - from: start
+    to: done
+terminalStates:
+  - done
+`,
+        );
+        const priorDigest = getEnvVar('SPUR_EXPECTED_DEFINITION_DIGEST');
+        const priorWorker = getEnvVar('SPUR_ASYNC_WORKER');
+        setEnvVar(
+            'SPUR_EXPECTED_DEFINITION_DIGEST',
+            'sha256:0000000000000000000000000000000000000000000000000000000000000000',
+        );
+        setEnvVar('SPUR_ASYNC_WORKER', '1');
+        const output = createCapturedOutput();
+        try {
+            const exitCode = await main(['workflow', 'run', '--run-id', 'digest-mismatch-1', workflowFile], {
+                output,
+                cwd: dir,
+                dbUrl: ':memory:',
+            });
+
+            expect(exitCode).toBe(1);
+            expect(output.errors.join('\n')).toContain('differs from the expected digest');
+            expect(await exists(marker)).toBe(false);
+        } finally {
+            if (priorDigest === undefined) removeEnvVar('SPUR_EXPECTED_DEFINITION_DIGEST');
+            else setEnvVar('SPUR_EXPECTED_DEFINITION_DIGEST', priorDigest);
+            if (priorWorker === undefined) removeEnvVar('SPUR_ASYNC_WORKER');
+            else setEnvVar('SPUR_ASYNC_WORKER', priorWorker);
             await rm(dir, { recursive: true, force: true });
         }
     });

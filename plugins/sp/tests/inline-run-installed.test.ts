@@ -241,6 +241,50 @@ transitions:
 // (`app.persistWorktreeRuns`, …). A twin missing an export fails at runtime in every
 // installed layout, so parity is pinned here: every app.<name> call site in the facade
 // source must be present in both generated twins (exported names survive minification).
+// 1120 AC1: a stale installed bundle (lib/ older than its scripts) fails setup mode with a named
+// version-skew error — bundle path, the missing export, the cause and both remedies — never an
+// `is not a function` TypeError. The stub reproduces the Oct-2025 installed shape: everything
+// setup mode calls except `readInstalledInventory`.
+test('a stale installed bundle fails setup with a named skew error, not a TypeError', () => {
+    const root = mkdtempSync(join(tmpdir(), 'spur-inline-skew-'));
+    const plugin = join(root, 'installed plugin');
+    const project = join(root, 'project');
+    try {
+        mkdirSync(join(plugin, 'scripts'), { recursive: true });
+        mkdirSync(join(plugin, 'lib'), { recursive: true });
+        mkdirSync(project);
+        cpSync(
+            resolve(import.meta.dir, '../scripts/inline-run-setup.mjs'),
+            join(plugin, 'scripts/inline-run-setup.mjs'),
+        );
+        writeFileSync(
+            join(plugin, 'lib/inline-run.generated.mjs'),
+            [
+                'export async function runInlineRunSetup() {',
+                '    return 0;',
+                '}',
+                'export function writeInlineRunOutcome() {}',
+                '',
+            ].join('\n'),
+        );
+        // No --spur-bin: the installed fallback loads the adjacent (stale) bundle.
+        const stale = spawnSync(
+            'node',
+            [join(plugin, 'scripts/inline-run-setup.mjs'), '--run-id', 'skew-run', '--file', 'installed-smoke'],
+            { cwd: project, encoding: 'utf8', timeout: 30_000 },
+        );
+        expect(stale.status, stale.stderr).not.toBe(0);
+        expect(stale.stderr).toContain(join(plugin, 'lib/inline-run.generated.mjs'));
+        expect(stale.stderr).toContain('readInstalledInventory');
+        expect(stale.stderr).toContain('older than its scripts');
+        expect(stale.stderr).toContain('commit b42961b');
+        expect(stale.stderr).toContain('--spur-bin');
+        expect(stale.stderr).not.toContain('is not a function');
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+}, 30_000);
+
 test('generated twins export every app operation the driver facade calls', () => {
     const facade = readFileSync(resolve(import.meta.dir, '../scripts/inline-run-setup.ts'), 'utf8');
     const names = new Set([...facade.matchAll(/\bapp\.([A-Za-z_$][\w$]*)/g)].map((m) => m[1] ?? '').filter(Boolean));

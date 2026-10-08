@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 // Type-only namespace import (erased before bundling; the smoke scanner exempts `import type`).
 import type * as spurApp from '@gobing-ai/spur-app';
 import { getEnvVar } from '../lib/env';
+import { loadInlineApp } from '../lib/inline-run-app';
 
 // EMBEDDED_SPUR_SCHEMAS: declared by the bundle twin, never exported by the barrel — optional
 // intersection member, exactly what the previous structural cast expressed.
@@ -60,6 +61,9 @@ function resolveAppEntry(spurBin: string): { entry: string; portable: boolean } 
     }
     return { entry, portable: true };
 }
+
+const TRACE_EXPORTS = ['runInlineRunTrace', 'isInlineRunCloseStatus', 'isInlineRunActionStatus'] as const;
+const SETUP_EXPORTS = ['readInstalledInventory', 'runInlineRunSetup', 'writeInlineRunOutcome'] as const;
 
 // 0937 R2 closed terminal-reason vocabulary for `--close`. COPIED from
 // packages/app/src/workflow/terminal-reason.ts (no value import); parity test asserts equality.
@@ -126,7 +130,7 @@ async function main(): Promise<void> {
 
     if (fingerprint) {
         if (runId !== '' || file !== '' || taskFiles.length !== 1 || (taskFiles[0] ?? '').trim() === '') usage();
-        const app = (await import(resolveAppEntry(spurBin).entry)) as InlineApp;
+        const { app } = await loadInlineApp<InlineApp>(spurBin, resolveAppEntry, ['runInlineRunFingerprint']);
         process.exit(await app.runInlineRunFingerprint({ taskFile: taskFiles[0] ?? '', featureFile }));
     }
 
@@ -135,7 +139,7 @@ async function main(): Promise<void> {
         if (runId.trim() === '' || status !== '' || node !== '' || kind !== '') usage();
         if (okRaw !== '' || durationRaw !== '') usage();
         if (!SAFE_RUN_ID_RE.test(runId)) refuseUnsafeRunId(runId);
-        const app = (await import(resolveAppEntry(spurBin).entry)) as InlineApp;
+        const { app } = await loadInlineApp<InlineApp>(spurBin, resolveAppEntry, ['runInlineRunTraceBatch']);
         process.exit(await app.runInlineRunTraceBatch({ runId, actionsFile }));
     }
 
@@ -144,8 +148,7 @@ async function main(): Promise<void> {
         if (runId.trim() === '' || node.trim() === '' || optionsJson.trim() === '') usage();
         if (!SAFE_RUN_ID_RE.test(runId)) refuseUnsafeRunId(runId);
         try {
-            const { entry, portable } = resolveAppEntry(spurBin);
-            const app = (await import(entry)) as InlineApp;
+            const { app, portable } = await loadInlineApp<InlineApp>(spurBin, resolveAppEntry, ['runInlineRunDecide']);
             const bundlePath = fileURLToPath(new URL('../lib/inline-run.generated.mjs', import.meta.url));
             const lib = (await import(bundlePath)) as typeof import('../lib/inline-run.generated.mjs');
             // Decide-enabled switch + catalog config resolved ONCE at the driver boundary
@@ -166,7 +169,7 @@ async function main(): Promise<void> {
     if (persistOut) {
         if (fingerprint || decide || action || close || runId !== '' || file !== '') usage();
         if (from.trim() === '' || taskFiles.some((taskFile) => taskFile.trim() === '')) usage();
-        const app = (await import(resolveAppEntry(spurBin).entry)) as InlineApp;
+        const { app } = await loadInlineApp<InlineApp>(spurBin, resolveAppEntry, ['runInlineRunPersistOut']);
         process.exit(await app.runInlineRunPersistOut({ from, taskFiles }));
     }
 
@@ -174,7 +177,7 @@ async function main(): Promise<void> {
         if (action && close) usage();
         if (runId.trim() === '' || status.trim() === '') usage();
         if (!SAFE_RUN_ID_RE.test(runId)) refuseUnsafeRunId(runId);
-        const app = (await import(resolveAppEntry(spurBin).entry)) as InlineApp;
+        const { app } = await loadInlineApp<InlineApp>(spurBin, resolveAppEntry, TRACE_EXPORTS);
         if (close) {
             if (!app.isInlineRunCloseStatus(status)) usage();
             // 0937 R2: failed close needs a declared closed-enum reason — before any write.
@@ -214,8 +217,7 @@ async function main(): Promise<void> {
 
     if (runId.trim() === '' || file.trim() === '') usage();
     if (!SAFE_RUN_ID_RE.test(runId)) refuseUnsafeRunId(runId);
-    const { entry, portable } = resolveAppEntry(spurBin);
-    const app = (await import(entry)) as InlineApp;
+    const { app, portable } = await loadInlineApp<InlineApp>(spurBin, resolveAppEntry, SETUP_EXPORTS);
     let inventory: unknown;
     try {
         // The CLI walk lives in the app service (ADR-130 glue budget): the script passes only the

@@ -8,9 +8,20 @@
  * and exit codes 0/1/2 (design §7.2, §10).
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { rmSync, writeFileSync } from 'node:fs';
+import { readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import {
+    captureFeatureReceiptDigest,
+    completeFeatureVerificationReceipt,
+    DEFAULT_FEATURE_VERIFICATION_CMD,
+    featureReceiptPaths,
+    resolveWorkflowDefinition,
+    startFeatureVerificationReceipt,
+} from '@gobing-ai/spur-app';
+import { ArtifactDao } from '@gobing-ai/spur-domain';
+import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
+import { createMigratedDbAdapter } from '../../src/context';
 import { main } from '../../src/index';
 import { type CapturedOutput, createCapturedOutput } from '../helpers';
 
@@ -681,5 +692,187 @@ Review description
         const code2 = await main(['feature', 'update', fid, '--value', 'val'], { cwd, output: errOut2 });
         expect(code2).toBe(2);
         expect(errOut2.errors.join('')).toContain('--field is required with --value');
+    });
+});
+
+/** Feature/task fixture paths shared by the 1119 receipt-gating tests. */
+const receiptGate = {
+    id: '',
+    featurePath: '',
+    taskPath: '',
+};
+
+/**
+ * 1119 AC2 fixture: record a valid feature-verification receipt (both copies) bound to the
+ * feature's current on-disk content, plus the backing run-store rows the CLI receipt port
+ * validates (terminal done run, persisted definition digest, registered artifact).
+ * The verifier contract and proof digest are captured from `process.cwd()` — the same root
+ * `feature check` resolves them against at validation time.
+ */
+async function fixturePassReceipt(featureId: string, featureContent: string): Promise<void> {
+    const selected = await resolveWorkflowDefinition(process.cwd(), 'feature-verification');
+    const vars = selected.workflow.vars as { verificationCmd?: unknown } | undefined;
+    const cmd =
+        typeof vars?.verificationCmd === 'string' && vars.verificationCmd.length > 0
+            ? vars.verificationCmd
+            : DEFAULT_FEATURE_VERIFICATION_CMD;
+    // defaultVerdictRunDir(<cwd>/docs/tasks): the fixture uses the default docs/ layout.
+    const runDir = join(cwd, '.spur', 'run');
+    const fs = createNodeFileSystem();
+    const inputDigest = await captureFeatureReceiptDigest(process.cwd(), featureContent);
+    const runId = `receipt-${featureId.toLowerCase()}`;
+    const running = await startFeatureVerificationReceipt(fs, runDir, {
+        featureId,
+        runId,
+        workdir: cwd,
+        verifier: {
+            name: 'feature-verification',
+            sourcePath: selected.path,
+            layer: selected.layer,
+            definitionDigest: selected.digest,
+        },
+        verificationCmd: cmd,
+        inputDigest,
+    });
+    await completeFeatureVerificationReceipt(fs, runDir, running, { status: 'PASS', inputDigest });
+
+    const db = await createMigratedDbAdapter(cwd);
+    try {
+        await db.run(
+            'INSERT INTO runs (id, status, workflow_name, mode, started_at, metadata_json) VALUES (?, ?, ?, ?, ?, ?)',
+            runId,
+            'done',
+            'feature-verification',
+            'inline',
+            Date.now(),
+            JSON.stringify({ definitionDigest: selected.digest }),
+        );
+        await new ArtifactDao(db).record({
+            runId,
+            path: featureReceiptPaths(runDir, featureId, runId).runScoped,
+            kind: 'evidence',
+        });
+    } finally {
+        db.close();
+    }
+}
+
+describe('spur feature sync receipt gating (1119)', () => {
+    test('sync stops a fully-done feature at verifying while the feature-verification receipt is missing (1119 AC1)', async () => {
+        // The suite's other tests exhaust the A–Z top-level letter ceiling, so place the
+        // fixture feature file directly (same template shape as `feature create`) on the
+        // first free child ID (<letter><digit>) instead of allocating through the CLI.
+        await mkdir(join(cwd, 'docs', 'features'), { recursive: true });
+        const featureFiles = readdirSync(join(cwd, 'docs', 'features'));
+        let id = '';
+        outer: for (const letter of 'ABCDEFGHIJKLMNOPQRSTUVWXYZ') {
+            for (const digit of '123456789') {
+                if (!featureFiles.some((f) => f.startsWith(`${letter}${digit}_`))) {
+                    id = `${letter}${digit}`;
+                    break outer;
+                }
+            }
+        }
+        expect(id).not.toBe('');
+        receiptGate.id = id;
+        const now = new Date().toISOString();
+        receiptGate.featurePath = join(cwd, 'docs', 'features', `${id}_receipt-gate-feature.md`);
+        // File-wins: place the feature at `verifying` directly — reaching verifying through a
+        // real sync hop runs the lifecycle shell guard, which cannot pass in the test runner
+        // (resolveSpurBin resolves the test file itself under `bun test`).
+        writeFileSync(
+            receiptGate.featurePath,
+            `---
+schema_version: 1
+id: "${id}"
+name: "Receipt Gate Feature"
+status: verifying
+priority: P2
+tags: []
+created_at: "${now}"
+updated_at: "${now}"
+---
+
+# ${id}: Receipt Gate Feature
+
+## Goal
+
+## Scope
+
+- In:
+- Out:
+
+## Acceptance Criteria
+
+\`\`\`gherkin
+Feature: Receipt Gate Feature
+
+  Scenario: Basic acceptance
+    Given a precondition
+    When an action
+    Then an expected outcome
+\`\`\`
+
+## Tasks
+
+<!-- AUTO-GENERATED by spur feature refresh -->
+<!-- END AUTO-GENERATED -->
+`,
+        );
+        await mkdir(join(cwd, 'docs', 'tasks'), { recursive: true });
+        receiptGate.taskPath = join(cwd, 'docs', 'tasks', '9911_receipt-gate-task.md');
+        writeFileSync(
+            receiptGate.taskPath,
+            `---
+schema_version: 1
+wbs: "9911"
+name: "Receipt Gate Task"
+title: "Receipt Gate Task"
+status: "done"
+feature_id: "${receiptGate.id}"
+created_at: "${new Date().toISOString()}"
+updated_at: "${new Date().toISOString()}"
+---
+
+## Description
+Task description
+`,
+        );
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['feature', 'sync', receiptGate.id, '--json'], { cwd, output });
+        expect(exitCode).toBe(0);
+        const parsed = JSON.parse(lastMessage(output));
+        expect(parsed.proposal.from).toBe('verifying');
+        expect(parsed.proposal.to).toBe('verifying');
+        expect(parsed.appliedHops).toEqual([]);
+        expect(parsed.proposal.receiptPending).toBe(true);
+        expect(parsed.proposal.gateFindings.map((f: { code: string }) => f.code)).toContain(
+            'L4.feature-receipt-missing',
+        );
+
+        const showOut = createCapturedOutput();
+        await main(['feature', 'show', receiptGate.id, '--json'], { cwd, output: showOut });
+        expect(JSON.parse(lastMessage(showOut)).status).toBe('verifying');
+    });
+
+    test('sync releases done once a valid receipt lands, not a suppressed BLOCKED replay (1119 AC2)', async () => {
+        const featureContent = readFileSync(receiptGate.featurePath, 'utf8');
+        await fixturePassReceipt(receiptGate.id, featureContent);
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['feature', 'sync', receiptGate.id, '--dry-run', '--json'], { cwd, output });
+        expect(exitCode).toBe(0);
+        const parsed = JSON.parse(lastMessage(output));
+        // The derivation now releases done. Applying the hop runs the lifecycle done-guard,
+        // which cannot pass under the test runner, hence --dry-run asserts the derivation
+        // contract; the applied-path completion is covered by the FeatureService unit suite.
+        expect(parsed.proposal.to).toBe('done');
+        expect(parsed.proposal.hops).toEqual(['done']);
+        expect(parsed.proposal.receiptPending).toBeUndefined();
+        expect(parsed.suppressed).toBeUndefined();
+
+        rmSync(receiptGate.featurePath, { force: true });
+        rmSync(receiptGate.taskPath, { force: true });
     });
 });

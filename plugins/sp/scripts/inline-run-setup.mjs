@@ -13,6 +13,17 @@ function getEnvVar(name, fallback) {
   return raw === undefined ? fallback : raw;
 }
 
+// plugins/sp/lib/inline-run-app.ts
+async function loadInlineApp(spurBin, resolveAppEntry, required) {
+  const { entry, portable } = resolveAppEntry(spurBin);
+  const app = await import(entry);
+  const missing = portable ? required.filter((name) => typeof app[name] !== "function") : [];
+  if (missing.length > 0) {
+    throw new Error(`inline application bundle ${entry} is older than its scripts — missing ${missing.join(", ")}. Reinstall sp with a superskill release that stages lib/ (commit b42961b), or pass --spur-bin <spur checkout>/apps/cli/src/index.ts.`);
+  }
+  return { app, portable };
+}
+
 // plugins/sp/scripts/inline-run-setup.ts
 function usage() {
   const text = [
@@ -55,6 +66,8 @@ function resolveAppEntry(spurBin) {
   }
   return { entry, portable: true };
 }
+var TRACE_EXPORTS = ["runInlineRunTrace", "isInlineRunCloseStatus", "isInlineRunActionStatus"];
+var SETUP_EXPORTS = ["readInstalledInventory", "runInlineRunSetup", "writeInlineRunOutcome"];
 var TERMINAL_REASONS = new Set([
   "done",
   "paused-operator",
@@ -118,7 +131,7 @@ async function main() {
   if (fingerprint) {
     if (runId !== "" || file !== "" || taskFiles.length !== 1 || (taskFiles[0] ?? "").trim() === "")
       usage();
-    const app2 = await import(resolveAppEntry(spurBin).entry);
+    const { app: app2 } = await loadInlineApp(spurBin, resolveAppEntry, ["runInlineRunFingerprint"]);
     process.exit(await app2.runInlineRunFingerprint({ taskFile: taskFiles[0] ?? "", featureFile }));
   }
   if (actionsFile !== "") {
@@ -130,7 +143,7 @@ async function main() {
       usage();
     if (!SAFE_RUN_ID_RE.test(runId))
       refuseUnsafeRunId(runId);
-    const app2 = await import(resolveAppEntry(spurBin).entry);
+    const { app: app2 } = await loadInlineApp(spurBin, resolveAppEntry, ["runInlineRunTraceBatch"]);
     process.exit(await app2.runInlineRunTraceBatch({ runId, actionsFile }));
   }
   if (decide) {
@@ -141,8 +154,7 @@ async function main() {
     if (!SAFE_RUN_ID_RE.test(runId))
       refuseUnsafeRunId(runId);
     try {
-      const { entry: entry2, portable: portable2 } = resolveAppEntry(spurBin);
-      const app2 = await import(entry2);
+      const { app: app2, portable: portable2 } = await loadInlineApp(spurBin, resolveAppEntry, ["runInlineRunDecide"]);
       const bundlePath = fileURLToPath(new URL("../lib/inline-run.generated.mjs", import.meta.url));
       const lib = await import(bundlePath);
       const loadOpts = portable2 ? { embeddedSchemas: lib.EMBEDDED_SPUR_SCHEMAS } : undefined;
@@ -163,7 +175,7 @@ async function main() {
       usage();
     if (from.trim() === "" || taskFiles.some((taskFile) => taskFile.trim() === ""))
       usage();
-    const app2 = await import(resolveAppEntry(spurBin).entry);
+    const { app: app2 } = await loadInlineApp(spurBin, resolveAppEntry, ["runInlineRunPersistOut"]);
     process.exit(await app2.runInlineRunPersistOut({ from, taskFiles }));
   }
   if (action || close) {
@@ -173,7 +185,7 @@ async function main() {
       usage();
     if (!SAFE_RUN_ID_RE.test(runId))
       refuseUnsafeRunId(runId);
-    const app2 = await import(resolveAppEntry(spurBin).entry);
+    const { app: app2 } = await loadInlineApp(spurBin, resolveAppEntry, TRACE_EXPORTS);
     if (close) {
       if (!app2.isInlineRunCloseStatus(status))
         usage();
@@ -214,8 +226,7 @@ async function main() {
     usage();
   if (!SAFE_RUN_ID_RE.test(runId))
     refuseUnsafeRunId(runId);
-  const { entry, portable } = resolveAppEntry(spurBin);
-  const app = await import(entry);
+  const { app, portable } = await loadInlineApp(spurBin, resolveAppEntry, SETUP_EXPORTS);
   let inventory;
   try {
     inventory = await app.readInstalledInventory({
