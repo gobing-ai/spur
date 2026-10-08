@@ -6,7 +6,7 @@ status: verifying
 priority: P1
 tags: [rd3-migration, wave-2]
 created_at: 2026-06-12T23:45:00.000Z
-updated_at: "2026-08-24T17:41:09.807Z"
+updated_at: "2026-10-08T17:38:10.011Z"
 ---
 
 # F3: Feature management CLI
@@ -18,8 +18,9 @@ one-active-goal (B09), the INDEX tree, traceability, and cascade-rename moves.
 
 ## Scope
 
-create/show/update/list/refresh/check/move verbs, ID allocation + ≤9-children enforcement,
-`## Tasks` auto-population, L4 traceability. **Out:** lifecycle wiring (F4).
+- In: create/show/update/list/refresh/check/move verbs, ID allocation + ≤9-children enforcement,
+  `## Tasks` auto-population, L4 traceability.
+- Out: lifecycle wiring (F4).
 
 ## Acceptance Criteria
 

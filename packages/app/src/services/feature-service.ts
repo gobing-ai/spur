@@ -986,6 +986,7 @@ export class FeatureService {
                 const doc = MarkdownDocument.parse(raw, 'task');
                 doc.setFrontmatterField('feature_id', newFid);
                 doc.setFrontmatterField('updated_at', now);
+                appendFeatureHistory(doc, now, `feature_id ${task.featureId} → ${newFid}`);
                 removed.push({ path: task.path, content: raw });
                 await atomicWriteAsync(
                     task.path,
@@ -1262,7 +1263,7 @@ function basename(filePath: string): string {
 }
 
 /**
- * Append a `## History` bullet line to a feature doc (DD-14 move audit trail).
+ * Append a History bullet line to a feature or task doc (DD-14 move audit trail).
  * Mirrors the write-service bullet format: `- {ISO-ts} {note} (system)`. Creates
  * the section body if `## History` exists but is empty.
  */

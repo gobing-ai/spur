@@ -4,7 +4,7 @@ name: record's feature sync can mark a feature done before its feature-verificat
 status: done
 template: feature-impl
 created_at: 2026-10-07T20:52:30.428Z
-updated_at: "2026-10-08T07:06:29.212Z"
+updated_at: "2026-10-08T17:22:52.615Z"
 
 feature_id: F3
 priority: P1
@@ -137,15 +137,20 @@ Tests:
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
-- Confidence: HIGH
+- Confidence: MEDIUM
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/feature-service.ts:534-542` second probe (`asStatus: 'done'` + `receiptRunPort`, filter `L4.feature-receipt-*` errors only, after L4 gate passes); stop at `to: 'verifying'` with `receiptPending`/`gateFindings` at `packages/app/src/services/feature-service.ts:544-568`; proven by `packages/app/tests/services/feature-service.test.ts:1019-1053` |
-| R2 | MET | `receiptPending` deliberately not `gateBlocked` (`packages/app/src/services/feature-service.ts:55`, rationale `:546-549`); no BLOCKED file persisted asserted `packages/app/tests/services/feature-service.test.ts:1054`; next sync without `--force` completes `:1056-1062`; role recorded in `docs/design/workflow-execution-economy.md:333` |
-| R3 | MET | `FeatureSyncOptions.receiptRunPort` `packages/app/src/services/feature-service.ts:65`, forwarded `:649`; CLI passes `makeReceiptRunPort(context)` for `sync --all` `apps/cli/src/commands/feature.ts:538-540` and `sync <id>` `:566-568` (port fn `:605`) |
-| R4 | MET | `--json` serializes `proposal.gateFindings` via `toEnvelopeJson(result)`; code+message asserted `apps/cli/tests/commands/feature.test.ts:845-852`; human output prints findings when `receiptPending` `apps/cli/src/commands/feature.ts:582-588`; exit code stays 0 (`apps/cli/tests/commands/feature.test.ts:844`) |
-| R5 | MET | Real-receipt fixture `recordPassReceipt` `packages/app/tests/services/feature-service.test.ts:49-83`; existing `done`-tests carry receipts, not weakened asserts (`:946`, `:992`, `:1127`); AC1 `apps/cli/tests/commands/feature.test.ts:761-857` (stays `verifying`, disk status, names `L4.feature-receipt-missing`); AC2 `:859-879` (`hops: ['done']`, no `receiptPending`, no `suppressed` replay) |
+| R1 | MET | second completion-boundary probe with asStatus done plus the receipt port `packages/app/src/services/feature-service.ts:535`, filtered to L4.feature-receipt errors, returns to verifying with gateFindings `packages/app/src/services/feature-service.ts:558`; proven by `packages/app/tests/services/feature-service.test.ts:1023` (58 pass / 0 fail this run from repo root and from packages/app) |
+| R2 | MET | receiptPending is a separate flag, not gateBlocked `packages/app/src/services/feature-service.ts:55`; no persisted BLOCKED file asserted `packages/app/tests/services/feature-service.test.ts:1058` and the next sync completes without force in the same test |
+| R3 | MET | FeatureSyncOptions.receiptRunPort `packages/app/src/services/feature-service.ts:65` forwarded at `packages/app/src/services/feature-service.ts:649`; CLI sync --all and sync id pass the project port `apps/cli/src/commands/feature.ts:540` and `apps/cli/src/commands/feature.ts:567` |
+| R4 | MET | receiptPending proposal carries code and message in gateFindings (asserted `packages/app/tests/services/feature-service.test.ts:1053`); human output prints them `apps/cli/src/commands/feature.ts:582`; CLI JSON assertion `apps/cli/tests/commands/feature.test.ts:851` not executable in this sandbox (.git/config write denied) |
+| R5 | MET | real-receipt fixture `packages/app/tests/services/feature-service.test.ts:49` now folds learnings like production `plugins/sp/scripts/feature-verification-steps.ts:203-207`; done-expecting sync tests carry receipts; fixture defect fixed this run (4 fail from repo root before, 0 after) |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Sync without a receipt stops at verifying and reports the receipt finding (req: R1, R2, R4) | MET | test | service-level sync stays at verifying, names L4.feature-receipt-missing and persists no BLOCKED file `packages/app/tests/services/feature-service.test.ts:1023` green this run; CLI wiring re-read `apps/cli/src/commands/feature.ts:567`; CLI test `apps/cli/tests/commands/feature.test.ts:761` blocked by the sandbox here |
+| AC2 — Sync with a valid receipt completes the feature (req: R1, R3, R5) | MET | test | same service test lands a valid receipt and the next sync reaches done without force `packages/app/tests/services/feature-service.test.ts:1023` green this run; CLI test `apps/cli/tests/commands/feature.test.ts:859` (fixture fixed the same way) blocked by the sandbox here |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

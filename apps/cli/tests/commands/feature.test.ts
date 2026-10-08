@@ -8,7 +8,7 @@
  * and exit codes 0/1/2 (design §7.2, §10).
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
@@ -719,7 +719,11 @@ async function fixturePassReceipt(featureId: string, featureContent: string): Pr
     // defaultVerdictRunDir(<cwd>/docs/tasks): the fixture uses the default docs/ layout.
     const runDir = join(cwd, '.spur', 'run');
     const fs = createNodeFileSystem();
-    const inputDigest = await captureFeatureReceiptDigest(process.cwd(), featureContent);
+    // Fold learnings exactly as validation does (feature-check.ts) — from the repo root
+    // `.spur/context/learnings.md` exists, and omitting it made the receipt stale.
+    const learningsPath = join(process.cwd(), '.spur', 'context', 'learnings.md');
+    const learnings = existsSync(learningsPath) ? readFileSync(learningsPath, 'utf8') : undefined;
+    const inputDigest = await captureFeatureReceiptDigest(process.cwd(), featureContent, learnings);
     const runId = `receipt-${featureId.toLowerCase()}`;
     const running = await startFeatureVerificationReceipt(fs, runDir, {
         featureId,

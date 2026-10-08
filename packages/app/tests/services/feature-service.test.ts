@@ -56,7 +56,11 @@ async function recordPassReceipt(featureId: string): Promise<void> {
             ? vars.verificationCmd
             : DEFAULT_FEATURE_VERIFICATION_CMD;
     const runDir = defaultVerdictRunDir(tasksDir);
-    const inputDigest = await captureFeatureReceiptDigest(process.cwd(), feature.content);
+    // Fold learnings exactly as validation does (feature-check.ts) — the repo root carries
+    // `.spur/context/learnings.md`, so omitting it made the receipt stale from the root.
+    const learningsPath = join(process.cwd(), '.spur', 'context', 'learnings.md');
+    const learnings = existsSync(learningsPath) ? readFileSync(learningsPath, 'utf8') : undefined;
+    const inputDigest = await captureFeatureReceiptDigest(process.cwd(), feature.content, learnings);
     const running = await startFeatureVerificationReceipt(receiptFs, runDir, {
         featureId,
         runId: `receipt-${featureId.toLowerCase()}`,
@@ -304,6 +308,27 @@ describe('FeatureService', () => {
             expect(a12.ref.id).toBe(`${a1.ref.id}2`);
             expect(deepSvc.depthOf(a11.ref.id)).toBe(3);
             expect(deepSvc.parentOf(a11.ref.id)).toBe(a1.ref.id);
+        });
+
+        // F3 "Hierarchical ID allocation", pinned exactly: next child digit + its file name, and
+        // the next free group letter for a parentless create.
+        test('given A with A1 and A2, --parent A allocates A3_x.md and no parent allocates B', async () => {
+            const fs = createNodeFileSystem(root);
+            const dir = join(root, 'f3-features');
+            await fs.ensureDir(dir);
+            const s = new FeatureService({
+                fs,
+                featuresDir: dir,
+                tasksDir,
+                writeService: new PlanningWriteService({ fs }),
+            });
+            await s.create('Group');
+            await s.create('One', 'A');
+            await s.create('Two', 'A');
+            const a3 = await s.create('X', 'A');
+            expect(a3.ref.id).toBe('A3');
+            expect(await fs.exists(join(dir, 'A3_x.md'))).toBe(true);
+            expect((await s.create('Next group')).ref.id).toBe('B');
         });
 
         test('concurrent creates never produce duplicate IDs — the loser fails loudly, not silently', async () => {
@@ -669,6 +694,8 @@ describe('FeatureService', () => {
             expect(result.tasksUpdated).toEqual(['0001']);
             const task = await fs.readFile(join(tasksDir, '0001_impl-sub.md'));
             expect(task).toContain('feature_id: B1');
+            // F3 "Moves cascade": the edge rewrite is audited in the task's History too.
+            expect(task).toMatch(/^- \S+ feature_id A1 → B1 \(system\)$/m);
             cleanup();
         });
 
