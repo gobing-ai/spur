@@ -568,7 +568,12 @@ describe('WorkflowActionTraceWriter — shell invocation stamping (dogfood 2026-
             data: { exitCode: 0 },
         });
         expect(
-            (await persistedResult(secretId).then((r) => (r.data as Record<string, unknown>).invocation)).command,
+            (
+                (await persistedResult(secretId).then((r) => (r.data as Record<string, unknown>).invocation)) as Record<
+                    string,
+                    unknown
+                >
+            ).command,
         ).toBe('[shell command redacted]');
     });
 
