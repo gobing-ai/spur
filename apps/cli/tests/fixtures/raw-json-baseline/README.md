@@ -11,9 +11,9 @@ regression reddens the suite instead of diffing away silently:
 ## When to recapture
 
 Only after an **intentional** change that legitimately alters these bytes — e.g. adding/removing
-a rule category in `config/rules/`, changing the `recommended-pre-check` preset, or changing the
-JSON envelope serialization. Recapture in the same commit as the intentional change and say so in
-its message. Never recapture to force a red suite green.
+a rule category in the repo rules source-of-truth (ADR-015), changing the `recommended-pre-check`
+preset, or changing the JSON envelope serialization. Recapture in the same commit as the
+intentional change and say so in its message. Never recapture to force a red suite green.
 
 ## How to recapture
 

@@ -2,10 +2,8 @@
   "valid": true,
   "kind": "preset",
   "source": "recommended-pre-check",
-  "ruleCount": 52,
+  "ruleCount": 50,
   "rules": [
-    "cited-api-claims",
-    "cited-version-strings",
     "cli-json-output",
     "cli-register-pattern",
     "drizzle-only-in-domain-schema",
