@@ -142,6 +142,7 @@ function runInlineSmoke(
         );
     }
     const spurBin = makeFakeSpur(cwd);
+    const runId = 'inline-smoke-run';
     const vars: Record<string, string> = {
         ...PIPELINE.vars,
         wbs: 'fixture-0503',
@@ -149,6 +150,11 @@ function runInlineSmoke(
         spurBin,
         formatCmd: 'true',
         qualityGateCmd: 'true',
+        // The real driver injects the run id on the __runId seam (workflow-service) and every
+        // run-scoped artifact (review answer, proof digest, script-root record) resolves
+        // through it — the smoke must mirror that or the seeded record below lands at a path
+        // no guard reads (1122 R3 session finding).
+        __runId: runId,
     };
     const env: Record<string, string> = {
         ...vars,
@@ -157,7 +163,6 @@ function runInlineSmoke(
         FAIL_CHECK_AT: options.failCheckAt === undefined ? '' : String(options.failCheckAt),
         FIXTURE_TASK_SPEC: options.unresolvableTask === true ? '' : taskSpecPath,
     };
-    const runId = 'inline-smoke-run';
     // The driver doc (task 0927) appends host provenance lines to the run-record markdown.
     const logPath = join(cwd, `.spur/run/${runId}.md`);
     mkdirSync(dirname(logPath), { recursive: true });
@@ -171,7 +176,9 @@ function runInlineSmoke(
     // 1122 R3: the review PASS edges resolve the review-gate scanner through the run's
     // script-root record. The smoke simulates a source-repo run — seed the record at the repo's
     // plugin scripts so the REAL scanner executes (its own suite owns the unit contract); the
-    // fixture task has no Review table, so the gate classifies zero findings and passes.
+    // fixture task has no Review table, so the gate classifies zero findings and passes. The
+    // precheck probe itself is stubbed (below): from the scratch tree it can only resolve
+    // installed/unresolved and would clobber this record before review ever reads it.
     writeFileSync(
         join(cwd, '.spur', 'run', `${runId}-script-root.json`),
         `${JSON.stringify({ mode: 'source-repo', dir: join(ROOT, 'plugins', 'sp', 'scripts') })}\n`,
@@ -285,6 +292,14 @@ function runInlineSmoke(
                 // actions); residual-scan.test.ts owns the script itself.
                 if (command.includes('residual-scan.ts') && command.includes('"$S" fold')) {
                     command = 'mkdir -p .spur/run; printf "[]\\n" > ".spur/run/$wbs-residuals.json"';
+                }
+                // 1122 R3: the precheck script-root probe resolves cwd-first (the source-repo
+                // marker lives outside plugins/sp), so from the scratch task tree it can only
+                // record installed/unresolved — never this repo's live tree. The smoke simulates
+                // the source-repo outcome by seeding the run's record itself (above); stub the
+                // probe like the other script-backed steps — script-root.test.ts owns the probe.
+                if (command.includes('script-root.ts') && command.includes('--run-id')) {
+                    command = 'exit 0';
                 }
                 if (
                     command.includes('residual-scan.ts') &&

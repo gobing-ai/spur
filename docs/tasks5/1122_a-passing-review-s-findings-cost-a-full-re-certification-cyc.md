@@ -129,7 +129,67 @@ The catch-all `review → review-fail-triage` edge is unchanged and still last. 
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Moves the record sweep's review-finding enforcement forward to the review PASS edges (R1 decision):
+a `Verdict: PASS` review now also needs a passing `residual-scan review-gate` check, so an open
+P1–P3 finding routes into the existing `review-fail-triage` → `test-fix` bounded repair lane
+BEFORE verify spends the cycle, instead of failing terminally after verify + record. No new state,
+no new budget; the record sweep is unchanged and remains the final authority.
+
+Per requirement:
+
+- **R1** — `packages/app/src/services/residual-scan.ts:282` adds the pure
+  `blockingReviewFindings(taskContent, deferrals)`: `parseReviewFindings` + `classify` restricted
+  to the `review-finding` category, same deferrals as the sweep. Regenerated through the repo
+  generator: `plugins/sp/lib/residual-scan.generated.mjs` (+ `.generated.d.mts` declaration,
+  maintained in `scripts/commands/bundle-plugin-lib.ts:345`) and the installed twin
+  `plugins/sp/scripts/residual-scan.mjs`.
+- **R2** — `plugins/sp/scripts/residual-scan.ts:13` (usage), `:138` (`reviewGateMode`), `:282`
+  (mode table): loads the task like `scan`, applies the same deferral file, writes the
+  review-finding-only `.spur/run/<wbs>-residuals.json` (the `test-fix` hop's existing remediation
+  input; record's `scan` overwrites it later), prints
+  `residual-review-gate: <wbs> blocking=<n> ids=… anchors=…`, exits 1 iff blocking > 0.
+- **R3** — `config/workflows/task-pipeline.yaml:1264-1301`: both PASS edges
+  (`review → verify` under `profile=auto`, `review → approve` interactive) now require the
+  reviewer's own `Verdict: PASS` line AND the `review-gate` check; the scanner resolves through
+  the same `${__runId}-script-root.json` source-repo/installed resolver as the record sweep and a
+  missing scanner fails the edge closed into the `review → review-fail-triage` catch-all
+  (`guard: always`, still declared last). Guard parity pinned in
+  `packages/app/tests/workflow/fixtures/guard-parity-baseline.json`.
+- **R4** — the cost is stated where the driver decides: `review` description
+  (`config/workflows/task-pipeline.yaml:703-706`), `review-fail-triage` description
+  (`:763-767`), and the reviewer Output Format note (`plugins/sp/agents/super-reviewer.md:177-182`):
+  open P1–P3 block `done`; a fix invalidates the certified digest and re-runs quality → review →
+  verify on a fresh digest; only P4 and `DEFER`-ed P3 rows are wrap residuals.
+- **R5** — `config/workflows/` stays the SSOT; the gitignored generated copy
+  `apps/cli/config/workflows/task-pipeline.yaml` was regenerated (`build:bundle`) and verified in
+  sync. Design satellite updated in the same change (`docs/design/task-residual-sweep.md:61,77,148`).
+
+Finishing-tail fixes (test harness only, `plugins/sp/tests/inline-pipeline-driver.test.ts`) —
+the 0503 smoke previously failed because the 1122 PASS-edge guards read
+`.spur/run/$__runId-script-root.json` while the smoke left `__runId` empty and seeded the record
+at a path no guard read:
+
+1. `runInlineSmoke` now sets `__runId: 'inline-smoke-run'` in its vars — mirroring the real
+   driver, which injects the run id on the `__runId` seam (workflow-service) — so every
+   run-scoped artifact (review answer, proof digest, script-root record) resolves at the paths
+   the guards read.
+2. The precheck script-root probe is stubbed to `exit 0` (same pattern as the other
+   script-backed steps): from the scratch task tree the cwd-first probe can only record
+   installed/unresolved and would clobber the seeded record before review reads it. The seeded
+   source-repo record pointing at the repo's live `plugins/sp/scripts` makes the REAL scanner
+   execute inside the review PASS guards (its own suite owns the unit contract; the record-stage
+   `scan`+`fold` shell stays stubbed per the existing F96 pattern).
+3. Right-reason proof (manual, scratch repo): with an OPEN P2 row under `### Review` the real
+   scanner exits 1 (`blocking=1 ids=review-finding:* anchors=src/a.ts:12` — guard falls to
+   triage); the clean fixture task exits 0 and writes the review-only artifact.
+
+Test evidence: `plugins/sp` — residual-scan + inline-pipeline-driver +
+super-reviewer-output-contract: 41 pass / 0 fail (242 expects; was 38/3). AC1 in
+`residual-scan.test.ts:577,632` (parity with the sweep slice; review-gate fixtures a–e), AC2/AC3
+in `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:688` (PASS+open P2 → triage,
+clean PASS → verify/approve, missing scanner fails closed): 33 pass / 0 fail; guard-parity
+fixture test: 2 pass / 0 fail. AC4 in `super-reviewer-output-contract.test.ts` + the YAML
+descriptions. Biome clean on the changed file.
 
 ### Testing
 

@@ -28,7 +28,7 @@ interface Transition {
     guard?: Guard;
 }
 interface WorkflowDef {
-    states: { id: string; onEnter?: Action[] }[];
+    states: { id: string; description?: string; onEnter?: Action[] }[];
     transitions: Transition[];
 }
 
@@ -687,10 +687,10 @@ describe('task-pipeline review-failure routing (session finding after 1088)', ()
 // deferrals, resolved like the record step's scanner, fail-closed into review-fail-triage.
 describe('task-pipeline review PASS-edge review-gate (task 1122)', () => {
     const TABLE_HEAD = '### Review\n\n| Priority | Finding | Location | Disposition |\n| --- | --- | --- | --- |\n';
-    const runSh = (script: string, cwd: string, spurBin: string): { code: number } =>
+    const runSh = (script: string, cwd: string, spurBin: string): number =>
         Bun.spawnSync(['sh', '-c', script], {
             cwd,
-            env: { ...process.env, wbs: '1122', spurBin },
+            env: { ...getEnvVars(), wbs: '1122', spurBin },
             stdout: 'pipe',
             stderr: 'pipe',
         }).exitCode ?? -1;
