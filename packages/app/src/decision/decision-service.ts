@@ -25,6 +25,7 @@ import {
     type DecisionInvocationContext,
     emitDecisionRejected,
 } from './decision-events';
+import type { DecisionLogSink, DecisionLogWrite, DecisionPhase } from './decision-log';
 
 /**
  * Where the effective maker of one decision came from (design §3.6). The first
@@ -92,6 +93,18 @@ export interface DecisionStatus {
 }
 
 /** Options for {@link DecisionService.decide}. */
+/**
+ * Caller-built decision-log plumbing (task 1100): the sink from this caller's own
+ * config plus any phases observed before the service call (an evidence read).
+ * Absent ⇒ the lifecycle emits events exactly as before with no row written.
+ */
+export interface DecisionLogOption {
+    readonly sink: DecisionLogSink;
+    /** Caller prelude: clock opened before pre-service work, with its phases. */
+    readonly prelude?: { readonly startedAt: number; readonly phases: readonly DecisionPhase[] };
+}
+
+/** Inputs for the decision service's `decide` hop: optional maker override plus engine-context bookkeeping. */
 export interface DecideOptions {
     /** `--maker` override; outranks every configured and catalog source. */
     readonly maker?: string;
@@ -99,6 +112,8 @@ export interface DecideOptions {
     readonly bus?: SystemEventBus;
     /** Caller attribution carried by every emitted decision event. */
     readonly context?: DecisionCallContext;
+    /** Decision-log sink (task 1100): every terminal state lands as one `decision_logs` row. */
+    readonly decisionLog?: DecisionLogOption;
 }
 
 /** One decide outcome plus the maker resolution that served it. */
@@ -196,6 +211,21 @@ export class DecisionService {
     async decide(id: string, input?: Record<string, unknown>, options?: DecideOptions): Promise<ServedDecision> {
         const callContext: DecisionCallContext = options?.context ?? { caller: 'cli' };
         const ctx: DecisionInvocationContext = { decisionId: id, ...callContext };
+        // Task 1100: the lifecycle clock opens at the service entry, before
+        // resolution, so started_at and the resolve phase are real even for
+        // callers that pass a prelude (an evidence read already happened).
+        const entryAt = Date.now();
+        const logWrite = options?.decisionLog;
+        const log: DecisionLogWrite | undefined =
+            logWrite !== undefined
+                ? {
+                      sink: logWrite.sink,
+                      startedAt: entryAt,
+                      phases: [],
+                      ...(logWrite.prelude !== undefined ? { prelude: logWrite.prelude } : {}),
+                      ...(input !== undefined ? { input } : {}),
+                  }
+                : undefined;
         if (this.duplicateIds.has(id)) {
             const sources = this.duplicateIds.get(id)?.join(', ') ?? '';
             const error = new DecisionCatalogError(
@@ -203,15 +233,19 @@ export class DecisionService {
                 sources,
                 id,
             );
-            emitDecisionRejected(options?.bus, ctx, error);
+            emitDecisionRejected(options?.bus, ctx, error, undefined, log);
             throw error;
         }
         let description: DecisionDescription;
         try {
             description = this.describe(id); // UnknownDecisionError before any maker work
         } catch (error) {
-            emitDecisionRejected(options?.bus, ctx, error);
+            emitDecisionRejected(options?.bus, ctx, error, undefined, log);
             throw error;
+        }
+        if (log !== undefined) {
+            log.catalogSource = description.catalog;
+            log.fallbackValue = description.fallback;
         }
         const file = this.resolution.files.find((f) => Object.keys(f.catalog.decisions).includes(id));
         const { name, source } = this.effectiveMaker(
@@ -225,7 +259,13 @@ export class DecisionService {
                 `maker "${name}" for decision "${id}" is not registered (built-ins: ${this.registry.names().join(', ')})`,
                 name,
             );
-            emitDecisionRejected(options?.bus, ctx, error, name);
+            emitDecisionRejected(
+                options?.bus,
+                ctx,
+                error,
+                name,
+                log !== undefined ? { ...log, makerSource: source } : undefined,
+            );
             throw error;
         }
         // Task 1113 R1: validate the caller input with the same upstream resolver the
@@ -236,33 +276,52 @@ export class DecisionService {
         if (decisionDefinition === undefined) {
             // Unreachable after describe() success; fail closed rather than cast.
             const error = new UnknownDecisionError(`decision "${id}" is not served by any loaded catalog`, id);
-            emitDecisionRejected(options?.bus, ctx, error);
+            emitDecisionRejected(options?.bus, ctx, error, undefined, log);
             throw error;
         }
         try {
             resolveDecisionInput(decisionDefinition, input as Parameters<typeof resolveDecisionInput>[1]);
         } catch (error) {
-            emitDecisionRejected(options?.bus, ctx, error);
+            emitDecisionRejected(options?.bus, ctx, error, undefined, log);
             throw error;
         }
+        if (log !== undefined) {
+            log.phases.push({ phase: 'resolve', startedAt: entryAt, durationMs: Date.now() - entryAt });
+        }
         const digestSource = evidenceDigestSource(input);
-        const invocation = beginDecisionInvocation(options?.bus, ctx, {
-            type: description.type,
-            maker: name,
-            makerSource: source,
-            catalogLayer: description.layer,
-            inputKeys: Object.keys(input ?? {}),
-            // Task 1113 R5: digest the evidence-bearing input consistently — the
-            // implicit instructions channel when it is a non-empty string, else a
-            // string `evidence` input (the gate path passes evidence there).
-            ...(digestSource !== undefined
-                ? { evidenceDigest: `sha256:${createHash('sha256').update(digestSource, 'utf8').digest('hex')}` }
-                : {}),
-            minConfidence: description.minConfidence,
-        });
+        const invocation = beginDecisionInvocation(
+            options?.bus,
+            ctx,
+            {
+                type: description.type,
+                maker: name,
+                makerSource: source,
+                catalogLayer: description.layer,
+                inputKeys: Object.keys(input ?? {}),
+                // Task 1113 R5: digest the evidence-bearing input consistently — the
+                // implicit instructions channel when it is a non-empty string, else a
+                // string `evidence` input (the gate path passes evidence there).
+                ...(digestSource !== undefined
+                    ? { evidenceDigest: `sha256:${createHash('sha256').update(digestSource, 'utf8').digest('hex')}` }
+                    : {}),
+                minConfidence: description.minConfidence,
+            },
+            log,
+        );
+        const makerStartedAt = Date.now();
         let outcome: DecisionResult | undefined;
         try {
             outcome = await this.hub.decide(id, input as Parameters<DecisionHub['decide']>[1], { maker: name });
+            const makerEndedAt = Date.now();
+            if (log !== undefined) {
+                // maker is the whole hub.decide call: resolve + ask inside one call
+                // (ts-ai-decision 0.5.16+), so the hub's own duration is the phase.
+                log.phases.push({
+                    phase: 'maker',
+                    startedAt: makerStartedAt,
+                    durationMs: outcome.durationMs > 0 ? outcome.durationMs : makerEndedAt - makerStartedAt,
+                });
+            }
             if (outcome.source === 'model' && outcome.reason === 'accepted') {
                 invocation.succeed({ value: outcome.value, confidence: outcome.confidence, maker: outcome.maker });
             } else {
@@ -273,8 +332,18 @@ export class DecisionService {
                     maker: outcome.maker,
                 });
             }
+            if (log !== undefined) {
+                // serve: mapping + emitting the result back to the caller.
+                log.phases.push({ phase: 'serve', startedAt: makerEndedAt, durationMs: Date.now() - makerEndedAt });
+            }
             return { ...outcome, makerSource: source };
         } catch (error) {
+            if (log !== undefined) {
+                // The raw message rides the log arg; the emitter redacts it into
+                // the row's `error` column with the caller's configured secrets.
+                log.error = error instanceof Error ? error.message : String(error);
+                log.phases.push({ phase: 'maker', startedAt: makerStartedAt, durationMs: Date.now() - makerStartedAt });
+            }
             // Task 1113 R2 backstop: an unexpected post-start throw must still keep
             // the fixed order start → failure → end (the old bare finally emitted
             // only end, leaving the lifecycle without a terminal failure event).

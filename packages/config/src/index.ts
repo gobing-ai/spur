@@ -820,11 +820,18 @@ export const WorkflowsConfigSchema = z.object({
  * DecisionMaker for every decision point and per-decision-point overrides.
  * An unregistered maker name is a config error, never a silent fallback
  * (design §3.6).
+ *
+ * `log` (task 1100) controls the Board's decision-log persistence: `full`
+ * stores the redacted input beside the served result, `metadata` stores the
+ * keys and evidence digest without the input or inline question, `off` writes
+ * no rows. Default `full` — the logs are redacted and bounded, and retention
+ * is capped at the newest 10,000 invocations.
  */
 export const DecisionsConfigSchema = z.object({
     paths: z.array(z.string()).optional(),
     maker: z.string().optional(),
     makers: z.record(z.string(), z.string()).optional(),
+    log: z.enum(['full', 'metadata', 'off']).optional(),
 });
 
 /**

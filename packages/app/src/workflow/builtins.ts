@@ -7,6 +7,7 @@ import {
     NodeProcessExecutor,
     type ProcessExecutor,
 } from '@gobing-ai/ts-runtime';
+import type { DecisionLogSink } from '../decision/decision-log';
 import type { DecisionService } from '../decision/decision-service';
 import type { AgentService } from '../services/agent-service';
 import type { RuleService } from '../services/rule-service';
@@ -42,6 +43,8 @@ export interface SpurWorkflowBuiltinsOptions {
     hostAllowlist?: HostAllowlist;
     responseValidateEngine?: ResponseValidateEngine;
     observabilityBus?: WorkflowObservabilityBus;
+    /** Decision-log sink (task 1100): built by the composition root from its own config. */
+    decisionLog?: DecisionLogSink;
     steeringController?: WorkflowSteeringController;
     /** Process executor for shell actions (task 0421 R9). Defaults to a fresh NodeProcessExecutor. */
     processExecutor?: ProcessExecutor;
@@ -116,6 +119,7 @@ export function registerSpurBuiltins(host: WorkflowEngineHost, options: SpurWork
             ...(options.decisionService !== undefined ? { decisionService: options.decisionService } : {}),
             ...(options.warn !== undefined ? { warn: options.warn } : {}),
             ...(options.observabilityBus !== undefined ? { observabilityBus: options.observabilityBus } : {}),
+            ...(options.decisionLog !== undefined ? { decisionLog: options.decisionLog } : {}),
         } satisfies DecideActionDeps),
         'builtin',
     );

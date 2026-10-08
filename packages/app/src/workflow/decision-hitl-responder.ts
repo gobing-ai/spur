@@ -1,7 +1,8 @@
 import type { ActionRunRow } from '@gobing-ai/spur-domain';
 import type { DecisionMaker } from '@gobing-ai/ts-ai-runner';
 import type { HitlAnswer, HitlRequest, HitlResponder } from '@gobing-ai/ts-dual-workflow-engine';
-import type { DecisionService } from '../decision/decision-service';
+import type { DecisionLogSink } from '../decision/decision-log';
+import type { DecisionLogOption, DecisionService } from '../decision/decision-service';
 import { redactAndBound } from '../observability/agent-execution';
 import type { SystemEventBus } from '../services/system-event-tap';
 import {
@@ -82,6 +83,11 @@ export interface DecisionEvaluationDeps {
      * correlation is best-effort (design §5). Wired in buildDecisionEvaluator.
      */
     runCorrelation?: (runId: string) => Promise<{ workflowName?: string; wbs?: string }>;
+    /**
+     * Task 1100: the decision-log sink for the gate caller, resolved lazily per
+     * decide call (the workflow DB opens per request). Undefined/off ⇒ no row.
+     */
+    decisionLog?: () => Promise<DecisionLogSink | undefined>;
 }
 
 /** Discriminated evaluation result consumed by the HITL actions. */
@@ -394,6 +400,9 @@ async function evaluateEvidence(
     clean: TextCleaner,
     started: number,
 ): Promise<DecisionEvaluationResult> {
+    // Task 1100: the evidence read is the gate's prelude phase — the clock opens
+    // here so the row's started_at and evidence phase cover the real read.
+    const evidenceStartedAt = Date.now();
     try {
         const rows = await deps.evidence(request);
         const selected = selectEvidence(rows, config.evidenceNodes, clean);
@@ -463,11 +472,33 @@ async function evaluateEvidence(
         // closed to the operator, never to an accepted answer.
         if (request.kind === 'confirm' && deps.decisionService !== undefined) {
             const service = await deps.decisionService();
+            // Task 1100: the gate writes its row through the same sink option as every
+            // other caller; the evidence read above is the prelude.
+            let decisionLog: DecisionLogOption | undefined;
+            if (deps.decisionLog !== undefined) {
+                const sink = await deps.decisionLog();
+                if (sink !== undefined) {
+                    decisionLog = {
+                        sink,
+                        prelude: {
+                            startedAt: evidenceStartedAt,
+                            phases: [
+                                {
+                                    phase: 'evidence',
+                                    startedAt: evidenceStartedAt,
+                                    durationMs: Date.now() - evidenceStartedAt,
+                                },
+                            ],
+                        },
+                    };
+                }
+            }
             const served = await service.decide(
                 GATE_EVIDENCE_DECISION_ID,
                 { prompt: clean(request.prompt), evidence: payload, node: nodeText },
                 {
                     ...(deps.bus !== undefined ? { bus: deps.bus } : {}),
+                    ...(decisionLog !== undefined ? { decisionLog } : {}),
                     context: {
                         caller: 'gate',
                         // Task 1113 R3: merge run correlation (workflowName/wbs from

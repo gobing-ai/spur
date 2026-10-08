@@ -44,6 +44,7 @@ import {
     parseYamlObject,
 } from '@gobing-ai/ts-runtime';
 import { ValidationError } from '@gobing-ai/ts-utils';
+import { decisionLogSink } from '../decision/decision-log';
 import { getDecisionService } from '../decision/decision-service';
 import { redactAndBound } from '../observability/agent-execution';
 import type { SystemEventBus } from '../services/system-event-tap';
@@ -2096,6 +2097,9 @@ export class WorkflowAppService {
             getDb: () => this.ctx.getDb(),
             // 0941 R4: decide degrades to its declared default unless the config switch is on.
             decideDecisionMaker: this.ctx.spurConfig?.workflow?.decideDecisionMaker === true,
+            // 1100: the workflow caller's decision-log sink — mode/secrets from this
+            // caller's own config + env, never the cached DecisionService's state.
+            decisionLog: await this.buildDecisionLogSink(),
             // 0941 R4: the backend comes from existing DecisionMaker config when the composition root supplies one.
             ...(this.ctx.decisionMaker !== undefined ? { decideMaker: this.ctx.decisionMaker } : {}),
             // Task 1094: the catalog-reference decide path resolves through the shared service;
@@ -2152,6 +2156,15 @@ export class WorkflowAppService {
               )
             : persistence;
         return new EngineWorkflowService(host, adapter);
+    }
+
+    /**
+     * Task 1100: the workflow caller's decision-log sink, built from this caller's
+     * own config + env (never the cached DecisionService's withConfig state).
+     * `decisions.log = 'off'` ⇒ undefined and no rows are written.
+     */
+    private async buildDecisionLogSink() {
+        return decisionLogSink(await this.ctx.getDb(), this.ctx.spurConfig ?? null, getEnvVars());
     }
 
     /**
@@ -2224,6 +2237,9 @@ export class WorkflowAppService {
                     // 1099: evidence-mode confirm gates decide through the catalog decision
                     // `gate-evidence` (same construction the `decision` CLI serves).
                     decisionService: () => getDecisionService(this.ctx.spurConfig ?? null, this.ctx.cwd),
+                    // 1100: the gate's decision rows use the workflow service DB — same
+                    // caller-config sink as the decide action, resolved lazily per call.
+                    decisionLog: async () => await this.buildDecisionLogSink(),
                     // Task 1113 R3: gate events join the run — workflowName from the run
                     // row, wbs from the snapshot's effective vars (never throws).
                     runCorrelation: async (runId) =>

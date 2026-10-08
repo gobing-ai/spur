@@ -82,7 +82,7 @@ export const DeltaBadge: FC<{ current: number; previous: number | undefined; inv
     },
 );
 
-const KpiCard: FC<{
+export const KpiCard: FC<{
     label: string;
     value: string;
     sub: string;

@@ -1,6 +1,11 @@
-import { InvalidWorkflowRunIdError, type ToolUseEvent } from '@gobing-ai/spur-app';
+import {
+    DecisionLogQueryService,
+    type DecisionLogQuerySpec,
+    InvalidWorkflowRunIdError,
+    type ToolUseEvent,
+} from '@gobing-ai/spur-app';
 import type { ObservabilitySummaryResponse } from '@gobing-ai/spur-contracts';
-import { queueJobKpis, type RoutingSummaryQuery, roleTokenSummary } from '@gobing-ai/spur-domain';
+import { DecisionLogDao, queueJobKpis, type RoutingSummaryQuery, roleTokenSummary } from '@gobing-ai/spur-domain';
 import type { Context, Hono } from 'hono';
 import type { ServerContext } from '../../context';
 import { enqueueSseFrame, sendSseKeepalive } from '../sse/stream-helpers';
@@ -210,6 +215,75 @@ export function resetRoleTokenSummaryForTesting(): void {
     loadRoleTokenSummary = roleTokenSummary;
 }
 
+/** Task 1100: parse `GET /api/observability/decisions` query params; null ⇒ respond 400. */
+function parseDecisionLogQuery(c: Context): DecisionLogQuerySpec | null {
+    const invalid = (param: string, value: string, expected: string): string =>
+        `invalid ${param}: "${value}" — expected ${expected}`;
+    const spec: DecisionLogQuerySpec = {};
+    const since = c.req.query('since');
+    if (since !== undefined && since !== '') spec.since = since;
+    const decisionId = c.req.query('decision');
+    if (decisionId !== undefined && decisionId !== '') spec.decisionId = decisionId;
+    const maker = c.req.query('maker');
+    if (maker !== undefined && maker !== '') spec.maker = maker;
+    const runId = c.req.query('run');
+    if (runId !== undefined && runId !== '') spec.runId = runId;
+    const before = c.req.query('before');
+    if (before !== undefined && before !== '') spec.before = before;
+    const outcome = c.req.query('outcome');
+    if (outcome !== undefined && outcome !== '') {
+        if (outcome !== 'accepted' && outcome !== 'fallback' && outcome !== 'rejected') {
+            throw new Error(invalid('outcome', outcome, 'accepted | fallback | rejected'));
+        }
+        spec.outcome = outcome;
+    }
+    const caller = c.req.query('caller');
+    if (caller !== undefined && caller !== '') {
+        if (caller !== 'cli' && caller !== 'workflow' && caller !== 'gate') {
+            throw new Error(invalid('caller', caller, 'cli | workflow | gate'));
+        }
+        spec.caller = caller;
+    }
+    const limitParam = c.req.query('limit');
+    if (limitParam !== undefined && limitParam !== '') {
+        const limit = Number(limitParam);
+        if (!Number.isInteger(limit) || limit < 1 || limit > 200) {
+            throw new Error(invalid('limit', limitParam, 'an integer between 1 and 200'));
+        }
+        spec.limit = limit;
+    }
+    return spec;
+}
+
+function handleDecisionLogs(ctx: ServerContext) {
+    return async (c: Context) => {
+        try {
+            const spec = parseDecisionLogQuery(c);
+            const service = new DecisionLogQueryService(new DecisionLogDao(await ctx.getDb()));
+            return c.json(await service.list(spec ?? {}));
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            return c.json({ error: message }, message.startsWith('invalid ') ? 400 : 500);
+        }
+    };
+}
+
+function handleDecisionLogDetail(ctx: ServerContext) {
+    return async (c: Context) => {
+        const id = c.req.param('id');
+        if (id === undefined || id === '') return c.json({ error: 'missing decision log id' }, 400);
+        try {
+            const service = new DecisionLogQueryService(new DecisionLogDao(await ctx.getDb()));
+            const row = await service.get(id);
+            if (row === null) return c.json({ error: `decision log row not found: ${id}` }, 404);
+            return c.json(row);
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            return c.json({ error: message }, 500);
+        }
+    };
+}
+
 function handleRoutingSummary(ctx: ServerContext) {
     return async (c: Context) => {
         try {
@@ -347,6 +421,8 @@ function handleObservabilitySummary(ctx: ServerContext) {
  * - GET /api/observability/tool-use/stream — SSE live appends (fs.watch)
  * - GET /api/observability/routing-summary — routing aggregate + per-role token totals (0552)
  * - GET /api/observability/summary — summary aggregations, KPIs, volume buckets (0789)
+ * - GET /api/observability/decisions — decision-log list: rows, KPI strip, facets, cursor `before` (1100)
+ * - GET /api/observability/decisions/:id — one decision-log row incl. redacted input and phases (1100)
  */
 export const observabilityModule: ServerModule = {
     name: 'observability',
@@ -358,6 +434,10 @@ export const observabilityModule: ServerModule = {
         app.get('/api/observability/tool-use', handleToolUseGet(ctx));
         app.get('/api/observability/tool-use/stream', handleToolUseStream(ctx));
         app.get('/api/observability/routing-summary', handleRoutingSummary(ctx));
+        // Task 1100: decision-log reads for the Board Decisions tab. Reads recorded rows
+        // only — never calls a maker; identical reads tolerate a pre-migration DB via the DAO.
+        app.get('/api/observability/decisions', handleDecisionLogs(ctx));
+        app.get('/api/observability/decisions/:id', handleDecisionLogDetail(ctx));
         app.get('/api/observability/summary', handleObservabilitySummary(ctx));
         // GET /api/observability/run-record/:runId — bounded, confined run-record
         // inspection for the Tasks run detail (0929 R1/R2). Read-only; text is

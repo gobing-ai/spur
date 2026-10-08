@@ -3,6 +3,7 @@ import {
     AgentConfigSchema,
     AgentExecutorConfigSchema,
     AgentFleetSchema,
+    DecisionsConfigSchema,
     FLEET_STRATEGIES,
     FleetMemberSchema,
     featuresConfigSchema,
@@ -12,6 +13,16 @@ import {
     resolveHistoryRefreshTrigger,
     tasksConfigSchema,
 } from '../src/index';
+
+describe('DecisionsConfigSchema', () => {
+    test('log key accepts the three write modes and stays optional (task 1100)', () => {
+        expect(DecisionsConfigSchema.safeParse({}).success).toBe(true);
+        expect(DecisionsConfigSchema.safeParse({ log: 'full' }).success).toBe(true);
+        expect(DecisionsConfigSchema.safeParse({ log: 'metadata' }).success).toBe(true);
+        expect(DecisionsConfigSchema.safeParse({ log: 'off' }).success).toBe(true);
+        expect(DecisionsConfigSchema.safeParse({ log: 'everything' }).success).toBe(false);
+    });
+});
 
 describe('tasksConfigSchema', () => {
     test('parses valid tasks config with a folders map (design §9)', () => {

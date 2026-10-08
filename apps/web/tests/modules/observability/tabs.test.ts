@@ -23,11 +23,12 @@ describe('OBSERVABILITY_TABS', () => {
         expect(new Set(ids).size).toBe(ids.length);
     });
 
-    test('contains exactly the consolidated telemetry tabs (J92 R4, E72 R1)', () => {
+    test('contains exactly the consolidated telemetry tabs (J92 R4, E72 R1, task 1100)', () => {
         // J92 consolidation: Observability registers exactly system-events, jobs, and routing.
         // Legacy tasks and tool-using are removed. E72 adds the run-centric Trace tab.
+        // Task 1100 adds the decision-log Decisions tab.
         const ids = OBSERVABILITY_TABS.map((t) => t.id);
-        expect(ids).toEqual(['summary', 'system-events', 'jobs', 'trace', 'routing']);
+        expect(ids).toEqual(['summary', 'system-events', 'jobs', 'trace', 'routing', 'decisions']);
         expect(ids).not.toContain('tasks');
         expect(ids).not.toContain('tool-using');
         expect(ids).not.toContain('inbox');

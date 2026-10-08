@@ -145,15 +145,18 @@ export function SegmentedToggle<T extends string>({
  */
 export const RETENTION_COPY = 'Retention: events capped at 10,000 rows per prefix · terminal jobs pruned after 30d';
 
-export function RetentionBadge() {
+/** Decision-log retention (task 1100): DECISION_LOG_RETENTION_ROWS (packages/domain/src/dao/decision-log-dao.ts). */
+export const DECISION_RETENTION_COPY = 'Retention: decision logs keep the newest 10,000 invocations';
+
+export function RetentionBadge({ copy = RETENTION_COPY }: { copy?: string } = {}) {
     return (
         <span
             data-testid="observability-retention-badge"
             className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg border border-base-content/15 bg-base-100 text-base-content/70 whitespace-nowrap"
-            title={RETENTION_COPY}
+            title={copy}
         >
             <span aria-hidden="true">ℹ️</span>
-            <span>{RETENTION_COPY}</span>
+            <span>{copy}</span>
         </span>
     );
 }

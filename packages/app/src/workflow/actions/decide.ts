@@ -10,6 +10,7 @@ import {
     emitDecisionRejected,
 } from '../../decision/decision-events';
 import { readDecisionEvidence } from '../../decision/decision-evidence-input';
+import type { DecisionLogSink, DecisionPhase } from '../../decision/decision-log';
 import type { DecisionDescription, DecisionService } from '../../decision/decision-service';
 import type { SystemEventBus } from '../../services/system-event-tap';
 import { DEFAULT_MIN_CONFIDENCE, type DecideMethod, type DecideResult, runDecide } from '../decide';
@@ -123,6 +124,8 @@ export interface DecideActionDeps {
     warn?: (message: string) => void;
     /** Workflow observability bus carrying the cataloged `decision.*` events (task 1095). */
     observabilityBus?: WorkflowObservabilityBus;
+    /** Decision-log sink (task 1100): the composition root builds it from this caller's own config. */
+    decisionLog?: DecisionLogSink;
 }
 
 /** Runs the non-pausing `decide` action: resolves a DecisionMaker answer (or a degraded default) and writes the schemaVersion-1 result row (0941). */
@@ -207,6 +210,24 @@ export class DecideActionRunner implements ActionRunner {
         const bus = this.deps.observabilityBus as unknown as SystemEventBus | undefined;
         if (this.deps.enabled && bus !== undefined && result.reason !== 'disabled') {
             const maker = result.backend ?? 'none';
+            // Task 1100: the inline path emits after runDecide returned, so its row records
+            // one maker phase of result.durationMs with started_at = ended_at - durationMs.
+            const endedAt = Date.now();
+            const log =
+                this.deps.decisionLog !== undefined
+                    ? {
+                          sink: this.deps.decisionLog,
+                          startedAt: endedAt - result.durationMs,
+                          phases: [
+                              {
+                                  phase: 'maker' as const,
+                                  startedAt: endedAt - result.durationMs,
+                                  durationMs: result.durationMs,
+                              },
+                          ],
+                          question: options.question,
+                      }
+                    : undefined;
             const invocation = beginDecisionInvocation(
                 bus,
                 {
@@ -224,6 +245,7 @@ export class DecideActionRunner implements ActionRunner {
                     ...(result.evidenceDigest !== null ? { evidenceDigest: result.evidenceDigest } : {}),
                     minConfidence: options.minConfidence ?? DEFAULT_MIN_CONFIDENCE,
                 },
+                log,
             );
             if (result.source === 'model' && result.reason === 'accepted') {
                 invocation.succeed({ value: result.value, confidence: result.confidence, maker });
@@ -358,13 +380,25 @@ export class DecideActionRunner implements ActionRunner {
                 error: `${DECIDE_KIND}: catalog decision "${options.decision}" cannot run — the decision service is unavailable`,
             };
         }
+        // Task 1100: the enabled path carries the caller-built sink; the evidence read gets
+        // its own prelude clock so the row's started_at covers it and its phase is recorded.
+        const sink = this.deps.decisionLog;
+        const rejectedLog = (prelude?: { startedAt: number; phases: DecisionPhase[] }) =>
+            sink !== undefined
+                ? {
+                      sink,
+                      startedAt: Date.now(),
+                      phases: [] as DecisionPhase[],
+                      ...(prelude !== undefined ? { prelude } : {}),
+                  }
+                : undefined;
         // Describe first: an unknown id is a caller mistake rejected before any work, and the
         // degraded evidence-error row below needs the declared fallback.
         let description: DecisionDescription;
         try {
             description = decisionService.describe(options.decision);
         } catch (error) {
-            emitDecisionRejected(bus, callContext, error);
+            emitDecisionRejected(bus, callContext, error, undefined, rejectedLog());
             return { ok: false, error: `${DECIDE_KIND}: ${error instanceof Error ? error.message : String(error)}` };
         }
         // Same type gate as validate: score decisions are CLI-only (the inline driver bypasses
@@ -385,6 +419,8 @@ export class DecideActionRunner implements ActionRunner {
             };
         }
         let instructionsText: string | undefined;
+        let evidencePrelude: { startedAt: number; phases: DecisionPhase[] } | undefined;
+        if (sink !== undefined) evidencePrelude = { startedAt: Date.now(), phases: [] };
         try {
             if (options.evidence !== undefined && options.evidence.length > 0) {
                 const evidence = await readDecisionEvidence(
@@ -395,8 +431,15 @@ export class DecideActionRunner implements ActionRunner {
             } else if (options.instructions !== undefined) {
                 instructionsText = options.instructions;
             }
+            if (evidencePrelude !== undefined) {
+                evidencePrelude.phases.push({
+                    phase: 'evidence',
+                    startedAt: evidencePrelude.startedAt,
+                    durationMs: Date.now() - evidencePrelude.startedAt,
+                });
+            }
         } catch (error) {
-            emitDecisionRejected(bus, callContext, error);
+            emitDecisionRejected(bus, callContext, error, undefined, rejectedLog(evidencePrelude));
             return await writeRow(
                 this.degradedCatalogRow(
                     { fallback: description.fallback, type: description.type },
@@ -415,6 +458,9 @@ export class DecideActionRunner implements ActionRunner {
         const served = await decisionService.decide(options.decision, input, {
             context: { caller: 'workflow', correlation: callContext.correlation },
             ...(bus !== undefined ? { bus } : {}),
+            ...(sink !== undefined && evidencePrelude !== undefined
+                ? { decisionLog: { sink, prelude: evidencePrelude } }
+                : {}),
         });
         // Validate blocks score ids, but the inline driver parses options without the catalog —
         // this is the runtime backstop: hard failure, never a bogus row.

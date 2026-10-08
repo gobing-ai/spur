@@ -47,6 +47,7 @@ const { lstat, mkdir, readdir, readFile } = await import('node:fs/promises');
 
 import { basename, join, resolve } from 'node:path';
 import type { SpurConfig } from '@gobing-ai/spur-config';
+import { getEnvVars } from '@gobing-ai/spur-config';
 import type { DbAdapter, RunDefinitionSource } from '@gobing-ai/spur-domain';
 import {
     createMigratedDb,
@@ -64,6 +65,7 @@ import {
 } from '@gobing-ai/ts-dual-workflow-engine';
 import { EventBus } from '@gobing-ai/ts-infra';
 import { createNodeFileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
+import { type DecisionLogSink, decisionLogSink } from '../decision/decision-log';
 import { getDecisionService } from '../decision/decision-service';
 import { createWorkflowActionTraceWriter } from '../workflow/action-trace';
 import { DecideActionRunner, DecideOptionsSchema } from '../workflow/actions/decide';
@@ -844,6 +846,8 @@ export interface InlineDecideInput {
      * backing the catalog-reference decide path through the shared decision service.
      */
     readonly spurConfig?: SpurConfig;
+    /** Task 1100: the inline driver caller's decision-log sink, built from the project DB. */
+    readonly decisionLog?: DecisionLogSink;
     /**
      * Task 1113 R3: correlation vars (`__workflowName`, `wbs`) resolved from the
      * run row + snapshot by the caller; passed as the action's run vars so
@@ -900,6 +904,7 @@ export async function runDecideForInlineRun(input: InlineDecideInput): Promise<I
             ? { decisionService: () => getDecisionService(spurConfig, resolve(input.workdir)) }
             : {}),
         ...(input.observabilityBus !== undefined ? { observabilityBus: input.observabilityBus } : {}),
+        ...(input.decisionLog !== undefined ? { decisionLog: input.decisionLog } : {}),
     });
     const result = await runner.execute(raw as Record<string, unknown>, {
         runId: input.runId ?? 'inline-decide',
@@ -1571,6 +1576,9 @@ export async function runInlineRunDecide(input: InlineRunDecideInput): Promise<n
     try {
         projectDb = await openInlineRunProjectDb(process.cwd());
         const bus: WorkflowObservabilityBus = new EventBus();
+        // Task 1100: the inline driver writes decision rows into the same project DB its
+        // events tap into, with mode/secrets from the threaded driver config.
+        const decisionLog = decisionLogSink(projectDb.adapter, input.spurConfig ?? null, getEnvVars());
         // SAFETY: the same EventBus instance is bridged as the system-event tap (structurally
         // nominal types over one ts-infra EventBus; ADR-044 event bridge, as in the CLI).
         tap = registerSystemEventTap(bus as unknown as SystemEventBus, new SystemEventDao(projectDb.adapter), {
@@ -1592,6 +1600,7 @@ export async function runInlineRunDecide(input: InlineRunDecideInput): Promise<n
                 runId: input.runId,
                 node: input.node,
                 observabilityBus: bus,
+                ...(decisionLog !== undefined ? { decisionLog } : {}),
                 // Task 1113 R3: inline runs persist a workflow_runs row — load the
                 // correlation the same way the gate does so decide events join the run.
                 correlationVars: {

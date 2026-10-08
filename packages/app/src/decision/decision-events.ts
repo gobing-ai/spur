@@ -22,6 +22,7 @@ import {
 import { redactAndBound } from '../observability/agent-execution';
 import type { SystemEventBus } from '../services/system-event-tap';
 import { wbsFromVar } from '../workflow/run-correlation';
+import { buildDecisionLogRow, type DecisionLogWrite, writeDecisionLog } from './decision-log';
 import type { DecisionMakerSource } from './decision-service';
 
 /** Upper bound for the redacted `message` carried by `decision.rejected` (§3.2). */
@@ -137,16 +138,23 @@ export function decisionCorrelationFromVars(vars: Record<string, string | undefi
  * Emit `decision.rejected` for a caller mistake refused before any maker call.
  * Single-event lifecycle: no start/end pair accompanies it. `maker` is included
  * only when the producer already knows the effective maker name.
+ *
+ * With a `log` sink (task 1100) the same invocationId also lands as a `rejected`
+ * row in `decision_logs`, carrying the rejection kind as `reason` and the
+ * redacted message as `error`. The row's clock opens at the caller's prelude
+ * when it supplied one, so pre-service rejections still show the real wall time.
  */
 export function emitDecisionRejected(
     bus: SystemEventBus | undefined,
     ctx: DecisionInvocationContext,
     error: unknown,
     maker?: string,
+    log?: DecisionLogWrite,
 ): void {
+    const invocationId = crypto.randomUUID();
     const message = error instanceof Error ? error.message : String(error);
     emitDecisionEvent(bus, 'decision.rejected', {
-        invocationId: crypto.randomUUID(),
+        invocationId,
         decisionId: ctx.decisionId,
         caller: ctx.caller,
         ...(ctx.correlation !== undefined ? { correlation: { ...ctx.correlation } } : {}),
@@ -155,6 +163,25 @@ export function emitDecisionRejected(
         message: redactAndBound(message, [], DECISION_MESSAGE_MAX_CHARS),
         ...(maker !== undefined ? { maker } : {}),
     });
+    if (log === undefined) return;
+    writeDecisionLog(
+        log.sink,
+        buildDecisionLogRow(log.sink, {
+            id: invocationId,
+            decisionId: ctx.decisionId,
+            caller: ctx.caller,
+            ...(ctx.correlation !== undefined ? { correlation: { ...ctx.correlation } } : {}),
+            ...(maker !== undefined ? { maker } : {}),
+            ...(log.makerSource !== undefined ? { makerSource: log.makerSource } : {}),
+            ...(log.input !== undefined ? { input: log.input } : {}),
+            outcome: 'rejected',
+            reason: decisionErrorKind(error),
+            error: message,
+            startedAtMs: log.prelude?.startedAt ?? log.startedAt,
+            endedAtMs: Date.now(),
+            phases: [...(log.prelude?.phases ?? []), ...log.phases],
+        }),
+    );
 }
 
 /**
@@ -162,11 +189,19 @@ export function emitDecisionRejected(
  * Order is fixed — start first, then exactly one of succeed/fail, then end — so
  * callers keep the service `try { … terminal } finally { end }` shape. A maker
  * throw between start and end still closes with `end` via that finally.
+ *
+ * With a `log` sink (task 1100), `end` additionally inserts exactly one
+ * `decision_logs` row under the same invocationId: `accepted` when the source
+ * model accepted, `fallback` for any served default, and `rejected` for the
+ * backstop close of a maker throw (`source` absent from the end fields, raw
+ * message in `log.error`). Rejected-before-start rows are written by
+ * {@link emitDecisionRejected} instead — never both for one invocation.
  */
 export function beginDecisionInvocation(
     bus: SystemEventBus | undefined,
     ctx: DecisionInvocationContext,
     start: DecisionStartFields,
+    log?: DecisionLogWrite,
 ): DecisionInvocation {
     const invocationId = crypto.randomUUID();
     const base = (): Record<string, unknown> => ({
@@ -201,6 +236,45 @@ export function beginDecisionInvocation(
         },
         end(fields: DecisionEndFields): void {
             emitDecisionEvent(bus, 'decision.end', { ...base(), severity: 'info', ...fields });
+            if (log === undefined) return;
+            // Backstop detection: a served row always carries `source`; the
+            // throw-close does not, and its message was stashed on `log.error`
+            // by the service's catch before this finally ran.
+            const outcome: 'accepted' | 'fallback' | 'rejected' =
+                fields.source === undefined
+                    ? 'rejected'
+                    : fields.source === 'model' && fields.reason === 'accepted'
+                      ? 'accepted'
+                      : 'fallback';
+            writeDecisionLog(
+                log.sink,
+                buildDecisionLogRow(log.sink, {
+                    id: invocationId,
+                    decisionId: ctx.decisionId,
+                    caller: ctx.caller,
+                    ...(ctx.correlation !== undefined ? { correlation: { ...ctx.correlation } } : {}),
+                    decisionType: start.type,
+                    maker: start.maker,
+                    makerSource: start.makerSource,
+                    catalogLayer: start.catalogLayer,
+                    ...(log.catalogSource !== undefined ? { catalogSource: log.catalogSource } : {}),
+                    minConfidence: start.minConfidence,
+                    ...(log.input !== undefined ? { input: log.input } : {}),
+                    inputKeys: start.inputKeys,
+                    ...(log.question !== undefined ? { question: log.question } : {}),
+                    ...(start.evidenceDigest !== undefined ? { evidenceDigest: start.evidenceDigest } : {}),
+                    outcome,
+                    ...(fields.value !== undefined ? { value: fields.value } : {}),
+                    ...(log.fallbackValue !== undefined ? { fallbackValue: log.fallbackValue } : {}),
+                    ...(fields.source !== undefined ? { source: fields.source } : {}),
+                    ...(fields.reason !== undefined ? { reason: fields.reason } : {}),
+                    ...(fields.confidence !== undefined ? { confidence: fields.confidence } : {}),
+                    ...(log.error !== undefined ? { error: log.error } : {}),
+                    startedAtMs: log.prelude?.startedAt ?? log.startedAt,
+                    endedAtMs: Date.now(),
+                    phases: [...(log.prelude?.phases ?? []), ...log.phases],
+                }),
+            );
         },
     };
 }

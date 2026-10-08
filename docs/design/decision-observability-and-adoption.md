@@ -171,7 +171,7 @@ mirrored in `packages/domain/src/migrations.ts`.
 | `value`, `fallback_value`, `source`, `reason`, `confidence` | Served result. `value` is null for `rejected`. |
 | `error` | Maker error or rejection message, redacted, ≤ 2 KiB |
 | `started_at`, `ended_at`, `duration_ms` | Wall clock |
-| `phases_json` | `[{ phase, startedAt, durationMs }]` with phase ∈ `resolve`, `evidence`, `maker-init`, `maker-call`, `serve`. Only phases the caller observed are listed. |
+| `phases_json` | `[{ phase, startedAt, durationMs }]` with phase ∈ `resolve`, `evidence`, `maker`, `serve`. Only phases the caller observed are listed; `maker` covers the one maker call (the outcome's `durationMs`). |
 | `schema_version` | `1` |
 
 Indexes: `(started_at)`, `(decision_id, started_at)`, `(maker_name, started_at)`, `(run_id)`.

@@ -184,3 +184,96 @@ export const schedulerSchedulesResponseSchema = z.object({
  * Response for registered scheduler jobs.
  */
 export type SchedulerSchedulesResponse = z.infer<typeof schedulerSchedulesResponseSchema>;
+
+/**
+ * One caller-observed decision lifecycle phase (task 1100).
+ */
+export const decisionPhaseSchema = z.object({
+    phase: z.enum(['resolve', 'evidence', 'maker', 'serve']),
+    startedAt: z.number(),
+    durationMs: z.number(),
+});
+/**
+ * One caller-observed decision lifecycle phase.
+ */
+export type DecisionPhase = z.infer<typeof decisionPhaseSchema>;
+
+/**
+ * List row of the Board Decisions tab: the full decision-log row minus the
+ * mode-gated payload (`inputJson`, `question`, `phases`).
+ */
+export const decisionLogRowSchema = z.object({
+    id: z.string(),
+    decisionId: z.string(),
+    decisionType: z.string().nullable(),
+    caller: z.enum(['cli', 'workflow', 'gate']),
+    runId: z.string().nullable(),
+    workflowName: z.string().nullable(),
+    nodeId: z.string().nullable(),
+    wbs: z.string().nullable(),
+    makerName: z.string().nullable(),
+    makerSource: z.string().nullable(),
+    catalogLayer: z.string().nullable(),
+    catalogSource: z.string().nullable(),
+    minConfidence: z.number().nullable(),
+    inputKeys: z.array(z.string()),
+    evidenceDigest: z.string().nullable(),
+    outcome: z.enum(['accepted', 'fallback', 'rejected']),
+    value: z.string().nullable(),
+    fallbackValue: z.string().nullable(),
+    source: z.string().nullable(),
+    reason: z.string().nullable(),
+    confidence: z.number().nullable(),
+    error: z.string().nullable(),
+    startedAt: z.string(),
+    endedAt: z.string(),
+    durationMs: z.number(),
+    schemaVersion: z.number(),
+});
+/**
+ * List row of the Board Decisions tab.
+ */
+export type DecisionLogRow = z.infer<typeof decisionLogRowSchema>;
+
+/**
+ * Full decision-log row: adds the redacted input text, inline question and
+ * phase timings (detail drawer only).
+ */
+export const decisionLogDetailSchema = decisionLogRowSchema.extend({
+    question: z.string().nullable(),
+    inputJson: z.string().nullable(),
+    phases: z.array(decisionPhaseSchema),
+});
+/**
+ * Full decision-log row with the mode-gated payload.
+ */
+export type DecisionLogDetail = z.infer<typeof decisionLogDetailSchema>;
+
+/**
+ * KPI strip over the filtered decision set.
+ */
+export const decisionLogSummarySchema = z.object({
+    count: z.number(),
+    acceptedRate: z.number(),
+    fallbackRate: z.number(),
+    p95DurationMs: z.number().nullable(),
+});
+/**
+ * KPI strip over the filtered decision set.
+ */
+export type DecisionLogSummary = z.infer<typeof decisionLogSummarySchema>;
+
+/**
+ * Response for decision-log listings: newest-first page, KPI strip, filter
+ * facets and the next-page cursor.
+ */
+export const decisionLogListResponseSchema = z.object({
+    rows: z.array(decisionLogRowSchema),
+    summary: decisionLogSummarySchema,
+    facets: z.object({ decisionIds: z.array(z.string()), makers: z.array(z.string()) }),
+    nextCursor: z.string().nullable(),
+});
+/**
+ * Response for decision-log listings.
+ */
+export type DecisionLogListResponse = z.infer<typeof decisionLogListResponseSchema>;

@@ -32,6 +32,8 @@ decision point at a time.
   the three existing decision points, so they can be measured with `spur decision run`.
 - Layered runtime resolution.
 - The `decisions` config section, with `paths`, a global `maker` and per-decision `makers`.
+- Task 1100 adds the `log` key: `full` (default) \| `metadata` \| `off` — the decision-log write
+  mode (see `docs/design/decision-observability-and-adoption.md` §3.5).
 - Owner docs.
 
 **Deferred to P1:** migrating `decide` to catalog references and replacing every shipped workflow

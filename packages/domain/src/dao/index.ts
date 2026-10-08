@@ -19,6 +19,17 @@ export {
     type OccupantRef,
     type StartCoordinationRunInput,
 } from './coordination-run-dao';
+export {
+    type CreateDecisionLogInput,
+    DECISION_LOG_RETENTION_ROWS,
+    DecisionLogDao,
+    type DecisionLogFacets,
+    type DecisionLogListResult,
+    type DecisionLogQuery,
+    type DecisionLogRow,
+    type DecisionLogSummaryCounts,
+    type DecisionLogSummaryRow,
+} from './decision-log-dao';
 export { InboxRecentDao, type InboxRecentRow } from './inbox-recent-dao';
 export { InboxUnfinishedDao, type InboxUnfinishedRow } from './inbox-unfinished-dao';
 export {

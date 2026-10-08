@@ -1,4 +1,5 @@
 import type { ComponentType } from 'react';
+import DecisionsTab from './DecisionsTab';
 import JobsTab from './JobsTab';
 import RoutingTab from './RoutingTab';
 import SummaryTab from './SummaryTab';
@@ -53,6 +54,7 @@ export interface ObservabilityTab {
  * J92 consolidation: Observability keeps system-wide telemetry: system events,
  * jobs, and routing. Legacy tasks and tool-using tabs removed. E72 adds the
  * run-centric Trace tab in place of the removed task-centric TasksTab.
+ * Task 1100 adds the Decisions tab over `decision_logs`.
  */
 export const OBSERVABILITY_TABS: readonly ObservabilityTab[] = [
     { id: 'summary', label: 'Summary', component: SummaryTab },
@@ -60,4 +62,5 @@ export const OBSERVABILITY_TABS: readonly ObservabilityTab[] = [
     { id: 'jobs', label: 'Jobs', component: JobsTab },
     { id: 'trace', label: 'Trace', component: TraceTab },
     { id: 'routing', label: 'Routing', component: RoutingTab },
+    { id: 'decisions', label: 'Decisions', component: DecisionsTab },
 ];

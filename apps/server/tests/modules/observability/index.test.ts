@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { InvalidWorkflowRunIdError } from '@gobing-ai/spur-app';
+import { applyCliMigrations, DecisionLogDao } from '@gobing-ai/spur-domain';
+import { createDbAdapter } from '@gobing-ai/ts-db';
 import { Hono } from 'hono';
 import type { ServerContext } from '../../../src/context';
 import {
@@ -650,5 +652,367 @@ describe('observability routing-summary (task 0552)', () => {
                 expect(await res.json()).toEqual(outcome);
             }
         });
+    });
+});
+
+describe('observability decision-log routes (task 1100)', () => {
+    function decisionRow(
+        overrides: Partial<Parameters<DecisionLogDao['insert']>[0]>,
+    ): Parameters<DecisionLogDao['insert']>[0] {
+        return {
+            id: 'd0',
+            decision_id: 'publish.pr',
+            decision_type: 'choice',
+            caller: 'workflow',
+            run_id: null,
+            workflow_name: null,
+            node_id: null,
+            wbs: null,
+            maker_name: null,
+            maker_source: null,
+            catalog_layer: null,
+            catalog_source: null,
+            min_confidence: null,
+            question: null,
+            input_json: null,
+            input_keys_json: '[]',
+            evidence_digest: null,
+            outcome: 'accepted',
+            value: null,
+            fallback_value: null,
+            source: null,
+            reason: null,
+            confidence: null,
+            error: null,
+            started_at: '2026-09-06T00:00:00.000Z',
+            ended_at: '2026-09-06T00:00:01.000Z',
+            duration_ms: 1000,
+            phases_json: '[]',
+            schema_version: 1,
+            ...overrides,
+        } as Parameters<DecisionLogDao['insert']>[0];
+    }
+
+    /** Seed (newest first): d1 accepted/workflow, d2 rejected/cli (no maker), d3 fallback/workflow. */
+    async function setupDecisionDb() {
+        const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(db);
+        const dao = new DecisionLogDao(db);
+        await dao.insert(
+            decisionRow({
+                id: 'd1',
+                decision_id: 'publish.pr',
+                caller: 'workflow',
+                run_id: 'run1',
+                workflow_name: 'task-pipeline',
+                node_id: 'decide',
+                wbs: '0042',
+                maker_name: 'planner',
+                maker_source: 'catalog',
+                catalog_layer: 'role',
+                catalog_source: 'builtin',
+                min_confidence: 0.6,
+                question: 'Ship it?',
+                input_json: '{"x":1}',
+                input_keys_json: '["x"]',
+                evidence_digest: 'sha256:abc',
+                outcome: 'accepted',
+                value: 'ship',
+                source: 'model',
+                reason: 'high confidence',
+                confidence: 0.9,
+                started_at: '2026-09-06T12:00:00.000Z',
+                ended_at: '2026-09-06T12:00:01.000Z',
+                duration_ms: 1000,
+                phases_json: '[{"phase":"maker","startedAt":12,"durationMs":900}]',
+            }),
+        );
+        await dao.insert(
+            decisionRow({
+                id: 'd2',
+                caller: 'cli',
+                outcome: 'rejected',
+                error: 'user rejected',
+                started_at: '2026-09-06T11:00:00.000Z',
+                ended_at: '2026-09-06T11:00:04.000Z',
+                duration_ms: 4000,
+            }),
+        );
+        await dao.insert(
+            decisionRow({
+                id: 'd3',
+                decision_id: 'triage.mode',
+                caller: 'workflow',
+                run_id: 'run1',
+                maker_name: 'router',
+                maker_source: 'default',
+                outcome: 'fallback',
+                fallback_value: 'cheap-exec',
+                source: 'default',
+                started_at: '2026-09-06T10:00:00.000Z',
+                ended_at: '2026-09-06T10:00:02.000Z',
+                duration_ms: 2000,
+            }),
+        );
+        return db;
+    }
+
+    function mountWithDb(db: Awaited<ReturnType<typeof createDbAdapter>>): Hono {
+        const app = new Hono();
+        observabilityModule.mount(app, { getDb: async () => db } as unknown as ServerContext);
+        return app;
+    }
+
+    test('list returns rows, KPI strip, facets, and no cursor on a short page', async () => {
+        const db = await setupDecisionDb();
+        const res = await mountWithDb(db).request('/api/observability/decisions');
+        expect(res.status).toBe(200);
+        const body = (await res.json()) as {
+            rows: Array<Record<string, unknown>>;
+            summary: { count: number; acceptedRate: number; fallbackRate: number; p95DurationMs: number | null };
+            facets: { decisionIds: string[]; makers: string[] };
+            nextCursor: string | null;
+        };
+        // Newest first; list rows map to camelCase and omit the mode-gated payload (§3.6).
+        expect(body.rows.map((r) => r.id)).toEqual(['d1', 'd2', 'd3']);
+        expect(body.rows[0]).toMatchObject({ decisionId: 'publish.pr', caller: 'workflow', outcome: 'accepted' });
+        expect(body.rows[0]?.inputKeys).toEqual(['x']);
+        expect(body.rows[0]).not.toHaveProperty('inputJson');
+        expect(body.rows[0]).not.toHaveProperty('question');
+        expect(body.rows[0]).not.toHaveProperty('phases');
+        // Summary is over the unfiltered set: 1 accepted + 1 fallback + 1 rejected.
+        expect(body.summary.count).toBe(3);
+        expect(body.summary.acceptedRate).toBeCloseTo(1 / 3);
+        expect(body.summary.fallbackRate).toBeCloseTo(1 / 3);
+        // Nearest-rank p95 of [1000, 4000, 2000].
+        expect(body.summary.p95DurationMs).toBe(4000);
+        expect(body.facets.decisionIds).toEqual(['publish.pr', 'triage.mode']);
+        expect(body.facets.makers).toEqual(['planner', 'router']);
+        expect(body.nextCursor).toBeNull();
+        db.close();
+    });
+
+    test('filters narrow rows and a short page yields a keyset cursor the next page honors', async () => {
+        const db = await setupDecisionDb();
+        const app = mountWithDb(db);
+        const filtered = await app.request(
+            '/api/observability/decisions?since=2026-09-06T00:00:00.000Z&decision=publish.pr&maker=planner&run=run1&outcome=accepted&caller=workflow&limit=10',
+        );
+        expect(filtered.status).toBe(200);
+        const filteredBody = (await filtered.json()) as {
+            rows: Array<{ id: string }>;
+            summary: { count: number; acceptedRate: number };
+        };
+        expect(filteredBody.rows.map((r) => r.id)).toEqual(['d1']);
+        expect(filteredBody.summary).toMatchObject({ count: 1, acceptedRate: 1 });
+
+        const page1 = await app.request('/api/observability/decisions?limit=1');
+        expect(page1.status).toBe(200);
+        const page1Body = (await page1.json()) as { rows: Array<{ id: string }>; nextCursor: string | null };
+        expect(page1Body.rows.map((r) => r.id)).toEqual(['d1']);
+        expect(page1Body.nextCursor).toBe('2026-09-06T12:00:00.000Z|d1');
+
+        const page2 = await app.request(
+            `/api/observability/decisions?limit=10&before=${encodeURIComponent(page1Body.nextCursor ?? '')}`,
+        );
+        expect(page2.status).toBe(200);
+        const page2Body = (await page2.json()) as { rows: Array<{ id: string }>; nextCursor: string | null };
+        expect(page2Body.rows.map((r) => r.id)).toEqual(['d2', 'd3']);
+        expect(page2Body.nextCursor).toBeNull();
+        db.close();
+    });
+
+    test('invalid outcome, caller, or limit respond 400 with the invalid-param wording', async () => {
+        const db = await setupDecisionDb();
+        const app = mountWithDb(db);
+        for (const query of ['outcome=bogus', 'caller=bogus', 'limit=0', 'limit=201', 'limit=1.5', 'limit=abc']) {
+            const res = await app.request(`/api/observability/decisions?${query}`);
+            expect(res.status).toBe(400);
+            const body = (await res.json()) as { error: string };
+            expect(body.error.startsWith('invalid ')).toBe(true);
+        }
+        db.close();
+    });
+
+    test('a DB failure maps to 500 on list and detail while invalid params stay 400', async () => {
+        const app = new Hono();
+        observabilityModule.mount(app, {
+            getDb: async () => {
+                throw new Error('db unavailable');
+            },
+        } as unknown as ServerContext);
+        const list = await app.request('/api/observability/decisions');
+        expect(list.status).toBe(500);
+        expect(((await list.json()) as { error: string }).error).toContain('db unavailable');
+
+        const detail = await app.request('/api/observability/decisions/d1');
+        expect(detail.status).toBe(500);
+        expect(((await detail.json()) as { error: string }).error).toContain('db unavailable');
+    });
+
+    test('detail returns the mode-gated payload and 404 for unknown ids', async () => {
+        const db = await setupDecisionDb();
+        const app = mountWithDb(db);
+        const res = await app.request('/api/observability/decisions/d1');
+        expect(res.status).toBe(200);
+        const body = (await res.json()) as {
+            id: string;
+            question: string | null;
+            inputJson: string | null;
+            phases: Array<{ phase: string; startedAt: number; durationMs: number }>;
+        };
+        expect(body.id).toBe('d1');
+        expect(body.question).toBe('Ship it?');
+        expect(body.inputJson).toBe('{"x":1}');
+        expect(body.phases).toEqual([{ phase: 'maker', startedAt: 12, durationMs: 900 }]);
+
+        const missing = await app.request('/api/observability/decisions/nope');
+        expect(missing.status).toBe(404);
+        expect(((await missing.json()) as { error: string }).error).toContain('nope');
+        db.close();
+    });
+});
+
+describe('GET /api/observability/summary — bucket, job-error merge, failure (task 1100 coverage)', () => {
+    const JOB_ERROR_MS = Date.parse('2026-09-06T15:30:00.000Z');
+
+    function mountWithSummaryStubs(opts: {
+        eventSummary: (spec: { since: string; until: string; bucketMs?: number }) => unknown;
+        db?: { queryAll: (sql: string) => unknown };
+        onEventSpec?: (spec: { since: string; until: string; bucketMs?: number }) => void;
+    }): Hono {
+        const app = new Hono();
+        const ctx = {
+            systemEventDao: async () => ({
+                eventSummary: async (spec: { since: string; until: string; bucketMs?: number }) => {
+                    opts.onEventSpec?.(spec);
+                    return opts.eventSummary(spec);
+                },
+            }),
+            getDb: async () => opts.db ?? { queryAll: async () => [] },
+        } as unknown as ServerContext;
+        observabilityModule.mount(app, ctx);
+        return app;
+    }
+
+    const eventSummaryBase = (spec: { since: string; until: string; bucketMs?: number }) => ({
+        window: { since: spec.since, until: spec.until },
+        totalEvents: 10,
+        errorEventCount: 1,
+        warningEventCount: 0,
+        eventVolumeBuckets: [],
+        topEventTypes: [],
+        recentErrors: [
+            { id: 'err-1', name: 'task.failed', occurredAt: '2026-09-06T15:45:00.000Z', message: 'Gate red' },
+        ],
+    });
+
+    test('bucket param is forwarded as bucketMs and failed job rows merge into recentErrors', async () => {
+        const specs: Array<{ since: string; until: string; bucketMs?: number }> = [];
+        const jobCounts = [
+            { status: 'completed', cnt: 3 },
+            { status: 'failed', cnt: 1 },
+        ];
+        const jobErrors = [{ id: 'job-9', type: 'task.run', updated_at: JOB_ERROR_MS, last_error: 'boom' }];
+        const app = mountWithSummaryStubs({
+            eventSummary: eventSummaryBase,
+            onEventSpec: (spec) => specs.push(spec),
+            db: {
+                queryAll: (sql: string) => (sql.includes('GROUP BY status') ? jobCounts : jobErrors),
+            },
+        });
+
+        const res = await app.request(
+            '/api/observability/summary?since=2026-09-06T12:00:00.000Z&until=2026-09-06T16:00:00.000Z&bucket=60000',
+        );
+        expect(res.status).toBe(200);
+        expect(specs[0]?.bucketMs).toBe(60000);
+        const body = (await res.json()) as {
+            kpis: {
+                totalEvents: number;
+                activeJobs: number;
+                completedJobs: number;
+                failedJobs: number;
+                successRatePct: number;
+                errorEventCount: number;
+                warningEventCount: number;
+            };
+            recentErrors: Array<{ id: string; source: string; name: string; occurredAt: string; message: string }>;
+        };
+        expect(body.kpis).toEqual({
+            totalEvents: 10,
+            activeJobs: 0,
+            completedJobs: 3,
+            failedJobs: 1,
+            successRatePct: 75,
+            errorEventCount: 1,
+            warningEventCount: 0,
+        });
+        // Event + job errors merge into one recency-sorted strip with a source discriminator.
+        expect(body.recentErrors).toEqual([
+            {
+                id: 'err-1',
+                source: 'event',
+                name: 'task.failed',
+                occurredAt: '2026-09-06T15:45:00.000Z',
+                message: 'Gate red',
+            },
+            {
+                id: 'job-9',
+                source: 'job',
+                name: 'task.run',
+                occurredAt: new Date(JOB_ERROR_MS).toISOString(),
+                message: 'boom',
+            },
+        ]);
+
+        // A non-positive/non-numeric bucket is ignored, not an error.
+        const resInvalidBucket = await app.request(
+            '/api/observability/summary?since=2026-09-06T12:00:00.000Z&until=2026-09-06T16:00:00.000Z&bucket=abc',
+        );
+        expect(resInvalidBucket.status).toBe(200);
+        expect(specs[1]?.bucketMs).toBeUndefined();
+    });
+
+    test('a failing aggregate surfaces a 500 with the cause', async () => {
+        const app = mountWithSummaryStubs({
+            eventSummary: () => {
+                throw new Error('events exploded');
+            },
+        });
+        const res = await app.request(
+            '/api/observability/summary?since=2026-09-06T12:00:00.000Z&until=2026-09-06T16:00:00.000Z',
+        );
+        expect(res.status).toBe(500);
+        expect(((await res.json()) as { error: string }).error).toContain('events exploded');
+    });
+});
+
+describe('getLedgerWatcher in-flight reuse and stale-path teardown', () => {
+    test('a second same-path call adopts the in-flight load; a path switch stops the stale watcher', async () => {
+        const { mkdtempSync, writeFileSync, rmSync } = await import('node:fs');
+        const { join } = await import('node:path');
+        const { tmpdir } = await import('node:os');
+        const dir = mkdtempSync(join(tmpdir(), 'spur-sse-race-'));
+        const pathA = join(dir, 'a.jsonl');
+        const pathB = join(dir, 'b.jsonl');
+        writeFileSync(pathA, '');
+        writeFileSync(pathB, '');
+        resetLedgerWatcherForTests();
+        try {
+            // Two synchronous calls race the same path: the second must adopt the in-flight
+            // load instead of starting a second watcher.
+            const first = getLedgerWatcher(pathA);
+            const second = getLedgerWatcher(pathA);
+            // A path switch before the first load resolves must stop the stale watcher.
+            const third = getLedgerWatcher(pathB);
+            const watcherA = await first;
+            expect(await second).toBe(watcherA);
+            const watcherB = await third;
+            expect(watcherB).not.toBe(watcherA);
+        } finally {
+            resetLedgerWatcherForTests();
+            rmSync(dir, { recursive: true, force: true });
+        }
     });
 });

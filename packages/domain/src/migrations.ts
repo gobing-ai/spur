@@ -218,6 +218,54 @@ CREATE INDEX IF NOT EXISTS idx_coordination_runs_parent ON coordination_runs (pa
 `;
 
 /**
+ * DDL for the `decision_logs` table (task 1100): one row per decision invocation, keyed by the
+ * `decision.start` invocationId. Rows carry the served result (`outcome`/`value`/`fallback_value`/
+ * `source`/`reason`/`confidence`), the caller context (`caller`, run correlation, maker and catalog
+ * provenance), the (redacted, bounded) input for `decisions.log = 'full'`, the always-stored input
+ * keys and evidence digest, and the caller-observed phase timings. Written by the decision log sink
+ * (`packages/app/src/decision/decision-log.ts`) after the lifecycle's `end`/`rejected` event, so a
+ * row always matches an emitted event sequence and never changes decision semantics on write
+ * failure. Mirrored in `drizzle/0052_spur_cli_decision_logs.sql`.
+ */
+export const DECISION_LOGS_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS decision_logs (
+    id TEXT PRIMARY KEY,
+    decision_id TEXT NOT NULL,
+    decision_type TEXT,
+    caller TEXT NOT NULL,
+    run_id TEXT,
+    workflow_name TEXT,
+    node_id TEXT,
+    wbs TEXT,
+    maker_name TEXT,
+    maker_source TEXT,
+    catalog_layer TEXT,
+    catalog_source TEXT,
+    min_confidence REAL,
+    question TEXT,
+    input_json TEXT,
+    input_keys_json TEXT NOT NULL DEFAULT '[]',
+    evidence_digest TEXT,
+    outcome TEXT NOT NULL,
+    value TEXT,
+    fallback_value TEXT,
+    source TEXT,
+    reason TEXT,
+    confidence REAL,
+    error TEXT,
+    started_at TEXT NOT NULL,
+    ended_at TEXT NOT NULL,
+    duration_ms INTEGER NOT NULL,
+    phases_json TEXT NOT NULL DEFAULT '[]',
+    schema_version INTEGER NOT NULL DEFAULT 1
+);
+CREATE INDEX IF NOT EXISTS idx_decision_logs_started_at ON decision_logs (started_at);
+CREATE INDEX IF NOT EXISTS idx_decision_logs_decision_started ON decision_logs (decision_id, started_at);
+CREATE INDEX IF NOT EXISTS idx_decision_logs_maker_started ON decision_logs (maker_name, started_at);
+CREATE INDEX IF NOT EXISTS idx_decision_logs_run ON decision_logs (run_id);
+`;
+
+/**
  * DDL for the `history_run_session` table (feature E6 / task 0557): the
  * run→session mapping captured at the agent invoke boundary. One row per
  * agent invocation that resolves a session — the run id to the importer
@@ -1587,6 +1635,14 @@ export const CLI_MIGRATIONS: CliMigration[] = [
         id: '0051_spur_cli_coordination_runs_parent',
         sql: COORDINATION_RUNS_PARENT_SCHEMA_SQL,
         addColumnIfMissing: { table: 'coordination_runs', column: 'parent_run_id' },
+    },
+    {
+        // 1100: decision_logs — one row per decision invocation (§3.5 of
+        // docs/design/decision-observability-and-adoption.md). Rows are written by the decision
+        // log sink through DecisionLogDao, which prunes beyond the newest 10,000 by started_at.
+        // Idempotent `CREATE TABLE IF NOT EXISTS`, so no column guard is needed.
+        id: '0052_spur_cli_decision_logs',
+        sql: DECISION_LOGS_SCHEMA_SQL,
     },
 ];
 

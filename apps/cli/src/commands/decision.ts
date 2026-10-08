@@ -4,6 +4,7 @@ import {
     DecisionInputError,
     type DecisionStatus,
     decisionCorrelationFromVars,
+    decisionLogSink,
     decisionReliability,
     emitDecisionRejected,
     getDecisionService,
@@ -151,13 +152,25 @@ export function registerDecisionCommand(program: Command, context: CliContext): 
             const correlation = decisionCorrelationFromVars(getEnvVars());
             const callContext =
                 correlation !== undefined ? { caller: 'workflow' as const, correlation } : { caller: 'cli' as const };
+            // Task 1100: the CLI caller writes decision rows from its own config. The
+            // prelude clock opens before describe so every pre-decide rejection row
+            // carries the real invocation start, and a successful evidence read adds
+            // the `evidence` phase (CLI and workflow paths only).
+            const sink = decisionLogSink(await context.getDb(), context.spurConfig ?? null, context.env);
+            const prelude:
+                | { startedAt: number; phases: { phase: 'evidence'; startedAt: number; durationMs: number }[] }
+                | undefined = sink !== undefined ? { startedAt: Date.now(), phases: [] } : undefined;
+            const rejectedLog = () =>
+                sink !== undefined && prelude !== undefined
+                    ? { sink, startedAt: Date.now(), phases: [], prelude }
+                    : undefined;
             try {
                 const service = await getDecisionService(context.spurConfig ?? null, context.cwd);
                 let description: ReturnType<typeof service.describe>;
                 try {
                     description = service.describe(id); // unknown id exits before any work
                 } catch (error) {
-                    emitDecisionRejected(bus, { decisionId: id, ...callContext }, error);
+                    emitDecisionRejected(bus, { decisionId: id, ...callContext }, error, undefined, rejectedLog());
                     throw error;
                 }
 
@@ -173,8 +186,15 @@ export function registerDecisionCommand(program: Command, context: CliContext): 
                             async (path) => await context.fs.readFile(path),
                         );
                     }
+                    if (prelude !== undefined) {
+                        prelude.phases.push({
+                            phase: 'evidence',
+                            startedAt: prelude.startedAt,
+                            durationMs: Date.now() - prelude.startedAt,
+                        });
+                    }
                 } catch (error) {
-                    emitDecisionRejected(bus, { decisionId: id, ...callContext }, error);
+                    emitDecisionRejected(bus, { decisionId: id, ...callContext }, error, undefined, rejectedLog());
                     throw error;
                 }
 
@@ -182,13 +202,14 @@ export function registerDecisionCommand(program: Command, context: CliContext): 
                 try {
                     input = parseParams(id, description.parameters, options.param ?? [], evidence);
                 } catch (error) {
-                    emitDecisionRejected(bus, { decisionId: id, ...callContext }, error);
+                    emitDecisionRejected(bus, { decisionId: id, ...callContext }, error, undefined, rejectedLog());
                     throw error;
                 }
                 const result = await service.decide(id, input, {
                     maker: options.maker,
                     bus,
                     context: callContext,
+                    ...(sink !== undefined && prelude !== undefined ? { decisionLog: { sink, prelude } } : {}),
                 });
                 if (options.json === true) {
                     context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope === true }));

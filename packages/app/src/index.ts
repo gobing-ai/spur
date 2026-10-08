@@ -28,6 +28,22 @@ export {
     emitDecisionRejected,
 } from './decision/decision-events';
 export { readDecisionEvidence } from './decision/decision-evidence-input';
+// Decision log persistence + Board reads (task 1100): the sink callers build
+// their caller-owned sink from, and the Board query service reads through.
+export {
+    buildDecisionLogRow,
+    DECISION_LOG_SCHEMA_VERSION,
+    type DecisionLogMode,
+    type DecisionLogRecord,
+    type DecisionLogSink,
+    decisionLogSink,
+    writeDecisionLog,
+} from './decision/decision-log';
+export {
+    type DecisionLogListResponse,
+    DecisionLogQueryService,
+    type DecisionLogQuerySpec,
+} from './decision/decision-log-query';
 // Decision reliability report (task 1096, slice S3): reads the recorded
 // `decision.end` ledger; the CLI imports only through this package index.
 export {
@@ -42,6 +58,7 @@ export {
 export {
     type DecisionDescription,
     type DecisionListEntry,
+    type DecisionLogOption,
     type DecisionMakerSource,
     DecisionService,
     type DecisionStatus,
