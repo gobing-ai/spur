@@ -15,6 +15,8 @@
  *     feature scenario title
  *   - status / evidence-type values the verdict parser would drop
  *   - empty evidence
+ *   - evidence asserting an external API/library claim with no same-cell citation (1070)
+ *   - hedged uncertainty phrases ("likely", "probably", …) in MET evidence
  *
  * Compound evidence types (`test + command`) stay valid — normalization mirrors
  * `packages/app/src/services/task-verdict.ts` exactly, so anything this lint accepts
@@ -89,13 +91,17 @@ export function lintVerifyAnswer(
         if (normalizeReqStatus(row.status) === null)
             add(row.line, 'req-status', `"${row.id}" invalid status "${row.status}" (MET | PARTIAL | UNMET)`);
         if (!row.evidence.trim()) add(row.line, 'req-evidence', `"${row.id}" has empty evidence`);
-        else if (hasClaimMarker(row.evidence) && !hasCitationForm(row.evidence)) {
-            add(
-                row.line,
-                'evidence-citation',
-                `"${row.id}" evidence asserts an external API/library/version claim without a citation ` +
-                    '(add a repo `path:line`, an external `@origin `path` line N`, or a URL in the same cell)',
-            );
+        else {
+            if (hasClaimMarker(row.evidence) && !hasCitationForm(row.evidence)) {
+                add(
+                    row.line,
+                    'evidence-citation',
+                    `"${row.id}" evidence asserts an external API/library/version claim without a citation ` +
+                        '(add a repo `path:line`, an external `@origin `path` line N`, or a URL in the same cell)',
+                );
+            }
+            const hedge = normalizeReqStatus(row.status) === 'MET' ? firstHedgedPhrase(row.evidence) : null;
+            if (hedge !== null) add(row.line, 'evidence-hedged', hedgedMessage(`"${row.id}"`, hedge));
         }
     }
     for (const id of reqIds) {
@@ -152,13 +158,17 @@ export function lintVerifyAnswer(
                 `invalid evidence type "${row.evidenceType}" (test | command | static-ref | manual-review | llm-judge | n/a, or a + compound)`,
             );
         if (!row.evidence.trim()) add(row.line, 'ac-evidence', `AC "${row.id.slice(0, 40)}" has empty evidence`);
-        else if (hasClaimMarker(row.evidence) && !hasCitationForm(row.evidence)) {
-            add(
-                row.line,
-                'evidence-citation',
-                `AC "${row.id.slice(0, 40)}" evidence asserts an external API/library/version claim without a citation ` +
-                    '(add a repo `path:line`, an external `@origin `path` line N`, or a URL in the same cell)',
-            );
+        else {
+            if (hasClaimMarker(row.evidence) && !hasCitationForm(row.evidence)) {
+                add(
+                    row.line,
+                    'evidence-citation',
+                    `AC "${row.id.slice(0, 40)}" evidence asserts an external API/library/version claim without a citation ` +
+                        '(add a repo `path:line`, an external `@origin `path` line N`, or a URL in the same cell)',
+                );
+            }
+            const hedge = normalizeAcStatus(row.status) === 'MET' ? firstHedgedPhrase(row.evidence) : null;
+            if (hedge !== null) add(row.line, 'evidence-hedged', hedgedMessage(`AC "${row.id.slice(0, 40)}"`, hedge));
         }
     }
 
@@ -215,6 +225,47 @@ function hasClaimMarker(evidence: string): boolean {
 
 function hasCitationForm(evidence: string): boolean {
     return CITATION_FORMS.some((re) => re.test(evidence));
+}
+
+// ─── Hedged-evidence detection ──────────────────────────────────────────────
+
+/**
+ * Uncertainty phrases (closed set, word-anchored). A MET row asserts the
+ * requirement is satisfied; hedged evidence contradicts the assertion the row
+ * is making, the same way an uncited claim does. Deliberately excludes modal
+ * verbs (might/may/could/should) — they appear constantly in remediation prose
+ * and would drown the signal. Scanning skips citation spans so a filename or
+ * test name containing a hedge word ("likely-match.test.ts") cannot fire.
+ */
+const HEDGED_PATTERNS: readonly RegExp[] = [
+    /\b(?:un)?likely\b/i,
+    /\bprobably\b/i,
+    /\bpresumably\b/i,
+    /\bapparently\b/i,
+    /\bseem(?:s|ing(?:ly)?)? to\b/i,
+    /\bappears to\b/i,
+];
+
+/** Strip citation spans (backticked spans + bare path.ext:line) before hedge scanning. */
+function stripCitationSpans(evidence: string): string {
+    return evidence.replace(/`[^`]*`/g, ' ').replace(/\b[\w./-]+\.[A-Za-z0-9]+:\d+(?:-\d+)?\b/g, ' ');
+}
+
+/** First hedged phrase in MET evidence (citation spans excluded), or null. */
+export function firstHedgedPhrase(evidence: string): string | null {
+    const scanned = stripCitationSpans(evidence);
+    for (const re of HEDGED_PATTERNS) {
+        const m = re.exec(scanned);
+        if (m) return m[0].toLowerCase();
+    }
+    return null;
+}
+
+function hedgedMessage(rowLabel: string, phrase: string): string {
+    return (
+        `${rowLabel} evidence hedges a MET claim ("${phrase}") — state the deterministic fact ` +
+        'with a concrete anchor, or downgrade the row to PARTIAL'
+    );
 }
 
 function splitTableCells(line: string): string[] {

@@ -181,6 +181,23 @@ citation in the SAME cell, or lint rejects the row with `evidence-citation` (blo
   satisfy it. Marker-free receipts (test counts, reviewed-log notes) need no citation. The check is
   presence-only — which citation proves which claim is not deterministically decidable.
 
+## Hedged evidence is rejected on MET rows
+
+A MET row asserts the requirement is satisfied; evidence that hedges ("the guard likely prevents
+the leak") contradicts the assertion the row is making. The lint rejects such rows with
+`evidence-hedged`, naming the detected phrase, with two remedies: state the deterministic fact
+with a concrete anchor, or downgrade the row to PARTIAL (which is what suspected-but-unproven
+behavior actually is).
+
+- Detected phrases (closed set, word-anchored, case-insensitive): `likely`, `unlikely`,
+  `probably`, `presumably`, `apparently`, `seems/seeming/seemingly to`, `appears to`. Modal verbs
+  (`might`/`may`/`could`/`should`) are deliberately out of set — they are constant in remediation
+  prose and would drown the signal.
+- Only MET rows are scanned. Hedging a gap in an UNMET row ("the stale path likely still loads
+  the old bundle") is honest reporting and stays clean.
+- Citation spans are stripped before scanning, so a filename or test name containing a hedge
+  word (`likely-match.test.ts`) cannot fire.
+
 ## Checks evidence
 
 Wave C verification can emit the following additive `checks[]` rows:

@@ -580,6 +580,83 @@ R3 is mentioned in prose without a terminator and is not a declaration.
     });
 });
 
+describe('evidence-hedged: uncertainty phrases in MET evidence are rejected', () => {
+    test.each([
+        ['likely', 'the guard likely prevents the leak'],
+        ['unlikely', 'a rerun is unlikely to pass without the fix'],
+        ['probably', 'the launcher probably inherits the env'],
+        ['presumably', 'the twin presumably picked up the lib change'],
+        ['apparently', 'the bundle is apparently stale'],
+        ['seems to', 'the guard seems to block the stale path'],
+        ['appears to', 'the receipt appears to be written'],
+    ])('%s in MET evidence is rejected, row-addressed', (phrase, evidence) => {
+        const findings = lintVerifyAnswer(
+            answer([`| R1 | MET | ${evidence} |`, '| R2 | MET | `src/log.ts:7` |'], CLEAN_ACS),
+            TASK,
+            null,
+        );
+        expect(findings.some((f) => f.rule === 'evidence-hedged' && f.line === 7 && f.message.includes(phrase))).toBe(
+            true,
+        );
+    });
+
+    test('case-insensitive: "Likely" is flagged', () => {
+        const findings = lintVerifyAnswer(
+            answer(['| R1 | MET | Likely fixed by the guard |', '| R2 | MET | `src/log.ts:7` |'], CLEAN_ACS),
+            TASK,
+            null,
+        );
+        expect(findings.some((f) => f.rule === 'evidence-hedged')).toBe(true);
+    });
+
+    test('hedge in an UNMET row lints clean — hedging a gap is honest', () => {
+        expect(
+            lintVerifyAnswer(
+                answer(
+                    [
+                        '| R1 | UNMET | the stale path likely still loads the old bundle |',
+                        '| R2 | MET | `src/log.ts:7` |',
+                    ],
+                    CLEAN_ACS,
+                ),
+                TASK,
+                null,
+            ),
+        ).toEqual([]);
+    });
+
+    test('hedge inside a citation span or backticked code lints clean', () => {
+        expect(
+            lintVerifyAnswer(
+                answer(
+                    ['| R1 | MET | rerun per `src/likely-match.test.ts:9` passes |', '| R2 | MET | `src/log.ts:7` |'],
+                    CLEAN_ACS,
+                ),
+                TASK,
+                null,
+            ),
+        ).toEqual([]);
+    });
+
+    test('hedged AC MET evidence is rejected', () => {
+        const findings = lintVerifyAnswer(
+            answer(CLEAN_REQS, ['| AC1 | MET | test | the fixture likely covers the branch |', CLEAN_ACS[1] ?? '']),
+            TASK,
+            null,
+        );
+        expect(findings.some((f) => f.rule === 'evidence-hedged')).toBe(true);
+    });
+
+    test('the refusal names both remedies: deterministic anchor or PARTIAL', () => {
+        const findings = lintVerifyAnswer(
+            answer(['| R1 | MET | the guard likely prevents the leak |', '| R2 | MET | `src/log.ts:7` |'], CLEAN_ACS),
+            TASK,
+            null,
+        );
+        expect(findings.some((f) => f.message.includes('PARTIAL'))).toBe(true);
+    });
+});
+
 describe('evidence-citation (task 1070 R1-R4): API/library claims need a same-cell citation', () => {
     const cited = (evidence: string, reqs = ['R1', 'R2']) =>
         answer(
