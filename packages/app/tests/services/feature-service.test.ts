@@ -1,13 +1,21 @@
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MarkdownDocument } from '@gobing-ai/spur-domain';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
+import { defaultVerdictRunDir } from '../../src/services/feature-check';
 import { FeatureService } from '../../src/services/feature-service';
 import type { SectionMatrix } from '../../src/services/planning-check-base';
 import { PlanningWriteService } from '../../src/services/planning-write-service';
 import { TaskService } from '../../src/services/task-service';
+import {
+    captureFeatureReceiptDigest,
+    completeFeatureVerificationReceipt,
+    DEFAULT_FEATURE_VERIFICATION_CMD,
+    startFeatureVerificationReceipt,
+} from '../../src/workflow/feature-verification-receipt';
+import { resolveWorkflowDefinition } from '../../src/workflow/workflow-resolver';
 
 let featuresDir: string;
 let tasksDir: string;
@@ -28,6 +36,42 @@ const F_SECTION_MATRIX: SectionMatrix = {
 };
 
 let svc: FeatureService;
+
+/** Filesystem for receipt fixtures (1119) — absolute paths, independent of the suite root fs. */
+const receiptFs = createNodeFileSystem();
+
+/**
+ * 1119: record a valid feature-verification receipt (run-scoped + feature-latest copies)
+ * bound to the feature's current on-disk content, the way the feature-verification pass
+ * does. Validation inside `deriveFeatureStatus` re-captures the same digest, so this makes
+ * the completion boundary see PASS evidence instead of `L4.feature-receipt-missing`.
+ */
+async function recordPassReceipt(featureId: string): Promise<void> {
+    const feature = await svc.show(featureId);
+    if (!feature) throw new Error(`feature ${featureId} not found`);
+    const selected = await resolveWorkflowDefinition(process.cwd(), 'feature-verification');
+    const vars = selected.workflow.vars as { verificationCmd?: unknown } | undefined;
+    const cmd =
+        typeof vars?.verificationCmd === 'string' && vars.verificationCmd.length > 0
+            ? vars.verificationCmd
+            : DEFAULT_FEATURE_VERIFICATION_CMD;
+    const runDir = defaultVerdictRunDir(tasksDir);
+    const inputDigest = await captureFeatureReceiptDigest(process.cwd(), feature.content);
+    const running = await startFeatureVerificationReceipt(receiptFs, runDir, {
+        featureId,
+        runId: `receipt-${featureId.toLowerCase()}`,
+        workdir: root,
+        verifier: {
+            name: 'feature-verification',
+            sourcePath: selected.path,
+            layer: selected.layer,
+            definitionDigest: selected.digest,
+        },
+        verificationCmd: cmd,
+        inputDigest,
+    });
+    await completeFeatureVerificationReceipt(receiptFs, runDir, running, { status: 'PASS', inputDigest });
+}
 
 beforeAll(async () => {
     root = mkdtempSync(join(tmpdir(), 'spur-feature-svc-'));
@@ -898,6 +942,8 @@ updated_at: "${new Date().toISOString()}"
             // Force the feature from backlog → done so a sync actually applies hops.
             await svc.transition(feat.ref.id, 'active');
             await svc.transition(feat.ref.id, 'verifying');
+            // 1119: completion needs the feature-verification receipt — fixture it.
+            await recordPassReceipt(feat.ref.id);
 
             const res = await svc.syncFeature(feat.ref.id, { forceConfirm: true });
             expect(res.applied).toBe(true);
@@ -941,6 +987,9 @@ updated_at: "${new Date().toISOString()}"
 `,
             );
             await svc.transition(feat.ref.id, 'active');
+            // 1119: the derivation must still propose `done` so the lifecycle guard is what
+            // rejects the later hop — fixture the feature-verification receipt.
+            await recordPassReceipt(feat.ref.id);
 
             const fs = createNodeFileSystem(root);
             const partialSvc = new FeatureService({
@@ -962,6 +1011,55 @@ updated_at: "${new Date().toISOString()}"
             await expect(partialSvc.syncFeature(feat.ref.id)).rejects.toThrow('blocked after verifying');
             expect((await partialSvc.show(feat.ref.id))?.status).toBe('verifying');
             expect(readFileSync(filePath, 'utf8')).toContain('| 9907 | Partial Converge Task | done |');
+
+            rmSync(filePath, { force: true });
+            rmSync(taskPath, { force: true });
+        });
+
+        test('syncFeature stops at verifying with receiptPending when the feature-verification receipt is missing, then completes once it lands (1119)', async () => {
+            const feat = await svc.create('Sync Receipt Pending');
+            const filePath = join(featuresDir, `${feat.ref.id}_sync-receipt-pending.md`);
+            const taskPath = join(tasksDir, '9911_receipt-pending-task.md');
+            writeFileSync(
+                taskPath,
+                `---
+schema_version: 1
+wbs: "9911"
+name: "Receipt Pending Task"
+status: "done"
+feature_id: "${feat.ref.id}"
+created_at: "${new Date().toISOString()}"
+updated_at: "${new Date().toISOString()}"
+---
+# 9911: Receipt Pending Task
+`,
+            );
+            await svc.transition(feat.ref.id, 'active');
+            // The suite shares one tmp root and feature ids recycle after cleanup; a leftover
+            // feature-latest receipt from an earlier id holder would surface as `stale` —
+            // start this scenario from a clean evidence plane.
+            rmSync(join(root, '.spur'), { recursive: true, force: true });
+
+            // No receipt: the all-terminal derivation stops at verifying and reports the finding.
+            const res = await svc.syncFeature(feat.ref.id);
+            expect(res.applied).toBe(true);
+            expect(res.appliedHops).toEqual(['verifying']);
+            expect(res.proposal.from).toBe('active');
+            expect(res.proposal.to).toBe('verifying');
+            expect(res.proposal.receiptPending).toBe(true);
+            expect(res.proposal.gateFindings?.map((f) => f.code)).toContain('L4.feature-receipt-missing');
+            expect((await svc.show(feat.ref.id))?.status).toBe('verifying');
+
+            // R2: a receipt-only stop is never persisted as a repeated BLOCKED state.
+            expect(existsSync(join(root, '.spur', 'run', `feature-sync-blocked-${feat.ref.id}.json`))).toBe(false);
+
+            // Once the receipt lands, the next sync (no --force) completes the feature.
+            await recordPassReceipt(feat.ref.id);
+            const second = await svc.syncFeature(feat.ref.id);
+            expect(second.suppressed).toBeUndefined();
+            expect(second.applied).toBe(true);
+            expect(second.appliedHops).toEqual(['done']);
+            expect((await svc.show(feat.ref.id))?.status).toBe('done');
 
             rmSync(filePath, { force: true });
             rmSync(taskPath, { force: true });
@@ -1026,6 +1124,8 @@ updated_at: "${new Date().toISOString()}"
             // Once the goal leaves active (operator advances it), the same sync applies.
             await svc.transition(goal.ref.id, 'verifying');
             await svc.transition(goal.ref.id, 'done');
+            // 1119: completion needs the feature-verification receipt — fixture it.
+            await recordPassReceipt(contender.ref.id);
             const applied = await svc.syncFeature(contender.ref.id);
             expect(applied.applied).toBe(true);
             expect(applied.appliedHops).toEqual(['active', 'verifying', 'done']);

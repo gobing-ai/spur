@@ -330,8 +330,7 @@ skipped when no run port is supplied), `contract-mismatch` (recorded verifier na
 layer/digest or `verificationCmd` differs from the currently resolved `feature-verification`
 definition — `--cmd` overrides cannot forge a contract; `sourcePath` is diagnostic only, since
 bundled and source-local CLIs resolve the same shared definition from different paths), and `stale` (digest drift: the recorded `inputDigest` no longer matches the current tree). Git failure during digest capture is
-fail-closed (0751 R1). All completion paths enforce: `feature advance`'s done hop and
-the engine `verifying→done` guard (`feature check --strict --as done`).
+fail-closed (0751 R1). All completion paths enforce: `feature advance`'s done hop, the engine `verifying→done` guard (`feature check --strict --as done`), and `feature sync`'s receipt-pending stop at `verifying` (1119 — sync holds a feature at `verifying` when its feature-verification receipt is missing, without persisting a BLOCKED replay).
 
 **Ordering and replay.** Re-running the pass overwrites both copies (start supersedes
 the feature-latest copy first; complete writes both + the coarse status). Wrapup

@@ -16,6 +16,7 @@ import {
     validateAcceptanceCriteria,
 } from '@gobing-ai/spur-domain';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
+import type { FeatureReceiptRunPort } from '../workflow/feature-verification-receipt';
 import {
     type CheckFeatureFindings,
     defaultVerdictRunDir,
@@ -50,6 +51,8 @@ export interface FeatureSyncProposal {
     gateBlocked?: boolean;
     gateFindings?: CheckFeatureFindings[];
     hops?: string[];
+    /** 1119: the proposal stops short of `done` only because the feature-verification receipt is missing or invalid. */
+    receiptPending?: boolean;
 }
 
 /** Options for feature status sync operations. */
@@ -58,6 +61,8 @@ export interface FeatureSyncOptions {
     forceConfirm?: boolean;
     /** 1004 R3: bypass repeated-BLOCKED suppression — always run the live derivation. */
     force?: boolean;
+    /** 1119: run-store ports for the completion-boundary receipt probe (CLI wires the project DB). */
+    receiptRunPort?: FeatureReceiptRunPort;
 }
 
 /** Result of a single feature status sync. */
@@ -433,7 +438,10 @@ export class FeatureService {
      * Derive proposed feature status from its linked tasks state per ADR/0322.
      * Conservative forward-only derivation mapping.
      */
-    async deriveFeatureStatus(featureId: string): Promise<FeatureSyncProposal> {
+    async deriveFeatureStatus(
+        featureId: string,
+        options?: { receiptRunPort?: FeatureReceiptRunPort },
+    ): Promise<FeatureSyncProposal> {
         const feature = await this.show(featureId);
         if (!feature) {
             throw new Error(`Feature ${featureId} not found`);
@@ -478,20 +486,24 @@ export class FeatureService {
             };
         }
 
+        // Shared check inputs for both probes: the L4 AC gate and the 1119 receipt probe
+        // must see identical dirs so a receipt finding can only come from the receipt itself.
+        const checkSvc = new FeatureCheckService(this.ctx.fs);
+        // Multi-folder scan (parity with collectTasksByFeature / feature check CLI).
+        const tasksDirs = this.ctx.foldersConfig
+            ? Object.keys(this.ctx.foldersConfig.folders).map((p) => this.ctx.fs.resolve(p))
+            : [this.ctx.tasksDir];
+        if (!tasksDirs.includes(this.ctx.tasksDir)) tasksDirs.unshift(this.ctx.tasksDir);
+        const checkOptions = {
+            featuresDir: this.ctx.featuresDir,
+            tasksDir: this.ctx.tasksDir,
+            tasksDirs,
+            runDir: defaultVerdictRunDir(this.ctx.tasksDir),
+        };
+
         // Helper to evaluate L4 AC gate before transitioning into verifying or done
         const checkL4Gate = async (): Promise<{ pass: boolean; findings: CheckFeatureFindings[] }> => {
-            const checkSvc = new FeatureCheckService(this.ctx.fs);
-            // Multi-folder scan (parity with collectTasksByFeature / feature check CLI).
-            const tasksDirs = this.ctx.foldersConfig
-                ? Object.keys(this.ctx.foldersConfig.folders).map((p) => this.ctx.fs.resolve(p))
-                : [this.ctx.tasksDir];
-            if (!tasksDirs.includes(this.ctx.tasksDir)) tasksDirs.unshift(this.ctx.tasksDir);
-            const res = await checkSvc.check(feature.filePath, featureId, {
-                featuresDir: this.ctx.featuresDir,
-                tasksDir: this.ctx.tasksDir,
-                tasksDirs,
-                runDir: defaultVerdictRunDir(this.ctx.tasksDir),
-            });
+            const res = await checkSvc.check(feature.filePath, featureId, checkOptions);
             const l4Errors = res.findings.filter((f) => f.layer === 'L4' && f.severity === 'error');
             return { pass: l4Errors.length === 0, findings: res.findings };
         };
@@ -513,6 +525,40 @@ export class FeatureService {
                     gateBlocked: true,
                     gateFindings: gate.findings,
                     ...(from !== targetBeforeVerifying ? { hops: [targetBeforeVerifying] } : {}),
+                };
+            }
+
+            // 1119: completion must not outrun the feature-verification receipt. A second
+            // probe at the completion boundary (`--as done`) is consulted ONLY for
+            // `L4.feature-receipt-*` errors, and only after the ordinary L4 AC gate passed —
+            // today's stop-before-verifying outcomes keep their exact shape.
+            const completion = await checkSvc.check(feature.filePath, featureId, {
+                ...checkOptions,
+                asStatus: 'done',
+                receiptRunPort: options?.receiptRunPort,
+            });
+            const receiptErrors = completion.findings.filter(
+                (f) => f.severity === 'error' && f.code.startsWith('L4.feature-receipt-'),
+            );
+            if (receiptErrors.length > 0) {
+                // 1119: never claim done without the feature-verification receipt; stop at
+                // verifying. Not `gateBlocked` on purpose — a receipt-only stop must not
+                // persist as a repeated BLOCKED state (the 1004 fingerprint cannot see the
+                // receipt file), or the next sync after the receipt lands would replay it.
+                const hops =
+                    from === 'backlog' || from === 'blocked'
+                        ? ['active', 'verifying']
+                        : from === 'active'
+                          ? ['verifying']
+                          : [];
+                return {
+                    featureId,
+                    from,
+                    to: 'verifying',
+                    reason: 'feature-verification receipt missing or invalid; stopped at verifying',
+                    receiptPending: true,
+                    gateFindings: receiptErrors,
+                    ...(hops.length > 0 ? { hops } : {}),
                 };
             }
 
@@ -600,7 +646,7 @@ export class FeatureService {
 
     /** Live derivation + application path (suppression wrapper lives in {@link syncFeature}). */
     private async runSyncFeature(featureId: string, options?: FeatureSyncOptions): Promise<FeatureSyncResult> {
-        const proposal = await this.deriveFeatureStatus(featureId);
+        const proposal = await this.deriveFeatureStatus(featureId, options);
 
         if (proposal.from === proposal.to) {
             return { proposal, applied: false, appliedHops: [] };
