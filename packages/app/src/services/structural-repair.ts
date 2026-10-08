@@ -104,7 +104,8 @@ function requirementsMissingCheckbox(body: string): Array<{ index: number; bulle
     const out: Array<{ index: number; bullet: string }> = [];
     for (const [i, line] of body.split('\n').entries()) {
         if (/\[[ xX]\]/.test(line)) continue;
-        const m = /^(\s*)([-*])?\s*R\d+\.?(\s.*)?$/.exec(line);
+        // A bullet `*` must not be the first char of a `**R1**` emphasis run.
+        const m = /^(\s*)([-*](?![*_]))?\s*[*_]{0,2}R\d+\.?[*_]{0,2}(\s.*)?$/.exec(line);
         if (m !== null) out.push({ index: i, bullet: m[2] ?? '' });
     }
     return out;
@@ -343,7 +344,8 @@ export function applyStructuralRepairs(
                 const orig = lines[rr.index];
                 if (orig === undefined) continue;
                 const leadWs = /^(\s*)/.exec(orig)?.[1] ?? '';
-                const rest = orig.slice(leadWs.length).replace(/^[-*]\s*/, '');
+                const body = orig.slice(leadWs.length);
+                const rest = rr.bullet === '' ? body : body.replace(/^[-*]\s*/, '');
                 lines[rr.index] = `${leadWs}${rr.bullet === '' ? '- [ ]' : `${rr.bullet} [ ]`} ${rest}`;
             }
             blockBody = lines.join('\n');

@@ -2,11 +2,11 @@
 schema_version: 1
 id: "F21"
 name: "Consistent task creation and default implementation readiness"
-status: verifying
+status: active
 priority: P1
 tags: []
 created_at: "2026-09-06T19:44:10.927Z"
-updated_at: "2026-09-07T01:37:44.229Z"
+updated_at: "2026-10-08T19:11:24.570Z"
 ---
 
 # F21: Consistent task creation and default implementation readiness
@@ -93,5 +93,8 @@ Delivery is scheduled after the D6 workflow repair batch ending at 0786. Two tas
 
 Approved design: docs/design/task-creation-readiness.md; decision ADR-109. The operator approved the direction and design gate on 2026-09-06 and explicitly asked to avoid overly small tasks. This feature is planned, not implemented.
 ## History
+
 - 2026-09-06T23:24:57.309Z backlog → active (system)
 - 2026-09-07T01:37:44.229Z active → verifying (system)
+- 2026-10-08T19:11:24.570Z verifying → active (system)
+

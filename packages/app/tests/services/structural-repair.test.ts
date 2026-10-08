@@ -82,6 +82,14 @@ describe('structuralFindings', () => {
         expect(cb?.message).toContain('1 R-item');
     });
 
+    test('reports and repairs bold R-items missing the checkbox marker', () => {
+        const raw = `---\nstatus: wip\n---\n\n## 9999. Probe\n\n### Requirements\n\n- **R1 Lock.** first\n- **R2.** second\n`;
+        const cb = structuralFindings(raw, 'task').find((f) => f.code === 'L3.requirements-checkbox');
+        expect(cb?.message).toContain('2 R-item');
+        const out = applyStructuralRepairs(raw, 'task', undefined);
+        expect(out.content).toContain('- [ ] **R1 Lock.** first\n- [ ] **R2.** second');
+    });
+
     test('produces no findings on a well-formed task', () => {
         const findings = structuralFindings(taskDoc(), 'task');
         expect(findings).toEqual([]);

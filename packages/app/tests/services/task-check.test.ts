@@ -2146,6 +2146,20 @@ describe('TaskCheckService', () => {
             expect(findings.filter((f) => f.code === FINDING_CODES.L4_UNCOVERED_TASK_SCENARIO)).toHaveLength(0);
         });
 
+        test('bold R-items bind like plain ones, so an unbound bold R2 is reported', async () => {
+            const findings = await check(
+                canaryTask({
+                    altitude: 'task-local',
+                    numbering: true,
+                    requirements: ['- [ ] **R1 Bind.** this one.', '- [ ] **R2.** Leave this unbound.'],
+                    ac: ['```gherkin', 'Scenario: AC1 — First outcome is bound (req: R1)', '  Given x', '```'],
+                }),
+            );
+            const cov = findings.filter((f) => f.code === FINDING_CODES.L3_AC_REQUIREMENT_COVERAGE);
+            expect(cov).toHaveLength(1);
+            expect(cov[0]?.message).toContain('R2');
+        });
+
         test('complete task-local binding stays silent on coverage and subset', async () => {
             const findings = await check(
                 canaryTask({

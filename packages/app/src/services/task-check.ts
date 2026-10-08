@@ -816,7 +816,7 @@ export class TaskCheckService extends PlanningCheckService {
         ) {
             const reqIds = new Set<string>();
             for (const line of reqBody.split('\n')) {
-                const m = /^\s*[-*]?\s*(?:\[[ xX]\]\s*)?R(\d+)\.?\s/.exec(line);
+                const m = /^\s*[-*]?\s*(?:\[[ xX]\]\s*)?[*_]{0,2}R(\d+)\.?[*_]{0,2}\s/.exec(line);
                 if (m?.[1] !== undefined) reqIds.add(m[1]);
             }
             const acIds = new Set<string>();
