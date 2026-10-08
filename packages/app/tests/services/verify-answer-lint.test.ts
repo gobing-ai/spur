@@ -665,3 +665,52 @@ describe('evidence-citation (task 1070 R1-R4): API/library claims need a same-ce
         expect(findings.some((f) => f.rule === 'evidence-citation' && f.message.includes('AC1'))).toBe(true);
     });
 });
+
+describe('AC identities containing colons (task 1118)', () => {
+    const COLON_TASK = `
+## 9002. Colon fixture task
+
+### Requirements
+
+- [ ] **R1. Inventory.** Name the anchor.
+
+### Acceptance Criteria
+
+- [ ] AC1 — The inventory names the \`file:line\` anchor for every surface (req: R1)
+`;
+
+    test('an AC title containing a colon resolves verbatim (0213 regression)', () => {
+        const findings = lintVerifyAnswer(
+            answer(
+                ['| R1 | MET | done |'],
+                [
+                    '| AC1 — The inventory names the `file:line` anchor for every surface (req: R1) | MET | test | `t.ts:1` |',
+                ],
+            ),
+            COLON_TASK,
+            null,
+        );
+        expect(findings).toEqual([]);
+    });
+
+    test('legacy colon-headed rows still resolve by their head', () => {
+        const findings = lintVerifyAnswer(
+            answer(CLEAN_REQS, ['| AC1 (R1) | MET | test | `t.ts:1` |', CLEAN_ACS[1] ?? '']),
+            TASK,
+            null,
+        );
+        expect(findings).toEqual([]);
+    });
+
+    test('the truncated pre-colon head is no longer a declared identity', () => {
+        // Before 1118 the declared identity stopped at the first colon, so only the junk
+        // truncated head resolved while the verbatim title did not. After the fix the full
+        // title resolves and the junk head is gone — citing it is rejected.
+        const junk = lintVerifyAnswer(
+            answer(['| R1 | MET | done |'], ['| AC1 — The inventory names the `file | MET | test | `t.ts:1` |']),
+            COLON_TASK,
+            null,
+        );
+        expect(junk.some((f) => f.rule === 'ac-identity')).toBe(true);
+    });
+});

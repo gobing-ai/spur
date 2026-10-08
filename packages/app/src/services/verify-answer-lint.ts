@@ -479,12 +479,25 @@ function buildAcIdentityIndex(taskContent: string, featureContent: string | null
         if (key !== '' && !byTitle.has(key)) byTitle.set(key, spelling);
     };
     const section = sectionBetween(taskContent, 'Acceptance Criteria');
-    for (const m of section.matchAll(/^[-*]\s+(?:\[[ xX]\]\s+)?(.+?)\s*(?::|$)/gm)) {
+    // Scenario titles declare first so the 1091 rejection message (5-item sample) leads with
+    // them; 1118's full checklist lines are long and would otherwise crowd scenarios out.
+    const scenarioTitles = (content: string): string[] =>
+        [...content.matchAll(/^[ \t]*Scenario:\s*(.+)\s*$/gm)].map((m) => (m[1] ?? '').trim()).filter((t) => t !== '');
+    const taskScenarios = scenarioTitles(section);
+    const featureScenarios = featureContent !== null ? scenarioTitles(featureContent) : [];
+    for (const title of [...taskScenarios, ...featureScenarios]) declareIdentity(title);
+    // 1118: the lazy `(.+?)\s*(?::|$)` declared only the head before the first colon, so any
+    // title containing one (e.g. `file:line` in backticks) truncated its identity and could
+    // never match the verbatim title an evidence convention asks verifiers to quote. Declare
+    // the full row text too; the colon-head stays declared for the legacy `AC1 (R1): …` form.
+    for (const m of section.matchAll(/^[-*]\s+(?:\[[ xX]\]\s+)?(.+?)\s*$/gm)) {
         const label = (m[1] ?? '').trim();
         if (!label) continue;
         declareIdentity(label);
+        const head = label.split(/:(?:\s|$)/)[0]?.trim() ?? '';
+        if (head && head !== label) declareIdentity(head);
         const leading = label.split(/\s+/)[0] ?? '';
-        if (leading && leading !== label) declareIdentity(leading);
+        if (leading && leading !== label && leading !== head) declareIdentity(leading);
     }
     // Bold head of a single-line criterion bullet (task 0862 R4): the bold span and its
     // head before the first ` — ` / `:` are declared ids, so `- **AC2 — Title.** Given …`
@@ -509,11 +522,6 @@ function buildAcIdentityIndex(taskContent: string, featureContent: string | null
         const head = inner.split(':')[0]?.trim() ?? '';
         if (head && head !== inner) declareIdentity(head);
     }
-    const scenarioTitles = (content: string): string[] =>
-        [...content.matchAll(/^[ \t]*Scenario:\s*(.+)\s*$/gm)].map((m) => (m[1] ?? '').trim()).filter((t) => t !== '');
-    const taskScenarios = scenarioTitles(sectionBetween(taskContent, 'Acceptance Criteria'));
-    const featureScenarios = featureContent !== null ? scenarioTitles(featureContent) : [];
-    for (const title of [...taskScenarios, ...featureScenarios]) declareIdentity(title);
     return { byTitle, taskScenarios, featureScenarios };
 }
 

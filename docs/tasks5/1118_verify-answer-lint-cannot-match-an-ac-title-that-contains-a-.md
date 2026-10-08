@@ -4,7 +4,7 @@ name: verify-answer-lint cannot match an AC title that contains a colon
 status: todo
 template: feature-impl
 created_at: 2026-10-07T20:52:29.516Z
-updated_at: "2026-10-07T21:25:40.085Z"
+updated_at: "2026-10-08T05:49:49.135Z"
 
 feature_id: F91
 priority: P2
@@ -110,11 +110,13 @@ for (const m of section.matchAll(/^[-*]\s+(?:\[[ xX]\]\s+)?(.+?)\s*$/gm)) {
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+- `packages/app/src/services/verify-answer-lint.ts` `buildAcIdentityIndex` (verify-answer-lint.ts:473): checklist regex now captures the full row text (`(.+?)\s*$`); declares full line + colon-whitespace head (legacy `AC1 (R1): …` form) + leading `AC-N` token. Scenario titles declare before checklist rows so the 1091 rejection sample (5 slots) leads with them instead of being crowded out by long full lines. Resolution is map-keyed, so reorder has no behavioral effect.
+- Junk truncated heads (e.g. `AC1 — The inventory names the \`file`) are no longer declared — citing one is rejected, which is the regression proof.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- TDD: 3 new tests in `packages/app/tests/services/verify-answer-lint.test.ts` (verbatim colon title resolves — 0213 regression; legacy head still resolves; truncated head now rejected). Red before fix (failure message reproduced the declared `…names the \`file` truncation), green after.
+- Focused: `bun test tests/services/verify-answer-lint.test.ts` 70/70; `task-check`+`task-service` 329/329; downstream `plugins/sp/tests/dispatch-handoff-contract.test.ts` 10/10; `apps/cli/tests/commands/task.test.ts` 204/204.
 
 ### Review
 
