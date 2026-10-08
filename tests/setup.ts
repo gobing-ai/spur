@@ -117,3 +117,10 @@ process.env.PATH = `${fileURLToPath(new URL('../scripts/test-shims', import.meta
 // marker here. The refusal test in apps/cli/tests/commands/workflow.test.ts sets it
 // explicitly itself, so the guard stays fully covered (0753 R3: never relax the guard).
 delete process.env.SPUR_WORKFLOW_RUN_ACTIVE;
+
+// Decision-backend hermeticity: the default `typesafe` maker resolves whenever the host
+// exports TYPESAFE_API_KEY, so "no backend" tests (decision-events 1095) made a live call
+// and saw reason `error` instead of `no-backend`. Tests that need a backend pass the key
+// explicitly (inline-run-setup, status.test), so drop the operator's credentials here.
+delete process.env.TYPESAFE_API_KEY;
+delete process.env.TYPESAFE_BASE_URL;
