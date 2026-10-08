@@ -1235,6 +1235,60 @@ ${MINIMAL_WORKFLOW_YAML}`,
             await rm(dir, { recursive: true, force: true });
         });
 
+        test('projects shell tails and invocation from an engine-persisted row (dogfood 2026-10-08 P4)', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-trace-'));
+            const path = join(dir, 'test.yaml');
+            await writeFile(path, MINIMAL_WORKFLOW_YAML);
+
+            const ctx = makeCtx(dir);
+            const svc = new WorkflowAppService(ctx);
+            await svc.run(path, { runId: 'trace-shell-1' });
+
+            // Rewrite the run's only action row into the exact shape the engine persists for a
+            // shell step: no top-level `kind`, tails under `data`. Before the P4 fix the trace
+            // rendered `result=unavailable` for this row.
+            const db = await ctx.getDb();
+            await db.run(
+                `INSERT INTO action_runs
+                    (id, run_id, node, kind, status, duration_ms, ok, result_json, started_at, completed_at, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                    'trace-shell-1-act',
+                    'trace-shell-1',
+                    'ingest',
+                    'shell',
+                    'done',
+                    4203,
+                    1,
+                    JSON.stringify({
+                        ok: true,
+                        data: {
+                            exitCode: 0,
+                            stdout: 'docs 260 labels 12',
+                            stderr: '',
+                            stdoutTruncated: false,
+                            stderrTruncated: false,
+                            invocation: { command: 'kk executor run …' },
+                        },
+                    }),
+                    1_760_000_000_000,
+                    1_760_000_004_203,
+                    1_760_000_000_000,
+                    1_760_000_004_203,
+                ],
+            );
+
+            const result = await svc.trace('trace-shell-1');
+            expect('events' in result).toBe(true);
+            if ('events' in result) {
+                const action = result.events.find((e) => e.kind === 'action');
+                expect(action).toBeDefined();
+                expect(action?.result).toMatchObject({ exitCode: 0, stdoutTail: 'docs 260 labels 12' });
+                expect(action?.invocation).toMatchObject({ command: 'kk executor run …' });
+            }
+            await rm(dir, { recursive: true, force: true });
+        });
+
         test('surfaces the per-run consolidated run log when present (task 0426)', async () => {
             const dir = await mkdtemp(join(tmpdir(), 'spur-wf-trace-'));
             const path = join(dir, 'test.yaml');

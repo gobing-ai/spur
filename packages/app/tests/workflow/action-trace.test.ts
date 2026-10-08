@@ -509,6 +509,100 @@ describe('WorkflowActionTraceWriter (task 0868 R4/R12)', () => {
     });
 });
 
+describe('WorkflowActionTraceWriter — shell invocation stamping (dogfood 2026-10-08 P4)', () => {
+    let base: string;
+    let projectDb: InlineRunProjectDb;
+
+    beforeAll(async () => {
+        base = mkdtempSync(join(tmpdir(), 'spur-p4-invocation-'));
+        projectDb = await openInlineRunProjectDb(base);
+    });
+
+    afterAll(() => {
+        projectDb.close();
+        rmSync(base, { recursive: true, force: true });
+    });
+
+    beforeEach(async () => {
+        await projectDb.adapter.run('DELETE FROM action_runs');
+        await projectDb.adapter.run('DELETE FROM runs');
+    });
+
+    async function persistedResult(actionId: string): Promise<Record<string, unknown>> {
+        const rows = await new ActionRunDao(projectDb.adapter).actionRowsByRunId(RUN_ID);
+        const row = rows.find((r) => r.id === actionId);
+        expect(row).toBeDefined();
+        return JSON.parse(row?.result_json ?? '{}') as Record<string, unknown>;
+    }
+
+    test('shell finalize stamps the memoized start options into data.invocation', async () => {
+        const writer = createWorkflowActionTraceWriter(projectDb.adapter);
+        await writer.createRun(runRecord());
+
+        const actionId = await writer.saveActionStart(RUN_ID, 'build', 'shell', {
+            command: 'bun run build --target bun',
+            cwd: '/tmp/project',
+            timeoutMs: 30_000,
+        });
+        await writer.saveActionFinalize(actionId, 'done', 5, true, 'shell', {
+            ok: true,
+            data: { exitCode: 0 },
+        });
+
+        const persisted = await persistedResult(actionId);
+        expect(persisted.data).toMatchObject({
+            exitCode: 0,
+            invocation: {
+                command: 'bun run build --target bun',
+                cwd: '/tmp/project',
+                timeoutMs: 30_000,
+            },
+        });
+
+        // A secret-shaped command collapses to the same guard the event-bus projection uses.
+        const secretId = await writer.saveActionStart(RUN_ID, 'deploy', 'shell', {
+            command: './deploy.sh --token secret-value',
+        });
+        await writer.saveActionFinalize(secretId, 'done', 5, true, 'shell', {
+            ok: true,
+            data: { exitCode: 0 },
+        });
+        expect(
+            (await persistedResult(secretId).then((r) => (r.data as Record<string, unknown>).invocation)).command,
+        ).toBe('[shell command redacted]');
+    });
+
+    test('non-shell kinds are never stamped', async () => {
+        const writer = createWorkflowActionTraceWriter(projectDb.adapter);
+        await writer.createRun(runRecord());
+
+        const actionId = await writer.saveActionStart(RUN_ID, 'implement', 'agent.run', {
+            command: 'not-a-shell-command',
+        });
+        await writer.saveActionFinalize(actionId, 'done', 5, true, 'agent.run', {
+            ok: true,
+            data: { answer: 'ok' },
+        });
+
+        const persisted = await persistedResult(actionId);
+        expect((persisted.data as Record<string, unknown>).invocation).toBeUndefined();
+    });
+
+    test('shell options without a command persist no invocation', async () => {
+        const writer = createWorkflowActionTraceWriter(projectDb.adapter);
+        await writer.createRun(runRecord());
+
+        const actionId = await writer.saveActionStart(RUN_ID, 'build', 'shell', { cwd: '/tmp/project' });
+        await writer.saveActionFinalize(actionId, 'done', 5, true, 'shell', {
+            ok: true,
+            data: { exitCode: 0 },
+        });
+
+        const persisted = await persistedResult(actionId);
+        expect((persisted.data as Record<string, unknown>).invocation).toBeUndefined();
+    });
+});
+
 describe('createRunLogTraceFailureRecorder (task 0868 R3/R4)', () => {
     let base: string;
 
