@@ -2,11 +2,11 @@
 schema_version: 1
 id: H1
 name: spur-dev umbrella skill
-status: verifying
+status: active
 priority: P1
 tags: [rd3-migration, wave-3]
 created_at: 2026-06-12T23:45:00.000Z
-updated_at: "2026-10-08T08:16:26.030Z"
+updated_at: "2026-10-08T18:52:02.779Z"
 ---
 
 # H1: spur-dev umbrella skill
@@ -672,4 +672,5 @@ the residuals as final.
 - 2026-09-24T21:37:53.976Z active → verifying (system)
 - 2026-10-06T01:22:34.792Z verifying → active (system)
 - 2026-10-08T08:16:26.030Z active → verifying (system)
+- 2026-10-08T18:52:02.779Z verifying → active (system)
 
