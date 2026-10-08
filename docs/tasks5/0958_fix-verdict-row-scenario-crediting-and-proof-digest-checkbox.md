@@ -4,7 +4,7 @@ name: Fix verdict-row scenario crediting and proof-digest checkbox invalidation 
 status: done
 template: feature-impl
 created_at: 2026-09-26T00:29:55.505Z
-updated_at: "2026-09-29T22:59:14.697Z"
+updated_at: "2026-10-08T15:51:25.420Z"
 feature_id: F91
 
 ac_altitude: task-local
@@ -253,25 +253,26 @@ Digest compatibility (Q&A 2026-09-26, closed): checkbox-canonicalized digests ch
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/feature-check.ts:1243-1253` EMBEDDED_SCENARIO_REF_RES + embeddedScenarioRefs; tests `packages/app/tests/services/feature-check.test.ts:3562-3600` |
-| R2 | MET | `packages/app/src/services/feature-check.ts:1419` verdictScenarioKeyGap (covering via taskCoversScenario :1364); CLI `apps/cli/src/commands/task.ts:1280-1292`; tests `apps/cli/tests/commands/task.test.ts:3803` / :3836 (re-anchored from :3800/:3833) |
-| R3 | MET | `packages/app/src/workflow/proof-input-fingerprint.ts:309` canonicalizeCheckboxMarkers applied :340 (task) / :373 (feature); tests `packages/app/tests/workflow/proof-input-fingerprint.test.ts:584` / :633 |
-| R4 | MET | `packages/app/tests/workflow/proof-input-fingerprint.test.ts:596` text edit changes digest; :633 AC text edit |
-| R5 | MET | `packages/app/src/services/feature-check.ts:915-926` finding names summarizeRowIds (:1368) + VERDICT_SCENARIO_KEY_FORMS (:1379); tests `packages/app/tests/services/feature-check.test.ts:3779` / :3802 |
-| R6 | MET | `packages/app/tests/services/feature-check.test.ts:3600`, :3945, :3952, :3960; CLI `apps/cli/tests/commands/task.test.ts:3863` (re-anchored from :3860) |
+| R1 | MET | `packages/app/src/services/feature-check.ts:1258` EMBEDDED_SCENARIO_REF_RES and embeddedScenarioRefs at `packages/app/src/services/feature-check.ts:1261`; rowMatchesScenario credits embedded refs at `packages/app/src/services/feature-check.ts:1279`; fresh 159 pass / 0 fail |
+| R2 | MET | `packages/app/src/services/feature-check.ts:1434` verdictScenarioKeyGap for covering tasks (taskCoversScenario at `packages/app/src/services/feature-check.ts:1379`); CLI fails verdict derivation with a named message at `apps/cli/src/commands/task.ts:1428-1445` |
+| R3 | MET | `packages/app/src/workflow/proof-input-fingerprint.ts:309` canonicalizeCheckboxMarkers applied at `packages/app/src/workflow/proof-input-fingerprint.ts:340` and `packages/app/src/workflow/proof-input-fingerprint.ts:373` |
+| R4 | MET | `packages/app/tests/workflow/proof-input-fingerprint.test.ts:584-633` checkbox-only edits keep the digest; text edit changes it |
+| R5 | MET | `packages/app/src/services/feature-check.ts:925-938` finding names row ids via summarizeRowIds (`packages/app/src/services/feature-check.ts:1388`) and VERDICT_SCENARIO_KEY_FORMS (`packages/app/src/services/feature-check.ts:1399`) |
+| R6 | MET | `packages/app/tests/services/feature-check.test.ts:3993-4015` title-keyed, AC-N, orphan, task-local and scenario-less cases unchanged; CLI `apps/cli/tests/commands/task.test.ts:4255`; fresh 254 pass / 0 fail CLI (temp worktree) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `packages/app/tests/services/feature-check.test.ts:3562`; replay :3763 |
-| AC2 | MET | test | `packages/app/tests/services/feature-check.test.ts:3569` |
-| AC3 | MET | test | `packages/app/tests/services/feature-check.test.ts:3585` |
-| AC4 | MET | test | `packages/app/tests/services/feature-check.test.ts:3926` / :3937; CLI `apps/cli/tests/commands/task.test.ts:3803` / :3836 |
-| AC5 | MET | test | `packages/app/tests/workflow/proof-input-fingerprint.test.ts:584`, :596, :633 |
-| AC6 | MET | test | `packages/app/tests/services/feature-check.test.ts:3779` |
-| AC7 | MET | test | `packages/app/tests/services/feature-check.test.ts:3600`, :3945, :3952, :3960 |
+| AC1 | MET | test | `packages/app/tests/services/feature-check.test.ts:3610`; done-gate replay `packages/app/tests/services/feature-check.test.ts:3811` |
+| AC2 | MET | test | `packages/app/tests/services/feature-check.test.ts:3617` |
+| AC3 | MET | test | `packages/app/tests/services/feature-check.test.ts:3633` |
+| AC4 | MET | test | `packages/app/tests/services/feature-check.test.ts:3974` fail half and `packages/app/tests/services/feature-check.test.ts:3985` pass half; CLI `apps/cli/tests/commands/task.test.ts:4180` and `apps/cli/tests/commands/task.test.ts:4217` |
+| AC5 | MET | test | `packages/app/tests/workflow/proof-input-fingerprint.test.ts:584`, `packages/app/tests/workflow/proof-input-fingerprint.test.ts:596`, `packages/app/tests/workflow/proof-input-fingerprint.test.ts:633` |
+| AC6 | MET | test | `packages/app/tests/services/feature-check.test.ts:3827` |
+| AC7 | MET | test | `packages/app/tests/services/feature-check.test.ts:3648`, `packages/app/tests/services/feature-check.test.ts:3993-4015` |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

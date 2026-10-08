@@ -4,7 +4,7 @@ name: task record must re-pull newer verdict artifact; refresh done_reason on re
 status: done
 template: issue
 created_at: 2026-10-01T18:14:27.154Z
-updated_at: "2026-10-02T00:10:29.502Z"
+updated_at: "2026-10-08T15:51:32.781Z"
 
 feature_id: F91
 ac_altitude: task-local
@@ -139,20 +139,21 @@ A read-only in-memory probe confirmed an unforced close returned transitioned, m
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | packages/app/src/services/task-record.ts:151-253 (readVerdictClassified returns readable/missing/malformed with a verdict-first remedy naming the path; wired into RecordResult.verdictState/verdictMessage at packages/app/src/services/task-service.ts:1416-1426, identical-content section skip at task-service.ts:1448-1473, CLI line apps/cli/src/commands/task.ts:1247-1248) |
-| R2 | MET | packages/app/src/services/task-transition.ts:170-193 (single reconcileDoneCloseAudit policy: forced keeps supplied reason + true flag, unforced clears flag and names the accepted PASS artifact; invoked only after successful done writes on the guarded path task-transition.ts:281-295 and record auto-walk task-service.ts:1558,1580) |
-| R3 | MET | packages/app/src/services/task-service.ts:1435 (authored-Testing UNKNOWN gate, guard order and provenance timing preserved; identical-content skip avoids rewrites; no new public verb/flag — CLI diff adds output lines only) |
-| R4 | MET | packages/app/src/services/task-record.ts:221-240 (raw-JSON 'wbs' identity check before schema parse: explicit foreign/empty WBS unusable with expected/actual/path, omitted-WBS keeps fallback; checkbox flip gated on readable state at packages/app/src/services/task-service.ts:1488) |
+| R1 | MET | `packages/app/src/services/task-record.ts:191` readVerdictClassified returns readable/missing/malformed state; verdictState and verdictMessage at `packages/app/src/services/task-record.ts:127-134`; wired at `packages/app/src/services/task-service.ts:1475-1476`; CLI output `apps/cli/src/commands/task.ts:1358-1359` |
+| R2 | MET | `packages/app/src/services/task-transition.ts:173-197` reconcileDoneCloseAudit, called at `packages/app/src/services/task-transition.ts:311`; record --transition done reconciles at `packages/app/src/services/task-service.ts:1637` and `packages/app/src/services/task-service.ts:1663` |
+| R3 | MET | UNKNOWN keeps authored Testing at `packages/app/src/services/task-service.ts:1485`; identical-content skip at `packages/app/src/services/task-service.ts:1498` and `packages/app/src/services/task-service.ts:1516`; fresh 164 pass / 0 fail |
+| R4 | MET | `packages/app/src/services/task-record.ts:244` wbs identity check reports expected/actual WBS and path; checkbox flips only for readable artifacts at `packages/app/src/services/task-service.ts:1555-1557` |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | packages/app/tests/services/task-record.test.ts:1893-1947 (a: missing → state + remedy naming path and `spur task verify`, stub written; b: malformed → authored Testing preserved) and :2055-2085 (f: identical re-record skips Testing/Review rewrites, state readable) |
-| AC2 | MET | test | packages/app/tests/services/task-transition.test.ts:284-333 (unforced clears stale flag and names PASS artifact, forced keeps supplied reason, done no-op writes no fields, audit failure reported via closeAuditError) plus packages/app/tests/services/task-record.test.ts:2086-2188 (g: stale cleared via record --transition done, h: denied hop throws and writes nothing, i: no-op byte-unchanged) |
-| AC3 | MET | test | packages/app/tests/services/task-record.test.ts:1948-2054 (c: foreign wbs 9999 → missing state, expected/actual/path message, zero checkbox flips, authored Testing/Requirements preserved; d: matching readable flips boxes; e: omitted-WBS fallback stays readable) |
-| AC4 | MET | test | Targeted suites run from packages/app: bun test tests/services/task-record.test.ts tests/services/task-transition.test.ts → 129 pass / 0 fail (318 expect calls); 1040 blocks at packages/app/tests/services/task-record.test.ts:1862-2188 and packages/app/tests/services/task-transition.test.ts:284-333 all green with pre-existing pins |
+| AC1 | MET | test | `packages/app/tests/services/task-record.test.ts:2419`, `packages/app/tests/services/task-record.test.ts:2439`, `packages/app/tests/services/task-record.test.ts:2575` |
+| AC2 | MET | test | `packages/app/tests/services/task-transition.test.ts:302-341`; record transition cases `packages/app/tests/services/task-record.test.ts:2604-2709` |
+| AC3 | MET | test | `packages/app/tests/services/task-record.test.ts:2468`, `packages/app/tests/services/task-record.test.ts:2520`, `packages/app/tests/services/task-record.test.ts:2555` |
+| AC4 | MET | test | fresh 2026-10-08 task-record + task-transition 164 pass / 0 fail; packages/app 4189 pass with the only 3 failures in out-of-scope DecisionService (`packages/app/tests/decision/decision-events.test.ts:283`, reproduced at HEAD) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

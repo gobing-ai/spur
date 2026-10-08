@@ -4,7 +4,7 @@ name: Make one verdict row id satisfy both the AC-N scenario alias and the AC ch
 status: done
 template: feature-impl
 created_at: 2026-09-28T08:31:24.792Z
-updated_at: "2026-09-29T22:59:29.616Z"
+updated_at: "2026-10-08T15:49:05.995Z"
 feature_id: F91
 
 ac_altitude: task-local
@@ -86,20 +86,21 @@ This removes the need for the `R1 (covers: R1) [R2]` workaround used when 0970 w
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/task-record.ts:193-196` prefixId normalizes `/^(?:AC |
-| R2 | MET | `packages/app/tests/services/task-record.test.ts:1371` end-to-end graduating record: feature-linked task, `AC-<n>` rows tick both aliasing boxes, two records emit no `scenarioWarnings`; `:1450` `AC<n> — <title>` flips its box; `:1474` `AC-<n>` never ticks the same-numbered box; fresh A32 probe: 3/3 scenarios credited by both `AC<n> — <title>` and `AC-<n>` rows |
-| R3 | MET | `plugins/sp/skills/spur-cli/references/tasks/verbs.md:337-346` documents `AC<n> — <scenario title>` and bare `AC-<i>`, and which check each satisfies |
-| R4 | MET | fresh `bun test tests/services/task-record.test.ts` 103 pass / 0 fail; packages/app 3451 pass / 0 fail; spur-check lint + 50 pre-rules + 2 post-rules pass, tests 9570 pass / 4 fail, all environmental (3 Chromium DevTools-port launch failures in sandbox; bundle determinism fails only in the temp worktree, 7/0 in main repo) |
+| R1 | MET | `packages/app/src/services/task-record.ts:331-334` prefixId normalizes `AC<n> — <title>` to the `AC<n>` box id; `packages/app/src/services/task-record.ts:355-369` acRowProves resolves `AC-<n>` through the feature scenario order to the aliasing AC box (no numeric guess); wired with feature titles at `packages/app/src/services/task-service.ts:1558-1563` — one alias path, no second alias |
+| R2 | MET | `packages/app/tests/services/task-record.test.ts:1560-1576` graduating record: `AC-<n>` rows tick both aliasing boxes and two records emit no scenarioWarnings; fresh A32 probe over `docs/features/A32_content-verified-standard-script-twins.md` (verdictRowsMatchScenarios `packages/app/src/services/feature-check.ts:1314`, matchedScenarioKeys `packages/app/src/services/feature-check.ts:1331`): 3 scenarios, `AC<n> — <title>` rows match 3/3 and `AC-<n>` rows match 3/3 |
+| R3 | MET | `plugins/sp/skills/spur-cli/references/tasks/verbs.md:359-367` documents `AC<n> — <scenario title>` and bare `AC-<i>`, and which check each satisfies |
+| R4 | MET | fresh 2026-10-08: `packages/app/tests/services/task-record.test.ts` 142 pass / 0 fail; packages/app suite 4189 pass / 3 fail (all 3 in DecisionService `packages/app/tests/decision/decision-events.test.ts:283`, reproduced at clean HEAD, outside F91); lint + typecheck exit 0; 50 pre-check rules pass |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `packages/app/tests/services/task-record.test.ts:1450` flips AC1 for an `AC1 — <title>` row; `:1474` resolves `AC-<n>` to the aliasing box; A32 probe credits all three scenarios |
-| AC2 | MET | test | `packages/app/tests/services/task-record.test.ts:1371` drives `TaskService.record` end to end on a feature-linked task — boxes flip and `scenarioWarnings` is undefined on both records; fresh A32 probe `matchedScenarioKeys` → 3 of 3 for both row forms |
-| AC3 | MET | command | `rg -c "Graduating tasks — one row keyed to both checks" plugins/sp/skills/spur-cli/references/tasks/verbs.md` → 1 (`plugins/sp/skills/spur-cli/references/tasks/verbs.md:337`) |
-| AC4 | MET | command | `bun run spur-check`: lint + typecheck + 50 rules pass; tests 9570 pass / 4 fail, all environmental (Chromium launch denied in sandbox ×3; bundle-plugin-lib determinism fails only via worktree node_modules symlinks, 7 pass / 0 fail in main repo); `bun run test-post-check` 2 rules pass |
+| AC1 | MET | test | `packages/app/tests/services/task-record.test.ts:1996-2008` AC-<n> resolves through scenario order to the aliasing box; `packages/app/tests/services/task-record.test.ts:1973-1982` an `AC1 — <title>` row flips AC1; fresh A32 probe credits 3/3 scenarios for both row forms |
+| AC2 | MET | test | `packages/app/tests/services/task-record.test.ts:1560-1576` drives TaskService.record end to end: boxes flip, scenarioWarnings undefined on both records; fresh A32 probe matchedScenarioKeys 3 of 3 (`packages/app/src/services/feature-check.ts:1331`) |
+| AC3 | MET | command | `rg -c "Graduating tasks — one row keyed to both checks" plugins/sp/skills/spur-cli/references/tasks/verbs.md` → 1 (`plugins/sp/skills/spur-cli/references/tasks/verbs.md:359`) |
+| AC4 | MET | command | fresh 2026-10-08: lint + typecheck exit 0, 50 pre-check rules pass, packages/app 4189 pass with the only 3 failures in out-of-scope DecisionService (`packages/app/tests/decision/decision-events.test.ts:283`, reproduced at HEAD); post-check fails only on TSDoc in `packages/app/src/decision/confidence-level.ts:13` (commit b3b6c304d, outside F91) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

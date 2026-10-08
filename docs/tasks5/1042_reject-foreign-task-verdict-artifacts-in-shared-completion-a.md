@@ -4,7 +4,7 @@ name: Reject foreign-task verdict artifacts in shared completion and feature gat
 status: done
 template: issue
 created_at: 2026-10-01T20:09:26.527Z
-updated_at: "2026-10-01T21:39:50.063Z"
+updated_at: "2026-10-08T15:51:38.364Z"
 feature_id: F91
 
 ac_altitude: task-local
@@ -112,12 +112,21 @@ Red-first: 7 new tests in `done-transition-guard.test.ts` (5 failed pre-fix), th
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
+- Confidence: MEDIUM
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | packages/app/tests/services/done-transition-guard.test.ts:466-562 (foreign/empty/null/non-string rejected; matching + omitted verified) |
-| R2 | MET | packages/app/tests/services/task-transition.test.ts:238-275 (unforced deny names both WBS + path, no writes; forced → UNKNOWN attribution) |
-| R3 | MET | packages/app/tests/services/feature-check.test.ts:3044-3090 (foreign no scenario credit + malformed finding; matching/omitted controls verify) |
+| R1 | MET | `packages/app/src/services/done-transition-guard.ts:114` readVerdictFrom binds identity at `packages/app/src/services/done-transition-guard.ts:145-156` (foreign, empty, null or non-string WBS yields readError naming path and expected WBS); shared readVerdictArtifact at `packages/app/src/services/done-transition-guard.ts:199-207`; tests `packages/app/tests/services/done-transition-guard.test.ts:516-572` |
+| R2 | MET | `packages/app/tests/services/task-transition.test.ts:265` unforced done denied with no task/audit writes; `packages/app/tests/services/task-transition.test.ts:282` force-done keeps override audit; reader diagnostic `packages/app/tests/services/done-transition-guard.test.ts:583` |
+| R3 | MET | `packages/app/src/services/feature-check.ts:999-1012` keeps artifactError from the shared reader so a foreign artifact is not treated as absent; tests `packages/app/tests/services/feature-check.test.ts:3044`, `packages/app/tests/services/feature-check.test.ts:3065`, `packages/app/tests/services/feature-check.test.ts:3079` |
+| R4 | MET | fresh 2026-10-08 targeted 203 pass / 0 fail through the single shared reader; lint + typecheck exit 0; 50 pre-check rules pass. Repo-wide spur-check currently red only on items outside F91: DecisionService tests (`packages/app/tests/decision/decision-events.test.ts:283`), TSDoc post-check in `packages/app/src/decision/confidence-level.ts:13` (commit b3b6c304d) |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | `packages/app/tests/services/done-transition-guard.test.ts:502-572` foreign/empty/null/non-string identity rejected; matching and omitted WBS accepted |
+| AC2 | MET | test | `packages/app/tests/services/task-transition.test.ts:265` denial before writes; `packages/app/tests/services/task-transition.test.ts:282` forced path |
+| AC3 | MET | test | `packages/app/tests/services/feature-check.test.ts:3044-3079` no scenario credit from foreign rows; identity error not relabeled as absent |
+| AC4 | MET | test | fresh 203 pass / 0 fail targeted (done-transition-guard, task-transition, feature-check); out-of-scope failures listed under R4 reproduce at HEAD |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

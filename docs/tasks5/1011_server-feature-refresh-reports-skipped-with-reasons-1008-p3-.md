@@ -4,7 +4,7 @@ name: Server feature refresh reports skipped with reasons (1008 P3-5)
 status: done
 template: feature-impl
 created_at: 2026-09-29T18:18:17.810Z
-updated_at: "2026-09-29T21:27:44.878Z"
+updated_at: "2026-10-08T15:50:09.537Z"
 feature_id: F91
 
 ac_altitude: task-local
@@ -78,14 +78,15 @@ Verify: `(cd apps/server && bun test tests/modules/feature/handlers.test.ts test
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/contracts/src/feature.ts:230-231` skipped z.array({id, reason: z.string()}) with JSDoc; `apps/server/src/modules/feature/handlers.ts:70-71` passes skipped through beside rebuilt; FeatureService.refresh unchanged by this task |
+| R1 | MET | `packages/contracts/src/feature.ts:230-231` skipped array of {id, reason} in the feature.refresh output schema; `apps/server/src/modules/feature/handlers.ts:70-71` passes skipped through beside rebuilt; fresh server 17 pass / 0 fail, contracts 61 pass / 0 fail |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `apps/server/tests/modules/feature/handlers.test.ts:36-40` stub returns skipped, :143-145 asserts data.skipped; schema acceptance now direct: `packages/contracts/tests/contract.test.ts:529-535` outputSchema.safeParse accepts {rebuilt, skipped} and rejects missing skipped (added this verify pass, --fix all); fresh runs: server 20 pass / 0 fail, contracts 81 pass / 0 fail |
+| AC1 | MET | test | `apps/server/tests/modules/feature/handlers.test.ts:39` stub returns skipped, `apps/server/tests/modules/feature/handlers.test.ts:145` asserts data.skipped; `packages/contracts/tests/contract.test.ts:529-535` outputSchema accepts {rebuilt, skipped} and rejects missing skipped; fresh server 17 pass / 0 fail, contracts 61 pass / 0 fail |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

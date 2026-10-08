@@ -4,7 +4,7 @@ name: Feature refresh skip-reason fidelity and feature-side --fix fence coverage
 status: done
 template: feature-impl
 created_at: 2026-09-29T18:18:16.889Z
-updated_at: "2026-09-29T21:54:48.156Z"
+updated_at: "2026-10-08T15:50:00.924Z"
 feature_id: F91
 
 ac_altitude: task-local
@@ -117,18 +117,19 @@ Verify: `(cd packages/app && bun test tests/services/feature-service.test.ts)`, 
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
+- Confidence: MEDIUM
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/feature-service.ts:385-405` — classify before write in spec precedence: unclosedFenceLine → unclosed-code-fence (:385-388), duplicateSectionNames → duplicate-sections (:389-392), !hasSection('Tasks') → missing-tasks-section (:393-396), replaceMarkerRegion marker-missing throw → no-tasks-marker-region, any other error rethrown (:397-405); tests `packages/app/tests/services/feature-service.test.ts:344-412` (re-verify 2026-09-29: 100 pass / 0 fail with planning-check-base) |
-| R2 | MET | `apps/cli/tests/commands/feature.test.ts:431-440` — feature check --fix leg: fence text survives, re-check exit 1 and still reports L2.unclosed-code-fence; rmSync in finally (:441-445); fresh run 48 pass / 0 fail (temp worktree — sandbox denies nested .git/config in repo tree) |
-| R3 | MET | `docs/design/data-output-contracts.md:204` — refresh row lists skipped: [{id, reason}] and the four reason values |
+| R1 | MET | `packages/app/src/services/feature-service.ts:407-426` classifies before write in spec precedence: unclosed-code-fence, duplicate-sections, missing-tasks-section, no-tasks-marker-region; any other error rethrown; tests `packages/app/tests/services/feature-service.test.ts:388-451`; fresh 58 pass / 0 fail |
+| R2 | MET | `apps/cli/tests/commands/feature.test.ts:424-458` feature check --fix leg: fence text survives, L2.unclosed-code-fence still reported; rmSync in finally `apps/cli/tests/commands/feature.test.ts:452-457`; fresh 254 pass / 0 fail (temp worktree; sandbox denies nested .git/config in repo tree) |
+| R3 | MET | `docs/design/data-output-contracts.md:204` refresh row lists skipped: [{id, reason}] and the four reason values |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `packages/app/tests/services/feature-service.test.ts:344` fence above Tasks, :359 fence after Tasks (no write), :370 duplicate-sections, :381 no-tasks-marker-region, :394 unexpected replaceMarkerRegion error rethrown, :407 missing-tasks-section; fresh run green |
-| AC2 | MET | test | `apps/cli/tests/commands/feature.test.ts:413-447` — --fix leg + finally cleanup; fresh run 48 pass / 0 fail |
-| AC3 | MET | command | `rg -c "skipped: \[\{id, reason\}\].*unclosed-code-fence.*duplicate-sections.*missing-tasks-section.*no-tasks-marker-region" docs/design/data-output-contracts.md` → 1 (row at `docs/design/data-output-contracts.md:204`) |
+| AC1 | MET | test | `packages/app/tests/services/feature-service.test.ts:388` fence above Tasks, `packages/app/tests/services/feature-service.test.ts:403` fence after Tasks, `packages/app/tests/services/feature-service.test.ts:414` duplicate-sections, `packages/app/tests/services/feature-service.test.ts:425` no-tasks-marker-region, `packages/app/tests/services/feature-service.test.ts:438` unexpected error rethrown, `packages/app/tests/services/feature-service.test.ts:451` missing-tasks-section; fresh 58 pass / 0 fail |
+| AC2 | MET | test | `apps/cli/tests/commands/feature.test.ts:424-458` --fix leg with finally cleanup; fresh 254 pass / 0 fail (temp worktree) |
+| AC3 | MET | command | `rg -n "skipped" docs/design/data-output-contracts.md` row at `docs/design/data-output-contracts.md:204` lists unclosed-code-fence, duplicate-sections, missing-tasks-section, no-tasks-marker-region |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

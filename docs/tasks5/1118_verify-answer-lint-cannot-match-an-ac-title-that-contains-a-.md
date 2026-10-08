@@ -4,7 +4,7 @@ name: verify-answer-lint cannot match an AC title that contains a colon
 status: done
 template: feature-impl
 created_at: 2026-10-07T20:52:29.516Z
-updated_at: "2026-10-08T07:55:02.628Z"
+updated_at: "2026-10-08T15:51:48.160Z"
 
 feature_id: F91
 priority: P2
@@ -124,14 +124,14 @@ for (const m of section.matchAll(/^[-*]\s+(?:\[[ xX]\]\s+)?(.+?)\s*$/gm)) {
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | packages/app/src/services/verify-answer-lint.ts:473 declares the full checklist row text; commit c905d6d44 |
-| R2 | MET | packages/app/tests/services/verify-answer-lint.test.ts test "every colon form resolves verbatim" covers backtick file:line, URL, bare prose colon and (req:) suffix; commit 36f274590 |
-| R3 | MET | same file: legacy head and AC-N alias tests plus full downstream suites green — verify-answer-lint 71/71, apps/cli task commands 204/204, dispatch-handoff-contract 10/10, full gate rc=0 10485 pass / 0 fail |
+| R1 | MET | `packages/app/src/services/verify-answer-lint.ts:540-552` buildAcIdentityIndex declares the full single-line checklist label beside the pre-colon head and leading token (`packages/app/src/services/verify-answer-lint.ts:524-575`) |
+| R2 | MET | `packages/app/tests/services/verify-answer-lint.test.ts:759` colon forms (file:line, URL, prose colon, req suffix) resolve verbatim; fresh 83 pass / 0 fail |
+| R3 | MET | `packages/app/tests/services/verify-answer-lint.test.ts:784` legacy head; bold head `packages/app/tests/services/verify-answer-lint.test.ts:236`; trajectory `packages/app/tests/services/verify-answer-lint.test.ts:477`; scenario `packages/app/tests/services/verify-answer-lint.test.ts:488`; AC-N `packages/app/tests/services/verify-answer-lint.test.ts:275`; paraphrase refused `packages/app/tests/services/verify-answer-lint.test.ts:521` |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — A checklist AC title with a colon inside it resolves by its full title (req: R1, R2) | MET | test | all four colon forms cited verbatim produce no ac-identity finding — packages/app/tests/services/verify-answer-lint.test.ts:696 |
-| AC2 — Legacy and alias forms keep resolving and paraphrases stay refused (req: R3) | MET | test | legacy-head test plus junk-head refusal test — packages/app/tests/services/verify-answer-lint.test.ts:716; suites 71/71, 204/204, 10/10, full gate rc=0 |
+| Scenario: AC1 — A checklist AC title with a colon inside it resolves by its full title (req: R1, R2) | MET | test | `packages/app/tests/services/verify-answer-lint.test.ts:759` and `packages/app/tests/services/verify-answer-lint.test.ts:773`; fresh 83 pass / 0 fail |
+| Scenario: AC2 — Legacy and alias forms keep resolving and paraphrases stay refused (req: R3) | MET | test | `packages/app/tests/services/verify-answer-lint.test.ts:784`, `packages/app/tests/services/verify-answer-lint.test.ts:793` junk head refused, `packages/app/tests/services/verify-answer-lint.test.ts:521` paraphrase refused |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

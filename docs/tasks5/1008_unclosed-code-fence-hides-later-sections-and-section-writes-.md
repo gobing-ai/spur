@@ -4,7 +4,7 @@ name: Unclosed code fence hides later sections and section writes silently drop 
 status: done
 template: feature-impl
 created_at: 2026-09-29T07:03:58.072Z
-updated_at: "2026-09-29T21:54:50.082Z"
+updated_at: "2026-10-08T15:49:57.478Z"
 feature_id: F91
 
 estimate_hours: 4
@@ -78,19 +78,20 @@ Single chokepoints per concern; no per-caller guards.
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
+- Confidence: MEDIUM
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/domain/src/planning/markdown-document.ts:131` findUnclosedFenceLine toggle scan; parse-time capture with frontmatter re-base :258-262; public `unclosedFenceLine()` :377; tests `packages/domain/tests/planning/markdown-document.test.ts:945-962`; fresh run 82 pass / 0 fail |
-| R2 | MET | `packages/config/src/finding-codes.ts:20` + :105 L2.unclosed-code-fence; `packages/app/src/services/planning-check-base.ts:234-242` emits severity error with the fence line; CLI tests `apps/cli/tests/commands/task.test.ts:922` and `apps/cli/tests/commands/feature.test.ts:413-447` (incl. --fix never auto-closes); fresh 192 + 48 pass / 0 fail (temp worktree) |
-| R3 | MET | `packages/domain/src/planning/markdown-document.ts:398` assertFenceBalance, called before mutation by replaceSection :479 and replaceMarkerRegion :576; tests `packages/domain/tests/planning/markdown-document.test.ts:963-1008` (body fence, doc fence, marker region, balanced) and :885 duplicate-section refusal |
-| R4 | MET | `packages/app/src/services/feature-service.ts:379-412` skipped [{id, reason}] returned (reason vocabulary refined by 1009); `apps/cli/src/commands/feature.ts:387` JSON, :393-395 human output; test `packages/app/tests/services/feature-service.test.ts:407-412` missing-tasks-section (re-anchored: 1009 moved skip sites) |
+| R1 | MET | `packages/domain/src/planning/markdown-document.ts:131` findUnclosedFenceLine toggle scan; public unclosedFenceLine() at `packages/domain/src/planning/markdown-document.ts:377`; tests `packages/domain/tests/planning/markdown-document.test.ts:960-972`; fresh 2026-10-08 domain targeted 83 pass / 0 fail |
+| R2 | MET | `packages/config/src/finding-codes.ts:20` and `packages/config/src/finding-codes.ts:111` L2.unclosed-code-fence; `packages/app/src/services/planning-check-base.ts:242-251` emits severity error with the fence line; CLI tests `apps/cli/tests/commands/task.test.ts:974` and `apps/cli/tests/commands/feature.test.ts:424-458` (--fix never auto-closes); fresh 254 pass / 0 fail in temp worktree (sandbox denies nested .git/config writes in repo tree) |
+| R3 | MET | `packages/domain/src/planning/markdown-document.ts:398` assertFenceBalance, called before mutation by replaceSection (`packages/domain/src/planning/markdown-document.ts:479`) and replaceMarkerRegion (`packages/domain/src/planning/markdown-document.ts:576`); tests `packages/domain/tests/planning/markdown-document.test.ts:978-1029` and duplicate-section refusal `packages/domain/tests/planning/markdown-document.test.ts:900` |
+| R4 | MET | `packages/app/src/services/feature-service.ts:398-434` returns skipped [{id, reason}]; `apps/cli/src/commands/feature.ts:387` JSON and `apps/cli/src/commands/feature.ts:393-395` human output; tests `packages/app/tests/services/feature-service.test.ts:388-451` |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `apps/cli/tests/commands/task.test.ts:922` and `apps/cli/tests/commands/feature.test.ts:413` — check reports L2.unclosed-code-fence severity error; fresh runs green |
-| AC2 | MET | test | `packages/domain/tests/planning/markdown-document.test.ts:963-1008` — refusal leaves serialize() byte-identical; :885 duplicate-section write refusal; fresh 82 pass |
-| AC3 | MET | test | `packages/app/tests/services/feature-service.test.ts:344-412` — every skip reported with {id, reason}; fresh 100 pass |
+| AC1 | MET | test | `apps/cli/tests/commands/task.test.ts:974` and `apps/cli/tests/commands/feature.test.ts:424-458` check reports L2.unclosed-code-fence severity error; fresh 254 pass / 0 fail (temp worktree) |
+| AC2 | MET | test | `packages/domain/tests/planning/markdown-document.test.ts:978-1029` refusal leaves serialize() byte-identical; `packages/domain/tests/planning/markdown-document.test.ts:900` duplicate-section refusal; fresh 83 pass / 0 fail |
+| AC3 | MET | test | `packages/app/tests/services/feature-service.test.ts:388-451` every skip reported with {id, reason}; fresh 58 pass / 0 fail |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
