@@ -102,6 +102,22 @@ function clearWorkflowRunActive(): void {
 }
 
 /**
+ * Consume the launcher→worker handshake once (task 1117): `spawnAsyncWorkflowWorker`
+ * ships `SPUR_EXPECTED_DEFINITION_DIGEST` + `SPUR_ASYNC_WORKER=1` to the worker, whose
+ * startup digest check and pid recording are the variables' only legitimate consumers.
+ * Removing both from the worker environment at action entry keeps every step child (shell,
+ * `agent.run`, guard, nested `spur`) from inheriting an expectation that would make a
+ * nested run on any other definition refuse with a phantom digest mismatch.
+ */
+function takeAsyncWorkerEnv(): { expectedDigest: string | undefined; isAsyncWorker: boolean } {
+    const expectedDigest = getEnvVar('SPUR_EXPECTED_DEFINITION_DIGEST');
+    const isAsyncWorker = getEnvVar('SPUR_ASYNC_WORKER') === '1';
+    removeEnvVar('SPUR_EXPECTED_DEFINITION_DIGEST');
+    removeEnvVar('SPUR_ASYNC_WORKER');
+    return { expectedDigest, isAsyncWorker };
+}
+
+/**
  * Launch a long-lived async workflow worker via ProcessExecutor + nohup.
  * Avoids direct child_process.spawn (no-direct-process-spawn).
  */
@@ -608,6 +624,10 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
         .option(...SHARED_OPTIONS.jsonSupported)
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (file, options) => {
+            // 1117: consume the launcher→worker handshake at entry — the worker's own
+            // digest check and pid recording below use the captured values; step children
+            // get a clean env (the --async launcher re-injects both explicitly).
+            const { expectedDigest, isAsyncWorker } = takeAsyncWorkerEnv();
             const json = options.json === true;
             const silent = !json && options.silent === true;
             const quiet = !json && options.quiet === true;
@@ -930,10 +950,9 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             // happens ONCE here (0768 R1) and is handed to the run so plan, identity
             // stamp, and engine share one resolution. Advisory for the launcher — a
             // resolution failure must not block the run (the engine surfaces it).
-            // As WORKER (SPUR_EXPECTED_DEFINITION_DIGEST set), resolution is NOT
+            // As WORKER (an expected digest was captured at action entry), resolution is NOT
             // advisory: the launcher's expected digest must match this process's own
             // resolution before any action starts (0768 R2).
-            const expectedDigest = getEnvVar('SPUR_EXPECTED_DEFINITION_DIGEST');
             let resolvedDefinition: ResolvedWorkflowDefinition | undefined;
             if (options.plan !== false || expectedDigest !== undefined) {
                 try {
@@ -1154,8 +1173,9 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                     ...(options.from !== undefined ? { startState: options.from } : {}),
                     ...(options.fromRun !== undefined ? { continuedFrom: options.fromRun } : {}),
                     // Async worker self-records its pid so `spur workflow cancel` can
-                    // signal the live process group (set by the --async launcher).
-                    recordSelfPid: getEnvVar('SPUR_ASYNC_WORKER') === '1',
+                    // signal the live process group (captured from the launcher env at
+                    // action entry).
+                    recordSelfPid: isAsyncWorker,
                     // 0901 R5: shell streams persisted by this run pass the secret
                     // redactor before the 64 KiB tail bound.
                     redactor: createShellOutputRedactor(configuredSecretValues(context.env)),
@@ -1214,6 +1234,10 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
         .option(...SHARED_OPTIONS.jsonSupported)
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (runId, options) => {
+            // 1117: consume the launcher→worker handshake at entry so the resumed run's
+            // step children never inherit it; the resume-owner branch below uses the
+            // captured flag (the --async launcher re-injects SPUR_ASYNC_WORKER itself).
+            const { isAsyncWorker } = takeAsyncWorkerEnv();
             const json = options.json === true;
             // Validate --answer enum (R1): commander does not natively enforce choices.
             let hitlAnswer: 'yes' | 'no' | 'cancel' | undefined;
@@ -1421,8 +1445,8 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                             redactor: createShellOutputRedactor(configuredSecretValues(context.env)),
                             // 0901 R4: the detached worker claims ownership under its
                             // own attempt identity and stamps its pid at the claim so
-                            // `workflow cancel` can reach it.
-                            ...(getEnvVar('SPUR_ASYNC_WORKER') === '1'
+                            // `workflow cancel` can reach it (flag captured at entry).
+                            ...(isAsyncWorker
                                 ? {
                                       resumeOwner: { attemptId: crypto.randomUUID(), pid: process.pid },
                                       recordSelfPid: true,
