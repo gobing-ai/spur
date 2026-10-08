@@ -2,11 +2,11 @@
 schema_version: 1
 id: "E5"
 name: "Session forensics implementation: retention, derived variables, report modes, find-issue rewrite"
-status: verifying
+status: active
 priority: P2
 tags: []
 created_at: "2026-08-14T01:03:25.438Z"
-updated_at: "2026-08-24T17:40:53.956Z"
+updated_at: "2026-10-08T18:52:03.887Z"
 ---
 
 # E5: Session forensics implementation: retention, derived variables, report modes, find-issue rewrite
@@ -188,5 +188,8 @@ not be replaced.
   unwired and is revisited only if a future ruling retains result content.
 - TTFT/generation split — deferred by 0491; the artifact carries no intra-call latency fields.
 ## History
+
 - 2026-08-17T19:05:22.219Z backlog → active (system)
 - 2026-08-24T17:40:53.956Z active → verifying (system)
+- 2026-10-08T18:52:03.887Z verifying → active (system)
+

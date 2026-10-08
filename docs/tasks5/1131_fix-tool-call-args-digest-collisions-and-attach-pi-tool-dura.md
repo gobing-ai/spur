@@ -4,8 +4,8 @@ name: Fix tool-call args digest collisions and attach pi tool durations in histo
 status: todo
 template: feature-impl
 created_at: 2026-10-08T18:27:09.806Z
-updated_at: "2026-10-08T18:35:28.896Z"
-feature_id: E2
+updated_at: "2026-10-08T18:51:39.424Z"
+feature_id: E5
 
 ac_numbering: task-local
 ac_altitude: task-local
