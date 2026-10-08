@@ -213,4 +213,26 @@ describe('DecisionsTab (task 1100 remediation)', () => {
             expect(fetchCalls.some((u) => u.includes('run=run-abc'))).toBe(true);
         });
     });
+    test('refresh: the Refresh button refetches the list with the active filters (DESIGN.md:462-466, 1124)', async () => {
+        const fetchCalls: string[] = [];
+        installFetchMock(fetchCalls);
+        const { getByRole, getByTestId } = render(<DecisionsTab timeRange="4h" />);
+
+        await waitFor(() => {
+            expect(getByTestId('decisions-table')).toBeDefined();
+        });
+        fireEvent.click(getByRole('radio', { name: 'Fallback' }));
+        await waitFor(() => {
+            expect(fetchCalls.some((u) => u.includes('outcome=fallback'))).toBe(true);
+        });
+
+        const listCalls = () => fetchCalls.filter((u) => /\/decisions\?/.test(u)).length;
+        const before = listCalls();
+        fireEvent.click(getByRole('button', { name: 'Refresh decisions' }));
+        await waitFor(() => {
+            expect(listCalls()).toBe(before + 1);
+        });
+        // The refetch keeps the tab-local filter rather than resetting it.
+        expect(fetchCalls.at(-1)).toContain('outcome=fallback');
+    });
 });

@@ -1,6 +1,6 @@
 import type { DecisionLogListResponse, DecisionLogRow } from '@gobing-ai/spur-contracts';
-import { type FC, useCallback, useEffect, useRef, useState } from 'react';
-import { Badge, Input, Loading, Select } from '@/ui';
+import { type FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Badge, Button, Input, Loading, Select } from '@/ui';
 import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
 import DecisionDetailDrawer from './DecisionDetailDrawer';
 import { DECISION_RETENTION_COPY, RetentionBadge, SegmentedToggle, timeRangeSince } from './ObservabilityFilters';
@@ -69,6 +69,8 @@ export default function DecisionsTab({ timeRange, onNavigate }: ObservabilityTab
     const [caller, setCaller] = useState('');
     const [runId, setRunId] = useState('');
     const [selected, setSelected] = useState<DecisionLogRow | null>(null);
+    // Bumped by the Refresh button (DESIGN.md:462-466); see `listQuery`.
+    const [refreshKey, setRefreshKey] = useState(0);
     const fetchIdRef = useRef(0);
     const nextCursorRef = useRef<string | null>(null);
     const openerRef = useRef<HTMLTableRowElement | null>(null);
@@ -84,7 +86,17 @@ export default function DecisionsTab({ timeRange, onNavigate }: ObservabilityTab
         openerRef.current?.focus();
     }, []);
 
+    /**
+     * The list fetch's inputs. `generation` makes a Refresh click a real input to the effect
+     * (same idiom as FeatureDetail's `loadTarget`): it refetches with the current filters.
+     */
+    const listQuery = useMemo(
+        () => ({ timeRange, outcome, decisionId, maker, caller, runId, generation: refreshKey }),
+        [timeRange, outcome, decisionId, maker, caller, runId, refreshKey],
+    );
+
     useEffect(() => {
+        const { timeRange, outcome, decisionId, maker, caller, runId } = listQuery;
         const controller = new AbortController();
         const fetchId = ++fetchIdRef.current;
         setLoading(true);
@@ -125,7 +137,7 @@ export default function DecisionsTab({ timeRange, onNavigate }: ObservabilityTab
         })();
 
         return () => controller.abort();
-    }, [timeRange, outcome, decisionId, maker, caller, runId]);
+    }, [listQuery]);
 
     const loadOlder = async () => {
         if (nextCursorRef.current === null || loadingOlder) return;
@@ -194,6 +206,16 @@ export default function DecisionsTab({ timeRange, onNavigate }: ObservabilityTab
                         size="xs"
                         className="w-40 font-mono"
                     />
+                    <Button
+                        variant="ghost"
+                        size="xs"
+                        disabled={loading}
+                        onClick={() => setRefreshKey((k) => k + 1)}
+                        aria-label="Refresh decisions"
+                        data-testid="decisions-refresh-btn"
+                    >
+                        Refresh
+                    </Button>
                 </div>
                 <RetentionBadge copy={DECISION_RETENTION_COPY} />
             </div>
