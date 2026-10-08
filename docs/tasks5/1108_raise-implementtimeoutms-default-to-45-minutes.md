@@ -4,7 +4,7 @@ name: Raise implementTimeoutMs default to 45 minutes
 status: done
 template: feature-impl
 created_at: 2026-10-07T07:29:49.093Z
-updated_at: "2026-10-08T15:08:06.046Z"
+updated_at: "2026-10-08T15:16:50.288Z"
 feature_id: H15
 
 priority: P2
@@ -108,7 +108,7 @@ One config default, one driver-contract amendment, and the dependents that pinne
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
 | R1 | MET | `implementTimeoutMs: "2700000"` at `config/workflows/task-pipeline.yaml:127` with the 45m comment block at `config/workflows/task-pipeline.yaml:118-126`; bundle copy identical (`apps/cli/config/workflows/task-pipeline.yaml:127`, cmp IDENTICAL this run) |
-| R2 | MET | Timeout boundary amended by 1108 at `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:639-650`; agent.run timeout bullet `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:439-441` |
+| R2 | MET | Timeout boundary amended by 1108 at `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:639-651`; agent.run timeout bullet `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:439-441` |
 | R3 | MET | Run-var merge in `packages/app/src/services/workflow-service.ts:835`; test `packages/app/tests/services/workflow-service.test.ts:3108` passed this run (1 pass / 0 fail). Live dry-run with --vars blocked by capability attestation (exit 1) — unit evidence only |
 | R4 | MET | "configured timeout" message at `packages/app/src/workflow/actions/agent-run.ts:1281`; test `packages/app/tests/workflow/actions/agent-run.test.ts:1378` green this run |
 | R5 | MET | `plugins/sp/tests/skill-structure.test.ts:764-768`, `docs/design/planning-workflow-contracts.md:262-267`, `plugins/sp/hooks/context-session-start.ts:77`, `scripts/commands/inline-execution-contract.test.ts:336-337` (21 pass / 0 fail) |
@@ -116,7 +116,7 @@ One config default, one driver-contract amendment, and the dependents that pinne
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
 | AC1 | MET | test | `plugins/sp/tests/skill-structure.test.ts:764-768` pins the 45m default; skill-structure suite 132 pass / 0 fail this run |
-| R2 — Implement dispatch budget defaults to 45 minutes on subprocess and inline hosts and exhaustion is visible | MET | test | Default at `config/workflows/task-pipeline.yaml:127` consumed by `config/workflows/task-pipeline.yaml:329`; inline contract `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:639-650`; exhaustion test `packages/app/tests/workflow/actions/agent-run.test.ts:1378` |
+| R2 — Implement dispatch budget defaults to 45 minutes on subprocess and inline hosts and exhaustion is visible | MET | test | Default at `config/workflows/task-pipeline.yaml:127` consumed by `config/workflows/task-pipeline.yaml:329`; inline contract `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:639-651`; exhaustion test `packages/app/tests/workflow/actions/agent-run.test.ts:1378` |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

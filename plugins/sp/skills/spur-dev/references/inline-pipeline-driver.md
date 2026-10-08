@@ -637,7 +637,8 @@ same-task subagent exists (the earlier stage ran host-inline or below the dispat
 host-owned gate sat between the stages, or when the platform cannot address completed subagents.
 
 **Timeout boundary (task 0727, amended by task 1108):** when the host's dispatch tool accepts a
-per-dispatch timeout (pi: subagent `timeoutMs`), the driver passes the stage's resolved YAML
+per-dispatch timeout (pi: subagent `timeoutMs`, default 30 min — pi-subagents `docs/tool-reference.md`
+line 97), the driver passes the stage's resolved YAML
 `timeoutMs` (implement → `implementTimeoutMs`) and records `host timeout <ms> (yaml timeoutMs)`.
 When it does not, a dispatched subagent is governed by
 **the host platform's subagent limit, not the YAML timeoutMs**, and the driver records

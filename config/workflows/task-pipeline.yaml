@@ -122,7 +122,7 @@ vars:
     # headless); inline hosts receive it only when their dispatch tool accepts a
     # timeout (inline-pipeline-driver.md § Timeout boundary). 45 min is a reasoned
     # default, not a proven bound — in P1 one implement still hit 45 min and resumed
-    # (docs/reports/i31/1107-runall-p1-pilot.md:61-66).
+    # (docs/reports/i31/1107-runall-p1-pilot.md § Timeout attribution).
     # Override per run: `--vars '{"implementTimeoutMs":"3600000"}'`.
     implementTimeoutMs: "2700000"
     # Answer captured by the approve gate's hitl.confirm (R1): "yes" | "no" | "cancel".

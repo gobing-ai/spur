@@ -65,7 +65,7 @@ Two implement-stage timeouts fired in the batch. Both kill strings are host-side
 - `Subagent timed out after 1800000ms` — transcript line 418, a `customType: subagent-notify` message (the 30-minute default kill that killed 1096/1099 workers mid-gate).
 - `Subagent timed out after 2700000ms` — transcript line 618, the same message shape at the raised 45-minute budget (1099 resumed after it).
 
-The governing bound is therefore **the host platform's subagent limit**, exactly as `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:639-646` (task 0727, amended by 1108) states: on the host-inline path the YAML `timeoutMs` is recorded as not-applicable because the host session has no independent kill boundary. The numeric coincidence with the YAML `implementTimeoutMs` default (1800000 ms = 30 min) is arithmetic, not causation — the same kill text appears at 2700000 ms, which is a host value the run set explicitly. The fix — raising the shipped default to 45 minutes and passing the YAML budget to the host dispatch where the host accepts one — is owned by **1108**.
+The governing bound is therefore **the host platform's subagent limit**, exactly as `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:639-647` (task 0727, amended by 1108) states: on the host-inline path the YAML `timeoutMs` is recorded as not-applicable because the host session has no independent kill boundary. The numeric coincidence with the YAML `implementTimeoutMs` default (1800000 ms = 30 min) is arithmetic, not causation — the same kill text appears at 2700000 ms, which is a host value the run set explicitly. The fix — raising the shipped default to 45 minutes and passing the YAML budget to the host dispatch where the host accepts one — is owned by **1108**.
 
 ## Criterion mapping against `0912-workflow-baseline.md:55`
 
@@ -99,7 +99,7 @@ No `action_runs` rows exist for this batch, so every duration here is either a t
 ## References
 
 - Baseline and criterion: `docs/reports/i31/0912-workflow-baseline.md:42`, `docs/reports/i31/0912-workflow-baseline.md:55`
-- Timeout boundary: `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:639-646` (cited as `:600-612` before the 1108 amendment and later drift)
+- Timeout boundary: `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:639-647` (cited as `:600-612` before the 1108 amendment and later drift)
 - D62 feature record: `docs/features/D62_workflow-execution-economy-contract-first-stages-inline-traceability-and-graph-retirement.md`
 - Transcript: `~/.pi/agent/sessions/--Users-robin-xprojects-spur-new--/2026-10-07T01-27-51-768Z_01a113f9-5cd7-7195-8e4d-b6e7c7643917.jsonl` (cited by line number above)
 - Consumers: 1108 (budget default), 1109 (anchor qualification), 1110 (shipped briefs), 1111 (deferred gate, reads the R3 verdict)
