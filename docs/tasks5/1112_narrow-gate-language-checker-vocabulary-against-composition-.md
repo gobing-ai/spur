@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Narrow gate-language checker vocabulary against composition prose false positives
-status: todo
+status: wip
 template: feature-impl
 created_at: 2026-10-07T07:29:50.751Z
-updated_at: "2026-10-07T16:17:20.124Z"
+updated_at: "2026-10-07T23:27:51.815Z"
 feature_id: F91
 
 ac_altitude: task-local
@@ -103,6 +103,7 @@ const GATE_CUES = /\b(until|after|once|before|pending|blocked|wait(?:ing)? for|r
 ### History
 
 - 2026-10-07T07:34:14.858Z backlog → todo (system)
+- 2026-10-07T23:27:51.815Z todo → wip (system)
 
 ### Notes
 

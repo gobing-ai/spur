@@ -442,6 +442,24 @@ function hasAdjacentFileLineColumns(body: string): boolean {
     return false;
 }
 
+/** L4.gate-language predicate — shared by `task check` and the write-time warning in TaskService. */
+export const GATE_LANGUAGE_SECTIONS = ['Background', 'Requirements', 'Design', 'Acceptance Criteria', 'Plan'] as const;
+const GATE_TOKENS = /(?<![\w-])(HITL|human[- ]in[- ]the-loop|merge event|content-gate|GATED|capstone)(?![\w-])/i;
+const AMBIGUOUS_GATE_TOKENS = /(?<![\w-])(approval|approved|merged)(?![\w-])/i;
+// Composition prose ("the stages merged back into one step", "the approved design") uses these
+// words with no gate in play, so the ambiguous tokens only warn when the same sentence also
+// carries an explicit gating cue (task 1112).
+const GATE_CUES = /\b(until|after|once|before|pending|blocked|wait(?:ing)? for|requires?)\b/i;
+/** True when the body names a gate/human-approval marker that does not belong in a task spec. */
+export function hasGateLanguage(body: string): boolean {
+    if (GATE_TOKENS.test(body)) return true;
+    // ponytail: sentence-level cue co-occurrence, not a syntactic subject check — "after the
+    // stages were merged back" still warns; upgrade to subject parsing only if it recurs.
+    return body
+        .split(/[.!?](?:\s|$)|\n/)
+        .some((sentence) => AMBIGUOUS_GATE_TOKENS.test(sentence) && GATE_CUES.test(sentence));
+}
+
 /**
  * True when a Solution body carries at least one recognized `file:line` citation:
  * a backticked `` `path:line` `` / `` `path:start-end` `` anchor, a bare
@@ -450,16 +468,6 @@ function hasAdjacentFileLineColumns(body: string): boolean {
  * truth shared by the L3 checker and the task-write seam (task 0510 R1) so
  * write-time and `task check` behavior cannot drift.
  */
-/** L4.gate-language predicate — shared by `task check` and the write-time warning in TaskService. */
-export const GATE_LANGUAGE_SECTIONS = ['Background', 'Requirements', 'Design', 'Acceptance Criteria', 'Plan'] as const;
-/** True when the body names a gate/human-approval marker that does not belong in a task spec. */
-export function hasGateLanguage(body: string): boolean {
-    return /(?<![\w-])(HITL|human[- ]in[- ]the-loop|approval|approved|merge event|merged|content-gate|GATED|capstone)(?![\w-])/i.test(
-        body,
-    );
-}
-
-/** True when the Solution body carries at least one `file:line`-shaped citation. */
 export function hasSolutionFileLineCitation(body: string): boolean {
     const hasFileLine = /`[^`]+?:\d+(-\d+)?`/.test(body) || /[^\s`]\.\w+:\d+/.test(body);
     return hasFileLine || hasAdjacentFileLineColumns(body);

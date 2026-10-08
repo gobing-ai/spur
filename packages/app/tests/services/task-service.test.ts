@@ -2520,6 +2520,15 @@ describe('TaskService 0416: WBS collision guard + baseCounter', () => {
             expect((result.warnings ?? []).join('\n')).not.toContain('L4.gate-language');
         });
 
+        test('1112 R2: write-time path stays silent for composition prose without a cue', async () => {
+            const created = await svc.create({ title: 'Gate words composition' });
+            const src = await writeTmp('gate-comp', 'The review steps merged back into one step.');
+
+            const result = await svc.updateSection(created.ref.id, 'Background', src);
+
+            expect((result.warnings ?? []).join('\n')).not.toContain('L4.gate-language');
+        });
+
         test('attaching feature_id after the AC write re-runs the DD-09 subset warning', async () => {
             const fs = createNodeFileSystem(root());
             const featuresDir = join(root(), 'features');
