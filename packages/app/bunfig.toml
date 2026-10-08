@@ -1,0 +1,6 @@
+# Workspace-local test config (same fix as apps/cli, task 0699 R3): without it,
+# `cd packages/app && bun test` skipped the root preload, so an operator-exported
+# TYPESAFE_API_KEY reached decide-catalog's "no-backend" tests and they saw reason
+# `error`. Coverage stays gated by the root bunfig (bun run test).
+[test]
+preload = ["../../tests/setup.ts"]
