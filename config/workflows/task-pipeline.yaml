@@ -122,7 +122,7 @@ vars:
     # headless); inline hosts receive it only when their dispatch tool accepts a
     # timeout (inline-pipeline-driver.md § Timeout boundary). 45 min is a reasoned
     # default, not a proven bound — in P1 one implement still hit 45 min and resumed
-    # (docs/reports/i31/1107-runall-p1-pilot.md:70).
+    # (docs/reports/i31/1107-runall-p1-pilot.md:61-66).
     # Override per run: `--vars '{"implementTimeoutMs":"3600000"}'`.
     implementTimeoutMs: "2700000"
     # Answer captured by the approve gate's hitl.confirm (R1): "yes" | "no" | "cancel".
@@ -314,8 +314,8 @@ states:
                 # Pure slash command only (ADR-043). Anti-recursion / implement discipline
                 # The worker's brief is OWNED BY the skill, not restated here (task 1110 R3):
                 # see `plugins/sp/skills/code-implementation/SKILL.md` (targeted-probe scope
-                # `:98-118`, dependency-aware changed-path checks `:120-138`, Solution anchor form
-                # in Red Flags `:187`). The YAML only names the entry command.
+                # § Implement scope, dependency-aware § Changed-path targeted checks, Solution
+                # anchor form in § Red Flags). The YAML only names the entry command.
                 # Declared Layer-1 role (0538 R2/0710 R7): routing reason; no executor pin — role routing feeds the distinctness gate.
                 role: coder
                 # B7 R3/R6 (0894): coder stages reuse the role session — the test-fix hop

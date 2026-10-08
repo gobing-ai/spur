@@ -693,6 +693,17 @@ describe('AC identities containing colons (task 1118)', () => {
         expect(findings).toEqual([]);
     });
 
+    test('every colon form resolves verbatim: backticks, URL, bare prose colon, (req:) suffix (1118 AC1)', () => {
+        const task = `\n## 9003. Colon forms task\n\n### Requirements\n\n- [ ] **R1. Anchors.** Name them.\n\n### Acceptance Criteria\n\n- [ ] AC1 — The inventory names the \`file:line\` of each surface\n- [ ] AC2 — Docs link http://example.test/x\n- [ ] AC3 — Output shows: a summary\n- [ ] AC4 — Gate passes (req: R1)\n`;
+        const acs = [
+            '| AC1 — The inventory names the `file:line` of each surface | MET | test | `t.ts:1` |',
+            '| AC2 — Docs link http://example.test/x | MET | test | `t.ts:2` |',
+            '| AC3 — Output shows: a summary | MET | test | `t.ts:3` |',
+            '| AC4 — Gate passes (req: R1) | MET | test | `t.ts:4` |',
+        ];
+        expect(lintVerifyAnswer(answer(['| R1 | MET | done |'], acs), task, null)).toEqual([]);
+    });
+
     test('legacy colon-headed rows still resolve by their head', () => {
         const findings = lintVerifyAnswer(
             answer(CLEAN_REQS, ['| AC1 (R1) | MET | test | `t.ts:1` |', CLEAN_ACS[1] ?? '']),
