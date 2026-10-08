@@ -315,6 +315,10 @@ Rules (R1):
   first, then verify the physical path and repository identity.
 - **Native tool cwd options are additive.** A tool-level cwd/`cd` pin may additionally set the
   call's directory, but never replaces the identity checks above.
+- **Dispatch cwd is mandatory when the tool accepts one.** A subagent dispatch whose tool exposes a
+  `cwd` (pi `subagent`) passes the execution-tree cwd. Omitted, the child starts in the host tree:
+  it can edit main, and the timeout watchdog diffs the wrong tree (H15 2026-10-07: "changed
+  tracked files: none" on a worker that changed 5 worktree files).
 - **Host-only scope.** Engine `shell` actions already bind `context.workdir`
   (`packages/app/src/workflow/actions/shell.ts:98`) — leave them alone. No service-wide
   `process.chdir`, no new public flag, no helper framework.
