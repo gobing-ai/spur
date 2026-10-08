@@ -1989,7 +1989,7 @@ failureStates:
         expect(await exists(oldLog)).toBe(false);
     });
 
-    test('clean honors workflow.logRetentionDays from .spur/config.yaml', async () => {
+    test('clean honors workflows.logRetentionDays from .spur/config.yaml', async () => {
         const cwd = await createTempProject();
         const runDir = join(cwd, '.spur', 'run');
         await mkdir(runDir, { recursive: true });
@@ -1998,7 +1998,7 @@ failureStates:
         // 10 days old: within the default 30d, past a 7d override.
         const mtime = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
         await utimes(log, mtime, mtime);
-        await writeFile(join(cwd, '.spur', 'config.yaml'), 'workflow:\n  logRetentionDays: 7\n');
+        await writeFile(join(cwd, '.spur', 'config.yaml'), 'workflows:\n  logRetentionDays: 7\n');
 
         const output = createCapturedOutput();
         const exitCode = await main(['workflow', 'clean', '--logs'], { output, cwd, dbUrl: ':memory:' });

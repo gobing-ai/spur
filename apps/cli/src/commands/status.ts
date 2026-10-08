@@ -40,7 +40,7 @@ async function runStatusCore(
     ]);
     const target = path === undefined ? undefined : await readTargetStatus(context, path);
     const decisionMaker = computeDecisionReadiness(
-        context.spurConfig?.workflow?.hitlDecisionMaker === true,
+        context.spurConfig?.workflows?.hitlDecisionMaker === true,
         isNonEmpty(context.env.TYPESAFE_API_KEY),
     );
 

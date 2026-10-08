@@ -72,12 +72,12 @@ export interface CheckpointReclamationResult {
 
 /**
  * Resolve the run-log retention threshold (days) from the threaded config
- * `workflow.logRetentionDays` (feature D2 / task 0429). Sync & pure: a load
+ * `workflows.logRetentionDays` (feature D2 / task 0429). Sync & pure: a load
  * failure is already surfaced once at the root; `config === null` degrades to
  * the 30-day default.
  */
 export function resolveWorkflowLogRetentionDays(config: SpurConfig | null): number {
-    return config?.workflow?.logRetentionDays ?? 30;
+    return config?.workflows?.logRetentionDays ?? 30;
 }
 
 /**

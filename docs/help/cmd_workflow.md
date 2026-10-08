@@ -146,7 +146,7 @@ EventBus. Preview and live progress are **suppressed under `--json`** and on the
 **`--async` path** (use `spur workflow trace`). `--no-plan` suppresses only the preview.
 
 By default a consolidated log is written to `.spur/run/<RUNID>.log` and retained after the run
-(subject to `workflow.logRetentionDays`); pass `--no-log` to skip it (propagates to `--async`
+(subject to `workflows.logRetentionDays`); pass `--no-log` to skip it (propagates to `--async`
 workers).
 
 ### `--async` worker
@@ -361,7 +361,7 @@ Housekeeping **two scopes** (unless scoped by flag):
 
 1. **Stale-run finalization** — bulk-finalize orphaned `running`/`pending` runs as `failed`.
 2. **Run-log reclamation** — remove retained `.spur/run/<RUNID>.log` files older than
-   `workflow.logRetentionDays` in `.spur/config.yaml` (default 30 days). Never touches
+   `workflows.logRetentionDays` in `.spur/config.yaml` (default 30 days). Never touches
    `.spur/workflow/<RUNID>.jsonl` or `*-partial.md`.
 
 ## Workflow Action and Guard Kinds

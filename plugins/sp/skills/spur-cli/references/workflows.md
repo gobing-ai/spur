@@ -112,7 +112,7 @@ The skill's logic divides by **whether the LLM adds value**:
 | `run` | `spur workflow run` (CLI) | `<file> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan] [--quiet/--silent/--verbose] [--detail <level>] [--trace-file] [--no-log] [--steer]` | Terminal state reached (sync) or run started (async); trace readable |
 | `continue` | `spur workflow continue` (CLI) | `[run-id] [--yes] [--answer <yes\|no\|cancel>] [--answer-text <text>] [--async] [--no-log]` | Resume a paused or interrupted run (omit id -> most recent resumable); `--answer` injects a confirm/select gate answer and `--answer-text` answers an input gate with free text (H1 R27), both before guard re-evaluation; one of them is required headless (0901 R3) and each is validated against the pending gate kind; `--async` detaches the resume (0901 R4) |
 | `cancel` | `spur workflow cancel` (CLI) | `<run-id>` | Single non-terminal run marked failed (SIGTERM async worker when live) |
-| `clean` | `spur workflow clean` (CLI) | `[--older-than <min>] [--force] [--logs] [--dry-run]` | Bulk-finalize stale `running`/`pending` runs as failed **and** reclaim retained run logs older than `workflow.logRetentionDays` (30d default) |
+| `clean` | `spur workflow clean` (CLI) | `[--older-than <min>] [--force] [--logs] [--dry-run]` | Bulk-finalize stale `running`/`pending` runs as failed **and** reclaim retained run logs older than `workflows.logRetentionDays` (30d default) |
 | `list` | `spur workflow list` (CLI) | — | Available workflow **YAML definition files** (not run records) |
 | `trace` | `spur workflow trace` (CLI) | `[run-id] [--workflow <n>] [--status <s>] [--since <iso>] [--last <n>] [--follow] [--poll <ms>] [--output] [--timeout <ms>]` | Run history list or per-run timeline |
 | `progress` | `spur workflow progress` (CLI) | `<run-id>` | The `projectWorkflowProgress` projection for that run — current state, per-action attempts, candidate next transitions, diagnostics. Read-only; the verb renders, `packages/app` derives. Unknown run id exits 1 with `Run <id> not found.` |
@@ -366,7 +366,7 @@ redirecting `agent.run` stages (ADR-047).
 - **Stale-run finalization** (existing): bulk-finalizes orphaned `running`/`pending` runs as `failed`.
   `--older-than <minutes>` (default 30) and `--force` (all non-terminal regardless of age) apply here only.
 - **Run-log reclamation** (0429): removes expired `.log` files from `.spur/memory/runs/`
-  and legacy `.spur/run/`, using `workflow.logRetentionDays` (default 30 days). Non-terminal
+  and legacy `.spur/run/`, using `workflows.logRetentionDays` (default 30 days). Non-terminal
   runs, including paused/interrupted runs, are protected; ownership lookup failures preserve logs.
   The two-file record (`.md` + `.state.json`) and partial handoffs are retained.
 - **Checkpoint reclamation**: removes expired terminal checkpoints only when confinement,

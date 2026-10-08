@@ -19,10 +19,10 @@ The authoritative contract is [Optional DecisionMaker for executed HITL actions]
 ## 2. Enable it for one project
 
 Merge this into `<project>/.spur/config.yaml`; preserve the rest of the file and any existing
-`workflow` keys. The singular `workflow` section is different from `workflows.paths`.
+`workflows` keys (catalog `paths` and the switches live in the same section).
 
 ```yaml
-workflow:
+workflows:
   hitlDecisionMaker: true
 ```
 
@@ -56,7 +56,7 @@ override. Both layers use a YAML boolean, not the string `"true"`.
 Set the project override explicitly:
 
 ```yaml
-workflow:
+workflows:
   hitlDecisionMaker: false
 ```
 
@@ -73,7 +73,7 @@ the feature enabled, it produces provider-unavailable fallback instead.
 
 | Control | Purpose |
 | --- | --- |
-| `workflow.hitlDecisionMaker` | Explicit project/global activation; absent means off unless inherited |
+| `workflows.hitlDecisionMaker` | Explicit project/global activation; absent means off unless inherited |
 | `TYPESAFE_API_KEY` | Provider credentials; does not activate the feature |
 | `TYPESAFE_BASE_URL` | Optional API base URL override read by the upstream SDK; normally leave unset |
 | `SPUR_HITL_AUTO_APPROVE=1` | Existing headless confirm fallback policy; not a Jev switch |

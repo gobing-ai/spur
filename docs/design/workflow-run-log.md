@@ -91,7 +91,7 @@ the run. Errors are logged/swallowed (same contract as the current sink and the 
 - `spur workflow clean` (already the run housekeeping verb, today finalizing stale
   running/pending runs) gains a **log-reclamation scope**: it removes retained `<RUNID>.log` files
   whose age exceeds a retention threshold. The threshold is configurable via a
-  `workflow.logRetentionDays` config key (default **30 days**). `--logs` scopes the verb to log
+  `workflows.logRetentionDays` config key (default **30 days**). `--logs` scopes the verb to log
   reclamation only; `--dry-run` lists what would be removed without writing.
 - Removing `<RUNID>-output.log` (consolidated into `<RUNID>.log`) and reclaiming retained logs are
   the compatibility-bearing changes — see consumer table.
@@ -127,7 +127,7 @@ remain distinct authorities and are **not** folded into `<RUNID>.log`.
 | `spur workflow run <file>` | `--no-log` (opt out of the consolidated log) | none (composes with `--async`) |
 | `spur workflow trace <run-id>` | `--follow --output` (stream `<RUNID>.log`) | `--output` requires `--follow`; rejects `--json` |
 | `spur workflow clean` | log reclamation scope (`--logs`, `--dry-run`), retention age from config | composes with existing `--force`/`--older-than` |
-| `.spur/config.yaml` | `workflow.logRetentionDays` (default 30) | — |
+| `.spur/config.yaml` | `workflows.logRetentionDays` (default 30) | — |
 
 CLI signatures above match the shipped code (`spur workflow run|trace|clean --help`, task 0430
 verify pass). ADR-038 parity with `plugins/sp/skills/spur-cli/references/workflows.md` holds

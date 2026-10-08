@@ -1461,7 +1461,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
         .command('clean')
         .description(
             'Housekeeping: finalize orphaned runs stuck in running/pending past a staleness threshold ' +
-                '(mark as failed) and reclaim retained run logs older than workflow.logRetentionDays. ' +
+                '(mark as failed) and reclaim retained run logs older than workflows.logRetentionDays. ' +
                 '`--logs` scopes to log reclamation only. To cancel a single live run by id, use ' +
                 '`spur workflow cancel <run-id>` instead.',
         )

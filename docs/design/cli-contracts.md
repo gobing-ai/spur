@@ -760,7 +760,7 @@ overrides the global root and suppresses the bundled fallback for a hermetic run
 > **Shipped surface (ADR-045 / feature D2, tasks 0426–0429):** `run --no-log` opts out of the
 > consolidated `.spur/run/<RUNID>.log` (retained by default otherwise); `trace --follow --output`
 > streams that log as a tail -f-equivalent source and is rejected with `--json`; `spur workflow
-clean` reclaims retained logs older than `workflow.logRetentionDays` (default 30 days). Shapes:
+clean` reclaims retained logs older than `workflows.logRetentionDays` (default 30 days). Shapes:
 > [`design/workflow-run-log.md`](workflow-run-log.md).
 
 - `show <file> [--format <mermaid|todo>] [--json]` — read-only projection of a definition (0695/D7).
@@ -929,7 +929,7 @@ clean` reclaims retained logs older than `workflow.logRetentionDays` (default 30
   `result_json` produces explicit unavailable fields. Existing JSON keys remain present.
 - `clean [--older-than <minutes>] [--force] [--logs] [--dry-run]` — housekeeping: finalize orphaned
   runs stuck in `running`/`pending` past a staleness threshold (default 30 min) as failed, and
-  reclaim retained run logs older than `workflow.logRetentionDays` (`.spur/config.yaml`, default 30
+  reclaim retained run logs older than `workflows.logRetentionDays` (`.spur/config.yaml`, default 30
   days) across both durable run records (`.spur/memory/runs/`) and scratch (`.spur/run/`), protecting
   active runs. Every clean also executes durable evidence migration (`migrateRunStorage`, ADR-131 / E71),
   persisting eligible lasting task verdicts, feature verification receipts, and terminal run-record
@@ -953,10 +953,10 @@ clean` reclaims retained logs older than `workflow.logRetentionDays` (default 30
 
 ### Optional DecisionMaker for executed HITL actions
 
-Set the single project/global config switch through the existing merged config loader:
+Set the project/global config switch through the existing merged config loader:
 
 ```yaml
-workflow:
+workflows:
   hitlDecisionMaker: true
 ```
 

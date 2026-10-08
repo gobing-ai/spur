@@ -16,7 +16,6 @@ import {
     removeEnvVar,
     setEnvVar,
     spurConfigSchema,
-    WorkflowConfigSchema,
     WorkflowsConfigSchema,
 } from '../src/index';
 import {
@@ -253,14 +252,14 @@ describe('app-section schemas', () => {
         expect(result.success).toBe(false);
     });
 
-    test('WorkflowConfigSchema parses logRetentionDays and defaults to 30 (task 0429)', () => {
-        expect(WorkflowConfigSchema.parse({ logRetentionDays: 7 }).logRetentionDays).toBe(7);
-        expect(WorkflowConfigSchema.parse({}).logRetentionDays).toBe(30);
+    test('WorkflowsConfigSchema parses logRetentionDays and defaults to 30 (task 0429)', () => {
+        expect(WorkflowsConfigSchema.parse({ logRetentionDays: 7 }).logRetentionDays).toBe(7);
+        expect(WorkflowsConfigSchema.parse({}).logRetentionDays).toBe(30);
     });
 
-    test('WorkflowConfigSchema rejects non-positive or non-integer logRetentionDays (task 0429)', () => {
+    test('WorkflowsConfigSchema rejects non-positive or non-integer logRetentionDays (task 0429)', () => {
         for (const bad of [0, -1, 2.5]) {
-            const result = WorkflowConfigSchema.safeParse({ logRetentionDays: bad });
+            const result = WorkflowsConfigSchema.safeParse({ logRetentionDays: bad });
             expect(result.success).toBe(false);
         }
     });
@@ -276,11 +275,11 @@ describe('app-section schemas', () => {
         }
     });
 
-    test('spurConfigSchema accepts the workflow section (task 0429)', () => {
-        const result = spurConfigSchema.safeParse({ workflow: { logRetentionDays: 14 } });
+    test('spurConfigSchema accepts the workflows section (task 0429)', () => {
+        const result = spurConfigSchema.safeParse({ workflows: { logRetentionDays: 14 } });
         expect(result.success).toBe(true);
         if (result.success) {
-            expect(result.data.workflow?.logRetentionDays).toBe(14);
+            expect(result.data.workflows?.logRetentionDays).toBe(14);
         }
     });
 
@@ -1064,28 +1063,28 @@ describe('retired fleet carrier guard (0858 R2)', () => {
     });
 });
 
-test('workflow.hitlDecisionMaker is optional, false by default policy, and boolean only', () => {
-    expect(WorkflowConfigSchema.parse({}).hitlDecisionMaker ?? false).toBe(false);
-    expect(WorkflowConfigSchema.parse({ hitlDecisionMaker: true }).hitlDecisionMaker).toBe(true);
-    expect(WorkflowConfigSchema.parse({ hitlDecisionMaker: false }).hitlDecisionMaker).toBe(false);
-    expect(WorkflowConfigSchema.safeParse({ hitlDecisionMaker: 'true' }).success).toBe(false);
+test('workflows.hitlDecisionMaker is optional, false by default policy, and boolean only', () => {
+    expect(WorkflowsConfigSchema.parse({}).hitlDecisionMaker ?? false).toBe(false);
+    expect(WorkflowsConfigSchema.parse({ hitlDecisionMaker: true }).hitlDecisionMaker).toBe(true);
+    expect(WorkflowsConfigSchema.parse({ hitlDecisionMaker: false }).hitlDecisionMaker).toBe(false);
+    expect(WorkflowsConfigSchema.safeParse({ hitlDecisionMaker: 'true' }).success).toBe(false);
 });
 
-test('workflow.decideDecisionMaker is optional, false by default policy, and boolean only (0941 R4)', () => {
-    expect(WorkflowConfigSchema.parse({}).decideDecisionMaker ?? false).toBe(false);
-    expect(WorkflowConfigSchema.parse({ decideDecisionMaker: true }).decideDecisionMaker).toBe(true);
-    expect(WorkflowConfigSchema.parse({ decideDecisionMaker: false }).decideDecisionMaker).toBe(false);
-    expect(WorkflowConfigSchema.safeParse({ decideDecisionMaker: 'yes' }).success).toBe(false);
+test('workflows.decideDecisionMaker is optional, false by default policy, and boolean only (0941 R4)', () => {
+    expect(WorkflowsConfigSchema.parse({}).decideDecisionMaker ?? false).toBe(false);
+    expect(WorkflowsConfigSchema.parse({ decideDecisionMaker: true }).decideDecisionMaker).toBe(true);
+    expect(WorkflowsConfigSchema.parse({ decideDecisionMaker: false }).decideDecisionMaker).toBe(false);
+    expect(WorkflowsConfigSchema.safeParse({ decideDecisionMaker: 'yes' }).success).toBe(false);
 });
 
 test('resolveDecideDecisionMakerEnabled projects the switch from a merged load (0941 gate fix)', async () => {
     // Absent config → schema defaults → switch off.
     expect(await resolveDecideDecisionMakerEnabled(tmpCwd)).toBe(false);
-    await writeConfig(tmpCwd, 'version: "1"\nname: t\nworkflow:\n  decideDecisionMaker: true\n');
+    await writeConfig(tmpCwd, 'version: "1"\nname: t\nworkflows:\n  decideDecisionMaker: true\n');
     // Same-path rewrite: clear the mtime-keyed cache so the reload sees the new file.
     invalidateSpurConfig();
     expect(await resolveDecideDecisionMakerEnabled(tmpCwd)).toBe(true);
-    await writeConfig(tmpCwd, 'version: "1"\nname: t\nworkflow:\n  decideDecisionMaker: false\n');
+    await writeConfig(tmpCwd, 'version: "1"\nname: t\nworkflows:\n  decideDecisionMaker: false\n');
     invalidateSpurConfig();
     expect(await resolveDecideDecisionMakerEnabled(tmpCwd)).toBe(false);
 });

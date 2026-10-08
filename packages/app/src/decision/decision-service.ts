@@ -109,7 +109,7 @@ export type ServedDecision = DecisionResult & { makerSource: DecisionMakerSource
  * catalogs, builds `createDecisionHub`-equivalent state with the default maker
  * registry and caches the result per process. `list`/`describe`/`status` never
  * construct a maker; makers are built lazily by the registry on first
- * `decide`. The service never reads `workflow.decideDecisionMaker` — that
+ * `decide`. The service never reads `workflows.decideDecisionMaker` — that
  * switch governs only the workflow decide action, while `spur decision run`
  * (and every P1 workflow adoption later, through this same service) is an
  * explicit operator decision point.

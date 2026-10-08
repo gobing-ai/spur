@@ -46,13 +46,13 @@ describe('status command', () => {
         const cases = [
             { config: '', env: {}, state: 'disabled', credentialPresent: false },
             {
-                config: 'workflow:\n  hitlDecisionMaker: true\n',
+                config: 'workflows:\n  hitlDecisionMaker: true\n',
                 env: {},
                 state: 'missing-key',
                 credentialPresent: false,
             },
             {
-                config: 'workflow:\n  hitlDecisionMaker: true\n',
+                config: 'workflows:\n  hitlDecisionMaker: true\n',
                 env: { TYPESAFE_API_KEY: 'not-a-real-key' },
                 state: 'configured-not-probed',
                 credentialPresent: true,

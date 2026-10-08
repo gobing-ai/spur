@@ -1159,7 +1159,7 @@ export class WorkflowAppService {
      * task 0711 R5–R8). A checkpoint is reclaimed only when every guard holds:
      * it parses as canonical metadata (0711 R1), its status is terminal, its
      * `updated_at` (fallback mtime) is older than the retention threshold —
-     * the same `workflow.logRetentionDays` knob that governs run logs (0711
+     * the same `workflows.logRetentionDays` knob that governs run logs (0711
      * R7) — its `run_id` references no active run, and its resolved path is
      * confined to the sessions directory (0711 R5). Anything else is kept and
      * reported with the reason: malformed files are never deleted because they
@@ -2095,7 +2095,7 @@ export class WorkflowAppService {
             agentConfig: agentSlice,
             getDb: () => this.ctx.getDb(),
             // 0941 R4: decide degrades to its declared default unless the config switch is on.
-            decideDecisionMaker: this.ctx.spurConfig?.workflow?.decideDecisionMaker === true,
+            decideDecisionMaker: this.ctx.spurConfig?.workflows?.decideDecisionMaker === true,
             // 0941 R4: the backend comes from existing DecisionMaker config when the composition root supplies one.
             ...(this.ctx.decisionMaker !== undefined ? { decideMaker: this.ctx.decisionMaker } : {}),
             // Task 1094: the catalog-reference decide path resolves through the shared service;
@@ -2214,7 +2214,7 @@ export class WorkflowAppService {
         return {
             evaluate: (request, config) =>
                 evaluateDecision(request, config, {
-                    enabled: this.ctx.spurConfig?.workflow?.hitlDecisionMaker === true,
+                    enabled: this.ctx.spurConfig?.workflows?.hitlDecisionMaker === true,
                     evidence: async (request) =>
                         new ActionRunDao(await this.ctx.getDb()).actionRowsByRunId(request.runId),
                     decisionMaker: this.ctx.decisionMaker,

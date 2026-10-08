@@ -42,7 +42,7 @@ decision point (§3.5).
 - Per-decision model selection in config.
 - Server, oRPC and Board surfaces.
 - Upstream package changes.
-- Migrating `workflow.hitlDecisionMaker`.
+- Migrating `workflows.hitlDecisionMaker` — done later as an in-development config-surface consolidation: the singular `workflow` section merged into `workflows` (`workflows.hitlDecisionMaker`).
 
 ## 2. Context and constraints
 
@@ -59,7 +59,7 @@ decision point (§3.5).
     `redactAndBound(…, 2000)`.
   - The default `minConfidence` is 0.8.
   - It writes a frozen schemaVersion-1 `resultFile` row.
-  - It is gated by `workflow.decideDecisionMaker`, which defaults to false.
+  - It is gated by `workflows.decideDecisionMaker`, which defaults to false.
   - The inline driver (`inline-run-setup --decide`) and the engine share one runner. That parity
     must survive the change.
 - **ADR-113:** workflows resolve in layers:
@@ -110,7 +110,7 @@ decision point (§3.5).
   result per process.
 - It exposes `list()`, `describe(id)`, `decide(id, input)` and `status()`.
 - It resolves the effective maker per decision (§3.6) and returns the selecting source with it.
-- It never reads `workflow.decideDecisionMaker`. That switch governs only the workflow `decide`
+- It never reads `workflows.decideDecisionMaker`. That switch governs only the workflow `decide`
   action. `spur decision run` is an explicit operator call whose purpose is measuring reliability.
 - It constructs makers lazily, so `list`, `show` and `status` never build one.
 

@@ -633,7 +633,7 @@ states:
             options:
                 command: >-
                     mkdir -p .spur/run; if [ -n "$mode" ]; then printf '%s\n' "$mode" > ".spur/run/$wbs-mode.txt"; exit 0; fi; DF=".spur/run/$wbs-diffstat.json"; if ! jq -e 'type == "object"' "$DF" >/dev/null 2>&1; then printf 'safety\n' > ".spur/run/$wbs-mode.txt"; exit 0; fi; jq -r 'if .sensitive == true or ((.insertions // 0) + (.deletions // 0)) > 400 then "safety" else empty end' "$DF" 2>/dev/null > ".spur/run/$wbs-mode.txt"; exit 0
-          # (d) lane decision — degrades to the standard default whenever workflow.decideDecisionMaker
+          # (d) lane decision — degrades to the standard default whenever workflows.decideDecisionMaker
           # is off (R4), so with the flag off this state is pure shell: no model call is made.
           - kind: decide
             options:
@@ -744,7 +744,7 @@ states:
     # (`.spur/run/<wbs>-test-fix-attempt` against `qualityGateMaxFixAttempts`), and the fix
     # re-enters quality → review → verify on a freshly captured digest. The `decide` action
     # itself always runs (the engine has no onEnter conditionals); with
-    # `workflow.decideDecisionMaker` off it degrades to its declared default.
+    # `workflows.decideDecisionMaker` off it degrades to its declared default.
     - id: review-fail-triage
       display:
           phase: review
