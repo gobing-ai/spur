@@ -365,7 +365,9 @@ and `prefixId` normalizes `AC<n>` so the box flips. A bare `AC-<i>` also does bo
 resolves it through the feature's scenario order to the AC line aliasing scenario *i*
 (`AC<k> — [R<n> — ]<scenario title>`) and flips that box — never the same-numbered `AC<i>`; with no
 aliasing line it flips nothing. A bare `AC<n>` credits no scenario; a title carrying the scenario's
-`R<n>` label matches neither.
+`R<n>` label matches neither. When the task's AC section is a Gherkin fence (`Scenario: AC1 — …`
+rows), there is no checklist label: cite each row by its exact scenario title — a bare `AC<i>`
+matches nothing and the verdict is rejected.
 
 **Evidence rule (behavior-bearing AC):** an AC row with `status: MET` on a behavior-bearing id
 (no `[advisory]`/`[non-core]`/`[non-behavior]`/`[docs-only]` marker) MUST carry `test` or
