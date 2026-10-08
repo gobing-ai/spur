@@ -2,11 +2,11 @@
 schema_version: 1
 id: "A33"
 name: "Repo release-tooling integrity: verified binary installs and single-source generated plugin-lib bindings"
-status: active
+status: verifying
 priority: P2
 tags: []
 created_at: "2026-09-26T06:34:35.756Z"
-updated_at: "2026-10-01T21:54:11.687Z"
+updated_at: "2026-10-08T08:15:56.762Z"
 ---
 
 # A33: Repo release-tooling integrity: verified binary installs and single-source generated plugin-lib bindings
@@ -55,6 +55,7 @@ Feature: Repo release-tooling integrity
 | 0972 | Derive inline-run plugin-lib exports and declarations from one table | done |
 | 0973 | Gate plugins/sp under strict typecheck and clear its 216 errors | done |
 | 1044 | Make build:bundle byte-identical with the authoritative bundle-plugin-lib test bundler | done |
+| 1120 | superskill install sp does not refresh the installed lib/inline-run.generated.mjs | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -65,4 +66,5 @@ Feature: Repo release-tooling integrity
 - 2026-09-28T17:28:44.489Z active → verifying (system)
 - 2026-09-28T17:36:39.214Z verifying → done (system)
 - 2026-10-01T21:54:11.687Z done → active (system)
+- 2026-10-08T08:15:56.762Z active → verifying (system)
 

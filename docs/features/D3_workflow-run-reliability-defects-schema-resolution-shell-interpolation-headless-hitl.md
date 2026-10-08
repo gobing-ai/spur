@@ -2,11 +2,11 @@
 schema_version: 1
 id: "D3"
 name: "Workflow run reliability defects: schema resolution, shell interpolation, headless HITL"
-status: active
+status: verifying
 priority: P2
 tags: []
 created_at: "2026-08-04T17:26:12.441Z"
-updated_at: "2026-10-07T21:24:19.145Z"
+updated_at: "2026-10-08T08:14:43.084Z"
 ---
 
 # D3: Workflow run reliability defects: schema resolution, shell interpolation, headless HITL
@@ -113,6 +113,7 @@ Feature: Workflow run reliability defects
 | 1064 | Workflow run registration: reported run ids must be queryable | done |
 | 1065 | make residual scan fold freshness aware between run and durable verdict copies | done |
 | 1067 | enforce e71 persist out before worktree removal in wt4 landings | done |
+| 1117 | feature-verification leaks the async launcher's expected definition digest into verificationCmd | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -128,4 +129,5 @@ Feature: Workflow run reliability defects
 - 2026-10-03T06:38:31.380Z active → verifying (system)
 - 2026-10-03T15:00:59.611Z verifying → done (system)
 - 2026-10-07T21:24:19.145Z done → active (system)
+- 2026-10-08T08:14:43.084Z active → verifying (system)
 

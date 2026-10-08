@@ -2,11 +2,11 @@
 schema_version: 1
 id: "G71"
 name: "Core inbox fleet: one dispatcher, member execution, execution record"
-status: active
+status: verifying
 priority: P2
 tags: []
 created_at: "2026-10-04T20:29:21.149Z"
-updated_at: "2026-10-06T01:24:42.658Z"
+updated_at: "2026-10-08T08:16:16.182Z"
 ---
 
 # G71: Core inbox fleet: one dispatcher, member execution, execution record
@@ -86,4 +86,5 @@ Feature: Core inbox fleet: one dispatcher, member execution, execution record
 ## History
 
 - 2026-10-06T01:24:42.658Z backlog → active (system)
+- 2026-10-08T08:16:16.182Z active → verifying (system)
 

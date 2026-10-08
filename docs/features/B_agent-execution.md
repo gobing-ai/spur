@@ -2,11 +2,11 @@
 schema_version: 1
 id: B
 name: Agent execution
-status: active
+status: verifying
 priority: P2
 tags: [group]
 created_at: 2026-06-12T23:45:00.000Z
-updated_at: "2026-08-30T00:25:27.019Z"
+updated_at: "2026-10-08T08:16:08.046Z"
 ---
 
 # B: Agent execution
@@ -47,3 +47,5 @@ plugin harness. Existing mixed history under H is frozen pending a separate audi
 - 2026-06-12 — created (rd3-migration feature finalizing)
 - 2026-08-30T00:24:20.681Z active → verifying (system)
 - 2026-08-30T00:25:27.019Z verifying → active (system)
+- 2026-10-08T08:16:08.046Z active → verifying (system)
+
