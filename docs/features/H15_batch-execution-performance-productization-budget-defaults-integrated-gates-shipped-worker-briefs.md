@@ -2,11 +2,11 @@
 schema_version: 1
 id: "H15"
 name: "Batch execution performance productization: budget defaults, integrated gates, shipped worker briefs"
-status: active
+status: done
 priority: P2
 tags: []
 created_at: "2026-10-07T15:57:49.599Z"
-updated_at: "2026-10-07T22:56:57.364Z"
+updated_at: "2026-10-08T06:44:47.670Z"
 ---
 
 # H15: Batch execution performance productization: budget defaults, integrated gates, shipped worker briefs
@@ -51,8 +51,8 @@ Feature: Batch execution performance productization
 | 1109 | Auto-repair task-check anchor warnings via task migrate-anchors in the driver recovery path | done |
 | 1110 | Ship verify-answer contract and implement briefs as spur-dev references | done |
 | 1111 | Add deferQualityGate batch gate policy to parallel mode | done |
-| 1121 | Worktree merge/cleanup: re-install the invoking tree and persist the feature receipts | todo |
-| 1122 | A passing review's findings cost a full re-certification cycle (no review fix edge) | todo |
+| 1121 | Worktree merge/cleanup: re-install the invoking tree and persist the feature receipts | done |
+| 1122 | A passing review's findings cost a full re-certification cycle (no review fix edge) | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -63,4 +63,6 @@ Feature: Batch execution performance productization
 - 2026-10-07T21:39:10.277Z active → verifying (system)
 - 2026-10-07T21:39:10.953Z verifying → done (system)
 - 2026-10-07T22:56:57.364Z done → active (system)
+- 2026-10-08T06:44:45.802Z active → verifying (system)
+- 2026-10-08T06:44:47.670Z verifying → done (system)
 

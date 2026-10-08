@@ -3,8 +3,8 @@ import { join } from 'node:path';
  * Residual scan — task-leftover classification and recorded-verdict discovery (F96, ADR-071).
  *
  * Contract owner: docs/design/task-residual-sweep.md. The plugin script
- * `plugins/sp/scripts/residual-scan.ts` keeps the IO glue (argv, git/spur spawning, file
- * IO, the four scan/fold/settle/report modes) and calls into this module through the
+ * `plugins/sp/scripts/residual-scan.ts` keeps the IO glue (git/spur spawning, file IO, the
+ * scan/fold/settle/report/review-gate modes) and calls into this module through the
  * generated standalone bundle `plugins/sp/lib/residual-scan.generated.mjs` — node-builtin
  * only, no workspace imports, so the bundle satisfies the plugin standalone contract.
  *
@@ -272,6 +272,79 @@ export function scanResiduals(inputs: ResidualScanInputs): ResidualArtifact {
     };
 }
 
+/**
+ * Validate raw parsed deferral-file JSON: only entries with a non-empty string `id` and
+ * `reason` survive; anything else (or a non-array payload) is silently ignored.
+ */
+export function parseDeferralEntries(raw: unknown): Deferral[] {
+    const isDeferral = (e: unknown): e is Deferral =>
+        typeof e === 'object' &&
+        e !== null &&
+        typeof (e as Deferral).id === 'string' &&
+        typeof (e as Deferral).reason === 'string' &&
+        (e as Deferral).reason.trim().length > 0;
+    return (Array.isArray(raw) ? raw : []).filter(isDeferral);
+}
+
+/**
+ * Task 1122 R1: the review-finding slice of the record sweep — same `parseReviewFindings`, same
+ * `classify`, same deferrals (in-table `DEFER` dispositions plus the file entries) — so the
+ * review-time gate and the record sweep cannot disagree. Restricted to `review-finding`:
+ * unchecked boxes and diff markers are not decidable before record flips the proven boxes. The
+ * record sweep stays the final authority; this only runs the same check before verify.
+ */
+export function blockingReviewFindings(taskContent: string, deferrals: Deferral[]): ResidualItem[] {
+    const rows = parseReviewFindings(taskContent);
+    const tableDeferrals = rows.flatMap((r) =>
+        r.deferral === undefined ? [] : [{ id: makeItemId('review-finding', r.location, r.text), reason: r.deferral }],
+    );
+    const items = rows.map((r) => ({
+        category: 'review-finding' as const,
+        priority: r.priority,
+        location: r.location,
+        text: r.text,
+    }));
+    return classify(items, [...tableDeferrals, ...deferrals]);
+}
+
+/**
+ * Task 1122 R2: the review-gate artifact assembly — the review-finding slice
+ * ({@link blockingReviewFindings}) shaped into the same `ResidualArtifact` the record sweep
+ * writes to `.spur/run/<wbs>-residuals.json` (the test-fix hop's remediation input; the
+ * record sweep stays the final authority and overwrites it), plus the operator line naming
+ * blocking ids and anchors. The script's `review-gate` mode owns only the IO: task load,
+ * artifact write, and the fail-closed exit code.
+ */
+export function buildReviewGateArtifact(
+    wbs: string,
+    taskContent: string,
+    deferrals: Deferral[],
+): { artifact: ResidualArtifact; note: string } {
+    const items = blockingReviewFindings(taskContent, deferrals);
+    const blocking = items.filter((i) => i.class === 'blocking');
+    const counts = { blocking: 0, deferrable: 0, advisory: 0, housekeeping: 0 };
+    for (const item of items) counts[item.class]++;
+    const artifact: ResidualArtifact = {
+        wbs,
+        base: null,
+        scanned: {
+            'review-finding': true,
+            'diff-marker': false,
+            'unchecked-box': false,
+            'staging-residue': false,
+        },
+        items,
+        counts,
+    };
+    const note =
+        `residual-review-gate: ${wbs} blocking=${counts.blocking}` +
+        (blocking.length > 0
+            ? ` ids=${blocking.map((i) => i.id).join(',')} anchors=${blockingAnchors(blocking).join(',')}`
+            : '') +
+        '\n';
+    return { artifact, note };
+}
+
 /** Blocking locations that match the `file.ext:line` findings-anchor shape. */
 export function blockingAnchors(items: ResidualItem[]): string[] {
     const anchors = new Set<string>();
@@ -414,4 +487,42 @@ export function verdictDisagreementNote(
         `residual-fold: ${wbs} verdict copies disagree — run=${run} (${value(run)}) durable=${durable} (${value(durable)})` +
         ` → chose ${winner} (newer mtime)`
     );
+}
+
+/** Parsed `residual-scan` argv: the mode, target wbs, and optional root/tmp-dir/spur-bin overrides. */
+export interface ParsedScanArgs {
+    mode: string;
+    wbs: string;
+    spurBin?: string;
+    root: string;
+    tmpDir: string;
+}
+
+/**
+ * Pure argv parse for the residual-scan CLI surface:
+ * `<mode> <wbs> [--spur-bin <bin>] [--root <dir>] [--tmp-dir <dir>]`. Returns null on
+ * `--help`/`-h` or a missing mode/wbs — the caller prints usage and exits 2. `cwd` and
+ * `defaultTmpDir` are the caller's IO defaults for `--root` and `--tmp-dir`.
+ */
+export function parseScanArgs(
+    argv: readonly (string | undefined)[],
+    cwd: string,
+    defaultTmpDir: string,
+): ParsedScanArgs | null {
+    let mode = '';
+    let wbs = '';
+    let spurBin: string | undefined;
+    let root = cwd;
+    let tmpDir = defaultTmpDir;
+    for (let i = 0; i < argv.length; i++) {
+        const a = argv[i];
+        if (a === undefined) break;
+        if (a === '--spur-bin') spurBin = argv[++i];
+        else if (a === '--root') root = argv[++i] ?? root;
+        else if (a === '--tmp-dir') tmpDir = argv[++i] ?? tmpDir;
+        else if (a === '--help' || a === '-h') return null;
+        else if (mode === '') mode = a;
+        else if (wbs === '') wbs = a;
+    }
+    return mode === '' || wbs === '' ? null : { mode, wbs, spurBin, root, tmpDir };
 }

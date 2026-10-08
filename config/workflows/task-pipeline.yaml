@@ -697,7 +697,15 @@ states:
           phase: review
           phaseTitle: Review
           title: Review changes
-      description: Three-dimensional code review via /sp:dev-review (functional requirements traceability + SECUA framework (Security, Efficiency, Correctness, Usability, Architecture) + architecture depth), findings written to `## Review`.
+      description: >-
+          Three-dimensional code review via /sp:dev-review (functional requirements traceability +
+          SECUA framework (Security, Efficiency, Correctness, Usability, Architecture) +
+          architecture depth), findings written to `## Review`. Cost at this decision point (1122):
+          open P1-P3 review findings block `done` — the PASS edges below also run the review-gate
+          residual check, and a PASS carrying an open P1-P3 row routes to review-fail-triage
+          before verify. Fixing a finding invalidates the certified digest and re-runs
+          quality → review → verify on a fresh digest; only P4 rows and DEFER-ed P3 rows are wrap
+          residuals.
       onEnter:
           - kind: agent.run
             options:
@@ -755,7 +763,9 @@ states:
           Deterministic router for a review that did NOT certify PASS (session finding after 1088).
           `decide review-failure-class` reads the reviewer's answer and the task spec and routes:
           fix → the shared test-fix hop, stop → failed with terminalReason failed-check. A
-          missing/corrupt decision fails closed to failed-check.
+          missing/corrupt decision fails closed to failed-check. Cost either way (1122): open
+          P1-P3 review findings block `done`; the fix lane re-enters quality → review → verify on a
+          fresh digest; only P4 rows and DEFER-ed P3 rows are wrap residuals.
       onEnter:
           - kind: decide
             options:
@@ -1253,33 +1263,44 @@ transitions:
           kind: always
     # ── review routing: FAIL → bounded remediation; PASS → approve or the auto-skip (R4) ──
     # Declaration order matters and is FAIL-CLOSED: the two PASS edges each demand the reviewer's
-    # own `Verdict: PASS` line, and the catch-all sends EVERYTHING ELSE (FAIL, a missing answer, an
-    # unparseable one) into `review-fail-triage`. Before this, a FAIL review had no outgoing edge at
-    # all — the graph could not see the verdict, so remediation meant driving states by hand
-    # (session finding after 1088). The reviewer writes `Verdict: PASS|FAIL` in its answer; both
-    # plain and bold forms are accepted. Under `profile=auto` the approve gate is skipped, so the
-    # PASS+auto edge is tried first and the interactive PASS edge second.
+    # own `Verdict: PASS` line AND a passing review-gate residual check (1122 R3) — the SAME
+    # parse/classify/deferrals the record sweep enforces, resolved through the same source-repo /
+    # installed scanner pair as the record step; a missing scanner fails closed into the catch-all.
+    # EVERYTHING ELSE — FAIL, a missing or unparseable answer, or a PASS carrying an open P1-P3
+    # review finding (record would terminally fail it after a full verify + record) — enters
+    # `review-fail-triage` and its bounded repair hop BEFORE verify spends the cycle, then
+    # re-enters quality → review → verify on a fresh digest. Before 1088 a FAIL review had no
+    # outgoing edge at all; before 1122 a PASS-with-findings cost a full re-certification cycle per
+    # attempt (knowledge-kit 0210/0213). The reviewer writes `Verdict: PASS|FAIL` in its answer;
+    # both plain and bold forms are accepted. Under `profile=auto` the approve gate is skipped, so
+    # the PASS+auto edge is tried first and the interactive PASS edge second.
     - from: review
       to: verify
-      description: profile=auto and the review certified PASS — skip the human approval gate.
+      description: profile=auto, the review certified PASS, and no open P1-P3 review finding — skip the human approval gate.
       guard:
           kind: shell
           options:
               command: >-
                   test "$profile" = auto &&
-                  grep -qiE '^[[:space:]]*\**Verdict:\** *PASS' ".spur/run/$__runId-review-answer.txt"
+                  grep -qiE '^[[:space:]]*\**Verdict:\** *PASS' ".spur/run/$__runId-review-answer.txt" &&
+                  eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/residual-scan.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/residual-scan.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)" &&
+                  [ -f "$S" ] && "$RUNNER" "$S" review-gate "$wbs" --spur-bin "$spurBin" >&2
     - from: review
       to: approve
-      description: Review certified PASS — gate on human approval before verification.
+      description: Review certified PASS with no open P1-P3 review finding — gate on human approval before verification.
       guard:
           kind: shell
           options:
-              command: grep -qiE '^[[:space:]]*\**Verdict:\** *PASS' ".spur/run/$__runId-review-answer.txt"
+              command: >-
+                  grep -qiE '^[[:space:]]*\**Verdict:\** *PASS' ".spur/run/$__runId-review-answer.txt" &&
+                  eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/residual-scan.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/residual-scan.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)" &&
+                  [ -f "$S" ] && "$RUNNER" "$S" review-gate "$wbs" --spur-bin "$spurBin" >&2
     - from: review
       to: review-fail-triage
       description: >-
-          No PASS in the reviewer's answer (FAIL, PARTIAL, missing, or unparseable — fail closed) —
-          classify the failure and route it into the bounded repair hop instead of dead-ending the run.
+          No certified PASS without an open P1-P3 finding (FAIL, PARTIAL, missing, unparseable, or
+          a PASS whose review-gate check found an open P1-P3 row — fail closed) — classify the
+          failure and route it into the bounded repair hop instead of dead-ending the run.
       guard:
           kind: always
 

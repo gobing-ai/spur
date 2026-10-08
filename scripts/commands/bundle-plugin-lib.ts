@@ -325,6 +325,13 @@ export declare interface FoldResult {
     checks: Array<{ name: string; status: string; evidence: string }>;
     findings: string;
 }
+export declare interface ParsedScanArgs {
+    mode: string;
+    wbs: string;
+    spurBin?: string;
+    root: string;
+    tmpDir: string;
+}
 export declare const ALLOW_PRAGMA: 'residual-scan:allow';
 export declare function recordedVerdictPath(runDir: string, wbs: string, fs: Pick<typeof import('node:fs'), 'lstatSync' | 'existsSync'>): string;
 export declare function makeItemId(category: ResidualCategory, location: string, text: string): string;
@@ -342,6 +349,18 @@ export declare function classify(
     deferrals: Deferral[],
 ): ResidualItem[];
 export declare function scanResiduals(inputs: ResidualScanInputs): ResidualArtifact;
+export declare function parseDeferralEntries(raw: unknown): Deferral[];
+export declare function blockingReviewFindings(taskContent: string, deferrals: Deferral[]): ResidualItem[];
+export declare function buildReviewGateArtifact(
+    wbs: string,
+    taskContent: string,
+    deferrals: Deferral[],
+): { artifact: ResidualArtifact; note: string };
+export declare function parseScanArgs(
+    argv: readonly (string | undefined)[],
+    cwd: string,
+    defaultTmpDir: string,
+): ParsedScanArgs | null;
 export declare function blockingAnchors(items: ResidualItem[]): string[];
 export declare function foldVerdict(
     verdict: { verdict: string; checks: Array<{ name: string; status: string; evidence: string }> },

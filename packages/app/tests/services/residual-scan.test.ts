@@ -5,14 +5,18 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
     blockingAnchors,
+    blockingReviewFindings,
+    buildReviewGateArtifact,
     classify,
     findUncheckedBoxes,
     foldVerdict,
     locationOf,
     makeItemId,
     normalizeAnchor,
+    parseDeferralEntries,
     parseDiffMarkers,
     parseReviewFindings,
+    parseScanArgs,
     recordedVerdictPath,
     renderReport,
     scanResiduals,
@@ -311,5 +315,147 @@ describe('review-finding parser hardening (task 1065 R4)', () => {
         const rows = parseReviewFindings(table("| P2 | shape | a.ts:1 | tuple ('paused' \\| 'held') widened | OPEN |"));
         expect(rows).toHaveLength(1);
         expect(rows[0]?.location).toContain('a.ts:1');
+    });
+});
+
+/** Shared Review-section table head for the task 1122 review-gate tests. */
+const gateTable = (rows: string[]): string =>
+    ['### Review', '', '| Priority | Finding | Location | Disposition |', '| --- | --- | --- | --- |', ...rows].join(
+        '\n',
+    );
+
+/** The plugin script's fail-closed exit decision for the review-gate mode (task 1122 R2). */
+const gateExit = (counts: { blocking: number }): 0 | 1 => (counts.blocking > 0 ? 1 : 0);
+
+describe('parseDeferralEntries (task 1122)', () => {
+    test('keeps string-id entries with a non-blank reason; drops the rest and non-arrays', () => {
+        // A blank string id still passes (only the reason must be non-blank); it is inert
+        // downstream because classify matches deferrals by exact item id (category:hex8).
+        expect(
+            parseDeferralEntries([
+                { id: 'review-finding:abc123', reason: 'tracked for 1100' },
+                { id: '', reason: 'blank id' },
+                { id: 'x', reason: '   ' },
+                { id: 7, reason: 'numeric id' },
+                { reason: 'missing id' },
+                'junk',
+                null,
+            ]),
+        ).toEqual([
+            { id: 'review-finding:abc123', reason: 'tracked for 1100' },
+            { id: '', reason: 'blank id' },
+        ]);
+        expect(parseDeferralEntries('not an array')).toEqual([]);
+        expect(parseDeferralEntries(null)).toEqual([]);
+    });
+});
+
+describe('blockingReviewFindings (task 1122 R1)', () => {
+    test('open P1-P3 block; file-deferred and in-table DEFER P3s are deferrable; P4 advisory', () => {
+        const content = gateTable([
+            '| P1 (blocker) | Off by one | `src/b.ts:3` | OPEN |',
+            '| P2 (major) | Missing validation | `src/c.ts:8` | OPEN |',
+            '| P3 | Magic number | `src/a.ts:12` | OPEN |',
+            '| P3 | Dead branch | `src/d.ts:4` | DEFER(post-merge regen) |',
+            '| P4 (advisory) | Fuzzy name | `src/e.ts:20` | ACCEPTED |',
+        ]);
+        const items = blockingReviewFindings(content, [
+            { id: makeItemId('review-finding', 'src/a.ts:12', 'Magic number'), reason: 'tracked for 1100' },
+        ]);
+        const byLocation = new Map(items.map((i) => [i.location, i]));
+        expect(byLocation.get('src/b.ts:3')?.class).toBe('blocking');
+        expect(byLocation.get('src/c.ts:8')?.class).toBe('blocking');
+        expect(byLocation.get('src/a.ts:12')?.class).toBe('deferrable'); // file deferral entry
+        expect(byLocation.get('src/d.ts:4')?.class).toBe('deferrable'); // in-table DEFER disposition
+        expect(byLocation.get('src/e.ts:20')?.class).toBe('advisory'); // P4 never blocks the gate
+        expect(items.every((i) => i.category === 'review-finding')).toBe(true);
+    });
+
+    test('a deferral whose reason is blank leaves the P3 blocking', () => {
+        const items = blockingReviewFindings(gateTable(['| P3 | Magic number | `src/a.ts:12` | OPEN |']), [
+            { id: makeItemId('review-finding', 'src/a.ts:12', 'Magic number'), reason: '   ' },
+        ]);
+        expect(items[0]?.class).toBe('blocking');
+    });
+});
+
+describe('buildReviewGateArtifact (task 1122 R2)', () => {
+    test('open P1-P3: review-only artifact, counts, note with ids+anchors, exit 1', () => {
+        const content = [
+            '## Requirements',
+            '',
+            '- [ ] R1. proven at record',
+            '',
+            gateTable(['| P2 (major) | Missing validation | `src/c.ts:8` | OPEN |']),
+        ].join('\n');
+        const gate = buildReviewGateArtifact('1122', content, []);
+        expect(gate.artifact.wbs).toBe('1122');
+        expect(gate.artifact.base).toBeNull();
+        expect(gate.artifact.scanned).toEqual({
+            'review-finding': true,
+            'diff-marker': false,
+            'unchecked-box': false,
+            'staging-residue': false,
+        });
+        // Unchecked boxes are not decidable pre-record: the gate artifact stays review-only.
+        expect(gate.artifact.items.map((i) => [i.category, i.class])).toEqual([['review-finding', 'blocking']]);
+        expect(gate.artifact.counts).toEqual({ blocking: 1, deferrable: 0, advisory: 0, housekeeping: 0 });
+        const blocking = gate.artifact.items[0];
+        expect(gate.note).toBe(`residual-review-gate: 1122 blocking=1 ids=${blocking?.id} anchors=src/c.ts:8\n`);
+        expect(gateExit(gate.artifact.counts)).toBe(1);
+        // The payload the script writes to `.spur/run/<wbs>-residuals.json` round-trips.
+        expect(JSON.parse(JSON.stringify(gate.artifact, null, 2))).toEqual(gate.artifact);
+    });
+
+    test('P4/RESOLVED/none rows: zero blocking, note without ids segment, exit 0', () => {
+        const gate = buildReviewGateArtifact(
+            '1122',
+            gateTable([
+                '| P4 (advisory) | Fuzzy name | `src/e.ts:20` | ACCEPTED |',
+                '| P2 | Missing validation | `src/c.ts:8` | RESOLVED — fixed in pass |',
+                '| P3 |  | none found |  |',
+            ]),
+            [],
+        );
+        expect(gate.artifact.items).toHaveLength(1);
+        expect(gate.artifact.items[0]?.class).toBe('advisory');
+        expect(gate.artifact.counts.blocking).toBe(0);
+        expect(gate.note).toBe('residual-review-gate: 1122 blocking=0\n');
+        expect(gateExit(gate.artifact.counts)).toBe(0);
+    });
+});
+
+describe('parseScanArgs', () => {
+    test('mode/wbs with flag overrides; defaults from cwd/defaultTmpDir', () => {
+        expect(
+            parseScanArgs(
+                ['review-gate', '1122', '--spur-bin', 'spur', '--root', '/r', '--tmp-dir', '/t'],
+                '/cwd',
+                '/dtmp',
+            ),
+        ).toEqual({ mode: 'review-gate', wbs: '1122', spurBin: 'spur', root: '/r', tmpDir: '/t' });
+        expect(parseScanArgs(['scan', '1122'], '/cwd', '/dtmp')).toEqual({
+            mode: 'scan',
+            wbs: '1122',
+            spurBin: undefined,
+            root: '/cwd',
+            tmpDir: '/dtmp',
+        });
+    });
+
+    test('--help/-h or missing mode/wbs return null; trailing flag falls back; undefined stops parsing', () => {
+        expect(parseScanArgs(['--help'], '/cwd', '/dtmp')).toBeNull();
+        expect(parseScanArgs(['-h'], '/cwd', '/dtmp')).toBeNull();
+        expect(parseScanArgs([], '/cwd', '/dtmp')).toBeNull();
+        expect(parseScanArgs(['scan'], '/cwd', '/dtmp')).toBeNull();
+        expect(parseScanArgs(['fold', '1122', '--root'], '/cwd', '/dtmp')?.root).toBe('/cwd');
+        expect(parseScanArgs(['fold', '1122', '--tmp-dir'], '/cwd', '/dtmp')?.tmpDir).toBe('/dtmp');
+        expect(parseScanArgs(['fold', '1122', undefined, '--root', '/r'], '/cwd', '/dtmp')).toEqual({
+            mode: 'fold',
+            wbs: '1122',
+            spurBin: undefined,
+            root: '/cwd',
+            tmpDir: '/dtmp',
+        });
     });
 });

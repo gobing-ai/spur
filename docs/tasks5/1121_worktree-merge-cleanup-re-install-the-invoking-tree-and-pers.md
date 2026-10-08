@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: "Worktree merge/cleanup: re-install the invoking tree and persist the feature receipts"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-10-07T20:52:32.965Z
-updated_at: "2026-10-07T21:29:45.118Z"
+updated_at: "2026-10-08T03:25:54.904Z"
 
 feature_id: H15
 priority: P2
 ac_numbering: task-local
 ac_altitude: task-local
 estimate_hours: 1.5
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1121-verdict.json
 ---
 
 ## 1121. Worktree merge/cleanup: re-install the invoking tree and persist the feature receipts
@@ -42,10 +44,10 @@ Related, same session: the receipt is digest-bound, so any later tree change mak
 
 ### Requirements
 
-- [ ] R1. The WT-4 landing sequence in `execution-batch.md`, in both create and reuse mode, gains a step WT-4d. After the landed verify and before the success-marker write (`write_marker`), if `git diff --name-only "$BASE_TIP" "$BATCH_TIP" -- bun.lock '*package.json'` is non-empty, it runs `bun install --frozen-lockfile --ignore-scripts` in the invoking tree.
-- [ ] R2. A WT-4d install failure is a non-fatal, named warning, not a halt: the merge has already landed and the marker still records success. The batch report states "invoking tree workspace links are stale — run `bun install --frozen-lockfile --ignore-scripts`", so the next gate failure is not misread as a regression.
-- [ ] R3. WT-4d is skipped silently when the landed diff touches no manifest or lockfile, so ordinary batches pay no install cost.
-- [ ] R4. `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts` pins WT-4d in both modes: present, placed after the landed verify and before the success-marker write (`write_marker`), with `--frozen-lockfile --ignore-scripts`, and with the manifest/lockfile diff condition.
+- [x] R1. The WT-4 landing sequence in `execution-batch.md`, in both create and reuse mode, gains a step WT-4d. After the landed verify and before the success-marker write (`write_marker`), if `git diff --name-only "$BASE_TIP" "$BATCH_TIP" -- bun.lock '*package.json'` is non-empty, it runs `bun install --frozen-lockfile --ignore-scripts` in the invoking tree.
+- [x] R2. A WT-4d install failure is a non-fatal, named warning, not a halt: the merge has already landed and the marker still records success. The batch report states "invoking tree workspace links are stale — run `bun install --frozen-lockfile --ignore-scripts`", so the next gate failure is not misread as a regression.
+- [x] R3. WT-4d is skipped silently when the landed diff touches no manifest or lockfile, so ordinary batches pay no install cost.
+- [x] R4. `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts` pins WT-4d in both modes: present, placed after the landed verify and before the success-marker write (`write_marker`), with `--frozen-lockfile --ignore-scripts`, and with the manifest/lockfile diff condition.
 
 ### Acceptance Criteria
 
@@ -107,15 +109,44 @@ fi
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change map (WT-4d — relink the invoking tree when the landed diff touched a manifest/lockfile):
+
+- AC1 (R1, R3, R4) — `plugins/sp/skills/spur-dev/references/execution-batch.md:1086-1093` (create-mode WT-4d): inserted after WT-4c (`:1084-1085`) and before the success-marker write `write_marker merged` (`:1096`), i.e. after the landed verify (`:998-1001`); guarded by `git diff --name-only "$BASE_TIP" "$BATCH_TIP" -- bun.lock '*package.json'` (`:1089` — silent skip when empty, R3) and runs `bun install --frozen-lockfile --ignore-scripts` in the invoking tree (`:1090`).
+- AC1 (R1, R3, R4) — `plugins/sp/skills/spur-dev/references/execution-batch.md:1165-1172` (reuse-mode WT-4d): inserted after the Step 5 report persistence (`:1159-1164`) and before its success-marker write `write_marker merged` (`:1177`), likewise after the landed verify (`:1142-1145`); same guard and install command.
+- AC2 (R2) — both blocks: a failed install only appends "WT-4d warning: invoking tree workspace links are stale — run 'bun install --frozen-lockfile --ignore-scripts'" to `.spur/run/worktree-<marker-id>-batch-report.md` via `tee -a` plus stderr (`:1091-1092` create, `:1170-1171` reuse) and execution continues to the success marker — never a halt, never a marker change. Prose naming the non-fatal contract: `:1101-1103` (create mode) and `:1180-1183` (reuse mode).
+- R4 — `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:1063-1114`: new describe pins WT-4d in both modes — presence, placement after the landed verify (and after WT-4c / Step 5 persistence respectively) and before the success-marker write (`:1074`, `:1089`), `--frozen-lockfile --ignore-scripts`, the manifest/lockfile diff guard exactly once per mode (`:1104`), and the non-fatal stale-links warning carried in the batch report (`:1108`). Pins confirmed red before the spec edit and green after.
+
+Sanity: the exact WT-4d snippet was exercised in a scratch git repo — nested `packages/x/package.json` triggers one install; a docs-only diff skips silently (no install, no report); a failing install exits 0 and appends the stale-links warning line to the batch report.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | WT-4d present in both modes with exact guard + install, correctly placed. Create: execution-batch.md:1086-1093 (guard :1089 `git diff --name-only "$BASE_TIP" "$BATCH_TIP" -- bun.lock '*package.json'`, install :1090 `bun install --frozen-lockfile --ignore-scripts`); after landed verify (:998-1001) and WT-4c (:1084-1085), before `write_marker merged` (:1096), sequence pinned to invoking tree (:956-961). Reuse: execution-batch.md:1165-1172 (guard :1168, install :1169); after landed verify (:1142-1145) and Step 5 persistence (:1159-1164), before `write_marker merged` (:1175). |
+| R2 | MET | Non-fatal failure contract: execution-batch.md:1091-1092 (create) / :1170-1171 (reuse) — failed install only echoes the stale-links warning naming `bun install --frozen-lockfile --ignore-scripts` through `tee -a ".spur/run/worktree-<marker-id>-batch-report.md" >&2`; no halt construct in either WT-4d block; falls through to `write_marker merged` (:1096/:1175). Prose names the contract: :1101-1103 (create), :1180-1183 (reuse). |
+| R3 | MET | Silent skip on empty manifest/lockfile diff via ` |
+| R4 | MET | execution-batch-contract.test.ts:1063-1114 pins WT-4d in both modes: presence (:1075/:1090), guard (:1076/:1091), install flags (:1077/:1092), placement after landed verify + WT-4c / Step 5 persistence and before success marker (:1078-1085 / :1093-1102), guard exactly once per mode (:1104-1106), AC2 non-fatal warning + batch-report persistence + prose (:1108-1114). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — A landed manifest change relinks the invoking tree before the success marker (req: R1, R3, R4) | MET | test | Both sequences contain WT-4d after the landed verify and before the success-marker write, guarded by the exact `git diff --name-only` condition, running `bun install --frozen-lockfile --ignore-scripts`. Spec: execution-batch.md:1086-1093 (create), :1165-1172 (reuse); test execution-batch-contract.test.ts:1074-1106. |
+| AC2 — A failed relink warns and names the stale workspace state without halting (req: R2) | MET | test | Failed install records the stale-links warning naming the remedy, persists it to the batch report via `tee -a`, and still performs `write_marker merged`. Spec: execution-batch.md:1091-1092/:1170-1171, prose :1101-1103/:1180-1183; test :1108-1114. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -129,4 +160,7 @@ fi
 ### History
 
 - 2026-10-07T21:29:45.118Z backlog → todo (system)
+- 2026-10-07T23:21:30.468Z todo → wip (system)
+- 2026-10-08T03:25:23.381Z wip → testing (system)
+- 2026-10-08T03:25:54.893Z testing → done (system)
 

@@ -1059,3 +1059,59 @@ describe('execution-batch spec contract (task 1111 R3/R4)', () => {
         expect(deferredSection).toContain('newest-first');
     });
 });
+
+describe('execution-batch spec contract (task 1121 — WT-4d invoking-tree relink)', () => {
+    const CREATE_BLOCK = SPEC.slice(
+        SPEC.indexOf('#### Create mode — merge, remove, delete'),
+        SPEC.indexOf('#### Reuse mode — merge, retain'),
+    );
+    const REUSE_BLOCK = SPEC.slice(
+        SPEC.indexOf('#### Reuse mode — merge, retain'),
+        SPEC.indexOf('**Fast-forward only.**'),
+    );
+    const DIFF_CONDITION = 'git diff --name-only "$BASE_TIP" "$BATCH_TIP" -- bun.lock \'*package.json\'';
+
+    test('AC1 — create mode: WT-4d sits after the landed verify and WT-4c, before the success marker', () => {
+        expect(CREATE_BLOCK).toContain('WT-4d');
+        expect(CREATE_BLOCK).toContain(DIFF_CONDITION);
+        expect(CREATE_BLOCK).toContain('bun install --frozen-lockfile --ignore-scripts');
+        const landedVerify = CREATE_BLOCK.indexOf('git merge-base --is-ancestor "$BATCH_TIP" "$LANDED_BASE_TIP"');
+        const wt4c = CREATE_BLOCK.indexOf('WT-4c');
+        const wt4d = CREATE_BLOCK.indexOf('WT-4d');
+        const successMarker = CREATE_BLOCK.lastIndexOf('write_marker merged');
+        expect(landedVerify).toBeGreaterThan(-1);
+        expect(wt4c).toBeGreaterThan(-1);
+        expect(wt4d).toBeGreaterThan(landedVerify);
+        expect(wt4d).toBeGreaterThan(wt4c);
+        expect(successMarker).toBeGreaterThan(wt4d);
+    });
+
+    test('AC1 — reuse mode: WT-4d sits after the landed verify and Step 5 persistence, before the marker', () => {
+        expect(REUSE_BLOCK).toContain('WT-4d');
+        expect(REUSE_BLOCK).toContain(DIFF_CONDITION);
+        expect(REUSE_BLOCK).toContain('bun install --frozen-lockfile --ignore-scripts');
+        const landedVerify = REUSE_BLOCK.indexOf('git merge-base --is-ancestor "$BATCH_TIP" "$LANDED_BASE_TIP"');
+        const persistence = REUSE_BLOCK.indexOf('# Step 5 evidence persistence');
+        const wt4d = REUSE_BLOCK.indexOf('WT-4d');
+        const successMarker = REUSE_BLOCK.lastIndexOf('write_marker merged');
+        expect(landedVerify).toBeGreaterThan(-1);
+        expect(persistence).toBeGreaterThan(-1);
+        expect(wt4d).toBeGreaterThan(landedVerify);
+        expect(wt4d).toBeGreaterThan(persistence);
+        expect(successMarker).toBeGreaterThan(wt4d);
+    });
+
+    test('AC1/R3 — the manifest/lockfile guard exists exactly once per mode (silent skip otherwise)', () => {
+        expect(SPEC.split(DIFF_CONDITION)).toHaveLength(3); // two occurrences → three slices
+    });
+
+    test('AC2 — a failed relink warns, names the stale workspace state in the batch report, never halts', () => {
+        for (const block of [CREATE_BLOCK, REUSE_BLOCK]) {
+            expect(block).toContain('invoking tree workspace links are stale');
+            expect(block).toContain('tee -a ".spur/run/worktree-<marker-id>-batch-report.md"');
+        }
+        // The prose names the non-fatal contract: warning only — the success marker still records merged.
+        expect(SPEC).toContain('a failed relink');
+        expect(SPEC).toContain('the success marker still records `merged`');
+    });
+});

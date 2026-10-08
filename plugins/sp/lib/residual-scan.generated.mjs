@@ -150,6 +150,43 @@ function scanResiduals(inputs) {
     counts
   };
 }
+function parseDeferralEntries(raw) {
+  const isDeferral = (e) => typeof e === "object" && e !== null && typeof e.id === "string" && typeof e.reason === "string" && e.reason.trim().length > 0;
+  return (Array.isArray(raw) ? raw : []).filter(isDeferral);
+}
+function blockingReviewFindings(taskContent, deferrals) {
+  const rows = parseReviewFindings(taskContent);
+  const tableDeferrals = rows.flatMap((r) => r.deferral === undefined ? [] : [{ id: makeItemId("review-finding", r.location, r.text), reason: r.deferral }]);
+  const items = rows.map((r) => ({
+    category: "review-finding",
+    priority: r.priority,
+    location: r.location,
+    text: r.text
+  }));
+  return classify(items, [...tableDeferrals, ...deferrals]);
+}
+function buildReviewGateArtifact(wbs, taskContent, deferrals) {
+  const items = blockingReviewFindings(taskContent, deferrals);
+  const blocking = items.filter((i) => i.class === "blocking");
+  const counts = { blocking: 0, deferrable: 0, advisory: 0, housekeeping: 0 };
+  for (const item of items)
+    counts[item.class]++;
+  const artifact = {
+    wbs,
+    base: null,
+    scanned: {
+      "review-finding": true,
+      "diff-marker": false,
+      "unchecked-box": false,
+      "staging-residue": false
+    },
+    items,
+    counts
+  };
+  const note = `residual-review-gate: ${wbs} blocking=${counts.blocking}` + (blocking.length > 0 ? ` ids=${blocking.map((i) => i.id).join(",")} anchors=${blockingAnchors(blocking).join(",")}` : "") + `
+`;
+  return { artifact, note };
+}
 function blockingAnchors(items) {
   const anchors = new Set;
   for (const item of items) {
@@ -248,19 +285,48 @@ function verdictDisagreementNote(runDir, wbs, fs) {
   const winner = mtimeOf(fs, durable) > mtimeOf(fs, run) ? "durable" : "run";
   return `residual-fold: ${wbs} verdict copies disagree — run=${run} (${value(run)}) durable=${durable} (${value(durable)})` + ` → chose ${winner} (newer mtime)`;
 }
+function parseScanArgs(argv, cwd, defaultTmpDir) {
+  let mode = "";
+  let wbs = "";
+  let spurBin;
+  let root = cwd;
+  let tmpDir = defaultTmpDir;
+  for (let i = 0;i < argv.length; i++) {
+    const a = argv[i];
+    if (a === undefined)
+      break;
+    if (a === "--spur-bin")
+      spurBin = argv[++i];
+    else if (a === "--root")
+      root = argv[++i] ?? root;
+    else if (a === "--tmp-dir")
+      tmpDir = argv[++i] ?? tmpDir;
+    else if (a === "--help" || a === "-h")
+      return null;
+    else if (mode === "")
+      mode = a;
+    else if (wbs === "")
+      wbs = a;
+  }
+  return mode === "" || wbs === "" ? null : { mode, wbs, spurBin, root, tmpDir };
+}
 export {
   verdictDisagreementNote,
   scanResiduals,
   renderReport,
   recordedVerdictPath,
+  parseScanArgs,
   parseReviewFindings,
   parseDiffMarkers,
+  parseDeferralEntries,
   normalizeAnchor,
   makeItemId,
   locationOf,
   foldVerdict,
   findUncheckedBoxes,
   classify,
+  buildReviewGateArtifact,
+  blockingReviewFindings,
   blockingAnchors,
   ALLOW_PRAGMA
 };

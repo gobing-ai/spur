@@ -164,6 +164,43 @@ function scanResiduals(inputs) {
     counts
   };
 }
+function parseDeferralEntries(raw) {
+  const isDeferral = (e) => typeof e === "object" && e !== null && typeof e.id === "string" && typeof e.reason === "string" && e.reason.trim().length > 0;
+  return (Array.isArray(raw) ? raw : []).filter(isDeferral);
+}
+function blockingReviewFindings(taskContent, deferrals) {
+  const rows = parseReviewFindings(taskContent);
+  const tableDeferrals = rows.flatMap((r) => r.deferral === undefined ? [] : [{ id: makeItemId("review-finding", r.location, r.text), reason: r.deferral }]);
+  const items = rows.map((r) => ({
+    category: "review-finding",
+    priority: r.priority,
+    location: r.location,
+    text: r.text
+  }));
+  return classify(items, [...tableDeferrals, ...deferrals]);
+}
+function buildReviewGateArtifact(wbs, taskContent, deferrals) {
+  const items = blockingReviewFindings(taskContent, deferrals);
+  const blocking = items.filter((i) => i.class === "blocking");
+  const counts = { blocking: 0, deferrable: 0, advisory: 0, housekeeping: 0 };
+  for (const item of items)
+    counts[item.class]++;
+  const artifact = {
+    wbs,
+    base: null,
+    scanned: {
+      "review-finding": true,
+      "diff-marker": false,
+      "unchecked-box": false,
+      "staging-residue": false
+    },
+    items,
+    counts
+  };
+  const note = `residual-review-gate: ${wbs} blocking=${counts.blocking}` + (blocking.length > 0 ? ` ids=${blocking.map((i) => i.id).join(",")} anchors=${blockingAnchors(blocking).join(",")}` : "") + `
+`;
+  return { artifact, note };
+}
 function blockingAnchors(items) {
   const anchors = new Set;
   for (const item of items) {
@@ -262,6 +299,31 @@ function verdictDisagreementNote(runDir, wbs, fs) {
   const winner = mtimeOf(fs, durable) > mtimeOf(fs, run) ? "durable" : "run";
   return `residual-fold: ${wbs} verdict copies disagree — run=${run} (${value(run)}) durable=${durable} (${value(durable)})` + ` → chose ${winner} (newer mtime)`;
 }
+function parseScanArgs(argv, cwd, defaultTmpDir) {
+  let mode = "";
+  let wbs = "";
+  let spurBin;
+  let root = cwd;
+  let tmpDir = defaultTmpDir;
+  for (let i = 0;i < argv.length; i++) {
+    const a = argv[i];
+    if (a === undefined)
+      break;
+    if (a === "--spur-bin")
+      spurBin = argv[++i];
+    else if (a === "--root")
+      root = argv[++i] ?? root;
+    else if (a === "--tmp-dir")
+      tmpDir = argv[++i] ?? tmpDir;
+    else if (a === "--help" || a === "-h")
+      return null;
+    else if (mode === "")
+      mode = a;
+    else if (wbs === "")
+      wbs = a;
+  }
+  return mode === "" || wbs === "" ? null : { mode, wbs, spurBin, root, tmpDir };
+}
 
 // plugins/sp/lib/spur-bin.ts
 function spurCommand(spurBin) {
@@ -270,7 +332,7 @@ function spurCommand(spurBin) {
 }
 
 // plugins/sp/scripts/residual-scan.ts
-var RESIDUAL_SCAN_USAGE = "usage: residual-scan.ts <scan|fold|settle|report> <wbs> [--spur-bin <bin>] [--root <dir>] [--tmp-dir <dir>]";
+var RESIDUAL_SCAN_USAGE = "usage: residual-scan.ts <scan|fold|settle|report|review-gate> <wbs> [--spur-bin <bin>] [--root <dir>] [--tmp-dir <dir>]";
 function run(cmd, args, cwd) {
   const result = spawnSync(cmd, args, { cwd, encoding: "utf8" });
   if (result.error !== undefined)
@@ -326,10 +388,8 @@ function readDeferrals(runDir, wbs) {
   const path = join2(runDir, `${wbs}-residual-deferrals.json`);
   if (!fs.existsSync(path))
     return [];
-  const isDeferral = (e) => typeof e === "object" && e !== null && typeof e.id === "string" && typeof e.reason === "string" && e.reason.trim().length > 0;
   try {
-    const parsed = JSON.parse(fs.readFileSync(path, "utf8"));
-    return (Array.isArray(parsed) ? parsed : []).filter(isDeferral);
+    return parseDeferralEntries(JSON.parse(fs.readFileSync(path, "utf8")));
   } catch {
     return [];
   }
@@ -342,31 +402,6 @@ function scanResiduals2(root, wbs, tmpDir, taskContent, _env) {
   const deferrals = readDeferrals(runDir, wbs);
   const addedLines = base === null ? [] : collectAddedLines(root, base);
   return scanResiduals({ wbs, base, taskContent, addedLines, stagingResidue, deferrals });
-}
-function parseArgs(argv) {
-  let mode = "";
-  let wbs = "";
-  let spurBin;
-  let root = process.cwd();
-  let tmpDir = tmpdir();
-  for (let i = 0;i < argv.length; i++) {
-    const a = argv[i];
-    if (a === undefined)
-      break;
-    if (a === "--spur-bin")
-      spurBin = argv[++i];
-    else if (a === "--root")
-      root = argv[++i] ?? root;
-    else if (a === "--tmp-dir")
-      tmpDir = argv[++i] ?? tmpDir;
-    else if (a === "--help" || a === "-h")
-      return null;
-    else if (mode === "")
-      mode = a;
-    else if (wbs === "")
-      wbs = a;
-  }
-  return mode === "" || wbs === "" ? null : { mode, wbs, spurBin, root, tmpDir };
 }
 function loadTask(env, spurBinFlag, wbs, root) {
   const res = spur(env, spurBinFlag, ["task", "show", wbs, "--json"], root);
@@ -387,6 +422,16 @@ function scanMode(opts, env, io) {
   io.out(`residual-scan: ${opts.wbs} blocking=${artifact.counts.blocking} deferrable=${artifact.counts.deferrable} advisory=${artifact.counts.advisory} housekeeping=${artifact.counts.housekeeping}
 `);
   return 0;
+}
+function reviewGateMode(opts, env, io) {
+  const runDir = join2(opts.root, ".spur", "run");
+  fs.mkdirSync(runDir, { recursive: true });
+  const { content } = loadTask(env, opts.spurBin, opts.wbs, opts.root);
+  const gate = buildReviewGateArtifact(opts.wbs, content, readDeferrals(runDir, opts.wbs));
+  fs.writeFileSync(join2(runDir, `${opts.wbs}-residuals.json`), `${JSON.stringify(gate.artifact, null, 2)}
+`);
+  io.out(gate.note);
+  return gate.artifact.counts.blocking > 0 ? 1 : 0;
 }
 function foldMode(opts, _env, io) {
   const runDir = join2(opts.root, ".spur", "run");
@@ -492,8 +537,14 @@ function main(argv, env = getEnvVars(), options = {}) {
     err: (line) => process.stderr.write(line)
   };
   const cwd = options.cwd ?? process.cwd();
-  const opts = parseArgs(argv);
-  const modes = { scan: scanMode, fold: foldMode, settle: settleMode, report: reportMode };
+  const opts = parseScanArgs(argv, cwd, tmpdir());
+  const modes = {
+    scan: scanMode,
+    fold: foldMode,
+    settle: settleMode,
+    report: reportMode,
+    "review-gate": reviewGateMode
+  };
   const modeFn = opts === null ? undefined : modes[opts.mode];
   if (opts === null || modeFn === undefined) {
     io.err(`${RESIDUAL_SCAN_USAGE}
@@ -509,8 +560,10 @@ export {
   scanResiduals2 as scanResiduals,
   renderReport,
   recordedVerdictPath,
+  parseScanArgs,
   parseReviewFindings,
   parseDiffMarkers,
+  parseDeferralEntries,
   normalizeAnchor,
   makeItemId,
   main,
@@ -520,6 +573,8 @@ export {
   findUncheckedBoxes,
   collectAddedLines,
   classify,
+  buildReviewGateArtifact,
+  blockingReviewFindings,
   blockingAnchors,
   RESIDUAL_SCAN_USAGE,
   ALLOW_PRAGMA
