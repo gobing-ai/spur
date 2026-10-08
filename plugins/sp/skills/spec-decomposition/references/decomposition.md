@@ -562,9 +562,11 @@ schema before emitting.
 
 **Pass the deterministic task check.** Each `acceptance_criteria` bullet must be an exact feature
 scenario title (L4.uncovered-task-scenario); add task-local checks as prose after the bullets, not
-as extra bullets. No section body may use `HITL`, `approval`/`approved`, `merged`/`merge event`,
-`content-gate`, `GATED`, or `capstone` as standalone words (L4.gate-language) — say "operator
-answer" / "accepted" instead, and keep enum values out of that list too.
+as extra bullets. No section body may use `HITL`, `merge event`, `content-gate`, `GATED`, or
+`capstone` as standalone words (L4.gate-language); ambiguous words (`approval`, `approved`,
+`merged`) warn only with a gating cue (`until`, `after`, `once`, `before`, `pending`, `blocked`,
+`wait for`, `requires`) in the same sentence, so plain composition prose stays silent — say
+"operator answer" / "accepted" instead, and keep enum values out of that list too.
 
 **The order sidecar.** Also emit the private task-order sidecar at
 `.spur/run/<runId>-idea-task-order.json`: a JSON array (one entry per batch item) of

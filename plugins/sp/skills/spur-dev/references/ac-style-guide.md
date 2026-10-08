@@ -100,9 +100,12 @@ scenario, it matches by title. Rules:
 - **No synonyms in cross-references.** The title in the feature file and the title in the
   task's AC reference must be byte-identical.
 - **Avoid gate vocabulary in titles.** `spur task check` (L4.gate-language) rejects task sections
-  containing `HITL`, `approval`/`approved`, `merged`/`merge event`, `content-gate`, `GATED`, or
-  `capstone` as standalone words; task AC bullets copy scenario titles verbatim, so a title using
-  them fails every child task. Write "pause for an operator answer" instead of "HITL approval".
+  containing `HITL`, `merge event`, `content-gate`, `GATED`, or `capstone` as standalone words;
+  ambiguous words (`approval`, `approved`, `merged`) warn only when the same sentence also carries
+  a gating cue (`until`, `after`, `once`, `before`, `pending`, `blocked`, `wait for`, `requires`)
+  — plain composition prose like "the stages merged back into one step" stays silent. Task AC
+  bullets copy scenario titles verbatim, so a title using the unconditional tokens fails every
+  child task. Write "pause for an operator answer" instead of "HITL approval".
 
 ## Verdict AC ↔ feature scenario linkage
 

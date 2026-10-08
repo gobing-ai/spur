@@ -4233,6 +4233,36 @@ test('0700 R6: advisory still fires without declared dependencies', async () => 
     expect(findings.length).toBeGreaterThanOrEqual(1);
 });
 
+// ── 1112 R2: ambiguous gate tokens warn only with a gating cue in the same sentence ──
+
+const gateLanguageFindingsForBody = async (body: string) => {
+    const content = taskFm({ feature_id: 'F1', status: 'backlog', name: 'Gate task' }).replace(
+        '### Background\n\ntext',
+        `### Background\n\n${body}`,
+    );
+    const { fs, path, cleanup } = seedEnv({
+        taskContent: content,
+        features: { F1: feature0700('F1', ['the real scenario']) },
+    });
+    const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+    cleanup();
+    return result.findings.filter((f) => f.code.includes('gate-language'));
+};
+
+test('1112 R2: composition prose without a gating cue stays silent', async () => {
+    const findings = await gateLanguageFindingsForBody(
+        'The review steps merged back into one step. The approved design passed.',
+    );
+    expect(findings).toHaveLength(0);
+});
+
+test('1112 R2: cue-bearing gate prose still warns', async () => {
+    const findings = await gateLanguageFindingsForBody(
+        'Blocked until 1050 is merged. Requires operator approval before starting.',
+    );
+    expect(findings.length).toBeGreaterThanOrEqual(1);
+});
+
 // ── 0700 R2: stale non-passing Review beside PASS Testing on a closed task ──
 
 const closedTaskWith = async (reviewBody: string, status = 'done') => {
