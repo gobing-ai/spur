@@ -117,13 +117,14 @@ export const HistoryShell: React.FC = () => {
     // Filter-coupled Summary + Insights load (badges/livechip stay available on every tab).
     useEffect(() => {
         let mounted = true;
+        const controller = new AbortController();
         setSummaryLoading(true);
         setSummaryError(null);
         setInsightsLoading(true);
         setInsightsError(null);
 
         api.history
-            .getSummary(filter)
+            .getSummary(filter, { signal: controller.signal })
             .then((res) => {
                 if (!mounted) return;
                 if (res?.data) {
@@ -133,14 +134,18 @@ export const HistoryShell: React.FC = () => {
                 }
             })
             .catch((err) => {
-                if (mounted) setSummaryError(errorMessage(err));
+                if (mounted && !controller.signal.aborted) {
+                    setSummaryError(errorMessage(err));
+                }
             })
             .finally(() => {
-                if (mounted) setSummaryLoading(false);
+                if (mounted && !controller.signal.aborted) {
+                    setSummaryLoading(false);
+                }
             });
 
         api.history
-            .getInsights(filter)
+            .getInsights(filter, { signal: controller.signal })
             .then((res) => {
                 if (!mounted) return;
                 if (res?.data) {
@@ -150,25 +155,31 @@ export const HistoryShell: React.FC = () => {
                 }
             })
             .catch((err) => {
-                if (mounted) setInsightsError(errorMessage(err));
+                if (mounted && !controller.signal.aborted) {
+                    setInsightsError(errorMessage(err));
+                }
             })
             .finally(() => {
-                if (mounted) setInsightsLoading(false);
+                if (mounted && !controller.signal.aborted) {
+                    setInsightsLoading(false);
+                }
             });
 
         return () => {
             mounted = false;
+            controller.abort();
         };
     }, [filter]);
 
     // One all-time Sources load: registry cards, heatmap data, and the header livechip.
     useEffect(() => {
         let mounted = true;
+        const controller = new AbortController();
         setSourcesLoading(true);
         setSourcesError(null);
         (async () => {
             try {
-                const res = await api.history.getSources();
+                const res = await api.history.getSources(undefined, { signal: controller.signal });
                 if (!mounted) return;
                 if (res?.data) {
                     setSourcesData(res.data);
@@ -176,13 +187,14 @@ export const HistoryShell: React.FC = () => {
                     setSourcesError('Failed to load sources');
                 }
             } catch (err) {
-                if (mounted) setSourcesError(errorMessage(err));
+                if (mounted && !controller.signal.aborted) setSourcesError(errorMessage(err));
             } finally {
-                if (mounted) setSourcesLoading(false);
+                if (mounted && !controller.signal.aborted) setSourcesLoading(false);
             }
         })();
         return () => {
             mounted = false;
+            controller.abort();
         };
     }, []);
 

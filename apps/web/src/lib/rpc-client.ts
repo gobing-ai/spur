@@ -38,12 +38,17 @@ export function resolveApiUrl(
     return origin && origin !== 'null' ? new URL('/api', origin).toString() : 'http://localhost:3000/api';
 }
 
+export const DEFAULT_FETCH_TIMEOUT_MS = 30_000;
+
 /**
- * Timeout-wrapped fetch — aborts via `AbortController` after `ms` (default 10s).
+ * Timeout-wrapped fetch — aborts via `AbortController` after `ms` (default 30s).
  */
-export function fetchWithTimeout(request: Request, ms = 10_000): Promise<Response> {
+export function fetchWithTimeout(request: Request, ms = DEFAULT_FETCH_TIMEOUT_MS): Promise<Response> {
     const controller = new AbortController();
-    const handle = setTimeout(() => controller.abort(), ms);
+    const handle = setTimeout(
+        () => controller.abort(new DOMException(`Request timed out after ${ms}ms`, 'TimeoutError')),
+        ms,
+    );
     const origSignal = request.signal;
     const onAbort = () => controller.abort(origSignal.reason);
     if (origSignal.aborted) onAbort();
@@ -60,7 +65,7 @@ export function fetchWithTimeout(request: Request, ms = 10_000): Promise<Respons
  * Adapter: matches OpenAPILink's fetch signature and delegates to fetchWithTimeout.
  */
 export function apiFetchWithTimeout(request: Request): Promise<Response> {
-    return fetchWithTimeout(request);
+    return fetchWithTimeout(request, DEFAULT_FETCH_TIMEOUT_MS);
 }
 
 /** Typed oRPC OpenAPI client — derived from the contract so contract↔client drift fails at compile time. */
