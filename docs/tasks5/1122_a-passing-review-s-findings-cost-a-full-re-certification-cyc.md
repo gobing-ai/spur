@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: A passing review's findings cost a full re-certification cycle (no review fix edge)
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-10-07T20:52:34.353Z
-updated_at: "2026-10-07T21:31:47.239Z"
+updated_at: "2026-10-08T06:42:31.508Z"
 
 feature_id: H15
 priority: P2
 ac_numbering: task-local
 ac_altitude: task-local
 estimate_hours: 3
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1122-verdict.json
 ---
 
 ## 1122. A passing review's findings cost a full re-certification cycle (no review fix edge)
@@ -39,11 +41,11 @@ This is a design question, not a clear defect; filed so the trade-off gets decid
 
 ### Requirements
 
-- [ ] R1. Add a pure function to `packages/app/src/services/residual-scan.ts` that returns the blocking review findings for a task's content plus deferrals, using `parseReviewFindings` + `classify` restricted to the `review-finding` category. Regenerate `plugins/sp/lib/residual-scan.generated.mjs` and `plugins/sp/scripts/residual-scan.mjs`.
-- [ ] R2. Add a `review-gate <wbs>` mode to `plugins/sp/scripts/residual-scan.ts`. It loads the task like `scan`, applies the same deferrals, writes the review-only residual artifact to `.spur/run/<wbs>-residuals.json` (so the `test-fix` hop's existing hand-off feeds the findings to `/sp:dev-fixall`), prints the blocking anchors, and exits 1 when any blocking review finding exists, 0 otherwise.
-- [ ] R3. In `config/workflows/task-pipeline.yaml`, both PASS edges (`review → verify`, `review → approve`) require `Verdict: PASS` **and** a passing `review-gate`. The scanner is resolved exactly like the record step's residual-scan call, and a missing scanner fails closed. A PASS review with an open P1–P3 finding then falls through to `review-fail-triage` → `test-fix`, bounded by the shared `qualityGateMaxFixAttempts` budget, and re-enters quality → review → verify on a fresh digest.
-- [ ] R4. The cost is discoverable at the decision point. The `review` and `review-fail-triage` state descriptions state that open P1–P3 findings block `done`, that a fix invalidates the certified digest and re-runs quality → review → verify, and that only P4 rows and `DEFER`-ed P3 rows are wrap residuals. The reviewer Output Format note in `super-reviewer.md` says the same.
-- [ ] R5. Regenerate the CLI bundle (`bun run --filter @gobing-ai/spur build:bundle`); `config/workflows/` stays the source of truth.
+- [x] R1. Add a pure function to `packages/app/src/services/residual-scan.ts` that returns the blocking review findings for a task's content plus deferrals, using `parseReviewFindings` + `classify` restricted to the `review-finding` category. Regenerate `plugins/sp/lib/residual-scan.generated.mjs` and `plugins/sp/scripts/residual-scan.mjs`.
+- [x] R2. Add a `review-gate <wbs>` mode to `plugins/sp/scripts/residual-scan.ts`. It loads the task like `scan`, applies the same deferrals, writes the review-only residual artifact to `.spur/run/<wbs>-residuals.json` (so the `test-fix` hop's existing hand-off feeds the findings to `/sp:dev-fixall`), prints the blocking anchors, and exits 1 when any blocking review finding exists, 0 otherwise.
+- [x] R3. In `config/workflows/task-pipeline.yaml`, both PASS edges (`review → verify`, `review → approve`) require `Verdict: PASS` **and** a passing `review-gate`. The scanner is resolved exactly like the record step's residual-scan call, and a missing scanner fails closed. A PASS review with an open P1–P3 finding then falls through to `review-fail-triage` → `test-fix`, bounded by the shared `qualityGateMaxFixAttempts` budget, and re-enters quality → review → verify on a fresh digest.
+- [x] R4. The cost is discoverable at the decision point. The `review` and `review-fail-triage` state descriptions state that open P1–P3 findings block `done`, that a fix invalidates the certified digest and re-runs quality → review → verify, and that only P4 rows and `DEFER`-ed P3 rows are wrap residuals. The reviewer Output Format note in `super-reviewer.md` says the same.
+- [x] R5. Regenerate the CLI bundle (`bun run --filter @gobing-ai/spur build:bundle`); `config/workflows/` stays the source of truth.
 
 ### Acceptance Criteria
 
@@ -180,7 +182,7 @@ at a path no guard read:
    execute inside the review PASS guards (its own suite owns the unit contract; the record-stage
    `scan`+`fold` shell stays stubbed per the existing F96 pattern).
 3. Right-reason proof (manual, scratch repo): with an OPEN P2 row under `### Review` the real
-   scanner exits 1 (`blocking=1 ids=review-finding:* anchors=src/a.ts:12` — guard falls to
+   scanner exits 1 (blocking=1, one review-finding item citing an in-test fixture anchor - guard falls to
    triage); the clean fixture task exits 0 and writes the review-only artifact.
 
 Test evidence: `plugins/sp` — residual-scan + inline-pipeline-driver +
@@ -193,11 +195,36 @@ descriptions. Biome clean on the changed file.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Pure `blockingReviewFindings(taskContent, deferrals)` at packages/app/src/services/residual-scan.ts:296 — uses `parseReviewFindings` (:106) + `classify` (:195), restricted to `review-finding`, with in-table `DEFER` dispositions plus file deferrals, mirroring `scanResiduals` (:270-274); artifact shaper `buildReviewGateArtifact` (:318). Regenerated bundles verified: plugins/sp/lib/residual-scan.generated.mjs:157,168 (exported :328-329), declaration plugins/sp/lib/residual-scan.generated.d.mts:64-65, installed twin plugins/sp/scripts/residual-scan.mjs:171,182,430,576-577. |
+| R2 | MET | plugins/sp/scripts/residual-scan.ts:12-13 usage includes `review-gate`; `reviewGateMode` :114 loads the task via the same `loadTask` + `readDeferrals` as `scanMode`, writes `.spur/run/<wbs>-residuals.json` (:121), prints `residual-review-gate: <wbs> blocking=<n> ids=… anchors=…` (note built at packages/app/src/services/residual-scan.ts:335-341), returns `counts.blocking > 0 ? 1 : 0` (:123); mode table entry :237. Bundled twin .mjs:335,426,546. |
+| R3 | MET | config/workflows/task-pipeline.yaml:1277-1287 (`review → verify`: `profile=auto` && `Verdict: PASS` grep && scanner resolver && `review-gate`), :1288-1297 (`review → approve`, interactive, same chain), catch-all `review → review-fail-triage` `guard: always` still declared last (:1298-1304). Resolver jq expression identical verbatim to the record step's (:962); missing scanner → `[ -f "$S" ]` fails → edge closed → triage (fail-closed). Shared budget: `qualityGateMaxFixAttempts` default :183, review repair lane :1239-1248 reusing the `$wbs-test-fix-attempt` counter; test-fix re-enters quality → review → verify. Edge order pinned by packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:636 `['verify','approve','review-fail-triage']`. Guard text pinned in packages/app/tests/workflow/fixtures/guard-parity-baseline.json:151,157. |
+| R4 | MET | `review` description config/workflows/task-pipeline.yaml:701-707 ("Cost at this decision point (1122): open P1-P3 … block done … re-runs quality → review → verify … only P4 rows and DEFER-ed P3 rows are wrap residuals"); `review-fail-triage` description :763-768 ("Cost either way (1122) …"); reviewer Output Format note plugins/sp/agents/super-reviewer.md:178-182 ("Pipeline cost of an open finding (1122)"). Contract tests: proof-chain.test.ts:766-774 and plugins/sp/tests/super-reviewer-output-contract.test.ts:11-20. |
+| R5 | MET | apps/cli/config/workflows/task-pipeline.yaml regenerated — review-gate anchors at identical line numbers (704, 1266, 1287, 1297, 1302) as the SSOT config/workflows/task-pipeline.yaml (apps/cli/config is the gitignored `build:bundle` output per AGENTS.md). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — review-gate classifies review findings exactly like the record sweep (req: R1, R2) | MET | test | plugins/sp/tests/residual-scan.test.ts:632-701: fixtures (a) P4-only → 0, (b) DEFER-ed P3 → 0, (c) OPEN P2 → 1 naming an in-test fixture anchor, (d) RESOLVED P2 → 0, (e) unchecked Requirement boxes with P4-only → 0; artifact asserted to contain only `review-finding` items (:684); parity with the record sweep slice at :577-583; file-deferral and task-load fail-closed cases :703-728. |
+| AC2 — A PASS review with an open P2 routes to the repair lane before verify (req: R3, R5) | MET | test | packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:718-746: seeded `Verdict: PASS` + OPEN P2 → both PASS-edge guards exit non-zero (catch-all → review-fail-triage) and the staged artifact holds the blocking `review-finding`; guard-chain assertions :698-715 (one AND-list after the Verdict grep, no `;`, `test-fix` hop reads exactly `cat ".spur/run/$wbs-residuals.json"`); the `fix`-decision lane under the shared cap is the unchanged review-fail-triage → test-fix edges (task-pipeline.yaml:1239-1257). |
+| AC3 — A clean PASS review still advances unchanged (req: R3) | MET | test | packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:746-755: clean PASS (P4 + RESOLVED rows) → `review → verify` guard (profile=auto) exits 0 and `review → approve` guard exits 0; missing scanner still fails closed (:757-762). |
+| AC4 — The cost of fixing a review finding is stated where the driver decides (req: R4) | MET | test | super-reviewer-output-contract.test.ts:11-20 (reviewer Output Format states open P1-P3 block done, re-certification cost, wrap-residual boundary) and proof-chain.test.ts:766-774 (both state descriptions contain P1-P3 / DEFER / quality → review → verify / wrap residual); static sources task-pipeline.yaml:701-707,763-768 and super-reviewer.md:178-182. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -211,4 +238,6 @@ descriptions. Biome clean on the changed file.
 ### History
 
 - 2026-10-07T21:31:47.239Z backlog → todo (system)
+- 2026-10-08T06:38:55.535Z todo → testing (system)
+- 2026-10-08T06:42:31.494Z testing → done (system)
 
