@@ -1916,7 +1916,7 @@ export class WorkflowAppService {
                 const duration = a.duration_ms !== null ? `${a.duration_ms}ms` : '';
                 const ok = a.ok === null ? null : a.ok === 1;
                 const label = a.status === 'running' ? ' (in-flight)' : ok === true ? ' ✓' : ' ✗';
-                const result = projectActionTraceResult(a.result_json, this.ctx.secretValues);
+                const result = projectActionTraceResult(a.result_json, this.ctx.secretValues, a.kind);
                 const partialArtifact = await partialArtifactForAction(this.ctx.cwd, runId, a.node, ok);
                 const artifacts = partialArtifact === undefined ? [] : [partialArtifact];
                 events.push({
@@ -2721,6 +2721,8 @@ function traceNextAction(run: WorkflowTraceEntry, outputArtifact?: string): Syst
 function projectActionTraceResult(
     resultJson: string | null,
     secretValues: readonly string[] = [],
+    /** The action row's `kind` — the persisted payload does not carry it (dogfood 2026-10-08 P4). */
+    actionKind?: string,
 ): {
     result: Record<string, string | number | boolean> | null;
     invocation: Record<string, string | number | boolean> | null;
@@ -2765,8 +2767,9 @@ function projectActionTraceResult(
     // 0901 R5: shell results carry persisted byte-tails (≤ 65,536 bytes, already
     // secret-redacted at persist time by the Spur ActionRedactor). Project them
     // verbatim — NOT through the 256-char bound — plus the truncation flags, so
-    // trace surfaces the tail without re-reading the run log.
-    if (result.kind === 'shell') {
+    // trace surfaces the tail without re-reading the run log. Kind comes from the
+    // action row, not the payload: engine-persisted rows carry no top-level `kind`.
+    if ((actionKind ?? result.kind) === 'shell') {
         for (const [field, source] of [
             ['stdoutTail', 'stdout'],
             ['stderrTail', 'stderr'],

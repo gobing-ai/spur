@@ -50,7 +50,29 @@ type BranchVars = Parameters<WorkflowPersistenceAdapter['commitJoin']>[3];
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { ensureDurablePlaneIgnored, runStoragePaths } from '../services/run-storage';
 import { resolveDurableArtifactPath } from './actions/run-path';
+import { projectShellInvocation } from './observability';
 import { classifyTerminalReason } from './terminal-reason';
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Stamp the memoized shell invocation into the persisted result's `data` so the trace's
+ * `invocation` projection has a source. A result without an object `data` gets one; the
+ * engine's redactor still runs over the merged payload at persist time.
+ */
+function withShellInvocation(
+    result: Record<string, unknown>,
+    options?: Record<string, unknown>,
+): Record<string, unknown> {
+    const invocation = projectShellInvocation(options);
+    if (invocation === undefined) return result;
+    return {
+        ...result,
+        data: { ...(isRecord(result.data) ? result.data : {}), invocation },
+    };
+}
 
 /** The engine does not export its reseed-result type; derive it from the interface. */
 type ReseedResult = Awaited<ReturnType<WorkflowPersistenceAdapter['reseedRun']>>;
@@ -121,7 +143,10 @@ export class RunRowNotFoundError extends Error {
  */
 export class WorkflowActionTraceWriter implements WorkflowPersistenceAdapter {
     /** action-row id → its boundary identity, so a finalize failure can name the run. */
-    private readonly boundaries = new Map<string, { runId: string; node: string; kind: string }>();
+    private readonly boundaries = new Map<
+        string,
+        { runId: string; node: string; kind: string; options?: Record<string, unknown> }
+    >();
 
     constructor(
         private readonly inner: WorkflowPersistenceAdapter,
@@ -152,7 +177,7 @@ export class WorkflowActionTraceWriter implements WorkflowPersistenceAdapter {
             this.lastStart = { runId, node, kind };
             return syntheticId;
         }
-        this.boundaries.set(outcome.value, { runId, node, kind });
+        this.boundaries.set(outcome.value, { runId, node, kind, options });
         this.lastStart = { runId, node, kind };
         return outcome.value;
     }
@@ -174,8 +199,16 @@ export class WorkflowActionTraceWriter implements WorkflowPersistenceAdapter {
         // 0868 finding #2: an unobserved finalize (boundary already gone) keeps its run-id
         // attribution via the remembered last-start identity instead of degrading to ''.
         const origin = boundary ?? this.lastStart;
+        // Dogfood 2026-10-08 P4: the engine's default adapter drops the start options, so the
+        // trace's `invocation` projection had no source for shell actions. Stamp the sanitized
+        // invocation into the persisted `data` at the boundary — additive inside an allow-list
+        // projected field, so every other reader of `result_json` is unaffected.
+        const stamped =
+            kind === 'shell' && boundary !== undefined && isRecord(result)
+                ? withShellInvocation(result, boundary.options)
+                : result;
         await this.guard('action.finish', { runId: origin?.runId ?? '', node: origin?.node, kind }, () =>
-            this.inner.saveActionFinalize(actionId, status, durationMs, ok, kind, result, redactor),
+            this.inner.saveActionFinalize(actionId, status, durationMs, ok, kind, stamped, redactor),
         );
         this.boundaries.delete(actionId);
     }

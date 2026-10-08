@@ -406,6 +406,27 @@ export function projectActionMetadata(
     return Object.keys(metadata).length === 0 ? undefined : metadata;
 }
 
+/**
+ * Shell invocation projected for persistence into the action row's `data.invocation` — the
+ * engine's default adapter drops the start options, so the trace writer memoizes them at the
+ * boundary and stamps this object at finalize (dogfood 2026-10-08 P4: `workflow trace` otherwise
+ * renders `invocation=unavailable` for shell actions). Bounded + secret-collapsed, same shape the
+ * event-bus metadata projection uses.
+ */
+export function projectShellInvocation(
+    options?: Record<string, unknown>,
+): { command: string; cwd?: string; timeoutMs?: number } | undefined {
+    const command = typeof options?.command === 'string' ? options.command : '';
+    if (command.trim() === '') return undefined;
+    return {
+        command: bounded(sanitizeCommand(command), 80),
+        ...(typeof options?.cwd === 'string' && options.cwd !== '' ? { cwd: options.cwd } : {}),
+        ...(typeof options?.timeoutMs === 'number' && Number.isFinite(options.timeoutMs)
+            ? { timeoutMs: Math.max(0, options.timeoutMs) }
+            : {}),
+    };
+}
+
 function sanitizeCommand(cmd: string): string {
     const trimmed = cmd.replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
     if (/(?:authorization|bearer|password|secret|token|api_key|private_key)/i.test(trimmed)) {
