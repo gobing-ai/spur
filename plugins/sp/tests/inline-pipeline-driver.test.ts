@@ -168,6 +168,14 @@ function runInlineSmoke(
             RUN_ID: runId,
         }),
     ).toBe(0);
+    // 1122 R3: the review PASS edges resolve the review-gate scanner through the run's
+    // script-root record. The smoke simulates a source-repo run — seed the record at the repo's
+    // plugin scripts so the REAL scanner executes (its own suite owns the unit contract); the
+    // fixture task has no Review table, so the gate classifies zero findings and passes.
+    writeFileSync(
+        join(cwd, '.spur', 'run', `${runId}-script-root.json`),
+        `${JSON.stringify({ mode: 'source-repo', dir: join(ROOT, 'plugins', 'sp', 'scripts') })}\n`,
+    );
 
     let current = PIPELINE.initialState;
     const hostStages: string[] = [];

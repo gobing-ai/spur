@@ -14,6 +14,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
     blockingAnchors,
+    blockingReviewFindings,
     classify,
     collectAddedLines,
     findUncheckedBoxes,
@@ -564,6 +565,166 @@ describe('CLI modes', () => {
 
     test('usage constant exported', () => {
         expect(RESIDUAL_SCAN_USAGE).toContain('scan|fold|settle|report');
+        expect(RESIDUAL_SCAN_USAGE).toContain('review-gate');
+    });
+});
+
+/**
+ * Task 1122 R1: the review-time gate reuses the record sweep's classifier on the review-finding
+ * slice only — same parse, same classify, same deferrals — so the early check and the record sweep
+ * cannot disagree. Unchecked boxes and diff markers are not decidable before record and stay out.
+ */
+describe('blockingReviewFindings (task 1122 R1)', () => {
+    test('review-only content classifies identically to the record sweep review slice', () => {
+        const { dir, cleanup } = scratch('rs-brf-');
+        try {
+            const sweep = scanResiduals(dir, '1122', dir, REVIEW_BOTH_ORDERS, {});
+            const slice = sweep.items.filter((i) => i.category === 'review-finding');
+            expect(blockingReviewFindings(REVIEW_BOTH_ORDERS, [])).toEqual(slice);
+        } finally {
+            cleanup();
+        }
+    });
+
+    test('file deferrals reclassify a P3 the same way the sweep does; P2 stays blocking', () => {
+        const review = [
+            '### Review',
+            '',
+            '| Priority | Finding | Location | Disposition |',
+            '| --- | --- | --- | --- |',
+            '| P3 | Magic number | `src/a.ts:12` | OPEN |',
+            '| P2 | Missing validation | `src/c.ts:8` | OPEN |',
+        ].join('\n');
+        const deferred = blockingReviewFindings(review, [
+            { id: makeItemId('review-finding', 'src/a.ts:12', 'Magic number'), reason: 'post-merge regen' },
+        ]);
+        expect(deferred.map((i) => [i.priority, i.class])).toEqual([
+            ['P3', 'deferrable'],
+            ['P2', 'blocking'],
+        ]);
+        // In-table DEFER dispositions apply without a deferrals file (same as scanResiduals).
+        const inTable = blockingReviewFindings(
+            [
+                '### Review',
+                '',
+                '| Priority | Finding | Location | Disposition |',
+                '| --- | --- | --- | --- |',
+                '| P3 | Magic number | `src/a.ts:12` | DEFER(post-merge regen) |',
+                '| P2 | Missing validation | `src/c.ts:8` | OPEN |',
+            ].join('\n'),
+            [],
+        );
+        expect(inTable[0]?.class).toBe('deferrable');
+    });
+
+    test('ignores unchecked boxes even alongside P4-only findings', () => {
+        const content =
+            '## Requirements\n\n- [ ] R1. proven later\n\n### Review\n\n| Priority | Finding |\n| --- | --- |\n| P4 (advisory) | Note |';
+        expect(blockingReviewFindings(content, []).every((i) => i.class !== 'blocking')).toBe(true);
+    });
+});
+
+/**
+ * Task 1122 R2/AC1: the review-gate mode is the PASS-edge gate — exit 0 for P4-only, DEFER-ed P3,
+ * RESOLVED rows, and unchecked boxes; exit 1 for an open P1-P3 with its anchor; the artifact holds
+ * only review-finding items so the test-fix hop's existing hand-off feeds /sp:dev-fixall.
+ */
+describe('review-gate mode (task 1122 R2/AC1)', () => {
+    const REVIEW_TABLE_HEAD =
+        '### Review\n\n| Priority | Finding | Location | Disposition |\n| --- | --- | --- | --- |\n';
+    const stubSpurShow = (dir: string, content: string): string => {
+        const stub = join(dir, 'stub-spur.sh');
+        const payload = JSON.stringify({ content, frontmatter: { feature_id: 'H15' } }).replaceAll("'", "'\\''");
+        writeFileSync(stub, `#!/bin/sh\ncase "$2" in\n  show) printf '%s' '${payload}' ;;\nesac\n`);
+        chmodSync(stub, 0o755);
+        return stub;
+    };
+    const capture = () => {
+        const lines: string[] = [];
+        return { lines, io: { out: (line: string) => lines.push(line), err: () => {} } };
+    };
+
+    test.each([
+        ['P4-only rows pass', `${REVIEW_TABLE_HEAD}| P4 (advisory) | Fuzzy name | src/a.ts:20 | ACCEPTED |\n`, 0, ''],
+        [
+            'DEFER-ed P3 passes',
+            `${REVIEW_TABLE_HEAD}| P3 | Magic number | src/a.ts:12 | DEFER(post-merge regen) |\n`,
+            0,
+            '',
+        ],
+        [
+            'RESOLVED P2 passes',
+            `${REVIEW_TABLE_HEAD}| P2 | Missing validation | src/c.ts:8 | RESOLVED — fixed in pass |\n`,
+            0,
+            '',
+        ],
+        [
+            'unchecked boxes with P4-only rows pass',
+            `## Requirements\n\n- [ ] R1. proven at record\n\n${REVIEW_TABLE_HEAD}| P4 (advisory) | Note | src/d.ts:1 | ACCEPTED |\n`,
+            0,
+            '',
+        ],
+        [
+            'OPEN P2 fails with its anchor',
+            `${REVIEW_TABLE_HEAD}| P2 (major) | Missing validation | src/c.ts:8 | OPEN |\n`,
+            1,
+            'src/c.ts:8',
+        ],
+        ['OPEN P1 fails', `${REVIEW_TABLE_HEAD}| P1 (blocker) | Off by one | src/b.ts:3 | OPEN |\n`, 1, 'src/b.ts:3'],
+    ] as const)('review-gate: %s', (_name, content, expected, anchor) => {
+        const { dir, cleanup } = scratch('rs-gate-');
+        try {
+            const stub = stubSpurShow(dir, content);
+            const cap = capture();
+            expect(main(['review-gate', '1122', '--spur-bin', stub, '--root', dir], {}, { io: cap.io })).toBe(expected);
+            const art = JSON.parse(
+                readFileSync(join(dir, '.spur', 'run', '1122-residuals.json'), 'utf8'),
+            ) as ResidualArtifact;
+            expect(art.items.every((i) => i.category === 'review-finding')).toBe(true);
+            expect(art.scanned).toEqual({
+                'review-finding': true,
+                'diff-marker': false,
+                'unchecked-box': false,
+                'staging-residue': false,
+            });
+            if (expected === 1) {
+                expect(art.counts.blocking).toBe(1);
+                expect(cap.lines.join('')).toContain('blocking=1');
+                expect(cap.lines.join('')).toContain(anchor);
+            } else {
+                expect(art.counts.blocking).toBe(0);
+            }
+        } finally {
+            cleanup();
+        }
+    });
+
+    test('file deferrals apply: a deferred P3 exits 0', () => {
+        const { dir, cleanup } = scratch('rs-gate-def-');
+        try {
+            const content = `${REVIEW_TABLE_HEAD}| P3 | Magic number | src/a.ts:12 | OPEN |\n`;
+            const stub = stubSpurShow(dir, content);
+            const id = makeItemId('review-finding', 'src/a.ts:12', 'Magic number');
+            writeFileSync(
+                join(dir, '.spur', 'run', '1122-residual-deferrals.json'),
+                `${JSON.stringify([{ id, reason: 'post-merge regen' }])}\n`,
+            );
+            expect(main(['review-gate', '1122', '--spur-bin', stub, '--root', dir], {}, SILENT)).toBe(0);
+        } finally {
+            cleanup();
+        }
+    });
+
+    test('task load failure fails closed (non-zero)', () => {
+        const { dir, cleanup } = scratch('rs-gate-err-');
+        try {
+            const stub = join(dir, 'stub-fail.sh');
+            writeFileSync(stub, '#!/bin/sh\nexit 3\n');
+            chmodSync(stub, 0o755);
+            expect(() => main(['review-gate', '1122', '--spur-bin', stub, '--root', dir], {}, SILENT)).toThrow();
+        } finally {
+            cleanup();
+        }
     });
 });
 

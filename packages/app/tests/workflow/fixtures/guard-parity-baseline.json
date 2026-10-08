@@ -46,7 +46,7 @@
             "from": "test",
             "to": "triage",
             "kind": "shell",
-            "command": "gate_status=\"$(cat .spur/run/$wbs-test-gate.status 2>/dev/null)\"; test \"$gate_status\" = PASS"
+            "command": "gate_status=\"$(cat .spur/run/$wbs-test-gate.status 2>/dev/null)\"; test \"$gate_status\" = PASS || { test \"$gate_status\" = DEFERRED && test \"$deferQualityGate\" = \"true\"; }"
         },
         {
             "from": "test",
@@ -70,7 +70,7 @@
             "from": "test-recheck",
             "to": "triage",
             "kind": "shell",
-            "command": "gate_status=\"$(cat .spur/run/$wbs-test-gate.status 2>/dev/null)\"; test \"$gate_status\" = PASS"
+            "command": "gate_status=\"$(cat .spur/run/$wbs-test-gate.status 2>/dev/null)\"; test \"$gate_status\" = PASS || { test \"$gate_status\" = DEFERRED && test \"$deferQualityGate\" = \"true\"; }"
         },
         {
             "from": "test-recheck",
@@ -148,13 +148,13 @@
             "from": "review",
             "to": "verify",
             "kind": "shell",
-            "command": "test \"$profile\" = auto && grep -qiE '^[[:space:]]*\\**Verdict:\\** *PASS' \".spur/run/$__runId-review-answer.txt\""
+            "command": "test \"$profile\" = auto && grep -qiE '^[[:space:]]*\\**Verdict:\\** *PASS' \".spur/run/$__runId-review-answer.txt\" && eval \"$(jq -r 'if .mode==\"source-repo\" then \"S=\"+@sh\"\\(.dir)/residual-scan.ts\"+\" RUNNER=bun\" elif .mode==\"installed\" then \"S=\"+@sh\"\\(.dir)/residual-scan.mjs\"+\" RUNNER=node\" else empty end' \".spur/run/$__runId-script-root.json\" 2>/dev/null)\" && [ -f \"$S\" ] && \"$RUNNER\" \"$S\" review-gate \"$wbs\" --spur-bin \"$spurBin\" >&2"
         },
         {
             "from": "review",
             "to": "approve",
             "kind": "shell",
-            "command": "grep -qiE '^[[:space:]]*\\**Verdict:\\** *PASS' \".spur/run/$__runId-review-answer.txt\""
+            "command": "grep -qiE '^[[:space:]]*\\**Verdict:\\** *PASS' \".spur/run/$__runId-review-answer.txt\" && eval \"$(jq -r 'if .mode==\"source-repo\" then \"S=\"+@sh\"\\(.dir)/residual-scan.ts\"+\" RUNNER=bun\" elif .mode==\"installed\" then \"S=\"+@sh\"\\(.dir)/residual-scan.mjs\"+\" RUNNER=node\" else empty end' \".spur/run/$__runId-script-root.json\" 2>/dev/null)\" && [ -f \"$S\" ] && \"$RUNNER\" \"$S\" review-gate \"$wbs\" --spur-bin \"$spurBin\" >&2"
         },
         {
             "from": "review",

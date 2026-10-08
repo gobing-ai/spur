@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getEnvVars } from '@gobing-ai/spur-config';
@@ -38,6 +38,10 @@ const DEF = parseYaml(readFileSync(join(WORKFLOWS_DIR, 'task-pipeline.yaml'), 'u
 
 const cmdOf = (from: string, to: string): string =>
     DEF.transitions.find((t) => t.from === from && t.to === to)?.guard?.options?.command?.replace(/\n/g, ' ') ?? '';
+
+// The repo's scanner sources — behavioral guard tests resolve the review-gate through the same
+// source-repo pair the record step uses (task 1122).
+const SCRIPTS_DIR = join(import.meta.dir, '../../../../plugins/sp/scripts');
 
 describe('task-pipeline proof chain (task 0703, ADR-071)', () => {
     test('verify certifies observe-only: --fix none, never --fix all (R1)', () => {
@@ -636,11 +640,27 @@ describe('task-pipeline review-failure routing (session finding after 1088)', ()
         const dir = mkdtempSync(join(tmpdir(), 'spur-review-gate-'));
         try {
             mkdirSync(join(dir, '.spur', 'run'), { recursive: true });
+            // Since 1122 the PASS edge continues into the review-gate residual check, so a passing
+            // case must satisfy the whole chain: seed the scanner resolution and a stub spur that
+            // serves a clean review (P4-only row).
+            const stub = join(dir, 'stub-spur.sh');
+            const cleanReview = JSON.stringify({
+                content:
+                    '### Review\n\n| Priority | Finding | Location | Disposition |\n| --- | --- | --- | --- |\n| P4 (advisory) | Note | src/d.ts:1 | ACCEPTED |\n',
+            }).replaceAll("'", "'\\''");
+            writeFileSync(stub, `#!/bin/sh\ncase "$2" in\n  show) printf '%s' '${cleanReview}' ;;\nesac\n`);
+            chmodSync(stub, 0o755);
+            writeFileSync(
+                join(dir, '.spur', 'run', 'run-t-review-script-root.json'),
+                `${JSON.stringify({ mode: 'source-repo', dir: SCRIPTS_DIR })}\n`,
+            );
             const answer = join(dir, '.spur', 'run', 'run-t-review-review-answer.txt');
             const guard = cmdOf('review', 'verify')
                 .replaceAll('$profile', 'auto')
                 .replaceAll('$__runId', 'run-t-review')
-                .replaceAll('../..', dir);
+                .replaceAll('../..', dir)
+                .replaceAll('$spurBin', stub)
+                .replaceAll('$wbs', '1122');
             for (const [body, expected] of [
                 ['Verdict: PASS\n', 0],
                 ['**Verdict: PASS**\n', 0],
@@ -657,6 +677,99 @@ describe('task-pipeline review-failure routing (session finding after 1088)', ()
             expect(runSh(missing, dir).code).not.toBe(0);
         } finally {
             rmSync(dir, { recursive: true, force: true });
+        }
+    });
+});
+
+// Task 1122: the record sweep's "no open P1-P3 review finding" rule moved forward to the review
+// PASS edges — a PASS with an open finding enters the bounded repair lane BEFORE verify spends the
+// cycle (record would terminally fail it after a full verify + record). Same classifier, same
+// deferrals, resolved like the record step's scanner, fail-closed into review-fail-triage.
+describe('task-pipeline review PASS-edge review-gate (task 1122)', () => {
+    const TABLE_HEAD = '### Review\n\n| Priority | Finding | Location | Disposition |\n| --- | --- | --- | --- |\n';
+    const runSh = (script: string, cwd: string, spurBin: string): { code: number } =>
+        Bun.spawnSync(['sh', '-c', script], {
+            cwd,
+            env: { ...process.env, wbs: '1122', spurBin },
+            stdout: 'pipe',
+            stderr: 'pipe',
+        }).exitCode ?? -1;
+
+    test('both PASS edges chain review-gate into the Verdict check (R3, AC2/AC3)', () => {
+        for (const guard of [cmdOf('review', 'verify'), cmdOf('review', 'approve')]) {
+            expect(guard).toContain('review-gate');
+            expect(guard).toContain('script-root.json');
+            expect(guard).toContain('residual-scan.ts');
+            expect(guard).toContain('residual-scan.mjs');
+            expect(guard).toContain('$wbs');
+            expect(guard).toContain('$spurBin');
+            // One AND-list: the gate runs only after the Verdict grep, so a missing scanner or an
+            // open P1-P3 finding fails the edge closed into the review-fail-triage catch-all.
+            expect(guard).toContain('review-answer.txt" && eval "$(jq');
+            expect(guard).not.toContain(';');
+        }
+        // The test-fix hop's existing hand-off appends exactly the artifact review-gate writes.
+        const fixShells = (DEF.states.find((s) => s.id === 'test-fix')?.onEnter ?? [])
+            .filter((a) => a.kind === 'shell')
+            .map((a) => String(a.options?.command ?? ''));
+        expect(fixShells.some((c) => c.includes('cat ".spur/run/$wbs-residuals.json"'))).toBe(true);
+    });
+
+    test('behavioral: PASS with an open P2 falls through to triage; clean PASS advances; missing scanner fails closed', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-1122-gate-'));
+        try {
+            mkdirSync(join(dir, '.spur', 'run'), { recursive: true });
+            const runId = 'run-t-1122';
+            writeFileSync(join(dir, '.spur', 'run', `${runId}-review-answer.txt`), 'Verdict: PASS\n');
+            writeFileSync(
+                join(dir, '.spur', 'run', `${runId}-script-root.json`),
+                `${JSON.stringify({ mode: 'source-repo', dir: SCRIPTS_DIR })}\n`,
+            );
+            const spurStub = join(dir, 'stub-spur.sh');
+            const serve = (review: string): void => {
+                const payload = JSON.stringify({ content: review }).replaceAll("'", "'\\''");
+                writeFileSync(spurStub, `#!/bin/sh\ncase "$2" in\n  show) printf '%s' '${payload}' ;;\nesac\n`);
+                chmodSync(spurStub, 0o755);
+            };
+            const verifyGuard = cmdOf('review', 'verify').replaceAll('$profile', 'auto').replaceAll('$__runId', runId);
+            const approveGuard = cmdOf('review', 'approve').replaceAll('$__runId', runId);
+
+            // AC2: PASS + open P2 → neither PASS edge passes → review-fail-triage; the artifact
+            // the fix hop consumes is staged with the blocking finding.
+            serve(`${TABLE_HEAD}| P2 (major) | Missing validation | src/c.ts:8 | OPEN |\n`);
+            expect(runSh(verifyGuard, dir, spurStub)).not.toBe(0);
+            expect(runSh(approveGuard, dir, spurStub)).not.toBe(0);
+            const artifact = JSON.parse(readFileSync(join(dir, '.spur', 'run', '1122-residuals.json'), 'utf8')) as {
+                items: Array<{ category: string; class: string; location: string }>;
+            };
+            expect(artifact.items.map((i) => i.category)).toEqual(['review-finding']);
+            expect(artifact.items.some((i) => i.class === 'blocking' && i.location === 'src/c.ts:8')).toBe(true);
+
+            // AC3: clean PASS (P4 + RESOLVED rows only) still advances, auto and interactive.
+            serve(
+                `${TABLE_HEAD}| P4 (advisory) | Note | src/d.ts:1 | ACCEPTED |\n| P3 (minor) | Fixed | src/e.ts:2 | RESOLVED — in pass |\n`,
+            );
+            expect(runSh(verifyGuard, dir, spurStub)).toBe(0);
+            expect(runSh(approveGuard, dir, spurStub)).toBe(0);
+
+            // Missing scanner resolution fails closed into the catch-all (triage), never verify.
+            rmSync(join(dir, '.spur', 'run', `${runId}-script-root.json`));
+            serve(`${TABLE_HEAD}| P4 (advisory) | Note | src/d.ts:1 | ACCEPTED |\n`);
+            expect(runSh(verifyGuard, dir, spurStub)).not.toBe(0);
+            expect(runSh(approveGuard, dir, spurStub)).not.toBe(0);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    }, 30000);
+
+    test('the cost is stated where the driver decides (R4, AC4)', () => {
+        const reviewDesc = String(DEF.states.find((s) => s.id === 'review')?.description ?? '');
+        const triageDesc = String(DEF.states.find((s) => s.id === 'review-fail-triage')?.description ?? '');
+        for (const desc of [reviewDesc, triageDesc]) {
+            expect(desc).toContain('P1-P3');
+            expect(desc).toContain('DEFER');
+            expect(desc).toContain('quality → review → verify');
+            expect(desc).toContain('wrap residual');
         }
     });
 });

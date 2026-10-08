@@ -43,6 +43,10 @@ This design takes that path:
 
 ```text
 precheck ─(+ write .spur/run/<wbs>-base.sha)→ implement → test → review → verify
+review:  /sp:dev-review → findings table
+         ├─ PASS + review-gate clean (no open P1-P3 row, 1122) → verify (profile=auto) or approve
+         └─ otherwise (incl. a PASS carrying an open P1-P3 row, fail closed) → review-fail-triage
+                                       → test-fix → re-enter quality → review → verify
 verify:  agent answer → answer-lint → task verdict → proof bind (jq)
          ├─ PASS + proof block      → record
          ├─ PARTIAL, attempts < max → test-fix (verifier non-PASS) → recheck → review → verify
@@ -53,6 +57,10 @@ record:  task record (flips verdict-proven R/AC boxes) → feature sync
          └─ blocking downgrade      → re-record Testing from the final artifact (R5) → failed
                                        (+ residual-report.md, recovery line); task stays testing
 ```
+
+The record sweep stays the final authority; the 1122 `review-gate` check only runs the same
+review-finding classification earlier, at the review PASS edges, so an open P1–P3 finding enters
+the bounded repair lane before verify spends a full re-certification cycle.
 
 ## Scanner
 
@@ -66,6 +74,7 @@ record:  task record (flips verdict-proven R/AC boxes) → feature sync
 | `fold <wbs>` | after `spur task record` on every surface: pipeline `record` (0983), standalone `/sp:dev-verify` and `/sp:dev-verifyall` (0987) | Downgrades PASS→PARTIAL in `<wbs>-verdict.json` when blocking > 0; adds a `residual-sweep` check; appends blocking anchors to `<wbs>-test-gate.findings`. A downgrade re-records Testing from the final artifact (pipeline R5; standalone downgrade-only re-record). Freshness (1065): when both the run copy `.spur/run/<wbs>-verdict.json` and the durable copy `.spur/memory/evidence/<wbs>-verdict.json` exist, the newer (mtime; tie → run copy) wins the fold, and a content disagreement between the captured and folded verdict is reported, never silent |
 | `settle <wbs>` | pipeline `done` entry, `/sp:dev-verify --next` after its done transition | Files one follow-up task for deferrables (`spur task create --feature <f> --skip-ready`, dedup guard) and removes `/tmp/<wbs>-*` files |
 | `report <wbs>` | `failed` state entry | No-op unless the verdict carries a failing `residual-sweep` check; otherwise writes `.spur/run/<wbs>-residual-report.md` and prints the recovery line |
+| `review-gate <wbs>` | review PASS edges (`review → verify`, `review → approve`; 1122) | Review-finding-only slice of the record sweep with the same parse/classify/deferrals (`blockingReviewFindings`); writes `.spur/run/<wbs>-residuals.json` (the test-fix hop's remediation input); prints blocking anchors; exit 1 on an open P1-P3 finding fails the PASS edge closed into `review-fail-triage` |
 
 ### Categories and classification
 
@@ -136,7 +145,7 @@ reason instead of failing.
 
 | Surface | Change |
 | --- | --- |
-| `config/workflows/task-pipeline.yaml` | precheck writes `base.sha`; `done` entry adds `settle`; `failed` entry adds `report`; 0983 moved `scan`+`fold` from verify to record (after the box flips, before the done guard) and added the R5 Testing re-record on a downgrade |
+| `config/workflows/task-pipeline.yaml` | precheck writes `base.sha`; `done` entry adds `settle`; `failed` entry adds `report`; 0983 moved `scan`+`fold` from verify to record (after the box flips, before the done guard) and added the R5 Testing re-record on a downgrade; 1122 review PASS edges also require a passing `review-gate` check — a PASS with an open P1-P3 finding routes to `review-fail-triage` before verify |
 | `plugins/sp/commands/dev-verify.md`, `dev-verifyall.md`, `code-verification/SKILL.md` | Residual scan + fold under every `--fix` mode, after `spur task record` (0987), with a downgrade-only re-record; `settle` only on the `--next` done transition |
 | `plugins/sp/commands/dev-fixall.md` | Residual findings as fix targets; the deferral-file contract |
 | `plugins/sp/commands/dev-runall.md` | Done-subset batch wrap; remove the per-task `--wrap` contradiction |

@@ -150,6 +150,17 @@ function scanResiduals(inputs) {
     counts
   };
 }
+function blockingReviewFindings(taskContent, deferrals) {
+  const rows = parseReviewFindings(taskContent);
+  const tableDeferrals = rows.flatMap((r) => r.deferral === undefined ? [] : [{ id: makeItemId("review-finding", r.location, r.text), reason: r.deferral }]);
+  const items = rows.map((r) => ({
+    category: "review-finding",
+    priority: r.priority,
+    location: r.location,
+    text: r.text
+  }));
+  return classify(items, [...tableDeferrals, ...deferrals]);
+}
 function blockingAnchors(items) {
   const anchors = new Set;
   for (const item of items) {
@@ -261,6 +272,7 @@ export {
   foldVerdict,
   findUncheckedBoxes,
   classify,
+  blockingReviewFindings,
   blockingAnchors,
   ALLOW_PRAGMA
 };

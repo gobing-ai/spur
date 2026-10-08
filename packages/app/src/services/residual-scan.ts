@@ -272,6 +272,27 @@ export function scanResiduals(inputs: ResidualScanInputs): ResidualArtifact {
     };
 }
 
+/**
+ * Task 1122 R1: the review-finding slice of the record sweep — same `parseReviewFindings`, same
+ * `classify`, same deferrals (in-table `DEFER` dispositions plus the file entries) — so the
+ * review-time gate and the record sweep cannot disagree. Restricted to `review-finding`:
+ * unchecked boxes and diff markers are not decidable before record flips the proven boxes. The
+ * record sweep stays the final authority; this only runs the same check before verify.
+ */
+export function blockingReviewFindings(taskContent: string, deferrals: Deferral[]): ResidualItem[] {
+    const rows = parseReviewFindings(taskContent);
+    const tableDeferrals = rows.flatMap((r) =>
+        r.deferral === undefined ? [] : [{ id: makeItemId('review-finding', r.location, r.text), reason: r.deferral }],
+    );
+    const items = rows.map((r) => ({
+        category: 'review-finding' as const,
+        priority: r.priority,
+        location: r.location,
+        text: r.text,
+    }));
+    return classify(items, [...tableDeferrals, ...deferrals]);
+}
+
 /** Blocking locations that match the `file.ext:line` findings-anchor shape. */
 export function blockingAnchors(items: ResidualItem[]): string[] {
     const anchors = new Set<string>();

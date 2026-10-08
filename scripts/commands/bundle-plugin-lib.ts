@@ -342,6 +342,7 @@ export declare function classify(
     deferrals: Deferral[],
 ): ResidualItem[];
 export declare function scanResiduals(inputs: ResidualScanInputs): ResidualArtifact;
+export declare function blockingReviewFindings(taskContent: string, deferrals: Deferral[]): ResidualItem[];
 export declare function blockingAnchors(items: ResidualItem[]): string[];
 export declare function foldVerdict(
     verdict: { verdict: string; checks: Array<{ name: string; status: string; evidence: string }> },

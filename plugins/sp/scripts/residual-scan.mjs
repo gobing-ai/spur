@@ -164,6 +164,17 @@ function scanResiduals(inputs) {
     counts
   };
 }
+function blockingReviewFindings(taskContent, deferrals) {
+  const rows = parseReviewFindings(taskContent);
+  const tableDeferrals = rows.flatMap((r) => r.deferral === undefined ? [] : [{ id: makeItemId("review-finding", r.location, r.text), reason: r.deferral }]);
+  const items = rows.map((r) => ({
+    category: "review-finding",
+    priority: r.priority,
+    location: r.location,
+    text: r.text
+  }));
+  return classify(items, [...tableDeferrals, ...deferrals]);
+}
 function blockingAnchors(items) {
   const anchors = new Set;
   for (const item of items) {
@@ -270,7 +281,7 @@ function spurCommand(spurBin) {
 }
 
 // plugins/sp/scripts/residual-scan.ts
-var RESIDUAL_SCAN_USAGE = "usage: residual-scan.ts <scan|fold|settle|report> <wbs> [--spur-bin <bin>] [--root <dir>] [--tmp-dir <dir>]";
+var RESIDUAL_SCAN_USAGE = "usage: residual-scan.ts <scan|fold|settle|report|review-gate> <wbs> [--spur-bin <bin>] [--root <dir>] [--tmp-dir <dir>]";
 function run(cmd, args, cwd) {
   const result = spawnSync(cmd, args, { cwd, encoding: "utf8" });
   if (result.error !== undefined)
@@ -388,6 +399,33 @@ function scanMode(opts, env, io) {
 `);
   return 0;
 }
+function reviewGateMode(opts, env, io) {
+  const runDir = join2(opts.root, ".spur", "run");
+  fs.mkdirSync(runDir, { recursive: true });
+  const { content } = loadTask(env, opts.spurBin, opts.wbs, opts.root);
+  const items = blockingReviewFindings(content, readDeferrals(runDir, opts.wbs));
+  const blocking = items.filter((i) => i.class === "blocking");
+  const counts = { blocking: 0, deferrable: 0, advisory: 0, housekeeping: 0 };
+  for (const item of items)
+    counts[item.class]++;
+  const artifact = {
+    wbs: opts.wbs,
+    base: null,
+    scanned: {
+      "review-finding": true,
+      "diff-marker": false,
+      "unchecked-box": false,
+      "staging-residue": false
+    },
+    items,
+    counts
+  };
+  fs.writeFileSync(join2(runDir, `${opts.wbs}-residuals.json`), `${JSON.stringify(artifact, null, 2)}
+`);
+  io.out(`residual-review-gate: ${opts.wbs} blocking=${counts.blocking}` + (blocking.length > 0 ? ` ids=${blocking.map((i) => i.id).join(",")} anchors=${blockingAnchors(blocking).join(",")}` : "") + `
+`);
+  return blocking.length > 0 ? 1 : 0;
+}
 function foldMode(opts, _env, io) {
   const runDir = join2(opts.root, ".spur", "run");
   const scan = JSON.parse(fs.readFileSync(join2(runDir, `${opts.wbs}-residuals.json`), "utf8"));
@@ -493,7 +531,13 @@ function main(argv, env = getEnvVars(), options = {}) {
   };
   const cwd = options.cwd ?? process.cwd();
   const opts = parseArgs(argv);
-  const modes = { scan: scanMode, fold: foldMode, settle: settleMode, report: reportMode };
+  const modes = {
+    scan: scanMode,
+    fold: foldMode,
+    settle: settleMode,
+    report: reportMode,
+    "review-gate": reviewGateMode
+  };
   const modeFn = opts === null ? undefined : modes[opts.mode];
   if (opts === null || modeFn === undefined) {
     io.err(`${RESIDUAL_SCAN_USAGE}
@@ -520,6 +564,7 @@ export {
   findUncheckedBoxes,
   collectAddedLines,
   classify,
+  blockingReviewFindings,
   blockingAnchors,
   RESIDUAL_SCAN_USAGE,
   ALLOW_PRAGMA

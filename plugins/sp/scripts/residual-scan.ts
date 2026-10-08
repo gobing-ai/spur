@@ -10,7 +10,7 @@ import { spurCommand } from '../lib/spur-bin';
 
 export * from '../lib/residual-scan.generated.mjs';
 export const RESIDUAL_SCAN_USAGE =
-    'usage: residual-scan.ts <scan|fold|settle|report> <wbs> [--spur-bin <bin>] [--root <dir>] [--tmp-dir <dir>]';
+    'usage: residual-scan.ts <scan|fold|settle|report|review-gate> <wbs> [--spur-bin <bin>] [--root <dir>] [--tmp-dir <dir>]';
 export type ScanEnv = { spurBin?: string } & Record<string, string | undefined>;
 export type ScanIo = { out: (line: string) => void; err: (line: string) => void };
 export type ScanOptions = { cwd?: string; io?: ScanIo };
@@ -128,6 +128,43 @@ function scanMode(opts: ParsedArgs, env: ScanEnv, io: ScanIo): number {
     );
     return 0;
 }
+/**
+ * Task 1122 R2: the review-time gate — the record sweep's review-finding slice with the same
+ * parse/classify/deferrals, applied at the review PASS edges before verify spends the cycle.
+ * Writes the same `<wbs>-residuals.json` artifact the test-fix hop already appends to the gate
+ * log (its remediation input); the record sweep stays the final authority and overwrites it.
+ * Exit 1 on an open P1-P3 finding fails the review PASS edge closed into review-fail-triage.
+ */
+function reviewGateMode(opts: ParsedArgs, env: ScanEnv, io: ScanIo): number {
+    const runDir = join(opts.root, '.spur', 'run');
+    fs.mkdirSync(runDir, { recursive: true });
+    const { content } = loadTask(env, opts.spurBin, opts.wbs, opts.root);
+    const items = core.blockingReviewFindings(content, readDeferrals(runDir, opts.wbs));
+    const blocking = items.filter((i) => i.class === 'blocking');
+    const counts = { blocking: 0, deferrable: 0, advisory: 0, housekeeping: 0 };
+    for (const item of items) counts[item.class]++;
+    const artifact: core.ResidualArtifact = {
+        wbs: opts.wbs,
+        base: null,
+        scanned: {
+            'review-finding': true,
+            'diff-marker': false,
+            'unchecked-box': false,
+            'staging-residue': false,
+        },
+        items,
+        counts,
+    };
+    fs.writeFileSync(join(runDir, `${opts.wbs}-residuals.json`), `${JSON.stringify(artifact, null, 2)}\n`);
+    io.out(
+        `residual-review-gate: ${opts.wbs} blocking=${counts.blocking}` +
+            (blocking.length > 0
+                ? ` ids=${blocking.map((i) => i.id).join(',')} anchors=${core.blockingAnchors(blocking).join(',')}`
+                : '') +
+            '\n',
+    );
+    return blocking.length > 0 ? 1 : 0;
+}
 function foldMode(opts: ParsedArgs, _env: ScanEnv, io: ScanIo): number {
     const runDir = join(opts.root, '.spur', 'run');
     const scan = JSON.parse(
@@ -237,7 +274,13 @@ export function main(argv: string[], env: ScanEnv = getEnvVars(), options: ScanO
     };
     const cwd = options.cwd ?? process.cwd();
     const opts = parseArgs(argv);
-    const modes: Record<string, ModeFn> = { scan: scanMode, fold: foldMode, settle: settleMode, report: reportMode };
+    const modes: Record<string, ModeFn> = {
+        scan: scanMode,
+        fold: foldMode,
+        settle: settleMode,
+        report: reportMode,
+        'review-gate': reviewGateMode,
+    };
     const modeFn = opts === null ? undefined : modes[opts.mode];
     if (opts === null || modeFn === undefined) {
         io.err(`${RESIDUAL_SCAN_USAGE}\n`);
