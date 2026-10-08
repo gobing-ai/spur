@@ -1,15 +1,17 @@
 ---
 schema_version: 1
 name: Narrow gate-language checker vocabulary against composition prose false positives
-status: wip
+status: done
 template: feature-impl
 created_at: 2026-10-07T07:29:50.751Z
-updated_at: "2026-10-08T07:38:11.553Z"
+updated_at: "2026-10-08T07:54:58.742Z"
 feature_id: F91
 
 ac_altitude: task-local
 priority: P3
 estimate_hours: 2
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1112-verdict.json
 ---
 
 ## 1112. Narrow gate-language checker vocabulary against composition prose false positives
@@ -28,14 +30,14 @@ estimate_hours: 2
 
 ### Requirements
 
-- [ ] R1. `hasGateLanguage()` splits its vocabulary. Unconditional tokens (`HITL`, `human-in-the-loop`, `merge event`, `content-gate`, `GATED`, `capstone`) fire anywhere. Ambiguous tokens (`approval`, `approved`, `merged`) fire only when the same sentence also carries a gating cue (`until`, `after`, `once`, `before`, `pending`, `blocked`, `wait for`/`waiting for`, `requires`/`require`). A code comment states WHY (composition prose uses these words with no gate).
-- [ ] R2. Tests in `packages/app/tests/services/task-check.test.ts`: the 1106 sentence "…merged back into one step" and "the approved design" produce no finding; "Blocked until 1050 is merged" and "Requires operator approval before starting" warn; the 0700 R6 fixtures stay green. One test in `task-service.test.ts` shows the write-time path is silent for the composition sentence.
-- [ ] R3. `ac-style-guide.md:103` and `decomposition.md:565` describe the cue rule for the ambiguous words.
-- [ ] R4. The orphaned `hasSolutionFileLineCitation` doc comment (`task-check.ts:445-451`) is moved onto its function.
+- [x] R1. `hasGateLanguage()` splits its vocabulary. Unconditional tokens (`HITL`, `human-in-the-loop`, `merge event`, `content-gate`, `GATED`, `capstone`) fire anywhere. Ambiguous tokens (`approval`, `approved`, `merged`) fire only when the same sentence also carries a gating cue (`until`, `after`, `once`, `before`, `pending`, `blocked`, `wait for`/`waiting for`, `requires`/`require`). A code comment states WHY (composition prose uses these words with no gate).
+- [x] R2. Tests in `packages/app/tests/services/task-check.test.ts`: the 1106 sentence "…merged back into one step" and "the approved design" produce no finding; "Blocked until 1050 is merged" and "Requires operator approval before starting" warn; the 0700 R6 fixtures stay green. One test in `task-service.test.ts` shows the write-time path is silent for the composition sentence.
+- [x] R3. `ac-style-guide.md:103` and `decomposition.md:565` describe the cue rule for the ambiguous words.
+- [x] R4. The orphaned `hasSolutionFileLineCitation` doc comment (`task-check.ts:445-451`) is moved onto its function.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Composition and testing prose no longer triggers the gate-language WARN; true human-confirmation vocabulary still warns (req: R1, R2, R3, R4)
+- [x] AC1 — Composition and testing prose no longer triggers the gate-language WARN; true human-confirmation vocabulary still warns (req: R1, R2, R3, R4)
 
 ### Q&A
 
@@ -87,12 +89,31 @@ const GATE_CUES = /\b(until|after|once|before|pending|blocked|wait(?:ing)? for|r
 
 ### Testing
 
-- Focused after merge to main: task-check + task-service suites 329/329 green (multiple sessions).
-- Full gate on merged main: first green run `bun run spur-check` rc=0 — 10485 pass / 0 fail across 614 files (commit f0468d1ab tree, 2026-10-08 00:37 local), pre-check and post-check rules clean. Earlier two runs on the same tree each failed exactly one unrelated load-flake subprocess timeout (display-plan / EnvShellGuardRunner / inline-run-trace), all isolation-green on rerun.
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | packages/app/src/services/task-check.ts:447 unconditional GATE_TOKENS; gating-cue rule and WHY comment at packages/app/src/services/task-check.ts:450-454 |
+| R2 | MET | packages/app/tests/services/task-check.test.ts covers merged-back prose, approved-design prose, blocked-until and requires-approval sentences; task-service write-time test present; suites 329/329 green |
+| R3 | MET | plugins/sp/skills/spur-dev/references/ac-style-guide.md:103 documents the ambiguous-token cue rule |
+| R4 | MET | packages/app/src/services/task-check.ts:445 doc comment now sits on the L4.gate-language predicate function |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | composition/test prose produces no finding while true gate vocabulary still warns; full gate rc=0 10485 pass / 0 fail across 614 files (commit 36f274590 tree) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-- Pipeline review ran in run d8b32b00 (37 recorded rows) before the load-flake failure; implementation diff reviewed against the request on salvage (6 files, +71/−18) and merged cleanly with no conflicts. Functional traceability: R1 narrow-vocabulary fix present on main with regression tests.
+Pipeline review ran in run d8b32b00-20d6-4142-a4e5-01a3d577158c (37 recorded rows) before the load-flake failure; salvage diff (6 files, +71/−18) re-reviewed against the request before merge 1b6857d00.
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P2 | process | packages/app/tests | Full-gate subprocess timeouts under concurrent fleet load are load-flakes (5 distinct, all isolation-green across sessions); record an isolation-rerun protocol so future gates do not burn reruns |
+| P4 | — | — | No blocking findings (verify verdict PASS; full gate rc=0, 10485 pass / 0 fail) |
 
 ### References
 
@@ -106,6 +127,8 @@ const GATE_CUES = /\b(until|after|once|before|pending|blocked|wait(?:ing)? for|r
 
 - 2026-10-07T07:34:14.858Z backlog → todo (system)
 - 2026-10-07T23:27:51.815Z todo → wip (system)
+- 2026-10-08T07:54:57.139Z wip → testing (system)
+- 2026-10-08T07:54:58.551Z testing → done (system)
 
 ### Notes
 

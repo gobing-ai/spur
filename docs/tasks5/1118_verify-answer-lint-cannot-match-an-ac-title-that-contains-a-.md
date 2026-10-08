@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: verify-answer-lint cannot match an AC title that contains a colon
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-10-07T20:52:29.516Z
-updated_at: "2026-10-08T05:49:49.135Z"
+updated_at: "2026-10-08T07:55:02.628Z"
 
 feature_id: F91
 priority: P2
 ac_numbering: task-local
 ac_altitude: task-local
 estimate_hours: 1.5
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1118-verdict.json
 ---
 
 ## 1118. verify-answer-lint cannot match an AC title that contains a colon
@@ -45,9 +47,9 @@ Impact: any task whose AC title contains a colon before its end is uncertifiable
 
 ### Requirements
 
-- [ ] R1. `buildAcIdentityIndex` declares the full single-line checklist label (text after the optional checkbox to end of line, trimmed) as an AC identity, in addition to the existing pre-colon head and leading token.
-- [ ] R2. An answer row citing a checklist AC by its verbatim title resolves when the title contains `` `file:line` ``, a URL such as `http://host/x`, a bare prose colon, or a `(req: R<n>)` suffix.
-- [ ] R3. Existing resolutions are preserved: the legacy `- [ ] AC1 (R1): description` head and its `AC1` token, the bold head (`- **AC2 — Title.** …`), the bold-trajectory paragraph, scenario titles and the `AC-N` alias all resolve exactly as before, a `- [ ] AC1: text` row still answers to `AC1`, and an undeclared paraphrase is still refused.
+- [x] R1. `buildAcIdentityIndex` declares the full single-line checklist label (text after the optional checkbox to end of line, trimmed) as an AC identity, in addition to the existing pre-colon head and leading token.
+- [x] R2. An answer row citing a checklist AC by its verbatim title resolves when the title contains `` `file:line` ``, a URL such as `http://host/x`, a bare prose colon, or a `(req: R<n>)` suffix.
+- [x] R3. Existing resolutions are preserved: the legacy `- [ ] AC1 (R1): description` head and its `AC1` token, the bold head (`- **AC2 — Title.** …`), the bold-trajectory paragraph, scenario titles and the `AC-N` alias all resolve exactly as before, a `- [ ] AC1: text` row still answers to `AC1`, and an undeclared paraphrase is still refused.
 
 ### Acceptance Criteria
 
@@ -115,12 +117,32 @@ for (const m of section.matchAll(/^[-*]\s+(?:\[[ xX]\]\s+)?(.+?)\s*$/gm)) {
 
 ### Testing
 
-- TDD: 3 new tests in `packages/app/tests/services/verify-answer-lint.test.ts` (verbatim colon title resolves — 0213 regression; legacy head still resolves; truncated head now rejected). Red before fix (failure message reproduced the declared `…names the \`file` truncation), green after.
-- Focused: `bun test tests/services/verify-answer-lint.test.ts` 70/70; `task-check`+`task-service` 329/329; downstream `plugins/sp/tests/dispatch-handoff-contract.test.ts` 10/10; `apps/cli/tests/commands/task.test.ts` 204/204.
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | packages/app/src/services/verify-answer-lint.ts:473 declares the full checklist row text; commit c905d6d44 |
+| R2 | MET | packages/app/tests/services/verify-answer-lint.test.ts test "every colon form resolves verbatim" covers backtick file:line, URL, bare prose colon and (req:) suffix; commit 36f274590 |
+| R3 | MET | same file: legacy head and AC-N alias tests plus full downstream suites green — verify-answer-lint 71/71, apps/cli task commands 204/204, dispatch-handoff-contract 10/10, full gate rc=0 10485 pass / 0 fail |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — A checklist AC title with a colon inside it resolves by its full title (req: R1, R2) | MET | test | all four colon forms cited verbatim produce no ac-identity finding — packages/app/tests/services/verify-answer-lint.test.ts:696 |
+| AC2 — Legacy and alias forms keep resolving and paraphrases stay refused (req: R3) | MET | test | legacy-head test plus junk-head refusal test — packages/app/tests/services/verify-answer-lint.test.ts:716; suites 71/71, 204/204, 10/10, full gate rc=0 |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -133,4 +155,7 @@ for (const m of section.matchAll(/^[-*]\s+(?:\[[ xX]\]\s+)?(.+?)\s*$/gm)) {
 ### History
 
 - 2026-10-07T21:25:40.085Z backlog → todo (system)
+- 2026-10-08T07:54:59.296Z todo → wip (system)
+- 2026-10-08T07:55:00.698Z wip → testing (system)
+- 2026-10-08T07:55:02.412Z testing → done (system)
 
