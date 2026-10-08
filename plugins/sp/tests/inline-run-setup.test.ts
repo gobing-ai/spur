@@ -498,12 +498,12 @@ test('--decide executes through the app runner: degraded default with the switch
 test('--decide threads the config switch through the driver boundary: switch on gets past disabled (0941 gate fix)', () => {
     const dir = mkdtempSync(join(tmpdir(), 'inline-run-setup-decide-cfg-'));
     try {
-        // The delegate resolves workflow.decideDecisionMaker at its own boundary; a switched-on
+        // The delegate resolves workflows.decideDecisionMaker at its own boundary; a switched-on
         // config must get PAST the 'disabled' gate. The options declare a MISSING evidence file
         // so the core degrades before any backend ask — deterministic and network-free; the
         // reason is 'error' (factory ok, evidence absent) or 'no-backend' (factory threw).
         mkdirSync(join(dir, '.spur'), { recursive: true });
-        writeFileSync(join(dir, '.spur', 'config.yaml'), 'workflow:\n  decideDecisionMaker: true\n');
+        writeFileSync(join(dir, '.spur', 'config.yaml'), 'workflows:\n  decideDecisionMaker: true\n');
         const optionsFile = writeDecideOptions(dir, {
             id: 'recovery-classify',
             method: 'choice',

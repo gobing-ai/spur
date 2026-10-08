@@ -58,7 +58,7 @@ export interface SpurWorkflowBuiltinsOptions {
     secretValues?: readonly string[];
     /** Application-owned decision evaluator for explicit never/evidence HITL modes (0911). */
     decisionEvaluator?: DecisionEvaluator;
-    /** `workflow.decideDecisionMaker` switch for the non-pausing decide action (0941 R4). Default false. */
+    /** `workflows.decideDecisionMaker` switch for the non-pausing decide action (0941 R4). Default false. */
     decideDecisionMaker?: boolean;
     /** Optional provider factory for the decide action backend (0941 R4); defaults to the shared lazy maker. */
     decideMaker?: () => Promise<DecisionMaker>;

@@ -122,7 +122,7 @@ vars:
     # headless); inline hosts receive it only when their dispatch tool accepts a
     # timeout (inline-pipeline-driver.md § Timeout boundary). 45 min is a reasoned
     # default, not a proven bound — in P1 one implement still hit 45 min and resumed
-    # (docs/reports/i31/1107-runall-p1-pilot.md:70).
+    # (docs/reports/i31/1107-runall-p1-pilot.md:61-66).
     # Override per run: `--vars '{"implementTimeoutMs":"3600000"}'`.
     implementTimeoutMs: "2700000"
     # Answer captured by the approve gate's hitl.confirm (R1): "yes" | "no" | "cancel".
@@ -314,8 +314,8 @@ states:
                 # Pure slash command only (ADR-043). Anti-recursion / implement discipline
                 # The worker's brief is OWNED BY the skill, not restated here (task 1110 R3):
                 # see `plugins/sp/skills/code-implementation/SKILL.md` (targeted-probe scope
-                # `:98-118`, dependency-aware changed-path checks `:120-138`, Solution anchor form
-                # in Red Flags `:187`). The YAML only names the entry command.
+                # § Implement scope, dependency-aware § Changed-path targeted checks, Solution
+                # anchor form in § Red Flags). The YAML only names the entry command.
                 # Declared Layer-1 role (0538 R2/0710 R7): routing reason; no executor pin — role routing feeds the distinctness gate.
                 role: coder
                 # B7 R3/R6 (0894): coder stages reuse the role session — the test-fix hop
@@ -633,7 +633,7 @@ states:
             options:
                 command: >-
                     mkdir -p .spur/run; if [ -n "$mode" ]; then printf '%s\n' "$mode" > ".spur/run/$wbs-mode.txt"; exit 0; fi; DF=".spur/run/$wbs-diffstat.json"; if ! jq -e 'type == "object"' "$DF" >/dev/null 2>&1; then printf 'safety\n' > ".spur/run/$wbs-mode.txt"; exit 0; fi; jq -r 'if .sensitive == true or ((.insertions // 0) + (.deletions // 0)) > 400 then "safety" else empty end' "$DF" 2>/dev/null > ".spur/run/$wbs-mode.txt"; exit 0
-          # (d) lane decision — degrades to the standard default whenever workflow.decideDecisionMaker
+          # (d) lane decision — degrades to the standard default whenever workflows.decideDecisionMaker
           # is off (R4), so with the flag off this state is pure shell: no model call is made.
           # 1114: the inline decide moved to the bundled catalog (`config/decisions/task-pipeline.yaml`
           # → `task-triage`), whose R0 samples measured this exact prompt before the migration.
@@ -699,7 +699,15 @@ states:
           phase: review
           phaseTitle: Review
           title: Review changes
-      description: Three-dimensional code review via /sp:dev-review (functional requirements traceability + SECUA framework (Security, Efficiency, Correctness, Usability, Architecture) + architecture depth), findings written to `## Review`.
+      description: >-
+          Three-dimensional code review via /sp:dev-review (functional requirements traceability +
+          SECUA framework (Security, Efficiency, Correctness, Usability, Architecture) +
+          architecture depth), findings written to `## Review`. Cost at this decision point (1122):
+          open P1-P3 review findings block `done` — the PASS edges below also run the review-gate
+          residual check, and a PASS carrying an open P1-P3 row routes to review-fail-triage
+          before verify. Fixing a finding invalidates the certified digest and re-runs
+          quality → review → verify on a fresh digest; only P4 rows and DEFER-ed P3 rows are wrap
+          residuals.
       onEnter:
           - kind: agent.run
             options:
@@ -746,7 +754,7 @@ states:
     # (`.spur/run/<wbs>-test-fix-attempt` against `qualityGateMaxFixAttempts`), and the fix
     # re-enters quality → review → verify on a freshly captured digest. The `decide` action
     # itself always runs (the engine has no onEnter conditionals); with
-    # `workflow.decideDecisionMaker` off it degrades to its declared default.
+    # `workflows.decideDecisionMaker` off it degrades to its declared default.
     - id: review-fail-triage
       display:
           phase: review
@@ -757,7 +765,9 @@ states:
           Deterministic router for a review that did NOT certify PASS (session finding after 1088).
           `decide review-failure-class` reads the reviewer's answer and the task spec and routes:
           fix → the shared test-fix hop, stop → failed with terminalReason failed-check. A
-          missing/corrupt decision fails closed to failed-check.
+          missing/corrupt decision fails closed to failed-check. Cost either way (1122): open
+          P1-P3 review findings block `done`; the fix lane re-enters quality → review → verify on a
+          fresh digest; only P4 rows and DEFER-ed P3 rows are wrap residuals.
       onEnter:
           # 1116: the inline decide moved to the bundled catalog (`config/decisions/task-pipeline.yaml`
           # → `review-failure-class`), whose R0 samples measured this exact prompt before the
@@ -1256,33 +1266,44 @@ transitions:
           kind: always
     # ── review routing: FAIL → bounded remediation; PASS → approve or the auto-skip (R4) ──
     # Declaration order matters and is FAIL-CLOSED: the two PASS edges each demand the reviewer's
-    # own `Verdict: PASS` line, and the catch-all sends EVERYTHING ELSE (FAIL, a missing answer, an
-    # unparseable one) into `review-fail-triage`. Before this, a FAIL review had no outgoing edge at
-    # all — the graph could not see the verdict, so remediation meant driving states by hand
-    # (session finding after 1088). The reviewer writes `Verdict: PASS|FAIL` in its answer; both
-    # plain and bold forms are accepted. Under `profile=auto` the approve gate is skipped, so the
-    # PASS+auto edge is tried first and the interactive PASS edge second.
+    # own `Verdict: PASS` line AND a passing review-gate residual check (1122 R3) — the SAME
+    # parse/classify/deferrals the record sweep enforces, resolved through the same source-repo /
+    # installed scanner pair as the record step; a missing scanner fails closed into the catch-all.
+    # EVERYTHING ELSE — FAIL, a missing or unparseable answer, or a PASS carrying an open P1-P3
+    # review finding (record would terminally fail it after a full verify + record) — enters
+    # `review-fail-triage` and its bounded repair hop BEFORE verify spends the cycle, then
+    # re-enters quality → review → verify on a fresh digest. Before 1088 a FAIL review had no
+    # outgoing edge at all; before 1122 a PASS-with-findings cost a full re-certification cycle per
+    # attempt (knowledge-kit 0210/0213). The reviewer writes `Verdict: PASS|FAIL` in its answer;
+    # both plain and bold forms are accepted. Under `profile=auto` the approve gate is skipped, so
+    # the PASS+auto edge is tried first and the interactive PASS edge second.
     - from: review
       to: verify
-      description: profile=auto and the review certified PASS — skip the human approval gate.
+      description: profile=auto, the review certified PASS, and no open P1-P3 review finding — skip the human approval gate.
       guard:
           kind: shell
           options:
               command: >-
                   test "$profile" = auto &&
-                  grep -qiE '^[[:space:]]*\**Verdict:\** *PASS' ".spur/run/$__runId-review-answer.txt"
+                  grep -qiE '^[[:space:]]*\**Verdict:\** *PASS' ".spur/run/$__runId-review-answer.txt" &&
+                  eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/residual-scan.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/residual-scan.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)" &&
+                  [ -f "$S" ] && "$RUNNER" "$S" review-gate "$wbs" --spur-bin "$spurBin" >&2
     - from: review
       to: approve
-      description: Review certified PASS — gate on human approval before verification.
+      description: Review certified PASS with no open P1-P3 review finding — gate on human approval before verification.
       guard:
           kind: shell
           options:
-              command: grep -qiE '^[[:space:]]*\**Verdict:\** *PASS' ".spur/run/$__runId-review-answer.txt"
+              command: >-
+                  grep -qiE '^[[:space:]]*\**Verdict:\** *PASS' ".spur/run/$__runId-review-answer.txt" &&
+                  eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/residual-scan.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/residual-scan.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)" &&
+                  [ -f "$S" ] && "$RUNNER" "$S" review-gate "$wbs" --spur-bin "$spurBin" >&2
     - from: review
       to: review-fail-triage
       description: >-
-          No PASS in the reviewer's answer (FAIL, PARTIAL, missing, or unparseable — fail closed) —
-          classify the failure and route it into the bounded repair hop instead of dead-ending the run.
+          No certified PASS without an open P1-P3 finding (FAIL, PARTIAL, missing, unparseable, or
+          a PASS whose review-gate check found an open P1-P3 row — fail closed) — classify the
+          failure and route it into the bounded repair hop instead of dead-ending the run.
       guard:
           kind: always
 

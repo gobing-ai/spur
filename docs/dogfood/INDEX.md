@@ -17,6 +17,7 @@ git ls-files docs/dogfood | grep -Ev '(README|INDEX)\.md$'
 
 ## Reports
 
+- `2026-10-07-f91-corpus-gate-integrity-dogfood.md`
 - `2026-07-28-D1-0365-workflow-observability-dogfood.md`
 - `2026-10-07-H15-runall-batch-execution-dogfood.md`
 - `2026-08-08-E1-history-data-plane-dogfood.md`
@@ -70,3 +71,4 @@ git ls-files docs/dogfood | grep -Ev '(README|INDEX)\.md$'
 - `2026-10-06-G72-fleet-team-residue-cleanup-dogfood.md`
 - `2026-10-06-P-spur-decision-noun-dogfood.md`
 - `2026-10-07-I13-dev-runall-two-layer-plan-dogfood.md`
+- `2026-10-07-E91-history-read-path-dogfood.md`

@@ -263,7 +263,7 @@ terminalStates: [done]
                 // composition root injects, so the context-level legacy decisionMaker is never
                 // consulted; this counter only proves that boundary (R3 keeps it for select/legacy).
                 let legacyMakerCalls = 0;
-                const ctx = makeCtx(dir, spurConfigSchema.parse({ workflow: { hitlDecisionMaker: enabled } }));
+                const ctx = makeCtx(dir, spurConfigSchema.parse({ workflows: { hitlDecisionMaker: enabled } }));
                 const executor = new TestProcessExecutor();
                 const run = executor.run.bind(executor);
                 executor.run = async (options) => {
@@ -408,7 +408,7 @@ terminalStates: [done]
         test('example: an accepted evidence answer runs the bounded retry and projects provenance into the trace', async () => {
             const dir = await mkdtemp(join(tmpdir(), 'spur-wf-example-accept-'));
             try {
-                const ctx = makeCtx(dir, spurConfigSchema.parse({ workflow: { hitlDecisionMaker: true } }));
+                const ctx = makeCtx(dir, spurConfigSchema.parse({ workflows: { hitlDecisionMaker: true } }));
                 const svc = new WorkflowAppService({ ...ctx, decisionMaker: acceptingDecisionMaker });
                 const result = await svc.run(EXAMPLE_WORKFLOW, { runId: 'example-accept' });
 
@@ -473,7 +473,7 @@ terminalStates: [done]
                         'terminalStates: [done]',
                     ].join('\n'),
                 );
-                const ctx = makeCtx(dir, spurConfigSchema.parse({ workflow: { hitlDecisionMaker: true } }));
+                const ctx = makeCtx(dir, spurConfigSchema.parse({ workflows: { hitlDecisionMaker: true } }));
                 const svc = new WorkflowAppService({ ...ctx, decisionMaker: acceptingDecisionMaker });
 
                 const result = await svc.run(path, { runId: 'legacy-pause-1' });
@@ -3581,11 +3581,11 @@ describe('agent.output config bounds flow to the consolidated run-log sink (task
     });
 });
 
-describe('workflow.logRetentionDays config flows to clean (task 0429)', () => {
-    test('resolveWorkflowLogRetentionDays reads workflow.logRetentionDays from the threaded config', () => {
+describe('workflows.logRetentionDays config flows to clean (task 0429)', () => {
+    test('resolveWorkflowLogRetentionDays reads workflows.logRetentionDays from the threaded config', () => {
         const config: SpurConfig = spurConfigSchema.parse({
             version: '1',
-            workflow: { logRetentionDays: 7 },
+            workflows: { logRetentionDays: 7 },
         });
         expect(resolveWorkflowLogRetentionDays(config)).toBe(7);
     });

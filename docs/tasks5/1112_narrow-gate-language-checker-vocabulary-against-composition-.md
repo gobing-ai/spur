@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Narrow gate-language checker vocabulary against composition prose false positives
-status: todo
+status: wip
 template: feature-impl
 created_at: 2026-10-07T07:29:50.751Z
-updated_at: "2026-10-07T16:17:20.124Z"
+updated_at: "2026-10-08T07:38:11.553Z"
 feature_id: F91
 
 ac_altitude: task-local
@@ -82,15 +82,17 @@ const GATE_CUES = /\b(until|after|once|before|pending|blocked|wait(?:ing)? for|r
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+- `packages/app/src/services/task-check.ts:445 gate-language predicate: narrowed the composition-prose vocabulary so gate/gate-run language inside task body prose (checklists, plan steps) no longer reads as a done-gate finding. Test coverage in `packages/app/tests/services/task-check.test.ts` and `task-service.test.ts`.
+- Implemented on branch `sp/runall-feature-f91-2add` in run d8b32b00-20d6-4142-a4e5-01a3d577158c, salvaged and merged to main as 92a451aeb (merge 1b6857d00); generated `.mjs` bundles regenerated on main with zero drift.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Focused after merge to main: task-check + task-service suites 329/329 green (multiple sessions).
+- Full gate on merged main: first green run `bun run spur-check` rc=0 — 10485 pass / 0 fail across 614 files (commit f0468d1ab tree, 2026-10-08 00:37 local), pre-check and post-check rules clean. Earlier two runs on the same tree each failed exactly one unrelated load-flake subprocess timeout (display-plan / EnvShellGuardRunner / inline-run-trace), all isolation-green on rerun.
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+- Pipeline review ran in run d8b32b00 (37 recorded rows) before the load-flake failure; implementation diff reviewed against the request on salvage (6 files, +71/−18) and merged cleanly with no conflicts. Functional traceability: R1 narrow-vocabulary fix present on main with regression tests.
 
 ### References
 
@@ -103,6 +105,7 @@ const GATE_CUES = /\b(until|after|once|before|pending|blocked|wait(?:ing)? for|r
 ### History
 
 - 2026-10-07T07:34:14.858Z backlog → todo (system)
+- 2026-10-07T23:27:51.815Z todo → wip (system)
 
 ### Notes
 

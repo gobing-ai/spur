@@ -1083,6 +1083,14 @@ if git rev-parse --verify --quiet "$BRANCH" >/dev/null; then
 fi
 # WT-4c — clean up registry entry in ~/.config/spur/projects.json (task 0924)
 spur projects remove "$WT_PATH" 2>/dev/null || spur projects clean --json 2>/dev/null || true
+# WT-4d — relink the invoking tree when the landed diff touched a manifest or the lockfile (task 1121).
+# The gate evidence came from the worktree's node_modules; the receiving tree still links the old
+# workspace set until it is re-installed. --ignore-scripts mirrors the worktree convention (0701 R2a).
+if git diff --name-only "$BASE_TIP" "$BATCH_TIP" -- bun.lock '*package.json' | grep -q .; then
+  bun install --frozen-lockfile --ignore-scripts \
+    || echo "WT-4d warning: invoking tree workspace links are stale — run 'bun install --frozen-lockfile --ignore-scripts'" \
+       | tee -a ".spur/run/worktree-<marker-id>-batch-report.md" >&2
+fi
 # Success marker, written once and only here: status "merged" + mergeCommit "$BATCH_TIP" —
 # after landed verification, required persistence, and cleanup:
 write_marker merged
@@ -1090,7 +1098,10 @@ write_marker merged
 
 Every halt above stops explicitly and falls through to **WT-5** — zero-commit branch (task 0701
 R1), failed checkout, divergent base, failed FF, persist-out failure (task 0975), or surviving CWD
-holders (task 0720 R1). Pre-merge failures leave the marker at `status: active` and the worktree +
+holders (task 0720 R1). WT-4d (task 1121) is the one non-halting step: when the landed diff touched
+a manifest or the lockfile it re-installs the invoking tree, and a failed relink only appends a
+stale-links warning to the batch report — the success marker still records `merged`. Pre-merge
+failures leave the marker at `status: active` and the worktree +
 branch untouched. Landed-but-incomplete failures record `status: retained` + `mergeCommit`
 BATCH_TIP: the merge landed, and the retained report reads the captured tip only. While any holder
 remains, do **not** run `git worktree prune`, `git worktree remove`, or branch deletion — only an
@@ -1151,6 +1162,14 @@ if printf 'batch report %s\n' "$BATCH_TIP" > ".spur/run/worktree-<marker-id>-bat
   write_marker retained
   exit 1
 fi
+# WT-4d — relink the invoking tree when the landed diff touched a manifest or the lockfile (task 1121).
+# The gate evidence came from the worktree's node_modules; the receiving tree still links the old
+# workspace set until it is re-installed. --ignore-scripts mirrors the worktree convention (0701 R2a).
+if git diff --name-only "$BASE_TIP" "$BATCH_TIP" -- bun.lock '*package.json' | grep -q .; then
+  bun install --frozen-lockfile --ignore-scripts \
+    || echo "WT-4d warning: invoking tree workspace links are stale — run 'bun install --frozen-lockfile --ignore-scripts'" \
+       | tee -a ".spur/run/worktree-<marker-id>-batch-report.md" >&2
+fi
 # Success marker: status "merged" + mergeCommit "$BATCH_TIP" — written once, only after landed verification and required persistence.
 # The worktree and branch are intentionally NOT removed.
 write_marker merged
@@ -1158,7 +1177,10 @@ write_marker merged
 
 The operator supplied the tree, so the operator owns its lifetime. After a green reuse batch
 `baseRef == $BRANCH`, so the same worktree keeps fast-forwarding on the next invocation instead of
-having to be rebuilt — the continue-the-work loop is stable.
+having to be rebuilt — the continue-the-work loop is stable. WT-4d (task 1121) relinks the
+invoking tree there too — after the Step 5 persistence, before the success marker; a failed relink
+appends the same stale-links warning to the persisted batch report, and the success marker still
+records `merged`.
 
 **Fast-forward only.** `git merge --ff-only` is the sole mutation of the terminal sequence; every
 other step is a read, a check, a persistence write, or a cleanup, and every tip/ancestry read uses

@@ -175,6 +175,14 @@ with the commit) drops the row from the sweep; `DEFER(<reason>)` reclassifies a 
 the cell, not the sentence. `OPEN` states "still live", and `ACCEPTED` marks a non-blocking P4
 observation you are deliberately not acting on; both behave as an ordinary open row.
 
+**Pipeline cost of an open finding (1122).** The review PASS edges run this same classification
+before verify (`residual-scan review-gate`): a PASS whose table still carries an open P1-P3 row
+routes into `review-fail-triage` → the bounded repair hop instead of verify. Open P1-P3 findings
+block `done`; fixing one invalidates the certified digest and re-runs quality → review → verify on
+a fresh digest. Only P4 rows and `DEFER`-ed P3 rows are wrap residuals — disposition the finding in
+its cell now, while you hold the context, instead of leaving the cost to be rediscovered after a
+full cycle.
+
 **Section-relative headings.** In WBS mode (standalone or pipeline) the report body is written
 *into* the task's `### Review` section, so every heading inside it MUST be `####` or deeper. A
 `##`/`###` heading in the body becomes a new top-level task section and corrupts the document. With

@@ -6,7 +6,7 @@
 # the `decision policy (0911)` block in workflow-service.test.ts.
 #
 #   never    — the action always asks the human (DecisionMaker is bypassed even when
-#              `workflow.hitlDecisionMaker: true`). Used for gates that must stay human-only.
+#              `workflows.hitlDecisionMaker: true`). Used for gates that must stay human-only.
 #   evidence — the DecisionMaker answers from recorded action evidence of the listed producer
 #              states: it picks one of the offered choices when confidence >= 0.9, or defers
 #              (answer var is cleared, status var records `deferred`) when evidence is missing,
@@ -18,8 +18,8 @@
 # The run is safe and local: one shell producer emits a fixed failure summary, a non-pausing
 # decide classifier (0941) makes the first retry/stop cut without pausing, the choose step
 # reads the producer as evidence, and the operator gate has no side effects. No provider is
-# required — without `workflow.decideDecisionMaker: true` the classifier degrades to its
-# declared default, without `workflow.hitlDecisionMaker: true` (or without a key) the evidence
+# required — without `workflows.decideDecisionMaker: true` the classifier degrades to its
+# declared default, without `workflows.hitlDecisionMaker: true` (or without a key) the evidence
 # step defers, and `never` behaves exactly like an unconfigured gate. See `spur self status`
 # -> `decisionMaker` for offline readiness. Optional registered-summary evidence
 # (`summaryArtifact`) is documented in docs/help/how_to_enable_jev_in_spur.md; this example

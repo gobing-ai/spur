@@ -831,7 +831,7 @@ export interface InlineDecideInput {
     /** Options JSON file path (relative to the workdir or absolute). */
     readonly optionsFile: string;
     /**
-     * Config-derived `workflow.decideDecisionMaker` switch, resolved at the composition
+     * Config-derived `workflows.decideDecisionMaker` switch, resolved at the composition
      * boundary (the plugin delegate) — app services never load Spur config (ADR-082).
      */
     readonly enabled: boolean;
@@ -875,7 +875,7 @@ export interface InlineDecideOutcome {
  * Inline-driver decide execution (0941 R5): executes the SAME {@link DecideActionRunner} the
  * engine composition registers and writes the same resultFile row — no second decide
  * implementation. The decide-enabled switch is an explicit parameter: the composition
- * boundary (plugin delegate) resolves `workflow.decideDecisionMaker` and threads it in
+ * boundary (plugin delegate) resolves `workflows.decideDecisionMaker` and threads it in
  * (ADR-082). The caller (plugin script) owns the trace row through the shared
  * WorkflowActionTraceWriter.
  */

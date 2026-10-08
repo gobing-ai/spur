@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { afterAll, describe, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -13,6 +13,20 @@ import type { RuleService } from '../../src/services/rule-service';
 import { registerSpurBuiltins } from '../../src/workflow/builtins';
 
 describe('registerSpurBuiltins', () => {
+    // 0485 R6 e2e debris sweep: the failed-output run leaves a durable partial-work artifact
+    // (`.spur/memory/runs/<runId>/artifacts/…-partial.md`) plus the `.spur/run/` scratch mirror,
+    // with live `git diff --stat` content that can cite `config/…` paths and trip the repo's
+    // sp-runtime-path pre-check. Sweep both in afterAll (runs even when a test fails) so the
+    // gate is deterministic — not mid-test, where a thrown assertion would strand the mirror.
+    afterAll(() => {
+        rmSync(join(process.cwd(), '.spur', 'memory', 'runs', 'failed-agent-output-e2e-1'), {
+            recursive: true,
+            force: true,
+        });
+        rmSync(join(process.cwd(), '.spur', 'run', 'failed-agent-output-e2e-1-invoke-partial.md'), {
+            force: true,
+        });
+    });
     test('registers all action kinds including http.request when requester provided', () => {
         const host = new WorkflowEngineHost();
         registerSpurBuiltins(host, {
@@ -263,13 +277,6 @@ describe('registerSpurBuiltins', () => {
             { runId: 'failed-agent-output-e2e-1' },
         );
         await Promise.resolve();
-
-        // The agent.run action preserves failed output at `.spur/run/<runId>-invoke-partial.md`
-        // relative to the process cwd — sweep it so the artifact cannot trip the repo's
-        // sp-runtime-path pre-check on the next gate run.
-        rmSync(join(process.cwd(), '.spur', 'run', 'failed-agent-output-e2e-1-invoke-partial.md'), {
-            force: true,
-        });
 
         expect(result.status).toBe('done');
         const traceJson = persistence.actionRuns[0]?.resultJson ?? '';

@@ -51,7 +51,7 @@ command, skill, script, or second workflow.
 
 **Inline HITL defer semantics (0911):** bundled pipeline human gates ship `decision: {mode:
 never}`, so the inline driver always prompts the operator for those gates regardless of
-`workflow.hitlDecisionMaker` — the decision policy never answers inline pipeline gates. A local
+`workflows.hitlDecisionMaker` — the decision policy never answers inline pipeline gates. A local
 workflow override (`.spur/workflows/*.yaml`) may declare `mode: evidence`, but the driver does
 not claim full inline parity for the DecisionMaker path: evidence-mode auto-answering inside the
 inline driver is an explicit non-goal (subprocess runs own that behavior). No hot reload: config

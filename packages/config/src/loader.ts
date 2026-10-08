@@ -304,7 +304,7 @@ export async function loadSpurConfig(cwd?: string, opts?: LoadSpurConfigOptions)
 // ---- Facade flag derivations (ADR-082) ----
 
 /**
- * Project the `workflow.decideDecisionMaker` switch from a fresh merged load.
+ * Project the `workflows.decideDecisionMaker` switch from a fresh merged load.
  *
  * For composition boundaries with no threaded config context — the inline driver delegate
  * (task 0941) — the load happens here in the facade and the flag is passed into app
@@ -312,7 +312,7 @@ export async function loadSpurConfig(cwd?: string, opts?: LoadSpurConfigOptions)
  * themselves. Throws on an invalid config (same fail-loud posture as {@link loadSpurConfig}).
  */
 export async function resolveDecideDecisionMakerEnabled(cwd?: string, opts?: LoadSpurConfigOptions): Promise<boolean> {
-    return (await loadSpurConfig(cwd, opts)).workflow?.decideDecisionMaker === true;
+    return (await loadSpurConfig(cwd, opts)).workflows?.decideDecisionMaker === true;
 }
 
 // Task 0797 / ADR-111: filesystem updater rides the node-only `./loader` subpath.

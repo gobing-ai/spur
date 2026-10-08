@@ -809,9 +809,25 @@ export const RulesConfigSchema = z.object({
     paths: z.array(z.string()).optional(),
 });
 
-/** Schema for the `workflows` section. */
+/**
+ * Schema for the `workflows` section: workflow catalog `paths` plus the
+ * workflow-runtime switches (catalog location and engine policy live together,
+ * singular `workflow` section retired during decision-feature development —
+ * no shipped configs carried the singular form).
+ */
 export const WorkflowsConfigSchema = z.object({
     paths: z.array(z.string()).optional(),
+    /** Opt-in DecisionMaker responder; false preserves existing interactive/default answers. */
+    hitlDecisionMaker: z.boolean().optional(),
+    /** Opt-in DecisionMaker backend for the non-pausing decide action (0941 R4); false keeps the degraded default. */
+    decideDecisionMaker: z.boolean().optional(),
+    /**
+     * How old a retained `.spur/memory/runs/<RUNID>.log` must be (mtime) before
+     * `spur workflow clean` reclaims it. Default 30. Config units are days here
+     * because retention is a policy; the stale-run `--older-than` flag stays
+     * minutes and is never reused for log age.
+     */
+    logRetentionDays: z.number().int().positive().default(30),
 });
 
 /**
@@ -832,22 +848,6 @@ export const DecisionsConfigSchema = z.object({
     maker: z.string().optional(),
     makers: z.record(z.string(), z.string()).optional(),
     log: z.enum(['full', 'metadata', 'off']).optional(),
-});
-
-/**
- * Schema for the `workflow` section (feature D2 / task 0429).
- *
- * - `logRetentionDays` — how old a retained `.spur/memory/runs/<RUNID>.log` must be
- *   (mtime) before `spur workflow clean` reclaims it. Default 30. Config
- *   units are days here because retention is a policy; the stale-run
- *   `--older-than` flag stays minutes and is never reused for log age.
- */
-export const WorkflowConfigSchema = z.object({
-    /** Opt-in DecisionMaker responder; false preserves existing interactive/default answers. */
-    hitlDecisionMaker: z.boolean().optional(),
-    /** Opt-in DecisionMaker backend for the non-pausing decide action (0941 R4); false keeps the degraded default. */
-    decideDecisionMaker: z.boolean().optional(),
-    logRetentionDays: z.number().int().positive().default(30),
 });
 
 /** Schema for the `redaction` section. */
@@ -1006,7 +1006,6 @@ export const spurConfigSchema = z.object({
     rules: RulesConfigSchema.optional(),
     workflows: WorkflowsConfigSchema.optional(),
     decisions: DecisionsConfigSchema.optional(),
-    workflow: WorkflowConfigSchema.optional(),
     redaction: RedactionConfigSchema.optional(),
     history: HistoryConfigSchema.optional(),
     builder: BuilderConfigSchema.optional(),
@@ -1085,9 +1084,6 @@ export type AgentConfig = z.infer<typeof AgentConfigSchema>;
 /** Inferred type for the `agent.output` config section (per-run output capture bounds). */
 export type AgentOutputConfig = z.infer<typeof AgentOutputConfigSchema>;
 
-/** Inferred type for the `workflow` config section (run-log retention policy, task 0429). */
-export type WorkflowConfig = z.infer<typeof WorkflowConfigSchema>;
-
 /** Inferred type for the `history` config section (task 0549). */
 export type HistoryConfig = z.infer<typeof HistoryConfigSchema>;
 
@@ -1100,7 +1096,7 @@ export type HistoryRefreshConfig = z.infer<typeof HistoryRefreshConfigSchema>;
  */
 export type SpurAppConfig = Pick<
     SpurConfig,
-    'version' | 'name' | 'agent' | 'rules' | 'workflows' | 'decisions' | 'workflow' | 'redaction'
+    'version' | 'name' | 'agent' | 'rules' | 'workflows' | 'decisions' | 'redaction'
 >;
 
 // ---- App-layer (runtime) config ----

@@ -79,7 +79,7 @@ describe('retention and output-log resolvers (D2 / 0429)', () => {
 
     test('reads the threaded config sections when present', () => {
         const config = {
-            workflow: { logRetentionDays: 7 },
+            workflows: { logRetentionDays: 7 },
             agent: { output: { 'max-bytes': 1024, 'max-lines': 50 } },
         } as unknown as SpurConfig;
         expect(resolveWorkflowLogRetentionDays(config)).toBe(7);

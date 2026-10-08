@@ -149,7 +149,7 @@ A first-class, **non-pausing** workflow action for fuzzy classification:
 
 - Wraps `ts-ai-runner` DecisionMaker (installed backends: typesafe / laya-local), reusing the ADR-123
   plumbing (`DecisionProvenance`, `redactAndBound`, lazy default maker). Opt-in via
-  `workflow.decideDecisionMaker` (default false, sibling of `workflow.hitlDecisionMaker`); when off,
+  `workflows.decideDecisionMaker` (default false, sibling of `workflows.hitlDecisionMaker`); when off,
   every `decide` returns its declared default with `degraded: true`.
 - Writes `{value, method, backend, confidence, degraded, reason, source, evidenceDigest, durationMs}`
   to `resultFile`; guards read the file like other status files (no re-evaluation in guards).

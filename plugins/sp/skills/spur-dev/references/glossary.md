@@ -75,12 +75,12 @@ can only route *around* one whose objective precondition is already met (see the
 routing contract in `cross-cutting.md`). A `decision` option (0911) pins that action's policy:
 `mode: never` forces the human responder, `mode: evidence` lets the optional DecisionMaker answer
 only from verified prior action evidence (deferring otherwise), and absence keeps the 0910
-implicit behavior when `workflow.hitlDecisionMaker` is enabled.
+implicit behavior when `workflows.hitlDecisionMaker` is enabled.
 Avoid: *prompt* (reserved for LLM input text), *interrupt* (implies an exception, not a planned
 pause point).
 
 **DecisionMaker** — optional provider-backed responder for executed `hitl.confirm`/`hitl.select`
-actions (ADR-123), enabled via `workflow.hitlDecisionMaker: true` and `TYPESAFE_API_KEY`.
+actions (ADR-123), enabled via `workflows.hitlDecisionMaker: true` and `TYPESAFE_API_KEY`.
 Evidence answers clear the answer variable and record `statusVar: accepted/deferred`; unresolved
 cases defer or delegate to the human. Offline readiness: `spur self status`.
 
