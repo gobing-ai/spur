@@ -2,11 +2,11 @@
 schema_version: 1
 id: "E5"
 name: "Session forensics implementation: retention, derived variables, report modes, find-issue rewrite"
-status: verifying
+status: active
 priority: P2
 tags: []
 created_at: "2026-08-14T01:03:25.438Z"
-updated_at: "2026-08-24T17:40:53.956Z"
+updated_at: "2026-10-08T19:39:52.954Z"
 ---
 
 # E5: Session forensics implementation: retention, derived variables, report modes, find-issue rewrite
@@ -125,6 +125,7 @@ Feature: Session forensics implementation
 | 0580 | Mapper fidelity: codex roles, claude usage, tool_name pollution, epoch-0 sentinel | done |
 | 0581 | Per-step token/time and cache-efficiency sections in the analyze artifact | done |
 | 0624 | Close the 0622 history data-plane residue: per-response usage dedup, claude forensic blind spots, empty sources and ETL tables | done |
+| 1130 | Parse pi transcripts in session-timeline | testing |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -188,5 +189,8 @@ not be replaced.
   unwired and is revisited only if a future ruling retains result content.
 - TTFT/generation split — deferred by 0491; the artifact carries no intra-call latency fields.
 ## History
+
 - 2026-08-17T19:05:22.219Z backlog → active (system)
 - 2026-08-24T17:40:53.956Z active → verifying (system)
+- 2026-10-08T19:39:52.954Z verifying → active (system)
+
