@@ -8,15 +8,15 @@
  * consumer without throwing.
  */
 
+/** The closed level vocabulary, strongest first (schema enums and UI ordering). */
 export type ConfidenceLevel = 'HIGH' | 'MEDIUM' | 'LOW';
-
-export const CONFIDENCE_LEVELS = ['HIGH', 'MEDIUM', 'LOW'] as const;
 
 /** HIGH ≥ 0.8 — the catalog strict bar (`review-failure-class.minConfidence`). */
 export const CONFIDENCE_HIGH_THRESHOLD = 0.8;
 /** MEDIUM ≥ 0.5. */
 export const CONFIDENCE_MEDIUM_THRESHOLD = 0.5;
 
+/** Map a raw maker confidence to its level; total, and LOW for any absent or invalid value. */
 export function confidenceLevel(confidence: number | null | undefined): ConfidenceLevel {
     if (confidence === null || confidence === undefined) return 'LOW';
     if (!Number.isFinite(confidence) || confidence < 0 || confidence > 1) return 'LOW';
