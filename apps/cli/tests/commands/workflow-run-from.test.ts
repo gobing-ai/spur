@@ -176,9 +176,7 @@ describe('spur workflow run --from / --from-run (task 1072)', () => {
 
         const list = await runCli(['workflow', 'trace', '--json'], project);
         expect(list.stdout).toMatch(/"startState":\s*"s2"/);
-        // Same 7-spawn cost class as AC2 below: cold `bun run` starts cross the 5s default
-        // under full-suite parallel load (timed out at 5007ms in the 1121 test gate).
-    }, 20000);
+    });
 
     test('AC1: a transition-flow run starts at the chosen node', async () => {
         const fixture = writeFixture('tf.yaml', TF_FIXTURE);

@@ -231,14 +231,12 @@ describe('agent doctor', () => {
         ['--probe-health'],
         ['--force-refresh'],
         ['--probe-health', '--force-refresh'],
-        // Same doctor measurement class as slowTest above: the --probe-health/--force-refresh
-        // cases crossed bun's 5000ms default under full-suite parallel load (1121 test gate).
     ])('doctor accepts %j', async (...args: unknown[]) => {
         const flags = args.filter((a): a is string => typeof a === 'string');
         const output = captureOutput();
         const exitCode = await main(['agent', 'doctor', ...flags, '--json'], { output });
         expect(typeof exitCode).toBe('number');
-    }, 30_000);
+    });
 });
 
 describe('member session rendering (0897)', () => {
