@@ -362,7 +362,7 @@ const SKILL_5M_INSERT_SQL = `INSERT INTO history_board_skill_5m (
  * remains for compatibility but is no longer the freshness authority (task 0741).
  */
 export async function historyBoardRollupsFresh(db: DbAdapter): Promise<boolean> {
-    const freshness = await rollupTableFreshness(db);
+    const freshness = await rollupTableFreshness(db, { includeStaleBuckets: false });
     for (const verdict of freshness.values()) {
         if (!verdict.fresh) return false;
     }
@@ -2289,9 +2289,13 @@ export async function refreshHistoryBoardRollupsIncremental(db: DbAdapter): Prom
                 });
             }
             // 0743: derive the day-grain dimension marts for this bucket's day INSIDE the same
-            // per-bucket transaction. A reader never observes the five-minute rollups and the
-            // daily mart disagreeing, because both land in the same atomic batch.
-            ops.push(...deriveDimensionMartsOps([day]));
+            // per-bucket transaction once all buckets for the day are committed. A reader never
+            // observes the five-minute rollups and the daily mart disagreeing, because both land
+            // in the same atomic batch.
+            const isLastBucketForDay = i === affected.length - 1 || bucketDay(affected[i + 1]?.bucket ?? '') !== day;
+            if (isLastBucketForDay) {
+                ops.push(...deriveDimensionMartsOps([day]));
+            }
             // Advance ONLY the bucket-level watermarks in the transaction. Advancing every
             // table here would make an interruption between the bucket loop and the post-pass
             // unrecoverable: the post-pass tables would already be marked clean (R7).
@@ -2308,6 +2312,9 @@ export async function refreshHistoryBoardRollupsIncremental(db: DbAdapter): Prom
     const days =
         affected.length > 0 ? [...new Set(affected.map((a) => bucketDay(a.bucket)))] : await allMaterializedDays(db);
     await recomputeDailyAndSourceDaily(db, days);
+    if (affected.length === 0) {
+        await deriveDimensionMarts(db, days);
+    }
     // One deltaSessionScope call feeds both recomputeKeyedAggregates and
     // recomputeLoopFindings — same scope, two consumers. null (a delta wider than
     // SESSION_SCOPE_LIMIT) means both fall back to the full recompute.

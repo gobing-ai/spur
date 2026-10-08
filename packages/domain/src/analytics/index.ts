@@ -219,6 +219,7 @@ export {
     GLOBAL_RANKED_ROLLUP_TABLES,
     KEYED_ROLLUP_TABLES,
     type RollupTableFreshness,
+    type RollupTableFreshnessOptions,
     type RollupWatermarkState,
     readRollupWatermarks,
     rollupTableFreshness,

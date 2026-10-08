@@ -157,6 +157,17 @@ async function staleBucketsForTable(db: DbAdapter, table: string, watermark: str
     return rows.map((row) => row.bucket);
 }
 
+/** Options for {@link rollupTableFreshness}. */
+export interface RollupTableFreshnessOptions {
+    /**
+     * Whether to compute the stale bucket range for tables that are not fresh.
+     * When false, `staleBuckets` is returned as an empty array, avoiding expensive
+     * scans and date-formatting over the raw message and skill tables. Defaults to true
+     * for backwards-compatibility.
+     */
+    includeStaleBuckets?: boolean;
+}
+
 /**
  * Per-table freshness verdict for every rollup data table, plus the stale bucket
  * range (the buckets covered by imported rows at or after the watermark).
@@ -165,7 +176,11 @@ async function staleBucketsForTable(db: DbAdapter, table: string, watermark: str
  * {@link ROLLUP_DEFINITION_VERSION} and whose `imported_at` watermark covers the
  * newest imported row. A table with no watermark row is stale (sentinel).
  */
-export async function rollupTableFreshness(db: DbAdapter): Promise<Map<string, RollupTableFreshness>> {
+export async function rollupTableFreshness(
+    db: DbAdapter,
+    options: RollupTableFreshnessOptions = {},
+): Promise<Map<string, RollupTableFreshness>> {
+    const { includeStaleBuckets = true } = options;
     const watermarks = await readRollupWatermarks(db);
     // The materialized-only read path tolerates exactly one raw history_message probe:
     // the newest-row single-row read. Use the same `ORDER BY rowid DESC LIMIT 1` shape
@@ -181,7 +196,8 @@ export async function rollupTableFreshness(db: DbAdapter): Promise<Map<string, R
         const hasWatermark = wm.importedAtWatermark !== '' || wm.definitionVersion !== '';
         const covered = newest === null || wm.importedAtWatermark >= newest;
         const fresh = hasWatermark && wm.definitionVersion === ROLLUP_DEFINITION_VERSION && covered;
-        const staleBuckets = fresh ? [] : await staleBucketsForTable(db, table, wm.importedAtWatermark);
+        const staleBuckets =
+            fresh || !includeStaleBuckets ? [] : await staleBucketsForTable(db, table, wm.importedAtWatermark);
         result.set(table, { tableName: table, fresh, staleBuckets });
     }
     return result;
