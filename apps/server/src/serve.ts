@@ -1084,6 +1084,7 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                             return handleSchedulerCustomJob(
                                 {
                                     cwd: ctx.cwd,
+                                    ...(options.dbUrl !== undefined ? { databaseUrl: options.dbUrl } : {}),
                                     executor: childExecutor,
                                     // Task 0806 R3: per-job budget override via
                                     // `SPUR_SCHEDULER_TIMEOUT_<NAME>_MS`, falling back to the job's
@@ -1109,6 +1110,15 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                                     },
                                     // Shutdown abandonment is likewise audited: the row completes,
                                     // so this is the only record that the command did not finish.
+                                    onExclusiveCollision: (name, key, heldBy) => {
+                                        ctx.eventBus().emit('scheduler.job.executed', {
+                                            name: `${SCHEDULER_CUSTOM_JOB}:${name}`,
+                                            durationMs: 0,
+                                            severity: 'info',
+                                            skipped: true,
+                                            reason: `exclusive job suppressed; producer "${key}" is already running (${heldBy})`,
+                                        });
+                                    },
                                     onShutdownAbandon: (name) => {
                                         ctx.eventBus().emit('scheduler.job.executed', {
                                             name: `${SCHEDULER_CUSTOM_JOB}:${name}`,

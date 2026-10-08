@@ -8,7 +8,7 @@ import {
     runBoundedChild,
 } from './bounded-child-run';
 import { normalizeLegacyTimeoutMs, resolveTimeoutOption, type TimeoutPolicyMs } from './execution-policy';
-import { acquireExclusiveJob, releaseExclusiveJob } from './job-exclusion-guard';
+import { acquireExclusiveJob, getExclusiveJobOwner, releaseExclusiveJob } from './job-exclusion-guard';
 
 export type { BoundedChildResult };
 // Re-exported so server wiring and tests resolve the containment policy from one module.
@@ -112,6 +112,14 @@ export interface SchedulerCustomJobDeps {
      * Omitted → no audit hook (tests, non-server consumers).
      */
     onDuplicate?: (name: string) => void;
+    /** Database connection URL forwarded to child env when configured. */
+    databaseUrl?: string;
+    /**
+     * Audit seam for a suppressed exclusive-job collision. When provided and the
+     * requested exclusive key is held by another active job, the attempt is
+     * completed cleanly rather than throwing/failing.
+     */
+    onExclusiveCollision?: (name: string, key: string, heldBy: string) => void;
 }
 
 /**
@@ -259,6 +267,11 @@ export async function handleSchedulerCustomJob(deps: SchedulerCustomJobDeps, job
     }
     const exclusiveKey = payload.exclusiveKey;
     if (exclusiveKey !== undefined) {
+        const holder = getExclusiveJobOwner(exclusiveKey);
+        if (holder !== undefined && deps.onExclusiveCollision) {
+            deps.onExclusiveCollision(payload.name, exclusiveKey, holder);
+            return;
+        }
         acquireExclusiveJob(exclusiveKey, `scheduler job "${payload.name}"`);
     }
     activeJobs.add(payload.name);
@@ -279,6 +292,7 @@ export async function handleSchedulerCustomJob(deps: SchedulerCustomJobDeps, job
             cwd: deps.cwd,
             timeoutMs,
             ...(deps.killGraceMs !== undefined ? { killGraceMs: deps.killGraceMs } : {}),
+            ...(deps.databaseUrl !== undefined ? { env: { DATABASE_URL: deps.databaseUrl } } : {}),
             maxOutput: SCHEDULER_CUSTOM_MAX_OUTPUT,
         });
         const { result } = outcome;

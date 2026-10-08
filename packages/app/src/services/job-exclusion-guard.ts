@@ -42,6 +42,11 @@ export function isExclusiveJobActive(key: string): boolean {
     return activeExclusions.has(key);
 }
 
+/** Returns the owner currently holding `key`, or undefined if not held. */
+export function getExclusiveJobOwner(key: string): string | undefined {
+    return activeExclusions.get(key);
+}
+
 /**
  * The one shared history-producer exclusion key (task 0806 R6): held by the
  * completion-triggered `history.refresh` job and stamped on configured

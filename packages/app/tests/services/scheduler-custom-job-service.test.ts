@@ -35,6 +35,7 @@ interface RecordedRun {
     command: string;
     args: string[];
     cwd?: string;
+    env?: Record<string, string>;
     timeout?: number | null;
     maxOutput?: number;
     forceBuffered?: boolean;
@@ -413,6 +414,80 @@ describe('handler-level exclusive-key wiring (task 0807 R2)', () => {
         await first;
         // The first run's finally released the key for the next producer.
         expect(isExclusiveJobActive(HISTORY_PRODUCER_EXCLUSIVE_KEY)).toBe(false);
+    });
+
+    test('onExclusiveCollision suppresses the run and audits collision without throwing or spawning a child', async () => {
+        const gate = Promise.withResolvers<void>();
+        const runs: RecordedRun[] = [];
+        const collisions: Array<{ name: string; key: string; heldBy: string }> = [];
+        const executor = {
+            run: async (options: RecordedRun) => {
+                runs.push(options);
+                await gate.promise;
+                return {
+                    command: options.command,
+                    args: options.args ?? [],
+                    exitCode: 0,
+                    stdout: 'ok',
+                    stderr: '',
+                };
+            },
+        } as unknown as ProcessExecutor;
+        const first = handleSchedulerCustomJob(
+            { cwd: '/proj', executor },
+            jobOf({
+                name: 'history-daily-report',
+                command: 'bun run x history import',
+                exclusiveKey: HISTORY_PRODUCER_EXCLUSIVE_KEY,
+            }),
+        );
+        await handleSchedulerCustomJob(
+            {
+                cwd: '/proj',
+                executor,
+                onExclusiveCollision: (name, key, heldBy) => {
+                    collisions.push({ name, key, heldBy });
+                },
+            },
+            jobOf({
+                name: 'history-nightly',
+                command: 'bun run y history daily',
+                exclusiveKey: HISTORY_PRODUCER_EXCLUSIVE_KEY,
+            }),
+        );
+        expect(collisions).toEqual([
+            {
+                name: 'history-nightly',
+                key: HISTORY_PRODUCER_EXCLUSIVE_KEY,
+                heldBy: 'scheduler job "history-daily-report"',
+            },
+        ]);
+        expect(runs).toHaveLength(1);
+        gate.resolve();
+        await first;
+        expect(isExclusiveJobActive(HISTORY_PRODUCER_EXCLUSIVE_KEY)).toBe(false);
+    });
+
+    test('deps.databaseUrl is passed into child environment', async () => {
+        const runs: RecordedRun[] = [];
+        const executor = {
+            run: async (options: RecordedRun) => {
+                runs.push(options);
+                return {
+                    command: options.command,
+                    args: options.args ?? [],
+                    exitCode: 0,
+                    stdout: 'ok',
+                    stderr: '',
+                };
+            },
+        } as unknown as ProcessExecutor;
+        await handleSchedulerCustomJob(
+            { cwd: '/proj', executor, databaseUrl: 'sqlite:///custom/db.sqlite' },
+            jobOf({ name: 'smoke-db', command: 'echo 1' }),
+        );
+        expect(runs).toHaveLength(1);
+        expect(runs[0]?.env?.DATABASE_URL).toBe('sqlite:///custom/db.sqlite');
     });
 });
 

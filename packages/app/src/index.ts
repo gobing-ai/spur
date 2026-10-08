@@ -456,6 +456,7 @@ export {
 } from './services/inline-run-setup';
 export {
     acquireExclusiveJob,
+    getExclusiveJobOwner,
     HISTORY_PRODUCER_EXCLUSIVE_KEY,
     historyProducerExclusiveKeyFor,
     isExclusiveJobActive,
