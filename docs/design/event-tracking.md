@@ -129,11 +129,11 @@ Scores are family-uniform **by construction** — the defect from §2.1 means pr
 | 73 | `bus.handler.error` | `context.ts:411` → ts-infra `EventBus` | – | ~ | P | ~ | P | P |
 | 74 | `bus.handler.async.enqueued` | `context.ts:411` → ts-infra `EventBus` | – | ~ | P | ~ | – | ~ |
 | 75 | `workflow.agent.contract-violation` *(added 0870)* | `agent-run.ts:36` (`contractViolation`) / `observability.ts:272` | ~ | P | P | P | – | P |
-| 76 | `decision.start` *(added 1095)* | `decision-events.ts:146` via `decision-service.ts:229` / `workflow/actions/decide.ts:113` | ~ | ~ | P | ~ | – | ~ |
-| 77 | `decision.success` *(added 1095)* | `decision-events.ts:159` (`invocation.succeed` ← `decision-service.ts`) | ~ | P | P | ~ | – | – |
-| 78 | `decision.failure` *(added 1095)* | `decision-events.ts:164` (`invocation.fail` ← `decision-service.ts`) | ~ | P | P | ~ | P | – |
-| 79 | `decision.end` *(added 1095)* | `decision-events.ts:171` (`invocation.end` ← `decision-service.ts` `finally`) | ~ | ~ | P | ~ | ~ | P |
-| 80 | `decision.rejected` *(added 1095)* | `decision-events.ts:116` (`decision-service.ts:204,211,226` / `commands/decision.ts:149,173,181`) | – | ~ | P | ~ | P | – |
+| 76 | `decision.start` *(added 1095)* | `decision-events.ts:213` via `decision-service.ts:292` / `workflow/actions/decide.ts:232` | ~ | ~ | P | ~ | – | ~ |
+| 77 | `decision.success` *(added 1095)* | `decision-events.ts:226` (`invocation.succeed` ← `decision-service.ts`) | ~ | P | P | ~ | – | – |
+| 78 | `decision.failure` *(added 1095)* | `decision-events.ts:231` (`invocation.fail` ← `decision-service.ts`) | ~ | P | P | ~ | P | – |
+| 79 | `decision.end` *(added 1095)* | `decision-events.ts:238` (`invocation.end` ← `decision-service.ts` `finally`) | ~ | ~ | P | ~ | ~ | P |
+| 80 | `decision.rejected` *(added 1095)* | `decision-events.ts:156` (`decision-service.ts:236,243,262,279,285` / `commands/decision.ts:173,197,205`) | – | ~ | P | ~ | P | – |
 
 **Tally:** Who — present `0`, partial `54`, absent `25`. What — present `6`, partial `73`, absent `0`. When — present `75`, partial `4`, absent `0`. Where — present `29`, partial `46`, absent `4`. Why — present `22`, partial `13`, absent `44`. How — present `36`, partial `36`, absent `7`.
 

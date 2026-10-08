@@ -226,17 +226,18 @@ Classes:
 | --- | --- | --- | --- |
 | task-pipeline · `triage` (`task-pipeline.yaml:603`) | catalog `decide` — migrated (task 1114, operator waiver on the evidence bar) | adopted | `task-triage` · low/standard/high · standard |
 | task-pipeline · `test-fail-triage` (`task-pipeline.yaml:667`) | catalog `decide` — migrated (task 1115) | adopted | `failure-class` · fix/stop · fix |
-| task-pipeline · `review-fail-triage` (`task-pipeline.yaml:750`) | catalog `decide` — migrated (task 1116) | adopted | `review-failure-class` · fix/stop · fix |
-| idea-pipeline · recommendation (`idea-pipeline.yaml:146`) | awk over `## Recommendation` → `unknown` pauses | rescue-only | `idea-recommendation` · proceed/reshape/drop · *pause* (fallback writes `unknown`) |
-| idea-pipeline · `needs_design` (`:132`) | agent-written JSON. A missing or corrupt file means design. | rescue-only | `needs-design` · design/skip · design |
+| task-pipeline · `review-fail-triage` (`task-pipeline.yaml:758`) | catalog `decide` — migrated (task 1116) | adopted | `review-failure-class` · fix/stop · fix |
+| idea-pipeline · recommendation (`idea-pipeline.yaml:154`) | awk over `## Recommendation` → `unknown` pauses | rescue-only | `idea-recommendation` · proceed/reshape/drop · *pause* (fallback writes `unknown`) |
+| idea-pipeline · `needs_design` (`:140`) | agent-written JSON. A missing or corrupt file means design. | rescue-only | `needs-design` · design/skip · design |
 | history-anatomy · validation verdict (`history-anatomy.yaml:270`) | shell normalization of `Verdict:` lines; rescue shell step after it | rescue-only | `anatomy-validation-verdict` · PASS/FAIL · FAIL. Any exact `Verdict: FAIL` line short-circuits to FAIL without calling a maker. |
-| 7 operator gates: idea-eval, feature-check, design-approval, batch-create (`idea-pipeline.yaml:160/299/379/439`), task-pipeline approve (`task-pipeline.yaml:706`), wayfinder (`wayfinder-resolution.yaml:163`), wrapup branch cleanup (`wrapup-pipeline.yaml:443`) | `hitl.confirm` `mode: never` | keep-human (bundled). In evidence-mode overrides, the decision is catalog-backed. | `gate-evidence` · yes/no · defer to operator |
+| 7 operator gates: idea-eval, feature-check, design-approval, batch-create (`idea-pipeline.yaml:195/346/434/502`), task-pipeline approve (`task-pipeline.yaml:801`), wayfinder (`wayfinder-resolution.yaml:163`), wrapup branch cleanup (`wrapup-pipeline.yaml:443`) | `hitl.confirm` `mode: never` | keep-human (bundled). In evidence-mode overrides, the decision is catalog-backed. | `gate-evidence` · yes/no · defer to operator |
 | pr-review preflight/hygiene/precheck; wayfinder precheck/final; wrapup gates; feature-verification; history structure-gate; task-pipeline `command.gate`s | exact status files | keep-deterministic | — |
 | feature-lifecycle, task-lifecycle | status transitions | keep-deterministic | — |
 
-The evidence-mode path is `decision-hitl-responder.ts:340,442`. It calls the legacy
-`defaultDecisionMaker().choice`. Slice S7 routes it through `DecisionService` so that override
-gates get catalog entries and lifecycle events.
+The evidence-mode confirm path routes through `DecisionService` (`gate-evidence`, slice S7, task
+1099; `decision-hitl-responder.ts:473`), so override gates get catalog entries and lifecycle events.
+Select gates and callers without an injected service keep the legacy `defaultDecisionMaker().choice`
+path (`decision-hitl-responder.ts:365,544`).
 
 ## 5. Staged roadmap
 

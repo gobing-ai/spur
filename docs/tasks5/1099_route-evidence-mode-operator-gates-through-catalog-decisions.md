@@ -4,7 +4,7 @@ name: Route evidence-mode operator gates through catalog decisions
 status: done
 template: feature-impl
 created_at: 2026-10-07T01:02:20.692Z
-updated_at: "2026-10-07T07:01:41.119Z"
+updated_at: "2026-10-08T16:23:22.628Z"
 feature_id: P1
 priority: P2
 tags:
@@ -108,20 +108,19 @@ Slice S7 of docs/design/decision-observability-and-adoption.md §5. Evidence-mod
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
-- Confidence: HIGH
+- Confidence: MEDIUM
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | test |
-| R2 | MET | test |
-| R3 | MET | test |
-| R4 | MET | static-ref |
-| R5 | MET | static-ref |
+| R1 | MET | catalog `config/decisions/gates.yaml:18-35`: gate-evidence type choice, params prompt string / evidence json / node string, criteria yes/no/defer, fallback defer; shipped-catalog contract `packages/app/tests/workflow/shipped-workflows-catalog-decide.test.ts:85` |
+| R2 | MET | confirm gates with an injected service decide gate-evidence with caller gate and run/node correlation `packages/app/src/workflow/decision-hitl-responder.ts:473-513`; model yes/no maps to accepted with served confidence, defer or fallback maps to deferred `packages/app/src/workflow/decision-hitl-responder.ts:519-537`; run bus passed `packages/app/src/services/workflow-service.ts:2090` and decisionService injected `packages/app/src/services/workflow-service.ts:2239`; tests `packages/app/tests/workflow/decision-gate-catalog.test.ts:87` and `packages/app/tests/workflow/decision-gate-catalog.test.ts:136` |
+| R3 | MET | select gates and callers without a service keep the legacy maker `packages/app/src/workflow/decision-hitl-responder.ts:540-544`; tests `packages/app/tests/workflow/decision-gate-catalog.test.ts:216` and `packages/app/tests/workflow/decision-gate-catalog.test.ts:236` |
+| R4 | MET | bundled gates keep mode never `config/workflows/task-pipeline.yaml:805` and `config/workflows/idea-pipeline.yaml:199`; never mode keeps the operator in the loop `packages/app/tests/workflow/decision-gate-catalog.test.ts:187` |
+| R5 | MET | fresh 2026-10-08 `spur decision status --reliability --json` reports gate-evidence evidence recorded, samples 1 (maker laya-local, fallback reason no-backend) after a `spur decision run gate-evidence` probe; the Solution recorded the start condition as not met at implementation time and overridden by batch order; report wiring `packages/app/src/decision/decision-reliability.ts:66-70` |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | Evidence-mode confirm gates resolve through catalog decisions: full event lifecycle start/failure |
-| Operator gates in evidence mode resolve through catalog decisions | MET | test | see AC1: packages/app/src/workflow/decision-hitl-responder.ts:458 (scenario twin of AC1, feature Scenario R13) |
+| AC1 — Operator gates in evidence mode resolve through catalog decisions | MET | test | evidence-mode confirm gate decides through gate-evidence `packages/app/tests/workflow/decision-gate-catalog.test.ts:87`; real bundled catalog with no backend records start, failure and end on the run bus with caller gate `packages/app/tests/workflow/decision-gate-catalog.test.ts:250`; fresh run 10 pass / 0 fail |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

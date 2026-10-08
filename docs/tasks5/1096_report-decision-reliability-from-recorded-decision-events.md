@@ -4,7 +4,7 @@ name: Report decision reliability from recorded decision events
 status: done
 template: feature-impl
 created_at: 2026-10-07T01:02:20.691Z
-updated_at: "2026-10-07T05:38:24.740Z"
+updated_at: "2026-10-08T16:19:00.197Z"
 feature_id: P1
 priority: P2
 tags:
@@ -211,18 +211,16 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/domain/src/dao/system-event-dao.ts:582-691` â `decisionSummary(spec)` filters `event_name = 'decision.end'`, groups by `json_extract(payload_json, '$.data.decisionId')` Ã `$.data.maker`; returns samples, accepted (source='model'), fallbacks by `$.data.reason` (source='default'), firstSeen/lastSeen, and raw durationMs/confidence arrays read from the end row (`$.data.confidence`, no join); since/decisionId bound as SQL parameters |
-| R2 | MET | `packages/app/src/decision/decision-reliability.ts:66-98` â `decisionReliability(dao, spec)` computes acceptedRate, medianConfidence (numeric-only, null when none), nearest-rank p50/p95 durationMs (`:124-130`); every catalog id with zero rows reported as `evidence: 'none'` (`:77-93`) |
-| R3 | MET | `packages/app/src/decision/decision-reliability.ts:1-8` â module reads recorded rows only through `SystemEventDao.decisionSummary`; no maker import, construction or call anywhere in the service (verified by full-file read, 130 lines) |
-| R4 | MET | `apps/cli/src/commands/decision.ts:225-268` â `decision status` gains `--reliability`, `--since <iso>`, `--json`; report JSON is `{ generatedAt, groups }` (`packages/app/src/decision/decision-reliability.ts:98`); plain status output and exit codes unchanged (reliability branch returns at `:261` before the status path); `--since` without `--reliability` rejected (`:267-268`); public-flag operator consent recorded at `docs/design/decision-observability-and-adoption.md:177-179` |
-| R5 | MET | `docs/design/decision-observability-and-adoption.md:4` â `status: accepted`; Â§4 audit table `:127-147` classifies all 9 `config/workflows/*.yaml` files (task-pipeline, idea-pipeline, history-anatomy, wayfinder-resolution, wrapup-pipeline, pr-review, feature-verification, feature-lifecycle, task-lifecycle) across adopt/rescue-only/keep-deterministic/keep-human â no missing row found against the live `config/workflows/` listing |
+| R1 | MET | SystemEventDao.decisionSummary over decision.end grouped by decisionId × maker `packages/domain/src/dao/system-event-dao.ts:582-589`, group shape with fallbacks by reason and raw durationMs/confidence `packages/domain/src/dao/system-event-dao.ts:173-181`; DAO tests `packages/domain/tests/dao/system-event-dao.test.ts:1391`, `packages/domain/tests/dao/system-event-dao.test.ts:1513`, `packages/domain/tests/dao/system-event-dao.test.ts:1558` (fresh run 46 pass / 0 fail) |
+| R2 | MET | decisionReliability app service `packages/app/src/decision/decision-reliability.ts:66-69`, nearest-rank median and percentiles `packages/app/src/decision/decision-reliability.ts:111-113`, evidence none fill `packages/app/src/decision/decision-reliability.ts:85`; tests `packages/app/tests/decision/decision-reliability.test.ts:60`, `packages/app/tests/decision/decision-reliability.test.ts:164`, `packages/app/tests/decision/decision-reliability.test.ts:194` |
+| R3 | MET | service reads only the DAO aggregation, no maker import or call `packages/app/src/decision/decision-reliability.ts:66-70`; empty ledger never throws `packages/app/tests/decision/decision-reliability.test.ts:277` |
+| R4 | MET | --reliability and --since on decision status `apps/cli/src/commands/decision.ts:248-249`, invalid since rejected `apps/cli/src/commands/decision.ts:257`, since without reliability is a caller mistake `apps/cli/src/commands/decision.ts:291`; CLI tests `apps/cli/tests/commands/decision.test.ts:348`, `apps/cli/tests/commands/decision.test.ts:413`, `apps/cli/tests/commands/decision.test.ts:424` (fresh run 25 pass / 0 fail) |
+| R5 | MET | design status accepted `docs/design/decision-observability-and-adoption.md:4`; §4 audit rows cover all nine `config/workflows/*.yaml` files `docs/design/decision-observability-and-adoption.md:225-235` (step anchors refreshed this run to current YAML lines; S7 note updated to the shipped gate path) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `packages/domain/tests/dao/system-event-dao.test.ts:1390-1648` â 7 DAO tests (per-group samples/accepted/fallbacks, mixed makers, end-only counting, null confidence excluded but row counted, since/decisionId filters, empty ledger); `packages/app/tests/decision/decision-reliability.test.ts:59-130` â 7 service tests (nearest-rank percentiles, single-sample p95, null median, evidence-none fill, decisionId/since narrowing); `apps/cli/tests/commands/decision.test.ts:344-430` â flag, human output, invalid `--since`, plain-path exit codes; E2E artifact `.spur/run/1096-reliability.json:1` â task-triage samples 3 / acceptedRate 0 / fallbacks {no-backend: 3}, failure-class samples 1, review-failure-class evidence none |
-| AC2 | MET | command | comm of ls config/workflows/* vs docs/design/decision-observability-and-adoption.md:127-150 rows → 0 of 9 shipped workflow files unclassified (run 2026-10-06, batch branch) |
-| A reliability report summarizes recorded decision outcomes per decision and maker | MET | test | see AC1: packages/app/tests/decision/decision-reliability.test.ts:59 |
-| The workflow audit classifies every shipped workflow step | MET | test | see AC2: docs/design/decision-observability-and-adoption.md:127 |
+| AC1 — A reliability report summarizes recorded decision outcomes per decision and maker | MET | test | per decision × maker groups with fallbacks and evidence-none fill `apps/cli/tests/commands/decision.test.ts:348`; metric math `packages/app/tests/decision/decision-reliability.test.ts:60` |
+| AC2 — The workflow audit classifies every shipped workflow step | MET | command | `ls config/workflows/*.yaml` lists 9 files; each appears in the §4 audit table `docs/design/decision-observability-and-adoption.md:225-235` with an adopt / rescue-only / keep-deterministic / keep-human class |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

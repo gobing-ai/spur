@@ -4,7 +4,7 @@ name: Rescue ambiguous history-anatomy verdicts without overturning FAIL
 status: done
 template: feature-impl
 created_at: 2026-10-07T01:02:20.692Z
-updated_at: "2026-10-07T06:26:00.421Z"
+updated_at: "2026-10-08T16:22:45.272Z"
 feature_id: P1
 priority: P2
 tags:
@@ -108,20 +108,19 @@ E2E evidence: `.spur/run/1098-verdicts.json` — the validate state's normalizat
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
-- Confidence: HIGH
+- Confidence: MEDIUM
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | static-ref |
-| R2 | MET | static-ref |
-| R3 | MET | test |
-| R4 | MET | test |
-| R5 | MET | command |
+| R1 | MET | catalog `config/decisions/history-anatomy.yaml:22-34`: anatomy-validation-verdict type choice, criteria PASS/FAIL, fallback FAIL; shipped-catalog contract `packages/app/tests/workflow/shipped-workflows-catalog-decide.test.ts:85` |
+| R2 | MET | normalization step unchanged `config/workflows/history-anatomy.yaml:245-252`; rescue guard runs only on zero exact Verdict: FAIL lines and a final line not Verdict: PASS `config/workflows/history-anatomy.yaml:268-269` |
+| R3 | MET | rescue maker call `config/workflows/history-anatomy.yaml:270`; model-only PASS jq rule and hard FAIL default `config/workflows/history-anatomy.yaml:271-273`; textual pin `apps/cli/tests/workflow-decision-scan.test.ts:66` |
+| R4 | MET | scan over the five deterministic-status workflows `apps/cli/tests/workflow-decision-scan.test.ts:60` (no kind: decide) and `apps/cli/tests/workflow-decision-scan.test.ts:66` (decision run exactly once, in the rescue step); fresh run 4 pass / 0 fail |
+| R5 | MET | fresh 2026-10-08 `spur decision status --reliability --json` reports evidence recorded, samples 1 for anatomy-validation-verdict, idea-recommendation, needs-design and gate-evidence (maker laya-local, fallbacks no-backend) after `spur decision run` probes; the prior typesafe samples cited in Solution are no longer in this ledger; report wiring `packages/app/src/decision/decision-reliability.ts:66-70` |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | Deterministic-FAIL-never-overturned proven three ways: in-step guard ordering (history-anatomy.yaml:269 before :270), E2E fixtures (exact FAIL → zero decision rows; FAIL+PASS → FAIL zero rows), and the hard-default arm (:272). See AC1: config/workflows/history-anatomy.yaml:269 |
-| A deterministic FAIL is never overturned by a decision | MET | test | see AC1: apps/cli/tests/workflow-decision-scan.test.ts:1 (scenario twin of AC1, feature Scenario R12) |
+| AC1 — A deterministic FAIL is never overturned by a decision | MET | test | behavioral fixture B: Verdict: FAIL input runs normalization then rescue, maker stub called 0 times and no verdict appended `apps/cli/tests/workflow-decision-scan.test.ts:212-216`; zero-FAIL guard precedes the maker call `config/workflows/history-anatomy.yaml:269`; fresh run 4 pass / 0 fail |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

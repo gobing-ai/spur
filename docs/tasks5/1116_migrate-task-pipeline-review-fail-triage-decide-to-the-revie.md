@@ -4,7 +4,7 @@ name: Migrate task-pipeline review-fail-triage decide to the review-failure-clas
 status: done
 template: feature-impl
 created_at: 2026-10-07T16:29:03.402Z
-updated_at: "2026-10-08T07:33:35.733Z"
+updated_at: "2026-10-08T16:36:27.273Z"
 feature_id: P1
 
 dependencies: ["1094"]
@@ -120,12 +120,25 @@ The S8 deprecation clock goes in the feature Notes through `spur feature update 
 
 ### Testing
 
-- **R5 pre-proof:** `bun test tests/workflow/shipped-workflows-catalog-decide.test.ts` on the pre-migration tree → FAIL naming both remaining inline slices (`.spur/run/1116-r5-prefail.txt`); after R1 → PASS (10 defs walked; task-triage then waived to 1114, strict after 1114 landed).
-- Focused suites (packages/app): `shipped-workflows-catalog-decide` + `task-pipeline-proof-chain` + `task-pipeline-triage-routing` → 55 tests, 0 fail.
-- `bun run --filter @gobing-ai/spur build:bundle` exit 0; bundled `task-pipeline.yaml` byte-identical to source (BUNDLE-IDENTICAL).
-- `workflow validate config/workflows/task-pipeline.yaml` → valid; deprecation warnings reduced from two to one (task-triage, closed by 1114 in the same batch) to zero.
-- E2E probe (deleted after capture): off/on rows per `.spur/run/1116-decide.json`, including the honest first-enabled-run low-confidence→fix row before the enriched accepted run.
-- Full gate `bun run spur-check` (covers 1115+1116+1114 combined tree): PASS — see `.spur/run/1116-spur-check.log` (final receipt: `.spur/run/1116-spur-check.log`).
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: MEDIUM
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R0 | MET | operator evidence bar of 20 samples at acceptedRate 0.8 on a reachable maker recorded in task Q&A; prior-session receipt (`.spur/run/1116-r0-reliability.json`, gitignored, written 2026-10-08 00:36) shows review-failure-class on fm-local 20 samples, 20 accepted, acceptedRate 1, no fallbacks; not re-executable this run (the fm-local samples are absent from the current project ledger) |
+| R1 | MET | review-fail-triage decide is the catalog reference `decision: review-failure-class` with params wbs, the original evidence and resultFile `config/workflows/task-pipeline.yaml:776-785`; catalog entry `config/decisions/task-pipeline.yaml:44` |
+| R2 | MET | resultFile path unchanged `config/workflows/task-pipeline.yaml:785`; fallback values match the inline defaults replaced `packages/app/tests/workflow/shipped-workflows-catalog-decide.test.ts:94`; switch-off disabled row from the fallback with no events `packages/app/tests/workflow/actions/decide-catalog.test.ts:211`; fresh run 28 pass / 0 fail |
+| R3 | MET | fresh 2026-10-08 `diff -q config/workflows/task-pipeline.yaml apps/cli/config/workflows/task-pipeline.yaml` reports identical; source of truth `config/workflows/task-pipeline.yaml:776-785` |
+| R4 | MET | §4 audit row reads migrated `docs/design/decision-observability-and-adoption.md:229` |
+| R5 | MET | committed scan fails on any inline-form decide across shipped workflows `packages/app/tests/workflow/shipped-workflows-catalog-decide.test.ts:42`; S8 deprecation clock started in the feature Notes `docs/features/P1_workflow-decision-points-adopt-spur-decision-catalogs.md:206` |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Workflow decide action resolves a catalog decision by id | MET | test | accepted served result maps onto the frozen row and writes the resultFile `packages/app/tests/workflow/actions/decide-catalog.test.ts:153`; shipped workflow decide actions are catalog references resolving to existing choice decisions `packages/app/tests/workflow/shipped-workflows-catalog-decide.test.ts:85`; fresh run 28 pass / 0 fail |
+| AC2 — Every AI decision in shipped workflows comes from a catalog | MET | test | every decide action in every shipped workflow is catalog-reference `packages/app/tests/workflow/shipped-workflows-catalog-decide.test.ts:42`; every referenced id exists with choice type, criteria and fallback `packages/app/tests/workflow/shipped-workflows-catalog-decide.test.ts:85`; fresh run 28 pass / 0 fail |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
@@ -135,11 +148,11 @@ The S8 deprecation clock goes in the feature Notes through `spur feature update 
 
 | # | Priority | Dimension | Finding | Location | Disposition |
 |---|----------|-----------|---------|----------|-------------|
-| 1 | P2 (major) | test integrity / architecture | Migration dropped the inline choices/default pin without a catalog-content replacement: a silent catalog edit (`fallback: fix`→`stop`) would flip degraded routing while guard-parity/R5/proof-chain stay green. | `task-pipeline-proof-chain.test.ts:601`, `config/decisions/task-pipeline.yaml:54` | **FIXED in-slice** — catalog-content pin added to the R5 gate file (`shipped-workflows-catalog-decide.test.ts`): fallback values frozen standard/fix/fix, criteria non-empty, type choice; extended per the 1114 review (#2) with the lane-vocabulary key pin. |
-| 2 | P3 (minor) | hygiene / config scope | `.spur/config.yaml` machine-local `decisions.maker: fm-local` is tracked and outside the slice; committing it would default every checkout to fm-local (unreachable on non-macOS → `no-backend` rows). | `.spur/config.yaml:145-151` | ACCEPTED — excluded from all batch commits via explicit paths; restored at terminal wrap; removal folded into feature closure. |
+| 1 | P2 (major) | test integrity / architecture | Migration dropped the inline choices/default pin without a catalog-content replacement: a silent catalog edit (`fallback: fix`→`stop`) would flip degraded routing while guard-parity/R5/proof-chain stay green. | `task-pipeline-proof-chain.test.ts:601`, `config/decisions/task-pipeline.yaml:54` | FIXED in-slice — catalog-content pin added to the R5 gate file (`shipped-workflows-catalog-decide.test.ts`): fallback values frozen standard/fix/fix, criteria non-empty, type choice; extended per the 1114 review (#2) with the lane-vocabulary key pin. |
+| 2 | P3 (minor) | hygiene / config scope | `.spur/config.yaml` machine-local `decisions.maker: fm-local` is tracked and outside the slice; committing it would default every checkout to fm-local (unreachable on non-macOS → `no-backend` rows). | `.spur/config.yaml:145-151` | RESOLVED — override removed: `.spur/config.yaml` has no `maker` key and no working-tree diff (`git diff --stat -- .spur/config.yaml` empty, 2026-10-08 verifyall P1); effective maker resolves from the operator global config. |
 | 3 | P4 (advisory) | test integrity | WAIVED_INLINE ledger scrutinized: fails loud in both misuse directions. Nits: malformed decide (no options) throws before the promised naming message; stale-entry detection misses deleted workflows. | `shipped-workflows-catalog-decide.test.ts:19,56-58,74-76` | ACCEPTED — tighten when the ledger is next used (currently empty). |
 | 4 | P4 (advisory) | usability / docs | S8 clock note lacks a version anchor; root package.json has no version field (instruction unactionable); prose ambiguity + state-id typo. | feature Notes | ACCEPTED — typo fixed; version anchor pinned when S8 executes the removal. |
-| 5 | P4 (advisory) | correctness (environment) | Stale GLOBAL registered workflow layer (spur v0.4.0 in ~/node_modules) shadows name-based `workflow validate/run task-pipeline` on this machine (pre-existing, exposed not caused; path-based validate silent). | `~/.config/spur/config.yaml:363`, `workflow-resolver.ts:96-103` | ACCEPTED — operator machine hygiene outside the diff; refresh global install before machine-level validate/run; shipped state judged by the R5 gate reading `config/workflows/` directly. |
+| 5 | P4 (advisory) | correctness (environment) | Stale GLOBAL registered workflow layer (spur v0.4.0 in ~/node_modules) shadows name-based `workflow validate/run task-pipeline` on this machine (pre-existing, exposed not caused; path-based validate silent). | `~/.config/spur/config.yaml:363`, `workflow-resolver.ts:96-103` | RESOLVED — 2026-10-08 (verifyall P1): operator global `~/.config/spur/config.yaml` `workflows.paths` switched from the absolute 0.4.0 install path to `bundled:workflows` (the config's own TODO; installed 0.4.0 carries `BUNDLED_PATH_PREFIX`). Name-based `workflow validate task-pipeline` now resolves the `shared` layer with catalog decides task-triage / failure-class / review-failure-class (source and linked CLIs). |
 | 6 | P4 (advisory) | evidence provenance | Probe definitions deleted after capture; pre-fail file is a disclosed transcription. | `.spur/run/1116-decide.json:3` | ACCEPTED — preserve probe definitions for future E2E artifacts. |
 
 Residual risk: P2#1 class-drift is now pinned; environment shadow (P4#5) persists until the global install is refreshed. No code defects in the slice.

@@ -4,7 +4,7 @@ name: Persist decision invocations to decision_logs and add a Board Decisions ta
 status: done
 template: feature-impl
 created_at: 2026-10-07T02:58:40.297Z
-updated_at: "2026-10-08T02:10:10.066Z"
+updated_at: "2026-10-08T16:25:05.992Z"
 feature_id: P1
 
 dependencies: ["1095", "1113"]
@@ -254,11 +254,28 @@ Implemented per the frozen design: a dedicated `decision_logs` table written onc
 
 ### Testing
 
-- Full gate `bun run spur-check` — PASS, exit 0 (`.spur/run/1100-spur-check6.log`): 10493 tests / 617 files / 0 fail; per-file coverage thresholds met; `recommended-post-check` rules clean (`every-export-has-tsdoc` satisfied after TSDoc additions).
-- Focused suites (verify-stage fresh re-runs, 317 pass / 0 fail): domain 69 (DAO + migration tests), app 52 (`tests/decision/`), config 24, server 33 (observability routes incl. 400/404/500), web 139 (observability incl. `decisions-tab.test.tsx` nav-intent/a11y/controls regression tests).
-- `bun run typecheck` exit 0 across workspaces; Biome clean on all touched files.
-- Coverage claim: new modules `packages/domain/src/dao/decision-log-dao.ts`, `packages/app/src/decision/decision-log.ts` covered by dedicated suites (decision-log-dao 8 pass, decision-log 12 pass, decision-log-query included in app 52); `apps/server/src/modules/observability/index.ts` at 100% lines / 97.5% functions after route-test additions.
-- Deferred (documented residual): plan-step-9 live E2E artifacts (`.spur/run/1100-decision-logs.json`, tab screenshot) not produced; AC1/AC2 evidence rests on the fresh 317-test focused re-runs + green full gate, accepted by review run 2 and verify.
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R0 | MET | decision_logs rows join their system_events lifecycle on invocationId rather than copying events: fresh 2026-10-08 artifact `.spur/run/1100-decision-logs.json` shows each row joined to 3 (fallback) or 1 (rejected) events; rejected row reuses the event invocationId `packages/app/src/decision/decision-events.ts:166-170` |
+| R1 | MET | `drizzle/0052_spur_cli_decision_logs.sql:8` CREATE TABLE IF NOT EXISTS decision_logs with maker_name `drizzle/0052_spur_cli_decision_logs.sql:17` and the four indexes `drizzle/0052_spur_cli_decision_logs.sql:39-42`; constant `packages/domain/src/migrations.ts:230` registered as 0052 `packages/domain/src/migrations.ts:1644-1645`; test `packages/domain/tests/dao/migrations.test.ts:255` |
+| R2 | MET | DecisionLogDao `packages/domain/src/dao/decision-log-dao.ts:171` with insert `:175`, list `:231`, summary `:255`, facets `:284`, get `:317` and retention 10,000 `packages/domain/src/dao/decision-log-dao.ts:4`; tests `packages/domain/tests/dao/decision-log-dao.test.ts:42` and prune `packages/domain/tests/dao/decision-log-dao.test.ts:193` |
+| R3 | MET | service-entry clock and log write opened before resolution `packages/app/src/decision/decision-service.ts:216-222`; rejected row `packages/app/src/decision/decision-events.ts:166-170`; end row with accepted/fallback/rejected outcome `packages/app/src/decision/decision-events.ts:245-252`; best-effort write `packages/app/tests/decision/decision-log.test.ts:178`; metadata/off modes `packages/app/tests/decision/decision-log.test.ts:88` |
+| R4 | MET | CLI sink `apps/cli/src/commands/decision.ts:159` passed at `apps/cli/src/commands/decision.ts:212`; workflow runner sink `packages/app/src/workflow/builtins.ts:122` used at `packages/app/src/workflow/actions/decide.ts:388`; inline driver sink `packages/app/src/services/inline-run-setup.ts:1581`; gate sink `packages/app/src/services/workflow-service.ts:2242` |
+| R5 | MET | config key `packages/config/src/index.ts:850`; mode read as config decisions log defaulting to full, off returns no sink `packages/app/src/decision/decision-log.ts:50-51`; tests `packages/app/tests/decision/decision-log.test.ts:119` and `packages/app/tests/decision/decision-log.test.ts:123`; doc row `docs/design/decision-catalog.md:35` |
+| R6 | MET | contracts `packages/contracts/src/observability.ts:205` and `packages/contracts/src/observability.ts:243`; query service p95 `packages/app/src/decision/decision-log-query.ts:84`; routes documented `apps/server/src/modules/observability/index.ts:424-425` and mounted `apps/server/src/modules/observability/index.ts:439-440`; route tests incl. 404 `apps/server/tests/modules/observability/index.test.ts:869` |
+| R7 | MET | tab registered after routing `apps/web/src/modules/observability/tabs.ts:65`; exact-list test `apps/web/tests/modules/observability/tabs.test.ts:31`; KpiCard reuse `apps/web/src/modules/observability/DecisionsTab.tsx:7`; View run events nav intent `apps/web/src/modules/observability/DecisionDetailDrawer.tsx:163` with test `apps/web/tests/modules/observability/decisions-tab.test.tsx:123` |
+| R8 | MET | commit 584fea1de touches no package.json or bun.lock and adds no option or command in `apps/cli/src/commands/decision.ts:159` (sink wiring only) |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Every decision invocation is recorded in the decision log | MET | command | fresh 2026-10-08 E2E: nine `spur decision run` invocations (fallback, input rejection, unknown id) wrote nine decision_logs rows, each joined to its events, artifact `.spur/run/1100-decision-logs.json`; seam `packages/app/src/decision/decision-events.ts:245-252`; DAO and log suites 87 pass / 0 fail `packages/domain/tests/dao/decision-log-dao.test.ts:42` |
+| AC2 — The Board Decisions tab lists and explains recorded decisions | MET | test | list and detail routes `apps/server/tests/modules/observability/index.test.ts:768` and `apps/server/tests/modules/observability/index.test.ts:848` (33 pass); tab drawer, nav intent, a11y and controls `apps/web/tests/modules/observability/decisions-tab.test.tsx:123` and `apps/web/tests/modules/observability/decisions-tab.test.tsx:186` (8 pass); DESIGN `DESIGN.md:453` |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 

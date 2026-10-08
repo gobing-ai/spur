@@ -4,7 +4,7 @@ name: Migrate task-pipeline triage decide to the task-triage catalog decision
 status: done
 template: feature-impl
 created_at: 2026-10-07T16:29:02.797Z
-updated_at: "2026-10-08T07:33:40.938Z"
+updated_at: "2026-10-08T16:36:33.583Z"
 feature_id: P1
 
 dependencies: ["1094"]
@@ -117,12 +117,23 @@ Blocked until the evidence bar in the feature P1 Entry condition is met for `tas
 
 ### Testing
 
-- `bunx biome check packages/app/tests/workflow/shipped-workflows-catalog-decide.test.ts packages/app/tests/workflow/task-pipeline-triage-routing.test.ts` → clean (formatter + noTemplateCurlyInString suppressions in place).
-- Focused suites (packages/app): `shipped-workflows-catalog-decide` + `task-pipeline-proof-chain` + `task-pipeline-triage-routing` → 55 tests, 0 fail — triage-routing's frozen contract asserts the catalog form, and the R5 gate walks task-pipeline.yaml strict (no waiver entries left).
-- `bun apps/cli/src/index.ts rule run --preset recommended-pre-check` → all 50 rules passed.
-- `workflow validate config/workflows/task-pipeline.yaml` → `workflow valid: task-pipeline (explicit(5))` with **zero deprecation warnings** (both remaining inline decides migrated).
-- E2E probe (deleted after capture): off/on rows per `.spur/run/1114-decide.json`; `workflow run` exit 0 both directions.
-- Full gate `bun run spur-check` (covers 1115+1116+1114 combined tree): PASS — see `.spur/run/1116-spur-check.log` (final receipt: `.spur/run/1116-spur-check.log`).
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: MEDIUM
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R0 | MET | operator evidence bar of 20 samples at acceptedRate 0.8 on a reachable maker recorded in task Q&A; prior-session receipt (`.spur/run/1114-r0-reliability.json`, gitignored, written 2026-10-08 00:36) shows task-triage on fm-local 41 samples, 28 accepted, 0.683, below the bar, so the slice proceeds on the explicit operator waiver recorded in Q&A; not re-executable this run (the fm-local samples are absent from the current project ledger) |
+| R1 | MET | triage decide is the catalog reference `decision: task-triage` with params wbs, the original evidence and resultFile `config/workflows/task-pipeline.yaml:641-651`; catalog entry `config/decisions/task-pipeline.yaml:19` |
+| R2 | MET | resultFile path unchanged `config/workflows/task-pipeline.yaml:651`; fallback values match the inline defaults replaced `packages/app/tests/workflow/shipped-workflows-catalog-decide.test.ts:94`; switch-off disabled row from the fallback with no events `packages/app/tests/workflow/actions/decide-catalog.test.ts:211`; fresh run 28 pass / 0 fail |
+| R3 | MET | fresh 2026-10-08 `diff -q config/workflows/task-pipeline.yaml apps/cli/config/workflows/task-pipeline.yaml` reports identical; source of truth `config/workflows/task-pipeline.yaml:641-651` |
+| R4 | MET | §4 audit row reads migrated `docs/design/decision-observability-and-adoption.md:227` |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Workflow decide action resolves a catalog decision by id | MET | test | accepted served result maps onto the frozen row and writes the resultFile `packages/app/tests/workflow/actions/decide-catalog.test.ts:153`; shipped workflow decide actions are catalog references resolving to existing choice decisions `packages/app/tests/workflow/shipped-workflows-catalog-decide.test.ts:85`; fresh run 28 pass / 0 fail |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
@@ -132,10 +143,10 @@ Blocked until the evidence bar in the feature P1 Entry condition is met for `tas
 
 | # | Priority | Dimension | Finding | Location | Disposition |
 |---|----------|-----------|---------|----------|-------------|
-| 1 | P2 (major) | correctness / ops | Stale GLOBAL registered workflow layer (spur v0.4.0, inline decides) outranks the shared layer for name-based resolution on this machine: `workflow validate task-pipeline` (by name) reads the pre-migration def and warns; `workflow run` by name would execute it. Pre-existing machine state, exposed not caused; affects 1114/1115/1116 equally; path-based validate silent. | `~/.config/spur/config.yaml:363`, `workflow-resolver.ts:96-103` | ACCEPTED — operator machine hygiene outside this diff (recorded for feature closure: refresh/link the global install, then re-run the invariant name-based). Slice code unaffected — all tests read `config/workflows/` directly. |
-| 2 | P3 (minor) | test integrity | `low/standard/high` vocabulary lost its exact pin (catalog-content pin checked criteria non-empty, not keys) while the projection shell hardcodes `low` — a catalog rename would silently kill the fast lane (fail-safe, but undetected). | `shipped-workflows-catalog-decide.test.ts:88` vs `task-pipeline.yaml:660` | **FIXED in-slice** — criteria-keys pin added (`['high','low','standard']`) in the 1116-owned gate file. |
-| 3 | P3 (minor) | waiver residual | Accepted 68.3%'s lane distribution (esp. `low`→fast-lane share) unmeasured — the other half of what the bar gated. | `.spur/run/1114-r0-reliability.json` | **RESOLVED** — lane distribution derived from `decision_logs` and recorded in Q&A (low 27 / standard 1, guard-bounded). |
-| 4 | P4 (advisory) | satellite accuracy | Sibling-row anchors off by one (`:666`→667, `:749`→750). | `docs/design/decision-observability-and-adoption.md:222-223` | **FIXED in-slice** — anchors corrected. |
+| 1 | P2 (major) | correctness / ops | Stale GLOBAL registered workflow layer (spur v0.4.0, inline decides) outranks the shared layer for name-based resolution on this machine: `workflow validate task-pipeline` (by name) reads the pre-migration def and warns; `workflow run` by name would execute it. Pre-existing machine state, exposed not caused; affects 1114/1115/1116 equally; path-based validate silent. | `~/.config/spur/config.yaml:363`, `workflow-resolver.ts:96-103` | RESOLVED — 2026-10-08 (verifyall P1): operator global `~/.config/spur/config.yaml` `workflows.paths` switched from the absolute 0.4.0 install path to `bundled:workflows` (the config's own TODO; installed 0.4.0 carries `BUNDLED_PATH_PREFIX`). Name-based `workflow validate task-pipeline` now resolves the `shared` layer with catalog decides task-triage / failure-class / review-failure-class (source and linked CLIs). |
+| 2 | P3 (minor) | test integrity | `low/standard/high` vocabulary lost its exact pin (catalog-content pin checked criteria non-empty, not keys) while the projection shell hardcodes `low` — a catalog rename would silently kill the fast lane (fail-safe, but undetected). | `shipped-workflows-catalog-decide.test.ts:88` vs `task-pipeline.yaml:660` | FIXED in-slice — criteria-keys pin added (`['high','low','standard']`) in the 1116-owned gate file. |
+| 3 | P3 (minor) | waiver residual | Accepted 68.3%'s lane distribution (esp. `low`→fast-lane share) unmeasured — the other half of what the bar gated. | `.spur/run/1114-r0-reliability.json` | RESOLVED — lane distribution derived from `decision_logs` and recorded in Q&A (low 27 / standard 1, guard-bounded). |
+| 4 | P4 (advisory) | satellite accuracy | Sibling-row anchors off by one (`:666`→667, `:749`→750). | `docs/design/decision-observability-and-adoption.md:222-223` | FIXED in-slice — anchors corrected. |
 | 5 | P4 (advisory) | batch hygiene | Tracked `.spur/config.yaml` maker override has no owning task for its removal. | `.spur/config.yaml:143-150` | ACCEPTED — restoration at terminal wrap + feature-closure note (batch report). |
 
 Residual risk: global-layer shadow until the operator refreshes the machine install (outside diff); accepted-lane skew (fast-lane preference) guard-bounded and audit-logged.

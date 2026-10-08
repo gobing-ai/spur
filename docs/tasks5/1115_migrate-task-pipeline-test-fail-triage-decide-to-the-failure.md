@@ -4,7 +4,7 @@ name: Migrate task-pipeline test-fail-triage decide to the failure-class catalog
 status: done
 template: feature-impl
 created_at: 2026-10-07T16:29:03.102Z
-updated_at: "2026-10-08T05:45:50.075Z"
+updated_at: "2026-10-08T16:27:49.951Z"
 feature_id: P1
 
 dependencies: ["1094"]
@@ -109,7 +109,23 @@ Migrated the test-fail-triage onEnter decide to the failure-class catalog refere
 
 ### Testing
 
-`bun run spur-check` — PASS (2026-10-07, worktree `sp/runall-p1-723834e9`): lint + typecheck clean; **10493 tests across 617 files, 0 fail** (log: .spur/run/1115-spur-check.log); post-check rules 2/2 passed. Focused re-runs during the slice: task-pipeline-triage-routing (15 tests), inline-pipeline-driver smoke (4 tests), inline-run-trace + cli-surface + agent + workflow-run-from (81 tests) — all green. Two earlier gate attempts flaked 5 unrelated timing-sensitive tests under machine load >30 (concurrent suites in other trees); all passed in isolation and in the final clean run — no code change was involved.
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: MEDIUM
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R0 | MET | operator evidence bar of 20 samples at acceptedRate 0.8 on a reachable maker recorded in task Q&A; prior-session receipt in Solution: failure-class on fm-local 20 of 20 accepted, acceptedRate 1.00 (corroborated by `.spur/run/1114-r0-reliability.json`, gitignored: 21 samples, 21 accepted on fm-local); not re-executable this run (the fm-local samples are absent from the current project ledger) |
+| R1 | MET | test-fail-triage decide is the catalog reference `decision: failure-class` with params wbs, the original evidence and resultFile `config/workflows/task-pipeline.yaml:687-695`; catalog entry `config/decisions/task-pipeline.yaml:32` |
+| R2 | MET | resultFile path unchanged `config/workflows/task-pipeline.yaml:695`; fallback values match the inline defaults replaced `packages/app/tests/workflow/shipped-workflows-catalog-decide.test.ts:94`; switch-off disabled row from the fallback with no events `packages/app/tests/workflow/actions/decide-catalog.test.ts:211`; fresh run 28 pass / 0 fail |
+| R3 | MET | fresh 2026-10-08 `diff -q config/workflows/task-pipeline.yaml apps/cli/config/workflows/task-pipeline.yaml` reports identical; source of truth `config/workflows/task-pipeline.yaml:687-695` |
+| R4 | MET | §4 audit row reads migrated `docs/design/decision-observability-and-adoption.md:228` |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Workflow decide action resolves a catalog decision by id | MET | test | accepted served result maps onto the frozen row and writes the resultFile `packages/app/tests/workflow/actions/decide-catalog.test.ts:153`; shipped workflow decide actions are catalog references resolving to existing choice decisions `packages/app/tests/workflow/shipped-workflows-catalog-decide.test.ts:85`; fresh run 28 pass / 0 fail |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 

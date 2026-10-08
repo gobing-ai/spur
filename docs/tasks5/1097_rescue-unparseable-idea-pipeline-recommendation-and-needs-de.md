@@ -4,7 +4,7 @@ name: Rescue unparseable idea-pipeline recommendation and needs-design signals w
 status: done
 template: feature-impl
 created_at: 2026-10-07T01:02:20.691Z
-updated_at: "2026-10-07T06:33:03.618Z"
+updated_at: "2026-10-08T16:22:47.734Z"
 feature_id: P1
 priority: P2
 tags:
@@ -125,20 +125,19 @@ Both configured ids show ≥1 recorded sample with the configured (catalog-defau
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
-- Confidence: HIGH
+- Confidence: MEDIUM
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | static-ref |
-| R2 | MET | test |
-| R3 | MET | test |
-| R4 | MET | test |
-| R5 | MET | command |
+| R1 | MET | rescue-only catalog file `config/decisions/idea-pipeline.yaml:1-9`: idea-recommendation choice proceed/reshape/drop/unknown fallback unknown `config/decisions/idea-pipeline.yaml:21-29`, needs-design choice design/skip fallback design `config/decisions/idea-pipeline.yaml:31-37`; shipped catalog contract test `packages/app/tests/workflow/shipped-workflows-catalog-decide.test.ts:85` |
+| R2 | MET | awk derivation stays first `config/workflows/idea-pipeline.yaml:154-156`; rescue runs only on unknown and writes only a model proceed/reshape/drop `config/workflows/idea-pipeline.yaml:157-168`; tests `apps/cli/tests/workflow/idea-pipeline-rescue.test.ts:126` and `apps/cli/tests/workflow/idea-pipeline-rescue.test.ts:150` |
+| R3 | MET | valid needs_design boolean short-circuits, else needs-design decision writes false only for model skip `config/workflows/idea-pipeline.yaml:169-179`; test `apps/cli/tests/workflow/idea-pipeline-rescue.test.ts:160` |
+| R4 | MET | parsed recommendation and valid boolean call no decision `apps/cli/tests/workflow/idea-pipeline-rescue.test.ts:116`; --auto routing unchanged `packages/app/tests/workflow/idea-pipeline-definition.test.ts:71` |
+| R5 | MET | fresh 2026-10-08 `spur decision status --reliability --json` reports evidence recorded, samples 1 for anatomy-validation-verdict, idea-recommendation, needs-design and gate-evidence (maker laya-local, fallbacks no-backend) after `spur decision run` probes; the prior typesafe samples cited in Solution are no longer in this ledger; report wiring `packages/app/src/decision/decision-reliability.ts:66-70` |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | Unparseable agent output resolves through a catalog decision: E2E matrix (a/b/c/d) drives the tracked YAML's own commands through the real source CLI in a temp project and asserts lifecycle rows; offline resolution paths verified (b): file stays unknown + full event lifecycle; (c): needs-design rescue fires on corrupt JSON. See AC1: apps/cli/tests/workflow/idea-pipeline-rescue.test.ts:1 |
-| Unparseable agent output resolves through a catalog decision | MET | test | see AC1: config/workflows/idea-pipeline.yaml:158 (scenario twin of AC1, feature Scenario R11) |
+| AC1 — Unparseable agent output resolves through a catalog decision | MET | test | prose report triggers the idea-recommendation catalog decision and records the fallback lifecycle `apps/cli/tests/workflow/idea-pipeline-rescue.test.ts:126`; corrupt needs-design JSON resolves through the needs-design decision `apps/cli/tests/workflow/idea-pipeline-rescue.test.ts:160`; fresh 2026-10-08 run 4 pass / 0 fail |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

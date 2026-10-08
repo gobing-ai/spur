@@ -4,7 +4,7 @@ name: "Harden decision-catalog test evidence: pin rescue ordering and persisted 
 status: done
 template: feature-impl
 created_at: 2026-10-07T07:09:24.800Z
-updated_at: "2026-10-07T18:29:18.732Z"
+updated_at: "2026-10-08T16:25:29.975Z"
 feature_id: P1
 
 ac_altitude: task-local
@@ -118,13 +118,13 @@ Key anchors: rescue step `config/workflows/history-anatomy.yaml:253`; scan test 
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Ordering pin added to apps/cli/tests/workflow-decision-scan.test.ts ("history-anatomy normalize-then-rescue ordering pin"). Structural: in state validate of config/workflows/history-anatomy.yaml the normalization action (contains `grep -vx 'Verdict: PASS'`) and the rescue action (contains `decision run anatomy-validation-verdict`) each match exactly one action chunk and rescueIndex == normalizeIndex + 1, so reorder or collapse fails. Behavioral: /bin/sh runs of both extracted commands over .spur/run fixture — YAML order with a PASS-first artifact leaves 0 stub calls and final line `Verdict: PASS`; reversed order leaves exactly 1 stub call; a `Verdict: FAIL` artifact leaves 0 stub calls and no appended PASS. Suite 4/4 pass (bun test apps/cli). |
-| R2 | MET | New packages/app/tests/workflow/decision-gate-persistence.test.ts wires registerSystemEventTap (packages/app/src/services/system-event-tap.ts:51) over createDbAdapter bun-sqlite in-memory + applyCliMigrations + SystemEventDao, runs the genuine no-backend gate-evidence fallback (no model stubs), awaits tap.flush(), reads dao.query (packages/domain/src/dao/system-event-dao.ts:359) for the decision.start/failure/end rows: lifecycle order by sequence, one shared invocationId, run_id 'run-gate' on every row via nested correlation.runId, decision.* source family, caller 'gate', minConfidence 0.7, makerSource 'catalog-default', correlation.nodeId 'approve-gate', failure reason 'no-backend', fallbackValue 'defer', end source 'default'. No .spur/run reads, no FakeSystemEventDao, env via config gateway only, no YAML edits. 1/1 pass; catalog suite still 10/10. |
+| R1 | MET | normalize-then-rescue ordering pin: structural rescue index is exactly one after normalization `apps/cli/tests/workflow-decision-scan.test.ts:125`; behavioral arm where the reversed order calls the maker stub once versus zero in YAML order `apps/cli/tests/workflow-decision-scan.test.ts:205-210`; fresh run 4 pass / 0 fail |
+| R2 | MET | committed DB-backed test wires registerSystemEventTap over in-memory SQLite `packages/app/tests/workflow/decision-gate-persistence.test.ts:62-66` (tap seam `packages/app/src/services/system-event-tap.ts:51`), flushes and asserts start/failure/end rows `packages/app/tests/workflow/decision-gate-persistence.test.ts:86-93` with run_id from correlation `packages/app/tests/workflow/decision-gate-persistence.test.ts:98`; fresh run pass |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | Failing-if-reordered proven two ways: structural index pin (reorder/collapse of the two validate actions fails) and the behavioral reversed-order arm where the stub fires exactly once versus zero in YAML order. |
-| AC2 | MET | test | Persistence proven from committed coverage alone through the real tap into in-memory SQLite (packages/app/tests/workflow/decision-gate-persistence.test.ts); no gitignored artifact is read anywhere in the test. |
+| AC1 | MET | test | reorder of the two validate actions fails the structural pin `apps/cli/tests/workflow-decision-scan.test.ts:125` and flips the behavioral stub count `apps/cli/tests/workflow-decision-scan.test.ts:209-210`; fresh run 4 pass / 0 fail |
+| AC2 | MET | test | gate-evidence no-backend fallback persists decision.start, decision.failure, decision.end through the real tap into in-memory SQLite with run_id populated `packages/app/tests/workflow/decision-gate-persistence.test.ts:93-98`; no gitignored artifact read; fresh run pass |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
