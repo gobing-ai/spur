@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: Migrate task-pipeline review-fail-triage decide to the review-failure-class catalog decision
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-10-07T16:29:03.402Z
-updated_at: "2026-10-07T22:42:49.476Z"
+updated_at: "2026-10-08T07:33:35.733Z"
 feature_id: P1
 
 dependencies: ["1094"]
 tags: ["decision", "workflow"]
 priority: P2
 estimate_hours: 3
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/run/1116-verdict.json
 ---
 
 ## 1116. Migrate task-pipeline review-fail-triage decide to the review-failure-class catalog decision
@@ -33,17 +35,17 @@ Blocked until the evidence bar in the feature P1 Entry condition is met for `rev
 
 ### Requirements
 
-- [ ] R0. Start condition: the operator records the evidence bar (minimum samples and accepted rate) in this task's Q&A. `spur decision status --reliability --json` on the project database then shows `review-failure-class` meeting it on the effective maker, counting only samples from a reachable maker (no `no-backend` fallbacks). Cite the report output in Solution. Gather samples with `spur decision run review-failure-class --param wbs=<wbs> --evidence <file>` over a recorded non-PASS review answer plus its task spec.
-- [ ] R1. Replace the inline `decide` in `review-fail-triage` with `{decision: review-failure-class, params: {wbs: ${vars.wbs}}, evidence: [...], resultFile: ...}`, keeping evidence `.spur/run/${vars.__runId}-review-answer.txt`, `${vars.taskSpecPath}` and resultFile `.spur/run/${vars.wbs}-review-failure-class.decision`.
-- [ ] R2. Guards, the following projection shell and the resultFile path are unchanged. With `workflow.decideDecisionMaker` off, the row is `fix` with `source: default`, `reason: disabled`, exactly as today.
-- [ ] R3. Regenerate the CLI bundle (`bun run --filter @gobing-ai/spur build:bundle`); `config/workflows/` stays the source of truth.
-- [ ] R4. Update the §4 audit row for `review-fail-triage` in the design satellite to "migrated (task 1116)".
-- [ ] R5. After this slice no shipped workflow declares an inline decide. Add a committed check that scans `config/workflows/*.yaml` and fails on any inline-form `decide` action (feature R2, first clause); start the one-release deprecation clock for S8 in the feature Notes.
+- [x] R0. Start condition: the operator records the evidence bar (minimum samples and accepted rate) in this task's Q&A. `spur decision status --reliability --json` on the project database then shows `review-failure-class` meeting it on the effective maker, counting only samples from a reachable maker (no `no-backend` fallbacks). Cite the report output in Solution. Gather samples with `spur decision run review-failure-class --param wbs=<wbs> --evidence <file>` over a recorded non-PASS review answer plus its task spec.
+- [x] R1. Replace the inline `decide` in `review-fail-triage` with `{decision: review-failure-class, params: {wbs: ${vars.wbs}}, evidence: [...], resultFile: ...}`, keeping evidence `.spur/run/${vars.__runId}-review-answer.txt`, `${vars.taskSpecPath}` and resultFile `.spur/run/${vars.wbs}-review-failure-class.decision`.
+- [x] R2. Guards, the following projection shell and the resultFile path are unchanged. With `workflow.decideDecisionMaker` off, the row is `fix` with `source: default`, `reason: disabled`, exactly as today.
+- [x] R3. Regenerate the CLI bundle (`bun run --filter @gobing-ai/spur build:bundle`); `config/workflows/` stays the source of truth.
+- [x] R4. Update the §4 audit row for `review-fail-triage` in the design satellite to "migrated (task 1116)".
+- [x] R5. After this slice no shipped workflow declares an inline decide. Add a committed check that scans `config/workflows/*.yaml` and fails on any inline-form `decide` action (feature R2, first clause); start the one-release deprecation clock for S8 in the feature Notes.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Workflow decide action resolves a catalog decision by id
-- [ ] AC2 — Every AI decision in shipped workflows comes from a catalog
+- [x] AC1 — Workflow decide action resolves a catalog decision by id
+- [x] AC2 — Every AI decision in shipped workflows comes from a catalog
 
 ### Q&A
 
@@ -108,15 +110,39 @@ The S8 deprecation clock goes in the feature Notes through `spur feature update 
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+- **R1 — catalog migration** (`config/workflows/task-pipeline.yaml:749`, decide id `:767`): the `review-fail-triage` inline decide became the catalog-reference form `{id, decision: review-failure-class, params: {wbs: '${vars.wbs}'}, evidence: ['.spur/run/'${vars.__runId}'-review-answer.txt', '${vars.taskSpecPath}'], resultFile: '.spur/run/'${vars.wbs}'-review-failure-class.decision'}`. The `id` is preserved so guard parity and the audit-row contract stay intact; question/choices/minConfidence/fallback live in the bundled catalog (`config/decisions/task-pipeline.yaml:54` — minConfidence 0.8, fallback `fix`).
+- **R0 — evidence bar met** (`.spur/run/1116-r0-reliability.json`): `review-failure-class` × fm-local — 20 samples, 20 accepted, acceptedRate 1.0 (bar ≥ 0.80), medianConfidence 1.0, p50 4120ms; no fallbacks. Maker served keyless via the project-layer `.spur/config.yaml` override (setup recorded in the 2026-10-07 Q&A; override restored after capture).
+- **R5 — committed gate** (`packages/app/tests/workflow/shipped-workflows-catalog-decide.test.ts`): walks every shipped workflow definition and fails on any `kind: decide` that does not satisfy `isCatalogDecideOptions`. Pre-edit FAIL proven before the migration (`.spur/run/1116-r5-prefail.txt` — names `task-pipeline.yaml/triage/onEnter: id=task-triage` and `task-pipeline.yaml/review-fail-triage/onEnter: id=review-failure-class`). After this slice and task 1114 (same batch, landed before this gate run) the check runs strict: no shipped workflow declares an inline decide.
+- **R3 — bundle** regenerated via `bun run --filter @gobing-ai/spur build:bundle`; the bundled `apps/cli/config/workflows/task-pipeline.yaml` is byte-identical to `config/workflows/task-pipeline.yaml` (diff-verified).
+- **R4 — satellite** §4 audit row updated: `docs/design/decision-observability-and-adoption.md:223` → "catalog decide — migrated (task 1116)", anchor `config/workflows/task-pipeline.yaml:749`. The S8 one-release deprecation clock for remaining external consumers starts at this slice's landing and is recorded in the feature Notes.
+- **Collateral** — `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:601-603` frozen pin moved from the inline shape (`choices ['fix','stop']`) to the catalog form (`decision`, `params.wbs`).
+- **E2E** (`.spur/run/1116-decide.json`): one-state probe carried the migrated block verbatim. Off row (`run-71ebc8e0-5f78-49a5-874c-1278464cd4e6`): exact degraded contract `fix/default/disabled`. On row (`run-93f0a8dc-dd68-4219-81ab-336351127469`): `fix/model/fm-local`, confidence 1, `accepted`, 11466ms; decision_logs row `review-failure-class|fix||model|accepted|1.0|fm-local|shared`. First enabled run (`run-7cc72cef`) hit the catalog minConfidence gate (0.029 < 0.8 → low-confidence→fix) on thin evidence before the enriched run — recorded, not hidden.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- **R5 pre-proof:** `bun test tests/workflow/shipped-workflows-catalog-decide.test.ts` on the pre-migration tree → FAIL naming both remaining inline slices (`.spur/run/1116-r5-prefail.txt`); after R1 → PASS (10 defs walked; task-triage then waived to 1114, strict after 1114 landed).
+- Focused suites (packages/app): `shipped-workflows-catalog-decide` + `task-pipeline-proof-chain` + `task-pipeline-triage-routing` → 55 tests, 0 fail.
+- `bun run --filter @gobing-ai/spur build:bundle` exit 0; bundled `task-pipeline.yaml` byte-identical to source (BUNDLE-IDENTICAL).
+- `workflow validate config/workflows/task-pipeline.yaml` → valid; deprecation warnings reduced from two to one (task-triage, closed by 1114 in the same batch) to zero.
+- E2E probe (deleted after capture): off/on rows per `.spur/run/1116-decide.json`, including the honest first-enabled-run low-confidence→fix row before the enriched accepted run.
+- Full gate `bun run spur-check` (covers 1115+1116+1114 combined tree): PASS — see `.spur/run/1116-spur-check.log` (final receipt: `.spur/run/1116-spur-check.log`).
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+## Review — fresh sp-super-reviewer, 2026-10-07 (native subagent, review-only)
+
+**Verdict: PASS-WITH-FINDINGS.** Full report transcribed from the reviewer's output; review-time gate 10503 pass / 0 fail / 618 files; final post-fix gate (authoritative receipt): 10506 pass / 618 files / 704.36s with 1 fail = command-gate.test.ts soft-probe load timeout [5000.64ms], isolated re-run 14 pass / 0 fail / 857ms → documented flake (.spur/run/1116-spur-check.log).
+
+| # | Priority | Dimension | Finding | Location | Disposition |
+|---|----------|-----------|---------|----------|-------------|
+| 1 | P2 (major) | test integrity / architecture | Migration dropped the inline choices/default pin without a catalog-content replacement: a silent catalog edit (`fallback: fix`→`stop`) would flip degraded routing while guard-parity/R5/proof-chain stay green. | `task-pipeline-proof-chain.test.ts:601`, `config/decisions/task-pipeline.yaml:54` | **FIXED in-slice** — catalog-content pin added to the R5 gate file (`shipped-workflows-catalog-decide.test.ts`): fallback values frozen standard/fix/fix, criteria non-empty, type choice; extended per the 1114 review (#2) with the lane-vocabulary key pin. |
+| 2 | P3 (minor) | hygiene / config scope | `.spur/config.yaml` machine-local `decisions.maker: fm-local` is tracked and outside the slice; committing it would default every checkout to fm-local (unreachable on non-macOS → `no-backend` rows). | `.spur/config.yaml:145-151` | ACCEPTED — excluded from all batch commits via explicit paths; restored at terminal wrap; removal folded into feature closure. |
+| 3 | P4 (advisory) | test integrity | WAIVED_INLINE ledger scrutinized: fails loud in both misuse directions. Nits: malformed decide (no options) throws before the promised naming message; stale-entry detection misses deleted workflows. | `shipped-workflows-catalog-decide.test.ts:19,56-58,74-76` | ACCEPTED — tighten when the ledger is next used (currently empty). |
+| 4 | P4 (advisory) | usability / docs | S8 clock note lacks a version anchor; root package.json has no version field (instruction unactionable); prose ambiguity + state-id typo. | feature Notes | ACCEPTED — typo fixed; version anchor pinned when S8 executes the removal. |
+| 5 | P4 (advisory) | correctness (environment) | Stale GLOBAL registered workflow layer (spur v0.4.0 in ~/node_modules) shadows name-based `workflow validate/run task-pipeline` on this machine (pre-existing, exposed not caused; path-based validate silent). | `~/.config/spur/config.yaml:363`, `workflow-resolver.ts:96-103` | ACCEPTED — operator machine hygiene outside the diff; refresh global install before machine-level validate/run; shipped state judged by the R5 gate reading `config/workflows/` directly. |
+| 6 | P4 (advisory) | evidence provenance | Probe definitions deleted after capture; pre-fail file is a disclosed transcription. | `.spur/run/1116-decide.json:3` | ACCEPTED — preserve probe definitions for future E2E artifacts. |
+
+Residual risk: P2#1 class-drift is now pinned; environment shadow (P4#5) persists until the global install is refreshed. No code defects in the slice.
 
 ### References
 
@@ -126,4 +152,7 @@ The S8 deprecation clock goes in the feature Notes through `spur feature update 
 
 - 2026-10-07T16:29:38.703Z backlog → blocked (system)
 - 2026-10-07T22:42:49.476Z blocked → todo (system)
+- 2026-10-08T07:33:23.487Z todo → wip (system)
+- 2026-10-08T07:33:32.994Z wip → testing (system)
+- 2026-10-08T07:33:35.704Z testing → done (system)
 

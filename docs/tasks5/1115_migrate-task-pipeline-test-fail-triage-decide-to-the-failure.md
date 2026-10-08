@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: Migrate task-pipeline test-fail-triage decide to the failure-class catalog decision
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-10-07T16:29:03.102Z
-updated_at: "2026-10-07T22:43:06.819Z"
+updated_at: "2026-10-08T05:45:50.075Z"
 feature_id: P1
 
 dependencies: ["1094"]
 tags: ["decision", "workflow"]
 priority: P2
 estimate_hours: 2
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/run/1115-verdict.json
 ---
 
 ## 1115. Migrate task-pipeline test-fail-triage decide to the failure-class catalog decision
@@ -33,15 +35,15 @@ Blocked until the evidence bar in the feature P1 Entry condition is met for `fai
 
 ### Requirements
 
-- [ ] R0. Start condition: the operator records the evidence bar (minimum samples and accepted rate) in this task's Q&A. `spur decision status --reliability --json` on the project database then shows `failure-class` meeting it on the effective maker, counting only samples from a reachable maker (no `no-backend` fallbacks). Cite the report output in Solution. Gather samples with `spur decision run failure-class --param wbs=<wbs> --evidence <file>` over a recorded quality-gate findings file from a failed run.
-- [ ] R1. Replace the inline `decide` in `test-fail-triage` with `{decision: failure-class, params: {wbs: ${vars.wbs}}, evidence: [...], resultFile: ...}`, keeping evidence `.spur/run/${vars.wbs}-test-gate.findings` and resultFile `.spur/run/${vars.wbs}-failure-class.decision`.
-- [ ] R2. Guards, the following projection shell and the resultFile path are unchanged. With `workflow.decideDecisionMaker` off, the row is `fix` with `source: default`, `reason: disabled`, exactly as today.
-- [ ] R3. Regenerate the CLI bundle (`bun run --filter @gobing-ai/spur build:bundle`); `config/workflows/` stays the source of truth.
-- [ ] R4. Update the §4 audit row for `test-fail-triage` in the design satellite to "migrated (task 1115)".
+- [x] R0. Start condition: the operator records the evidence bar (minimum samples and accepted rate) in this task's Q&A. `spur decision status --reliability --json` on the project database then shows `failure-class` meeting it on the effective maker, counting only samples from a reachable maker (no `no-backend` fallbacks). Cite the report output in Solution. Gather samples with `spur decision run failure-class --param wbs=<wbs> --evidence <file>` over a recorded quality-gate findings file from a failed run.
+- [x] R1. Replace the inline `decide` in `test-fail-triage` with `{decision: failure-class, params: {wbs: ${vars.wbs}}, evidence: [...], resultFile: ...}`, keeping evidence `.spur/run/${vars.wbs}-test-gate.findings` and resultFile `.spur/run/${vars.wbs}-failure-class.decision`.
+- [x] R2. Guards, the following projection shell and the resultFile path are unchanged. With `workflow.decideDecisionMaker` off, the row is `fix` with `source: default`, `reason: disabled`, exactly as today.
+- [x] R3. Regenerate the CLI bundle (`bun run --filter @gobing-ai/spur build:bundle`); `config/workflows/` stays the source of truth.
+- [x] R4. Update the §4 audit row for `test-fail-triage` in the design satellite to "migrated (task 1115)".
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Workflow decide action resolves a catalog decision by id
+- [x] AC1 — Workflow decide action resolves a catalog decision by id
 
 ### Q&A
 
@@ -97,15 +99,36 @@ Blocked until the evidence bar in the feature P1 Entry condition is met for `fai
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Migrated the test-fail-triage onEnter decide to the failure-class catalog reference (R0 evidence: failure-class accepted 20/20 samples on fm-local, acceptedRate 1.00 ≥ 0.8, reachable keyless maker; median confidence 1.0).
+
+**The change (config/workflows/task-pipeline.yaml:666, test-fail-triage onEnter):** the inline decide options block (question/choices/default, the R0-deprecated form) is replaced by the catalog-reference form — `id: failure-class`, `decision: failure-class`, `params: {wbs: ${vars.wbs}}`, evidence and resultFile unchanged. Routing is untouched: choices `fix`/`stop`, fallback `fix`, minConfidence 0.8 and the four edges (failed/failed-check, failed/retry-exhausted, test-fix, failed/failed-check) live in the catalog/edges exactly as before.
+
+**E2E proof (decisionMaker off → on, one-state probe .spur/e2e/1115-probe.yaml driving the exact migrated block):** switch off writes the R2 degraded row (`fix`, source default, reason disabled, backend null) — field-identical to the pre-migration inline off-row; switch on resolves through the catalog via fm-local (`fix`, source model, reason accepted, confidence 1) and persists a decision_logs row with caller=workflow, catalog_layer=shared and catalog_source attribution (the probe runs the exact verbatim-identical options block, so the recorded row's `node` is the probe state id `probe`, not the shipped state name). `workflow validate` no longer emits the deprecation warning for test-fail-triage (remaining warnings are the not-yet-migrated 1114/1116 steps). Rows: .spur/run/1115-decide.json.
+
+**Test collateral (behavior preserved; pins updated to the migrated contract):** 0943's frozen-contract test (packages/app/tests/workflow/task-pipeline-triage-routing.test.ts:327) now pins the catalog form (decision id, params, evidence, resultFile) instead of the deleted inline choices/default; the 0503 driver smoke's decisionMaker-off simulation (plugins/sp/tests/inline-pipeline-driver.test.ts:246) sources the degraded row value from the shipped catalog fallback (config/decisions/task-pipeline.yaml:42) instead of the removed inline `default` key, restoring the second test-fix hop its FAIL scenario expects.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+`bun run spur-check` — PASS (2026-10-07, worktree `sp/runall-p1-723834e9`): lint + typecheck clean; **10493 tests across 617 files, 0 fail** (log: .spur/run/1115-spur-check.log); post-check rules 2/2 passed. Focused re-runs during the slice: task-pipeline-triage-routing (15 tests), inline-pipeline-driver smoke (4 tests), inline-run-trace + cli-surface + agent + workflow-run-from (81 tests) — all green. Two earlier gate attempts flaked 5 unrelated timing-sensitive tests under machine load >30 (concurrent suites in other trees); all passed in isolation and in the final clean run — no code change was involved.
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+Phase 7 review by fresh-context sp-super-reviewer, 2026-10-07, scope = uncommitted 1115 diff @ 584fea1de. Verdict **PASS-WITH-FINDINGS** — gate-clearing (no P1/P2; six findings, all dispositioned).
+
+Invariant verification: I1 shell/guards/resultFile byte-identical (only +4 comment lines + options swap) PASS; I2 off-row contract-exact + on-row accepted via fm-local PASS; I3 comment claim-by-claim accurate PASS; I4 `workflow validate` exit 0, no test-fail-triage deprecation warning PASS; I5 bundled copy byte-identical to source PASS; I6 pin-updates only — value contract preserved via DECISIONS_CATALOG source + guard-parity pins (fix/stop) + two test-fix hops in the FAIL scenario PASS; I7 scope clean (6 files; spec diff = system `updated_at` + Solution/Testing only) PASS.
+
+Functional traceability: R0 MET (reliability report: failure-class × fm-local 21/21 accepted, acceptedRate 1.0 ≥ 0.8, medianConfidence 1.0, evidence=recorded); R1-R4 MET; AC1 MET (E2E on-run `reason: accepted`, `source: model`, decisionLog caller=workflow).
+
+Findings (severity per P1–P4 scale):
+
+| Priority | Finding | Disposition |
+| --- | --- | --- |
+| P3 | `.spur/config.yaml` maker override is dirty in the tree; must not be committed with 1115 — restore before merge | DEFER (operator restore-before-merge step, planned) |
+| P4 | `.spur/e2e/1115-probe.yaml` untracked and not gitignored; would ship under `git add -A` | DEFER (delete at cleanup) |
+| P4 | Solution anchor drift: frozen-contract test cited :324, begins :327 | FIXED |
+| P4 | Solution wording overstated decisionLog `node` field (row records probe state id) | FIXED |
+| P4 | Design "Frozen action" omits `id:` key present in shipped options | ACCEPTED (preserves frozen row-id contract pinned by guard-parity) |
+| P4 | State description's retired inline-form parenthetical left as-is | ACCEPTED (Design scoped description edits to only-if-it-names-the-inline-question) |
 
 ### References
 
@@ -115,4 +138,5 @@ Blocked until the evidence bar in the feature P1 Entry condition is met for `fai
 
 - 2026-10-07T16:29:38.473Z backlog → blocked (system)
 - 2026-10-07T22:43:06.819Z blocked → todo (system)
+- 2026-10-08T05:45:50.062Z todo → done (system)
 

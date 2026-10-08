@@ -19,6 +19,8 @@ interface ActionOptions {
     expect?: string;
     resultFile?: string;
     default?: string;
+    // Catalog-reference decide (1115).
+    decision?: string;
 }
 
 interface PipelineAction {
@@ -57,6 +59,13 @@ const ROOT = join(import.meta.dir, '..', '..', '..');
 const PIPELINE = parse(
     readFileSync(join(ROOT, 'config', 'workflows', 'task-pipeline.yaml'), 'utf8'),
 ) as PipelineDefinition;
+
+// Catalog fallbacks (task 1115): the smoke's decide simulation writes the decisionMaker-off
+// degraded row, whose value is the INLINE default pre-migration and the catalog `fallback`
+// after — read it from the shipped catalog instead of duplicating it here.
+const DECISIONS_CATALOG = parse(readFileSync(join(ROOT, 'config', 'decisions', 'task-pipeline.yaml'), 'utf8')) as {
+    decisions: Record<string, { fallback: string }>;
+};
 
 function expand(value: string, vars: Record<string, string>): string {
     return value.replace(/\$\{vars\.([A-Za-z0-9_]+)\}/g, (_match, key: string) => vars[key] ?? '');
@@ -234,11 +243,13 @@ function runInlineSmoke(
                 // 0943/0941: the smoke simulates the decisionMaker-off contract — runDecide
                 // always writes the schemaVersion-1 row with the degraded default value; the
                 // driver script (`inline-run-setup --decide`) owns the real execution.
+                // 1115: catalog-reference decide has no inline `default` — degrade to the
+                // catalog fallback (config/decisions/task-pipeline.yaml).
                 const resultFile = expand(action.options?.resultFile ?? '', vars);
                 mkdirSync(dirname(join(cwd, resultFile)), { recursive: true });
                 writeFileSync(
                     join(cwd, resultFile),
-                    `${JSON.stringify({ schemaVersion: 1, value: action.options?.default ?? '', degraded: true, reason: 'disabled' })}\n`,
+                    `${JSON.stringify({ schemaVersion: 1, value: action.options?.default ?? DECISIONS_CATALOG.decisions[action.options?.decision ?? '']?.fallback ?? '', degraded: true, reason: 'disabled' })}\n`,
                 );
                 continue;
             }

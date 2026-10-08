@@ -635,15 +635,16 @@ states:
                     mkdir -p .spur/run; if [ -n "$mode" ]; then printf '%s\n' "$mode" > ".spur/run/$wbs-mode.txt"; exit 0; fi; DF=".spur/run/$wbs-diffstat.json"; if ! jq -e 'type == "object"' "$DF" >/dev/null 2>&1; then printf 'safety\n' > ".spur/run/$wbs-mode.txt"; exit 0; fi; jq -r 'if .sensitive == true or ((.insertions // 0) + (.deletions // 0)) > 400 then "safety" else empty end' "$DF" 2>/dev/null > ".spur/run/$wbs-mode.txt"; exit 0
           # (d) lane decision — degrades to the standard default whenever workflow.decideDecisionMaker
           # is off (R4), so with the flag off this state is pure shell: no model call is made.
+          # 1114: the inline decide moved to the bundled catalog (`config/decisions/task-pipeline.yaml`
+          # → `task-triage`), whose R0 samples measured this exact prompt before the migration.
+          # Routing contract is unchanged: same evidence, same resultFile, same guards, same
+          # `standard` fallback when the switch is off (field-identical to this form's default).
           - kind: decide
             options:
                 id: task-triage
-                method: choice
-                question: >-
-                    The quality gate is green. Which verification lane does this diff deserve —
-                    low (small, contained diff — fast lane), standard, or high caution?
-                choices: [low, standard, high]
-                default: standard
+                decision: task-triage
+                params:
+                    wbs: ${vars.wbs}
                 evidence:
                     - .spur/run/${vars.wbs}-diffstat.json
                     - ${vars.taskSpecPath}
@@ -679,15 +680,16 @@ states:
           missing/corrupt decision fails closed to failed-check. (0976 R2 collapsed the former
           `retryable` lane: the declared default made it unreachable on the inline path.)
       onEnter:
+          # 1115: catalog-reference decide (task 1094 form) — question/choices/fallback live in
+          # the bundled catalog (`config/decisions/task-pipeline.yaml` → `failure-class`), whose
+          # R0 samples measured this exact prompt before the migration. Routing contract is
+          # unchanged: same resultFile, same guards, same `fix` fallback when the switch is off.
           - kind: decide
             options:
                 id: failure-class
-                method: choice
-                question: >-
-                    The quality gate failed. Is the failure fixable by the repair agent, or should
-                    the run stop here?
-                choices: [fix, stop]
-                default: fix
+                decision: failure-class
+                params:
+                    wbs: ${vars.wbs}
                 evidence:
                     - .spur/run/${vars.wbs}-test-gate.findings
                 resultFile: .spur/run/${vars.wbs}-failure-class.decision
@@ -757,15 +759,16 @@ states:
           fix → the shared test-fix hop, stop → failed with terminalReason failed-check. A
           missing/corrupt decision fails closed to failed-check.
       onEnter:
+          # 1116: the inline decide moved to the bundled catalog (`config/decisions/task-pipeline.yaml`
+          # → `review-failure-class`), whose R0 samples measured this exact prompt before the
+          # migration. Routing contract is unchanged: same evidence, same resultFile, same guards,
+          # same `fix` fallback when the switch is off.
           - kind: decide
             options:
                 id: review-failure-class
-                method: choice
-                question: >-
-                    The review did not certify PASS (FAIL or PARTIAL). Is the finding fixable by the
-                    repair agent, or should the run stop here for the operator?
-                choices: [fix, stop]
-                default: fix
+                decision: review-failure-class
+                params:
+                    wbs: ${vars.wbs}
                 evidence:
                     - .spur/run/${vars.__runId}-review-answer.txt
                     - ${vars.taskSpecPath}

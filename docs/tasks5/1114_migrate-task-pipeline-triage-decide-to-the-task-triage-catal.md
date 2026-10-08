@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: Migrate task-pipeline triage decide to the task-triage catalog decision
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-10-07T16:29:02.797Z
-updated_at: "2026-10-07T22:42:55.050Z"
+updated_at: "2026-10-08T07:33:40.938Z"
 feature_id: P1
 
 dependencies: ["1094"]
 tags: ["decision", "workflow"]
 priority: P2
 estimate_hours: 2
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/run/1114-verdict.json
 ---
 
 ## 1114. Migrate task-pipeline triage decide to the task-triage catalog decision
@@ -33,15 +35,15 @@ Blocked until the evidence bar in the feature P1 Entry condition is met for `tas
 
 ### Requirements
 
-- [ ] R0. Start condition: the operator records the evidence bar (minimum samples and accepted rate) in this task's Q&A. `spur decision status --reliability --json` on the project database then shows `task-triage` meeting it on the effective maker, counting only samples from a reachable maker (no `no-backend` fallbacks). Cite the report output in Solution. Gather samples with `spur decision run task-triage --param wbs=<wbs> --evidence <file>` over a green-gate diff from a recent task (diffstat JSON plus task spec).
-- [ ] R1. Replace the inline `decide` in `triage` with `{decision: task-triage, params: {wbs: ${vars.wbs}}, evidence: [...], resultFile: ...}`, keeping evidence `.spur/run/${vars.wbs}-diffstat.json`, `${vars.taskSpecPath}` and resultFile `.spur/run/${vars.wbs}-triage.decision`.
-- [ ] R2. Guards, the following projection shell and the resultFile path are unchanged. With `workflow.decideDecisionMaker` off, the row is `standard` with `source: default`, `reason: disabled`, exactly as today.
-- [ ] R3. Regenerate the CLI bundle (`bun run --filter @gobing-ai/spur build:bundle`); `config/workflows/` stays the source of truth.
-- [ ] R4. Update the §4 audit row for `triage` in the design satellite to "migrated (task 1114)".
+- [x] R0. Start condition: the operator records the evidence bar (minimum samples and accepted rate) in this task's Q&A. `spur decision status --reliability --json` on the project database then shows `task-triage` meeting it on the effective maker, counting only samples from a reachable maker (no `no-backend` fallbacks). Cite the report output in Solution. Gather samples with `spur decision run task-triage --param wbs=<wbs> --evidence <file>` over a green-gate diff from a recent task (diffstat JSON plus task spec).
+- [x] R1. Replace the inline `decide` in `triage` with `{decision: task-triage, params: {wbs: ${vars.wbs}}, evidence: [...], resultFile: ...}`, keeping evidence `.spur/run/${vars.wbs}-diffstat.json`, `${vars.taskSpecPath}` and resultFile `.spur/run/${vars.wbs}-triage.decision`.
+- [x] R2. Guards, the following projection shell and the resultFile path are unchanged. With `workflow.decideDecisionMaker` off, the row is `standard` with `source: default`, `reason: disabled`, exactly as today.
+- [x] R3. Regenerate the CLI bundle (`bun run --filter @gobing-ai/spur build:bundle`); `config/workflows/` stays the source of truth.
+- [x] R4. Update the §4 audit row for `triage` in the design satellite to "migrated (task 1114)".
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Workflow decide action resolves a catalog decision by id
+- [x] AC1 — Workflow decide action resolves a catalog decision by id
 
 ### Q&A
 
@@ -57,6 +59,14 @@ Blocked until the evidence bar in the feature P1 Entry condition is met for `tas
 
 - **Evidence bar (operator decision, 2026-10-07):** at least **20 samples** with an **accepted rate ≥ 80%** for `task-triage` on its effective maker, in `spur decision status --reliability --json` on the project database. Only samples served by a configured, reachable maker count; `no-backend` fallbacks are excluded (feature P1 Entry condition). The 80% rate matches the catalog `minConfidence: 0.8`, and the same bar applies to all three adoption slices.
 - **Status:** the task stays `blocked` until the report meets the bar; no waiver. Report on 2026-10-07: `task-triage` has 0 samples.
+
+#### Q&A entry — 2026-10-08T06:23:32.462Z
+
+- **Operator decision (Robin Min, session approval):** the evidence bar is WAIVED for this slice; the task proceeds on an explicit operator waiver recorded here per the feature P1 entry condition ("A slice that starts without meeting it records an explicit operator waiver there").
+- **Measured evidence** (`.spur/run/1114-r0-reliability.json`, `spur decision status --reliability --json` on the project DB): `task-triage` × fm-local — 41 samples, 28 accepted, acceptedRate 68.3% (bar: ≥ 80%), fallbacks all `low-confidence` (13), medianConfidence 1.0, p50 8.4s. The single `no-backend` (typesafe) sample is excluded per the entry condition.
+- **Waiver rationale (operator-approved):** the catalog's declared fallback `standard` is field-identical to the inline form's `default: standard`, so below-bar acceptance degrades routing to exactly today's behavior; the migration adds observability and catalog governance without increasing reliance on the model.
+
+- **Waiver residual addendum (review finding #3, 2026-10-08):** accepted-sample lane distribution from `decision_logs` (task-triage × model × accepted, N=28): **low 27, standard 1**. The accepted answers overwhelmingly select the fast lane; the deterministic pre-decide guard pins `safety` for sensitive/>400-line diffs before the decide (`config/workflows/task-pipeline.yaml:640`), so `low` only ever applies to small contained diffs — the fast lane's intended scope — and every non-`low` value takes today's standard path. Degradation direction is unchanged (fail-safe to standard).
 
 ### Design
 
@@ -98,15 +108,37 @@ Blocked until the evidence bar in the feature P1 Entry condition is met for `tas
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+- **R1 — catalog migration** (`config/workflows/task-pipeline.yaml:636`, decide id `:641`): the `triage` inline decide became the catalog-reference form `{id, decision: task-triage, params: {wbs: '${vars.wbs}'}, evidence: ['.spur/run/'${vars.wbs}'-diffstat.json', '${vars.taskSpecPath}'], resultFile: '.spur/run/'${vars.wbs}'-triage.decision'}`. Evidence, resultFile, guards, projection and the `standard` default are unchanged from the inline form; question/choices/fallback live in the bundled catalog (`config/decisions/task-pipeline.yaml:30`, fallback `standard`).
+- **R0 — evidence + operator waiver** (`.spur/run/1114-r0-reliability.json`): `task-triage` × fm-local — 41 samples, 28 accepted, acceptedRate 68.3% (bar ≥ 80%), fallbacks all `low-confidence` (13), medianConfidence 1.0, p50 8439ms; the single `no-backend` typesafe sample is excluded per the entry condition. **Operator (Robin Min) waived the bar in-session on 2026-10-07**; the waiver and rationale are recorded in this task's Q&A: the catalog's declared fallback `standard` is field-identical to the inline form's `default: standard`, so below-bar acceptance degrades routing to exactly today's behavior — the migration adds observability and catalog governance without increasing reliance on the model.
+- **R2 — off-row contract proven** (`.spur/run/1114-decide.json`): with `workflow.decideDecisionMaker` off, probe run `run-47c28809-f3cd-4008-99bf-2c49fa0f78a8` produced the exact degraded row `standard/default/disabled` (degraded true, backend/confidence/evidenceDigest null). On row (`run-de6f6e34-f30a-4251-b8d7-3056b29cade4`): `standard/model/fm-local`, confidence 1, `accepted`, 10902ms; decision_logs row `task-triage|standard||model|accepted|1.0|fm-local|config-default|shared`.
+- **R3 — bundle** regenerated via `bun run --filter @gobing-ai/spur build:bundle`; bundled file diff-identical to source.
+- **R4 — satellite** §4 audit row updated: `docs/design/decision-observability-and-adoption.md:221` → "catalog decide — migrated (task 1114, operator waiver on the evidence bar)", anchor `config/workflows/task-pipeline.yaml:603` (state id line; the decide block sits at `:636`).
+- **Collateral** — `packages/app/tests/workflow/task-pipeline-triage-routing.test.ts` frozen pin moved from the inline shape (`method/choices/default`) to the catalog form (`decision`, `params.wbs`); `packages/app/tests/workflow/shipped-workflows-catalog-decide.test.ts` (1116 R5) runs strict — the task-triage waiver entry was deleted when this slice landed.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- `bunx biome check packages/app/tests/workflow/shipped-workflows-catalog-decide.test.ts packages/app/tests/workflow/task-pipeline-triage-routing.test.ts` → clean (formatter + noTemplateCurlyInString suppressions in place).
+- Focused suites (packages/app): `shipped-workflows-catalog-decide` + `task-pipeline-proof-chain` + `task-pipeline-triage-routing` → 55 tests, 0 fail — triage-routing's frozen contract asserts the catalog form, and the R5 gate walks task-pipeline.yaml strict (no waiver entries left).
+- `bun apps/cli/src/index.ts rule run --preset recommended-pre-check` → all 50 rules passed.
+- `workflow validate config/workflows/task-pipeline.yaml` → `workflow valid: task-pipeline (explicit(5))` with **zero deprecation warnings** (both remaining inline decides migrated).
+- E2E probe (deleted after capture): off/on rows per `.spur/run/1114-decide.json`; `workflow run` exit 0 both directions.
+- Full gate `bun run spur-check` (covers 1115+1116+1114 combined tree): PASS — see `.spur/run/1116-spur-check.log` (final receipt: `.spur/run/1116-spur-check.log`).
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+## Review — fresh sp-super-reviewer, 2026-10-08 (native subagent, review-only)
+
+**Verdict: PASS-WITH-FINDINGS.** Waiver scrutiny (requested as the batch's riskiest disposition): **sound and honestly recorded** — artifact numbers match the Q&A verbatim; equivalence claim verified in code (`minConfidence: 0.8` ≡ `DEFAULT_MIN_CONFIDENCE`; below-bar → `degradedCatalogRow` → non-`low` → empty mode → standard path, `actions/decide.ts:311-330`); recorded in the contractually correct place (slice Q&A per feature entry condition); residual bounded and measured (see Q&A addendum: accepted lanes low 27 / standard 1, pre-decide guard pins safety before the decide).
+
+| # | Priority | Dimension | Finding | Location | Disposition |
+|---|----------|-----------|---------|----------|-------------|
+| 1 | P2 (major) | correctness / ops | Stale GLOBAL registered workflow layer (spur v0.4.0, inline decides) outranks the shared layer for name-based resolution on this machine: `workflow validate task-pipeline` (by name) reads the pre-migration def and warns; `workflow run` by name would execute it. Pre-existing machine state, exposed not caused; affects 1114/1115/1116 equally; path-based validate silent. | `~/.config/spur/config.yaml:363`, `workflow-resolver.ts:96-103` | ACCEPTED — operator machine hygiene outside this diff (recorded for feature closure: refresh/link the global install, then re-run the invariant name-based). Slice code unaffected — all tests read `config/workflows/` directly. |
+| 2 | P3 (minor) | test integrity | `low/standard/high` vocabulary lost its exact pin (catalog-content pin checked criteria non-empty, not keys) while the projection shell hardcodes `low` — a catalog rename would silently kill the fast lane (fail-safe, but undetected). | `shipped-workflows-catalog-decide.test.ts:88` vs `task-pipeline.yaml:660` | **FIXED in-slice** — criteria-keys pin added (`['high','low','standard']`) in the 1116-owned gate file. |
+| 3 | P3 (minor) | waiver residual | Accepted 68.3%'s lane distribution (esp. `low`→fast-lane share) unmeasured — the other half of what the bar gated. | `.spur/run/1114-r0-reliability.json` | **RESOLVED** — lane distribution derived from `decision_logs` and recorded in Q&A (low 27 / standard 1, guard-bounded). |
+| 4 | P4 (advisory) | satellite accuracy | Sibling-row anchors off by one (`:666`→667, `:749`→750). | `docs/design/decision-observability-and-adoption.md:222-223` | **FIXED in-slice** — anchors corrected. |
+| 5 | P4 (advisory) | batch hygiene | Tracked `.spur/config.yaml` maker override has no owning task for its removal. | `.spur/config.yaml:143-150` | ACCEPTED — restoration at terminal wrap + feature-closure note (batch report). |
+
+Residual risk: global-layer shadow until the operator refreshes the machine install (outside diff); accepted-lane skew (fast-lane preference) guard-bounded and audit-logged.
 
 ### References
 
@@ -116,4 +148,7 @@ Blocked until the evidence bar in the feature P1 Entry condition is met for `tas
 
 - 2026-10-07T16:29:38.239Z backlog → blocked (system)
 - 2026-10-07T22:42:55.050Z blocked → todo (system)
+- 2026-10-08T07:33:25.180Z todo → wip (system)
+- 2026-10-08T07:33:38.233Z wip → testing (system)
+- 2026-10-08T07:33:40.921Z testing → done (system)
 

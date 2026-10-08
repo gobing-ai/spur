@@ -48,6 +48,9 @@ interface ActionDef {
         question?: string;
         choices?: string[];
         default?: string;
+        // Catalog-reference decide (1115).
+        decision?: string;
+        params?: Record<string, string>;
         evidence?: string[];
         resultFile?: string;
         path?: string;
@@ -209,9 +212,11 @@ function readAttempts(staged: Staged): string {
 describe('task-pipeline 0943 — triage state routing (R1/R2)', () => {
     test('frozen contract: task-triage decide row + lane projection + exhaustive triage fork', () => {
         const triage = decideAction('triage', 'task-triage');
-        expect(triage.options?.method).toBe('choice');
-        expect(triage.options?.choices).toEqual(['low', 'standard', 'high']);
-        expect(triage.options?.default).toBe('standard');
+        expect(triage.options?.decision).toBe('task-triage');
+        expect((triage.options?.params as Record<string, string> | undefined)?.wbs).toBe(
+            // biome-ignore lint/suspicious/noTemplateCurlyInString: asserting the literal YAML template, not interpolating
+            '${vars.wbs}',
+        );
         expect(triage.options?.resultFile).toBe(`.spur/run/\${vars.wbs}-triage.decision`);
         expect(triage.options?.evidence).toContain(`.spur/run/\${vars.wbs}-diffstat.json`);
         // (d) the resolved lane lands in the mode var for the fork guards.
@@ -321,10 +326,13 @@ describe('task-pipeline 0943 — triage state routing (R1/R2)', () => {
 });
 
 describe('task-pipeline 0943 — failure-class routing (R3)', () => {
-    test('frozen contract: failure-class decide row + declaration order (stop, cap, fix, defense)', () => {
+    test('frozen contract: failure-class catalog decide + declaration order (stop, cap, fix, defense)', () => {
         const decide = decideAction('test-fail-triage', 'failure-class');
-        expect(decide.options?.choices).toEqual(['fix', 'stop']);
-        expect(decide.options?.default).toBe('fix');
+        // 1115: catalog-reference form — choices `fix/stop` and fallback `fix` live in the
+        // bundled catalog (config/decisions/task-pipeline.yaml → failure-class); the step pins
+        // the decision id, params, evidence and resultFile only.
+        expect(decide.options?.decision).toBe('failure-class');
+        expect(decide.options?.params).toEqual({ wbs: `\${vars.wbs}` });
         expect(decide.options?.resultFile).toBe(`.spur/run/\${vars.wbs}-failure-class.decision`);
         expect(decide.options?.evidence).toEqual([`.spur/run/\${vars.wbs}-test-gate.findings`]);
         expect(edgesFrom('test-fail-triage').map((t) => [t.to, t.terminalReason ?? '-'])).toEqual([

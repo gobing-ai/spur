@@ -6,7 +6,7 @@ status: active
 priority: P2
 tags: []
 created_at: "2026-10-06T18:15:41.140Z"
-updated_at: "2026-10-07T16:26:07.700Z"
+updated_at: "2026-10-08T06:29:06.434Z"
 ---
 
 # P1: Workflow decision points adopt spur decision catalogs
@@ -198,6 +198,8 @@ Feature: Spur decision production readiness: events and workflow adoption
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+- **Inline-decide deprecation clock (S8/R3) — started 2026-10-07.** The last shipped-workflow adoption slices landed 2026-10-07 (1115 `test-fail-triage`, 1116 `review-fail-triage`, 1114 `triage`): no shipped workflow declares an inline decide (enforced strict by `packages/app/tests/workflow/shipped-workflows-catalog-decide.test.ts`). The inline `decide` options form itself remains supported for one release with the existing deprecation warning (`workflow validate` / engine), and is removed in the next release after that.
 
 ## History
 

@@ -598,7 +598,9 @@ describe('task-pipeline review-failure routing (session finding after 1088)', ()
         const decide = state?.onEnter?.find((a) => a.kind === 'decide');
         const options = decide?.options as Record<string, unknown> | undefined;
         expect(options?.id).toBe('review-failure-class');
-        expect(options?.choices).toEqual(['fix', 'stop']);
+        expect(options?.decision).toBe('review-failure-class');
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: asserting the literal YAML template, not interpolating
+        expect((options?.params as Record<string, string> | undefined)?.wbs).toBe('${vars.wbs}');
         // Bounded by the SAME counter the quality-gate loop uses: no extra attempts.
         // biome-ignore lint/suspicious/noTemplateCurlyInString: asserting the literal YAML template, not interpolating
         expect(String(options?.resultFile)).toBe('.spur/run/${vars.wbs}-review-failure-class.decision');

@@ -218,9 +218,9 @@ Classes:
 
 | Workflow · step | Today | Class | Catalog id · choices · fallback |
 | --- | --- | --- | --- |
-| task-pipeline · `triage` (`task-pipeline.yaml:575`) | inline `decide` | adopt | `task-triage` · low/standard/high · standard |
-| task-pipeline · `test-fail-triage` (`:614`) | inline `decide` | adopt | `failure-class` · fix/stop · fix |
-| task-pipeline · `review-fail-triage` (`:683`) | inline `decide` | adopt | `review-failure-class` · fix/stop · fix |
+| task-pipeline · `triage` (`task-pipeline.yaml:603`) | catalog `decide` — migrated (task 1114, operator waiver on the evidence bar) | adopted | `task-triage` · low/standard/high · standard |
+| task-pipeline · `test-fail-triage` (`task-pipeline.yaml:667`) | catalog `decide` — migrated (task 1115) | adopted | `failure-class` · fix/stop · fix |
+| task-pipeline · `review-fail-triage` (`task-pipeline.yaml:750`) | catalog `decide` — migrated (task 1116) | adopted | `review-failure-class` · fix/stop · fix |
 | idea-pipeline · recommendation (`idea-pipeline.yaml:146`) | awk over `## Recommendation` → `unknown` pauses | rescue-only | `idea-recommendation` · proceed/reshape/drop · *pause* (fallback writes `unknown`) |
 | idea-pipeline · `needs_design` (`:132`) | agent-written JSON. A missing or corrupt file means design. | rescue-only | `needs-design` · design/skip · design |
 | history-anatomy · validation verdict (`history-anatomy.yaml:270`) | shell normalization of `Verdict:` lines; rescue shell step after it | rescue-only | `anatomy-validation-verdict` · PASS/FAIL · FAIL. Any exact `Verdict: FAIL` line short-circuits to FAIL without calling a maker. |
