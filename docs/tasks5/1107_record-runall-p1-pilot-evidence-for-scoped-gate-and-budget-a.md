@@ -4,7 +4,7 @@ name: Record runall-P1 pilot evidence for scoped-gate and budget adoption (featu
 status: done
 template: feature-impl
 created_at: 2026-10-07T07:29:48.676Z
-updated_at: "2026-10-07T18:34:41.624Z"
+updated_at: "2026-10-08T15:08:04.470Z"
 feature_id: H15
 
 priority: P2
@@ -125,20 +125,20 @@ Docs-only deliverable: a new pilot-evidence report plus two corpus edits. No sou
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
-- Confidence: MEDIUM
+- Confidence: HIGH
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `docs/reports/i31/1107-runall-p1-pilot.md:1` (report exists, i31 sibling layout) with a `## Timeline` table carrying phase/WBS/wip/terminal/commit/merge columns and the `durable`/`transcript`/`projection` label contract declared in the header (`docs/reports/i31/1107-runall-p1-pilot.md:5`). SHA rows re-derived with `git show -s --format='%h %cI' c59d9312c 93f19a02f e36a1636a 3d4024c6e 4f682cb96 c3542bd32 bfe4db572 414b62302 01b2ca063 90a435a0f`; wip/done rows from `spur task show <wbs> --json` History for 1095–1099 |
-| R2 | MET | `docs/reports/i31/1107-runall-p1-pilot.md:52` labels the "~28 min saved" claim `projection` while the integrated gate line stays `transcript`-sourced; `## Gate economy` names each per-slice gate (10333/0, 10352-run with 2 fails, 10356/0, 10361/0) and the integrated gate `10367 pass / 0 fail · 606 files · [388.07s]`; `## Verify chain` states 1095's fix loop, 1096's post-AC2-patch PASS, 1097–1099 PASS, and times the briefs at 05:04:48Z / 05:05:07Z |
-| R3 | MET | The criterion-mapping table at `docs/reports/i31/1107-runall-p1-pilot.md:70-79` maps the three criterion elements (sample size / retained failing-gate output / diff attribution) and closes with exactly one verdict token, `partial — INSUFFICIENT_EVIDENCE retained`, naming the two unmet elements |
-| R4 | MET | `git diff docs/reports/i31/0912-workflow-baseline.md` = 10 insertions, 0 deletions; the only added heading is `+## Addendum (2026-10-07, task 1107)` appended after the last line; F3/F4 rows are byte-identical. D62 pointer written via `spur feature update D62 --section Notes --from-file` (returned `feature.updated`) and read back with `spur feature show D62 --json` |
-| R5 | MET | `docs/reports/i31/1107-runall-p1-pilot.md:70` (`## Timeout attribution`) attributes both kills to the host limit, quotes the two kill strings (`Subagent timed out after 1800000ms` / `2700000ms`), cites `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:600-612`, and names 1108 as the fix owner |
+| R1 | MET | Timeline section from durable sources at `docs/reports/i31/1107-runall-p1-pilot.md:15` (re-read this run) |
+| R2 | MET | Gate economy section `docs/reports/i31/1107-runall-p1-pilot.md:38`; integrated gate row 10367 pass / 0 fail at `docs/reports/i31/1107-runall-p1-pilot.md:48`; projection labelled separately in the same section |
+| R3 | MET | Criterion mapping against the 0912 pilot criterion at `docs/reports/i31/1107-runall-p1-pilot.md:70`; verdict token at `docs/reports/i31/1107-runall-p1-pilot.md:81` |
+| R4 | MET | Dated append-only addendum at `docs/reports/i31/0912-workflow-baseline.md:78`; D62 Notes pointer at `docs/features/D62_workflow-execution-economy-contract-first-stages-inline-traceability-and-graph-retirement.md:229` |
+| R5 | MET | Timeout attribution section `docs/reports/i31/1107-runall-p1-pilot.md:61`; timeout-boundary citation refreshed this run to `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:639` (heading "Timeout boundary (task 0727, amended by task 1108)"), recorded in References at `docs/reports/i31/1107-runall-p1-pilot.md:102` |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | command | `test -f docs/reports/i31/1107-runall-p1-pilot.md && grep -q '^\| Phase \| WBS \|' ... && grep -qE 'durable\|transcript\|projection' ...` → `R1 PASS`; `grep -q 'the saving is \`projection\`' ...` → hit at line 52; `grep -q '^\*\*Verdict token: \`partial — INSUFFICIENT_EVIDENCE retained\`' ...` → hit; `git diff docs/reports/i31/0912-workflow-baseline.md \| grep -c '^-[^-]'` → `0` deletions, `addendum=1`; `grep -q 'inline-pipeline-driver.md:600-612'` → hit; `spur feature show D62 --json \| jq -r '.content' \| grep -q '1107-runall-p1-pilot.md'` → hit; all booleans PASS |
-| R5 — The runall-P1-20261006-02 pilot evidence is recorded with source-labeled numbers and mapped against the D62 pilot criterion | MET | command | Same command set as the AC1 row, scoped to the R5 surface: the report exists, its `## Criterion mapping` section carries the per-element met/not-met table, and the token line is present exactly once as the closing verdict. `spur feature check H15` re-run after the write reports the R5 scenario as covered by task 1107 |
+| AC1 | MET | command | `grep -c '^ |
+| R5 — The runall-P1-20261006-02 pilot evidence is recorded with source-labeled numbers and mapped against the D62 pilot criterion | MET | command | Same command set as AC1 run this run; Source-labeled integrated gate row `docs/reports/i31/1107-runall-p1-pilot.md:48`; criterion mapping `docs/reports/i31/1107-runall-p1-pilot.md:70`; baseline addendum `docs/reports/i31/0912-workflow-baseline.md:78` |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

@@ -4,7 +4,7 @@ name: Ship verify-answer contract and implement briefs as spur-dev references
 status: done
 template: feature-impl
 created_at: 2026-10-07T07:29:49.913Z
-updated_at: "2026-10-07T22:38:12.811Z"
+updated_at: "2026-10-08T15:08:09.075Z"
 feature_id: H15
 
 priority: P3
@@ -129,15 +129,15 @@ Gap-fill into the two skills the pipeline workers already load. No new reference
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | The brief was recovered from the pi transcript with a `python3` JSONL reader over the two `write` tool calls (2768 B + 3358 B extracted to `/tmp/h15-briefs/`; nothing pasted into the repo). Every brief rule is classified in the task's Solution table: eleven `present` rows citing `plugins/sp/skills/code-verification/SKILL.md` and `plugins/sp/skills/code-verification/references/verdict-schema.md`, two `conflicts` rows (uppercase `VERDICT:`/`Confidence:` casing; bare `AC<n>` keying, where SKILL.md `:318-321` wins), one `missing` row added. No new reference file: `ls plugins/sp/skills/spur-dev/references/` contains no `verify-answer-contract.md` |
-| R2 | MET | The implement brief plus both driver habits are classified in the Solution table against `plugins/sp/skills/code-implementation/SKILL.md`; the one missing rule (CLI pin + per-call tree re-selection) is added at `plugins/sp/skills/code-implementation/SKILL.md:107-114`, while `requireDiff`/escalation (`:64-69`, `:91`), the Solution anchor form (`:187`), and the changed-path check matrix (`:120-138`) are `present`. P1-specific content was dropped (the transcript's decision-observability layout, batch branch, and worktree path appear nowhere in the skill) |
-| R3 | MET | `config/workflows/task-pipeline.yaml:299-302` (implement) and `config/workflows/task-pipeline.yaml:740-744` (verify) each cite their skill and owning section by path; `rg -c 'code-verification/SKILL.md |
-| R4 | MET | `superskill skill validate plugins/sp/skills/code-verification` → `Valid`; `superskill skill validate plugins/sp/skills/code-implementation` → `Valid`; `(cd plugins/sp && bun test tests/skill-structure.test.ts)` → 91 pass / 0 fail. The R44 body-budget gate initially failed (`code-verification: 36332 bytes, baselined at 35468`), so the substantive rule was relocated into `plugins/sp/skills/code-verification/references/verdict-schema.md:141` and only a 41-byte pointer remains, with the baseline moved to 35_509 and the reason recorded at `plugins/sp/tests/skill-structure.test.ts:897-900` |
+| R1 | MET | Verify-brief classification in task Solution against `plugins/sp/skills/code-verification/SKILL.md:340` (Answer-File Schema Contract); new basename section `plugins/sp/skills/code-verification/references/verdict-schema.md:153` with pointer `plugins/sp/skills/code-verification/SKILL.md:168` |
+| R2 | MET | Implement brief gap-fill: repo-relative Solution anchors rule `plugins/sp/skills/code-implementation/SKILL.md:194` |
+| R3 | MET | Implement comment cites skill by path `config/workflows/task-pipeline.yaml:316`; verify-stage comment cites `config/workflows/task-pipeline.yaml:816` (code-verification/SKILL.md § Answer-File Schema) |
+| R4 | MET | Structure baseline `plugins/sp/tests/skill-structure.test.ts:917`; suite 132 pass / 0 fail this run |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | command | `superskill skill validate plugins/sp/skills/code-verification` → `Valid`; `superskill skill validate plugins/sp/skills/code-implementation` → `Valid`; `(cd plugins/sp && bun test tests/skill-structure.test.ts)` → 91 pass / 0 fail (`plugins/sp/tests/skill-structure.test.ts:897-900`, `plugins/sp/tests/skill-structure.test.ts:921-926`); `rg -c 'code-verification/SKILL.md\|code-implementation/SKILL.md' apps/cli/config/workflows/task-pipeline.yaml` → 2; full gate `bun run spur-check` → 10372 pass / 0 fail across 606 files in 454.48s (`plugins/sp/scripts/quality-gate.ts:1`, log `.spur/run/1110-test-gate.log`) |
-| R4 — Verify and implement workers get answer-shape and anchor rules from the existing shipped skills | MET | command | Same command set plus the file read-backs: `plugins/sp/skills/code-verification/references/verdict-schema.md:141` carries the new basename-anchor section and `plugins/sp/skills/code-implementation/SKILL.md:107-114` the new CLI-pin bullet |
+| AC1 | MET | command | `superskill skill validate` → Valid for code-verification and code-implementation; `plugins/sp/tests/skill-structure.test.ts:917` green this run |
+| R4 — Verify and implement workers get answer-shape and anchor rules from the existing shipped skills | MET | command | `superskill skill validate plugins/sp/skills/code-verification` → Valid; `superskill skill validate plugins/sp/skills/code-implementation` → Valid; skill-structure suite 132 pass / 0 fail (all this run); read-backs `plugins/sp/skills/code-verification/references/verdict-schema.md:153`, `plugins/sp/skills/code-implementation/SKILL.md:194`, YAML pointers `config/workflows/task-pipeline.yaml:316` and `config/workflows/task-pipeline.yaml:816` |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

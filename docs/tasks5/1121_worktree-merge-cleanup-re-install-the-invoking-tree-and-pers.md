@@ -4,7 +4,7 @@ name: "Worktree merge/cleanup: re-install the invoking tree and persist the feat
 status: done
 template: feature-impl
 created_at: 2026-10-07T20:52:32.965Z
-updated_at: "2026-10-08T03:25:54.904Z"
+updated_at: "2026-10-08T15:08:12.106Z"
 
 feature_id: H15
 priority: P2
@@ -123,19 +123,19 @@ Sanity: the exact WT-4d snippet was exercised in a scratch git repo — nested `
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
-- Confidence: HIGH
+- Confidence: MEDIUM
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | WT-4d present in both modes with exact guard + install, correctly placed. Create: execution-batch.md:1086-1093 (guard :1089 `git diff --name-only "$BASE_TIP" "$BATCH_TIP" -- bun.lock '*package.json'`, install :1090 `bun install --frozen-lockfile --ignore-scripts`); after landed verify (:998-1001) and WT-4c (:1084-1085), before `write_marker merged` (:1096), sequence pinned to invoking tree (:956-961). Reuse: execution-batch.md:1165-1172 (guard :1168, install :1169); after landed verify (:1142-1145) and Step 5 persistence (:1159-1164), before `write_marker merged` (:1175). |
-| R2 | MET | Non-fatal failure contract: execution-batch.md:1091-1092 (create) / :1170-1171 (reuse) — failed install only echoes the stale-links warning naming `bun install --frozen-lockfile --ignore-scripts` through `tee -a ".spur/run/worktree-<marker-id>-batch-report.md" >&2`; no halt construct in either WT-4d block; falls through to `write_marker merged` (:1096/:1175). Prose names the contract: :1101-1103 (create), :1180-1183 (reuse). |
-| R3 | MET | Silent skip on empty manifest/lockfile diff via ` |
-| R4 | MET | execution-batch-contract.test.ts:1063-1114 pins WT-4d in both modes: presence (:1075/:1090), guard (:1076/:1091), install flags (:1077/:1092), placement after landed verify + WT-4c / Step 5 persistence and before success marker (:1078-1085 / :1093-1102), guard exactly once per mode (:1104-1106), AC2 non-fatal warning + batch-report persistence + prose (:1108-1114). |
+| R1 | MET | WT-4d relink in create mode `plugins/sp/skills/spur-dev/references/execution-batch.md:1086-1093` and reuse mode `plugins/sp/skills/spur-dev/references/execution-batch.md:1165-1172`, each before write_marker merged (:1096, :1175) |
+| R2 | MET | Non-fatal named warning `plugins/sp/skills/spur-dev/references/execution-batch.md:1091` and `plugins/sp/skills/spur-dev/references/execution-batch.md:1170` |
+| R3 | MET | Conditional skip on no manifest/lockfile change in the same blocks `plugins/sp/skills/spur-dev/references/execution-batch.md:1086-1093`; prose `plugins/sp/skills/spur-dev/references/execution-batch.md:1101` |
+| R4 | MET | Contract describe `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:1063` (AC1 placement test :1074) green this run |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — A landed manifest change relinks the invoking tree before the success marker (req: R1, R3, R4) | MET | test | Both sequences contain WT-4d after the landed verify and before the success-marker write, guarded by the exact `git diff --name-only` condition, running `bun install --frozen-lockfile --ignore-scripts`. Spec: execution-batch.md:1086-1093 (create), :1165-1172 (reuse); test execution-batch-contract.test.ts:1074-1106. |
-| AC2 — A failed relink warns and names the stale workspace state without halting (req: R2) | MET | test | Failed install records the stale-links warning naming the remedy, persists it to the batch report via `tee -a`, and still performs `write_marker merged`. Spec: execution-batch.md:1091-1092/:1170-1171, prose :1101-1103/:1180-1183; test :1108-1114. |
+| AC1 — A landed manifest change relinks the invoking tree before the success marker (req: R1, R3, R4) | MET | test | `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:1074`; spec `plugins/sp/skills/spur-dev/references/execution-batch.md:1086-1093` |
+| AC2 — A failed relink warns and names the stale workspace state without halting (req: R2) | MET | test | `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:1063`; warning text `plugins/sp/skills/spur-dev/references/execution-batch.md:1091` |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

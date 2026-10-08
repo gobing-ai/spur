@@ -4,7 +4,7 @@ name: Raise implementTimeoutMs default to 45 minutes
 status: done
 template: feature-impl
 created_at: 2026-10-07T07:29:49.093Z
-updated_at: "2026-10-07T19:07:55.927Z"
+updated_at: "2026-10-08T15:08:06.046Z"
 feature_id: H15
 
 priority: P2
@@ -103,20 +103,20 @@ One config default, one driver-contract amendment, and the dependents that pinne
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
-- Confidence: HIGH
+- Confidence: MEDIUM
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `config/workflows/task-pipeline.yaml:132` reads `implementTimeoutMs: "2700000"` (read back with `grep -n implementTimeoutMs config/workflows/task-pipeline.yaml`); the comment block at `config/workflows/task-pipeline.yaml:118-131` names the 45-minute default, the subprocess-surface scope and the reasoned-default caveat with the P1 citation |
-| R2 | MET | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:401-411` and `:600-616` carry the amended contract for the `timeoutMs` request rule; `bun test scripts/commands/inline-execution-contract.test.ts` → 21 pass / 0 fail, including the amended assertions on both boundary strings and on the host-budget request |
-| R3 | MET | `--vars` merge probed end-to-end with `bun apps/cli/src/index.ts workflow run task-pipeline.yaml --dry-run`: without `wbs` the run stopped at precheck against the YAML default `0000`; with `--vars '{"wbs":"1108"}'` it walked 11 transitions. `implementTimeoutMs` is a var of that same object (`config/workflows/task-pipeline.yaml:132`) consumed by the implement stage template (`config/workflows/task-pipeline.yaml:309`, asserted green at `plugins/sp/tests/skill-structure.test.ts:765`). A direct single-var probe was attempted and is BLOCKED by an independent gate: the subprocess run fails at implement with a capability-attestation error for the resolved `agent.default` executor, so no spawn ever reaches a timeout — recorded, not claimed as proof |
-| R4 | MET | `packages/app/src/workflow/actions/agent-run.ts` is absent from the diff (`git diff --name-only`); `(cd packages/app && bun test tests/workflow/actions/agent-run.test.ts)` → 163 pass / 0 fail in isolation of the one flaky timeout |
-| R5 | MET | `plugins/sp/tests/skill-structure.test.ts:760-762`, `docs/design/planning-workflow-contracts.md:255-260`, `plugins/sp/hooks/context-session-start.ts:77`, `scripts/commands/inline-execution-contract.test.ts:330-334` all updated; `bun run --filter @gobing-ai/spur build:bundle` exited 0 and `apps/cli/config/workflows/task-pipeline.yaml:132` reads the new value |
+| R1 | MET | `implementTimeoutMs: "2700000"` at `config/workflows/task-pipeline.yaml:127` with the 45m comment block at `config/workflows/task-pipeline.yaml:118-126`; bundle copy identical (`apps/cli/config/workflows/task-pipeline.yaml:127`, cmp IDENTICAL this run) |
+| R2 | MET | Timeout boundary amended by 1108 at `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:639-650`; agent.run timeout bullet `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:439-441` |
+| R3 | MET | Run-var merge in `packages/app/src/services/workflow-service.ts:835`; test `packages/app/tests/services/workflow-service.test.ts:3108` passed this run (1 pass / 0 fail). Live dry-run with --vars blocked by capability attestation (exit 1) — unit evidence only |
+| R4 | MET | "configured timeout" message at `packages/app/src/workflow/actions/agent-run.ts:1281`; test `packages/app/tests/workflow/actions/agent-run.test.ts:1378` green this run |
+| R5 | MET | `plugins/sp/tests/skill-structure.test.ts:764-768`, `docs/design/planning-workflow-contracts.md:262-267`, `plugins/sp/hooks/context-session-start.ts:77`, `scripts/commands/inline-execution-contract.test.ts:336-337` (21 pass / 0 fail) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | command | `grep -n implementTimeoutMs config/workflows/task-pipeline.yaml` returns the new default at `config/workflows/task-pipeline.yaml:132`; `(cd plugins/sp && bun test tests/skill-structure.test.ts)` → 91 pass / 0 fail (assertion at `plugins/sp/tests/skill-structure.test.ts:762`); `bun test scripts/commands/inline-execution-contract.test.ts` → 21 pass / 0 fail (assertions at `scripts/commands/inline-execution-contract.test.ts:330-334`); `bun run build:bundle` → exit 0, regenerated copy read back at `apps/cli/config/workflows/task-pipeline.yaml:132`; full gate `bun run spur-check` → 10370 pass / 0 fail across 606 files in 546.02s (`plugins/sp/scripts/quality-gate.ts:1`, log `.spur/run/1108-test-gate.log`) |
-| R2 — Implement dispatch budget defaults to 45 minutes on subprocess and inline hosts and exhaustion is visible | MET | command | Same command set: the 45-minute default in the SSOT and its generated copy, the inline driver's amended boundary contract asserted by the contract test, and the unchanged `configured timeout` message path (`packages/app/src/workflow/actions/agent-run.ts:1280`, test file green) covering "exhaustion is visible" |
+| AC1 | MET | test | `plugins/sp/tests/skill-structure.test.ts:764-768` pins the 45m default; skill-structure suite 132 pass / 0 fail this run |
+| R2 — Implement dispatch budget defaults to 45 minutes on subprocess and inline hosts and exhaustion is visible | MET | test | Default at `config/workflows/task-pipeline.yaml:127` consumed by `config/workflows/task-pipeline.yaml:329`; inline contract `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:639-650`; exhaustion test `packages/app/tests/workflow/actions/agent-run.test.ts:1378` |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

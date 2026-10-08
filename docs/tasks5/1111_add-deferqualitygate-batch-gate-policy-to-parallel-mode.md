@@ -4,7 +4,7 @@ name: Add deferQualityGate batch gate policy to parallel mode
 status: done
 template: feature-impl
 created_at: 2026-10-07T07:29:50.343Z
-updated_at: "2026-10-07T21:27:21.439Z"
+updated_at: "2026-10-08T15:08:10.581Z"
 feature_id: H15
 
 dependencies: ["1107"]
@@ -140,16 +140,16 @@ Opt-in deferred gate for parallel batches: the proof chain stays intact, the per
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Var `deferQualityGate: "false"` at `config/workflows/task-pipeline.yaml:228` (commented like `deferFeatureSync`, which sits directly below); the `test` hop keeps all six proof-chain onEnter steps and selects the mode at `config/workflows/task-pipeline.yaml:489` (`M=run; [ "$deferQualityGate" = "true" ] && M=deferred`), `test-recheck` at `:579` (`M=recheck; …`); `runDeferredGate` (`packages/app/src/services/quality-gate.ts:459-481`) runs the light tier and writes `DEFERRED`/`FAIL` — the behavioral test asserts the status file contains `DEFERRED` on light PASS and never `PASS` (`plugins/sp/tests/quality-gate-receipt.test.ts:320-345`) |
-| R2 | MET | Both triage guards carry `test "$gate_status" = DEFERRED && test "$deferQualityGate" = "true"` (`config/workflows/task-pipeline.yaml:1050-1052`, `:1093-1095`), asserted as exactly two occurrences by `plugins/sp/tests/skill-structure.test.ts:778-800`; the verify proof stamp reads `.spur/run/<wbs>-test-gate.status` into `qualityGate.status`, so a deferred run records `DEFERRED`; the completion-gate predicate compares digests, runId, definitionDigest and confidence only — `deferQualityGate` never enters it, and with the default `"false"` the guards reject `DEFERRED` |
-| R3 | MET | `plugins/sp/skills/spur-dev/references/flag-glossary.md:149-175` (anchor `#flag-defer-gate`) and `plugins/sp/commands/dev-runall.md:29` / `plugins/sp/commands/dev-parallel.md:21` document the opt-in flag and the `--mode parallel` requirement; `plugins/sp/skills/spur-dev/references/execution-batch.md:1392-1400` adds the var to the per-task `--vars` only under the flag and `:1466-1480` runs the integrated `qualityGateCmd` on `BASE_REF` **before** the deferred feature sync, with the FAIL lane (batch FAIL, sync skipped, per-branch re-gate newest-first, no automatic bisect) specified; the ordering and both FAIL properties are pinned by `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:1034-1056` |
-| R4 | MET | `plugins/sp/skills/spur-dev/references/execution-batch.md:1466-1480` states the `gate: deferred` marker for deferred task rows, and the pin at `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:1040` fails if the marker text regresses |
-| R5 | MET | `docs/00_ADR.md:1991-2006` carries the dated ADR-124 clarification (2026-10-07, task 1111): the rejected single-end-of-run-gate alternative is narrowly reopened for opt-in parallel batches, the light tier keeps per-task early feedback, and the "review only after a green full gate" invariant is preserved at batch scope; the YAML invariant comment states the same (`config/workflows/task-pipeline.yaml:168-172`), as does the flag-glossary entry and `docs/design/workflow-catalogue-refactor.md:89-97` |
+| R1 | MET | Var `deferQualityGate: "false"` at `config/workflows/task-pipeline.yaml:223` beside invariant comment `config/workflows/task-pipeline.yaml:162-167`; deferred mode select at `config/workflows/task-pipeline.yaml:501` and `config/workflows/task-pipeline.yaml:601`; `runDeferredGate` at `packages/app/src/services/quality-gate.ts:459` |
+| R2 | MET | Triage guards accept DEFERRED only when opted in at `config/workflows/task-pipeline.yaml:1124` and `config/workflows/task-pipeline.yaml:1158`; receipt tests `plugins/sp/tests/quality-gate-receipt.test.ts:321-328` |
+| R3 | MET | `--defer-gate` flag at `plugins/sp/commands/dev-runall.md:29` and `plugins/sp/commands/dev-parallel.md:21`; contract test `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:1035-1046` |
+| R4 | MET | `gate: deferred` row rule at `plugins/sp/skills/spur-dev/references/execution-batch.md:1537` |
+| R5 | MET | ADR-124 dated clarification `docs/00_ADR.md:1991` |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | command | `(cd plugins/sp && bun test tests/quality-gate-receipt.test.ts)` → 27 pass / 0 fail (`plugins/sp/tests/quality-gate-receipt.test.ts:286-346`); `(cd plugins/sp && bun test tests/skill-structure.test.ts)` → 91 pass / 0 fail (`plugins/sp/tests/skill-structure.test.ts:778-800`); `(cd plugins/sp && bun test tests/dogfood-testing/execution-batch-contract.test.ts)` → 50 pass / 0 fail (`plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:1034-1056`); `bun run apps/cli/src/index.ts rule run --preset recommended-pre-check --fail-on warning --no-logo` → all 50 rules passed; `bun run plugin-smoke` → PASS; full gate `bun run spur-check` → 10376 tests / 0 fail across 606 files in 521.87s (`plugins/sp/scripts/quality-gate.ts:1`, log `.spur/run/1111-test-gate.log`) |
-| R1 — Opt-in deferred quality gate runs one integrated full gate per parallel batch | MET | command | Same command set plus the generated-copy read-back: `rg -c deferQualityGate apps/cli/config/workflows/task-pipeline.yaml` → 6, and `apps/cli/config/workflows/task-pipeline.yaml:489` carries the `M=run … M=deferred` dispatch after `bun run --filter @gobing-ai/spur build:bundle` |
+| AC1 | MET | test | `plugins/sp/tests/quality-gate-receipt.test.ts:321-328`, `plugins/sp/tests/skill-structure.test.ts:782-786` |
+| R1 — Opt-in deferred quality gate runs one integrated full gate per parallel batch | MET | test | Mode select `config/workflows/task-pipeline.yaml:501`; guards `config/workflows/task-pipeline.yaml:1124`; batch contract `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:1035-1046` |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
