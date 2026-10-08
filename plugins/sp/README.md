@@ -409,6 +409,15 @@ hand-editable source for the operator command surface. Per-platform adapters are
 output** owned by `superskill` (`superskill install sp`) and never committed here. Plugin `sp` ships
 no per-platform artifacts — only the platform-independent thin wrappers.
 
+**Install-time `lib/` ownership (1120).** Staging and refreshing the plugin's sibling
+`lib/inline-run.generated.mjs` app bundle into the shared scripts root is `superskill`'s install
+contract (superskill commit `b42961b`, first release after 0.3.35): spur ships the bundle, superskill
+places it. The inline scripts carry a skew guard for the window where the installed bundle is older
+than its scripts (e.g. superskill ≤ 0.3.35): they fail with a named version-skew error — bundle
+path, missing exports, and both remedies — instead of an `is not a function` TypeError. Until a
+superskill release containing `b42961b` is installed and `sp` reinstalled, pass
+`--spur-bin <spur checkout>/apps/cli/src/index.ts`.
+
 **Thin-wrapper contract** is enforced by `scripts/commands/validate-commands.ts`:
 
 ```bash

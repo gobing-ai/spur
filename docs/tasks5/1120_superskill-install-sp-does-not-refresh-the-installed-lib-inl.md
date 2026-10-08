@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: superskill install sp does not refresh the installed lib/inline-run.generated.mjs
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-10-07T20:52:31.358Z
-updated_at: "2026-10-07T21:28:24.239Z"
+updated_at: "2026-10-08T08:07:39.937Z"
 
 feature_id: A33
 priority: P2
 ac_numbering: task-local
 ac_altitude: task-local
 estimate_hours: 1.5
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1120-verdict.json
 ---
 
 ## 1120. superskill install sp does not refresh the installed lib/inline-run.generated.mjs
@@ -43,10 +45,10 @@ Note the marketplace source itself was moved by the install attempt (from `dir:�
 
 ### Requirements
 
-- [ ] R1. Every app import in `plugins/sp/scripts/inline-run-setup.ts` goes through one loader that, after `import(entry)`, checks the exports that mode calls are functions. If any is missing, it throws before any call. The error names the bundle path, the missing export(s), the cause (installed sp `lib/` is older than its scripts) and both remedies: reinstall `sp` with a superskill release containing commit b42961b, or pass `--spur-bin <spur checkout>/apps/cli/src/index.ts`.
-- [ ] R2. Modes that already report failures as a JSON outcome (`--decide`, setup) keep doing so, with the skew message as the `error`; no mode reaches an `is not a function` TypeError on a stale bundle.
-- [ ] R3. The ownership decision is recorded in `plugins/sp/README.md`, next to the existing "install-time output owned by `superskill`" paragraph: superskill stages `lib/` (b42961b), and spur ships the bundle plus the skew guard.
-- [ ] R4. The guard respects the plugin standalone contract: only `node:*`/`bun:*`/relative/`import type` imports, enforced by the `sp-plugin-standalone` rule and `bun run plugin-smoke`.
+- [x] R1. Every app import in `plugins/sp/scripts/inline-run-setup.ts` goes through one loader that, after `import(entry)`, checks the exports that mode calls are functions. If any is missing, it throws before any call. The error names the bundle path, the missing export(s), the cause (installed sp `lib/` is older than its scripts) and both remedies: reinstall `sp` with a superskill release containing commit b42961b, or pass `--spur-bin <spur checkout>/apps/cli/src/index.ts`.
+- [x] R2. Modes that already report failures as a JSON outcome (`--decide`, setup) keep doing so, with the skew message as the `error`; no mode reaches an `is not a function` TypeError on a stale bundle.
+- [x] R3. The ownership decision is recorded in `plugins/sp/README.md`, next to the existing "install-time output owned by `superskill`" paragraph: superskill stages `lib/` (b42961b), and spur ships the bundle plus the skew guard.
+- [x] R4. The guard respects the plugin standalone contract: only `node:*`/`bun:*`/relative/`import type` imports, enforced by the `sp-plugin-standalone` rule and `bun run plugin-smoke`.
 
 ### Acceptance Criteria
 
@@ -122,15 +124,41 @@ The setup branch (`:216`) has no surrounding catch for the import. It throws to 
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change map (all repo-root paths):
+
+- `plugins/sp/scripts/inline-run-setup.ts:76-98` — added `loadInlineApp(spurBin, required)`: resolves the entry via the unchanged `resolveAppEntry`, imports it once, and for the **installed bundle path** verifies every export the mode is about to call is a function; on a gap it throws before any call: `inline application bundle <entry> is older than its scripts — missing <exports>. Reinstall sp with a superskill release that stages lib/ (commit b42961b), or pass --spur-bin <spur checkout>/apps/cli/src/index.ts.` Converted all six import sites: fingerprint `:139` (`runInlineRunFingerprint`), batch `:150` (`runInlineRunTraceBatch`), decide `:158` (`runInlineRunDecide`), persist-out `:171` (`runInlineRunPersistOut`), action/close `:180` (`runInlineRunTrace`, `isInlineRunCloseStatus`, `isInlineRunActionStatus`), setup `:222` (`readInstalledInventory`, `runInlineRunSetup`, `writeInlineRunOutcome`). No new imports (R4); `resolveAppEntry` unchanged.
+- `plugins/sp/scripts/inline-run-setup.mjs` — regenerated twin (`superskill script convert sp inline-run-setup.ts`); `lib/*.generated.mjs` re-verified byte-identical via `build:plugin-lib` (app source untouched).
+- `plugins/sp/tests/inline-run-installed.test.ts:254-292` — AC1 test: installed-layout fixture with a stub `lib/inline-run.generated.mjs` exporting everything setup calls except `readInstalledInventory`; setup mode without `--spur-bin` exits non-zero naming the bundle path, `readInstalledInventory`, "older than its scripts", commit `b42961b` and `--spur-bin`, with no "is not a function". Confirmed red first (reproduced `app.readInstalledInventory is not a function`).
+- `plugins/sp/README.md:412-421` — R3 ownership note beside the ADR-032 install-time-output paragraph: superskill stages the plugin `lib/` bundle (commit `b42961b`, first release after 0.3.35); the inline scripts fail with a named skew error when the installed bundle is older; `--spur-bin` remains the supported remedy until then.
+
+Design deviation, evidence-pinned: the design sketch checked required exports for **every** entry. That fails AC2 — the 0809 delegate-cleanup fixtures in `plugins/sp/tests/inline-run-setup.test.ts:133-214` load minimal **partial source app modules** via `--spur-bin` (no `writeInlineRunOutcome` export) and AC2 requires the existing setup/installed tests to pass unchanged. The guard therefore applies on the portable bundle path only (the stale-install surface R1/R2 target); source-entry behavior is exactly as before, matching the design invariant "source-entry behavior is unchanged". Real-world skew confirmed: the installed Oct-2 bundle lacks exactly `readInstalledInventory` among mode-called exports.
+
+Remedy note (operator, not this task): install a superskill release > 0.3.35 (contains b42961b) and rerun `superskill install sp`.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Single loader `loadInlineApp` checks required exports are functions before any call and throws the named skew error with bundle path, missing exports, cause ("older than its scripts") and both remedies — plugins/sp/lib/inline-run-app.ts:11-26; all six app imports converted: plugins/sp/scripts/inline-run-setup.ts:133, :142, :151, :172, :180, :220; grep shows no remaining direct app-entry `import(` (only the decide lib-bundle import at :153, out of R1 scope). |
+| R2 | MET | `--decide` keeps its JSON outcome with the skew message as `error` — plugins/sp/scripts/inline-run-setup.ts:151,162-166; setup's skew throw reaches the top-level handler printing `FAIL — <message>` to stderr, exit 1 — plugins/sp/scripts/inline-run-setup.ts:220,246-249; AC1 test asserts non-zero exit, named error, and no "is not a function" — plugins/sp/tests/inline-run-installed.test.ts:249-281. |
+| R3 | MET | Ownership paragraph directly follows the ADR-032 install-time-output note: superskill stages `lib/` (commit b42961b, first release after 0.3.35), spur ships bundle + skew guard, named skew error, `--spur-bin` remedy — plugins/sp/README.md:412-420. |
+| R4 | MET | New guard module has zero imports — plugins/sp/lib/inline-run-app.ts:1-9; only script-side addition is relative `import { loadInlineApp } from '../lib/inline-run-app'` — plugins/sp/scripts/inline-run-setup.ts:12; mjs twin inlines the identical guard — plugins/sp/scripts/inline-run-setup.mjs:16-25; plugin-smoke PASS and sp-plugin-standalone 0 findings attested in task context. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -143,4 +171,6 @@ The setup branch (`:216`) has no surrounding catch for the import. It throws to 
 ### History
 
 - 2026-10-07T21:28:16.277Z backlog → todo (system)
+- 2026-10-08T07:19:00.693Z todo → wip (system)
+- 2026-10-08T08:07:39.930Z wip → done (system)
 
