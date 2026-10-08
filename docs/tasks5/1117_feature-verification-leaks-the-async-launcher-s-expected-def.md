@@ -4,7 +4,7 @@ name: feature-verification leaks the async launcher's expected definition digest
 status: done
 template: feature-impl
 created_at: 2026-10-07T20:52:28.373Z
-updated_at: "2026-10-08T05:30:03.398Z"
+updated_at: "2026-10-08T17:13:24.946Z"
 
 feature_id: D3
 priority: P1
@@ -145,10 +145,16 @@ Tests (`apps/cli/tests/commands/workflow.test.ts`):
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | consume-once helper reads+removes both vars apps/cli/src/commands/workflow.ts:112-118; first statement of run (workflow.ts:627-628) and continue (:1240); no residual getEnvVar readers repo-wide; launcher re-injects child env (workflow.ts:134, :810) |
-| R2 | MET | refusal unchanged: expectedDigestMismatch apps/cli/src/commands/workflow.ts:365-377 same message, driven by captured digest at :979 |
-| R3 | MET | no post-entry re-reads: recordSelfPid apps/cli/src/commands/workflow.ts:1178; resume-owner branch :1449-1453 |
-| R4 | MET | AC1/AC2/AC3 tests apps/cli/tests/commands/workflow.test.ts:292/:345/:407; env restored in finally; stash-reverted regression signal (AC1+AC2 red, AC3 green without fix) |
+| R1 | MET | takeAsyncWorkerEnv reads then removes both vars `apps/cli/src/commands/workflow.ts:112-118`; first statement of run `apps/cli/src/commands/workflow.ts:630` and continue `apps/cli/src/commands/workflow.ts:1240`; no other reader of either var in the file (rg this run); real --async E2E step probe reads clean (.spur/run/1117-e2e.log) |
+| R2 | MET | refusal driven by the captured digest `apps/cli/src/commands/workflow.ts:979` through expectedDigestMismatch `apps/cli/src/commands/workflow.ts:367-374` with the unchanged "differs from the expected digest" message; AC3 test green this run |
+| R3 | MET | captured flag drives recordSelfPid `apps/cli/src/commands/workflow.ts:1178` and the continue resume-owner branch `apps/cli/src/commands/workflow.ts:1449`; no post-entry env re-read |
+| R4 | MET | tests `apps/cli/tests/commands/workflow.test.ts:292`, `apps/cli/tests/commands/workflow.test.ts:345`, `apps/cli/tests/commands/workflow.test.ts:407`: 3 pass / 0 fail this run; mutation check with both removeEnvVar lines disabled turns AC1+AC2 red (AC3 stays green), source restored clean |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — A workflow step started by the async worker does not inherit the launcher's digest or worker flag (req: R1, R3) | MET | test | `apps/cli/tests/commands/workflow.test.ts:292` green this run and red under the mutation; real --async E2E probe reads clean (.spur/run/1117-e2e.log) |
+| AC2 — A nested workflow run on a different definition completes under the async worker (req: R1, R4) | MET | test | `apps/cli/tests/commands/workflow.test.ts:345` green this run and red under the mutation; real --async E2E nested run exit 0, status done, empty stderr (.spur/run/1117-e2e.log) |
+| AC3 — A genuine digest mismatch still refuses (req: R2) | MET | test | `apps/cli/tests/commands/workflow.test.ts:407` green this run: refusal message, marker file absent |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
