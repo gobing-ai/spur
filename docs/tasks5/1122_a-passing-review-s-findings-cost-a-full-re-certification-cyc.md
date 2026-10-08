@@ -4,7 +4,7 @@ name: A passing review's findings cost a full re-certification cycle (no review 
 status: done
 template: feature-impl
 created_at: 2026-10-07T20:52:34.353Z
-updated_at: "2026-10-08T06:42:31.508Z"
+updated_at: "2026-10-08T07:00:35.283Z"
 
 feature_id: H15
 priority: P2
@@ -139,13 +139,13 @@ no new budget; the record sweep is unchanged and remains the final authority.
 
 Per requirement:
 
-- **R1** — `packages/app/src/services/residual-scan.ts:282` adds the pure
+- **R1** — `packages/app/src/services/residual-scan.ts:296` adds the pure
   `blockingReviewFindings(taskContent, deferrals)`: `parseReviewFindings` + `classify` restricted
   to the `review-finding` category, same deferrals as the sweep. Regenerated through the repo
   generator: `plugins/sp/lib/residual-scan.generated.mjs` (+ `.generated.d.mts` declaration,
   maintained in `scripts/commands/bundle-plugin-lib.ts:345`) and the installed twin
   `plugins/sp/scripts/residual-scan.mjs`.
-- **R2** — `plugins/sp/scripts/residual-scan.ts:13` (usage), `:138` (`reviewGateMode`), `:282`
+- **R2** — `plugins/sp/scripts/residual-scan.ts:12-13` (usage), `:114` (`reviewGateMode`), `:237
   (mode table): loads the task like `scan`, applies the same deferral file, writes the
   review-finding-only `.spur/run/<wbs>-residuals.json` (the `test-fix` hop's existing remediation
   input; record's `scan` overwrites it later), prints
