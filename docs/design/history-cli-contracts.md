@@ -3,7 +3,7 @@ kind: design
 title: "History CLI and refresh contracts"
 status: implemented
 created_at: 2026-09-09
-updated_at: 2026-10-02
+updated_at: 2026-10-08
 related: []
 tags: [contract, history, cli]
 ---
@@ -198,6 +198,30 @@ Six composable `AND` selectors, each resolving against an indexed column: `--sin
 attribution recovered at import (task 0722) — never through `run_id`/`task_wbs` message columns,
 which are reserved for boundary promotion; task+run selection intersects through the run chain), and `--top <n>` (default 20; bounds `bySession`/`byTool` only — never
 `totals`/`bySource`/`byModel`/`daily`).
+
+**Unmatched `--session`.** The flag is an exact `history_message.session_id` predicate
+(`sessionMatchLookup` counts `session_id = ?`). When `--session` is set and that count is zero,
+analyze still writes the artifact and adds a `warnings[]` entry `session-not-found` whose `detail`
+is `no history_message rows match session '<id>'`. Up to three stored ids that contain the value
+(`LIKE '%' || ? || '%'`, `LIMIT 3`; `%` and `_` are not escaped) are appended as
+` Did you mean: <id>, …?`. The CLI exits 2 only when that warning is present. An exact match, and
+every other zero-data selector (`--task`, `--run`, a date window, an empty database), stays exit 0.
+A source imported with a source-file context — pi included — stores `session_id` as the transcript
+basename without `.jsonl`, so a bare uuid misses and the suggestion is the file stem.
+
+**Tool-call digest and pi duration (importer 0.5.19).** The root catalog pins
+`@gobing-ai/ts-llm-jsonl-importer` at `^0.5.19`. `args_digest` is the sha256 of key-sorted stable
+JSON after `DEFAULT_REDACTION_RULES` substring replacement on string leaves only: no length
+collapse and no whole-value token-class collapse. Q4 loops (`GROUP BY` source, session, tool, and
+`args_digest`, count ≥ 3) therefore group calls that still match after that redaction. A secret
+that matches no rule stays inside the hashed input, and object keys are not a digest redaction
+trigger. Pi tool-result timing uses the omp path: `duration_ms` is `details.wallTimeMs`, else
+`message.durationMs`, else `details.toolMetadata.durationMs`, and `started_at` / `completed_at`
+are written from `toolMetadata` when that native figure is present. Pi `toolResult` rows are stored
+as role `user`, so the result-line match accepts that role. The timestamp-delta fallback and its
+guards are unchanged. Rows imported by an older importer keep the previous digest and a null pi
+`duration_ms` until the file is re-imported (`--mode force-file`, or a source-complete
+`--mode full`); analyze does not recompute those columns.
 
 Artifact: `.spur/reports/history/<YYYY-MM-DD>/analyze-<selectorDigest>.json` where `selectorDigest` is
 the first 8 hex of sha256 over the canonicalized selector (stable for the daily loop). `--out <path>`

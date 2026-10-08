@@ -2,7 +2,7 @@
 kind: design
 title: "History Data Processing Architecture — Ingestion, Materialization, and Query Plane"
 created_at: 2026-08-22
-updated_at: 2026-10-03
+updated_at: 2026-10-08
 related: [E9, E93, "0631", "0632", "0633", "0712", "0722", "1028", "1029", "1030"]
 tags: [system, E9, history]
 ---
@@ -139,19 +139,18 @@ covers the source-local `bun run apps/cli/src/index.ts task …` spelling). The 
   tool-output echoes, pasted prose, doc frontmatter) appear there and must never link — they are
   counted as **skipped** mentions instead (the cd09d701#222 grep-output class that linked before
   the rule). Dates, versions, and paths are excluded by the operand shape.
-- **Bash-evidence channel — upstream gap (recorded, not worked around).** Genuine `spur task`
-  operations in pi sessions execute as bash `toolCall` blocks, but
-  `@gobing-ai/ts-llm-jsonl-importer@0.4.48` persists every pi bash call with `args_raw = NULL`
-  (`maybeArgsRaw` retains args only for the todo-tool allowlist), so the tool-args channel above
-  never sees those commands. The importer's declared extension point cannot fix this caller-side:
-  `fieldTransforms` are per-source and receive only the mapper's **split record** (never the raw
-  JSONL object), and `piSplit` drops `call.input` for non-allowlisted tools at split time — only a
-  one-way `args_digest` survives — while a source-level `args_raw` transform also fires on
-  `history_message` split records and its key presence makes the typed message insert throw
-  (`Typed table "history_message" has unknown columns: args_raw`; reproduced live against
-  0.4.48). The fix belongs upstream: persist pi tool-call args (or route the transform per target
-  table with the raw line in `TransformContext`); a full re-import then feeds the channel. Until
-  then, bash-driven batches recover attribution only through slash-command evidence.
+- **Bash-evidence channel.** Genuine `spur task` operations in pi sessions execute as bash
+  `toolCall` blocks. At `@gobing-ai/ts-llm-jsonl-importer@0.4.48`, `maybeArgsRaw` retained args
+  only for a todo-tool allowlist, so every pi bash call persisted `args_raw = NULL` and this
+  channel never saw those commands. Spur cannot patch that caller-side: `fieldTransforms` are
+  per-source and receive only the mapper's split record (never the raw JSONL line), and a
+  source-level `args_raw` transform also fires on `history_message` rows and makes the typed
+  insert throw (`Typed table "history_message" has unknown columns: args_raw`; reproduced against
+  0.4.48). The installed importer (`0.5.19`) writes the column inside `piSplit`: `maybeArgsRaw`
+  keeps the shell command string for bash/shell/exec/command tools (capped at 8192 characters)
+  and bounded JSON otherwise. Rows imported before that retention stay NULL until the file is
+  re-imported (`--mode force-file`, or a source-complete `--mode full`). Until that replay,
+  bash-driven batches still recover attribution only through slash-command evidence.
 - **Validation + writes** — every candidate WBS must resolve through the task locator
   (`TaskService.findByWbs`) before persistence; links land in `history_task_session`
   (migration `0028`) with `exactness='estimated'`, idempotent under the

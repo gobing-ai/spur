@@ -5532,3 +5532,66 @@ Gotchas
 - Verification used: `bun test repo-wide-tests/adr-supersession.test.ts` (10 pass),
   `(cd plugins/sp && bun test tests/wrapup-drift-probe.test.ts)` (10 pass),
   `bun run test-pre-check` (50 rules passed), relative-link + frontmatter checks all clean.
+
+# Working learnings
+
+## 2026-10-08
+
+### 1130 — Parse pi transcripts in session-timeline
+
+#### Conventions
+
+- The active-session timeline stays inside `plugins/sp`. It must not import `spur history` or `@gobing-ai/ts-llm-jsonl-importer`. The standalone plugin contract allows only `node:*` / `bun:*` and relative imports. Mirror importer field semantics by citation.
+- Pi format is sniffed per file from the first known row (`type:"message"` plus `message.role` in user, assistant, or toolResult). Claude parsing stays an additive branch.
+- A pi operator prompt is only a `role:"user"` message with text content. `toolResult` rows are results, never prompts.
+- Tool calls come from assistant `content[]` items of `type:"toolCall"`, keyed by `id`. Results join on `toolCallId`. `ask_user_question` / `AskUserQuestion` call-to-result time is operator wait.
+- Assistant `usage` maps `{input, output, cacheRead, cacheWrite}` onto the existing Tokens shape (`cacheWrite` → `cacheCreation`), counted once per row `id`.
+- `compactions` is pi-only, counted from `type:"compaction"` rows, on both the segment and `totals`. Claude output omits the field.
+- Edit the `.ts` sources and regenerate `session-timeline.mjs` and `run-summary.mjs` with `bun run build:scripts`. `run-summary` shares `lib/transcript.ts`, so its tests stay in the same check.
+- Ended-session forensics stay on `spur history analyze --source pi --session <file-stem>`. `<file-stem>` is the transcript basename without `.jsonl`.
+
+#### Errors fixed
+
+- A pi transcript passed with `--transcript` used to return `{available:true, segments:[]}` because the parser only understood Claude `tool_use` / `tool_result` rows. A non-empty file that yields zero segments now returns `{available:false, reason:"unrecognized transcript format"}` with exit 0.
+- With no `--transcript` and no `CLAUDE_CODE_SESSION_ID`, resolution now fails with a reason that names `--transcript` and the pi path `~/.pi/agent/sessions/<cwd-slug>/<file>.jsonl`.
+
+#### Patterns
+
+- Keep the segment model shared. Add a format branch in `promptText`, `accumulate`, and `parseRows` instead of a second timeline script.
+- Put the pi forensic pointer in the session-review skill's imported-history sentence. The skill owns that route; the timeline does not grow a history client.
+
+#### Gotchas
+
+- Do not auto-pick the newest pi session file. Several pi sessions can share one cwd, and newest-wins selects the wrong transcript.
+- A green Claude fixture suite does not prove the pi branch. The zero-segment guard and the absent `compactions` key on Claude output both need their own assertions.
+- Regenerating only one `.mjs` twin leaves `run-summary` on the old parser.
+
+### 1131 — Fix tool-call args digest collisions and attach pi tool durations
+
+#### Conventions
+
+- `args_digest` is sha256 of key-sorted stable JSON. String leaves get the same `DEFAULT_REDACTION_RULES` substring pass as `redactValue`. Do not collapse strings longer than 80 characters, and do not replace a whole value that matches `[A-Za-z0-9_-]{20,}`.
+- Q4 loops group by `(source, session_id, tool_name, args_digest)` with count ≥ 3. Digest equality is the loop identity, so a lossy digest manufactures loops.
+- Pi tool-call duration is importer-owned. Spur adopts a released `@gobing-ai/ts-llm-jsonl-importer` and re-imports. It does not fork mapper code into the app.
+- `history analyze --session` is an exact `history_message.session_id` match. Pi stores the transcript file stem, not the bare uuid.
+- A zero-match `--session` still writes the artifact, adds `warnings[]` code `session-not-found`, and the CLI exits 2. Other zero-data selectors stay exit 0.
+- Native pi timing is `details.wallTimeMs`, else `message.durationMs`, else `details.toolMetadata.durationMs`. `started_at` / `completed_at` are written from `toolMetadata` only on that native branch. The timestamp-delta fallback and its guards stay as they were.
+
+#### Errors fixed
+
+- Distinct long bash commands and long paths shared one digest, so Q4 reported loops whose `args_raw` values differed. Secret-only differences that match a redaction rule still share a digest.
+- Pi `toolResult` rows were skipped because duration attachment ran only for `source === 'omp'` and required normalized role `toolresult`. Pi normalizes `toolResult` to role `user`, so the match has to accept that role. Before the fix every pi `history_tool_call.duration_ms` was NULL and analyze warned `derived-unattributed-time`.
+- `history analyze --session <bare-uuid>` returned an all-zero artifact with exit 0. It now exits 2 and, when a stored id contains the selector, suggests up to three ids (the full file stem).
+
+#### Patterns
+
+- Ship the importer change in ts-libs, publish, then bump the root catalog (`^0.5.19`) and refresh the lock. A catalog edit without a release does not change installed mapping.
+- Old rows keep the old digest and null durations. Checkpoint incremental import will not revisit an unchanged file. Re-import with `--mode force-file` for one session, or a source-complete `--mode full`, after a `VACUUM INTO` backup.
+- The loud-miss check is one warning code in the analyze action (`session-not-found` → exit 2). Do not turn every empty selector into exit 2.
+
+#### Gotchas
+
+- The suggestion query is `LIKE '%' || ? || '%'` with `LIMIT 3` and does not escape `%` or `_`. It is suggestion text only; the exact `COUNT` decides whether the warning fires.
+- Digest redaction is the substring rule pass on string leaves. A short secret sitting under a key such as `api_key` is not rewritten before hashing. `args_raw` still has its own `redactRecord` seam.
+- Re-import changes historical digests. Loop rows and any consumer that stored an old `args_digest` will not match until they are recomputed from the new rows.
+- A bare uuid that happens to be a prefix of several stems can suggest the wrong stem. Pass the full file stem when the session is known.
