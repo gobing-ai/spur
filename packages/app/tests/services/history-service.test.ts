@@ -72,6 +72,7 @@ interface Msg {
     record_type?: string;
     provenance?: string;
     duration_ms?: number | null;
+    source?: string;
 }
 
 async function insertMessage(db: DbAdapter, m: Msg): Promise<void> {
@@ -81,7 +82,7 @@ async function insertMessage(db: DbAdapter, m: Msg): Promise<void> {
              provenance, duration_ms, imported_at)
          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         m.record_hash,
-        'claude',
+        m.source ?? 'claude',
         'test.jsonl',
         1,
         m.session_id,
@@ -621,6 +622,50 @@ describe('HistoryService', () => {
             expect(existsSync(out)).toBe(true);
             expect(existsSync(`${out.replace(/\.json$/, '')}.errors.jsonl`)).toBe(false); // no errors → no sidecar
             rmSync(cwd, { recursive: true, force: true });
+        });
+
+        test('1131 R4 — --session matching zero rows warns session-not-found and suggests the stored id', async () => {
+            const ctx = makeCtx();
+            const db = await ctx.getDb();
+            // pi stores sessions as <file-stem>_<uuid>; operators pass the bare uuid tail.
+            await insertMessage(db, {
+                record_hash: 'pi-m1',
+                session_id: '2026-10-07T22-44-33-625Z_01a1188a-36d8-72ae-b267-dac37608899b',
+                seq: 1,
+                ts: '2026-10-07T22:44:40Z',
+                model: null,
+                role: 'user',
+                source: 'pi',
+            });
+            const svc = new HistoryService(ctx);
+            const artifact = await svc.analyze({
+                ...ALL,
+                sessionId: '01a1188a-36d8-72ae-b267-dac37608899b',
+            });
+            const warning = artifact.warnings.find((w) => w.code === 'session-not-found');
+            expect(warning).toBeDefined();
+            expect(warning?.detail).toContain('01a1188a-36d8-72ae-b267-dac37608899b');
+            expect(warning?.detail).toContain('2026-10-07T22-44-33-625Z_01a1188a-36d8-72ae-b267-dac37608899b');
+        });
+
+        test('1131 R4 — an exact --session match stays silent (no session-not-found)', async () => {
+            const ctx = makeCtx();
+            const db = await ctx.getDb();
+            await insertMessage(db, {
+                record_hash: 'pi-m1',
+                session_id: '2026-10-07T22-44-33-625Z_01a1188a-36d8-72ae-b267-dac37608899b',
+                seq: 1,
+                ts: '2026-10-07T22:44:40Z',
+                model: null,
+                role: 'user',
+                source: 'pi',
+            });
+            const svc = new HistoryService(ctx);
+            const artifact = await svc.analyze({
+                ...ALL,
+                sessionId: '2026-10-07T22-44-33-625Z_01a1188a-36d8-72ae-b267-dac37608899b',
+            });
+            expect(artifact.warnings.find((w) => w.code === 'session-not-found')).toBeUndefined();
         });
     });
 

@@ -81,6 +81,7 @@ export {
     type SourceSummaryRow,
     type StepRow,
     selectionPopulation,
+    sessionMatchLookup,
     sessionSpans,
     sessionTimeline,
     sessionToolDurations,

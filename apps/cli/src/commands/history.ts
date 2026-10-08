@@ -376,6 +376,11 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
                           daily: artifact.daily,
                       }),
             );
+            // Task 1131 R4: a --session selector that matched nothing is loud — exit 2 with
+            // the session-not-found warning in the artifact. Other zero-data selectors stay 0.
+            if (artifact.warnings.some((w) => w.code === 'session-not-found')) {
+                context.setExitCode(2);
+            }
         });
     noun.command('reset')
         .description(

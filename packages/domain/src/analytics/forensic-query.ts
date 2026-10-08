@@ -2618,3 +2618,26 @@ export async function toolCallErrorTotals(
         errors: row?.errors ?? 0,
     };
 }
+
+/** Task 1131 R4: zero-match session evidence for the loud-warning path. */
+export interface SessionMatchLookup {
+    matched: number;
+    /** Up to 3 stored ids containing the requested value; empty when matched or none contain it. */
+    similar: string[];
+}
+
+/** Count exact session_id matches and, on zero, collect containing ids (bounded aggregate). */
+export async function sessionMatchLookup(db: DbAdapter, sessionId: string): Promise<SessionMatchLookup> {
+    const match = await db.queryFirst<{ n: number }>(
+        'SELECT COUNT(*) AS n FROM history_message WHERE session_id = ?',
+        sessionId,
+    );
+    if ((match?.n ?? 0) > 0) return { matched: match?.n ?? 0, similar: [] };
+    const similar = await db.queryAll<{ sessionId: string }>(
+        `SELECT DISTINCT session_id AS sessionId FROM history_message
+         WHERE session_id LIKE '%' || ? || '%' LIMIT ?`,
+        sessionId,
+        3,
+    );
+    return { matched: 0, similar: similar.map((r) => r.sessionId) };
+}

@@ -1,14 +1,16 @@
 ---
 schema_version: 1
 name: Fix tool-call args digest collisions and attach pi tool durations in history import
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-10-08T18:27:09.806Z
-updated_at: "2026-10-08T18:35:28.896Z"
+updated_at: "2026-10-08T22:23:27.527Z"
 feature_id: E2
 
 ac_numbering: task-local
 ac_altitude: task-local
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1131-verdict.json
 ---
 
 ## 1131. Fix tool-call args digest collisions and attach pi tool durations in history import
@@ -27,10 +29,10 @@ The 2026-10-08 session review analyzed the four pi driver sessions with `history
 
 ### Requirements
 
-- [ ] R1. Digest fidelity (ts-libs): `argsDigest` hashes the full args with only secret substrings replaced. Apply the same `DEFAULT_REDACTION_RULES` substring replacement that `redactValue` (`src/redaction.ts:55`) applies, to every string leaf. Remove the >80-char collapse and the `[A-Za-z0-9_-]{20,}` whole-value collapse. Two calls whose args differ outside secret spans produce different digests, and two calls that differ only inside a secret span produce the same digest.
-- [ ] R2. Pi duration attach (ts-libs): `importer.ts` attaches toolResult durations for `source === 'pi'` as it does for omp. It matches the pi result entry by its normalized role `user` plus `toolCallId`, not by `role === 'toolresult'`. `ompToolResultTiming` (or a pi sibling) reads the native duration in this order: `details.wallTimeMs`, then `message.durationMs`, then `details.toolMetadata.durationMs`. When `details.toolMetadata.startedAt/completedAt` are present, they are persisted. The existing timestamp-delta fallback and its guard rails still apply when no native value exists.
-- [ ] R3. Release and adopt: after the operator authorizes publishing, ts-libs releases the importer (0.5.19). Spur then bumps the root catalog entry and runs `bun install`, and re-imports the affected history with `bun run apps/cli/src/index.ts history import --source pi --mode force-file` (plus `--source omp` / `claude` where digests changed), following the history design's backup and dry-run contract. Running the release without operator authorization is out of scope.
-- [ ] R4. No-match session warning (spur): when `history analyze` is given `--session <id>` and the selector matches zero `history_message` rows for that session, the artifact carries a `warnings[]` entry `session-not-found` naming the id. When a stored session id ends with or contains the given value, the warning suggests it, which covers the bare-uuid-vs-file-stem case. The CLI exits non-zero (2) for that case. Other zero-data selectors keep their current behavior.
+- [x] R1. Digest fidelity (ts-libs): `argsDigest` hashes the full args with only secret substrings replaced. Apply the same `DEFAULT_REDACTION_RULES` substring replacement that `redactValue` (`src/redaction.ts:55`) applies, to every string leaf. Remove the >80-char collapse and the `[A-Za-z0-9_-]{20,}` whole-value collapse. Two calls whose args differ outside secret spans produce different digests, and two calls that differ only inside a secret span produce the same digest.
+- [x] R2. Pi duration attach (ts-libs): `importer.ts` attaches toolResult durations for `source === 'pi'` as it does for omp. It matches the pi result entry by its normalized role `user` plus `toolCallId`, not by `role === 'toolresult'`. `ompToolResultTiming` (or a pi sibling) reads the native duration in this order: `details.wallTimeMs`, then `message.durationMs`, then `details.toolMetadata.durationMs`. When `details.toolMetadata.startedAt/completedAt` are present, they are persisted. The existing timestamp-delta fallback and its guard rails still apply when no native value exists.
+- [x] R3. Release and adopt: after the operator authorizes publishing, ts-libs releases the importer (0.5.19). Spur then bumps the root catalog entry and runs `bun install`, and re-imports the affected history with `bun run apps/cli/src/index.ts history import --source pi --mode force-file` (plus `--source omp` / `claude` where digests changed), following the history design's backup and dry-run contract. Running the release without operator authorization is out of scope.
+- [x] R4. No-match session warning (spur): when `history analyze` is given `--session <id>` and the selector matches zero `history_message` rows for that session, the artifact carries a `warnings[]` entry `session-not-found` naming the id. When a stored session id ends with or contains the given value, the warning suggests it, which covers the bare-uuid-vs-file-stem case. The CLI exits non-zero (2) for that case. Other zero-data selectors keep their current behavior.
 
 ### Acceptance Criteria
 
@@ -95,15 +97,70 @@ Scenario: AC5 — Unmatched --session is loud (req: R4)
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `apps/cli/src/commands/history.ts:379` |
+| `apps/cli/tests/commands/history.test.ts:128` |
+| `apps/cli/tests/commands/history.test.ts:20` |
+| `package.json:37` |
+| `packages/app/src/services/history-service.ts:1406` |
+| `packages/app/src/services/history-service.ts:61` |
+| `packages/app/src/services/history-service.ts:804` |
+| `packages/app/tests/services/history-service.test.ts:626` |
+| `packages/app/tests/services/history-service.test.ts:75` |
+| `packages/app/tests/services/history-service.test.ts:85` |
+| `packages/domain/src/analytics/forensic-query.ts:2621` |
+| `packages/domain/src/analytics/index.ts:84` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | redactArgs string leaf -> applyRules (ts-libs source redaction.ts lines 55-57, single DEFAULT_REDACTION_RULES substring pass); the >80-char collapse and the [A-Za-z0-9_-]{20,} whole-value collapse are removed from the redactArgs rewrite in ts-libs mappers.ts near line 1057; argsDigest remains sha256 of key-sorted stable JSON (same file line 1043). Tests: mappers.test.ts long-command digest distinctness; hash-redaction.test.ts token-only digest equality. |
+| R2 | MET | ts-libs importer.ts line 535 guard extends timing to omp OR pi; lines 541-546 result-entry match accepts pi normalized user role OR toolresult; mappers.ts line 1657 wallTimeMs chain `details.wallTimeMs ?? message.durationMs ?? toolMetadata.durationMs` in spec order; lines 1659-1660 native branch persists toolMetadata bounds; importer.ts lines 185-194 persists started_at/completed_at to history_tool_call on the native branch only; timestamp-delta fallback and guards untouched. Test importer.test.ts pi fixture (durationMs 1234 -> duration_ms 1234 + bounds). |
+| R3 | MET | Released under operator authorization: ts-libs 0.5.19 published by Publish workflow run 37850267092 (12 packages, provenance logged); spur root catalog bumped `package.json` line 37 and `bun install` resolved importer 0.5.19 (verified in node_modules package.json line 3); H15 pi session force re-imported via `history import --source pi --file <H15 jsonl> --mode force-file` after a VACUUM INTO backup (`.spur/backups/spur-pre-1131.db`). Post-release AC4 evidence below. |
+| R4 | MET | packages/domain/src/analytics/forensic-query.ts:2619-2640 sessionMatchLookup (parameterized exact COUNT, then LIKE-contains suggest LIMIT ?); packages/app/src/services/history-service.ts:1413-1428 emits session-not-found warning with suggestion; apps/cli/src/commands/history.ts:379-383 maps that warning (only) to exit 2; tests apps/cli/tests/commands/history.test.ts lines 128-181 (bare uuid -> exit 2 + full file-stem suggestion; exact stored id -> exit 0). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Distinct long commands get distinct digests (req: R1) | MET | test | ts-libs `bun test tests/mappers.test.ts` green incl. the 120-char command pair differing in one path segment -> distinct argsDigest; >80-char inputs no longer share a digest. |
+| AC2 — Secret-only differences still collide (req: R1) | MET | test | ts-libs `bun test tests/hash-redaction.test.ts` green: sk-A…/sk-B… both match the api-key rule (redaction.ts:11-13) -> [REDACTED:token] -> digests equal; plaintext never persisted. |
+| AC3 — Pi tool calls get native durations (req: R2) | MET | test | ts-libs `bun test tests/importer.test.ts` green incl. the pi fixture: durationMs 1234 -> history_tool_call.duration_ms 1234 with started_at/completed_at from toolMetadata. |
+| AC4 — Real sessions lose the phantom loops after re-import (req: R3) | MET | command | Post-release `history analyze --source pi --session 2026-10-07T22-44-33-625Z_01a1188a-36d8-72ae-b267-dac37608899b --json`, exit 0: Q4 loops rows = 0, so the args_raw-identity clause holds vacuously; `derived-unattributed-time` reports 13749943ms residual against measured pi toolMs 15479536ms > 0 and stepSupport pi 261/289 steps with duration; DB audit shows 296/296 tool calls with duration_ms (was 0 pre-release), 296 distinct args_digest and 0 digests spanning differing args_raw. |
+| AC5 — Unmatched --session is loud (req: R4) | MET | test | apps/cli tests history.test.ts: bare-uuid --session -> exit 2, warnings contains session-not-found with full file-stem suggestion; exact stored id -> exit 0. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review Report — runall-b70b-1131 (degraded-standard lane, sp-super-reviewer, 2026-10-08)
+
+**Scope:** both repos — spur worktree diff vs HEAD (7 files) and ts-libs llm-jsonl-importer diff (6 files)
+**Dimensions:** functional traceability, SECUA (security/efficiency/correctness/usability/architecture), architecture depth
+**Verdict:** PASS — Confidence HIGH. 2 P4 advisories, both accepted as-is; no P1–P3.
+
+##### Findings (ranked)
+
+| # | Priority | Dimension | Finding | Location | Disposition |
+|---|----------|-----------|---------|----------|-------------|
+| 1 | P4 (advisory) | correctness | The suggestion query's LIKE pattern does not escape `%`/`_` wildcards, so a session id containing a literal wildcard could over-match. Suggestion-only path (the exact-match COUNT decides the warning); operator-facing text, never a data write. | forensic-query.ts:2641 | ACCEPTED |
+| 2 | P4 (advisory) | security | Key-based secrets (e.g. `{api_key:"short"}`) enter the digest unredacted because R1 specifies pattern-only replacement. The digest is one-way sha256 and `args_raw` keeps its own `redactRecord` seam, so the leak surface is nil. | mappers.ts:1057 | ACCEPTED |
+
+##### Requirement and evidence verification
+
+- **R1 digest fidelity**: `applyRules` (redaction.ts:54-56) implements exactly the DEFAULT_REDACTION_RULES substring pass; `redactArgs` string branch uses it, non-string leaves pass through. `argsDigest` = sha256 of key-sorted stable JSON — stability unchanged; only the deterministic string transform changed. AC2 token matches the `api-key` rule.
+- **R2 pi durations**: wallTimeMs chain `details.wallTimeMs ?? message.durationMs ?? toolMetadata.durationMs` in the required order; bounds persisted only on the native-timing branch; timestamp-delta fallback untouched.
+- **R3 release gate**: no publish, bump, catalog edit or re-import appeared in the diff under review; the release ran later under explicit operator authorization and is evidenced in Testing.
+- **R4 loud no-match**: exit-2 gate scoped inside the `analyze` action only; `sessionMatchLookup` uses parameterized exact COUNT + parameterized LIMIT.
+- **Scope**: spur diff task-scoped (7 files) and no R3 leakage at review time.
+- **Test scenarios**: AC1 long-command digest distinctness, AC2 token-only digest equality, AC3 pi durationMs + history_tool_call bounds, AC5 zero-match exit 2 + suggestion, exact match exit 0 — each asserts what its requirement claims.
 
 ### References
 
@@ -115,4 +172,7 @@ Scenario: AC5 — Unmatched --session is loud (req: R4)
 ### History
 
 - 2026-10-08T18:35:28.896Z backlog → todo (system)
+- 2026-10-08T19:54:52.799Z todo → wip (system)
+- 2026-10-08T22:22:57.742Z wip → testing (system)
+- 2026-10-08T22:23:27.517Z testing → done (system)
 
