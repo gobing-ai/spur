@@ -176,6 +176,12 @@ mirrored in `packages/domain/src/migrations.ts`.
 
 Indexes: `(started_at)`, `(decision_id, started_at)`, `(maker_name, started_at)`, `(run_id)`.
 
+**Derived confidence level.** Reads and decide receipts expose `confidenceLevel`: `HIGH` (≥ 0.8, the
+catalog's strictest `minConfidence` bar — `review-failure-class`), `MEDIUM` (≥ 0.5), `LOW` below. The
+derivation is computed at read/receipt time from `confidence` and never stored; absent, NaN or
+out-of-[0,1] values fail conservative to `LOW`, so a broken maker value cannot present as HIGH.
+Verified at the transport boundary by the `decisionLogRowSchema` enum.
+
 **Write seam.**
 - The §3.3 emitter module builds the row and inserts it once, at `end` (or at `rejected`), through
   a `DecisionLogDao` that the caller passes in. That is the CLI context DB, the workflow service DB,

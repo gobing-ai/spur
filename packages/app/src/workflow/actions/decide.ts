@@ -4,6 +4,7 @@ import type { DecisionMaker } from '@gobing-ai/ts-ai-runner';
 import type { ActionResult, ActionRunContext, ActionRunner } from '@gobing-ai/ts-dual-workflow-engine';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { z } from 'zod';
+import { confidenceLevel } from '../../decision/confidence-level';
 import {
     beginDecisionInvocation,
     decisionCorrelationFromVars,
@@ -296,6 +297,7 @@ export class DecideActionRunner implements ActionRunner {
             method: served.type,
             backend: served.maker,
             confidence: served.confidence,
+            confidenceLevel: confidenceLevel(served.confidence),
             degraded: served.source === 'default',
             reason: served.reason,
             source: served.source,
@@ -320,6 +322,7 @@ export class DecideActionRunner implements ActionRunner {
             method: description.type,
             backend: null,
             confidence: null,
+            confidenceLevel: 'LOW',
             degraded: true,
             reason,
             source: 'default',

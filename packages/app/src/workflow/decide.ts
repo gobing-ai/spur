@@ -1,4 +1,5 @@
 import { type DecisionMaker, DecisionTimeoutError } from '@gobing-ai/ts-ai-runner';
+import { type ConfidenceLevel, confidenceLevel } from '../decision/confidence-level';
 import { redactAndBound } from '../observability/agent-execution';
 import { evidencePayloadDigest } from './decision-evidence';
 import { defaultDecisionMaker } from './decision-hitl-responder';
@@ -56,6 +57,8 @@ export interface DecideResult {
     method: DecideMethod;
     backend: string | null;
     confidence: number | null;
+    /** Derived level (HIGH ≥ 0.8, MEDIUM ≥ 0.5, LOW otherwise; absent/out-of-range → LOW). */
+    confidenceLevel: ConfidenceLevel;
     degraded: boolean;
     reason: 'accepted' | DecideDegradedReason;
     /**
@@ -94,6 +97,7 @@ export async function runDecide(options: DecideOptions, deps: DecideDeps): Promi
         value: options.default,
         backend,
         confidence,
+        confidenceLevel: confidenceLevel(confidence),
         degraded: true,
         reason,
         source: 'default',
@@ -147,6 +151,7 @@ export async function runDecide(options: DecideOptions, deps: DecideDeps): Promi
                 value: answer.label,
                 backend: maker.driver,
                 confidence: answer.confidence,
+                confidenceLevel: confidenceLevel(answer.confidence),
                 degraded: false,
                 reason: 'accepted',
                 source: 'model',
@@ -164,6 +169,7 @@ export async function runDecide(options: DecideOptions, deps: DecideDeps): Promi
             value: confidence >= NOUL_YES_THRESHOLD ? 'yes' : 'no',
             backend: maker.driver,
             confidence,
+            confidenceLevel: confidenceLevel(confidence),
             degraded: false,
             reason: 'accepted',
             source: 'model',

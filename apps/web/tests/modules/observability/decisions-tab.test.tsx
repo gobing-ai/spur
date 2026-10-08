@@ -65,6 +65,7 @@ function row(overrides: Partial<DecisionLogRow>): DecisionLogRow {
         source: null,
         reason: null,
         confidence: 0.9,
+        confidenceLevel: 'HIGH',
         error: null,
         startedAt: '2026-07-15T10:00:00.000Z',
         endedAt: '2026-07-15T10:00:01.000Z',

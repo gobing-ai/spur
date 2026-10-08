@@ -101,6 +101,7 @@ describe('runDecide acceptance', () => {
             method: 'choice',
             backend: 'fake',
             confidence: 0.92,
+            confidenceLevel: 'HIGH',
             degraded: false,
             reason: 'accepted',
             source: 'model',
@@ -230,6 +231,8 @@ describe('runDecide degraded branches (0941 R3: never pause, never throw)', () =
         expect(result.value).toBe('stop');
         expect(result.backend).toBe('fake');
         expect(result.confidence).toBe(0.9);
+        // Level derives from the carried confidence even on error-degraded rows.
+        expect(result.confidenceLevel).toBe('HIGH');
     });
 
     test('low confidence: low-confidence with value=default (0941 R3)', async () => {
@@ -244,6 +247,7 @@ describe('runDecide degraded branches (0941 R3: never pause, never throw)', () =
         expect(result.value).toBe('stop');
         expect(result.backend).toBe('fake');
         expect(result.confidence).toBe(0.3);
+        expect(result.confidenceLevel).toBe('LOW');
     });
 
     test('explicit minConfidence gates the accepted branch', async () => {

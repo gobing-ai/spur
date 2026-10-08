@@ -224,6 +224,7 @@ export const decisionLogRowSchema = z.object({
     source: z.string().nullable(),
     reason: z.string().nullable(),
     confidence: z.number().nullable(),
+    confidenceLevel: z.enum(['HIGH', 'MEDIUM', 'LOW']),
     error: z.string().nullable(),
     startedAt: z.string(),
     endedAt: z.string(),

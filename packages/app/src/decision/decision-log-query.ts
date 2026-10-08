@@ -6,6 +6,7 @@
  */
 
 import type { DecisionLogDao, DecisionLogQuery, DecisionLogRow, DecisionLogSummaryRow } from '@gobing-ai/spur-domain';
+import { type ConfidenceLevel, confidenceLevel } from './confidence-level';
 
 /** Board list/detail query. Validation of outcome/caller/limit belongs to the caller (400s). */
 export interface DecisionLogQuerySpec {
@@ -45,6 +46,8 @@ export interface DecisionLogSummaryEntry {
     source: string | null;
     reason: string | null;
     confidence: number | null;
+    /** Derived level (HIGH ≥ 0.8, MEDIUM ≥ 0.5, LOW otherwise; absent/out-of-range → LOW). */
+    confidenceLevel: ConfidenceLevel;
     error: string | null;
     startedAt: string;
     endedAt: string;
@@ -134,6 +137,7 @@ function toSummaryEntry(row: DecisionLogSummaryRow): DecisionLogSummaryEntry {
         source: row.source,
         reason: row.reason,
         confidence: row.confidence,
+        confidenceLevel: confidenceLevel(row.confidence),
         error: row.error,
         startedAt: row.started_at,
         endedAt: row.ended_at,

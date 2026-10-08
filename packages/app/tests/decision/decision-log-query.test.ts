@@ -63,6 +63,7 @@ describe('DecisionLogQueryService.list', () => {
             inputKeys: [],
             durationMs: 10,
             schemaVersion: 1,
+            confidenceLevel: 'LOW', // seeded fallback rows carry null confidence → fail-conservative LOW
         });
         expect(page.summary.count).toBe(10);
         expect(page.summary.acceptedRate).toBeCloseTo(0.5, 5);
