@@ -2,11 +2,11 @@
 schema_version: 1
 id: "E91"
 name: "History read path materialized-only: incremental rollup ETL, per-table freshness, and precomputed UI aggregates"
-status: active
+status: done
 priority: P2
 tags: []
 created_at: "2026-09-03T07:00:35.499Z"
-updated_at: "2026-09-04T08:13:40.853Z"
+updated_at: "2026-10-08T02:56:38.958Z"
 ---
 
 # E91: History read path materialized-only: incremental rollup ETL, per-table freshness, and precomputed UI aggregates
@@ -313,3 +313,6 @@ Feature: History read path materialized-only: incremental rollup ETL, per-table 
 - 2026-09-04T00:12:39.410Z backlog → active (system)
 - 2026-09-04T00:12:39.658Z active → verifying (system)
 - 2026-09-04T03:34:17.331Z done → active (system)
+- 2026-10-08T02:38:13.100Z active → verifying (system)
+- 2026-10-08T02:56:38.958Z verifying → done (system)
+
