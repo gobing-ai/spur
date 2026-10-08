@@ -4,7 +4,7 @@ name: superskill install sp does not refresh the installed lib/inline-run.genera
 status: done
 template: feature-impl
 created_at: 2026-10-07T20:52:31.358Z
-updated_at: "2026-10-08T08:07:39.937Z"
+updated_at: "2026-10-08T17:33:35.918Z"
 
 feature_id: A33
 priority: P2
@@ -144,10 +144,16 @@ Remedy note (operator, not this task): install a superskill release > 0.3.35 (co
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Single loader `loadInlineApp` checks required exports are functions before any call and throws the named skew error with bundle path, missing exports, cause ("older than its scripts") and both remedies — plugins/sp/lib/inline-run-app.ts:11-26; all six app imports converted: plugins/sp/scripts/inline-run-setup.ts:133, :142, :151, :172, :180, :220; grep shows no remaining direct app-entry `import(` (only the decide lib-bundle import at :153, out of R1 scope). |
-| R2 | MET | `--decide` keeps its JSON outcome with the skew message as `error` — plugins/sp/scripts/inline-run-setup.ts:151,162-166; setup's skew throw reaches the top-level handler printing `FAIL — <message>` to stderr, exit 1 — plugins/sp/scripts/inline-run-setup.ts:220,246-249; AC1 test asserts non-zero exit, named error, and no "is not a function" — plugins/sp/tests/inline-run-installed.test.ts:249-281. |
-| R3 | MET | Ownership paragraph directly follows the ADR-032 install-time-output note: superskill stages `lib/` (commit b42961b, first release after 0.3.35), spur ships bundle + skew guard, named skew error, `--spur-bin` remedy — plugins/sp/README.md:412-420. |
-| R4 | MET | New guard module has zero imports — plugins/sp/lib/inline-run-app.ts:1-9; only script-side addition is relative `import { loadInlineApp } from '../lib/inline-run-app'` — plugins/sp/scripts/inline-run-setup.ts:12; mjs twin inlines the identical guard — plugins/sp/scripts/inline-run-setup.mjs:16-25; plugin-smoke PASS and sp-plugin-standalone 0 findings attested in task context. |
+| R1 | MET | `plugins/sp/lib/inline-run-app.ts:12-27` loadInlineApp imports the entry, checks the mode's required exports are functions, and throws the named skew error (bundle path, missing exports, cause, both remedies) at `plugins/sp/lib/inline-run-app.ts:22`; every app import in the facade routes through it: `plugins/sp/scripts/inline-run-setup.ts:133`, `:142`, `:151`, `:153` (decide's bundle-only config resolvers, FIXED this run), `:174`, `:182`, `:222` |
+| R2 | MET | decide keeps its JSON `{ok:false,error}` outcome and now carries the skew message instead of `lib.resolveDecideDecisionMakerEnabled is not a function` (reproduced before the fix this run): `plugins/sp/scripts/inline-run-setup.ts:153-157`, test `plugins/sp/tests/inline-run-installed.test.ts:290`; setup mode `plugins/sp/tests/inline-run-installed.test.ts:248` |
+| R3 | MET | `plugins/sp/README.md:414-418` records that superskill stages `lib/` (commit b42961b), spur ships the bundle plus the skew guard, and the `--spur-bin` workaround |
+| R4 | MET | fresh 2026-10-08: `spur rule run --rule sp-plugin-standalone` 0 findings; `bun run plugin-smoke` PASS; full pre-check 50 rules 0 findings; `plugins/sp/lib/inline-run-app.ts:12` has no imports |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — A stale installed bundle fails with a named version-skew error (req: R1, R2, R4) | MET | test | `plugins/sp/tests/inline-run-installed.test.ts:248` setup mode on a stub bundle lacking readInstalledInventory: non-zero exit, names bundle path, export, "older than its scripts", b42961b and --spur-bin, no "is not a function"; `plugins/sp/tests/inline-run-installed.test.ts:290` same for --decide in the JSON outcome; fresh run 26 pass / 0 fail |
+| AC2 — A current bundle and the source entry are unaffected (req: R1) | MET | test | fresh 2026-10-08 `plugins/sp/tests/inline-run-installed.test.ts` + `plugins/sp/tests/inline-run-setup.test.ts` 26 pass / 0 fail; twin parity `plugins/sp/tests/inline-run-installed.test.ts:334` |
+| AC3 — The install ownership decision is recorded beside the plugin's install docs (req: R3) | MET | command | `rg -n "b42961b\|skew" plugins/sp/README.md` → 4 hits at `plugins/sp/README.md:414-418`, which states superskill stages the lib/ bundle (commit b42961b) and the inline scripts fail with a named skew error when the installed bundle is older |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

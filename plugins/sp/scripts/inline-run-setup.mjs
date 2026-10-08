@@ -155,8 +155,7 @@ async function main() {
       refuseUnsafeRunId(runId);
     try {
       const { app: app2, portable: portable2 } = await loadInlineApp(spurBin, resolveAppEntry, ["runInlineRunDecide"]);
-      const bundlePath = fileURLToPath(new URL("../lib/inline-run.generated.mjs", import.meta.url));
-      const lib = await import(bundlePath);
+      const { app: lib } = await loadInlineApp(spurBin, () => ({ entry: fileURLToPath(new URL("../lib/inline-run.generated.mjs", import.meta.url)), portable: portable2 }), ["resolveDecideDecisionMakerEnabled", "loadSpurConfig"]);
       const loadOpts = portable2 ? { embeddedSchemas: lib.EMBEDDED_SPUR_SCHEMAS } : undefined;
       const [enabled, spurConfig] = await Promise.all([
         lib.resolveDecideDecisionMakerEnabled(process.cwd(), loadOpts),

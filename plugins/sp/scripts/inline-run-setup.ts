@@ -149,10 +149,12 @@ async function main(): Promise<void> {
         if (!SAFE_RUN_ID_RE.test(runId)) refuseUnsafeRunId(runId);
         try {
             const { app, portable } = await loadInlineApp<InlineApp>(spurBin, resolveAppEntry, ['runInlineRunDecide']);
-            const bundlePath = fileURLToPath(new URL('../lib/inline-run.generated.mjs', import.meta.url));
-            const lib = (await import(bundlePath)) as typeof import('../lib/inline-run.generated.mjs');
-            // Decide-enabled switch + catalog config resolved ONCE at the driver boundary
-            // (task 1094, ADR-082), passed as params.
+            // Decide switch + catalog config, resolved once (1094, ADR-082), behind the skew guard (1120 R2).
+            const { app: lib } = await loadInlineApp<typeof import('../lib/inline-run.generated.mjs')>(
+                spurBin,
+                () => ({ entry: fileURLToPath(new URL('../lib/inline-run.generated.mjs', import.meta.url)), portable }),
+                ['resolveDecideDecisionMakerEnabled', 'loadSpurConfig'],
+            );
             const loadOpts = portable ? { embeddedSchemas: lib.EMBEDDED_SPUR_SCHEMAS } : undefined;
             const [enabled, spurConfig] = await Promise.all([
                 lib.resolveDecideDecisionMakerEnabled(process.cwd(), loadOpts),

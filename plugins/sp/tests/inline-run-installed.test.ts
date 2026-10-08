@@ -285,6 +285,52 @@ test('a stale installed bundle fails setup with a named skew error, not a TypeEr
     }
 }, 30_000);
 
+// 1120 R2 (verify fix): --decide also reads the bundle's config resolvers; a stale bundle must
+// surface the named skew as the JSON outcome's `error`, not `lib.… is not a function`.
+test('a stale installed bundle fails --decide with a named skew error in the JSON outcome', () => {
+    const root = mkdtempSync(join(tmpdir(), 'spur-inline-skew-decide-'));
+    const plugin = join(root, 'installed plugin');
+    const project = join(root, 'project');
+    try {
+        mkdirSync(join(plugin, 'scripts'), { recursive: true });
+        mkdirSync(join(plugin, 'lib'), { recursive: true });
+        mkdirSync(project);
+        cpSync(
+            resolve(import.meta.dir, '../scripts/inline-run-setup.mjs'),
+            join(plugin, 'scripts/inline-run-setup.mjs'),
+        );
+        writeFileSync(
+            join(plugin, 'lib/inline-run.generated.mjs'),
+            'export async function runInlineRunDecide() {\n    return 0;\n}\n',
+        );
+        writeFileSync(join(project, 'options.json'), '[]');
+        const stale = spawnSync(
+            'node',
+            [
+                join(plugin, 'scripts/inline-run-setup.mjs'),
+                '--decide',
+                '--run-id',
+                'skew-run',
+                '--node',
+                'approve',
+                '--options-json',
+                'options.json',
+            ],
+            { cwd: project, encoding: 'utf8', timeout: 30_000 },
+        );
+        expect(stale.status, stale.stderr).not.toBe(0);
+        const outcome = JSON.parse(stale.stdout.trim()) as { ok: boolean; error: string };
+        expect(outcome.ok).toBe(false);
+        expect(outcome.error).toContain(join(plugin, 'lib/inline-run.generated.mjs'));
+        expect(outcome.error).toContain('resolveDecideDecisionMakerEnabled');
+        expect(outcome.error).toContain('loadSpurConfig');
+        expect(outcome.error).toContain('older than its scripts');
+        expect(outcome.error).not.toContain('is not a function');
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+}, 30_000);
+
 test('generated twins export every app operation the driver facade calls', () => {
     const facade = readFileSync(resolve(import.meta.dir, '../scripts/inline-run-setup.ts'), 'utf8');
     const names = new Set([...facade.matchAll(/\bapp\.([A-Za-z_$][\w$]*)/g)].map((m) => m[1] ?? '').filter(Boolean));
