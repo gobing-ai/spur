@@ -4,7 +4,7 @@ name: Implement-stage acceptance probe and the post-gate tree-freeze boundary
 status: todo
 template: feature-impl
 created_at: 2026-10-09T05:28:31.520Z
-updated_at: "2026-10-09T05:30:22.368Z"
+updated_at: "2026-10-09T06:40:24.891Z"
 feature_id: H1
 
 ac_altitude: task-local
@@ -43,6 +43,16 @@ Each mutation invalidated the certified input set and forced gate + review + ver
 - [ ] R5. **Digest hygiene is documented and reported.** The fingerprint's untracked-file behaviour is stated next to the exclusion globs (an untracked file outside `docs/tasks*`/`docs/features*` is part of the certified set), and a drift stop names the offending path(s) rather than a bare digest pair.
 - [ ] R6. **The probe must be cheap and safe.** It runs against a temp project root (never the repo corpus), leaves no tracked change, must not require network access beyond the CLI under test, and is bounded (a timeout plus a bounded output capture), so a probe can never become a new source of run failures or corpus pollution.
 - [ ] R7. **Same-change docs and bundle.** Update the driver reference (dispatch payload field 6, the freeze/drift rule, the probe evidence line), the `sp:code-implementation` skill's implement-scope section (the probe requirement and where it belongs in the stage), and any run-record/observability doc that lists the run's status artifacts; rebuild the bundle.
+
+- [ ] R6. **The implement-stage probe also covers the repo's own static gate invariants.** The H1
+  batch (2026-10-08) spent extra full-gate runs on three defects a dispatch-time self-check would
+  have caught before the stage reported done: new code reading the environment directly
+  (`env-var-hygiene`), a plugin script whose generated `.mjs` twin was stale after the source edit
+  (`script-contract-check`), and one of two paired `package.json` chains changed alone
+  (`spur-check` vs `spur-check-new`, asserted by two tests). The probe therefore also runs, scoped to
+  the paths the stage changed: the repo's configured pre-check rule preset, twin freshness for any
+  plugin script touched, and the paired-script parity the repo's own tests assert. It stays narrow —
+  the single full project check remains the pipeline `test` hop's job.
 
 ### Acceptance Criteria
 
@@ -105,6 +115,15 @@ Scenario: AC7 — Owning docs and bundle reflect the probe and freeze rules (req
   Then both pass
   And the driver reference documents the probe evidence requirement and the freeze/drift rule
   And the code-implementation skill states where in the stage the probe belongs
+```
+
+```gherkin
+Scenario: AC6 — a static-invariant defect cannot reach the gate
+  Given an implement stage whose change reads the environment directly, leaves a stale generated
+    twin, or edits one of a paired `package.json` chain
+  When the stage runs its acceptance probe
+  Then the probe fails the stage before it reports done, naming the invariant and the file
+  And the pipeline's `test` hop never sees that defect, so no extra gate run is consumed
 ```
 
 ### Q&A

@@ -4,7 +4,7 @@ name: Unblock workflow housekeeping from legacy evidence-migration failures
 status: todo
 template: issue
 created_at: 2026-10-09T06:08:08.615Z
-updated_at: "2026-10-09T06:08:10.442Z"
+updated_at: "2026-10-09T06:41:22.552Z"
 
 ---
 
@@ -58,6 +58,18 @@ could finish, because housekeeping could not do it.
   observed on 2026-10-08 (or reports precisely why a specific one is still live), and a second run
   is a no-op.
 
+- [ ] R5. **Divergent foreign evidence must be reported and skipped, not fatal.** `persist-out` refused
+  the H1 batch's teardown (2026-10-08) with `durable evidence conflicts: 1090-verdict.json`: a stale
+  *staged copy* of another task's evidence, whose invoking-tree counterpart had moved on. Twelve
+  further foreign files existed only in the worktree. Reconcile by reporting the divergent foreign set
+  (name + which side is newer) and skipping those copies, so a teardown is never blocked by evidence
+  the run does not own; the invoking tree's copy is never overwritten.
+- [ ] R6. **Unresolvable run-artifact citations are caught where they are written, not at teardown.**
+  After R5's class was reconciled, the same pass refused on `.spur/run/bb-base.sha` — a citation in
+  task 1129's `### Testing`, naming a path from a verifier's throwaway temp-repo probe. A citation
+  naming a `.spur/run/<name>` present in neither tree should fail (or be dropped by) the *record*
+  step; teardown must be the last chance, not the first detector.
+
 ### Acceptance Criteria
 
 ```gherkin
@@ -78,6 +90,19 @@ Scenario: AC3 — this repository's housekeeping converges
   When `spur workflow clean` runs twice
   Then the first run finalizes the stale rows (or names the ones it must leave live, with why)
   And the second run is a no-op with no `housekeeping skipped` line
+```
+
+```gherkin
+Scenario: AC4 — a stale foreign evidence copy cannot block teardown
+  Given a worktree evidence plane holding a foreign task's older copy whose invoking-tree counterpart is newer
+  When persist-out runs
+  Then the pass completes, reporting that file as skipped and naming which side is newer
+  And the invoking-tree copy is never overwritten
+
+Scenario: AC5 — a phantom citation is caught at record time
+  Given a task whose Testing section cites a `.spur/run/<name>` that exists in neither tree
+  When the record step runs
+  Then the citation is reported and repaired there, before any teardown is attempted
 ```
 
 ### Q&A

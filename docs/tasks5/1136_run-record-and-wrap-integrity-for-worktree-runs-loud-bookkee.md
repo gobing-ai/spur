@@ -4,7 +4,7 @@ name: "Run-record and wrap integrity for worktree runs: loud bookkeeping, fresh 
 status: todo
 template: feature-impl
 created_at: 2026-10-09T05:28:31.980Z
-updated_at: "2026-10-09T05:30:22.775Z"
+updated_at: "2026-10-09T06:40:32.230Z"
 feature_id: H1
 
 ac_altitude: task-local
@@ -45,6 +45,22 @@ Root cause: the wrapup **`doc-sync`** step **re-added** the deliberately delinke
 - [ ] R5. **Repair must be scoped to the violation's subject.** The wrapup `repair` lane may only touch the file(s) the contract violation names. A `doc-tripwire` FAIL must not be repaired by editing an unrelated test (observed: `apps/app/tests/decision/decision-log-query.test.ts`), and every repair attempt must record its scope (files touched) so an out-of-scope edit is visible in the run log.
 - [ ] R6. **Contract tests.** Static/fixture pins in the pattern of `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts`: the delinked row stays delinked through a doc-sync pass; repair scope is bounded; `--close` fails when the run has no rows; a cross-tree `--action` either lands in the owning database or fails loudly; the gate refuses receipt reuse for a stale supplied digest. Each pin must fail without the fix.
 - [ ] R7. **Same-change docs and bundle.** Update the driver reference (bookkeeping sections, structured-trace emission, the digest-recompute rule), the wrapup workflow comments and any run-record/observability doc that lists the wrapup states, and the receipt contract where reuse is decided; rebuild the bundle with `bun run --filter @gobing-ai/spur build:bundle` and `bun run build:scripts`.
+
+- [ ] R6. **The inline driver executes a state's declared actions through their declared runners,
+  never as ad-hoc shell re-implementations.** Recording the H1 batch (2026-10-08) showed the driver
+  hand-writing each lane's actions in bash: 43:56 of declared driver overhead plus roughly two
+  minutes more inside every run, three driver-script failures (scratch under `/tmp` reaped mid-run, a
+  quoting bug that aborted a lane, and one lane invoked before its declared `qualityGateCmd` variable
+  was exported — two wasted full-gate runs). The contract must therefore state, per action kind,
+  which runner executes it on the inline surface, and require that the declared run variables are
+  materialized before any action that consumes them. Driver scratch lives inside the run directory.
+- [ ] R7. **A wrap feature-transition must not fail on a nested verification invocation that passes
+  standalone.** In the H1 batch the wrapup feature-transition failed with
+  `GuardDeniedError: Lifecycle transition denied for feature H1: State "verifying" onEnter shell
+  failed (exit 1)` while its own gate printed `H1 (active): PASS`; running
+  `feature-verification.yaml` directly then succeeded (`H1 verification PASS`, run
+  `abf585eb-3e26-4b66-9835-3d3332e139dc`), so the nested invocation — not the feature — was at
+  fault and the transition had to be completed by hand.
 
 ### Acceptance Criteria
 
@@ -108,6 +124,21 @@ Scenario: AC7 — Owning docs and bundle reflect the three integrity fixes (req:
   Then both pass
   And the driver reference documents the owning-tree bookkeeping rule, the no-suppression rule and the digest-recompute rule
   And the receipt contract documents when reuse is refused
+```
+
+```gherkin
+Scenario: AC6 — a driver lane cannot bypass its declared action runner
+  Given a pipeline state whose YAML declares actions of a given kind
+  When the inline driver executes that state
+  Then every action runs through its declared runner with its declared variables materialized
+  And no driver scratch is read from outside the run directory
+
+Scenario: AC7 — the wrap feature-transition survives its nested verification
+  Given a batch whose tasks are all done and a feature at `active`
+  When the wrapup feature-transition runs its nested feature-verification step
+  Then the transition completes with the verification receipt recorded, or the failure names the
+    nested invocation's own error rather than a generic onEnter exit 1
+  And the same verification run standalone and nested agree on the verdict
 ```
 
 ### Q&A

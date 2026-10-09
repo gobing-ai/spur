@@ -4,7 +4,7 @@ name: session-timeline must measure the pi host transcript so the review skill's
 status: todo
 template: feature-impl
 created_at: 2026-10-09T05:34:59.326Z
-updated_at: "2026-10-09T05:36:13.650Z"
+updated_at: "2026-10-09T06:41:15.346Z"
 feature_id: E5
 
 ac_altitude: task-local
@@ -31,6 +31,13 @@ ac_numbering: task-local
 - **Fail-safe direction**: the review skill renders `n/a` only for an explicit unavailability, so the script must report `available:false` **with a reason** whenever it recognises no segments in a transcript that clearly has turns.
 
 **Why it matters.** `sp-dev-review-session` / `sp-session-review` is a supported surface on six hosts including pi; its time/token table is one of its two evidence planes, and the 0912 baseline diagnostics (F1/F2/F4) are drawn from exactly this measurement. On pi the table is silently zero, which is worse than absent: it looks measured. This session had to fall back to artifact timestamps (run row span, gate-receipt `durationMs`, dispatch durations), which is a different and lossier plane.
+
+**Observation from the H1 batch (2026-10-08, pi host).** Running
+`session-timeline.mjs --transcript <pi session jsonl>` returns
+`{"available":true,"segments":[],"totals":{"workMs":0,"waitMs":0,"toolCalls":0,"tokens":{…all 0…}},
+"skippedLines":0}` — the measurement reports itself *available* while parsing nothing, so the review
+skill's time/token contract renders as a silent zero instead of the `{"available":false,"reason":…}`
+R5 prescribes. The reviewed session was ≈11.7 h of one pi transcript with hundreds of rows.
 
 ### Requirements
 
