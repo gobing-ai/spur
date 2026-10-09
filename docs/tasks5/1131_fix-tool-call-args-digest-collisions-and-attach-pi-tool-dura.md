@@ -4,7 +4,7 @@ name: Fix tool-call args digest collisions and attach pi tool durations in histo
 status: done
 template: feature-impl
 created_at: 2026-10-08T18:27:09.806Z
-updated_at: "2026-10-09T15:24:56.167Z"
+updated_at: "2026-10-09T17:11:08.287Z"
 feature_id: E5
 
 ac_numbering: task-local
@@ -31,7 +31,7 @@ The 2026-10-08 session review analyzed the four pi driver sessions with `history
 
 - [x] R1. Digest fidelity (ts-libs): `argsDigest` hashes the full args with only secret substrings replaced. Apply the same `DEFAULT_REDACTION_RULES` substring replacement that `redactValue` (`src/redaction.ts:55`) applies, to every string leaf. Remove the >80-char collapse and the `[A-Za-z0-9_-]{20,}` whole-value collapse. Two calls whose args differ outside secret spans produce different digests, and two calls that differ only inside a secret span produce the same digest.
 - [x] R2. Pi duration attach (ts-libs): `importer.ts` attaches toolResult durations for `source === 'pi'` as it does for omp. It matches the pi result entry by its normalized role `user` plus `toolCallId`, not by `role === 'toolresult'`. `ompToolResultTiming` (or a pi sibling) reads the native duration in this order: `details.wallTimeMs`, then `message.durationMs`, then `details.toolMetadata.durationMs`. When `details.toolMetadata.startedAt/completedAt` are present, they are persisted. The existing timestamp-delta fallback and its guard rails still apply when no native value exists.
-- [x] R3. Release and adopt: after the operator authorizes publishing, ts-libs releases the importer (0.5.19). Spur then bumps the root catalog entry and runs `bun install`, and re-imports the affected history with `bun run apps/cli/src/index.ts history import --source pi --mode force-file` (plus `--source omp` / `claude` where digests changed), following the history design's backup and dry-run contract. Running the release without operator authorization is out of scope.
+- [x] R3. Release and adopt: after the operator authorizes publishing, ts-libs releases the importer (0.5.19). Spur then bumps the root catalog entry and runs `bun install`, and re-imports the affected history with a full replay, `bun run apps/cli/src/index.ts history import --source pi --mode full` (plus `--source omp` / `claude` where digests changed), following the history design's backup and dry-run contract. Only full mode retires rows whose record_hash changed; a single-file `--mode force-file` re-import adds the new rows beside the stale ones (`docs/design/history-capability-detection.md:169`). Running the release without operator authorization is out of scope.
 - [x] R4. No-match session warning (spur): when `history analyze` is given `--session <id>` and the selector matches zero `history_message` rows for that session, the artifact carries a `warnings[]` entry `session-not-found` naming the id. When a stored session id ends with or contains the given value, the warning suggests it, which covers the bare-uuid-vs-file-stem case. The CLI exits non-zero (2) for that case. Other zero-data selectors keep their current behavior.
 
 ### Acceptance Criteria
@@ -53,7 +53,7 @@ Scenario: AC3 — Pi tool calls get native durations (req: R2)
   Then history_tool_call.duration_ms = 1234 for that call and started_at/completed_at equal the toolMetadata values
 
 Scenario: AC4 — Real sessions lose the phantom loops after re-import (req: R3)
-  Given spur on the released importer with pi history force re-imported
+  Given spur on the released importer with pi history replayed in full mode
   When `bun run apps/cli/src/index.ts history analyze --source pi --session 2026-10-07T22-44-33-625Z_01a1188a-36d8-72ae-b267-dac37608899b --json` runs
   Then the loops rows, if any, each have identical `args_raw` across their grouped calls, the `derived-unattributed-time` warning is absent or reports pi measured time > 0, and the H15 numbers are recorded in Testing
 
@@ -92,50 +92,42 @@ Scenario: AC5 — Unmatched --session is loud (req: R4)
 2. ts-libs: write AC1/AC2 in `tests/mappers.test.ts` and `tests/hash-redaction.test.ts`, and AC3 in `tests/importer.test.ts` with a pi fixture. They fail on 0.5.18.
 3. ts-libs: implement R1/R2 and run the package tests and lint.
 4. Stop for operator authorization to release ts-libs 0.5.19 (publishing is an external action).
-5. Spur: bump `package.json:37`, run `bun install`, back up `.spur/spur.db`, run `history import --source pi --mode force-file` (dry-run first), then omp/claude as needed. Run the AC4 analyze and record the before/after loops rows in Testing.
+5. Spur: bump `package.json:37`, run `bun install`, back up `.spur/spur.db`, run `history import --source pi --mode full` (dry-run first; force-file cannot retire stale record_hash rows), then omp/claude as needed. Run the AC4 analyze and record the before/after loops rows in Testing.
 6. Run `bun run spur-check`.
 
 ### Solution
 
-Change-map (auto-generated — implement step did not record a Solution).
-Each entry cites the first changed line per file (`file:line`).
+Two repos, two commits plus a released package (recorded at re-verify, 2026-10-09).
 
-| Change (`file:line`) |
-|----------------------|
-| `apps/cli/src/commands/history.ts:379` |
-| `apps/cli/tests/commands/history.test.ts:128` |
-| `apps/cli/tests/commands/history.test.ts:20` |
-| `package.json:37` |
-| `packages/app/src/services/history-service.ts:1406` |
-| `packages/app/src/services/history-service.ts:61` |
-| `packages/app/src/services/history-service.ts:804` |
-| `packages/app/tests/services/history-service.test.ts:626` |
-| `packages/app/tests/services/history-service.test.ts:75` |
-| `packages/app/tests/services/history-service.test.ts:85` |
-| `packages/domain/src/analytics/forensic-query.ts:2621` |
-| `packages/domain/src/analytics/index.ts:84` |
+- **ts-libs R1/R2** (ts-libs `2cc0b158`, released as 0.5.19 in `56dfc670`): `argsDigest` now hashes the full args with only secret substrings replaced. The string leaves of `redactArgs` run the `DEFAULT_REDACTION_RULES` substring pass, and the >80-char and long-token collapses are gone (@gobing-ai/ts-llm-jsonl-importer `src/mappers.ts` line 1059). Pi tool results attach native durations: the omp-or-pi guard is at `src/importer.ts` line 535, the pi user-role toolResult match at line 544, and the wallTimeMs chain at `src/mappers.ts` line 1657.
+- **Spur R3** (`63a38285e`): the root catalog entry was bumped to `^0.5.19` (`package.json:37`). Historical rows are re-derived by a full pi replay (`history import --source pi --mode full`), not by single-file force-file. Force-file cannot retire rows whose record_hash changed; it duplicates them instead.
+- **Spur R4** (`63a38285e`):
+  - `sessionMatchLookup` counts exact matches and collects containing ids (`packages/domain/src/analytics/forensic-query.ts:2629`).
+  - The analyze path emits a `session-not-found` warning with a "Did you mean" suggestion (`packages/app/src/services/history-service.ts:1420`).
+  - The CLI maps that warning to exit 2 (`apps/cli/src/commands/history.ts:381`).
+  - Test: `apps/cli/tests/commands/history.test.ts:128`.
 
 ### Testing
 
 **Pipeline verify results**
 
-- Verdict: PASS (from verdict artifact)
-- Confidence: HIGH
+- Verdict: FAIL (from verdict artifact)
+- Confidence: MEDIUM
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | redactArgs string leaf -> applyRules (ts-libs source redaction.ts lines 55-57, single DEFAULT_REDACTION_RULES substring pass); the >80-char collapse and the [A-Za-z0-9_-]{20,} whole-value collapse are removed from the redactArgs rewrite in ts-libs mappers.ts near line 1057; argsDigest remains sha256 of key-sorted stable JSON (same file line 1043). Tests: mappers.test.ts long-command digest distinctness; hash-redaction.test.ts token-only digest equality. |
-| R2 | MET | ts-libs importer.ts line 535 guard extends timing to omp OR pi; lines 541-546 result-entry match accepts pi normalized user role OR toolresult; mappers.ts line 1657 wallTimeMs chain `details.wallTimeMs ?? message.durationMs ?? toolMetadata.durationMs` in spec order; lines 1659-1660 native branch persists toolMetadata bounds; importer.ts lines 185-194 persists started_at/completed_at to history_tool_call on the native branch only; timestamp-delta fallback and guards untouched. Test importer.test.ts pi fixture (durationMs 1234 -> duration_ms 1234 + bounds). |
-| R3 | MET | Released under operator authorization: ts-libs 0.5.19 published by Publish workflow run 37850267092 (12 packages, provenance logged); spur root catalog bumped `package.json` line 37 and `bun install` resolved importer 0.5.19 (verified in node_modules package.json line 3); H15 pi session force re-imported via `history import --source pi --file <H15 jsonl> --mode force-file` after a VACUUM INTO backup (`.spur/backups/spur-pre-1131.db`). Post-release AC4 evidence below. |
-| R4 | MET | packages/domain/src/analytics/forensic-query.ts:2619-2640 sessionMatchLookup (parameterized exact COUNT, then LIKE-contains suggest LIMIT ?); packages/app/src/services/history-service.ts:1413-1428 emits session-not-found warning with suggestion; apps/cli/src/commands/history.ts:379-383 maps that warning (only) to exit 2; tests apps/cli/tests/commands/history.test.ts lines 128-181 (bare uuid -> exit 2 + full file-stem suggestion; exact stored id -> exit 0). |
+| R1 | MET | @gobing-ai/ts-llm-jsonl-importer `src/mappers.ts` line 1059 — redactArgs string leaf returns applyRules (DEFAULT_REDACTION_RULES substring pass), argsDigest at line 1043; ts-libs `bun test tests/mappers.test.ts tests/hash-redaction.test.ts tests/importer.test.ts` 215 pass / 0 fail (re-run 2026-10-09 on ts-libs 554c0218, package 0.5.19); production check: the 278 rows written by 0.5.19 for H15 have 0 digests spanning differing args_raw. |
+| R2 | MET | @gobing-ai/ts-llm-jsonl-importer `src/mappers.ts` line 1657 — wallTimeMs chain details.wallTimeMs then message.durationMs then toolMetadata.durationMs; lines 1659-1660 toolMetadata bounds; @gobing-ai/ts-llm-jsonl-importer `src/importer.ts` line 535 omp-or-pi guard, line 544 pi user-role result match; importer.test.ts pi fixture green in the 215-pass run. |
+| R3 | PARTIAL | Release + adopt MET: `package.json:37` catalog ^0.5.19, lockfile resolves 0.5.19. Re-import NOT MET on the main DB: re-verify found this tree's node_modules still linked 0.5.18 (fixed by `bun install`, now 0.5.19) and H15 in `.spur/spur.db` held 296 pre-0.5.19 rows (0 with duration_ms, 47 distinct digests, 12 digests spanning differing args_raw). The prescribed procedure is wrong: `history import --mode force-file` never reconciles rows whose record_hash changed (only full mode runs reconcileFullImport, @gobing-ai/ts-llm-jsonl-importer `src/importer.ts` line 675), and the history design already says single-file force-file is not the procedure for retiring old extraction hashes (`docs/design/history-capability-detection.md:169`). Re-running it this verify (after VACUUM INTO backup .spur/backups/spur-pre-1131-reverify-20261009.db and a clean dry-run) added 278 0.5.19 rows beside the 296 stale ones (H15 now 574 rows). A full pi replay dry-run reports 586318 stale target rows across 4623 files; that bulk mutation needs operator authorization. |
+| R4 | MET | `packages/domain/src/analytics/forensic-query.ts:2630` sessionMatchLookup; `packages/app/src/services/history-service.ts:1420` session-not-found warning; `apps/cli/src/commands/history.ts:381` maps it to exit 2; `apps/cli/tests/commands/history.test.ts:128` test; re-run 2026-10-09: apps/cli history.test.ts 50 pass / 0 fail, app history-service.test.ts 58 pass / 0 fail. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Distinct long commands get distinct digests (req: R1) | MET | test | ts-libs `bun test tests/mappers.test.ts` green incl. the 120-char command pair differing in one path segment -> distinct argsDigest; >80-char inputs no longer share a digest. |
-| AC2 — Secret-only differences still collide (req: R1) | MET | test | ts-libs `bun test tests/hash-redaction.test.ts` green: sk-A…/sk-B… both match the api-key rule (redaction.ts:11-13) -> [REDACTED:token] -> digests equal; plaintext never persisted. |
-| AC3 — Pi tool calls get native durations (req: R2) | MET | test | ts-libs `bun test tests/importer.test.ts` green incl. the pi fixture: durationMs 1234 -> history_tool_call.duration_ms 1234 with started_at/completed_at from toolMetadata. |
-| AC4 — Real sessions lose the phantom loops after re-import (req: R3) | MET | command | Post-release `history analyze --source pi --session 2026-10-07T22-44-33-625Z_01a1188a-36d8-72ae-b267-dac37608899b --json`, exit 0: Q4 loops rows = 0, so the args_raw-identity clause holds vacuously; `derived-unattributed-time` reports 13749943ms residual against measured pi toolMs 15479536ms > 0 and stepSupport pi 261/289 steps with duration; DB audit shows 296/296 tool calls with duration_ms (was 0 pre-release), 296 distinct args_digest and 0 digests spanning differing args_raw. |
-| AC5 — Unmatched --session is loud (req: R4) | MET | test | apps/cli tests history.test.ts: bare-uuid --session -> exit 2, warnings contains session-not-found with full file-stem suggestion; exact stored id -> exit 0. |
+| AC1 — Distinct long commands get distinct digests (req: R1) | MET | test | ts-libs `bun test tests/mappers.test.ts tests/hash-redaction.test.ts tests/importer.test.ts` 215 pass / 0 fail (re-run 2026-10-09), incl. the 120-char command pair digest test. |
+| AC2 — Secret-only differences still collide (req: R1) | MET | test | Same ts-libs run, hash-redaction.test.ts sk-A/sk-B digest-equality test green. |
+| AC3 — Pi tool calls get native durations (req: R2) | MET | test | Same ts-libs run, importer.test.ts pi fixture (durationMs 1234 to duration_ms 1234 with toolMetadata bounds) green. |
+| AC4 — Real sessions lose the phantom loops after re-import (req: R3) | UNMET | command | `bun run apps/cli/src/index.ts history analyze --source pi --session 2026-10-07T22-44-33-625Z_01a1188a-36d8-72ae-b267-dac37608899b --json` exit 0 on 2026-10-09: before re-import 8 loop rows, 296 tool calls, 12 colliding digests; after the force-file re-import 8 loop rows (first: bash, repeats 85, stale digest a6323265), 574 tool calls (duplicated), derived-unattributed-time 13749943ms, stepSupport pi 261/289 with duration. The recorded 296/296-duration, 0-loop H15 state does not reproduce on the main DB. |
+| AC5 — Unmatched --session is loud (req: R4) | MET | command | `bun run apps/cli/src/index.ts history analyze --source pi --session 01a1188a-36d8-72ae-b267-dac37608899b --json` exit 2, warnings has code session-not-found with detail "Did you mean: 2026-10-07T22-44-33-625Z_01a1188a-36d8-72ae-b267-dac37608899b?" (re-run 2026-10-09). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

@@ -4,7 +4,7 @@ name: Verify the claimed confidence level is earned by the verdict evidence
 status: done
 template: standard
 created_at: 2026-10-08T22:44:30.518Z
-updated_at: "2026-10-09T06:36:45.703Z"
+updated_at: "2026-10-09T17:11:28.541Z"
 
 ac_numbering: task-local
 ac_altitude: task-local
@@ -170,21 +170,17 @@ artifact shape changes: the finding list is already an open set consumed by `spu
 
 ### Solution
 
-Change-map (auto-generated — implement step did not record a Solution).
-Each entry cites the first changed line per file (`file:line`).
+Single commit `c279b8712` (4 files: the task file, the lint module, its tests and the schema reference). Recorded at re-verify, 2026-10-09.
 
-| Change (`file:line`) |
-|----------------------|
-| `apps/web/src/lib/rpc-client.ts:41` |
-| `packages/app/src/services/verify-answer-lint.ts:175` |
-| `packages/app/tests/services/verify-answer-lint.test.ts:105` |
-| `packages/app/tests/services/verify-answer-lint.test.ts:115` |
-| `packages/app/tests/services/verify-answer-lint.test.ts:231` |
-| `packages/app/tests/services/verify-answer-lint.test.ts:39` |
-| `packages/app/tests/services/verify-answer-lint.test.ts:816` |
-| `plugins/sp/lib/inline-run.generated.mjs:1776` |
-| `plugins/sp/lib/inline-run.generated.mjs:1780` |
-| `plugins/sp/skills/code-verification/references/verdict-schema.md:53` |
+- **Coherence pass:** after the presence and vocabulary checks, `verify-answer-lint.ts` checks the confidence level against the rows (`packages/app/src/services/verify-answer-lint.ts:175-212`). It normalizes every requirement and AC row and computes `allRowsMet`, which needs at least one requirement row, and `hedgedRow`, which is true when a MET row's evidence contains a hedged phrase.
+  - `HIGH` with `!allRowsMet || hedgedRow` emits `confidence-unwarranted`.
+  - `LOW` with `allRowsMet` emits `confidence-understated`.
+  - The guard admits only HIGH and LOW, so MEDIUM is never a coherence finding, and a malformed level is reported only once, by the vocabulary pass.
+- **Artifact safety:** both findings go through `add()`, so they share the `ANSWER_LINT_MAX_FINDINGS` cap and address the `Confidence:` line. `spur task verdict --from-answer` lints first (`apps/cli/src/commands/task.ts:1440`) and returns before the artifact write (`apps/cli/src/commands/task.ts:1452`), so a rejected answer writes no verdict.
+- **Docs:** the rejection classes are documented in `plugins/sp/skills/code-verification/references/verdict-schema.md:59`.
+- **Known boundary:** a justified `N/A` AC row is not MET, so it makes HIGH unwarranted. This is deliberate under R1, which says an AC row must normalize to MET. Answers with N/A rows claim MEDIUM.
+
+The earlier auto change-map also listed `apps/web/src/lib/rpc-client.ts` and `plugins/sp/lib/inline-run.generated.mjs`. Those files changed in the base, not in this task.
 
 ### Testing
 
@@ -195,20 +191,20 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | packages/app/src/services/verify-answer-lint.ts:182-202 — the confidence-unwarranted branch fires for level HIGH (uppercase-normalized at line 182, admitted at line 183) when either allRowsMet is false (lines 186-189: a requirement row that does not normalize to MET, or an AC row that does not normalize to MET) or hedgedRow is true (lines 190-194: a MET row in either table whose evidence yields a hedge phrase). All three named conditions were exercised live on this tree: HIGH beside R2 UNMET returned exactly [line 2, confidence-unwarranted]; HIGH beside a hedged MET R1 returned [line 6 evidence-hedged, line 2 confidence-unwarranted]; HIGH beside AC1 UNMET returned [line 2, confidence-unwarranted]. Pinned by tests at packages/app/tests/services/verify-answer-lint.test.ts:833,845,851,864,923. |
-| R2 | MET | packages/app/src/services/verify-answer-lint.ts:203-209 — confidence-understated fires for level LOW when allRowsMet is true, which requires at least one present requirement row (line 187) and every requirement row plus every AC row normalizing to MET (lines 188-189). Positive case: LOW over an all-MET answer emits exactly one understated finding whose message names LOW (test at packages/app/tests/services/verify-answer-lint.test.ts:877-891). Negative control: LOW beside R2 UNMET emits no understated finding (test at line 888). |
-| R3 | MET | packages/app/src/services/verify-answer-lint.ts:183 — the outer guard admits only HIGH and LOW, so a MEDIUM level cannot reach either add call; the exemption is structural, not merely untested. Both directions pinned at packages/app/tests/services/verify-answer-lint.test.ts:894-904 (MEDIUM with every row MET, and MEDIUM beside R2 UNMET, each asserting the absence of both coherence rule names). Contract stated in plugins/sp/skills/code-verification/references/verdict-schema.md:65-67. |
-| R4 | MET | Findings route through add() (packages/app/src/services/verify-answer-lint.ts:39-41), which enforces ANSWER_LINT_MAX_FINDINGS = 10 (line 29); the address is the Confidence line (line 195 reads tables.confidence.line — observed as line 2 in the standard fixture and line 4 in a shifted fixture). Emission is from the same lintVerifyAnswer that spur task verdict calls: apps/cli/src/commands/task.ts:1407 via lintVerifyAnswerForTask (packages/app/src/services/feature-check.ts:1528 and 1552), then early return at apps/cli/src/commands/task.ts:1419 before the artifact write at apps/cli/src/commands/task.ts:1452-1453. Live CLI run: bun run apps/cli/src/index.ts task verdict 1133 --from-answer with Confidence HIGH beside an UNMET row exited 1, printed the confidence-unwarranted finding on line 2, and .spur/run/1133-verdict.json was absent afterward. |
-| R5 | MET | packages/app/src/services/verify-answer-lint.ts:66-75 runs presence and vocabulary first: a missing line yields exactly one confidence-missing (line 68), an out-of-vocabulary value yields exactly one confidence-value (lines 71-74). The coherence guard at line 183 admits only the normalized strings HIGH and LOW, so neither shape reaches it. Live: Confidence SURE over an all-MET answer produced exactly [line 2, confidence-value]; an answer with no Confidence line produced exactly [line 0, confidence-missing]. Pinned at packages/app/tests/services/verify-answer-lint.test.ts:940-948. |
+| R1 | MET | `packages/app/src/services/verify-answer-lint.ts:182-202` HIGH branch fires when not allRowsMet (req row not MET or AC row not MET, :186-189) or a MET row's evidence yields firstHedgedPhrase (:190-194); tests `packages/app/tests/services/verify-answer-lint.test.ts:833`, :845, :851, :864, :923 green (94 pass / 0 fail, re-run 2026-10-09); live source-CLI probe HIGH beside 5 UNMET rows returned exactly [confidence-unwarranted], exit 1. |
+| R2 | MET | `packages/app/src/services/verify-answer-lint.ts:203-209` LOW branch fires only when allRowsMet, which requires at least one requirement row (:187); tests `packages/app/tests/services/verify-answer-lint.test.ts:877` (positive) and :888 (negative control) green. |
+| R3 | MET | `packages/app/src/services/verify-answer-lint.ts:183` guard admits only HIGH and LOW, so MEDIUM never reaches either add call; test `packages/app/tests/services/verify-answer-lint.test.ts:894` covers both directions; live probe MEDIUM beside 5 UNMET rows returned zero lint findings. |
+| R4 | MET | Both rules go through add() with the ANSWER_LINT_MAX_FINDINGS cap and address tables.confidence.line (`packages/app/src/services/verify-answer-lint.ts:195`); CLI path `apps/cli/src/commands/task.ts:1440` lints first and returns at `apps/cli/src/commands/task.ts:1452` before the artifact write at `apps/cli/src/commands/task.ts:1486`; live: rejected HIGH-beside-UNMET answer exited 1 and left `.spur/run/1133-verdict.json` byte-identical (shasum before/after). |
+| R5 | MET | Presence/vocabulary pass runs first and the coherence guard (`packages/app/src/services/verify-answer-lint.ts:183`) only admits normalized HIGH/LOW; test `packages/app/tests/services/verify-answer-lint.test.ts:940` green; live probe Confidence SURE over all-MET rows returned exactly [confidence-value]. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — HIGH beside an UNMET row is rejected (req: R1) | MET | test | test: packages/app/tests/services/verify-answer-lint.test.ts:833-844 asserts exactly one confidence-unwarranted finding, names HIGH in the message, and addresses line 2 (the Confidence line); sibling cases at line 845 (PARTIAL) and line 851 (non-MET AC row) close the other two R1 clauses. command: a live lintVerifyAnswer call on a HIGH plus R2 UNMET answer returned [line 2, confidence-unwarranted], and the CLI probe cited under AC5 reproduced the same finding end to end. |
-| AC2 — HIGH beside hedged MET evidence is rejected (req: R1) | MET | test | packages/app/tests/services/verify-answer-lint.test.ts:864-875 (hedged requirement row) and line 923-937 (hedged AC row) each assert the finding set contains confidence-unwarranted; the co-emitted evidence-hedged row finding is the intended overlap recorded at plugins/sp/skills/code-verification/references/verdict-schema.md:59-64 and in the task Design section. Live: HIGH beside a hedged MET R1 returned [line 6 evidence-hedged, line 2 confidence-unwarranted]. |
-| AC3 — LOW over an all-MET answer is rejected (req: R2) | MET | test | test: packages/app/tests/services/verify-answer-lint.test.ts:877-891 asserts exactly one confidence-understated finding containing LOW with every requirement and AC row MET; line 888 is the negative control keeping LOW beside a non-MET row clean. command: a live lintVerifyAnswer call on an all-MET LOW answer returned exactly [line 2, confidence-understated]. |
-| AC4 — MEDIUM is never a coherence finding (req: R3) | MET | test | test: packages/app/tests/services/verify-answer-lint.test.ts:894-904 covers MEDIUM with every row MET and MEDIUM beside R2 UNMET, asserting neither confidence-unwarranted nor confidence-understated appears. static-ref: packages/app/src/services/verify-answer-lint.ts:183 restricts the pass to HIGH and LOW, so MEDIUM cannot emit a coherence finding on any row shape. |
-| AC5 — a warranted HIGH lints clean and a rejected answer writes no artifact (req: R1, R2, R4) | MET | test | test: packages/app/tests/services/verify-answer-lint.test.ts:906-910 asserts the warranted HIGH answer over all-MET cited rows yields an empty finding list. command: bun run apps/cli/src/index.ts task verdict 1133 --from-answer on a HIGH plus UNMET answer exited 1, printed confidence-unwarranted on line 2, and .spur/run/1133-verdict.json was absent; the early return is at apps/cli/src/commands/task.ts:1419, ahead of the artifact write at apps/cli/src/commands/task.ts:1452-1453. |
-| AC6 — a malformed level is reported once, not twice (req: R5) | MET | test | test: packages/app/tests/services/verify-answer-lint.test.ts:940-948 asserts the Confidence SURE answer yields exactly one finding, ruled confidence-value, with no coherence finding. command: a live lintVerifyAnswer call on the same shape returned exactly [line 2, confidence-value]. |
+| AC1 — HIGH beside an UNMET row is rejected (req: R1) | MET | test | `packages/app/tests/services/verify-answer-lint.test.ts:833` asserts one confidence-unwarranted naming HIGH on the Confidence line; suite 94 pass / 0 fail via `(cd packages/app && bun test tests/services/verify-answer-lint.test.ts)`. |
+| AC2 — HIGH beside hedged MET evidence is rejected (req: R1) | MET | test | `packages/app/tests/services/verify-answer-lint.test.ts:864` (hedged requirement row) and `packages/app/tests/services/verify-answer-lint.test.ts:923` (hedged AC row) assert confidence-unwarranted is present; same green run. |
+| AC3 — LOW over an all-MET answer is rejected (req: R2) | MET | test | `packages/app/tests/services/verify-answer-lint.test.ts:877` asserts one confidence-understated naming LOW; same green run. |
+| AC4 — MEDIUM is never a coherence finding (req: R3) | MET | test | `packages/app/tests/services/verify-answer-lint.test.ts:894` asserts no coherence rule for MEDIUM with all MET and with R2 UNMET; same green run; live MEDIUM-beside-UNMET probe produced no lint finding. |
+| AC5 — a warranted HIGH lints clean and a rejected answer writes no artifact (req: R1, R2, R4) | MET | command | `packages/app/tests/services/verify-answer-lint.test.ts:906` warranted HIGH yields no finding; `bun run apps/cli/src/index.ts task verdict 1133 --from-answer <HIGH plus UNMET probe>` exit 1 with confidence-unwarranted and `.spur/run/1133-verdict.json` shasum unchanged (re-run 2026-10-09). |
+| AC6 — a malformed level is reported once, not twice (req: R5) | MET | test | `packages/app/tests/services/verify-answer-lint.test.ts:940` asserts exactly one confidence-value finding; live SURE probe returned exactly [confidence-value]. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
