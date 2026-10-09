@@ -113,7 +113,11 @@ export declare interface DeferredGateResult {
     statusFile: string;
 }
 export declare function runDeferredGate(env: QualityGateEnv, options?: QualityGateOptions): DeferredGateResult;
-export declare function runShellCommand(cmd: string, cwd: string | undefined): { output: string; code: number };
+export declare function runShellCommand(
+    cmd: string,
+    cwd: string | undefined,
+    extraEnv?: Record<string, string>,
+): { output: string; code: number };
 export declare function runQualityGate(
     mode: 'run' | 'recheck',
     env: QualityGateEnv,
