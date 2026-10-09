@@ -90,6 +90,15 @@ describe('1132 — parent-status link guard on the server context', () => {
                     foldersConfig: { active_folder: tasksDir, folders: { [tasksDir]: { baseCounter: 0 } } },
                 },
             });
+            // Spy the cached feature service: the pre-fix wiring reopened through TaskService's OWN
+            // FeatureService, giving the same payload and file with zero calls here (review pass 4/5 P4).
+            const featureSvc = ctx.featureService();
+            const transition = featureSvc.transition.bind(featureSvc);
+            const calls: Array<[string, string]> = [];
+            featureSvc.transition = async (id, to) => {
+                calls.push([id, to]);
+                return transition(id, to);
+            };
             const result = await ctx.taskService().create({
                 title: 'server reopen probe',
                 featureId: 'F2',
@@ -97,6 +106,7 @@ describe('1132 — parent-status link guard on the server context', () => {
             });
 
             expect(result.featureReopened).toEqual({ id: 'F2', from: 'verifying', to: 'active' });
+            expect(calls).toEqual([['F2', 'active']]);
             expect(readFileSync(join(featuresDir, 'F2_verifying.md'), 'utf8')).toContain('status: active');
         } finally {
             rmSync(root, { recursive: true, force: true });

@@ -4279,3 +4279,56 @@ describe('spur task CLI — verdict scenario-key gate (0958)', () => {
         }
     });
 });
+
+// ── parent-status link guard under raw --json (task 1132 R2, review residual v) ──
+// `task create` already emitted the structured `ok:false` payload; `task update --feature` wrote
+// prose to stderr with empty stdout, which automation reading stdout cannot parse.
+describe('spur task CLI — parent-feature-status JSON error (1132)', () => {
+    test('create and update --feature on a done parent emit the same ok:false payload on stdout', async () => {
+        const isoCwd = join(import.meta.dir, '..', `.tmp-task-parent-${Date.now()}`);
+        await mkdir(join(isoCwd, 'docs', 'tasks'), { recursive: true });
+        await mkdir(join(isoCwd, 'docs', 'features'), { recursive: true });
+        await writeFile(
+            join(isoCwd, 'docs', 'features', 'P7_closed.md'),
+            [
+                '---',
+                'schema_version: 1',
+                'id: "P7"',
+                'name: "Closed"',
+                'status: done',
+                'created_at: 2026-10-01T00:00:00.000Z',
+                'updated_at: 2026-10-01T00:00:00.000Z',
+                '---',
+                '',
+                '# P7: Closed',
+                '',
+                '## Goal',
+                '',
+                'g',
+                '',
+            ].join('\n'),
+        );
+        try {
+            const seed = createCapturedOutput();
+            expect(
+                await main(['task', 'create', '--skip-ready', 'Unlinked', '--json'], { cwd: isoCwd, output: seed }),
+            ).toBe(0);
+            const wbs = JSON.parse(lastMessage(seed)).ref.id;
+
+            const expected = { ok: false, error: { code: 'parent-feature-status', featureId: 'P7', status: 'done' } };
+            const create = createCapturedOutput();
+            const createArgs = ['task', 'create', '--skip-ready', 'Linked', '--feature', 'P7', '--json'];
+            expect(await main(createArgs, { cwd: isoCwd, output: create })).toBe(1);
+            expect(JSON.parse(lastMessage(create))).toMatchObject(expected);
+
+            const update = createCapturedOutput();
+            expect(
+                await main(['task', 'update', wbs, '--feature', 'P7', '--json'], { cwd: isoCwd, output: update }),
+            ).toBe(1);
+            expect(update.errors).toEqual([]);
+            expect(JSON.parse(lastMessage(update))).toMatchObject(expected);
+        } finally {
+            rmSync(isoCwd, { recursive: true, force: true });
+        }
+    });
+});

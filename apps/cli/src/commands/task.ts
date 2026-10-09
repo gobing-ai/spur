@@ -143,9 +143,9 @@ function renderMigrationReport(report: MigrationReport, dryRun: boolean, corpusD
 }
 
 /**
- * Emit ONE parseable error result for a failed task create/batch-create under
- * `--json` (F21 task 0787 R4): raw mode gets the ADR-091 `ok:false` payload on
- * STDOUT — `writeJsonError`'s raw mode writes plain prose to stderr and leaves
+ * Emit ONE parseable error result for a failed task create/batch-create (or a
+ * parent-guarded `update --feature`, 1132) under `--json` (F21 task 0787 R4):
+ * raw mode gets the ADR-091 `ok:false` payload on STDOUT — `writeJsonError`'s raw mode writes plain prose to stderr and leaves
  * stdout empty, which automation reading stdout cannot parse — and enveloped
  * mode gets the canonical error envelope with the CLI-local code carried in
  * `details.cliCode`. Non-JSON invocations keep the stderr prose. Exit codes
@@ -780,7 +780,9 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     writeJsonError(context.output, options, `[${err.code}] ${err.message}`, 'INTERNAL_ERROR');
                     context.setExitCode(err.code === 'usage' ? 2 : 3);
                 } else if (err instanceof ParentFeatureStatusError) {
-                    writeJsonError(context.output, options, err.message, 'VALIDATION_FAILED', {
+                    // Same structured payload as `task create` (1132 review residual v): raw `--json`
+                    // must not leave stdout empty with prose on stderr.
+                    writeCreateJsonError(context, options, 'parent-feature-status', err.message, {
                         featureId: err.featureId,
                         status: err.status,
                         activeSiblings: err.activeSiblings,

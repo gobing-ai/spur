@@ -1108,6 +1108,18 @@ describe('execution-batch spec contract (task 1121 — WT-4d invoking-tree relin
         expect(SPEC.split(DIFF_CONDITION)).toHaveLength(3); // two occurrences → three slices
     });
 
+    test('AC2 — a failed relink warns, names the stale workspace state in the batch report, never halts', () => {
+        for (const block of [CREATE_BLOCK, REUSE_BLOCK]) {
+            expect(block).toContain('invoking tree workspace links are stale');
+            expect(block).toContain('tee -a ".spur/run/worktree-<marker-id>-batch-report.md"');
+        }
+        // The prose names the non-fatal contract: warning only — the success marker still records merged.
+        expect(SPEC).toContain('a failed relink');
+        expect(SPEC).toContain('the success marker still records `merged`');
+    });
+});
+
+describe('execution-batch spec contract (task 1132 R4/R5 — auto-fix-first gates)', () => {
     // ─── 1132 R4/R5 — auto-fix-first gates + the --auto refine-once rule ───
     // The batch driver is an agent-interpreted runbook, so these pins are its executable half:
     // without them a regression in the repair-before-judge order or in the bounded refine lane
@@ -1142,22 +1154,12 @@ describe('execution-batch spec contract (task 1121 — WT-4d invoking-tree relin
         expect(SPEC).toContain('one** `/sp:dev-refineall --auto` refinement pass');
         // The bound is explicit (exactly one), the fallback is a reported skip, and independence
         // is stated — the three clauses R5 asks for.
-        expect(SPEC).toContain('exactly one');
+        expect(SPEC).toContain('(exactly one — never');
         expect(SPEC).toContain('marked **skipped** with its findings');
         expect(SPEC).toContain('The batch does not abort');
         // Non-auto behavior is unchanged (halt), so the rule is not a blanket softening.
         expect(SPEC).toContain('unchanged halt behavior');
         // The driver loop carries the same branch, so the prose is not merely descriptive.
         expect(SPEC).toContain('/sp:dev-refineall --auto pass');
-    });
-
-    test('AC2 — a failed relink warns, names the stale workspace state in the batch report, never halts', () => {
-        for (const block of [CREATE_BLOCK, REUSE_BLOCK]) {
-            expect(block).toContain('invoking tree workspace links are stale');
-            expect(block).toContain('tee -a ".spur/run/worktree-<marker-id>-batch-report.md"');
-        }
-        // The prose names the non-fatal contract: warning only — the success marker still records merged.
-        expect(SPEC).toContain('a failed relink');
-        expect(SPEC).toContain('the success marker still records `merged`');
     });
 });
