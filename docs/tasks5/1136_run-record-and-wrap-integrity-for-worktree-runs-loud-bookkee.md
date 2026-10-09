@@ -4,7 +4,7 @@ name: "Run-record and wrap integrity for worktree runs: loud bookkeeping, fresh 
 status: done
 template: feature-impl
 created_at: 2026-10-09T05:28:31.980Z
-updated_at: "2026-10-09T20:35:48.014Z"
+updated_at: "2026-10-09T20:48:28.801Z"
 feature_id: H1
 
 ac_altitude: task-local
@@ -331,6 +331,34 @@ be green; no behaviour change.
 Not covered: no live driver `--worktree` run (the drill reproduces the two-tree shape with plain
 directories, exercising the same `--project-root` path); wrapup/teardown defects are task 1147/1148
 scope and were not touched.
+
+**Wrap hop (`--wrap`, post-merge).**
+
+The full wrap route failed deterministically and was completed on the documented fast route:
+
+- `wrapup-pipeline` full route: `doc-sync`'s `agent.run` exited 0 with an **empty**
+  `-wrapup-learnings.md`, the contract-violation edge routed to `repair`, and the `repair` shell
+  then exited 1 — its `&&` chain starts with `V="$(cat .spur/run/$__runId-wrapup-learnings.status)"`,
+  and that file does not exist on the empty-capture path, so `cat`'s status breaks the chain before
+  `exit 0`. Transcript: `.spur/memory/runs/1136-wrap-full.log`. This is a distinct wrapup defect
+  (the step must tolerate a missing status file), adjacent to task 1147/1148 scope; not fixed here
+  because this task's boundaries exclude wrapup.
+- No stray writes survived the failure: `git status` was clean afterwards (the 1132 incident needed
+  a manual revert; this run did not).
+- Fast route (`mode=fast`): `task-resolve → metrics-record → done`, exit 0, metrics recorded;
+  transcript `.spur/memory/runs/1136-wrap-fast.log`.
+
+Landed-gate re-run on the merged `main` tree (`c021837d4`, post-merge, after the worktree was
+removed): `bun run lint` PASS, `test-pre-check` 50/50 PASS,
+`bun scripts/commands/gate-lock.ts -- bun run test` **10675 pass / 0 fail** exit 0,
+`test-post-check` 2/2 PASS — transcript `.spur/memory/runs/1136-spur-check.log`.
+
+Landing: worktree FF-merged after merging `main` into the branch (a concurrent 1143 run had advanced
+`main`); the single conflict was the `task-diffstat` doc line 1143 had already fixed, resolved by
+taking main's version. `persist-out` reported one external-key conflict (the worktree's
+`task-lifecycle` run row for 1136 vs the invoking tree's existing 1136 lifecycle link); reconciled by
+evidence — the authoritative transition record is this file's History section, and no unique row or
+evidence file was lost. Worktree and branch removed after the merge was verified on `main`.
 
 ### Review
 
