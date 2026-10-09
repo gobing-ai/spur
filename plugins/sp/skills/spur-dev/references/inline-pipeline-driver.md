@@ -674,11 +674,11 @@ concurrent full-gate runs serialize, and a manual `spur-check` (wrapped via
 `scripts/commands/gate-lock.ts`) holds the same lock. A dispatched **implement** or `test-fix` child
 that re-ran the full gate would queue behind every other gate on the host and burn its dispatch
 timeout waiting instead of working. Both therefore run only the **changed-path matrix**
-(`cross-cutting.md` § Changed-path targeted checks) over the paths they touched — the matrix, not a
-hand-picked "targeted tests and a lint pass" — and return. Carry `--gate-log <path>` through to the
-child **verbatim**: never paraphrase it into "re-run the named gate command". That paraphrase is not
-cosmetic — it dropped this rule in the H15 run (task Background, seq 232) and sent a worker into the
-locked gate. The pipeline's next `test` (recheck) stage re-acquires the lock and delivers the
+(`code-implementation/SKILL.md` § Changed-path targeted checks) over the paths they touched —
+the matrix, not a hand-picked "targeted tests and a lint pass" — and return. Carry
+`--gate-log <path>` through to the child **verbatim**: never paraphrase it into "re-run the named
+gate command". That paraphrase is not cosmetic — it dropped this rule in the H15 run (task
+Background, seq 232) and sent a worker into the locked gate. The pipeline's next `test` (recheck) stage re-acquires the lock and delivers the
 deciding verdict; that deciding run may wait for a live holder, so a queued worker's effective
 budget is dispatch timeout minus observed lock queue wait, not the timeout alone.
 

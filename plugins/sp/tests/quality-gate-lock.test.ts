@@ -226,6 +226,22 @@ describe('quality-gate host-wide lock (task 1127)', () => {
         CHILD_TIMEOUT_MS,
     );
 
+    test('AC2b: a dead creator’s unreadable claim is reclaimed by its marker-name pid, not waited on forever', async () => {
+        const lockDir = scratch('spur-lock-ac2b-', false);
+        const task = scratch('spur-lock-ac2b-t-');
+        const dead = spawnSync('sh', ['-c', 'echo $$; exit 0']);
+        const deadPid = Number(String(dead.stdout).trim());
+        expect(deadPid).toBeGreaterThan(0);
+        // A creator that crashed mid-write: the marker exists, its JSON is truncated.
+        writeFileSync(join(lockDir, `${deadPid}-torn`), '{"pid":');
+        const child = spawnGateRun(task, lockDir, { wbs: '1127t', runId: 'run-t' });
+        expect(await child.code).toBe(0);
+        const log = gateLog(task, '1127t');
+        expect(log).toContain(`reclaimed stale claim (pid ${deadPid})`);
+        expect(log).not.toContain('no readable claim');
+        expect(log).toMatch(/start \d+/);
+    }, 30_000);
+
     test(
         'AC3: receipts separate queue wait from gate runtime for first and queued runs',
         async () => {

@@ -15,6 +15,7 @@ export declare const GATE_LOCK_POLL_MS_ENV: string;
 export declare const GATE_LOCK_OFF_ENV: string;
 export declare const GATE_LOCK_TOKEN_ENV: string;
 export declare const GATE_LOCK_POLL_MS_DEFAULT: number;
+export declare const GATE_LOCK_MKDIR_HOLD_MS_ENV: string;
 export declare interface GateLock {
     release(): void;
     queueWaitMs: number;

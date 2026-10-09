@@ -691,7 +691,12 @@ function isProcessAlive(pid: number): boolean {
     }
 }
 
-/** First sorted marker with a readable claim; `null` when the dir is unreadable or claimless. */
+/**
+ * First sorted marker with a usable claim; `null` when the dir is unreadable or claimless.
+ * A marker whose JSON is unreadable (mid-write, or torn by a crashed creator) still carries its
+ * creator's pid in its `<pid>-<uuid>` name, so liveness is judged from that: a live creator is
+ * waited on, a dead one is reclaimed — never an indefinite wait on wreckage (1127 review P4).
+ */
 function readGateLockClaim(dir: string): { claim: GateLockClaim; marker: string } | null {
     let markers: string[];
     try {
@@ -704,7 +709,11 @@ function readGateLockClaim(dir: string): { claim: GateLockClaim; marker: string 
             const claim = JSON.parse(readFileSync(join(dir, marker), 'utf8')) as GateLockClaim;
             if (typeof claim.pid === 'number') return { claim, marker };
         } catch {
-            // Unreadable claim: liveness falls back to a grace poll below — never a hot spin.
+            const pid = Number.parseInt(/^(\d+)-/.exec(marker)?.[1] ?? '', 10);
+            if (pid > 0) {
+                return { claim: { pid, startedAt: Date.now(), wbs: '?', runId: '?', cwd: '?' }, marker };
+            }
+            // Not a gate marker at all: liveness falls back to the grace poll below.
         }
     }
     return null;

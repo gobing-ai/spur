@@ -380,7 +380,12 @@ function readGateLockClaim(dir) {
       const claim = JSON.parse(readFileSync(join(dir, marker), "utf8"));
       if (typeof claim.pid === "number")
         return { claim, marker };
-    } catch {}
+    } catch {
+      const pid = Number.parseInt(/^(\d+)-/.exec(marker)?.[1] ?? "", 10);
+      if (pid > 0) {
+        return { claim: { pid, startedAt: Date.now(), wbs: "?", runId: "?", cwd: "?" }, marker };
+      }
+    }
   }
   return null;
 }
