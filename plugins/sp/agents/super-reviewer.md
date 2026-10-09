@@ -123,6 +123,12 @@ HITL gate unless `--auto` was passed.
 - [ ] Dispatch each requested dimension to its owning skill — do not inline the review logic.
 - [ ] Merge findings into a single ranked report, emitting native priority cells
       (`P1 (blocker)` > `P2 (major)` > `P3 (minor)` > `P4 (advisory)` — see Output Format).
+- [ ] Sweep a finding's **class** in the same round. When a defect is one instance of a repeated
+      pattern (the same rule misapplied on two surfaces, a signature stale in both a generator and
+      its output), grep for the siblings and report every instance now. A half-found class costs a
+      full gate + review cycle when the next round finds the other half — H1 batch 2026-10-08:
+      review round 1 of task 1129 named one runbook's fingerprint/commit mismatch, round 2 found
+      the same mismatch on the sibling runbook.
 - [ ] With a WBS target (standalone or pipeline), write the merged report to that task's
       `## Review` section via `spur task update <wbs> --section Review --from-file` — per task
       under a task set, then the combined summary table; with a path target, emit as advisory

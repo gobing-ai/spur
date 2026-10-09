@@ -563,9 +563,13 @@ does not earn another full-gate run:
    isolated pass receipt in the verify evidence. The original full-gate run stands as the single
    final gate.
 3. **Red alone**, or a failure that is not a timeout → it is a real failure. Fix it.
-4. If the same test load-flakes in two separate sessions, give it an explicit per-test timeout and
-   a WHY comment (see `plugins/sp/tests/inline-run-close-reason.test.ts:100-102`). Never raise the
-   global timeout, skip the test, or loop full-gate reruns.
+4. Give the test an explicit per-test timeout and a WHY comment (see
+   `plugins/sp/tests/inline-run-close-reason.test.ts:100-102`) as soon as EITHER (a) the same test
+   load-flakes in two separate runs, OR (b) it times out once **outside the change scope** and then
+   passes green alone on three consecutive isolated reruns. Waiting for a second gate run to license
+   the fix cost 21 minutes on 2026-10-08 (task 1128, the 1058 two-tree canary: 5145 ms then 5967 ms
+   against bun's 5000 ms default, green 3/3 alone). Never raise the global timeout, skip the test,
+   or loop full-gate reruns.
 
 ## Auto-Decision Principles
 

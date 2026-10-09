@@ -150,6 +150,12 @@ that single full gate.
   creep into every plugin edit.
 - Run the applicable rows, then stop: the single full project check belongs to the pipeline's
   `test` hop (`task-pipeline.yaml` `${vars.qualityGateCmd}`).
+- **Mirrored surfaces: an edit lands on all of them.** When the change is one instance of a repeated
+  pattern — the same wiring rule on two runbooks, a signature in both a generator and its generated
+  `.d.mts`, a command chain in both `spur-check` and `spur-check-new` — grep for the siblings and
+  update each in this pass. Two H1-batch cycles (2026-10-08) were spent re-finding exactly this:
+  task 1129 fixed the guard wiring on one runbook and left its sibling, and task 1127 changed
+  `spur-check` while `spur-check-new`'s chain-parity assertion still expected the old chain.
 
 ## Behavior
 

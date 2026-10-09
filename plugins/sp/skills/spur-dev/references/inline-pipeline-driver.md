@@ -614,6 +614,9 @@ Evidence Type = test | command | static-ref | manual-review | llm-judge | n/a
 AC rows use the task's exact AC identities (verbatim `Scenario:` titles / checklist text).
 A behavioral AC marked MET requires executable evidence (test | command);
 static-ref or llm-judge alone cannot carry it.
+Evidence anchors are repo-root-relative (`packages/app/src/foo.ts:42`); a basename
+(`foo.ts:42`) is an unresolved anchor and blocks the done projection (`L4.anchor-unresolved`) —
+see `code-verification/references/verdict-schema.md` § Basename-only anchors are unresolved anchors.
 ```
 
 **AC table shape (0948 R9).** The AC table must be exactly **4 columns** and **cell 3 must hold a
