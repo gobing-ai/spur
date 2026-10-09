@@ -4,7 +4,7 @@ name: Unblock workflow housekeeping from legacy evidence-migration failures
 status: done
 template: issue
 created_at: 2026-10-09T06:08:08.615Z
-updated_at: "2026-10-09T20:34:31.449Z"
+updated_at: "2026-10-09T20:51:59.679Z"
 
 feature_id: E71
 priority: P1
@@ -257,6 +257,36 @@ Adjacent unblock (out of task scope): `plugins/sp/skills/spur-dev/references/inl
 carried a forbidden bare `bun plugins/sp/scripts/` invocation that failed `script-contract-check` on
 `main` before this task; the line was aligned with the guarded/installed-twin idiom already used four
 times in the same file. Doc-only, no behavior change.
+
+#### Confidence-level verification (HIGH|MEDIUM|LOW)
+
+The confidence taxonomy is declared **three times** with only a hand-written "mirrors the other"
+comment and no executable tie between them:
+
+| Definition | Location | Runtime behaviour |
+| --- | --- | --- |
+| `CONFIDENCE_LEVELS` (exported) | `packages/app/src/services/verify-verdict.ts:44` | artifact schema; case-normalizes, invalidates the artifact on a bad value |
+| private `CONFIDENCE_LEVELS` | `packages/app/src/services/verify-answer-lint.ts:360` | answer-text grammar; returns `undefined` on a bad value |
+| bare `VerdictConfidence` type + inline literal list | `packages/app/src/services/done-transition-guard.ts:48` (list at `:172`) | done-gate reader; `readError` → deny |
+
+Drift is silent in the worst direction — a level added in one place reads as "invalid confidence"
+in another, denying a legitimate PASS (or admitting a bogus one). `packages/app/tests/services/confidence-taxonomy.test.ts`
+pins the shared taxonomy behaviourally across all three consumers: the canonical three are accepted
+everywhere and normalize identically in any case, and every off-taxonomy probe is refused everywhere.
+
+Red–green evidence (each mutation applied, test run, source reverted):
+
+| Mutation | Result |
+| --- | --- |
+| `verify-answer-lint.ts` levels +`'EXTRA'` | caught — 1 fail |
+| `verify-verdict.ts` levels −`'LOW'` | caught — 1 fail |
+| `done-transition-guard.ts` inline list +`'EXTRA'` | caught — 1 fail |
+| `done-transition-guard.ts` type alias +`'EXTRA'` | **not** caught — TS type erasure changes no runtime behaviour; compile-time only |
+
+On this task's own artifact, the recorded verdict was read through the canonical parser:
+`parseVerifyVerdict('.spur/run/1139-verdict.json')` → `kind: valid`, `wbs: 1139`, `verdict: PASS`,
+`confidence: HIGH` (in taxonomy); `'high'` → `HIGH`; `'SURE'` → `invalid`. The rendered record carries
+`- Confidence: HIGH`, and `1123`/`1068 R3` guarantee the `testing → done` transition required it.
 
 ### Review
 
