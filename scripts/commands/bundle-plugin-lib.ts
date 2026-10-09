@@ -409,6 +409,17 @@ export declare const LOCKED_PATTERN: RegExp;
 export declare const FINDINGS_PATTERN: RegExp;
 export declare const COVERAGE_ROW_PATTERN: RegExp;
 export declare const RECEIPT_SCHEMA_VERSION: 'check-receipt/v1';
+export declare const GATE_LOCK_DIR_ENV: string;
+export declare const GATE_LOCK_POLL_MS_ENV: string;
+export declare const GATE_LOCK_OFF_ENV: string;
+export declare const GATE_LOCK_TOKEN_ENV: string;
+export declare const GATE_LOCK_POLL_MS_DEFAULT: number;
+export declare interface GateLock {
+    release(): void;
+    queueWaitMs: number;
+    token: string;
+}
+export declare function acquireGateLock(env: QualityGateEnv, logLine?: (line: string) => void): GateLock;
 export declare interface QualityGateEnv {
     wbs: string;
     qualityGateCmd?: string;

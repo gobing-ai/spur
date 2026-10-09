@@ -31,6 +31,7 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 
 ## Implementation
 
+- **Bootstrap reads (1128):** before the first dispatch, read [SKILL.md § Bootstrap reads](../skills/spur-dev/SKILL.md#bootstrap-reads) and load only that mode's files — everything else under `references/` is on demand.
 - **Publish the generated plan first (1105):** your first tool call — before invoking the skill,
   reading any reference, or showing the task — is `spur workflow show task-pipeline.yaml --no-logo
   --format todo --json` (the CLI resolves the project→registered→shared layer); then publish every
@@ -63,7 +64,8 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 base ref on full success, retain intact on any failure/halt/non-FF; bare form creates a fresh tree,
 `<name>` form adopts an existing worktree by name/path/branch). The lifecycle — dirty-tree precheck,
 creation or adoption, crash-safe `.spur/run/` marker, merge-or-retain, `--continue` re-entry — is
-`execution-batch.md` § Worktree isolation applied to a batch of one: marker `command` is `dev-run`
+`execution-worktree-setup.md` (creation/adoption, WT-1…WT-3b) + `execution-worktree-landing.md`
+(WT-4/WT-5) applied to a batch of one: marker `command` is `dev-run`
 and `selector` is the `<wbs>`, the derived branch is `sp/run-<wbs>-<short-id>`, and the success
 condition is the task reaching terminal `done` with no failed stage. A failing gate, a non-PASS
 verify verdict, or a HITL pause that ends the run all take the retention path.

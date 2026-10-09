@@ -1,13 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { readRunbook } from '../helpers/runbook-parts';
 
-const DRIVER = readFileSync(
-    join(import.meta.dir, '../../skills/spur-dev/references/inline-pipeline-driver.md'),
-    'utf8',
-);
+const DRIVER = readRunbook('inline-pipeline-driver');
 const CROSS = readFileSync(join(import.meta.dir, '../../skills/spur-dev/references/cross-cutting.md'), 'utf8');
-const BATCH = readFileSync(join(import.meta.dir, '../../skills/spur-dev/references/execution-batch.md'), 'utf8');
+const BATCH = readRunbook('execution-batch');
 const PLANNER = readFileSync(join(import.meta.dir, '../../agents/super-planner.md'), 'utf8');
 const COMMANDS_DIR = join(import.meta.dir, '../../commands');
 

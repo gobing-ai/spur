@@ -7,6 +7,13 @@ import util from 'node:util';
 import { setLoggerMuted } from '@gobing-ai/ts-infra';
 import { configure, reset } from '@logtape/logtape';
 
+// Task 1127: ordinary tests must never contend for the host-wide full-gate lock (a `spur-check`
+// gate on this host may legitimately hold it for many minutes). Default every test process to its
+// own lock dir unless a test exports SPUR_GATE_LOCK_DIR to drive the locking behavior explicitly.
+if (!process.env.SPUR_GATE_LOCK_DIR) {
+    process.env.SPUR_GATE_LOCK_DIR = mkdtempSync(join(tmpdir(), 'spur-test-gate-lock-'));
+}
+
 type UtilTypesWithEventTarget = typeof util.types & {
     isEventTarget?: (target: unknown) => boolean;
 };

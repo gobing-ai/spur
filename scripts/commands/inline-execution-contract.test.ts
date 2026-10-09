@@ -153,10 +153,10 @@ describe('task 0406 / H82 — unified --agent execution-surface contract', () =>
     });
 
     test('0503 — interactive full task execution uses the YAML-backed host driver with provenance', () => {
-        const driver = readFileSync(
-            join(ROOT, 'plugins', 'sp', 'skills', 'spur-dev', 'references', 'inline-pipeline-driver.md'),
-            'utf8',
-        );
+        // Task 1128 split the driver: the trace-emission section lives in its own on-demand file.
+        const driver = ['inline-pipeline-driver.md', 'structured-trace-emission.md']
+            .map((file) => readFileSync(join(ROOT, 'plugins', 'sp', 'skills', 'spur-dev', 'references', file), 'utf8'))
+            .join('\n');
         for (const command of ['dev-run', 'dev-runall']) {
             const raw = readFileSync(join(COMMANDS_DIR, `${command}.md`), 'utf8');
             expect(raw, `${command}: missing host driver route`).toContain('inline pipeline driver');

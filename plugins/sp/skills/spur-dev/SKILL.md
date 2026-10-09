@@ -39,11 +39,7 @@ metadata:
 It converts vague intent into shipped work by _orchestrating_, not by doing the work itself: it runs
 the gates (feature-check, batch-create) and the execution pipeline with human-in-the-loop control,
 and **dispatches deep competency skills** for each unit of work — it never inlines them. Every write
-to the corpus goes through a CLI verb that validates before writing — the spine knows _how to drive
-the lifecycle_; the competency skills know _how to do each job_; the CLI knows _what is valid_.
-
-The skill was decomposed **by function** (ADR-028): design, decomposition, implementation, testing,
-and verification each became a standalone competency skill, leaving this spine to orchestrate them.
+to the corpus goes through a CLI verb that validates before writing.
 
 **Ownership (ADR-054).** This spine owns multi-step lifecycle orchestration — intake, gates,
 decomposition, pipeline runs, HITL pauses. CLI noun/verb/flag semantics, including
@@ -103,6 +99,19 @@ run. Resume with `spur workflow continue --answer-text <answer>` — the guard a
 
 Full procedure: **[references/execution-workflow.md](references/execution-workflow.md)**.
 Host-session procedure: **[references/inline-pipeline-driver.md](references/inline-pipeline-driver.md)**.
+
+## Bootstrap reads
+
+Read this `SKILL.md` plus your mode's files below before the first dispatch; everything else under
+`references/` is on demand, and the per-task delegate `inline-pipeline-driver.md` is read at dispatch
+(budgets: `plugins/sp/tests/bootstrap-budget.test.ts`, task 1128).
+
+- sequential-inline: `references/execution-batch.md`
+- --worktree: `references/execution-batch.md`, `references/execution-worktree-setup.md`
+- --mode parallel: `references/execution-batch.md`, `references/execution-parallel-isolation.md`
+
+Byte budgets for these sums live in `plugins/sp/tests/bootstrap-budget.test.ts`
+(`BOOTSTRAP_BUDGETS_BYTES`, task 1128); the test fails the build when a mode's bootstrap grows.
 
 ## Step routing
 
@@ -201,10 +210,8 @@ path <wbs> --json` only when another tool needs the absolute path. Never search 
 
 ## Additional Resources
 
-**Every reference file and its step is listed once, in [Step routing](#step-routing) above — this
-section adds what that table has no room for: per-file content summaries and items with no single
-step (glossary, config companions).** Read Step routing to find "which file for step X"; read below
-for "what's actually in file Y" or for resources that sit outside the step sequence.
+**Every reference file and its step is listed once, in [Step routing](#step-routing) above.** This
+section adds per-file content summaries and items with no single step (glossary, config companions).
 
 - Job transfer: [dump/resume](references/dev-operations.md#11a-job-dump).
 
@@ -212,12 +219,9 @@ for "what's actually in file Y" or for resources that sit outside the step seque
   corpus, gate, verdict, noun/verb, half, HITL, WBS, section-write contract — canonical term +
   Avoid list. Owns term definitions only; `cross-cutting.md` owns the process rules that use them.
 - [references/flag-glossary.md](references/flag-glossary.md) — the shared-flag glossary (one
-  canonical entry per flag used by two or more `/sp:dev-*` commands) and the `--next` chain
-  contract. Moved verbatim from `dev-operations.md` (task 0408) so command files can deep-link
-  flag entries while this spine reads the operation catalog linearly.
+  canonical entry per flag used by two or more `/sp:dev-*` commands) and the `--next` chain contract.
 - [references/gate-checklists.md](references/gate-checklists.md) — checkbox checklists for the
-  five gates (feature-check, batch-create, precheck, review, verify). Each checklist is a
-  `- [ ]` list of prerequisites an agent verifies before entering the gate.
+  five gates (feature-check, batch-create, precheck, review, verify).
 - [references/section-batching.md](references/section-batching.md) — the evidence-section
   **one-writer protocol** (F92 0593 R1/R2): implement owns `Solution`, the review coordinator owns
   `Review`, deterministic `record` owns `Testing`; skills query `spur task sections` /

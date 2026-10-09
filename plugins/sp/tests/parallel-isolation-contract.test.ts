@@ -1,13 +1,15 @@
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { readRunbook, referencePath } from './helpers/runbook-parts';
 
 const ROOT = join(import.meta.dir, '..', '..', '..');
-const EXECUTION_BATCH = join(ROOT, 'plugins', 'sp', 'skills', 'spur-dev', 'references', 'execution-batch.md');
 const DEV_RUNALL = join(ROOT, 'plugins', 'sp', 'commands', 'dev-runall.md');
 const FLAG_GLOSSARY = join(ROOT, 'plugins', 'sp', 'skills', 'spur-dev', 'references', 'flag-glossary.md');
 const SUPER_PLANNER = join(ROOT, 'plugins', 'sp', 'agents', 'super-planner.md');
 const PLUGIN_SP = join(ROOT, 'plugins', 'sp');
+/** Task 1128 — the § Parallel isolation prose body moved to its own on-demand file. */
+const PARALLEL_ISOLATION = referencePath('execution-parallel-isolation.md');
 const SECTION_HEADING = '## Parallel isolation (`--mode parallel`)';
 const SECTION_LINK = '#parallel-isolation---mode-parallel';
 const NEW_REJECTION_REASON = 'parallel mode already isolates each task in its own worktree';
@@ -26,9 +28,9 @@ function flat(raw: string): string {
 
 /** The § Parallel isolation section: from its heading to the next same-level heading. */
 function parallelIsolationSection(): string {
-    const raw = readFileSync(EXECUTION_BATCH, 'utf8');
+    const raw = readFileSync(PARALLEL_ISOLATION, 'utf8');
     const start = raw.indexOf(SECTION_HEADING);
-    if (start < 0) throw new Error(`missing "${SECTION_HEADING}" in execution-batch.md`);
+    if (start < 0) throw new Error(`missing "${SECTION_HEADING}" in execution-parallel-isolation.md`);
     const next = raw.indexOf('\n## ', start + 1);
     return raw.slice(start, next < 0 ? undefined : next);
 }
@@ -48,7 +50,7 @@ function collectSourceFiles(dir: string, out: string[] = []): string[] {
 }
 
 describe('task 0931 — parallel isolation prose contract', () => {
-    const executionBatch = readFileSync(EXECUTION_BATCH, 'utf8');
+    const executionBatch = readRunbook('execution-batch');
     const superPlanner = readFileSync(SUPER_PLANNER, 'utf8');
     const section = parallelIsolationSection();
     const prose = flat(section);
