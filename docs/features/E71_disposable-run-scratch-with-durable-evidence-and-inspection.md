@@ -2,11 +2,11 @@
 schema_version: 1
 id: "E71"
 name: "Disposable run scratch with durable evidence and inspection"
-status: done
+status: active
 priority: P2
 tags: []
 created_at: "2026-09-30T19:53:48.380Z"
-updated_at: "2026-10-07T00:12:34.683Z"
+updated_at: "2026-10-09T17:56:08.510Z"
 ---
 
 # E71: Disposable run scratch with durable evidence and inspection
@@ -125,4 +125,5 @@ Feature: Disposable run scratch with durable evidence and inspection
 - 2026-10-02T05:45:50.763Z done → active (system)
 - 2026-10-07T00:12:34.017Z active → verifying (system)
 - 2026-10-07T00:12:34.683Z verifying → done (system)
+- 2026-10-09T17:56:08.510Z done → active (system)
 
