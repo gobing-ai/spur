@@ -1,0 +1,8 @@
+# Workspace-local test config (task 1127 R8/AC7, mirroring apps/cli 0699 R3 precedent): without
+# it, `cd scripts && bun test` — the run AGENTS.md prescribes — skipped the root preload and
+# resolved the operator's real ~/.config/spur/run/full-gate.lock. These suites then waited silently
+# behind any live host-wide gate holder (their holder line is swallowed by `silenceStdout`), which
+# is the dispatch-budget burn this task exists to remove. Coverage stays gated by the root bunfig
+# (bun run test).
+[test]
+preload = ["../tests/setup.ts"]

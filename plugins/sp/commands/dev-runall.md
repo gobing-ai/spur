@@ -44,7 +44,7 @@ structured findings, before any task pipeline action, task 0510 R2; scoped: `L4.
 (the expected pre-run state of any not-yet-run feature) is reported verbatim but does not abort —
 any other strict error aborts), `--mode`
 `<sequential|parallel>` (default `sequential`; `parallel` fans out a proven-independent subset —
-see `execution-batch.md` § Parallel isolation), `--concurrency <n>`
+see `execution-parallel-isolation.md`), `--concurrency <n>`
 (parallel-mode worker bound — at most <n> task pipelines at once, default 2; a dependent task starts
 only after its in-set dependencies are **integrated** onto the base ref), `--keep-going`
 (batch failure policy — skip a failed task's in-batch dependents, continue independents; default
@@ -59,10 +59,10 @@ report as JSON), `--wrap` (trigger
 `--worktree` `[<name>]` (run the batch in an isolated git worktree —
 FF-merge onto the base ref on full success, retain intact on any failure/halt/non-FF; bare form
 creates a fresh tree, `<name>` form adopts an existing worktree by name/path/branch; see
-`execution-batch.md` § Worktree isolation).
+`execution-worktree-setup.md` + `execution-worktree-landing.md`).
 
 **`--worktree` and parallel mode.** `--worktree --mode parallel` is **rejected** — parallel mode
-already isolates each task in its own worktree (see `execution-batch.md` § Parallel isolation), and
+already isolates each task in its own worktree (see `execution-parallel-isolation.md`), and
 reuse mode (`--worktree <name>`) has no per-task meaning. Run parallel batches without
 `--worktree`, or run them sequentially with it.
 
@@ -82,13 +82,14 @@ advancing the feature lifecycle). **was: `--next` deliberately omitted; the old 
 = batch failure policy (does a failure halt the batch or skip dependents?);
 `--continue` = resume from
 checkpoint against the batch's original frozen identity — persisted plan membership, worktree
-marker, identity-filtered checkpoints as hints (execution-batch.md § Batch continuation, task
+marker, identity-filtered checkpoints as hints (execution-batch-continuation.md, task
 0919); `--next`
 = chain each task to terminal status + batch-once wrap. See `dev-operations.md` § runall for the
 full distinction.
 
 ## Implementation
 
+- **Bootstrap reads (1128):** before the first dispatch, read [SKILL.md § Bootstrap reads](../skills/spur-dev/SKILL.md#bootstrap-reads) and load only that mode's files — the section whose trigger has not fired is on demand.
 - **Publish the visible batch plan first (1105):** publish `A Prepare batch` (A1–A4) and `Z Batch
   report` before the first task, then one letter per task from `batch-plan.mjs waves` after
   freeze/order and digit children from `batch-plan.mjs task-children` at task start —

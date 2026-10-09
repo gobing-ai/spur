@@ -19,6 +19,17 @@ the interpreter and trace instructions must match. Never hand-edit the installed
 
 **Retirement criterion (0755 R5, D8 decision D7):** the per-task interpreter retires once the engine covers per-task execution for `/sp:dev-runall` with real terminal runs **and** the parity check (this doc's documented action/guard set ≡ the resolved action/guard set of every `.spur/workflows/*.yaml`) is green. Recording the criterion is part of this task; acting on it is not — that is a separate A3-gate decision.
 
+## Driver state checklist (re-read this after a compaction)
+
+- **Run id** — the run row `inline-run-setup` persisted (`.spur/run/<run-id>-inline-setup.json`
+  sidecar, `.spur/memory/runs/<run-id>.md` + `.state.json`); never re-derive it from the transcript.
+- **Markers under `.spur/run/`** — `<run-id>-inline-setup.json` (frozen invocation identity),
+  `<run-id>-tree-start.json` (commit-guard fingerprint), `<wbs>-verdict.json` (per-stage verdict),
+  `<wbs>-question.md` / `<wbs>-escalation.md` (operator pause), `<run-id>-event-trace.md`.
+- **Re-read per state** — this file (Run setup → YAML interpreter → Record & done),
+  [structured-trace-emission.md](structured-trace-emission.md) at the first trace event.
+- **Authoritative state** — the run record and verdict artifacts, never the host todo list.
+
 ## Supported action and guard set (0755 R2 parity contract)
 
 The action and guard kinds this driver implements. The parity check
@@ -93,6 +104,20 @@ fallback) — labels are display addresses only, never an execution key.
    [ -n "$SETUP_SCRIPT" ] && [ -f "$SETUP_SCRIPT" ] && \
      bun "$SETUP_SCRIPT" --run-id "$RUN_ID" --file <selected-pipeline-yaml> \
      || { echo "inline run setup failed closed — checker not found; run 'superskill install sp --marketplace gobing-ai/spur'" >&2; exit 1; }
+   ```
+
+   **Commit fingerprint (1129 R1).** Fingerprint the tree the task commit will land in — before the
+   first task write — because Record & done stages through this snapshot, so a concurrent writer's
+   file cannot ride into the task commit. The artifact is cwd-relative under `.spur/run/` (gitignored
+   per tree), so the snapshot and the commit it guards must name the SAME tree: without `--worktree`
+   take it here in the setup window; with `--worktree` take it immediately **after step 7's
+   isolation, from the worktree root** (still before the first task write) — a snapshot taken here
+   would land in the invoking tree, and the worktree's commit would find none (1129 review N1).
+
+   ```bash
+   RUN_ID="<marker-id>"   # the WT-3 marker's id (execution-batch.md), or the run id allocated at setup
+   GUARD=plugins/sp/scripts/commit-guard.ts; [ -f config/plugin-scripts.json -a -f "$GUARD" ] || GUARD="$(superskill script path sp commit-guard.mjs 2>/dev/null)";
+   bun "$GUARD" start --run "$RUN_ID"     # <this tree>/.spur/run/$RUN_ID-tree-start.json = { head, dirty[] }
    ```
 
    The delegate uses the source app service when the SPUR_BIN chain identifies a checkout;
@@ -640,6 +665,20 @@ grading its own work defeats the stage. A continuation stage also dispatches fre
 same-task subagent exists (the earlier stage ran host-inline or below the dispatch floor), when a
 host-owned gate sat between the stages, or when the platform cannot address completed subagents.
 
+**Implement and test-fix workers never run the full gate (task 1127 R8).** Since 1127 the full gate
+takes a host-wide lock (`SPUR_GATE_LOCK_DIR`, default `~/.config/spur/run/full-gate.lock`):
+concurrent full-gate runs serialize, and a manual `spur-check` (wrapped via
+`scripts/commands/gate-lock.ts`) holds the same lock. A dispatched **implement** or `test-fix` child
+that re-ran the full gate would queue behind every other gate on the host and burn its dispatch
+timeout waiting instead of working. Both therefore run only the **changed-path matrix**
+(`cross-cutting.md` § Changed-path targeted checks) over the paths they touched — the matrix, not a
+hand-picked "targeted tests and a lint pass" — and return. Carry `--gate-log <path>` through to the
+child **verbatim**: never paraphrase it into "re-run the named gate command". That paraphrase is not
+cosmetic — it dropped this rule in the H15 run (task Background, seq 232) and sent a worker into the
+locked gate. The pipeline's next `test` (recheck) stage re-acquires the lock and delivers the
+deciding verdict; that deciding run may wait for a live holder, so a queued worker's effective
+budget is dispatch timeout minus observed lock queue wait, not the timeout alone.
+
 **Timeout boundary (task 0727, amended by task 1108):** when the host's dispatch tool accepts a
 per-dispatch timeout (pi: subagent `timeoutMs`, default 30 min — pi-subagents `docs/tool-reference.md`
 line 97), the driver passes the stage's resolved YAML
@@ -673,139 +712,23 @@ Run-log stamps (task 0727): every appended line is prefixed with an **ISO-8601 U
 (`YYYY-MM-DDTHH:MM:SSZ`, e.g. `2026-08-31T17:51:11Z`); the exact-template provenance lines above
 keep their exact content after the stamp prefix. This normalization is contractual:
 **bare local-clock stamps are prohibited** — a hand-appended `[stage 12:31]` form mixes timezones
-in one file and makes the run unauditable (task 0726 mixed both forms).
+in one file and makes the run unauditable (task 0726).
 
 ## Structured trace emission (ADR-117, task 0868)
 
-`.spur/memory/runs/<run-id>.md` is the human half of the two-file run record — evidence, **not the record
-of truth**. A run's
-observability is a property of the run, so the inline driver owes the same structured trace the
-engine subprocess writes — and it owes it through the **same writer**, never a parallel
-implementation. The shared writer is `WorkflowActionTraceWriter`
-(`packages/app/src/workflow/action-trace.ts`): the same decorator the engine composition installs
-around `DbWorkflowPersistenceAdapter`, so the two surfaces call one emission path and one run-row
-closure path and cannot drift.
+Read [structured-trace-emission.md](structured-trace-emission.md) when the first trace event is
+emitted — the action vocabulary, the emit shape and the parse/close contract.
 
-The driver reaches it through the existing run delegate (`$SETUP_SCRIPT`,
-`plugins/sp/scripts/inline-run-setup.ts`) — no new entry point, no second resolution chain:
+## Record & done sequencing
 
-- **Every executed action** — after the action settles, whether it ran host-inline or via a native
-  subagent — append its provenance line as before, then record the boundary:
-
-  ```bash
-  bun "$SETUP_SCRIPT" --action --run-id "$RUN_ID" --node <state-id> --kind <action-kind> \
-    --status <done|failed> --ok <true|false> --duration-ms <measured-ms> [--estimated]
-  ```
-
-  `<state-id>` is the current YAML state id (the `node`), `<action-kind>` the YAML action kind
-  (`agent.run`, `shell`, `note`, `doctor.probe`, …). `--status` is `done` when the action settled
-  under its declared error policy and `failed` otherwise; `--duration-ms` is the wall clock the
-  driver measured around the action, and `--estimated` marks a duration the driver did **not**
-  time (a value reconstructed after the action returned). The row's provenance stamp rides
-  `action_runs.result_json` as `{provenance:'host-reported', estimated}`, and the projection
-  exposes it per attempt — `provenance` is `host-reported` for every inline row and `unknown`
-  for an engine-written or pre-stamp row, so the Board can label a host-reported duration
-  instead of presenting it as measured. This writes the `action_runs` row (node, kind, status,
-  `ok`, `duration_ms`, `run_id`) the engine would have written, so the run's rows are queryable
-  by run id (`spur workflow progress <run-id>`, `ActionRunDao`) without reading the text log.
-  The writer
-  back-dates the row's `started_at` from its own `completed_at` minus the measured duration
-  (0887 R8), so `completed_at − started_at == duration_ms` exactly; a back-date failure is
-  recorded (`action.backdate`) and never affects the run.
-
-- **A state with several actions (1007 R5)** — emit the whole state's boundaries in one call
-  instead of one `--action` invocation per action. Write a JSON array
-  (`[{node,kind,status,ok,durationMs,estimated?}, …]` — the `--action` fields, `estimated`
-  optional and `false` when absent) to a temp file and pass it with `--actions-file`:
-
-  ```bash
-  bun "$SETUP_SCRIPT" --actions-file <actions.json> --run-id "$RUN_ID"
-  ```
-
-  Every row is recorded through the same writer as `--action` (one `action_runs` row per entry);
-  the batch is validated in full before the first write, so an invalid row or unreadable file
-  exits `1` with `{"ok":false}` and leaves **no** partial rows — fix the batch and re-emit. On
-  success it prints `{"ok":true,"runId":…,"recorded":<n>}` and exits `0`. Row emission stays
-  best-effort exactly like `--action`: if a row's write fails mid-batch, the failure is recorded
-  to the run record and the call reports `{"ok":false,…,"error":…}` but still exits `0` — the run
-  continues; never retry the batch or backfill by hand. `--actions-file` is exclusive with the
-  other mode flags (`--action`, `--decide`, `--close`, …): mixing them is a usage error (exit 2),
-  and a mixed call must be corrected, not silently split.
-
-- **A `decide` action (0941)** — the driver never executes the DecisionMaker itself; it delegates
-  to the same app runner the engine registers, which writes the resultFile row (schemaVersion 1)
-  and returns the decision, then the delegate records the `action_runs` row (`kind=decide`)
-  through the same writer as every other action:
-
-  ```bash
-  bun "$SETUP_SCRIPT" --decide --run-id "$RUN_ID" --node <state-id> --options-json <options-file>
-  ```
-
-  The options JSON mirrors the YAML `decide` options (`id`, `method: choice|noul`, `question`,
-  `choices`/`default`, optional `evidence`, optional `minConfidence`, `resultFile`); paths resolve
-  against the project workdir. The decision never pauses and never fails the run for model
-  problems: a degraded outcome (feature switch off, no backend, error, timeout, low confidence)
-  prints `ok:true` with `degraded:true`, the declared `reason`, and `value = default`, and exits
-  `0` — route on the resultFile's `.value` with the declared file guards. Every row carries
-  `source: model|default` (0976 R2), and the delegate appends
-  `decide node=<id> value=<v> source=<s> reason=<r>` to the run log, so a declared-default
-  fallback is never read as a model decision. Only an invalid options
-  schema exits `1` (fail closed), and usage errors exit `2`. The `action_runs` trace row is
-  best-effort exactly like `--action`.
-
-- **At the run's declared terminal state** — before the driver reports the run complete, close the
-  row so a successful inline run is never left non-terminal for `spur workflow clean` to reap as
-  stale:
-
-  ```bash
-  bun "$SETUP_SCRIPT" --close --run-id "$RUN_ID" --status <done|failed|paused>
-  ```
-
-  `--status` is the declared terminal state's verdict, not a guess: a run that reached a terminal
-  state is `done`; a run halted by a failing action under its error policy is `failed`. On success
-  the close reports the recorded evidence: `{"ok":true,"runId":…,"actionRows":<n>}`.
-  After the close, the invoking command prints the measured
-  [execution summary](dev-operations.md#execution-summary) for `$RUN_ID` unless `--no-summary`.
-
-  **Zero-row done closes are a named failure (task 0975 R2).** A run closed `done` with **zero**
-  `action_runs` rows (`actionRows:0`) finalizes the row but exits `1` with
-  `{"ok":false,"code":"NO_ACTION_ROWS","actionRows":0}` — a run that claims success without a
-  single recorded action is exactly the untraced-runs gap ADR-117 closes, so the driver must
-  surface the code in its final report instead of reporting a clean close. The failure must NOT
-  be repaired by backfilling rows: the run row is already terminal, and hand-written rows are
-  forbidden (ADR-117) — record the finding and let the task's evidence show the gap. A `failed`
-  close with zero rows stays a clean `0` (a halt before the first boundary legitimately records
-  nothing), and any `done` close with `actionRows ≥ 1` exits `0`.
-
-**Best-effort at the action boundary only (ADR-117).** An `--action` persistence failure is
-recorded — the delegate appends a `trace-emission-failed` line to `.spur/memory/runs/<run-id>.md` and
-prints `{"ok":false}` on stdout — and the run continues to its declared terminal state; the
-delegate exits `0` for that outcome and the driver must never treat an emission failure as a run
-failure, retry it in a loop, or substitute a hand-written row. The run-row closure (`--close`) is
-bookkeeping, not trace emission, and is **not** best-effort: a missing run row or a persistence
-failure exits `1` with `{"ok":false}` and a named error (a missing row also carries
-`code:"RUN_NOT_FOUND"`), because a silently `running` row is exactly the stale state
-`spur workflow clean` reaps as `failed`. Exit `2` means the invocation itself was malformed
-(missing `--node`/`--kind`/`--status`/`--ok`, a miscased `--ok`, a missing or malformed
-`--duration-ms`, or an unsafe run id) and must be corrected, not ignored.
-
-Emission is not optional and not deferred: an inline run that skips it reintroduces the
-1,011-untraced-runs gap ADR-117 exists to close.
-
-Transition guards are not advisory. Execute the declared guard exactly, in order, with the same
-resolved variables and artifacts. `--no-lifecycle` remains bookkeeping only; the YAML's task checks,
-verdict gate, record step, and done guard all remain authoritative.
-
-## Record & done sequencing (dogfood 2026-08-21, feature A3)
-
-Order matters for the `testing → done` hop. The A3 batch hit the same clobbering spiral on two
-tasks (0617, 0619) because the sections were hand-written **before** the verdict artifact existed:
+Order matters for the `testing → done` hop: the sections must not be hand-written **before** the
+verdict artifact exists (tasks 0617, 0619 — the clobbering spiral).
 
 1. **Write the verdict artifact first.** `spur task record --solution-from-diff --transition testing`
    reads `.spur/run/<wbs>-verdict.json` (default attempt output) on every invocation and atomically retains the recorded verdict under `.spur/memory/evidence/`. A missing or malformed artifact
    yields **UNKNOWN**: bare Testing receives a "No requirements recorded" stub, while already-authored
-   Testing is preserved. `--solution-from-diff` backfills only a bare Solution. The A3 clobbering above
-   describes the historical behavior, corrected by the authored-Testing safeguard. Creating the
+   Testing is preserved. `--solution-from-diff` backfills only a bare Solution. The clobbering above is
+   the historical behavior, corrected by the authored-Testing safeguard (tasks 0617, 0619). Creating the
    artifact first (PASS, with requirement rows keyed by scenario title) remains the standard order;
    re-running record after a real verdict arrives refreshes Testing from that verdict.
 
@@ -837,6 +760,20 @@ tasks (0617, 0619) because the sections were hand-written **before** the verdict
    (`docs/help/cmd_example.md:12`) is checked exactly like any other row — cite an **existing file**
    with a **valid line or line range** whose content names the requirement's subject. A real absent
    symbol, nonexistent file or invalid range still reports; never replace a citable row with prose.
+4. **Stage through the commit guard (1129 R2/R3/R5).** The per-task commit that follows the record
+   hop stages only the files THIS run wrote — `git add -A` and `git add .` are **forbidden** in
+   every driver commit step (they staged a concurrent session's files in `a94f9f431` and
+   `36f274590`). `check` first and record a non-empty `foreign` list in the run report; `stage`
+   exits 2 when it refuses a listed path (foreign) and 3 when a target is unmerged or still carries
+   conflict markers — both mean "resolve it, do not commit":
+
+   ```bash
+   GUARD=plugins/sp/scripts/commit-guard.ts; [ -f config/plugin-scripts.json -a -f "$GUARD" ] || GUARD="$(superskill script path sp commit-guard.mjs 2>/dev/null)";
+   bun "$GUARD" check --run "$RUN_ID"
+   bun "$GUARD" stage --run "$RUN_ID" -- <files this run wrote> \
+     || { echo "record halt: commit-guard refused a path (foreign, unmerged or conflict-marked); nothing committed" >&2; exit 1; }
+   git commit -m "<type>(<scope>): <wbs> <summary>"
+   ```
 
 ## Failure contract
 

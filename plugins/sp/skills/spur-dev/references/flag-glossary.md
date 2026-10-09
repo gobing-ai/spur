@@ -507,7 +507,7 @@ mandatory: omitting the flag means create mode
 - **Reuse mode** — `--worktree <name>` / `--worktree=<name>`. Attach the batch to a worktree that
   already exists. `<name>` resolves against `git worktree list --porcelain` (exact path → basename →
   checked-out branch); exactly one match must survive or the batch aborts **before any task work**
-  (see [execution-batch.md § Name resolution](execution-batch.md#name-resolution---worktree-name)).
+  (see [execution-worktree-setup.md § Name resolution](execution-worktree-setup.md#name-resolution---worktree-name)).
   Reuse mode **never creates a worktree** — an unresolvable name is an error, not a create. The batch
   adopts the worktree's checked-out branch (a detached HEAD aborts), adopts or synthesizes the
   `.spur/run/` state marker, and runs. On a fully successful batch the branch is fast-forward-merged

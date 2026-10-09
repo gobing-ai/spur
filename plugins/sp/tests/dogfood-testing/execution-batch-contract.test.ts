@@ -4,8 +4,9 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSy
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { getEnvVars } from '@gobing-ai/ts-utils';
+import { readRunbook } from '../helpers/runbook-parts';
 
-const SPEC = readFileSync(join(import.meta.dir, '../../skills/spur-dev/references/execution-batch.md'), 'utf8');
+const SPEC = readRunbook('execution-batch');
 
 /**
  * execution-batch worktree/zero-task contract pins (task 0701).
@@ -296,10 +297,7 @@ describe('execution-batch spec contract (task 0477 — worktree isolation lifecy
     });
 });
 
-const DRIVER = readFileSync(
-    join(import.meta.dir, '../../skills/spur-dev/references/inline-pipeline-driver.md'),
-    'utf8',
-);
+const DRIVER = readRunbook('inline-pipeline-driver');
 
 describe('execution-batch + inline-driver spec contract (task 1058 — per-call tree pin)', () => {
     test('inline driver — the canonical per-call pin protocol is defined (R1)', () => {
@@ -478,6 +476,11 @@ describe('task 1058 — two-tree subprocess canary (R3, real source CLI)', () =>
         return { exitCode: result.exitCode, stdout: result.stdout.toString(), stderr: result.stderr.toString() };
     }
 
+    // Per-test headroom only (cross-cutting.md § Isolation rerun for load-flakes): this canary
+    // spawns the real source CLI twice (cold `bun` starts) and straddled bun's 5s default in two
+    // consecutive full-gate runs (5145.73ms, 5966.87ms) while passing green alone 3/3 (268
+    // assertions). Load flake, not a regression — the same test load-flaked in two separate runs,
+    // which is the protocol's condition for an explicit per-test timeout. Assertions unchanged.
     test('a pinned call from a stale cwd updates only the selected tree; wrong identities abort before writing', () => {
         const base = mkdtempSync(join(tmpdir(), 'spur-1058-cwd-'));
         try {
@@ -583,7 +586,7 @@ describe('task 1058 — two-tree subprocess canary (R3, real source CLI)', () =>
         } finally {
             rmSync(base, { recursive: true, force: true });
         }
-    });
+    }, 30_000);
 });
 
 // --- task 1059: executable WT-4 bash-shape cases against scratch git trees -------------------

@@ -13,6 +13,11 @@
             "twin": "batch-plan.mjs"
         },
         {
+            "rel": "commit-guard.ts",
+            "contract": "standard",
+            "twin": "commit-guard.mjs"
+        },
+        {
             "rel": "daily-summary/daily-summary.ts",
             "contract": "standard",
             "twin": "daily-summary/daily-summary.mjs"
