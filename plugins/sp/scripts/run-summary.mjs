@@ -39,6 +39,8 @@ function promptText(row) {
   if (row.type === "message") {
     if (row.message?.role !== "user")
       return;
+    if (isInjectedPrompt(row))
+      return;
     const content2 = row.message.content;
     if (typeof content2 === "string")
       return content2;
@@ -54,6 +56,13 @@ function promptText(row) {
   if (!Array.isArray(content) || content.some((b) => b.type === "tool_result"))
     return;
   return content.find((b) => b.type === "text")?.text;
+}
+function isInjectedPrompt(row) {
+  if (row.type !== "message" || row.message?.role !== "user")
+    return false;
+  const content = row.message.content;
+  const text = typeof content === "string" ? content : Array.isArray(content) ? content.find((b) => b.type === "text")?.text : undefined;
+  return typeof text === "string" && text.replace(/^\s+/, "").startsWith('<skill name="');
 }
 function sumTokens(all) {
   const total = zeroTokens();
@@ -158,11 +167,16 @@ function resolveTranscript(env, projectsRoot = join(homedir(), ".claude", "proje
   if (override)
     return existsSync(override) ? { ok: true, path: override } : { ok: false, reason: "no transcript" };
   const id = env.CLAUDE_CODE_SESSION_ID;
-  if (!id)
+  if (!id) {
+    const piFile = env.PI_SESSION_FILE;
+    if (piFile !== undefined && piFile !== "") {
+      return existsSync(piFile) ? { ok: true, path: piFile } : { ok: false, reason: `PI_SESSION_FILE ${piFile} does not exist` };
+    }
     return {
       ok: false,
-      reason: "no host session id; pass --transcript <path> (pi: ~/.pi/agent/sessions/<cwd-slug>/<file>.jsonl)"
+      reason: "no host session id; pass --transcript <path> (pi: ~/.pi/agent/sessions/<cwd-slug>/<file>.jsonl, " + "or set PI_SESSION_FILE)"
     };
+  }
   if (!SESSION_ID.test(id))
     return { ok: false, reason: "refusing a session id with path characters" };
   if (!existsSync(projectsRoot))

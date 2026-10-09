@@ -58,11 +58,14 @@ function listObligations(wtRoot, wbsList, runIds) {
   }
   return [...new Set(out)].sort();
 }
-function compareTrees(wtRoot, invokeRoot, files) {
+function compareTrees(wtRoot, invokeRoot, files, foreignDivergent = new Set) {
   const missing = [];
   const divergent = [];
   let ok = 0;
   for (const rel of files) {
+    if (foreignDivergent.has(rel) || foreignDivergent.has(basename(rel))) {
+      continue;
+    }
     const wtPath = join(wtRoot, rel);
     const invPath = join(invokeRoot, rel);
     if (!existsSync(invPath)) {
@@ -82,7 +85,7 @@ function compareTrees(wtRoot, invokeRoot, files) {
   return { missing, divergent, ok };
 }
 function persistOutCheckUsage() {
-  return "usage: persist-out-check --from <worktree> [--task-file <path>]\u2026 [--run-id <id>]\u2026 [--root <invoke-tree>]";
+  return "usage: persist-out-check --from <worktree> [--task-file <path>]\u2026 [--run-id <id>]\u2026 [--root <invoke-tree>] [--success-json <path>]";
 }
 function defaultInvokeRoot(cwd) {
   try {
@@ -95,6 +98,7 @@ function defaultInvokeRoot(cwd) {
 }
 function main(argv, invokeRoot = defaultInvokeRoot(process.cwd())) {
   let wtRoot = "";
+  let successJsonPath = "";
   const wbsList = [];
   const runIds = [];
   for (let i = 0;i < argv.length; i++) {
@@ -113,6 +117,8 @@ function main(argv, invokeRoot = defaultInvokeRoot(process.cwd())) {
       const id = argv[++i] ?? "";
       if (id)
         runIds.push(id);
+    } else if (arg === "--success-json") {
+      successJsonPath = argv[++i] ?? "";
     } else {
       process.stderr.write(`${persistOutCheckUsage()}
 `);
@@ -125,13 +131,35 @@ persist-out-check: --from must be an existing worktree directory
 `);
     return 2;
   }
+  const foreignDivergent = new Set;
+  const candidates = [
+    successJsonPath,
+    join(invokeRoot, ".spur", "run", "persist-out.json"),
+    join(wtRoot, ".spur", "run", "persist-out.json")
+  ].filter(Boolean);
+  for (const cand of candidates) {
+    if (existsSync(cand)) {
+      try {
+        const parsed = JSON.parse(readFileSync(cand, "utf8"));
+        if (Array.isArray(parsed.evidenceSkipped)) {
+          for (const item of parsed.evidenceSkipped) {
+            if (item.reason === "foreign-divergent" && typeof item.name === "string") {
+              foreignDivergent.add(item.name);
+              foreignDivergent.add(join(EVIDENCE_DIR, item.name));
+            }
+          }
+        }
+        break;
+      } catch {}
+    }
+  }
   const files = listObligations(wtRoot, wbsList, runIds);
   if (files === null) {
     process.stderr.write(`persist-out-check: BLOCKED \u2014 worktree evidence listing failed or exceeded caps (64/prefix, ${EVIDENCE_CAP} evidence files) \u2014 inspect by hand
 `);
     return 1;
   }
-  const { missing, divergent, ok } = compareTrees(wtRoot, invokeRoot, files);
+  const { missing, divergent, ok } = compareTrees(wtRoot, invokeRoot, files, foreignDivergent);
   const findings = [
     ...missing.map((f) => `MISSING ${f}`),
     ...divergent.map((f) => `DIVERGENT ${f} \u2014 reconcile by hand (persist-out never overwrites)`)

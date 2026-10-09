@@ -32,6 +32,7 @@ import { ValidationError } from '@gobing-ai/ts-utils';
 import { GuardDeniedError } from '../errors';
 import { resolveDurableArtifactPath } from '../workflow/actions/run-path';
 import { reconcileExistingLifecycleRow, TASK_LIFECYCLE_PROFILE } from '../workflow/lifecycle-adapter';
+import { extractRunCitations, RUN_CITATION_DIRS } from '../workflow/run-citation';
 import {
     featureScenarioTitles,
     matchedScenarioKeys,
@@ -65,6 +66,25 @@ import { normalizeTaskSection } from './task-section-normalizer';
 import { evaluateTaskSize } from './task-size-precheck';
 import { reconcileDoneCloseAudit, runTransitionCheckGate } from './task-transition';
 import type { VerifyVerdict as CanonicalVerifyVerdict } from './verify-verdict';
+
+/**
+ * R6 diagnostics: name the verdict row whose evidence carries the citation, so the operator
+ * knows which producer answer to fix. Requirements/AC rows render into the Testing section
+ * directly; a `checks[]` row is named when it is the only carrier.
+ */
+function citationOrigin(verdict: CanonicalVerifyVerdict, name: string): string {
+    const needle = `.spur/run/${name}`;
+    for (const row of verdict.requirements) {
+        if (row.evidence.includes(needle)) return `requirement ${row.id}`;
+    }
+    for (const row of verdict.acceptanceCriteria) {
+        if (row.evidence.includes(needle)) return `acceptance criterion ${row.id}`;
+    }
+    for (const row of verdict.checks) {
+        if (row.evidence?.includes(needle)) return `check ${row.name}`;
+    }
+    return 'the verdict';
+}
 
 /**
  * Error thrown by `mutateDependencies` for any validation failure (R2).
@@ -1698,6 +1718,9 @@ export class TaskService {
             );
             if (scenarioWarnings.length > 0) result.scenarioWarnings = scenarioWarnings;
             const testingBody = renderTesting(verdict);
+            // R6 (1139): a rendered Testing citation must resolve in THIS tree's planes, so
+            // teardown is never the first detector of a phantom `.spur/run/<name>` reference.
+            await this.assertTestingCitationsResolved(verdict, testingBody);
             const currentTesting = doc.getSection('Testing');
             // 1040 R1: an identical generated section is not rewritten (no
             // spurious updated_at bump); authored-preservation gate above stands.
@@ -2436,6 +2459,38 @@ export class TaskService {
     /** Search all registered task folders for the task file matching `wbs`. */
     private async findTaskFileName(wbs: string): Promise<{ name: string; filePath: string } | null> {
         return await this.locator.findByWbs(wbs);
+    }
+
+    /**
+     * R6 (1139): refuse a rendered Testing section that cites a direct-child `.spur/run/<name>`
+     * resolving in none of this tree's planes — `.spur/run/`, `.spur/memory/evidence/`,
+     * `.spur/memory/runs/`. The producer must fix its evidence; synthesizing a citation would
+     * invent evidence, so the record writes nothing and names the citation and its source row.
+     */
+    private async assertTestingCitationsResolved(verdict: CanonicalVerifyVerdict, testingBody: string): Promise<void> {
+        const citations = extractRunCitations(testingBody);
+        if (citations.length === 0) return;
+        const projectRoot = this.ctx.fs.resolve('.');
+        for (const citation of citations) {
+            let resolved = false;
+            for (const dir of RUN_CITATION_DIRS) {
+                try {
+                    await this.ctx.fs.readFile(join(projectRoot, dir, citation.name));
+                    resolved = true;
+                    break;
+                } catch {
+                    /* try the next plane */
+                }
+            }
+            if (resolved) continue;
+            const origin = citationOrigin(verdict, citation.name);
+            throw new ValidationError(
+                `record refuses an unresolved run citation: .spur/run/${citation.name} ` +
+                    `(cited by ${origin}) resolves in neither .spur/run/ nor ` +
+                    '.spur/memory/{evidence,runs}/ — fix the verdict evidence before recording; ' +
+                    'no section was written',
+            );
+        }
     }
 
     private async deriveBackground(featureId: string): Promise<string> {

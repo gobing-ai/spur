@@ -104,7 +104,13 @@ function resolveRunStorageRoot(cwd: string): string {
 export type RunStorageFamily = 'task-verdict' | 'feature-receipt' | 'run-record';
 
 /** Per-unit migration outcome. */
-export type RunStorageOutcome = 'would-migrate' | 'migrated' | 'already-present' | 'preserved' | 'failed';
+export type RunStorageOutcome =
+    | 'would-migrate'
+    | 'migrated'
+    | 'already-present'
+    | 'preserved'
+    | 'failed'
+    | 'superseded';
 
 /** One migrated (or explicitly preserved/failed) scratch unit. */
 export interface RunStorageMigrationEntry {
@@ -125,6 +131,17 @@ export interface RunStorageMigrationEntry {
 export interface RunStorageFailure {
     source: string;
     reason: string;
+    remedy?: string;
+}
+
+/** Standard remedy recommendation for a migration failure reason. */
+export function failureRemedy(reason: string): string {
+    if (reason.startsWith('write-failed')) return 'check permissions/disk';
+    if (reason.startsWith('copy-mismatch')) return 'check target disk integrity and retry';
+    if (reason.startsWith('confinement')) return 'path escapes plane';
+    if (reason.startsWith('target-mismatch')) return 'repair the durable file by hand';
+    if (reason.startsWith('missing-required-item')) return 're-record the run';
+    return 'inspect source file and durable storage';
 }
 
 /** Result of {@link migrateRunStorage}. */
@@ -246,46 +263,26 @@ function classify(name: string, scratchDir: string, files: Set<string>): Classif
     if (name.endsWith('-feature-verification.json')) {
         const prefix = name.slice(0, -'-feature-verification.json'.length);
         const parsed = parseJsonObject(source);
-        if (parsed === null) {
-            return {
-                entry: {
-                    source,
-                    target: null,
-                    family: 'feature-receipt',
-                    identity: prefix,
-                    contentDigest: fileDigest(source),
-                    outcome: 'failed',
-                    reason: 'malformed',
-                },
-            };
+        let receipt: FeatureVerificationReceipt | null = null;
+        if (parsed !== null) {
+            try {
+                receipt = parseFeatureVerificationReceipt(readFileSync(source, 'utf8'));
+                assertRunId(receipt.runId);
+                assertRunId(receipt.featureId);
+                if (prefix !== receipt.runId && prefix !== receipt.featureId) receipt = null;
+            } catch {
+                receipt = null;
+            }
         }
-        let receipt: FeatureVerificationReceipt;
-        try {
-            receipt = parseFeatureVerificationReceipt(readFileSync(source, 'utf8'));
-            assertRunId(receipt.runId);
-            assertRunId(receipt.featureId);
-            if (prefix !== receipt.runId && prefix !== receipt.featureId) throw new Error('receipt identity mismatch');
-        } catch (error) {
-            return {
-                entry: {
-                    source,
-                    target: null,
-                    family: 'feature-receipt',
-                    identity: prefix,
-                    contentDigest: fileDigest(source),
-                    outcome: 'failed',
-                    reason: `malformed: ${String(error)}`,
-                },
-            };
-        }
-        const { runId, featureId } = receipt;
+        const identity = receipt?.featureId ?? prefix;
+        const ownerRunId = receipt?.runId;
         return {
             unit: {
                 family: 'feature-receipt',
-                identity: featureId,
+                identity,
                 files: [source],
                 requiresJsonParse: true,
-                ownerRunId: runId,
+                ...(ownerRunId ? { ownerRunId } : {}),
             },
         };
     }
@@ -384,7 +381,12 @@ function writeManifest(
                 failures,
                 complete:
                     failures.length === 0 &&
-                    !entries.some((entry) => entry.family !== null && entry.outcome === 'preserved'),
+                    !entries.some(
+                        (entry) =>
+                            entry.family !== null &&
+                            entry.outcome === 'preserved' &&
+                            !entry.reason?.startsWith('unclassified'),
+                    ),
             },
             null,
             4,
@@ -396,6 +398,43 @@ function writeManifest(
     } catch (err) {
         return { source: manifestPath, reason: `manifest-write: ${(err as Error).message}` };
     }
+}
+
+/** True when a durable target is present and valid for its family. */
+function isDurableTargetValid(family: RunStorageFamily, identity: string, targets: string[]): boolean {
+    if (targets.length === 0 || targets.some((t) => !existsSync(t))) return false;
+    if (family === 'task-verdict') {
+        const target = targets[0];
+        if (!target) return false;
+        try {
+            const content = readFileSync(target, 'utf8');
+            const parsed = parseVerifyVerdict(content, identity);
+            return parsed.kind === 'valid' && parsed.verdict.wbs === identity;
+        } catch {
+            return false;
+        }
+    }
+    if (family === 'feature-receipt') {
+        const target = targets[0];
+        if (!target) return false;
+        try {
+            const content = readFileSync(target, 'utf8');
+            const receipt = parseFeatureVerificationReceipt(content);
+            return receipt.featureId === identity || receipt.runId === identity;
+        } catch {
+            return false;
+        }
+    }
+    if (family === 'run-record') {
+        for (const target of targets) {
+            if (target.endsWith('.state.json')) {
+                const state = parseJsonObject(target);
+                if (state === null || ('runId' in state && state.runId !== identity)) return false;
+            }
+        }
+        return true;
+    }
+    return false;
 }
 
 /**
@@ -475,7 +514,7 @@ export async function migrateRunStorage(input: MigrateRunStorageInput): Promise<
                 outcome: 'failed',
                 reason,
             });
-            result.failures.push({ source: sourcePath, reason });
+            result.failures.push({ source: sourcePath, reason, remedy: failureRemedy(reason) });
             continue;
         }
         const artifact = registered.get(sourcePath) ?? registered.get(fs.realPath?.(sourcePath) ?? sourcePath);
@@ -497,7 +536,8 @@ export async function migrateRunStorage(input: MigrateRunStorageInput): Promise<
         if (standalone !== undefined) {
             result.entries.push(standalone);
             if (standalone.outcome === 'failed') {
-                result.failures.push({ source: standalone.source, reason: standalone.reason ?? 'failed' });
+                const reason = standalone.reason ?? 'failed';
+                result.failures.push({ source: standalone.source, reason, remedy: failureRemedy(reason) });
             }
             continue;
         }
@@ -510,104 +550,6 @@ export async function migrateRunStorage(input: MigrateRunStorageInput): Promise<
             family: unit.family,
             identity: unit.identity,
         };
-
-        if (unit.ownerRunId !== undefined) {
-            try {
-                assertRunId(unit.ownerRunId);
-            } catch (error) {
-                const reason = `owner identity: ${String(error)}`;
-                result.entries.push({
-                    ...baseEntry,
-                    source,
-                    contentDigest: fileDigest(source),
-                    outcome: 'failed',
-                    reason,
-                });
-                result.failures.push({ source, reason });
-                continue;
-            }
-        }
-
-        // Owner gate: active/paused/interrupted-recoverable or unknown runs are preserved.
-        if (unit.ownerRunId !== undefined && (await ownerPreserved(readRunStatus, unit.ownerRunId))) {
-            for (const file of unit.files) {
-                result.entries.push({
-                    ...baseEntry,
-                    source: file,
-                    contentDigest: fileDigest(file),
-                    outcome: 'preserved',
-                });
-            }
-            continue;
-        }
-
-        // A run-record pair missing its required lasting item fails closed (housekeeping skipped).
-        if (unit.missingRequiredItem !== undefined) {
-            const reason = `missing-required-item: ${unit.missingRequiredItem}`;
-            result.entries.push({ ...baseEntry, source, contentDigest: fileDigest(source), outcome: 'failed', reason });
-            result.failures.push({ source, reason });
-            continue;
-        }
-
-        const snapshots = new Map(unit.files.map((file) => [file, readFileSync(file)]));
-        const sourceText = snapshots.get(source)?.toString('utf8') ?? '';
-        const snapshotDigest = (file: string) =>
-            createHash('sha256')
-                .update(snapshots.get(file) as Uint8Array)
-                .digest('hex');
-
-        // JSON families must parse before anything is written.
-        if (unit.requiresJsonParse && parseJsonObject(source, sourceText) === null) {
-            result.entries.push({
-                ...baseEntry,
-                source,
-                contentDigest: fileDigest(source),
-                outcome: 'failed',
-                reason: 'malformed',
-            });
-            result.failures.push({ source, reason: 'malformed' });
-            continue;
-        }
-        let invalid: string | undefined;
-        if (unit.family === 'task-verdict') {
-            const parsed = parseVerifyVerdict(sourceText, unit.identity);
-            if (parsed.kind !== 'valid' || parsed.verdict.wbs !== unit.identity) invalid = 'verdict identity or shape';
-            const raw = parseJsonObject(source, sourceText);
-            if (raw !== null && 'wbs' in raw && raw.wbs !== unit.identity) invalid = 'verdict identity';
-            if (raw?.proof !== undefined) {
-                const proof = raw.proof;
-                if (
-                    proof === null ||
-                    typeof proof !== 'object' ||
-                    Array.isArray(proof) ||
-                    typeof (proof as Record<string, unknown>).runId !== 'string' ||
-                    (proof as Record<string, unknown>).runId !== unit.ownerRunId
-                )
-                    invalid = 'proof owner binding';
-            }
-        }
-        if (unit.family === 'feature-receipt') {
-            try {
-                const receipt = parseFeatureVerificationReceipt(sourceText);
-                if (receipt.featureId !== unit.identity || receipt.runId !== unit.ownerRunId)
-                    invalid = 'receipt identity';
-            } catch {
-                invalid = 'receipt shape';
-            }
-        }
-        for (const file of unit.files.filter((file) => file.endsWith('.state.json'))) {
-            const state = parseJsonObject(file, snapshots.get(file)?.toString('utf8'));
-            if (state === null || ('runId' in state && state.runId !== unit.identity))
-                invalid = 'run-state identity or shape';
-        }
-        if (unit.requiresReferenceRedirect && input.redirectReferences === undefined)
-            invalid = 'reference owner unavailable';
-        if (invalid !== undefined) {
-            const reason = `malformed: ${invalid}`;
-            result.entries.push({ ...baseEntry, source, contentDigest: fileDigest(source), outcome: 'failed', reason });
-            result.failures.push({ source, reason });
-            continue;
-        }
 
         const targetDir = unit.family === 'run-record' ? dirs.recordsDir : dirs.evidenceDir;
         const unitRoot = join(dirs.scratchDir, unit.identity);
@@ -636,7 +578,229 @@ export async function migrateRunStorage(input: MigrateRunStorageInput): Promise<
         } catch (error) {
             const reason = `confinement: ${String(error)}`;
             result.entries.push({ ...baseEntry, source, contentDigest: fileDigest(source), outcome: 'failed', reason });
-            result.failures.push({ source, reason });
+            result.failures.push({ source, reason, remedy: failureRemedy(reason) });
+            continue;
+        }
+
+        const snapshots = new Map(unit.files.map((file) => [file, readFileSync(file)]));
+        const sourceText = snapshots.get(source)?.toString('utf8') ?? '';
+        const snapshotDigest = (file: string) =>
+            createHash('sha256')
+                .update(snapshots.get(file) as Uint8Array)
+                .digest('hex');
+
+        // R3(a): A unit whose every target already exists byte-identical is already-present before any family validation runs.
+        const allTargetsIdentical = unit.files.every(
+            (file, index) => existsSync(targetFor(index)) && fileDigest(targetFor(index)) === snapshotDigest(file),
+        );
+        if (allTargetsIdentical) {
+            for (const [index, file] of unit.files.entries()) {
+                result.entries.push({
+                    ...baseEntry,
+                    source: file,
+                    target: targetFor(index),
+                    contentDigest: snapshotDigest(file),
+                    outcome: 'already-present',
+                });
+            }
+            continue;
+        }
+
+        if (unit.ownerRunId !== undefined) {
+            try {
+                assertRunId(unit.ownerRunId);
+            } catch (error) {
+                if (isDurableTargetValid(unit.family, unit.identity, targets)) {
+                    for (const [index, file] of unit.files.entries()) {
+                        result.entries.push({
+                            ...baseEntry,
+                            source: file,
+                            target: targetFor(index),
+                            contentDigest: snapshotDigest(file),
+                            outcome: 'superseded',
+                            reason: 'durable canonical',
+                        });
+                    }
+                    continue;
+                }
+                const reason = `owner identity: ${String(error)}`;
+                result.entries.push({
+                    ...baseEntry,
+                    source,
+                    contentDigest: fileDigest(source),
+                    outcome: 'failed',
+                    reason,
+                });
+                result.failures.push({ source, reason, remedy: failureRemedy(reason) });
+                continue;
+            }
+        }
+
+        // Owner gate: active/paused/interrupted-recoverable or unknown runs are preserved.
+        if (unit.ownerRunId !== undefined && (await ownerPreserved(readRunStatus, unit.ownerRunId))) {
+            for (const file of unit.files) {
+                result.entries.push({
+                    ...baseEntry,
+                    source: file,
+                    contentDigest: fileDigest(file),
+                    outcome: 'preserved',
+                });
+            }
+            continue;
+        }
+
+        // R3(d): A run-record unit whose missing sibling exists with the full pair under .spur/memory/runs/<id>.* is already-present.
+        if (unit.missingRequiredItem !== undefined) {
+            const mdDurable = join(dirs.recordsDir, `${unit.identity}.md`);
+            const stateDurable = join(dirs.recordsDir, `${unit.identity}.state.json`);
+            if (existsSync(mdDurable) && existsSync(stateDurable)) {
+                result.entries.push({
+                    ...baseEntry,
+                    source,
+                    target: join(dirs.recordsDir, basename(source)),
+                    contentDigest: fileDigest(source),
+                    outcome: 'already-present',
+                });
+                continue;
+            }
+            const reason = `missing-required-item: ${unit.missingRequiredItem}`;
+            result.entries.push({ ...baseEntry, source, contentDigest: fileDigest(source), outcome: 'failed', reason });
+            result.failures.push({ source, reason, remedy: failureRemedy(reason) });
+            continue;
+        }
+
+        // JSON families must parse before anything is written.
+        let shapeInvalid: string | undefined;
+        let identityInvalid: string | undefined;
+
+        if (unit.requiresJsonParse && parseJsonObject(source, sourceText) === null) {
+            shapeInvalid = 'malformed';
+        }
+        if (shapeInvalid === undefined && unit.family === 'task-verdict') {
+            const parsed = parseVerifyVerdict(sourceText, unit.identity);
+            if (parsed.kind !== 'valid') {
+                shapeInvalid = 'verdict identity or shape';
+            } else {
+                const raw = parseJsonObject(source, sourceText);
+                if (raw !== null && 'wbs' in raw && raw.wbs !== unit.identity) {
+                    identityInvalid = 'verdict identity';
+                } else if (raw?.proof !== undefined) {
+                    const proof = raw.proof;
+                    if (
+                        proof === null ||
+                        typeof proof !== 'object' ||
+                        Array.isArray(proof) ||
+                        typeof (proof as Record<string, unknown>).runId !== 'string' ||
+                        (proof as Record<string, unknown>).runId !== unit.ownerRunId
+                    ) {
+                        identityInvalid = 'proof owner binding';
+                    }
+                }
+            }
+        }
+        if (shapeInvalid === undefined && identityInvalid === undefined && unit.family === 'feature-receipt') {
+            try {
+                const receipt = parseFeatureVerificationReceipt(sourceText);
+                if (receipt.featureId !== unit.identity && receipt.runId !== unit.identity) {
+                    identityInvalid = 'receipt identity';
+                } else if (unit.ownerRunId && receipt.runId !== unit.ownerRunId) {
+                    identityInvalid = 'receipt identity';
+                }
+            } catch (err) {
+                shapeInvalid = `receipt shape: ${String(err)}`;
+            }
+        }
+        if (shapeInvalid === undefined && identityInvalid === undefined) {
+            for (const file of unit.files.filter((file) => file.endsWith('.state.json'))) {
+                const state = parseJsonObject(file, snapshots.get(file)?.toString('utf8'));
+                if (state === null) {
+                    shapeInvalid = 'malformed';
+                } else if ('runId' in state && state.runId !== unit.identity) {
+                    identityInvalid = 'run-state identity or shape';
+                }
+            }
+        }
+        if (shapeInvalid === undefined && identityInvalid === undefined) {
+            if (unit.requiresReferenceRedirect && input.redirectReferences === undefined) {
+                identityInvalid = 'reference owner unavailable';
+            }
+        }
+
+        if (shapeInvalid !== undefined) {
+            // R3(b): Consult durable target. If valid, it is superseded.
+            if (isDurableTargetValid(unit.family, unit.identity, targets)) {
+                for (const [index, file] of unit.files.entries()) {
+                    result.entries.push({
+                        ...baseEntry,
+                        source: file,
+                        target: targetFor(index),
+                        contentDigest: snapshotDigest(file),
+                        outcome: 'superseded',
+                        reason: 'durable canonical',
+                    });
+                }
+                continue;
+            }
+            // If durable target exists but is invalid:
+            const anyTargetExists = targets.some((t) => existsSync(t));
+            if (anyTargetExists) {
+                for (const [index, file] of unit.files.entries()) {
+                    result.entries.push({
+                        ...baseEntry,
+                        source: file,
+                        target: targetFor(index),
+                        contentDigest: snapshotDigest(file),
+                        outcome: 'failed',
+                        reason: 'target-mismatch',
+                    });
+                    result.failures.push({
+                        source: file,
+                        reason: 'target-mismatch',
+                        remedy: failureRemedy('target-mismatch'),
+                    });
+                }
+                continue;
+            }
+            // R3(c): No durable counterpart -> preserved unclassified.
+            for (const file of unit.files) {
+                result.entries.push({
+                    ...baseEntry,
+                    source: file,
+                    target: null,
+                    contentDigest: snapshotDigest(file),
+                    outcome: 'preserved',
+                    reason: `unclassified: ${shapeInvalid}`,
+                });
+            }
+            continue;
+        }
+
+        if (identityInvalid !== undefined) {
+            // R3(b): Consult durable target. If valid, it is superseded.
+            if (isDurableTargetValid(unit.family, unit.identity, targets)) {
+                for (const [index, file] of unit.files.entries()) {
+                    result.entries.push({
+                        ...baseEntry,
+                        source: file,
+                        target: targetFor(index),
+                        contentDigest: snapshotDigest(file),
+                        outcome: 'superseded',
+                        reason: 'durable canonical',
+                    });
+                }
+                continue;
+            }
+            const reason = `malformed: ${identityInvalid}`;
+            for (const file of unit.files) {
+                result.entries.push({
+                    ...baseEntry,
+                    source: file,
+                    contentDigest: fileDigest(file),
+                    outcome: 'failed',
+                    reason,
+                });
+                result.failures.push({ source: file, reason, remedy: failureRemedy(reason) });
+            }
             continue;
         }
 
@@ -645,6 +809,20 @@ export async function migrateRunStorage(input: MigrateRunStorageInput): Promise<
             (file, index) => existsSync(targetFor(index)) && fileDigest(targetFor(index)) !== snapshotDigest(file),
         );
         if (conflicts.length > 0) {
+            // R3(b): Consult durable target. If valid, it is superseded.
+            if (isDurableTargetValid(unit.family, unit.identity, targets)) {
+                for (const [index, file] of unit.files.entries()) {
+                    result.entries.push({
+                        ...baseEntry,
+                        source: file,
+                        target: targetFor(index),
+                        contentDigest: snapshotDigest(file),
+                        outcome: 'superseded',
+                        reason: 'durable canonical',
+                    });
+                }
+                continue;
+            }
             for (const [index, file] of unit.files.entries()) {
                 result.entries.push({
                     ...baseEntry,
@@ -654,7 +832,11 @@ export async function migrateRunStorage(input: MigrateRunStorageInput): Promise<
                     outcome: 'failed',
                     reason: 'target-mismatch',
                 });
-                result.failures.push({ source: file, reason: 'target-mismatch' });
+                result.failures.push({
+                    source: file,
+                    reason: 'target-mismatch',
+                    remedy: failureRemedy('target-mismatch'),
+                });
             }
             continue;
         }
@@ -675,7 +857,11 @@ export async function migrateRunStorage(input: MigrateRunStorageInput): Promise<
         for (const [index, file] of unit.files.entries()) {
             const target = targetFor(index);
             if (target === undefined) {
-                result.failures.push({ source: file, reason: 'internal: no target mapped for file' });
+                result.failures.push({
+                    source: file,
+                    reason: 'internal: no target mapped for file',
+                    remedy: failureRemedy('internal'),
+                });
                 continue;
             }
             const fileEntry = { ...baseEntry, source: file, target, contentDigest: snapshotDigest(file) };
@@ -684,7 +870,11 @@ export async function migrateRunStorage(input: MigrateRunStorageInput): Promise<
                     result.entries.push({ ...fileEntry, outcome: 'already-present' });
                 } else {
                     result.entries.push({ ...fileEntry, outcome: 'failed', reason: 'target-mismatch' });
-                    result.failures.push({ source: file, reason: 'target-mismatch' });
+                    result.failures.push({
+                        source: file,
+                        reason: 'target-mismatch',
+                        remedy: failureRemedy('target-mismatch'),
+                    });
                 }
                 continue;
             }
@@ -696,7 +886,7 @@ export async function migrateRunStorage(input: MigrateRunStorageInput): Promise<
             } catch (err) {
                 const reason = (err as Error).message.startsWith('copy-mismatch:') ? 'copy-mismatch' : 'write-failed';
                 result.entries.push({ ...fileEntry, outcome: 'failed', reason });
-                result.failures.push({ source: file, reason });
+                result.failures.push({ source: file, reason, remedy: failureRemedy(reason) });
             }
         }
     }
@@ -708,7 +898,8 @@ export async function migrateRunStorage(input: MigrateRunStorageInput): Promise<
         try {
             if (copied.length > 0) await input.redirectReferences?.(copied);
         } catch (error) {
-            result.failures.push({ source: dirs.scratchDir, reason: `reference-redirect: ${String(error)}` });
+            const reason = `reference-redirect: ${String(error)}`;
+            result.failures.push({ source: dirs.scratchDir, reason, remedy: failureRemedy(reason) });
         }
         try {
             await resolveDurableArtifactPath(
@@ -718,11 +909,14 @@ export async function migrateRunStorage(input: MigrateRunStorageInput): Promise<
                 'memory',
             );
         } catch (error) {
-            result.failures.push({ source: dirs.projectRoot, reason: `manifest-confinement: ${String(error)}` });
+            const reason = `manifest-confinement: ${String(error)}`;
+            result.failures.push({ source: dirs.projectRoot, reason, remedy: failureRemedy(reason) });
             return result;
         }
         const manifestFailure = writeManifest(dirs, result.entries, now, result.failures);
-        if (manifestFailure !== undefined) result.failures.push(manifestFailure);
+        if (manifestFailure !== undefined) {
+            result.failures.push({ ...manifestFailure, remedy: failureRemedy(manifestFailure.reason) });
+        }
     }
     return result;
 }

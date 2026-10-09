@@ -249,16 +249,19 @@ describe('pi transcripts (1130)', () => {
 
     test('AC1: a real pi transcript slice yields measured segments', () => {
         const tl = buildTimeline(piLines());
-        expect(tl.segments).toHaveLength(2);
+        // Three operator prompts in the fixture (the fourth user-role row is an injected skill body
+        // and must not open a segment — R2/1138).
+        expect(tl.segments).toHaveLength(3);
         for (const seg of tl.segments) expect(seg.workMs).toBeGreaterThan(0);
-        // Each toolCall block counted once, split across the two prompt segments.
+        // Each toolCall block counted once, split across the prompt segments.
         expect(tl.segments.reduce((n, s) => n + s.toolCalls, 0)).toBe(fixtureToolCalls());
         expect(tl.totals.toolCalls).toBe(fixtureToolCalls());
         expect(tl.totals.tokens.output).toBeGreaterThan(0);
         expect(tl.totals.compactions).toBe(1);
         expect(tl.segments[0]?.compactions).toBe(1);
-        // The ask_user_question gate inside segment 2 is operator wait, not work (R1).
-        expect(tl.segments[1]).toMatchObject({ waitMs: 30_000, workMs: 20_000 });
+        // The ask_user_question gate inside segment 2 is operator wait, not work (R1): the 50s span
+        // minus the 30s ask is work; wait is that ask plus the idle until the appended segment 3.
+        expect(tl.segments[1]).toMatchObject({ workMs: 20_000, waitMs: 70_000 });
     });
 
     test('AC2: an unknown JSONL shape is reported, not hidden', () => {
@@ -266,7 +269,10 @@ describe('pi transcripts (1130)', () => {
         const path = join(mkdtempSync(join(tmpdir(), 'session-timeline-unknown-')), 'u.jsonl');
         writeFileSync(path, `${JSON.stringify({ type: 'mystery', timestamp: at(0) })}\n`);
         expect(main(['--transcript', path], {}, (s) => out.push(s), '/nope')).toBe(0);
-        expect(JSON.parse(out.join(''))).toEqual({ available: false, reason: 'unrecognized transcript format' });
+        expect(JSON.parse(out.join(''))).toEqual({
+            available: false,
+            reason: 'unrecognized transcript format (row types: mystery 1)',
+        });
     });
 
     test('AC3: no host id names the --transcript remedy including the pi path', () => {
@@ -282,6 +288,114 @@ describe('pi transcripts (1130)', () => {
         const tl = buildTimeline(fixture());
         expect('compactions' in tl.totals).toBe(false);
         for (const seg of tl.segments) expect('compactions' in seg).toBe(false);
+        // 1138 R2: the injected-prompt counter is pi-only too, so Claude output is unchanged.
+        expect('injectedPrompts' in tl).toBe(false);
+    });
+});
+
+describe('1138 — injected bodies, pi env resolution, detected-format reasons', () => {
+    const fixturePath = join(import.meta.dir, 'fixtures', 'pi-session.jsonl');
+    const piLines = (): string[] => readFileSync(fixturePath, 'utf8').split('\n');
+
+    test('AC2/R2: an injected skill body is counted, never segmented', () => {
+        const tl = buildTimeline(piLines());
+        // R4: the injected row does not change the segment count (3 operator prompts → 3 segments).
+        expect(tl.segments).toHaveLength(3);
+        expect(tl.injectedPrompts).toBe(1);
+        // The injected row's activity still lands in the open segment: segment 3's span reaches
+        // its timestamp even though that row opened nothing of its own.
+        expect(tl.segments[2]?.start).toBe('2026-10-08T18:50:00.000Z');
+        expect(tl.segments[2]?.workMs).toBe(20_000);
+    });
+
+    test('AC2/R2: an operator prompt containing "<skill" mid-text still opens a segment', () => {
+        const tl = buildTimeline(piLines());
+        const prompts = tl.segments.map((s) => s.prompt);
+        expect(prompts.some((p) => p.includes('operator note: the <skill name="x"> wrapper'))).toBe(true);
+    });
+
+    test('AC2/R2: injectedPrompts is absent for a Claude transcript', () => {
+        const tl = buildTimeline(fixture());
+        expect('injectedPrompts' in tl).toBe(false);
+    });
+
+    test('AC1/R1: PI_SESSION_FILE resolves when no Claude session id is set', () => {
+        const path = join(mkdtempSync(join(tmpdir(), 'session-timeline-pienv-')), 'pi.jsonl');
+        writeFileSync(path, '{}\n');
+        expect(resolveTranscript({ PI_SESSION_FILE: path }, '/nope')).toEqual({ ok: true, path });
+    });
+
+    test('AC1/R1: a missing PI_SESSION_FILE is named in the reason', () => {
+        const resolved = resolveTranscript({ PI_SESSION_FILE: '/nope/missing.jsonl' }, '/nope');
+        expect(resolved.ok).toBe(false);
+        if (!resolved.ok) expect(resolved.reason).toBe('PI_SESSION_FILE /nope/missing.jsonl does not exist');
+    });
+
+    test('AC1/R1: an explicit --transcript beats PI_SESSION_FILE', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'session-timeline-prec-'));
+        const explicit = join(dir, 'explicit.jsonl');
+        const envFile = join(dir, 'env.jsonl');
+        writeFileSync(explicit, '{}\n');
+        writeFileSync(envFile, '{}\n');
+        expect(resolveTranscript({ PI_SESSION_FILE: envFile }, '/nope', explicit)).toEqual({
+            ok: true,
+            path: explicit,
+        });
+    });
+
+    test('AC1/R1: the Claude session id still wins when both are set', () => {
+        const root = mkdtempSync(join(tmpdir(), 'session-timeline-cwin-'));
+        const id = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+        mkdirSync(join(root, 'proj'), { recursive: true });
+        const claudePath = join(root, 'proj', `${id}.jsonl`);
+        writeFileSync(claudePath, '{}\n');
+        const envFile = join(root, 'env.jsonl');
+        writeFileSync(envFile, '{}\n');
+        expect(resolveTranscript({ CLAUDE_CODE_SESSION_ID: id, PI_SESSION_FILE: envFile }, root)).toEqual({
+            ok: true,
+            path: claudePath,
+        });
+    });
+
+    test('AC3/R3: zero-segment pi output names the format, the row count and the injected count', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'session-timeline-zero-'));
+        const path = join(dir, 'pi-zero.jsonl');
+        const rows = [
+            {
+                type: 'message',
+                id: 'a1',
+                timestamp: '2026-10-08T18:45:52.074Z',
+                message: { role: 'assistant', content: [] },
+            },
+            {
+                type: 'message',
+                id: 't1',
+                timestamp: '2026-10-08T18:45:52.090Z',
+                message: { role: 'toolResult', content: [] },
+            },
+        ];
+        writeFileSync(path, `${rows.map((r) => JSON.stringify(r)).join('\n')}\n`);
+        const out: string[] = [];
+        expect(main(['--transcript', path], {}, (s) => out.push(s), '/nope')).toBe(0);
+        const parsed = JSON.parse(out.join(''));
+        expect(parsed.available).toBe(false);
+        expect(parsed.reason).toBe('pi transcript with no operator prompts (2 rows, 0 injected)');
+    });
+
+    test('AC3/R3: an unknown format lists its row-type census', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'session-timeline-census-'));
+        const path = join(dir, 'unknown.jsonl');
+        const rows = [
+            { type: 'mystery', timestamp: '2026-10-08T18:45:00.000Z' },
+            { type: 'mystery', timestamp: '2026-10-08T18:45:01.000Z' },
+            { type: 'other', timestamp: '2026-10-08T18:45:02.000Z' },
+        ];
+        writeFileSync(path, `${rows.map((r) => JSON.stringify(r)).join('\n')}\n`);
+        const out: string[] = [];
+        expect(main(['--transcript', path], {}, (s) => out.push(s), '/nope')).toBe(0);
+        const parsed = JSON.parse(out.join(''));
+        expect(parsed.available).toBe(false);
+        expect(parsed.reason).toBe('unrecognized transcript format (row types: mystery 2, other 1)');
     });
 });
 

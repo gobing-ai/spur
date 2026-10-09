@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: session-timeline must measure the pi host transcript so the review skill's time and token contract is available on pi
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-10-09T05:34:59.326Z
-updated_at: "2026-10-09T18:12:17.979Z"
+updated_at: "2026-10-09T23:22:19.165Z"
 feature_id: E5
 
 ac_altitude: task-local
 ac_numbering: task-local
 priority: P2
 estimate_hours: 3
+done_forced: "true"
+done_reason: "AC4 conditional: bun run build:scripts passes and the suite is 10721/0, but bun run spur-check cannot exit 0 because of 20 pre-existing no-scratch-verdict-pointer findings in docs/tasks4/* and docs/tasks5/*. Reproduced at the pre-1138 base 0304f3830 in an untouched worktree, so unrelated to 1138; owned by task 1141 (rule: durable records must not cite run scratch), whose batch is running concurrently in another worktree. Verdict rows: R1-R5 MET, AC1-AC3 MET, AC4 PARTIAL."
 ---
 
 ## 1138. session-timeline must measure the pi host transcript so the review skill's time and token contract is available on pi
@@ -64,25 +66,25 @@ What is still open, verified on the current tree:
 
 ### Requirements
 
-- [ ] R1. **Resolve the pi transcript from the environment.** In `resolveTranscript` (`plugins/sp/lib/transcript.ts`), the order is:
+- [x] R1. **Resolve the pi transcript from the environment.** In `resolveTranscript` (`plugins/sp/lib/transcript.ts`), the order is:
   1. an explicit `--transcript` override;
   2. `CLAUDE_CODE_SESSION_ID` (unchanged);
   3. `PI_SESSION_FILE` when it is set and exists.
 
   When `PI_SESSION_FILE` is set but missing on disk, the result is `{ok:false, reason:"PI_SESSION_FILE <path> does not exist"}`. `PI_SESSION_ID` is not used for lookup, because pi's session-file name is not derivable from the id alone. The change is shared, so `run-summary` gains it with no edit of its own.
-- [ ] R2. **Injected bodies do not open segments.** A `role:"user"` pi row whose first text block, after leading whitespace, starts with `<skill name="` is injected. It is accumulated into the open segment as activity, does not open a segment, and is counted in a new top-level `injectedPrompts` number on the timeline. Operator text that merely contains `<skill` later in the body is still a prompt. Claude rows are unchanged: their injected bodies already arrive as `isMeta`.
-- [ ] R3. **The unavailable reason names what was detected.** For zero segments the reason is:
+- [x] R2. **Injected bodies do not open segments.** A `role:"user"` pi row whose first text block, after leading whitespace, starts with `<skill name="` is injected. It is accumulated into the open segment as activity, does not open a segment, and is counted in a new top-level `injectedPrompts` number on the timeline. Operator text that merely contains `<skill` later in the body is still a prompt. Claude rows are unchanged: their injected bodies already arrive as `isMeta`.
+- [x] R3. **The unavailable reason names what was detected.** For zero segments the reason is:
   - `"pi transcript with no operator prompts (<n> rows, <k> injected)"` when the format is known;
   - `"unrecognized transcript format (row types: <top-5 type census>)"` when the format is `unknown`.
 
   The census uses `row.type` counts from the parsed rows.
-- [ ] R4. **Fixtures and tests.**
+- [x] R4. **Fixtures and tests.**
   - Extend `plugins/sp/tests/fixtures/pi-session.jsonl` with one `<skill name="sp-dev-run" …>` user row and one operator prompt containing `<skill` mid-text.
   - Assert: the segment count is unchanged by the injected row; `injectedPrompts` is 1; the mid-text prompt opens a segment.
   - Add tests for R1: `PI_SESSION_FILE` resolves; a missing file gives the named reason; the Claude id still wins when both are set.
   - Add tests for both R3 reasons.
   - Each test must be shown to fail before its fix.
-- [ ] R5. **Docs and generated parity.**
+- [x] R5. **Docs and generated parity.**
   - `plugins/sp/skills/session-review/SKILL.md:93` and `plugins/sp/commands/dev-review-session.md` state that pi resolves via `PI_SESSION_FILE`.
   - The no-host-id reason in `transcript.ts:212` names `PI_SESSION_FILE`.
   - `bun run build:scripts` regenerates the `.mjs` files; the installed copy refreshes through `superskill install`, never by hand.
@@ -167,15 +169,68 @@ Scenario: AC4 — Tests fail without fixes and docs match (req: R4, R5)
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| Change | Location | Why |
+| --- | --- | --- |
+| `resolveTranscript` resolves `PI_SESSION_FILE` after the Claude id | `plugins/sp/lib/transcript.ts:222` | pi sets `PI_SESSION_FILE` and no `CLAUDE_CODE_SESSION_ID`, so the documented invocation measured nothing; a missing file names itself |
+| `isInjectedPrompt` — a pi `role:"user"` row whose first text block opens with `<skill name="` | `plugins/sp/lib/transcript.ts:102` | pi has no `isMeta`, so skill wrappers manufactured phantom segments and mis-attributed wait |
+| `promptText` returns `undefined` for an injected row | `plugins/sp/lib/transcript.ts:78` | one predicate, so every consumer agrees |
+| `buildTimeline` counts and accumulates injected rows without opening a segment | `plugins/sp/scripts/session-timeline.ts:83` | the injected body's tools and usage are real work; only operator prompts segment |
+| `Timeline.injectedPrompts`, emitted for pi only | `plugins/sp/scripts/session-timeline.ts:44` | makes a missed injection shape visible instead of silent |
+| `zeroSegmentReason` — detected format + row/injected counts, or a top-5 type census | `plugins/sp/scripts/session-timeline.ts:145` | the review renders `n/a` only on an explicit unavailability, so a false `available:true` printed an authoritative all-zero timeline |
+| `main` uses the reason builder and parses the rows once | `plugins/sp/scripts/session-timeline.ts:193` | the census needs the parsed rows, which `parseRows` already returns |
+
+Tradeoff: `injectedPrompts` is a new optional field on the pi timeline only, so Claude output is byte-unchanged (same rule as `compactions`). `resolveTranscript` gains a third source, so a stale `PI_SESSION_FILE` now yields a named reason instead of the generic no-host-id one — a strictly more specific failure.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `plugins/sp/lib/transcript.ts:222` resolves `PI_SESSION_FILE` after the Claude id and names a missing file; live drill on this pi host ran the script with no arguments and measured the transcript. |
+| R2 | MET | `plugins/sp/lib/transcript.ts:102` `isInjectedPrompt` + `plugins/sp/scripts/session-timeline.ts:83` count and accumulate injected rows; the live drill reported `injectedPrompts: 2` with the skill wrappers opening no segment. |
+| R3 | MET | `plugins/sp/scripts/session-timeline.ts:145` `zeroSegmentReason` names the format, row count and injected count, or a top-5 type census; both reasons asserted. |
+| R4 | MET | `plugins/sp/tests/fixtures/pi-session.jsonl` gained one injected row and one mid-text `<skill` prompt; 37 tests in `plugins/sp/tests/session-timeline.test.ts` pass, and each fix reverted fails its tests (2/2/3). |
+| R5 | MET | `plugins/sp/skills/session-review/SKILL.md`, `plugins/sp/commands/dev-review-session.md` and `docs/design/session-review.md` state the resolution order; the no-host-id reason names `PI_SESSION_FILE`; `bun run build:scripts` regenerated `session-timeline.mjs` and `run-summary.mjs`. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | e2e | Live drill: with `PI_SESSION_FILE` set and no Claude id, the script with no arguments returned `available: true` with 2 segments; a missing file yields the named `PI_SESSION_FILE <path> does not exist` reason; the Claude id still wins when both are set (unit). |
+| AC2 | MET | unit | The fixture's injected row opens no segment (3 segments, `injectedPrompts` 1) and the mid-text `<skill` operator prompt opens its own. |
+| AC3 | MET | unit | A pi transcript of only assistant and toolResult rows returns `pi transcript with no operator prompts (2 rows, 0 injected)`; an unknown file returns `unrecognized transcript format (row types: mystery 2, other 1)`. |
+| AC4 | PARTIAL | e2e | Each fix reverted fails its tests (R1 2, R2 2, R3 3); `bun run build:scripts` and `bun run test-post-check` pass; the suite is 10721 pass / 0 fail. `bun run spur-check` cannot exit 0 because of 20 pre-existing `no-scratch-verdict-pointer` findings in docs/tasks4 and docs/tasks5, reproduced at the pre-change base `0304f3830` in an untouched worktree — unrelated to this task. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P4 | — | — | No findings (verify verdict PASS) |
+
+Residual risk:
+
+- **The injected-body rule is narrow by design.** Only a first text block starting with
+  `<skill name="` (after leading whitespace) is treated as injected. Another wrapper shape
+  (`<command …>`, a future injection form) still segments. The task's Q&A decided to widen only on
+  observed evidence, and `injectedPrompts` makes a miss visible rather than silent.
+- **A one-word operator prompt stays a prompt.** `continue` opens a segment and carries that
+  session's work time; only skill bodies were excluded. This is R2's literal contract, and it keeps
+  genuinely short operator turns attributable rather than folding them into a neighbour.
+- **`PI_SESSION_FILE` is preferred only when no Claude id is present.** A stale `PI_SESSION_FILE`
+  alongside a valid Claude id is ignored, so the Claude transcript wins (asserted).
+- **`bun run spur-check` cannot go green on this base** — 20 pre-existing
+  `no-scratch-verdict-pointer` findings in `docs/tasks4/*` and `docs/tasks5/*`, reproduced at the
+  pre-change base `0304f3830`. Reported, not fixed: repairing 20 unrelated task files is outside this
+  task and the invoking tree is being written by another session.
+- **Machine contention.** At load ~10 one unrelated fleet test timed out at bun's 5 s default; it
+  passes 13/13 in isolation and the suite is green with only the per-test timeout raised.
+
+Untested paths: the acceptance drill measured this live pi session, so the pi path is exercised on
+real data; the Claude half of R1 (id precedence) and the unknown-format census are covered by unit
+tests on synthesised files, not by a real Claude transcript or a real unrecognised file.
 
 ### References
 
@@ -187,4 +242,7 @@ Scenario: AC4 — Tests fail without fixes and docs match (req: R4, R5)
 ### History
 
 - 2026-10-09T05:36:13.650Z backlog → todo (system)
+- 2026-10-09T21:46:41.064Z todo → wip (system)
+- 2026-10-09T23:21:57.921Z wip → testing (system)
+- 2026-10-09T23:22:19.150Z testing → done (system)
 

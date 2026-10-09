@@ -84,11 +84,15 @@ export function compareTrees(
     wtRoot: string,
     invokeRoot: string,
     files: string[],
+    foreignDivergent = new Set<string>(),
 ): { missing: string[]; divergent: string[]; ok: number } {
     const missing: string[] = [];
     const divergent: string[] = [];
     let ok = 0;
     for (const rel of files) {
+        if (foreignDivergent.has(rel) || foreignDivergent.has(basename(rel))) {
+            continue;
+        }
         const wtPath = join(wtRoot, rel);
         const invPath = join(invokeRoot, rel);
         if (!existsSync(invPath)) {
@@ -107,7 +111,7 @@ export function compareTrees(
 }
 
 export function persistOutCheckUsage(): string {
-    return 'usage: persist-out-check --from <worktree> [--task-file <path>]… [--run-id <id>]… [--root <invoke-tree>]';
+    return 'usage: persist-out-check --from <worktree> [--task-file <path>]… [--run-id <id>]… [--root <invoke-tree>] [--success-json <path>]';
 }
 
 /**
@@ -129,6 +133,7 @@ export function defaultInvokeRoot(cwd: string): string {
 
 export function main(argv: string[], invokeRoot = defaultInvokeRoot(process.cwd())): number {
     let wtRoot = '';
+    let successJsonPath = '';
     const wbsList: string[] = [];
     const runIds: string[] = [];
     for (let i = 0; i < argv.length; i++) {
@@ -145,6 +150,8 @@ export function main(argv: string[], invokeRoot = defaultInvokeRoot(process.cwd(
         } else if (arg === '--run-id') {
             const id = argv[++i] ?? '';
             if (id) runIds.push(id);
+        } else if (arg === '--success-json') {
+            successJsonPath = argv[++i] ?? '';
         } else {
             process.stderr.write(`${persistOutCheckUsage()}\n`);
             return 2;
@@ -156,6 +163,28 @@ export function main(argv: string[], invokeRoot = defaultInvokeRoot(process.cwd(
         );
         return 2;
     }
+    const foreignDivergent = new Set<string>();
+    const candidates = [
+        successJsonPath,
+        join(invokeRoot, '.spur', 'run', 'persist-out.json'),
+        join(wtRoot, '.spur', 'run', 'persist-out.json'),
+    ].filter(Boolean);
+    for (const cand of candidates) {
+        if (existsSync(cand)) {
+            try {
+                const parsed = JSON.parse(readFileSync(cand, 'utf8'));
+                if (Array.isArray(parsed.evidenceSkipped)) {
+                    for (const item of parsed.evidenceSkipped) {
+                        if (item.reason === 'foreign-divergent' && typeof item.name === 'string') {
+                            foreignDivergent.add(item.name);
+                            foreignDivergent.add(join(EVIDENCE_DIR, item.name));
+                        }
+                    }
+                }
+                break;
+            } catch {}
+        }
+    }
     const files = listObligations(wtRoot, wbsList, runIds);
     if (files === null) {
         process.stderr.write(
@@ -163,7 +192,7 @@ export function main(argv: string[], invokeRoot = defaultInvokeRoot(process.cwd(
         );
         return 1;
     }
-    const { missing, divergent, ok } = compareTrees(wtRoot, invokeRoot, files);
+    const { missing, divergent, ok } = compareTrees(wtRoot, invokeRoot, files, foreignDivergent);
     const findings = [
         ...missing.map((f) => `MISSING ${f}`),
         ...divergent.map((f) => `DIVERGENT ${f} — reconcile by hand (persist-out never overwrites)`),

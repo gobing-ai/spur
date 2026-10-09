@@ -39,6 +39,8 @@ function promptText(row) {
   if (row.type === "message") {
     if (row.message?.role !== "user")
       return;
+    if (isInjectedPrompt(row))
+      return;
     const content2 = row.message.content;
     if (typeof content2 === "string")
       return content2;
@@ -54,6 +56,13 @@ function promptText(row) {
   if (!Array.isArray(content) || content.some((b) => b.type === "tool_result"))
     return;
   return content.find((b) => b.type === "text")?.text;
+}
+function isInjectedPrompt(row) {
+  if (row.type !== "message" || row.message?.role !== "user")
+    return false;
+  const content = row.message.content;
+  const text = typeof content === "string" ? content : Array.isArray(content) ? content.find((b) => b.type === "text")?.text : undefined;
+  return typeof text === "string" && text.replace(/^\s+/, "").startsWith('<skill name="');
 }
 function sumTokens(all) {
   const total = zeroTokens();
@@ -158,11 +167,16 @@ function resolveTranscript(env, projectsRoot = join(homedir(), ".claude", "proje
   if (override)
     return existsSync(override) ? { ok: true, path: override } : { ok: false, reason: "no transcript" };
   const id = env.CLAUDE_CODE_SESSION_ID;
-  if (!id)
+  if (!id) {
+    const piFile = env.PI_SESSION_FILE;
+    if (piFile !== undefined && piFile !== "") {
+      return existsSync(piFile) ? { ok: true, path: piFile } : { ok: false, reason: `PI_SESSION_FILE ${piFile} does not exist` };
+    }
     return {
       ok: false,
-      reason: "no host session id; pass --transcript <path> (pi: ~/.pi/agent/sessions/<cwd-slug>/<file>.jsonl)"
+      reason: "no host session id; pass --transcript <path> (pi: ~/.pi/agent/sessions/<cwd-slug>/<file>.jsonl, " + "or set PI_SESSION_FILE)"
     };
+  }
   if (!SESSION_ID.test(id))
     return { ok: false, reason: "refusing a session id with path characters" };
   if (!existsSync(projectsRoot))
@@ -198,7 +212,15 @@ function buildTimeline(lines, group) {
   const open = [];
   const { rows, skippedLines, format } = parseRows(lines);
   const isPi = format === "pi";
+  let injectedPrompts = 0;
   for (const [row, ts] of rows) {
+    if (isPi && isInjectedPrompt(row)) {
+      injectedPrompts++;
+      const injectedSeg = open.at(-1);
+      if (injectedSeg)
+        accumulate(injectedSeg, row, ts);
+      continue;
+    }
     const prompt = promptText(row);
     if (prompt !== undefined) {
       open.push({ start: ts, prompt, ...newAcc(ts) });
@@ -231,7 +253,8 @@ function buildTimeline(lines, group) {
     available: true,
     segments,
     totals: render(isPi ? { ...totals, compactions: segments.reduce((n, s) => n + (s.compactions ?? 0), 0) } : totals),
-    skippedLines
+    skippedLines,
+    ...isPi ? { injectedPrompts } : {}
   };
   if (group) {
     timeline.stages = parseGroups(group, segments.length).map(([a, b]) => render({ ...sumSpans(segments.slice(a - 1, b)), segments: a === b ? `${a}` : `${a}-${b}` }));
@@ -239,6 +262,20 @@ function buildTimeline(lines, group) {
   return timeline;
 }
 var SESSION_TIMELINE_USAGE = 'usage: session-timeline [--transcript <path>] [--group "1-3,4,..."]';
+function zeroSegmentReason(rows) {
+  const format = sniffFormat(rows.map(([r]) => r));
+  if (format === "unknown") {
+    const counts = new Map;
+    for (const [r] of rows) {
+      const kind = typeof r.type === "string" && r.type !== "" ? r.type : "(untyped)";
+      counts.set(kind, (counts.get(kind) ?? 0) + 1);
+    }
+    const census = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 5).map(([kind, n]) => `${kind} ${n}`).join(", ");
+    return `unrecognized transcript format (row types: ${census})`;
+  }
+  const injected = rows.filter(([r]) => isInjectedPrompt(r)).length;
+  return `${format} transcript with no operator prompts (${rows.length} rows, ${injected} injected)`;
+}
 function main(argv, env = getEnvVars(), write = (s) => process.stdout.write(s), projectsRoot, writeErr = (s) => process.stderr.write(s)) {
   let transcript;
   let group;
@@ -263,10 +300,11 @@ function main(argv, env = getEnvVars(), write = (s) => process.stdout.write(s), 
     return 0;
   }
   try {
-    const timeline = buildTimeline(readFileSync(resolved.path, "utf8").split(`
-`), group);
+    const lines = readFileSync(resolved.path, "utf8").split(`
+`);
+    const timeline = buildTimeline(lines, group);
     if (timeline.segments.length === 0) {
-      write(`${JSON.stringify({ available: false, reason: "unrecognized transcript format" })}
+      write(`${JSON.stringify({ available: false, reason: zeroSegmentReason(parseRows(lines).rows) })}
 `);
       return 0;
     }
@@ -281,6 +319,7 @@ function main(argv, env = getEnvVars(), write = (s) => process.stdout.write(s), 
 }
 process.exit(main(process.argv.slice(2)));
 export {
+  zeroSegmentReason,
   resolveTranscript,
   parseGroups,
   main,

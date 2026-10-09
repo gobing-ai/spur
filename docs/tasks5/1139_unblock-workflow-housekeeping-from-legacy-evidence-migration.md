@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: Unblock workflow housekeeping from legacy evidence-migration failures
-status: todo
+status: done
 template: issue
 created_at: 2026-10-09T06:08:08.615Z
-updated_at: "2026-10-09T17:56:18.621Z"
+updated_at: "2026-10-09T22:04:20.119Z"
 
 feature_id: E71
 priority: P1
 ac_numbering: task-local
 ac_altitude: task-local
 estimate_hours: 8
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1139-verdict.json
 ---
 
 ## 1139. Unblock workflow housekeeping from legacy evidence-migration failures
@@ -55,12 +57,12 @@ could finish, because housekeeping could not do it.
 
 ### Requirements
 
-- [ ] R1. Stale-run finalization (`WorkflowService.clean`, a DB-status-only pass that deletes no file) runs even when the migration pre-pass reports failures. Log reclamation (`cleanRunLogs`) and checkpoint reclamation (`cleanCheckpoints`) run only when the migration reports zero failures, because they delete files. The command still exits 1 while any migration failure remains.
-- [ ] R2. Human output prints one line per failure with source, reason and remedy, plus the stale-run result. `--json` keeps the existing `migration.failures[]` shape and adds `remedy` per failure. The stale-run outcome is reported in `cleaned[]` separately from `migration`. No new flag.
-- [ ] R3. The migrator classifies before it fails. (a) A unit whose every target already exists byte-identical is `already-present` before any family validation runs. (b) A unit whose durable target exists and parses as a valid member of the same family (same identity) is `superseded`, a new non-failure outcome: the durable copy is canonical per ADR-131 and is never overwritten. (c) A file whose name matches a family pattern, whose content does not parse as that family, and which has no durable counterpart is `preserved` with `reason: 'unclassified: <detail>'`, the existing unknown-scratch outcome. (d) A run-record unit whose missing sibling exists with the full pair under `.spur/memory/runs/<id>.*` is `already-present`. Only genuinely unrecoverable cases stay `failed`: write, copy, confinement, owned target-mismatch against an invalid durable copy, and a missing sibling with no durable pair.
-- [ ] R4. On this repository, `spur workflow clean` reports 0 migration failures, finalizes every `running` row older than the threshold (or names each one it leaves live and why), and exits 0. A second run finalizes nothing and prints no `housekeeping skipped` line.
-- [ ] R5. `persistWorktreeRuns` treats a divergent **foreign** durable evidence file as skipped, not fatal. Foreign means its wbs is not a forwarded task's and its receipt `runId` is not a worktree run row. The skip is reported in the success result as `evidenceSkipped[{name, reason: 'foreign-divergent', newer: 'invoking'|'worktree'}]`. The invoking-tree copy is never overwritten. A divergent **owned** file still throws `durable evidence conflicts`.
-- [ ] R6. The record step refuses a rendered Testing section that cites a direct-child `.spur/run/<name>` resolving in neither `.spur/run/` nor `.spur/memory/{evidence,runs}/` of the recording tree. The error names the citation and the verdict check it came from, before any section is written, so teardown is never the first detector.
+- [x] R1. Stale-run finalization (`WorkflowService.clean`, a DB-status-only pass that deletes no file) runs even when the migration pre-pass reports failures. Log reclamation (`cleanRunLogs`) and checkpoint reclamation (`cleanCheckpoints`) run only when the migration reports zero failures, because they delete files. The command still exits 1 while any migration failure remains.
+- [x] R2. Human output prints one line per failure with source, reason and remedy, plus the stale-run result. `--json` keeps the existing `migration.failures[]` shape and adds `remedy` per failure. The stale-run outcome is reported in `cleaned[]` separately from `migration`. No new flag.
+- [x] R3. The migrator classifies before it fails. (a) A unit whose every target already exists byte-identical is `already-present` before any family validation runs. (b) A unit whose durable target exists and parses as a valid member of the same family (same identity) is `superseded`, a new non-failure outcome: the durable copy is canonical per ADR-131 and is never overwritten. (c) A file whose name matches a family pattern, whose content does not parse as that family, and which has no durable counterpart is `preserved` with `reason: 'unclassified: <detail>'`, the existing unknown-scratch outcome. (d) A run-record unit whose missing sibling exists with the full pair under `.spur/memory/runs/<id>.*` is `already-present`. Only genuinely unrecoverable cases stay `failed`: write, copy, confinement, owned target-mismatch against an invalid durable copy, and a missing sibling with no durable pair.
+- [x] R4. On this repository, `spur workflow clean` reports 0 migration failures, finalizes every `running` row older than the threshold (or names each one it leaves live and why), and exits 0. A second run finalizes nothing and prints no `housekeeping skipped` line.
+- [x] R5. `persistWorktreeRuns` treats a divergent **foreign** durable evidence file as skipped, not fatal. Foreign means its wbs is not a forwarded task's and its receipt `runId` is not a worktree run row. The skip is reported in the success result as `evidenceSkipped[{name, reason: 'foreign-divergent', newer: 'invoking'|'worktree'}]`. The invoking-tree copy is never overwritten. A divergent **owned** file still throws `durable evidence conflicts`.
+- [x] R6. The record step refuses a rendered Testing section that cites a direct-child `.spur/run/<name>` resolving in neither `.spur/run/` nor `.spur/memory/{evidence,runs}/` of the recording tree. The error names the citation and the verdict check it came from, before any section is written, so teardown is never the first detector.
 
 ### Acceptance Criteria
 
@@ -103,9 +105,9 @@ Scenario: AC5 — a divergent foreign evidence copy cannot block persist-out (re
   And a divergent owned verdict still fails with durable evidence conflicts
 
 Scenario: AC6 — a phantom run citation fails at record (req: R6)
-  Given a verdict whose check evidence cites .spur/run/bb-base.sha that exists in no plane of the tree
+  Given a verdict whose check evidence cites .spur/run/<phantom>.sha that exists in no plane of the tree
   When `spur task record` renders Testing
-  Then it fails naming .spur/run/bb-base.sha and the check row
+  Then it fails naming .spur/run/<phantom>.sha and the check row
   And the task file is unchanged
 ```
 
@@ -167,15 +169,158 @@ Tradeoff: `superseded` widens a public JSON enum, which is additive. Consumers t
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| Change | Location | Why |
+| --- | --- | --- |
+| `superseded` outcome + `failureRemedy` map + `RunStorageFailure.remedy` | `packages/app/src/services/run-storage.ts:113` | ADR-131 makes the durable copy canonical, and every failure must name a repair |
+| `isDurableTargetValid()` — parse the durable target with the same family parser/identity | `packages/app/src/services/run-storage.ts:404` | Distinguishes a canonical durable copy from a corrupt one before failing |
+| `allTargetsIdentical` hoisted above family validation | `packages/app/src/services/run-storage.ts:593` | Validation before the identical-target check was the dominant defect (29 byte-identical files failed) |
+| Durable-target consultation on shape failure | `packages/app/src/services/run-storage.ts:738` | `superseded` when a valid durable copy exists; else target-mismatch or preserved-unclassified |
+| Durable-target consultation on identity failure | `packages/app/src/services/run-storage.ts:778` | A valid durable copy supersedes even when the scratch identity is foreign |
+| `missingRequiredItem` accepts a full durable pair | `packages/app/src/services/run-storage.ts:653` | Both `missing-required-item` files have their pair under `.spur/memory/runs/` |
+| `clean` action finalizes stale runs on migration failure; skips only file-deleting reclamation; per-failure remedy line | `apps/cli/src/commands/workflow.ts:1518` | DB-only finalization must not be held hostage to file-migration hygiene (R1/R2) |
+| Foreign-divergent evidence skip + `evidenceSkipped` | `packages/app/src/services/inline-run-setup.ts:395` | A divergent copy of another task's evidence must not block teardown (R5) |
+| `persist-out.json` written beside the stdout envelope | `packages/app/src/services/inline-run-setup.ts:1967` | The pre-removal check reads the recorded outcome instead of recomputing it |
+| Pre-removal check accepts the foreign-divergent set | `plugins/sp/scripts/persist-out-check.ts:166` | Same set as the recorded outcome (R5) |
+| Record-time citation resolution | `packages/app/src/services/task-service.ts:2490` | Teardown must not be the first detector of a phantom citation (R6) |
+| Shared citation module (regex, literalization, extraction, planes) | `packages/app/src/workflow/run-citation.ts:1` | One contract for persist-out and the record step; no drifting copies |
+
+Tradeoff: `superseded` widens the public `RunStorageOutcome` enum (`packages/app/src/services/run-storage.ts:113`) — additive; a
+consumer that switches on `outcome` treats unknown values as non-failure, and only `apps/cli` reads it today.
 
 ### Testing
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `apps/cli/src/commands/workflow.ts:1516-1518` — on `migration.failures.length > 0` the action sets exit 1 and still calls `svc.clean(minutes, dryRun)` (skipped only under `--logs`); the failure envelope reports `logs.reclaimed: []` and `checkpoints.reclaimed: []` (`apps/cli/src/commands/workflow.ts:1519-1535`), so file-deleting reclamation stays fail-closed. Re-verify 2026-10-09: `(cd apps/cli && bun test tests/commands/workflow.test.ts)` 173 pass / 0 fail. |
+| R2 | MET | `packages/app/src/services/run-storage.ts:138` failureRemedy map, attached to every failure at `packages/app/src/services/run-storage.ts:517` and `:540`; `cleaned[]` emitted beside `migration` in the JSON envelope (`apps/cli/src/commands/workflow.ts:1533`). Covered by the F5 e2e in `apps/cli/tests/commands/workflow.test.ts` (173 pass / 0 fail this run). |
+| R3 | MET | (a) `packages/app/src/services/run-storage.ts:592-596` allTargetsIdentical hoisted above family validation; (b) `packages/app/src/services/run-storage.ts:403` isDurableTargetValid consulted on shape failure (`:735-742`, outcome `superseded`, reason `durable canonical`) and identity failure (`:778-785`); outcome enum widened at `packages/app/src/services/run-storage.ts:113`; (d) durable-pair check at `packages/app/src/services/run-storage.ts:652-656`. Re-verify: `run-storage.test.ts` green inside the 297 pass / 0 fail `packages/app` focused run. |
+| R4 | MET | Re-verify 2026-10-09 on this repository with the source CLI: `bun run apps/cli/src/index.ts workflow clean --dry-run --json` exit 0, `migration.failures` 0, outcomes 1128 already-present / 11 superseded / 5294 preserved / 3 would-migrate, `cleaned` 0 (no stale rows remain after the original two-run apply recorded at verify time: run 1 finalized 70 rows, run 2 finalized none, both 0 failed, no housekeeping-skipped line). |
+| R5 | MET | `packages/app/src/services/inline-run-setup.ts:390-397` — an owned divergent file throws `durable evidence conflicts`; a foreign one is pushed to evidenceSkipped with reason `foreign-divergent` and the newer side, and is not copied. `plugins/sp/scripts/persist-out-check.ts:166-170` reads the recorded `persist-out.json` (written at `packages/app/src/services/inline-run-setup.ts:1967`). Re-verify: `persist-worktree-runs.test.ts` + `plugins/sp/tests/persist-out-check.test.ts` green (297/0 app run; 65/0 plugin run). |
+| R6 | MET | `packages/app/src/services/task-service.ts:1720-1723` renders Testing then asserts citations resolve before the write; refusal text at `packages/app/src/services/task-service.ts:2486-2492` names the citation and its origin row; shared extractor `packages/app/src/workflow/run-citation.ts:30-31` (direct-child only, subpaths skipped) and planes at `packages/app/src/workflow/run-citation.ts:73`. Re-verify: `task-record.test.ts` + `run-citation.test.ts` green (297 pass / 0 fail). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: AC1 — a migration failure no longer blocks stale-run finalization (req: R1) | MET | test | `apps/cli/tests/commands/workflow.test.ts` F5 e2e (forced migration failure → stale row finalized, reclamation skipped, exit 1 naming the file); 173 pass / 0 fail this run. |
+| Scenario: AC2 — failures are reported with a remedy in both outputs (req: R2) | MET | test | Same e2e asserts `source`/`reason`/`remedy` per `migration.failures` entry and `cleaned` separate from `migration`; 173 pass / 0 fail this run. |
+| Scenario: AC3 — identical and superseded scratch copies are not failures (req: R3) | MET | test | `packages/app/tests/services/run-storage.test.ts` F1–F4 (already-present / superseded / already-present / preserved-unclassified; failures empty; durable bytes unchanged); green this run. |
+| Scenario: AC4 — this repository converges (req: R4) | MET | command | `bun run apps/cli/src/index.ts workflow clean --dry-run --json` on this repository: exit 0, 0 migration failures, 0 stale rows left to finalize (converged after the recorded two-run apply). |
+| Scenario: AC5 — a divergent foreign evidence copy cannot block persist-out (req: R5) | MET | test | `packages/app/tests/services/persist-worktree-runs.test.ts` F6/F7 (foreign divergent skipped + reported with newer side, invoking copy byte-identical; owned divergent still throws); green this run. |
+| Scenario: AC6 — a phantom run citation fails at record (req: R6) | MET | test | `packages/app/tests/services/task-record.test.ts` F8 (phantom citation refused naming citation + check row, task file unchanged); green this run. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+
+#### Re-verify — 2026-10-09 (`/sp:dev-verifyall --force --fix all`)
+
+- Focused suites re-run: `packages/app` (run-storage, persist-worktree-runs, task-record, run-citation, confidence-taxonomy, inline-run-setup, quality-gate) 297 pass / 0 fail; `apps/cli` `workflow.test.ts` 173 pass / 0 fail; `plugins/sp` (persist-out-check, quality-gate-receipt, bookkeeping-contract, inline-run-trace) 65 pass / 0 fail; `bun run lint` exit 0.
+- R4 probe on this repository (source CLI): `workflow clean --dry-run --json` exit 0, 0 migration failures, 0 stale rows left.
+- Fix pass: Solution anchor for the `persist-out.json` write corrected `:1671` → `packages/app/src/services/inline-run-setup.ts:1967`. Gitignored writes: `.spur/run/1139-verify-answer.txt` and `.spur/run/1139-verdict.json` (re-derived, whole file).
+- Residual (P3): the global `spur` binary is the 2026-10-06 npm install and still reports 46 failures / exit 1 until the next release or `bun link` from `apps/cli`.
+
+#### R4 — this repository converges (AC4)
+
+`spur workflow clean` (worktree's fixed source CLI, run against the **invoking tree** at
+`/Users/robin/xprojects/spur-new`), twice, in order:
+
+Run 1 (applied), exit 0:
+
+```
+Finalized 70 stale run(s) (>30m):
+...
+Evidence migration: 2 migrated, 1123 already present, 0 failed.
+```
+
+Run 2 (applied), exit 0:
+
+```
+No stale runs older than 30m.
+Evidence migration: 0 migrated, 1124 already present, 0 failed.
+```
+
+No `housekeeping skipped` line in either output. `--dry-run --json` before the apply reported
+`failures: 0` and 70 would-finalize rows (was 46 failures / exit 1 before the fix).
+
+#### Regression suite
+
+| Suite | Command | Result |
+| --- | --- | --- |
+| Migrator classification | `(cd packages/app && bun test tests/services/run-storage.test.ts)` | 38 pass / 0 fail (F1–F4 + superseded / preserved-unclassified / remedy cases) |
+| persist-out foreign skip | `(cd packages/app && bun test tests/services/persist-worktree-runs.test.ts)` | 37 pass / 0 fail (F6/F7) |
+| Record citation gate | `(cd packages/app && bun test tests/services/task-record.test.ts)` | 146 pass / 0 fail (F8) |
+| Shared citation module | `(cd packages/app && bun test tests/workflow/run-citation.test.ts)` | 7 pass / 0 fail |
+| `clean` resilience + e2e | `(cd apps/cli && bun test tests/commands/workflow.test.ts)` | 173 pass / 0 fail (F5) |
+| Pre-removal assertion | `bun test plugins/sp/tests/persist-out-check.test.ts` | 12 pass / 0 fail |
+| Task-local gate | `bun run spur-check` | exit 0 — lint clean, 50 pre-check rules, 10682 pass / 0 fail, 2 post-check rules |
+| Plugin standalone | `bun run plugin-smoke` | PASS |
+| Feature-scoped repo-wide | `bun run spur-check-feature` | all pass except `dependency-drift-check` (pre-existing, see Review) |
+
+Coverage: `run-storage.ts` 94.05 % lines / 100 % functions (the 0.9 per-file gate); `run-citation.ts`
+100 %; `inline-run-setup.ts` 95.12 % lines / 93.10 % functions.
+
+Adjacent unblock (out of task scope): `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:793`
+carried a forbidden bare `bun plugins/sp/scripts/` invocation that failed `script-contract-check` on
+`main` before this task; the line was aligned with the guarded/installed-twin idiom already used four
+times in the same file. Doc-only, no behavior change.
+
+#### Confidence-level verification (HIGH|MEDIUM|LOW)
+
+The confidence taxonomy is declared **three times** with only a hand-written "mirrors the other"
+comment and no executable tie between them:
+
+| Definition | Location | Runtime behaviour |
+| --- | --- | --- |
+| `CONFIDENCE_LEVELS` (exported) | `packages/app/src/services/verify-verdict.ts:44` | artifact schema; case-normalizes, invalidates the artifact on a bad value |
+| private `CONFIDENCE_LEVELS` | `packages/app/src/services/verify-answer-lint.ts:360` | answer-text grammar; returns `undefined` on a bad value |
+| bare `VerdictConfidence` type + inline literal list | `packages/app/src/services/done-transition-guard.ts:48` (list at `:172`) | done-gate reader; `readError` → deny |
+
+Drift is silent in the worst direction — a level added in one place reads as "invalid confidence"
+in another, denying a legitimate PASS (or admitting a bogus one). `packages/app/tests/services/confidence-taxonomy.test.ts`
+pins the shared taxonomy behaviourally across all three consumers: the canonical three are accepted
+everywhere and normalize identically in any case, and every off-taxonomy probe is refused everywhere.
+
+Red–green evidence (each mutation applied, test run, source reverted):
+
+| Mutation | Result |
+| --- | --- |
+| `verify-answer-lint.ts` levels +`'EXTRA'` | caught — 1 fail |
+| `verify-verdict.ts` levels −`'LOW'` | caught — 1 fail |
+| `done-transition-guard.ts` inline list +`'EXTRA'` | caught — 1 fail |
+| `done-transition-guard.ts` type alias +`'EXTRA'` | **not** caught — TS type erasure changes no runtime behaviour; compile-time only |
+
+On this task's own artifact, the recorded verdict was read through the canonical parser:
+`parseVerifyVerdict('.spur/run/1139-verdict.json')` → `kind: valid`, `wbs: 1139`, `verdict: PASS`,
+`confidence: HIGH` (in taxonomy); `'high'` → `HIGH`; `'SURE'` → `invalid`. The rendered record carries
+`- Confidence: HIGH`, and `1123`/`1068 R3` guarantee the `testing → done` transition required it.
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P4 | — | — | No findings (verify verdict PASS) |
+
+Residual risk:
+
+- **`superseded` is public JSON.** Adding a value to `RunStorageOutcome` is additive; an external
+  consumer that switches exhaustively on `outcome` would need the new value. Only `apps/cli` reads it
+  in-tree.
+- **Unclassified scratch is never disposed.** By ADR-131 the four genuinely-unrecoverable files
+  (`2f720cbc…`, `4cd815f9…`, `E71-1024-final-verdict.json`, `E71-main-feature-verification.json`) stay
+  in `.spur/run/` as `preserved (unclassified)`. That is the intended contract (scratch disposal is the
+  operator's decision), not a leak.
+- **`dependency-drift-check` fails in `spur-check-feature`.** Environmental: `@gobing-ai/ts-db`,
+  `ts-runtime`, `ts-utils` are installed at 0.5.18 while `bun.lock`/catalog expects 0.5.19. The same
+  failure reproduces in the untouched main tree at base commit `17d06fe18`; the remedy is a repo-wide
+  `bun install`, outside this task's scope.
+- **`inline-pipeline-driver.md` doc line 793** was fixed as an adjacent unblock for the pre-existing
+  `script-contract-check` failure (see Testing). No behavior change.
+
+Untested paths: the `write-failed`/`copy-mismatch`/`manifest-confinement`/`manifest-write` failure
+branches are exercised by a test seam (`atomicCopy`) and a read-only-target fixture rather than real
+disk faults; the `cleanRunLogs`/`cleanCheckpoints` skip was asserted through the CLI JSON, not by
+inspecting the filesystem for each reclaimed log.
 
 ### References
 
@@ -184,3 +329,8 @@ Tradeoff: `superseded` widens a public JSON enum, which is additive. Consumers t
 - Related: 1140/1141/1145 (same ADR-131 follow-up under E71); 1136 R8/R12 (persist-out-check caps/skips — touches `persist-out-check.ts`, sequence after this task).
 
 ### History
+
+- 2026-10-09T18:43:23.744Z todo → wip (system)
+- 2026-10-09T20:34:20.842Z wip → testing (system)
+- 2026-10-09T20:34:31.444Z testing → done (system)
+
