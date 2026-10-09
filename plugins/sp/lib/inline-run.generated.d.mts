@@ -14,6 +14,8 @@ export declare const runInlineRunFingerprint: typeof import('@gobing-ai/spur-app
 export declare const runInlineRunPersistOut: typeof import('@gobing-ai/spur-app').runInlineRunPersistOut;
 export declare const runInlineRunSetup: typeof import('@gobing-ai/spur-app').runInlineRunSetup;
 export declare const runInlineRunTrace: typeof import('@gobing-ai/spur-app').runInlineRunTrace;
+export declare const runInlineRunNodeEnter: typeof import('@gobing-ai/spur-app').runInlineRunNodeEnter;
+export declare const runInlineRunTraceMode: typeof import('@gobing-ai/spur-app').runInlineRunTraceMode;
 export declare const writeInlineRunOutcome: typeof import('@gobing-ai/spur-app').writeInlineRunOutcome;
 export declare const computeProofInputFingerprint: typeof import('@gobing-ai/spur-app').computeProofInputFingerprint;
 export declare const readProofInputContents: typeof import('@gobing-ai/spur-app').readProofInputContents;

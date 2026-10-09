@@ -17,7 +17,7 @@ import { appendFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { getEnvVars } from '../lib/env';
 import type { QualityGateEnv, QualityGateOptions } from '../lib/quality-gate.generated.mjs';
-import { readReceiptStatus, runDeferredGate, runLightGate, runQualityGate } from '../lib/quality-gate.generated.mjs';
+import { resolveReceiptReuse, runDeferredGate, runLightGate, runQualityGate } from '../lib/quality-gate.generated.mjs';
 
 export * from '../lib/quality-gate.generated.mjs';
 
@@ -48,8 +48,20 @@ export function main(
         return runDeferredGate(env, options).status === 'DEFERRED' ? 0 : 1;
     } else if (mode === 'status') {
         const runDir = join(options.cwd ?? '.', '.spur', 'run');
-        const verdict = readReceiptStatus(join(runDir, `${env.wbs}-check-receipt.json`), env.proofDigest ?? '');
-        if (verdict.reuse) {
+        // Task 1136 R3: the gate owns its reuse identity — recompute the proof-input fingerprint
+        // before consulting the receipt, so a caller-copied digest can never trigger reuse.
+        const decision = resolveReceiptReuse(
+            join(runDir, `${env.wbs}-check-receipt.json`),
+            env,
+            options.cwd ?? process.cwd(),
+            options.recomputeFingerprint,
+        );
+        const verdict = decision.receiptStatus;
+        if (decision.refusal !== undefined) {
+            const line = `check.reuse-refused — ${decision.refusal}\n`;
+            process.stdout.write(line); // tee: stdout and the log
+            appendFileSync(join(runDir, `${env.wbs}-test-gate.log`), line);
+        } else if (verdict.reuse) {
             // 0940 R3: reuse is observable in the gate log and on stdout (the action result
             // `data`); the `{reuse, reason}` JSON stays the last stdout line for machine readers.
             const line = `check.reused — full-tier receipt reused for input digest ${env.proofDigest ?? ''}\n`;

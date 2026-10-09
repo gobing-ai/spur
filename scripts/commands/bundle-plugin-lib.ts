@@ -431,6 +431,10 @@ export declare interface QualityGateEnv {
 }
 export declare interface QualityGateOptions {
     cwd?: string;
+    recomputeFingerprint?: (
+        cwd: string,
+        env: QualityGateEnv,
+    ) => { ok: true; digest: string } | { ok: false; error: string };
 }
 export declare interface QualityGateResult {
     status: 'PASS' | 'FAIL';
@@ -486,6 +490,25 @@ export declare interface BuildReceiptInput {
 export declare function buildReceipt(input: BuildReceiptInput): CheckReceipt;
 export declare function receiptFailsAtDigest(receipt: CheckReceipt | null, currentDigest: string): boolean;
 export declare function readReceiptStatus(receiptPath: string, currentDigest: string): ReceiptReadStatus;
+export declare interface ReceiptReuseDecision {
+    reuse: boolean;
+    receiptStatus: ReceiptReadStatus;
+    refusal?: string;
+    recomputedDigest?: string;
+}
+export declare function resolveReceiptReuse(
+    receiptPath: string,
+    env: QualityGateEnv,
+    cwd: string,
+    recomputeFn?: (
+        cwd: string,
+        env: QualityGateEnv,
+    ) => { ok: true; digest: string } | { ok: false; error: string },
+): ReceiptReuseDecision;
+export declare function recomputeGateProofFingerprint(
+    cwd: string,
+    env: QualityGateEnv,
+): { ok: true; digest: string } | { ok: false; error: string };
 export declare interface LightScope {
     files: string[];
     workspaces: string[];
@@ -702,6 +725,10 @@ const INLINE_RUN_EXPORTS: readonly InlineRunExport[] = [
         'runInlineRunPersistOut',
         'runInlineRunSetup',
         'runInlineRunTrace',
+        // Task 1136: the trace-mode dispatcher (action/close/node-enter/actions-file) plus the
+        // node-enter stamp move here so the plugin script keeps only argv/env and entry resolution.
+        'runInlineRunNodeEnter',
+        'runInlineRunTraceMode',
         'writeInlineRunOutcome',
     ),
     ...appExports(

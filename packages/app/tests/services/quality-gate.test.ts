@@ -15,11 +15,14 @@ import {
     type QualityGateResult,
     RECEIPT_SCHEMA_VERSION,
     readReceiptStatus,
+    recomputeGateProofFingerprint,
+    resolveReceiptReuse,
     runQualityGate,
     runShellCommand,
     scanCoverageShortfalls,
     tailLines,
 } from '../../src/services/quality-gate';
+import { computeProofInputFingerprint } from '../../src/workflow/proof-input-fingerprint';
 
 // Task 1006 R1: behavioral suite ported from plugins/sp/tests/quality-gate.test.ts to follow
 // the gate core's new home (packages/app/src/services/quality-gate.ts); the plugin script keeps
@@ -51,7 +54,10 @@ function gate(
         return runQualityGate(
             mode,
             { wbs: '0823', qualityGateCmd: script, SPUR_QUALITY_GATE_RETRY_DELAY_MS: '0', ...extra },
-            { cwd: dir },
+            // Task 1136 R3: these cases are about the receipt's own verdict, so the recompute guard
+            // is stubbed to agree with the supplied digest. The guard itself is pinned separately
+            // (app: `recomputeGateProofFingerprint` parity; plugin: `check.reuse-refused` cases).
+            { cwd: dir, recomputeFingerprint: (_c, e) => ({ ok: true, digest: e.proofDigest ?? '' }) },
         );
     } finally {
         process.stdout.write = originalWrite;
@@ -519,6 +525,114 @@ describe('PASS receipt reuse (1016 R1)', () => {
             } finally {
                 cleanup();
             }
+        }
+    });
+});
+
+describe('gate receipt reuse identity (task 1136 R3)', () => {
+    /** Temp git repo with a task spec — the recompute needs a real tree and a readable task file. */
+    function repoWithTask(): { dir: string; task: string; cleanup: () => void } {
+        const { dir, cleanup } = scratch('spur-1136-recompute-');
+        writeFileSync(join(dir, '.gitignore'), '.spur/\n');
+        writeFileSync(join(dir, 'README.md'), 'tracked\n');
+        const task = join(dir, 'task-0939.md');
+        writeFileSync(task, '# 0939 test task\n\n## Requirements\n\n- R1. do a thing\n');
+        spawnSync('git', ['init', '-q'], { cwd: dir });
+        spawnSync('git', ['config', 'user.email', 't@example.com'], { cwd: dir });
+        spawnSync('git', ['config', 'user.name', 't'], { cwd: dir });
+        spawnSync('git', ['add', '-A'], { cwd: dir });
+        spawnSync('git', ['commit', '-qm', 'init'], { cwd: dir });
+        return { dir, task, cleanup };
+    }
+
+    test('recomputeGateProofFingerprint agrees with computeProofInputFingerprint on the same inputs', async () => {
+        const { dir, task, cleanup } = repoWithTask();
+        try {
+            const expected = await computeProofInputFingerprint({
+                cwd: dir,
+                taskContent: readFileSync(task, 'utf8'),
+            });
+            const actual = recomputeGateProofFingerprint(dir, { wbs: '0939', taskSpecPath: task });
+            expect(actual).toEqual({ ok: true, digest: expected });
+        } finally {
+            cleanup();
+        }
+    });
+
+    test('a missing task path refuses reuse and never reports it — no receipt is trusted', () => {
+        const { dir, cleanup } = scratch('spur-1136-nopath-');
+        try {
+            mkdirSync(join(dir, '.spur/run'), { recursive: true });
+            writeFileSync(join(dir, '.spur/run/0823-check-receipt.json'), '{}');
+            const decision = resolveReceiptReuse(join(dir, '.spur/run/0823-check-receipt.json'), { wbs: '0823' }, dir);
+            expect(decision.reuse).toBe(false);
+            expect(decision.refusal).toBe('recompute failed: missing task path');
+        } finally {
+            cleanup();
+        }
+    });
+
+    test('an absent receipt skips the recompute entirely (nothing to reuse)', () => {
+        const { dir, cleanup } = scratch('spur-1136-noreceipt-');
+        let recomputed = 0;
+        try {
+            const decision = resolveReceiptReuse(
+                join(dir, '.spur/run/0823-check-receipt.json'),
+                { wbs: '0823', proofDigest: 'digest-1' },
+                dir,
+                () => {
+                    recomputed++;
+                    return { ok: true, digest: 'digest-1' };
+                },
+            );
+            expect(decision.reuse).toBe(false);
+            expect(recomputed).toBe(0);
+        } finally {
+            cleanup();
+        }
+    });
+
+    test('run: a stale supplied digest refuses reuse, runs the gate, and logs both digests', () => {
+        const { dir, cleanup } = scratch('spur-1136-refuse-');
+        try {
+            mkdirSync(join(dir, '.spur/run'), { recursive: true });
+            writeFileSync(
+                join(dir, '.spur/run/0823-check-receipt.json'),
+                `${JSON.stringify({
+                    schemaVersion: RECEIPT_SCHEMA_VERSION,
+                    wbs: '0823',
+                    runId: 'pipeline-0823',
+                    tier: 'full',
+                    inputDigest: 'digest-1',
+                    checks: [{ id: 't', cmd: 'x', status: 'PASS', durationMs: 1, logPath: 'p' }],
+                    status: 'PASS',
+                    completedAt: '2026-09-30T00:00:00.000Z',
+                })}\n`,
+            );
+            const sentinel = join(dir, 'sentinel');
+            const script = executable(dir, 'gate.sh', `touch "${sentinel}"`);
+            const originalWrite = process.stdout.write;
+            process.stdout.write = () => true;
+            try {
+                runQualityGate(
+                    'recheck',
+                    {
+                        wbs: '0823',
+                        qualityGateCmd: script,
+                        proofDigest: 'digest-1',
+                        SPUR_QUALITY_GATE_RETRY_DELAY_MS: '0',
+                    },
+                    { cwd: dir, recomputeFingerprint: () => ({ ok: true, digest: 'digest-2' }) },
+                );
+            } finally {
+                process.stdout.write = originalWrite;
+            }
+            expect(existsSync(sentinel)).toBe(true);
+            expect(readFileSync(join(dir, '.spur/run/0823-test-gate.log'), 'utf8')).toContain(
+                'check.reuse-refused — supplied digest-1 != current digest-2',
+            );
+        } finally {
+            cleanup();
         }
     });
 });

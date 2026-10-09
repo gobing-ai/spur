@@ -35,7 +35,7 @@
  * stream order, which a captured-stdout+stderr seam cannot reproduce.
  */
 import { spawnSync } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
     appendFileSync,
     closeSync,
@@ -52,8 +52,10 @@ import {
     writeFileSync,
 } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { getEnvVar, getEnvVars, setEnvVar } from '@gobing-ai/ts-utils';
+import { canonicalJsonStringify } from '../workflow/composition-baseline';
+import { extractFeatureProofData, extractTaskProofData } from '../workflow/proof-input-fingerprint';
 
 /** Hard cap on lock-retry attempts before `run` gives up (the old shell `for i in 1..5`). */
 export const MAX_GATE_ATTEMPTS = 5;
@@ -91,6 +93,11 @@ export interface QualityGateEnv {
 export interface QualityGateOptions {
     /** Base directory for `.spur/run`; defaults to the process cwd (CLI behavior). */
     cwd?: string;
+    /** Task 1136 R3: optional proof-input fingerprint recomputer override (e.g. for unit tests). */
+    recomputeFingerprint?: (
+        cwd: string,
+        env: QualityGateEnv,
+    ) => { ok: true; digest: string } | { ok: false; error: string };
 }
 
 /** Where the gate wrote its run artifacts (log, findings, status, attempt, receipt). */
@@ -288,6 +295,11 @@ export function receiptFailsAtDigest(receipt: CheckReceipt | null, currentDigest
  * Reuse verdict for `.spur/run/<wbs>-check-receipt.json` against the current proof-input digest.
  * Evaluated missing → failed → stale → light-only; reuse requires `PASS` + `tier: full` + digest
  * match, so light rows can never flip a receipt reusable (0939 invariant).
+ *
+ * Task 1136 R3: The gate owns its reuse identity and recomputes the proof-input fingerprint itself
+ * before consulting this function. Callers must pass the fresh recomputed digest (never a
+ * caller-copied digest from an untrusted or stale source). When recompute cannot run or differs
+ * from the supplied digest, reuse is refused.
  */
 export function readReceiptStatus(receiptPath: string, currentDigest: string): ReceiptReadStatus {
     const receipt = readReceipt(receiptPath);
@@ -314,6 +326,63 @@ export function readReceiptStatus(receiptPath: string, currentDigest: string): R
         return { reuse: false, reason: 'failed' };
     }
     return { reuse: true, reason: 'ok' };
+}
+
+/**
+ * Task 1136 R3: the gate's own reuse decision. Recomputes the proof-input fingerprint before
+ * `readReceiptStatus` is consulted, so a receipt is never reused on a caller-copied digest.
+ *
+ * - no receipt file → `readReceiptStatus` alone (nothing to reuse; recompute is not paid).
+ * - recompute cannot run (missing/unreadable task spec) → reuse refused (`refusal` names why).
+ * - recomputed digest ≠ supplied `proofDigest` → reuse refused (`refusal` names both digests).
+ * - otherwise → `readReceiptStatus` against the freshly recomputed digest.
+ */
+export interface ReceiptReuseDecision {
+    readonly reuse: boolean;
+    readonly receiptStatus: ReceiptReadStatus;
+    /** Present when reuse was refused by the recompute guard, never by the receipt itself. */
+    readonly refusal?: string;
+    readonly recomputedDigest?: string;
+}
+
+/**
+ * Decide whether a run may reuse its check receipt, recomputing the proof-input fingerprint first
+ * (task 1136 R3) so a stale caller-supplied digest can never trigger reuse. Returns the receipt
+ * verdict plus, when the recompute guard refused, the `refusal` detail the caller logs.
+ */
+export function resolveReceiptReuse(
+    receiptPath: string,
+    env: QualityGateEnv,
+    cwd: string,
+    recomputeFn: (
+        cwd: string,
+        env: QualityGateEnv,
+    ) => { ok: true; digest: string } | { ok: false; error: string } = recomputeGateProofFingerprint,
+): ReceiptReuseDecision {
+    if (!existsSync(receiptPath)) {
+        return { reuse: false, receiptStatus: readReceiptStatus(receiptPath, env.proofDigest ?? '') };
+    }
+    const recomputed = recomputeFn(cwd, env);
+    if (!recomputed.ok) {
+        return {
+            reuse: false,
+            receiptStatus: { reuse: false, reason: 'stale' },
+            refusal: `recompute failed: ${recomputed.error}`,
+        };
+    }
+    if ((env.proofDigest ?? '') !== recomputed.digest) {
+        return {
+            reuse: false,
+            receiptStatus: { reuse: false, reason: 'stale' },
+            refusal: `supplied ${env.proofDigest ?? ''} != current ${recomputed.digest}`,
+            recomputedDigest: recomputed.digest,
+        };
+    }
+    return {
+        reuse: readReceiptStatus(receiptPath, recomputed.digest).reuse,
+        receiptStatus: readReceiptStatus(receiptPath, recomputed.digest),
+        recomputedDigest: recomputed.digest,
+    };
 }
 
 const TEST_FILE_PATTERN = /\.test\.tsx?$/;
@@ -868,6 +937,98 @@ export function acquireGateLock(env: QualityGateEnv, logLine: (line: string) => 
 }
 
 /**
+ * Task 1136 R3: Recompute the proof-input fingerprint for quality-gate receipt reuse.
+ * Uses taskSpecPath and optional featureSpecPath from env/options.
+ */
+export function recomputeGateProofFingerprint(
+    cwd: string,
+    env: QualityGateEnv,
+): { ok: true; digest: string } | { ok: false; error: string } {
+    const taskSpecPath = env.taskSpecPath ?? env.taskFile;
+    if (!taskSpecPath || taskSpecPath.trim() === '') {
+        return { ok: false, error: 'missing task path' };
+    }
+    const fullTaskPath = resolve(cwd, taskSpecPath);
+    if (!existsSync(fullTaskPath)) {
+        return { ok: false, error: `task file not found: ${taskSpecPath}` };
+    }
+    let taskContent: string;
+    try {
+        taskContent = readFileSync(fullTaskPath, 'utf8');
+    } catch (err) {
+        return { ok: false, error: `cannot read task file: ${err instanceof Error ? err.message : String(err)}` };
+    }
+
+    const featureSpecPath = env.featureSpecPath ?? env.featureFile;
+    let featureContent: string | undefined;
+    if (featureSpecPath && featureSpecPath.trim() !== '') {
+        const fullFeaturePath = resolve(cwd, featureSpecPath);
+        if (existsSync(fullFeaturePath)) {
+            try {
+                featureContent = readFileSync(fullFeaturePath, 'utf8');
+            } catch {
+                // optional
+            }
+        }
+    }
+
+    // Git tree capture using temporary index file
+    const indexFile = join(tmpdir(), `spur-proof-fingerprint-${randomUUID()}.index`);
+    try {
+        const processEnv = Object.fromEntries(
+            Object.entries(getEnvVars()).filter((entry): entry is [string, string] => entry[1] !== undefined),
+        );
+        processEnv.GIT_INDEX_FILE = indexFile;
+        const opts = { cwd, env: processEnv, stdio: ['pipe', 'pipe', 'pipe'] as ('pipe' | 'ignore')[] };
+
+        const readRes = spawnSync('git', ['read-tree', 'HEAD'], opts);
+        if (readRes.status !== 0) {
+            return { ok: false, error: `git read-tree HEAD failed: ${readRes.stderr?.toString() || readRes.status}` };
+        }
+
+        const addRes = spawnSync(
+            'git',
+            ['add', '-A', '--', '.', ':(exclude)docs/tasks*', ':(exclude)docs/features*'],
+            opts,
+        );
+        if (addRes.status !== 0) {
+            return { ok: false, error: `git add -A failed: ${addRes.stderr?.toString() || addRes.status}` };
+        }
+
+        const writeRes = spawnSync('git', ['write-tree'], opts);
+        if (writeRes.status !== 0) {
+            return { ok: false, error: `git write-tree failed: ${writeRes.stderr?.toString() || writeRes.status}` };
+        }
+        const gitTree = writeRes.stdout.toString().trim();
+
+        const task = extractTaskProofData(taskContent);
+        const feature = featureContent !== undefined ? extractFeatureProofData(featureContent) : undefined;
+
+        const canonical = canonicalJsonStringify({
+            gitTree,
+            ...(task !== undefined ? { task } : {}),
+            ...(feature !== undefined ? { feature } : {}),
+        });
+
+        const hash = createHash('sha256').update(canonical, 'utf8').digest('hex');
+        return { ok: true, digest: `sha256:${hash}` };
+    } catch (err) {
+        return {
+            ok: false,
+            error: `git alternate-tree capture failed: ${err instanceof Error ? err.message : String(err)}`,
+        };
+    } finally {
+        if (existsSync(indexFile)) {
+            try {
+                unlinkSync(indexFile);
+            } catch {
+                // Best-effort cleanup
+            }
+        }
+    }
+}
+
+/**
  * Run the gate in `run` or `recheck` mode: execute the probe/full gate with lock retries,
  * tee output to the wbs-scoped log, write the status/findings/receipt artifacts, and return
  * the verdict (exit codes stay the script's: 0 pass, 1 fail, 2 usage).
@@ -901,10 +1062,23 @@ export function runQualityGate(
 
     // 1016 R1 — PASS receipt reuse, next to the 0940 no-progress skip: a full-tier PASS receipt
     // bound to the current proof-input digest means these exact inputs already passed the full
-    // gate, so re-entry (run or recheck) skips the probe and the gate command. `readReceiptStatus`
-    // fails closed — missing, failed, stale, light-only or an empty digest never reuse — and the
-    // skip leaves the receipt untouched, so a FAIL can never be laundered into a reusable PASS.
-    const reusePass = commandPresent && readReceiptStatus(abs(rel('-check-receipt.json')), env.proofDigest ?? '').reuse;
+    // gate, so re-entry (run or recheck) skips the probe and the gate command.
+    // Task 1136 R3: The gate never reuses a receipt on a caller-copied digest.
+    // Before readReceiptStatus is consulted, recompute the proof-input fingerprint itself.
+    // When the supplied proofDigest differs from the recomputed value, reuse is refused.
+    // The gate runs and logs `check.reuse-refused — supplied <D1> != current <D2>`.
+    // When the recompute cannot run (missing task path), reuse is refused, never assumed.
+    const receiptPath = abs(rel('-check-receipt.json'));
+    let reusePass = false;
+    if (commandPresent) {
+        const decision = resolveReceiptReuse(receiptPath, env, abs('.'), options.recomputeFingerprint);
+        if (decision.refusal !== undefined) {
+            const refuseLine = `check.reuse-refused — ${decision.refusal}\n`;
+            process.stdout.write(refuseLine);
+            appendFileSync(abs(logFile), refuseLine);
+        }
+        reusePass = decision.reuse;
+    }
     if (reusePass) {
         const line = `check.reused — full-tier PASS receipt at input digest ${env.proofDigest ?? ''}; gate skipped\n`;
         process.stdout.write(line); // tee: stdout and the log

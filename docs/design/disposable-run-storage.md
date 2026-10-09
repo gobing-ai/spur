@@ -4,7 +4,7 @@ title: Disposable run storage and durable evidence
 status: implemented
 created_at: 2026-09-30
 updated_at: 2026-10-09
-related: [E71, E7, F93, docs/design/run-record-contract.md, "1056"]
+related: [E71, E7, F93, docs/design/run-record-contract.md, "1056", "1136"]
 tags: [contract, workflow, planning]
 ---
 
@@ -47,7 +47,11 @@ Use small path functions/constants at existing app seams where multiple callers 
 
 ### Publication and reads
 
-1. Temporary stage files keep existing freshness and lexical/physical confinement checks.
+1. Temporary stage files keep existing freshness and lexical/physical confinement checks. The
+   inline driver's own scratch (action-batch JSON, captured stage output, temporary status/answer
+   files) lives under `.spur/run/<run-id>/` and never `/tmp` or `$TMPDIR` — the OS may reap a host
+   temp directory mid-run, and a reaped scratch file then surfaces as an unrelated downstream
+   failure (task 1136 R6).
 2. `task verdict` derives attempt evidence in scratch; `task record` atomically publishes the selected valid verdict, including its raw proof fields, under durable evidence before writing Testing. Feature receipt writers publish both structured copies directly under durable evidence; the coarse status and command log remain in scratch. Readers resolve durable evidence. Current-input digest, stricter-of-stored-and-computed verdict, receipt latest/run equality, supersession and malformed evidence rejection remain unchanged. F93's tracked fallback retains its current valid-data semantics; malformed durable evidence cannot fall through to an old PASS.
 3. `run.artifact` accepts scratch output through its existing confined input contract, validates identity/proof as today, atomically persists the retained bytes to its owned durable destination, and records the durable path. Bound canonical evidence already published under `.spur/memory/evidence/` is validated against that fixed root and registered in place. Command-gate output confinement remains scratch-only. Persistence/registration failure reports failure and keeps the source; unregistered data is not claimed persisted. Optional missing artifacts retain truthful path-only semantics without fabricated bytes.
 4. Engine and inline run records write directly to the durable run directory. DB trace/status stays authoritative; `.state.json` is the existing projection, not a replacement engine snapshot. Inspection and coordination references resolve the durable pair with migrated legacy fallback.

@@ -50,6 +50,7 @@ import type { SpurConfig } from '@gobing-ai/spur-config';
 import { getEnvVars } from '@gobing-ai/spur-config';
 import type { DbAdapter, RunDefinitionSource } from '@gobing-ai/spur-domain';
 import {
+    ActionRunDao,
     createMigratedDb,
     listRunIdRows,
     normalizePersistedWorkflowLayer,
@@ -67,7 +68,7 @@ import { EventBus } from '@gobing-ai/ts-infra';
 import { createNodeFileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import { type DecisionLogSink, decisionLogSink } from '../decision/decision-log';
 import { getDecisionService } from '../decision/decision-service';
-import { createWorkflowActionTraceWriter } from '../workflow/action-trace';
+import { createWorkflowActionTraceWriter, RunRowNotFoundError } from '../workflow/action-trace';
 import { DecideActionRunner, DecideOptionsSchema } from '../workflow/actions/decide';
 import { resolveDurableArtifactPath } from '../workflow/actions/run-path';
 import { parseFeatureVerificationReceipt } from '../workflow/feature-verification-receipt';
@@ -1122,10 +1123,10 @@ export function writeInlineRunOutcome(runId: string, outcome: InlineRunStateOutc
 export function projectInlineRunClose(
     runId: string,
     status: 'done' | 'failed' | 'paused',
-    context?: { startedAt?: string },
+    context?: { startedAt?: string; workdir?: string },
 ): string | undefined {
     try {
-        const runDir = runStoragePaths(process.cwd()).recordsDir;
+        const runDir = runStoragePaths(context?.workdir ?? process.cwd()).recordsDir;
         if (!existsSync(runDir)) mkdirSync(runDir, { recursive: true });
         const statePath = join(runDir, `${runId}.state.json`);
         let prior: Record<string, unknown> = {};
@@ -1202,6 +1203,83 @@ export function isInlineRunActionStatus(status: string): status is 'done' | 'fai
     return ACTION_STATUSES.has(status);
 }
 
+/** Input for the trace-mode dispatch (`--action` / `--close` / `--node-enter` / `--actions-file`, task 1136). */
+export interface InlineRunTraceModeInput {
+    readonly mode: 'action' | 'close' | 'node-enter' | 'actions-file';
+    readonly runId: string;
+    readonly node: string;
+    readonly kind: string;
+    readonly status: string;
+    readonly reason: string;
+    readonly ok: string;
+    readonly durationMs: string;
+    readonly actionsFile: string;
+    readonly projectRoot: string;
+    readonly estimated: boolean;
+}
+
+/**
+ * Validate and dispatch one trace-mode invocation (task 1136; ADR-130 glue budget). The plugin
+ * script keeps argv/env parsing and entry resolution; the mode bodies, their guards and their
+ * exit codes live here — the same reason the other mode runners moved (1006 R3). Returns the
+ * process exit code, where `2` means the invocation was malformed and the caller prints usage.
+ *
+ * The run id is validated by the caller (`refuseUnsafeRunId`, which owns the loud message).
+ */
+export async function runInlineRunTraceMode(input: InlineRunTraceModeInput): Promise<number> {
+    if (input.estimated && input.mode !== 'action') return 2;
+    const projectRoot = input.projectRoot.trim() === '' ? {} : { projectRoot: input.projectRoot };
+    if (input.mode === 'node-enter') {
+        if (input.node.trim() === '' || input.status !== '' || input.kind !== '') return 2;
+        if (input.ok !== '' || input.durationMs !== '') return 2;
+        return runInlineRunNodeEnter({ runId: input.runId, node: input.node, ...projectRoot });
+    }
+    if (input.mode === 'actions-file') {
+        if (input.status !== '' || input.node !== '' || input.kind !== '') return 2;
+        if (input.ok !== '' || input.durationMs !== '' || input.actionsFile.trim() === '') return 2;
+        return runInlineRunTraceBatch({ runId: input.runId, actionsFile: input.actionsFile, ...projectRoot });
+    }
+    if (input.status.trim() === '') return 2;
+    if (input.mode === 'close') {
+        if (!isInlineRunCloseStatus(input.status)) return 2;
+        // 0937 R2: a failed close needs a declared closed-enum reason — before any write.
+        if (input.reason.trim() === '' ? input.status === 'failed' : !isTerminalReason(input.reason)) return 2;
+        return runInlineRunTrace({
+            runId: input.runId,
+            close: true,
+            node: '',
+            kind: '',
+            status: input.status,
+            ok: true,
+            durationMs: 0,
+            ...(input.reason.trim() === '' ? {} : { reason: input.reason }),
+            ...projectRoot,
+        });
+    }
+    if (input.node.trim() === '' || input.kind.trim() === '') return 2;
+    if (!isInlineRunActionStatus(input.status)) return 2;
+    // `--ok` is required and exact (0868 #2): no silent defaults. `--duration-ms` is optional
+    // (1136 R4): omitted, the emitter measures from the calling `--node-enter`.
+    if (input.ok !== 'true' && input.ok !== 'false') return 2;
+    let durationMs: number | undefined;
+    if (input.durationMs.trim() !== '') {
+        const parsed = Number(input.durationMs);
+        if (!Number.isFinite(parsed) || parsed < 0) return 2;
+        durationMs = parsed;
+    }
+    return runInlineRunTrace({
+        runId: input.runId,
+        close: false,
+        node: input.node,
+        kind: input.kind,
+        status: input.status,
+        ok: input.ok === 'true',
+        ...(durationMs === undefined ? {} : { durationMs }),
+        ...(input.estimated ? { estimated: true } : {}),
+        ...projectRoot,
+    });
+}
+
 /** Input for the ADR-117 emission modes (`--action` / `--close`); the plugin delegate builds it from argv. */
 export interface InlineRunTraceInput {
     readonly runId: string;
@@ -1219,13 +1297,29 @@ export interface InlineRunTraceInput {
      */
     readonly status: 'done' | 'failed' | 'paused';
     readonly ok: boolean;
-    readonly durationMs: number;
+    readonly durationMs?: number;
     /**
      * True when the host driver did not time the action (1070 R1) — for example a duration it
      * reconstructed after a subagent returned. Stamped into `action_runs.result_json` so the
      * projection can label the row instead of presenting it as measured.
      */
     readonly estimated?: boolean;
+    /** Task 1136 R1: optional root directory of the tree owning the run row. */
+    readonly projectRoot?: string;
+    /**
+     * Task 1136 R1: apply the loud run-row precheck. Driver emission modes (`--action`,
+     * `--actions-file`, `--node-enter`, `--close`) default to it; the decide runner's secondary
+     * trace row opts out because the decision itself is that call's primary result and its row
+     * stays best-effort exactly like `--action`'s emission failure policy.
+     */
+    readonly requireRunRow?: boolean;
+}
+
+/** Input for `runInlineRunNodeEnter` (`--node-enter`, task 1136 R4). */
+export interface InlineRunNodeEnterInput {
+    readonly runId: string;
+    readonly node: string;
+    readonly projectRoot?: string;
 }
 
 /**
@@ -1248,15 +1342,101 @@ export function inlineRunRecordLogPath(runDir: string, runId: string): string {
  * exit immediately after), and never throws: an unwritable log must not wedge the run
  * (ADR-117 R3).
  */
-export function appendInlineRunLogLine(runId: string, detail: string): void {
+export function appendInlineRunLogLine(runId: string, detail: string, workdir?: string): void {
     try {
-        const runDir = runStoragePaths(process.cwd()).recordsDir;
+        const runDir = runStoragePaths(workdir ?? process.cwd()).recordsDir;
         if (!existsSync(runDir)) mkdirSync(runDir, { recursive: true });
         const safeRunId = runId.replace(/[^A-Za-z0-9._-]/g, '_');
         const stamp = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
         appendFileSync(inlineRunRecordLogPath(runDir, safeRunId), `[${stamp}] ${detail}\n`);
     } catch {
         // Best-effort (R3): the run continues even when the failure cannot be recorded.
+    }
+}
+
+/**
+ * Record node entry in the run's state sidecar (task 1136 R4/R5).
+ */
+export async function runInlineRunNodeEnter(input: InlineRunNodeEnterInput): Promise<number> {
+    const workdir =
+        input.projectRoot !== undefined && input.projectRoot.trim() !== '' ? resolve(input.projectRoot) : process.cwd();
+    let projectDb: InlineRunProjectDb | undefined;
+    try {
+        projectDb = await openInlineRunProjectDb(workdir);
+        const runRow = await new DbWorkflowPersistenceAdapter(projectDb.adapter).loadRun(input.runId);
+        if (runRow === undefined) {
+            throw new RunRowNotFoundError(input.runId);
+        }
+        const runDir = runStoragePaths(workdir).recordsDir;
+        if (!existsSync(runDir)) mkdirSync(runDir, { recursive: true });
+        const statePath = join(runDir, `${input.runId}.state.json`);
+        let prior: Record<string, unknown> = {};
+        try {
+            const parsed = JSON.parse(readFileSync(statePath, 'utf8'));
+            if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                prior = parsed as Record<string, unknown>;
+            }
+        } catch {
+            // No prior state
+        }
+        const enteredAt = new Date().toISOString();
+        const nodeEnters =
+            prior.nodeEnters !== null && typeof prior.nodeEnters === 'object' && !Array.isArray(prior.nodeEnters)
+                ? { ...(prior.nodeEnters as Record<string, string>) }
+                : {};
+        nodeEnters[input.node] = enteredAt;
+
+        const visitedNodes = Array.isArray(prior.visitedNodes) ? [...(prior.visitedNodes as string[])] : [];
+        if (!visitedNodes.includes(input.node)) {
+            visitedNodes.push(input.node);
+        }
+
+        const state = {
+            schemaVersion: 1 as const,
+            ...prior,
+            runId: input.runId,
+            nodeEnters,
+            visitedNodes,
+            activeNode: input.node,
+            enteredAt,
+            updatedAt: enteredAt,
+        };
+
+        const temp = `${statePath}.tmp`;
+        try {
+            writeFileSync(temp, `${JSON.stringify(state, null, 4)}\n`);
+            renameSync(temp, statePath);
+        } catch (error) {
+            try {
+                unlinkSync(temp);
+            } catch {
+                // Nothing to clean
+            }
+            throw error;
+        }
+
+        appendInlineRunLogLine(
+            input.runId,
+            `node-entered run=${input.runId} node=${input.node} at=${enteredAt}`,
+            workdir,
+        );
+        process.stdout.write(`${JSON.stringify({ ok: true, runId: input.runId, node: input.node, enteredAt })}\n`);
+        return 0;
+    } catch (error) {
+        if ((error as { name?: string }).name === 'RunRowNotFoundError') {
+            const message = error instanceof Error ? error.message : String(error);
+            appendInlineRunLogLine(input.runId, `node-enter-failed run=${input.runId}: ${message}`, workdir);
+            process.stdout.write(
+                `${JSON.stringify({ ok: false, runId: input.runId, error: message, code: 'RUN_NOT_FOUND' })}\n`,
+            );
+            return 1;
+        }
+        const message = error instanceof Error ? error.message : String(error);
+        appendInlineRunLogLine(input.runId, `node-enter-failed run=${input.runId}: ${message}`, workdir);
+        process.stdout.write(`${JSON.stringify({ ok: false, runId: input.runId, error: message })}\n`);
+        return 1;
+    } finally {
+        projectDb?.close();
     }
 }
 
@@ -1292,6 +1472,8 @@ export async function runInlineRunTrace(input: InlineRunTraceInput): Promise<num
             );
         }
     }
+    const workdir =
+        input.projectRoot !== undefined && input.projectRoot.trim() !== '' ? resolve(input.projectRoot) : process.cwd();
     // 1051 AC1: omitted reasons resolve their defaults at the same boundary — `done` → `done`,
     // `paused` → `paused-operator` (the writer's classifyTerminalReason is idempotent on both).
     // `failed` cannot reach the fallback: it is rejected above when the reason is omitted.
@@ -1303,6 +1485,7 @@ export async function runInlineRunTrace(input: InlineRunTraceInput): Promise<num
             input.runId,
             `trace-emission-failed operation=${operation} run=${input.runId}` +
                 `${input.node === '' ? '' : ` node=${input.node}`}${input.kind === '' ? '' : ` kind=${input.kind}`}: ${error}`,
+            workdir,
         );
         process.stdout.write(`${JSON.stringify({ ok: false, runId: input.runId, error })}\n`);
         // The action boundary is best-effort (exit 0); the run-row closure fails loudly (exit 1).
@@ -1311,12 +1494,85 @@ export async function runInlineRunTrace(input: InlineRunTraceInput): Promise<num
 
     let projectDb: { adapter: DbAdapter; close: () => void } | undefined;
     try {
-        projectDb = await openInlineRunProjectDb(process.cwd());
+        projectDb = await openInlineRunProjectDb(workdir);
+        const existingRun = await new DbWorkflowPersistenceAdapter(projectDb.adapter).loadRun(input.runId);
+        // Verify the run row exists in the target DB (task 1136 R1):
+        if (input.requireRunRow !== false && existingRun === undefined) {
+            throw new RunRowNotFoundError(input.runId);
+        }
+
+        const runDir = runStoragePaths(workdir).recordsDir;
+        const statePath = join(runDir, `${input.runId}.state.json`);
+        let stateJson: Record<string, unknown> = {};
+        try {
+            const parsed = JSON.parse(readFileSync(statePath, 'utf8'));
+            if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                stateJson = parsed as Record<string, unknown>;
+            }
+        } catch {
+            // No prior state
+        }
+
+        let durationMs: number;
+        let provenance: 'measured' | 'host-reported';
+        let computedStart: number;
+        if (!input.close) {
+            if (input.durationMs !== undefined) {
+                durationMs = input.durationMs;
+                provenance = 'host-reported';
+                computedStart = Date.now() - durationMs;
+            } else {
+                const nodeEnters =
+                    stateJson.nodeEnters !== null &&
+                    typeof stateJson.nodeEnters === 'object' &&
+                    !Array.isArray(stateJson.nodeEnters)
+                        ? (stateJson.nodeEnters as Record<string, string>)
+                        : {};
+                const enteredAtStr = nodeEnters[input.node];
+                if (typeof enteredAtStr !== 'string') {
+                    // Protocol violation, not an emission failure: without a `--node-enter` stamp or a
+                    // supplied duration the emitter cannot measure, and silently exiting 0 would
+                    // recreate the invisible-no-op class this task closes (1136 R2/R4).
+                    const error = `no enter timestamp recorded for node "${input.node}"; call --node-enter first or pass --duration-ms`;
+                    appendInlineRunLogLine(
+                        input.runId,
+                        `trace-emission-failed run=${input.runId} node=${input.node}: ${error}`,
+                        workdir,
+                    );
+                    process.stdout.write(
+                        `${JSON.stringify({ ok: false, runId: input.runId, error, code: 'ACTION_DURATION_UNAVAILABLE' })}\n`,
+                    );
+                    return 1;
+                }
+                const enteredTime = new Date(enteredAtStr).getTime();
+                const now = Date.now();
+                durationMs = Math.max(0, now - enteredTime);
+                provenance = 'measured';
+                computedStart = enteredTime;
+            }
+
+            // Task 1136 R4: A row whose computed start precedes runs.started_at is rejected (exit 1).
+            const runStartedAt = existingRun === undefined ? 0 : new Date(existingRun.started_at).getTime();
+            if (computedStart < runStartedAt) {
+                const error = `action start time (${new Date(computedStart).toISOString()}) precedes run started_at (${existingRun?.started_at ?? ''})`;
+                appendInlineRunLogLine(input.runId, `trace-emission-failed run=${input.runId}: ${error}`, workdir);
+                process.stdout.write(
+                    `${JSON.stringify({ ok: false, runId: input.runId, error, code: 'ACTION_START_PRECEDES_RUN_START' })}\n`,
+                );
+                return 1;
+            }
+        } else {
+            durationMs = 0;
+            provenance = 'host-reported';
+            computedStart = Date.now();
+        }
+
         const writer = createWorkflowActionTraceWriter(projectDb.adapter, (failure: unknown) => {
             const detail = failure as { operation?: string; error?: string };
             appendInlineRunLogLine(
                 input.runId,
                 `trace-emission-failed operation=${detail.operation ?? operation} run=${input.runId}: ${detail.error ?? 'unknown error'}`,
+                workdir,
             );
         });
         const result = (
@@ -1328,8 +1584,11 @@ export async function runInlineRunTrace(input: InlineRunTraceInput): Promise<num
                       kind: input.kind,
                       status: input.status,
                       ok: input.ok,
-                      durationMs: input.durationMs,
-                      result: { provenance: 'host-reported', estimated: input.estimated === true },
+                      durationMs,
+                      result: {
+                          provenance,
+                          estimated: provenance === 'measured' ? false : input.estimated === true,
+                      },
                   })
         ) as Record<string, unknown>;
         if (result.ok !== true && result.failure !== undefined) {
@@ -1346,6 +1605,7 @@ export async function runInlineRunTrace(input: InlineRunTraceInput): Promise<num
         const stateError = input.close
             ? projectInlineRunClose(input.runId, input.status, {
                   startedAt: typeof result.startedAt === 'string' ? result.startedAt : undefined,
+                  workdir,
               })
             : undefined;
         if (input.close && input.status === 'done' && result.actionRows === 0) {
@@ -1356,7 +1616,7 @@ export async function runInlineRunTrace(input: InlineRunTraceInput): Promise<num
             const error = `run ${input.runId} closed done with zero action_runs rows; emit --action/--actions-file during the run (no backfill); see inline-pipeline-driver.md#structured-trace-emission-adr-117-task-0868${
                 stateError !== undefined ? `; run-record state projection also failed: ${stateError}` : ''
             }`;
-            appendInlineRunLogLine(input.runId, `trace-close-failed run=${input.runId}: ${error}`);
+            appendInlineRunLogLine(input.runId, `trace-close-failed run=${input.runId}: ${error}`, workdir);
             process.stdout.write(
                 `${JSON.stringify({ ok: false, runId: input.runId, error, code: 'NO_ACTION_ROWS', actionRows: 0 })}\n`,
             );
@@ -1365,24 +1625,44 @@ export async function runInlineRunTrace(input: InlineRunTraceInput): Promise<num
         if (input.close && stateError !== undefined) {
             // The committed write stands; only the sidecar projection failed. Report loudly
             // with a named code — replaying the same close repairs the sidecar (AC2).
-            appendInlineRunLogLine(input.runId, `trace-close-failed run=${input.runId}: ${stateError}`);
+            appendInlineRunLogLine(input.runId, `trace-close-failed run=${input.runId}: ${stateError}`, workdir);
             process.stdout.write(
                 `${JSON.stringify({ ok: false, runId: input.runId, error: stateError, code: 'RUN_RECORD_STATE_FAILED' })}\n`,
             );
             return 1;
         }
+
+        // Task 1136 R5: At close, compare visited declared states with states that have rows, report missingNodes
+        let missingNodes: string[] | undefined;
+        if (input.close) {
+            const actionRows = await new ActionRunDao(projectDb.adapter).actionRowsByRunId(input.runId);
+            const nodesWithRows = new Set(actionRows.map((r) => r.node));
+            const visitedNodes = Array.isArray(stateJson.visitedNodes) ? (stateJson.visitedNodes as string[]) : [];
+            missingNodes = visitedNodes.filter((node) => !nodesWithRows.has(node));
+            if (missingNodes.length > 0) {
+                appendInlineRunLogLine(
+                    input.runId,
+                    `trace-close-defect run=${input.runId}: missing action rows for visited nodes: ${missingNodes.join(', ')}`,
+                    workdir,
+                );
+            }
+        }
+
         // The stdout close shape stays `{ok, runId, actionRows?}` (0868 finding #1): the
         // task-1053 startedAt thread-through is for the sidecar projection, not a stdout
         // field — strip it before reporting.
         const { startedAt: _threaded, ...stdoutResult } = result;
-        process.stdout.write(`${JSON.stringify({ ...stdoutResult, runId: input.runId })}\n`);
+        process.stdout.write(
+            `${JSON.stringify({ ...stdoutResult, runId: input.runId, ...(missingNodes !== undefined ? { missingNodes } : {}) })}\n`,
+        );
         return 0;
     } catch (error) {
-        if (input.close && (error as { name?: string }).name === 'RunRowNotFoundError') {
-            // The run row must exist before --close can mark it terminal (R6); a missing row
-            // is a loud correctness failure, not a best-effort emission failure (finding #4).
+        if ((error as { name?: string }).name === 'RunRowNotFoundError') {
+            // The run row must exist (task 1136 R1); a missing row is a loud correctness failure,
+            // not a best-effort emission failure on both --action and --close.
             const message = error instanceof Error ? error.message : String(error);
-            appendInlineRunLogLine(input.runId, `trace-close-failed run=${input.runId}: ${message}`);
+            const tag = input.close ? 'trace-close-failed' : 'trace-emission-failed';
+            appendInlineRunLogLine(input.runId, `${tag} run=${input.runId}: ${message}`, workdir);
             process.stdout.write(
                 `${JSON.stringify({ ok: false, runId: input.runId, error: message, code: 'RUN_NOT_FOUND' })}\n`,
             );
@@ -1410,6 +1690,7 @@ export interface InlineRunActionEntry {
 export interface InlineRunTraceBatchInput {
     readonly runId: string;
     readonly actionsFile: string;
+    readonly projectRoot?: string;
 }
 
 /**
@@ -1466,15 +1747,27 @@ export async function runInlineRunTraceBatch(input: InlineRunTraceBatchInput): P
     }
     let projectDb: InlineRunProjectDb | undefined;
     let recorded = 0;
+    const workdir =
+        input.projectRoot !== undefined && input.projectRoot.trim() !== '' ? resolve(input.projectRoot) : process.cwd();
     const reportEmissionFailure = (node: string, kind: string, error: string): void => {
         appendInlineRunLogLine(
             input.runId,
             `trace-emission-failed operation=action.finish run=${input.runId} node=${node} kind=${kind}: ${error}`,
+            workdir,
         );
         process.stdout.write(`${JSON.stringify({ ok: false, runId: input.runId, recorded, error })}\n`);
     };
     try {
-        projectDb = await openInlineRunProjectDb(process.cwd());
+        projectDb = await openInlineRunProjectDb(workdir);
+        // Verify the run row exists in the target DB (task 1136 R1):
+        const existingRun = await new DbWorkflowPersistenceAdapter(projectDb.adapter).loadRun(input.runId);
+        if (existingRun === undefined) {
+            appendInlineRunLogLine(input.runId, `trace-emission-failed run=${input.runId}: run row not found`, workdir);
+            process.stdout.write(
+                `${JSON.stringify({ ok: false, runId: input.runId, error: `run row not found: ${input.runId}`, code: 'RUN_NOT_FOUND' })}\n`,
+            );
+            return 1;
+        }
         const writer = createWorkflowActionTraceWriter(projectDb.adapter, (failure: unknown) => {
             const detail = failure as { operation?: string; error?: string };
             appendInlineRunLogLine(
@@ -1620,6 +1913,8 @@ export async function runInlineRunDecide(input: InlineRunDecideInput): Promise<n
             `decide node=${input.node} value=${outcome.value ?? ''} source=${outcome.source ?? 'default'} reason=${outcome.reason ?? ''}`,
         );
         // Trace row is best-effort, exactly like --action: an emission failure never wedges the run.
+        // 1136 R1: the loud run-row precheck is scoped to the driver's emission modes; here the
+        // decision is the primary result, so a missing row stays a logged no-op.
         return runInlineRunTrace({
             runId: input.runId,
             close: false,
@@ -1628,6 +1923,7 @@ export async function runInlineRunDecide(input: InlineRunDecideInput): Promise<n
             status: 'done',
             ok: true,
             durationMs: outcome.durationMs ?? 0,
+            requireRunRow: false,
         });
     } finally {
         tap?.unsubscribe();
