@@ -344,9 +344,17 @@ ordered divergence recipe, run by the operator — the driver never merges, reba
 conflicts itself. Other halt causes (task failure, HITL pause) keep the hint as printed:
 
 ```
-# 1. decide whether conflicts need resolving FIRST, because that decides the merge form:
-#      git merge-tree $(git merge-base <base-ref> <branch>) <base-ref> <branch> | grep -q '^<<<<<<<' \
-#        && echo "conflicts — use the two-phase form below" || echo "clean — use the atomic form"
+# 1. decide whether conflicts need resolving FIRST, because that decides the merge form.
+#    Use the rc of `git merge-tree --write-tree` (git ≥ 2.38; `git --version` here reports 2.55):
+#      git merge-tree --write-tree <base-ref> <branch> >/dev/null && echo "clean — use the atomic form" \
+#        || echo "conflicts — use the two-phase form below"
+#    Do NOT use the legacy three-argument form
+#    (`git merge-tree $(git merge-base …) <base-ref> <branch> | grep '^<<<<<<<'`): it reports no
+#    conflict markers at all — verified 2026-10-08 on 2.55 against a synthetic repo, where it
+#    printed 0 markers for a real same-file conflict and sent this report's own landing into the
+#    atomic form on a diverging base (the merge then conflicted and had to be driven two-phase by
+#    hand). If `--write-tree` is unavailable on the operator's git, assume conflicts: the
+#    two-phase form is always correct, it just costs the resolution window described in 1a.
 #
 # 1a. CLEAN (the common case): integrate as ONE atomic merge commit. Never a rebase — task
 #     evidence cites the branch's commit SHAs. This is the file's sanctioned merge commit.
