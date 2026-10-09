@@ -779,6 +779,37 @@ verdict artifact exists (tasks 0617, 0619 — the clobbering spiral).
    git commit -m "<type>(<scope>): <wbs> <summary>"
    ```
 
+## Runtime interface contracts (from run evidence)
+
+Each item below cost a driver cycle to discover. They are contracts, not tips.
+
+- **`--decide --options-json <file>` takes one option object, never an array.** Shape:
+  `{id, decision, params?, evidence? | instructions?, resultFile}`; `evidence` and `instructions` are
+  mutually exclusive (`CatalogDecideOptionsSchema`). A JSON array parses as neither dialect and
+  surfaces as `decide: invalid options — Invalid input` with no field detail. `resultFile` resolves
+  against the confirmed tree's cwd, so pass a worktree-relative path such as
+  `.spur/run/<wbs>-triage.decision`.
+- **`task-diffstat.ts` reads `wbs` from the environment and writes an artifact.** Invoke it as
+  `wbs=<wbs> bun plugins/sp/scripts/task-diffstat.ts`; stdout stays empty, so assert success on
+  `.spur/run/<wbs>-diffstat.json` and never on command output.
+- **The verify answer grammar is exact.** One `Verdict:` line, one `Confidence:` line, then
+  `### Per-Requirement Traceability` (`| Req | Status | Evidence |`) and
+  `### Acceptance Criteria Verification` (`| AC | Status | Evidence Type | Evidence |`). Requirement
+  statuses are `MET | PARTIAL | UNMET`; AC statuses add `N/A`; every AC row id must match a declared
+  scenario title verbatim, including its `(req: ...)` suffix. A `MET` row whose evidence hedges
+  (`likely`, `probably`, `seems`, `appears`, `possibly`, `presumably`) is rejected as
+  `evidence-hedged`, and a level the rows do not earn is rejected as `confidence-unwarranted` or
+  `confidence-understated`. `spur task verdict` lints before writing, so a rejected answer leaves no
+  artifact and exits non-zero.
+- **Harness tooling refuses direct task-file writes.** Resolve a merge conflict in a task file by
+  choosing a git side, then applying the corpus delta through `spur task update` (for example
+  `--feature <id>`), never by editing the file.
+- **A skill body has a byte budget** (20,000 B for `SKILL.md`); procedure detail belongs in
+  `references/`. Adding a clause to a SKILL.md can fail `R44 — skill BODY budgets`.
+- **`.spur/run/` is volatile** (ADR-131, as amended): its contents are execution scratch. Anything
+  that outlives the run cites the durable owner (`.spur/memory/evidence/`, `.spur/memory/runs/`) or
+  the tracked Testing section.
+
 ## Failure contract
 
 Never silently fall back from this interactive inline path to `agent.default`. If the driver cannot

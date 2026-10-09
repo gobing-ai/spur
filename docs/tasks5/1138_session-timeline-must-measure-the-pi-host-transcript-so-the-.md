@@ -4,7 +4,7 @@ name: session-timeline must measure the pi host transcript so the review skill's
 status: todo
 template: feature-impl
 created_at: 2026-10-09T05:34:59.326Z
-updated_at: "2026-10-09T06:41:15.346Z"
+updated_at: "2026-10-09T16:52:17.537Z"
 feature_id: E5
 
 ac_altitude: task-local
@@ -38,6 +38,8 @@ ac_numbering: task-local
 "skippedLines":0}` — the measurement reports itself *available* while parsing nothing, so the review
 skill's time/token contract renders as a silent zero instead of the `{"available":false,"reason":…}`
 R5 prescribes. The reviewed session was ≈11.7 h of one pi transcript with hundreds of rows.
+
+**Session evidence (2026-10-09), reproduced while reviewing the session that filed this task.** (a) The review skill's documented invocation — `node scripts/session-timeline.mjs --group "..."`, with no `--transcript` — returns `{"available":false,"reason":"no host session id; pass --transcript <path> (pi: ~/.pi/agent/sessions/<cwd-slug>/<file>.jsonl)"}` on this pi host, so the measurement ran only with an explicit transcript path. (b) The segment list opened a segment for each skill-injection body: segment 1's prompt is the `<skill name="sp-dev-runall" …>` wrapper and segment 10's is the `<skill name="sp-dev-review-session" …>` wrapper, which is the R3 case in live data.
 
 ### Requirements
 

@@ -4,7 +4,7 @@ name: "Run-record and wrap integrity for worktree runs: loud bookkeeping, fresh 
 status: todo
 template: feature-impl
 created_at: 2026-10-09T05:28:31.980Z
-updated_at: "2026-10-09T06:40:32.230Z"
+updated_at: "2026-10-09T16:52:17.168Z"
 feature_id: H1
 
 ac_altitude: task-local
@@ -36,6 +36,8 @@ Root cause: the wrapup **`doc-sync`** step **re-added** the deliberately delinke
 - `config/workflows/wrapup-pipeline.yaml`: `doc-sync` (`:224`), `learnings-validate` (`:259`), `learnings-append` (`:287`), `repair` (`:308`, ADR-118 contract-violation repair), `doc-tripwire` (`:330`, writes `PASS`/`FAIL` to `.spur/run/$__runId-wrapup-doc-tripwire.status`), routing guards (`:600-618`), and the proportional fast path `task-resolve → metrics-record` when `mode == fast` (`:503-506`) with "a caller-set mode is projected verbatim; the probe never runs".
 - The tripwire that caught it is `repo-wide-tests/adr-supersession.test.ts` (g2/g3); `docs/04_DESIGN.md` is a derived index whose rows are the delink surface.
 
+**Session evidence (2026-10-09), from the 1130/1131 batch teardown.** (1) `persist-out` skipped one row as an external-key conflict and instructed the driver to reconcile before teardown; the conflicting row was a duplicate `feature:E5` lifecycle run whose authoritative copy already existed in the invoking tree, so nothing unique was lost — but the reconciliation was manual and unassisted. (2) `persist-out-check` then returned BLOCKED against its 256-file listing cap over 367 scratch files, and removal proceeded on hand-verified cited evidence (`1130/1131-verdict.json`, both `-test-gate.status`, both `-review-proof.digest`, four run records) rather than an assertion. (3) While auditing run rows: the invoking tree's database holds 63 runs in `running`, including a `feature:E5` lifecycle row whose `completed_at` is set while its status never closed.
+
 ### Requirements
 
 - [ ] R1. **Bookkeeping must reach the tree that owns the run row.** Either the driver contract pins the owning tree as the cwd for `--action` / `--actions-file` / `--close`, or `inline-run-setup.ts` resolves the run row by id across the invoking and execution trees and writes to the owning database. A `RUN_NOT_FOUND` must fail the driver step loudly instead of being a no-op the driver can sleep through.
@@ -61,6 +63,8 @@ Root cause: the wrapup **`doc-sync`** step **re-added** the deliberately delinke
   `feature-verification.yaml` directly then succeeded (`H1 verification PASS`, run
   `abf585eb-3e26-4b66-9835-3d3332e139dc`), so the nested invocation — not the feature — was at
   fault and the transition had to be completed by hand.
+
+- [ ] R8. The pre-removal evidence assertion holds at real evidence volumes. `persist-out-check` refused with `worktree evidence listing failed or exceeded caps (64/prefix, 256 evidence files)` on a worktree holding 367 scratch files, so teardown fell back to manual verification of the cited artifacts. The check is scoped to the evidence a task actually cites, or its caps are derived from that scope, so a large scratch directory cannot turn a safety assertion into a manual step.
 
 ### Acceptance Criteria
 

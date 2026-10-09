@@ -4,7 +4,7 @@ name: "Executor fail-fast: a host-quota pre-dispatch failure must shift executor
 status: todo
 template: feature-impl
 created_at: 2026-10-09T05:28:30.946Z
-updated_at: "2026-10-09T05:30:21.971Z"
+updated_at: "2026-10-09T16:52:16.381Z"
 feature_id: B
 
 ac_altitude: task-local
@@ -31,6 +31,8 @@ The inline driver's fallback rule then fired — `~/.agents/skills/sp-spur-dev/r
 
 **Why this is urgent beyond one run.** The 3 h 06 m of host-inline work also serialises the run, consumes orchestrator context (the session had to be driven to completion in one window), and hides the failure from the operator: the run log records a fallback, not a capacity stop, so nothing tells them "executor X is exhausted until 2026-10-13" — a later run repeats the discovery cost.
 
+**Session evidence (2026-10-09).** A review stage on task 1133 ran **4h01m40s** for a diff of about 160 lines (action row `review/agent`, `duration_ms` 14,500,000 in `run-1133-c3f1`), and an earlier dispatch of the same stage returned no result and had to be retried. Both consumed the run rather than failing it, and the wall clock dominated that task's 7h51m window. The host-capacity class this task owns is a different trigger; the shared defect is that an unproductive dispatch is absorbed instead of surfaced.
+
 ### Requirements
 
 - [ ] R1. **Contingent fallback in the inline driver.** A pre-dispatch failure classified as *host capacity exhaustion* (quota / credits / auth) must NOT fall back to another host-session attempt. The driver must (a) hand the stage to the subprocess dispatch path, which resolves an executor independently, or (b) when that path is unavailable, terminate the run at `failed` with `terminalReason: failed-agent` naming the executor and the observed reset time. Capability-shaped pre-dispatch failures (permission, missing capability, non-dispatch-eligible prose, below-floor size) keep today's host-inline fallback unchanged.
@@ -41,6 +43,8 @@ The inline driver's fallback rule then fired — `~/.agents/skills/sp-spur-dev/r
 - [ ] R6. **Make the gap observable.** `spur agent doctor --json` (already rendering `availability {disabled, owner, since, reason}` and the usage age) additionally reports the refresh job's last-run status and a count of inline stages that ran without executor attribution, so the operator can see whether fail-fast is actually able to fire.
 - [ ] R7. **Explicitly out of scope (do not build).** Per-provider health-check adapters; probing entries that are already disabled (forbidden by `docs/design/executor-availability.md` §2); a health probe per candidate executor at dispatch time; and any serve-side poller/timer that writes configuration without a separate operator-consented ADR-121 amendment. R5's zero-call observation refresh needs no amendment; anything that probes or writes config on a timer does.
 - [ ] R8. **Same-change docs and bundle.** Update the driver reference (`inline-pipeline-driver.md` dispatch/fallback and trace sections), the executor-availability design satellite (new section for the inline attribution + refresh job), and the run-record contract for the new status artifacts; rebuild the bundle with `bun run --filter @gobing-ai/spur build:bundle` and `bun run build:scripts`.
+
+- [ ] R9. Dispatch duration is bounded and a null result fails fast. An `agent.run` dispatch that returns no result, or that exceeds a stated bound, stops the stage as a recorded failure instead of consuming the run's wall clock. Boundary: R1–R5 cover a pre-dispatch host-capacity refusal, where the executor must shift; this requirement covers the dispatched-but-unproductive case. The two share only the surface (inline driver dispatch), not the fix.
 
 ### Acceptance Criteria
 
