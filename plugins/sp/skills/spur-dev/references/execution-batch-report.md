@@ -167,7 +167,8 @@ the wrap's refusal of non-done tasks remains the hard invariant.
 **Close-out commit (1129 R2/R5).** In sequential mode the wrap's writes (learnings, metrics,
 doc-sync) land in the invoking tree and are committed as ONE close-out commit after the wrap exits.
 Stage them through the guard — never a free-form `git add` — so a concurrent writer's file cannot
-ride into the close-out commit (incident `36f274590`):
+ride into the close-out commit (incident `36f274590`). `$RUN_ID` is the id Step 3 fixed before
+`commit-guard start` (execution-batch.md § Step 3); an unset id makes the guard exit 1 — fail closed:
 
 ```bash
 GUARD=plugins/sp/scripts/commit-guard.ts; [ -f config/plugin-scripts.json -a -f "$GUARD" ] || GUARD="$(superskill script path sp commit-guard.mjs 2>/dev/null)"

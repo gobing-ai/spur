@@ -283,6 +283,7 @@ per-task letter is ever hand-assigned.
 plan = resolve(--tasks) → freeze → order(deps)        # may abort (cycle) or pre-block (unmet dep)
 report = []
 publish visible plan §2.7: A/Z rows now; one letter per task after this freeze (batch-plan.mjs waves)
+RUN_ID = WT-3 marker id under --worktree, else "batch-$(date -u +%Y%m%dT%H%M%SZ)"   # fixed ONCE here; the close-out reuses it
 commit-guard start --run "$RUN_ID"                     # 1129 R1: fingerprint before the first task writes; the close-out commit stages through it
 for wbs in plan:                                       # default sequential mode
     if any dependency of wbs failed earlier in THIS batch:

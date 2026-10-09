@@ -225,6 +225,16 @@ describe('commit-guard (1129 AC4) — runbook commit-step contract', () => {
         }
     });
 
+    test('every guard start fixes RUN_ID first, so the later stage call reuses a defined id', () => {
+        // 1129 residual (b): the sequential start/close-out pair consumed `$RUN_ID` with no assignment
+        // on that path — the guard then failed closed (exit 1) instead of guarding the close-out.
+        for (const [name, doc] of docs) {
+            const start = doc.search(/commit-guard"?\s+start --run "\$RUN_ID"|\$GUARD"?\s+start --run "\$RUN_ID"/);
+            if (start < 0) continue;
+            expect([name, /RUN_ID\s*=/.test(doc.slice(0, start))]).toEqual([name, true]);
+        }
+    });
+
     test('the guard is documented wherever a commit step lives, with the incidents that motivated it', () => {
         const corpus = docs.map(([, doc]) => doc).join('\n');
         // Both incidents ride the guard wiring that the 1128 split scattered across the runbook set.
