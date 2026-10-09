@@ -4,7 +4,7 @@ name: Migrate task-pipeline triage decide to the task-triage catalog decision
 status: done
 template: feature-impl
 created_at: 2026-10-07T16:29:02.797Z
-updated_at: "2026-10-08T16:36:33.583Z"
+updated_at: "2026-10-09T21:30:38.056Z"
 feature_id: P1
 
 dependencies: ["1094"]
@@ -12,7 +12,7 @@ tags: ["decision", "workflow"]
 priority: P2
 estimate_hours: 2
 done_forced: "false"
-done_reason: unforced close; PASS artifact at .spur/run/1114-verdict.json
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1114-verdict.json
 ---
 
 ## 1114. Migrate task-pipeline triage decide to the task-triage catalog decision

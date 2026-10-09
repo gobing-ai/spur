@@ -13,9 +13,9 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-10T00:45:45.534Z"
-updated_at: "2026-09-09T19:18:52.618Z"
+updated_at: "2026-10-09T21:30:29.138Z"
 done_forced: "true"
-done_reason: "Wayfinder research ticket (reuse inventory): corpus-only investigation, no code diff — same class as siblings 0493/0495. Structural gate PASS; Review L3 findings table populated; verdict .spur/run/0494-verdict.json PASS (R1-R5 MET). Provenance override recorded per CLI guidance."
+done_reason: "Wayfinder research ticket (reuse inventory): corpus-only investigation, no code diff — same class as siblings 0493/0495. Structural gate PASS; Review L3 findings table populated; verdict tracked Testing section (scratch verdict not retained) PASS (R1-R5 MET). Provenance override recorded per CLI guidance."
 ---
 
 ## 0494. Reuse inventory: what next-router, spur CLI --json, and conflict-finding already provide that dev-find-next must compose rather than rebuild

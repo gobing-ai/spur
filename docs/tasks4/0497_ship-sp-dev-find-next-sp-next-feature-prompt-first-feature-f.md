@@ -13,9 +13,9 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-10T04:26:18.025Z"
-updated_at: "2026-08-10T05:09:52.586Z"
+updated_at: "2026-10-09T21:30:30.033Z"
 done_forced: "true"
-done_reason: "Implement task executed inline (prompt-first markdown surface; no pipeline run). Evidence: plugins/sp suite 642 pass 0 fail; wrapper/index/design anchors verified; verdict .spur/run/0497-verdict.json PASS (R1-R6 MET). Structural gate PASS; Review L3 table populated. Provenance override recorded per CLI guidance."
+done_reason: "Implement task executed inline (prompt-first markdown surface; no pipeline run). Evidence: plugins/sp suite 642 pass 0 fail; wrapper/index/design anchors verified; verdict tracked Testing section (scratch verdict not retained) PASS (R1-R6 MET). Structural gate PASS; Review L3 table populated. Provenance override recorded per CLI guidance."
 ---
 
 ## 0497. Ship /sp:dev-find-next + sp:next-feature — prompt-first feature frontier prioritizer

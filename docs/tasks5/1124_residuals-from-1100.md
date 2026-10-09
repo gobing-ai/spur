@@ -4,13 +4,13 @@ name: Residuals from 1100
 status: done
 template: standard
 created_at: 2026-10-08T16:31:15.479Z
-updated_at: "2026-10-08T16:43:39.202Z"
+updated_at: "2026-10-09T21:30:39.961Z"
 
 ac_numbering: task-local
 ac_altitude: task-local
 feature_id: P1
 done_forced: "true"
-done_reason: "Implemented and verified inside /sp:dev-verifyall --feature P1 --fix all (2026-10-08), not via task-pipeline; verdict PASS (.spur/run/1124-verdict.json), test apps/web/tests/modules/observability/decisions-tab.test.tsx:216, inline review recorded. Operator-approved audited bypass."
+done_reason: "Implemented and verified inside /sp:dev-verifyall --feature P1 --fix all (2026-10-08), not via task-pipeline; verdict PASS (.spur/memory/evidence/1124-verdict.json), test apps/web/tests/modules/observability/decisions-tab.test.tsx:216, inline review recorded. Operator-approved audited bypass."
 ---
 
 ## 1124. Residuals from 1100

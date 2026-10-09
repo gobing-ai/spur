@@ -66,10 +66,22 @@ export interface AnchorFileReport {
     skipped?: string;
     /**
      * Absolute `done_reason` artifact references normalized to a repo-relative path
-     * (1089 R3). Reported on a dry run exactly like {@link qualified}, and written
+     * (1089 R3), and scratch verdict pointers retargeted to durable evidence
+     * (1140 R1/R2). Reported on a dry run exactly like {@link qualified}, and written
      * through the frontmatter writer on apply.
+     *
+     * `kind` names the resolution that produced `to`: `absolute-path` for the 1089
+     * normalization alone, `durable-evidence` for a scratch verdict pointer rewritten to
+     * its `.spur/memory/evidence/` copy, `tracked-testing` for one with no durable copy
+     * whose task carries a non-empty Testing section. A value needing both carries the
+     * substantive kind, with `from`/`to` still showing the whole transformation.
      */
-    doneReasons: Array<{ from: string; to: string }>;
+    doneReasons: Array<{ from: string; to: string; kind: DoneReasonKind }>;
+    /**
+     * 1140 R2/R3: the scratch verdict pointer left byte-identical because neither a
+     * durable copy nor a non-empty Testing section owns it. Reported, never guessed.
+     */
+    doneReasonUnresolved?: string;
 }
 
 /** Aggregate qualification report (mirrors MigrationReport shape). */
@@ -109,6 +121,13 @@ export interface AnchorQualifierOptions {
     /** Resolve the planning folders (used when taskDirs not provided). */
     resolveFolders?: () => Promise<string[]>;
     /**
+     * 1140 R1: does a durable `.spur/memory/evidence/<wbs>-verdict.json` copy exist under
+     * the repo root? Defaults to the injected `FileSystem` seam at `projectRoot` (the
+     * `no-direct-fs-io` boundary rule, so no `node:fs` here); injectable so the retarget
+     * decision is testable without a real evidence plane. May be sync or async.
+     */
+    durableVerdictExists?: (wbs: string) => boolean | Promise<boolean>;
+    /**
      * Exact task files to scan (task 1109 R1). Absent = every `.md` in every task dir.
      */
     files?: string[];
@@ -138,6 +157,78 @@ export function normalizeDoneReason(reason: string): string | null {
     if (match === null) return null;
     const next = `${match[1] ?? ''}${match[2] ?? ''}`;
     return next === reason ? null : next;
+}
+
+/** How a `done_reason` value was resolved (1140 R3). */
+export type DoneReasonKind = 'absolute-path' | 'durable-evidence' | 'tracked-testing';
+
+/**
+ * The class ADR-131 makes non-durable: a verdict pointer into run scratch, in either
+ * the flat (`.spur/run/<wbs>-verdict.json`) or subpath (`.spur/run/<wbs>/verdict.json`)
+ * shape. Matched as a substring so surrounding operator text is preserved verbatim
+ * (1140 R1/R5). Deliberately narrow: `.spur/run/<wbs>-test-gate.status` and the
+ * `.spur/run/049x-spike/` prose pointers are not verdict evidence and never match.
+ */
+const SCRATCH_VERDICT_POINTER_SOURCE = '\\.spur/run/([0-9]{4})(?:-|/)verdict\\.json';
+
+/** 1140 R2: the durable owner a pointer falls back to when no durable copy exists. */
+export const TRACKED_TESTING_POINTER = 'tracked Testing section (scratch verdict not retained)';
+
+/** Outcome of retargeting every scratch verdict pointer inside one reason value. */
+export interface ScratchVerdictRetarget {
+    /** The reason with every resolvable pointer substituted; byte-identical when nothing resolved. */
+    readonly value: string;
+    /** The substantive resolution applied, or `null` when none was. */
+    readonly kind: DoneReasonKind | null;
+    /** The first pointer left untouched because neither owner exists (1140 R2). */
+    readonly unresolved?: string;
+}
+
+/**
+ * Every wbs a scratch verdict pointer in `reason` names, in reading order. The caller
+ * resolves their durable copies (async, through the FileSystem seam) before the pure
+ * {@link retargetScratchVerdictPointer} decision runs.
+ */
+export function scratchVerdictWbs(reason: string): string[] {
+    return [...reason.matchAll(new RegExp(SCRATCH_VERDICT_POINTER_SOURCE, 'g'))].map((match) => match[1] as string);
+}
+
+/**
+ * 1140 R1/R2: retarget each scratch verdict pointer in `reason` to its durable owner.
+ *
+ * A pointer whose `.spur/memory/evidence/<wbs>-verdict.json` copy exists becomes that
+ * path; one with no durable copy but a non-empty tracked `Testing` section becomes
+ * {@link TRACKED_TESTING_POINTER}; one with neither is left byte-identical and reported
+ * as `unresolved` so a caller can surface it instead of trading a volatile reference for
+ * a false one.
+ *
+ * A reason carrying several pointers (not a shape the corpus uses, but not forbidden) has
+ * every pointer resolved; the reported `kind` describes the FIRST resolved one, so the
+ * field is deterministic rather than dependent on match order.
+ *
+ * Pure: existence and the Testing body are injected, so the decision is unit-testable and
+ * the caller owns the filesystem.
+ */
+export function retargetScratchVerdictPointer(
+    reason: string,
+    context: { readonly durableVerdictExists: (wbs: string) => boolean; readonly testingBody: string | null },
+): ScratchVerdictRetarget {
+    let kind: DoneReasonKind | null = null;
+    let unresolved: string | undefined;
+    const pattern = new RegExp(SCRATCH_VERDICT_POINTER_SOURCE, 'g');
+    const value = reason.replace(pattern, (pointer: string, wbs: string) => {
+        if (context.durableVerdictExists(wbs)) {
+            kind ??= 'durable-evidence';
+            return `.spur/memory/evidence/${wbs}-verdict.json`;
+        }
+        if (context.testingBody !== null && context.testingBody.trim() !== '') {
+            kind ??= 'tracked-testing';
+            return TRACKED_TESTING_POINTER;
+        }
+        unresolved ??= pointer;
+        return pointer;
+    });
+    return { value, kind, ...(unresolved === undefined ? {} : { unresolved }) };
 }
 
 /**
@@ -308,6 +399,8 @@ export async function anchorQualify(
          * reports `Files scanned: 0` for any other target.
          */
         projectRoot?: string;
+        /** 1140 R1: durable `.spur/memory/evidence/<wbs>-verdict.json` existence probe. */
+        durableVerdictExists?: AnchorQualifierOptions['durableVerdictExists'];
     },
 ): Promise<AnchorQualifyReport> {
     return qualifyAnchors(fs, {
@@ -318,6 +411,7 @@ export async function anchorQualify(
         write: opts.write,
         writeField: opts.writeField,
         projectRoot: opts.projectRoot,
+        ...(opts.durableVerdictExists === undefined ? {} : { durableVerdictExists: opts.durableVerdictExists }),
     });
 }
 
@@ -336,6 +430,9 @@ export async function qualifyAnchors(
     const dryRun = opts.dryRun ?? false;
     const projectRoot = await resolveRepoRoot(opts.projectRoot, taskDirs[0]);
     const index = await buildTrackedBasenameIndex(projectRoot);
+    const durableVerdictExists: (wbs: string) => boolean | Promise<boolean> =
+        opts.durableVerdictExists ??
+        ((wbs: string) => fs.exists(join(projectRoot, '.spur', 'memory', 'evidence', `${wbs}-verdict.json`)));
 
     const fileReports: AnchorFileReport[] = [];
     // 1109 R1: a scoped run receives the exact resolved paths, so the pass neither walks
@@ -366,7 +463,8 @@ export async function qualifyAnchors(
             let modified = false;
             let skipped: string | undefined;
             const qualified: QualifiedAnchor[] = [];
-            const doneReasons: Array<{ from: string; to: string }> = [];
+            const doneReasons: Array<{ from: string; to: string; kind: DoneReasonKind }> = [];
+            let doneReasonUnresolved: string | undefined;
             const ambiguous: Array<{ cited: string; candidates: string[] }> = [];
             for (const section of ['Testing', 'Solution'] as const) {
                 const body = doc.getSection(section);
@@ -390,27 +488,52 @@ export async function qualifyAnchors(
                     modified = true; // dry-run still reports the would-be change
                 }
             }
-            // 1089 R3: the same pass owns the other machine-specific reference in
-            // tracked corpus. An unwritable legacy task was already reported via
-            // `skipped` by the section loop — do not attempt a second gate-failing
-            // write on the same file.
-            const doneReason = doc.frontmatterData?.done_reason;
-            const normalizedReason = typeof doneReason === 'string' ? normalizeDoneReason(doneReason) : null;
-            if (normalizedReason !== null && skipped === undefined) {
-                doneReasons.push({ from: doneReason as string, to: normalizedReason });
-                if (!dryRun && opts.writeField !== undefined) {
-                    try {
-                        await opts.writeField(filePath, wbs, 'done_reason', normalizedReason);
-                    } catch (err) {
-                        skipped = String(err instanceof Error ? err.message : err);
-                    }
+            // 1089 R3 + 1140 R1/R2: the same pass owns the machine-specific and
+            // scratch-only references in tracked corpus. An unwritable legacy task was
+            // already reported via `skipped` by the section loop — do not attempt a
+            // second gate-failing write on the same file.
+            const doneReasonRaw = doc.frontmatterData?.done_reason;
+            if (typeof doneReasonRaw === 'string' && skipped === undefined) {
+                // Absolute-path normalization applies FIRST (1089 R3), so an absolute
+                // scratch pointer resolves to durable evidence in one pass (1140 R4).
+                const normalized = normalizeDoneReason(doneReasonRaw);
+                const base = normalized ?? doneReasonRaw;
+                // 1140 R1: the durable owner is resolved against the repo root the pass operates
+                // on, so a citation is only rewritten to a path that actually exists (a false
+                // reference is worse than a volatile one).
+                const durable = new Set<string>();
+                for (const pointerWbs of scratchVerdictWbs(base)) {
+                    if (await durableVerdictExists(pointerWbs)) durable.add(pointerWbs);
                 }
-                if (skipped === undefined) modified = true;
+                const retarget = retargetScratchVerdictPointer(base, {
+                    durableVerdictExists: (wbs) => durable.has(wbs),
+                    testingBody: doc.getSection('Testing'),
+                });
+                const next = retarget.value;
+                if (next !== doneReasonRaw) {
+                    doneReasons.push({
+                        from: doneReasonRaw,
+                        to: next,
+                        // A substantive pointer resolution outranks the path normalization
+                        // it may also have needed — `from`/`to` still show both steps.
+                        kind: retarget.kind ?? 'absolute-path',
+                    });
+                    if (!dryRun && opts.writeField !== undefined) {
+                        try {
+                            await opts.writeField(filePath, wbs, 'done_reason', next);
+                        } catch (err) {
+                            skipped = String(err instanceof Error ? err.message : err);
+                        }
+                    }
+                    if (skipped === undefined) modified = true;
+                }
+                if (retarget.unresolved !== undefined) doneReasonUnresolved = retarget.unresolved;
             }
             if (
                 qualified.length > 0 ||
                 ambiguous.length > 0 ||
                 doneReasons.length > 0 ||
+                doneReasonUnresolved !== undefined ||
                 modified ||
                 skipped !== undefined
             ) {
@@ -421,6 +544,7 @@ export async function qualifyAnchors(
                     qualified,
                     ambiguous,
                     doneReasons,
+                    ...(doneReasonUnresolved === undefined ? {} : { doneReasonUnresolved }),
                     ...(skipped === undefined ? {} : { skipped }),
                 });
             }

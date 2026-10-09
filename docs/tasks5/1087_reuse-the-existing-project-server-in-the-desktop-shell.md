@@ -4,12 +4,12 @@ name: Reuse the existing project server in the desktop shell
 status: done
 template: standard
 created_at: 2026-10-05T04:19:48.947Z
-updated_at: "2026-10-05T23:23:06.624Z"
+updated_at: "2026-10-09T21:30:35.609Z"
 
 ac_numbering: task-local
 ac_altitude: task-local
 done_forced: "false"
-done_reason: unforced close; PASS artifact at .spur/run/1087-verdict.json
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1087-verdict.json
 ---
 
 ## 1087. Reuse the existing project server in the desktop shell

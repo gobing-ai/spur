@@ -1083,8 +1083,13 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     r.qualified.map((q) => `${r.wbs}: \`${q.raw}\` → \`${q.newPath}:${q.lineSpec}\``),
                 );
                 const reasons = report.fileReports.flatMap((r) =>
-                    r.doneReasons.map((d) => `${r.wbs}: "${d.from}" → "${d.to}"`),
+                    r.doneReasons.map((d) => `${r.wbs}: [${d.kind}] "${d.from}" → "${d.to}"`),
                 );
+                // 1140 R2/R3: a pointer with neither a durable copy nor a non-empty Testing
+                // section is reported, never rewritten — surface it beside the rewrites.
+                const unresolvedReasons = report.fileReports
+                    .filter((r) => r.doneReasonUnresolved !== undefined)
+                    .map((r) => `${r.wbs}: ${r.doneReasonUnresolved} (no durable copy, empty Testing)`);
                 const ambiguous = report.fileReports.flatMap((r) =>
                     r.ambiguous.map((a) => `${r.wbs}: ${a.cited} → candidates: ${a.candidates.join(', ')}`),
                 );
@@ -1100,6 +1105,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                                 ...(wbs === undefined ? {} : { wbs }),
                                 qualified,
                                 reasons,
+                                unresolvedReasons,
                                 ambiguous,
                                 skipped,
                                 ...report,
@@ -1117,8 +1123,11 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                         'Rewrites:',
                         ...(qualified.length ? qualified : ['  none']),
                         '',
-                        'Done-reason rewrites (absolute → repo-relative):',
+                        'Done-reason rewrites (scratch/absolute → durable evidence):',
                         ...(reasons.length ? reasons : ['  none']),
+                        '',
+                        'Done-reason pointers with no durable owner (reported, not rewritten):',
+                        ...(unresolvedReasons.length ? unresolvedReasons : ['  none']),
                         '',
                         'Ambiguous (reported, not rewritten):',
                         ...(ambiguous.length ? ambiguous : ['  none']),

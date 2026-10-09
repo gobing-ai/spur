@@ -11,6 +11,8 @@ import {
     qualifySectionBody,
     resolveConfiguredTaskDirs,
     resolveRepoRoot,
+    retargetScratchVerdictPointer,
+    TRACKED_TESTING_POINTER,
 } from '../../src/services/anchor-qualifier';
 import { citedLinesNameSubject, extractSubjectTokens } from '../../src/services/task-check';
 
@@ -261,6 +263,89 @@ describe('normalizeDoneReason (1089 R3)', () => {
     });
 });
 
+describe('retargetScratchVerdictPointer (1140 R1/R2/R4/R5)', () => {
+    const durable = (wbs: string) => wbs === '1046';
+    const testing = '`bun test` — green';
+
+    test('AC1/R1: a scratch verdict pointer becomes its durable copy, keeping surrounding text', () => {
+        const reason = 'unforced close; PASS artifact at .spur/run/1046-verdict.json';
+        const result = retargetScratchVerdictPointer(reason, { durableVerdictExists: durable, testingBody: testing });
+        expect(result).toEqual({
+            value: 'unforced close; PASS artifact at .spur/memory/evidence/1046-verdict.json',
+            kind: 'durable-evidence',
+        });
+    });
+
+    test('AC2/R1: the subpath shape normalizes to the flat durable name', () => {
+        const result = retargetScratchVerdictPointer('PASS verdict in .spur/run/1046/verdict.json', {
+            durableVerdictExists: durable,
+            testingBody: testing,
+        });
+        expect(result.value).toBe('PASS verdict in .spur/memory/evidence/1046-verdict.json');
+        expect(result.kind).toBe('durable-evidence');
+    });
+
+    test('AC3/R2: no durable copy but a non-empty Testing section falls back to the tracked section', () => {
+        const result = retargetScratchVerdictPointer(
+            'Verified with PASS verdict in .spur/run/0562-verdict.json; full suite green',
+            { durableVerdictExists: durable, testingBody: testing },
+        );
+        expect(result.value).toBe(`Verified with PASS verdict in ${TRACKED_TESTING_POINTER}; full suite green`);
+        expect(result.kind).toBe('tracked-testing');
+    });
+
+    test('AC4/R2: neither owner leaves the value byte-identical and reports the pointer', () => {
+        const reason = 'Closed with PASS artifact at .spur/run/9999-verdict.json';
+        const result = retargetScratchVerdictPointer(reason, {
+            durableVerdictExists: durable,
+            testingBody: null,
+        });
+        expect(result.value).toBe(reason);
+        expect(result.kind).toBeNull();
+        expect(result.unresolved).toBe('.spur/run/9999-verdict.json');
+    });
+
+    test('a whitespace-only Testing section is not an owner', () => {
+        const result = retargetScratchVerdictPointer('.spur/run/9999-verdict.json', {
+            durableVerdictExists: durable,
+            testingBody: '   \n\t',
+        });
+        expect(result.unresolved).toBe('.spur/run/9999-verdict.json');
+    });
+
+    test('AC5/R4/R5: idempotent, and non-verdict scratch prose never matches', () => {
+        const first = retargetScratchVerdictPointer('.spur/run/1046-verdict.json', {
+            durableVerdictExists: durable,
+            testingBody: testing,
+        });
+        const second = retargetScratchVerdictPointer(first.value, {
+            durableVerdictExists: durable,
+            testingBody: testing,
+        });
+        expect(second.value).toBe(first.value);
+        expect(second.kind).toBeNull();
+
+        for (const prose of [
+            '.spur/run/0490-spike/ (throwaway)',
+            'gate log at .spur/run/1136-test-gate.status',
+            'see .spur/run/ for the attempt scratch',
+        ]) {
+            expect(
+                retargetScratchVerdictPointer(prose, { durableVerdictExists: durable, testingBody: testing }),
+            ).toEqual({ value: prose, kind: null });
+        }
+    });
+
+    test('multiple pointers in one reason each resolve; the reported kind is the first', () => {
+        const result = retargetScratchVerdictPointer(
+            'first .spur/run/1046-verdict.json then .spur/run/9999-verdict.json',
+            { durableVerdictExists: durable, testingBody: testing },
+        );
+        expect(result.value).toBe(`first .spur/memory/evidence/1046-verdict.json then ${TRACKED_TESTING_POINTER}`);
+        expect(result.kind).toBe('durable-evidence');
+    });
+});
+
 describe('done_reason normalization in the qualification pass (1089 R3)', () => {
     const ABSOLUTE_REASON =
         'unforced close; PASS artifact at /Users/someone/xprojects/spur-new-run-1049-e7e0/.spur/memory/evidence/1049-verdict.json';
@@ -332,7 +417,7 @@ done_reason: "Verified with 23 passing tests"
             },
         });
         const entry = report.fileReports.find((r) => r.wbs === '1049');
-        expect(entry?.doneReasons).toEqual([{ from: ABSOLUTE_REASON, to: RELATIVE_REASON }]);
+        expect(entry?.doneReasons).toEqual([{ from: ABSOLUTE_REASON, to: RELATIVE_REASON, kind: 'absolute-path' }]);
         expect(entry?.modified).toBe(true);
         expect(writes).toHaveLength(0);
         // A free-form reason is operator text, not corpus drift — never reported.
@@ -396,6 +481,136 @@ done_reason: "Verified with 23 passing tests"
         expect(entry?.modified).toBe(false);
         expect(entry?.doneReasons).toEqual([]);
         expect(writes).toHaveLength(0);
+    });
+});
+
+describe('scratch verdict retargeting in the qualification pass (1140 R1–R3)', () => {
+    interface FieldWrite {
+        filePath: string;
+        value: string;
+    }
+
+    /**
+     * Three done tasks, one per resolution: durable copy exists, only Testing owns the
+     * evidence, and neither owns it (reported unresolved, never rewritten).
+     */
+    function mockFs(): FileSystem {
+        const task = (wbs: string, reason: string, testing: string): string => `---
+wbs: "${wbs}"
+name: "t${wbs}"
+status: done
+done_reason: "${reason}"
+---
+
+## ${wbs}. t${wbs}
+
+### Testing
+
+${testing}
+`;
+        const files: Record<string, string> = {
+            '/mock/docs/tasks/1046_task.md': task(
+                '1046',
+                'PASS artifact at .spur/run/1046-verdict.json',
+                '`bun test` green',
+            ),
+            '/mock/docs/tasks/0562_task.md': task(
+                '0562',
+                'Verified with PASS verdict in .spur/run/0562-verdict.json; suite 5290 pass',
+                '`bun test` green',
+            ),
+            '/mock/docs/tasks/0999_task.md': task('0999', 'PASS artifact at .spur/run/0999-verdict.json', ''),
+        };
+        return {
+            resolve: (p: string) => p,
+            cwd: () => '/mock',
+            readDir: async (dir: string) => {
+                if (dir === '/mock/docs/tasks')
+                    return Object.keys(files).map((p) => p.replace('/mock/docs/tasks/', ''));
+                throw new Error('Directory not found');
+            },
+            readFile: async (p: string) => {
+                const content = files[p];
+                if (content !== undefined) return content;
+                throw new Error(`File not found: ${p}`);
+            },
+        } as unknown as FileSystem;
+    }
+
+    const run = async (dryRun: boolean) => {
+        const writes: FieldWrite[] = [];
+        const report = await qualifyAnchors(mockFs(), {
+            fs: mockFs(),
+            dryRun,
+            taskDirs: ['/mock/docs/tasks'],
+            projectRoot: '/mock',
+            durableVerdictExists: (wbs) => wbs === '1046',
+            writeField: async (filePath, _wbs, _key, value) => {
+                writes.push({ filePath, value });
+            },
+        });
+        return { report, writes };
+    };
+
+    test('AC1/AC3: the durable copy wins, the tracked Testing section is the fallback, each rewrite is kind-tagged', async () => {
+        const { report, writes } = await run(false);
+        const durable = report.fileReports.find((r) => r.wbs === '1046');
+        expect(durable?.doneReasons).toEqual([
+            {
+                from: 'PASS artifact at .spur/run/1046-verdict.json',
+                to: 'PASS artifact at .spur/memory/evidence/1046-verdict.json',
+                kind: 'durable-evidence',
+            },
+        ]);
+        const tracked = report.fileReports.find((r) => r.wbs === '0562');
+        expect(tracked?.doneReasons).toEqual([
+            {
+                from: 'Verified with PASS verdict in .spur/run/0562-verdict.json; suite 5290 pass',
+                to: `Verified with PASS verdict in ${TRACKED_TESTING_POINTER}; suite 5290 pass`,
+                kind: 'tracked-testing',
+            },
+        ]);
+        expect([...writes].sort((a, b) => a.filePath.localeCompare(b.filePath))).toEqual([
+            {
+                filePath: '/mock/docs/tasks/0562_task.md',
+                value: `Verified with PASS verdict in ${TRACKED_TESTING_POINTER}; suite 5290 pass`,
+            },
+            {
+                filePath: '/mock/docs/tasks/1046_task.md',
+                value: 'PASS artifact at .spur/memory/evidence/1046-verdict.json',
+            },
+        ]);
+        expect(report.filesModified).toBe(2);
+    });
+
+    test('AC4: neither owner is reported as unresolved, left byte-identical and unwritten', async () => {
+        const { report, writes } = await run(false);
+        const unresolved = report.fileReports.find((r) => r.wbs === '0999');
+        expect(unresolved?.doneReasonUnresolved).toBe('.spur/run/0999-verdict.json');
+        expect(unresolved?.doneReasons).toEqual([]);
+        expect(unresolved?.modified).toBe(false);
+        expect(writes.some((w) => w.filePath.includes('0999'))).toBe(false);
+    });
+
+    test('AC5/R4: dry-run reports the rewrites and writes nothing; a second pass is a no-op', async () => {
+        const { report, writes } = await run(true);
+        expect(writes).toHaveLength(0);
+        expect(
+            report.fileReports
+                .filter((r) => r.doneReasons.length > 0)
+                .map((r) => r.wbs)
+                .sort(),
+        ).toEqual(['0562', '1046']);
+        expect(report.filesModified).toBe(2);
+
+        // The retargeted values no longer match the pointer pattern, so an apply pass over
+        // already-migrated reasons reports nothing for them (idempotency).
+        const applied = retargetScratchVerdictPointer('PASS artifact at .spur/memory/evidence/1046-verdict.json', {
+            durableVerdictExists: () => true,
+            testingBody: 'green',
+        });
+        expect(applied.kind).toBeNull();
+        expect(applied.value).toBe('PASS artifact at .spur/memory/evidence/1046-verdict.json');
     });
 });
 

@@ -4,13 +4,13 @@ name: Emit inline pipeline action rows so run close needs no post-hoc backfill
 status: done
 template: feature-impl
 created_at: 2026-10-01T23:59:14.229Z
-updated_at: "2026-10-03T01:58:21.838Z"
+updated_at: "2026-10-09T21:30:33.003Z"
 feature_id: E71
 
 priority: P2
 estimate_hours: 1
 done_forced: "false"
-done_reason: unforced close; PASS artifact at .spur/run/1046-verdict.json
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1046-verdict.json
 ---
 
 ## 1046. Emit inline pipeline action rows so run close needs no post-hoc backfill

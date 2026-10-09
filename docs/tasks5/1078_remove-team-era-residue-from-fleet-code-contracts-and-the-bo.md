@@ -4,13 +4,13 @@ name: Remove team-era residue from fleet code, contracts and the Board
 status: done
 template: feature-impl
 created_at: 2026-10-04T20:30:38.321Z
-updated_at: "2026-10-06T19:00:35.644Z"
+updated_at: "2026-10-09T21:30:34.045Z"
 feature_id: G72
 
 priority: P2
 estimate_hours: 4
 done_forced: "false"
-done_reason: unforced close; PASS artifact at .spur/run/1078-verdict.json
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1078-verdict.json
 ---
 
 ## 1078. Remove team-era residue from fleet code, contracts and the Board

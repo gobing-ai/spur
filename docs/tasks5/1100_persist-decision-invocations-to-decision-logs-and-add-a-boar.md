@@ -4,14 +4,14 @@ name: Persist decision invocations to decision_logs and add a Board Decisions ta
 status: done
 template: feature-impl
 created_at: 2026-10-07T02:58:40.297Z
-updated_at: "2026-10-08T16:25:05.992Z"
+updated_at: "2026-10-09T21:30:36.114Z"
 feature_id: P1
 
 dependencies: ["1095", "1113"]
 priority: P2
 estimate_hours: 12
 done_forced: "false"
-done_reason: unforced close; PASS artifact at .spur/run/1100-verdict.json
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1100-verdict.json
 ---
 
 ## 1100. Persist decision invocations to decision_logs and add a Board Decisions tab

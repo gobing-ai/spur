@@ -3,7 +3,9 @@
  * Behavioral tests for RuleService live in packages/app/tests/services/rule-service.test.ts.
  */
 import { describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
+import { join } from 'node:path';
 import type { RuleEvalRunRow, RuleRunRow, RuleTraceDetail, RuleTraceRun } from '@gobing-ai/spur-app';
 import { formatTraceDetail, formatTraceList } from '../../src/commands/rule';
 import { main } from '../../src/index';
@@ -361,6 +363,60 @@ describe('rule trace end-to-end', () => {
         expect(plainOutput.messages.at(-1)).toContain('sample-rule');
         expect(plainOutput.messages.at(-1)).toContain('Project:');
         expect(plainOutput.messages.at(-1)).toContain('Source: file:');
+    });
+});
+
+describe('no-scratch-verdict-pointer (1141 R1–R3)', () => {
+    const RULE_FILE = join(
+        import.meta.dir,
+        '..',
+        '..',
+        '..',
+        '..',
+        'config',
+        'rules',
+        'structure',
+        'scratch-evidence-pointer.yaml',
+    );
+
+    /** Temp corpus with one task file per case the rule must separate. */
+    async function rankedCorpus(): Promise<string> {
+        const cwd = await createTempProject();
+        await mkdir(`${cwd}/docs/tasks`, { recursive: true });
+        await Bun.write(
+            `${cwd}/docs/tasks/0001_scratch.md`,
+            '---\nwbs: "0001"\nstatus: done\ndone_reason: unforced close; PASS artifact at .spur/run/0001-verdict.json\n---\n\n## 0001. scratch\n',
+        );
+        await Bun.write(
+            `${cwd}/docs/tasks/0002_durable.md`,
+            '---\nwbs: "0002"\nstatus: done\ndone_reason: force close; PASS artifact at .spur/memory/evidence/0002-verdict.json\n---\n\n## 0002. durable\n',
+        );
+        await Bun.write(
+            `${cwd}/docs/tasks/0003_prose.md`,
+            '---\nwbs: "0003"\nstatus: done\ndone_reason: force close; PASS artifact at .spur/memory/evidence/0003-verdict.json\n---\n\n## 0003. prose\n\n### Testing\n\nGate log at `.spur/run/0003-test-gate.status`; verdict at `.spur/run/0003/verdict.json` in prose.\n',
+        );
+        return cwd;
+    }
+
+    test('AC1/AC2/AC3: a scratch pointer is rejected, a durable pointer and prose mentions are not', async () => {
+        const cwd = await rankedCorpus();
+        const output = createCapturedOutput();
+        const exitCode = await main(['rule', 'run', '--file', RULE_FILE, '--json'], { cwd, output });
+        // One error finding → the run exits non-zero (the gate's `--fail-on warning` behaviour).
+        expect(exitCode).toBe(1);
+        const parsed = JSON.parse(output.messages[0] ?? '{}');
+        expect(parsed.findings).toHaveLength(1);
+        const finding = parsed.findings[0];
+        expect(finding.ruleId).toBe('no-scratch-verdict-pointer');
+        expect(finding.severity).toBe('error');
+        expect(finding.filePath).toBe('docs/tasks/0001_scratch.md');
+        expect(finding.line).toBe(4);
+    });
+
+    test('AC1: the description names the durable owner and the repair command', () => {
+        const yaml = readFileSync(RULE_FILE, 'utf8');
+        expect(yaml).toContain('.spur/memory/evidence/<wbs>-verdict.json');
+        expect(yaml).toContain('spur task migrate-anchors --wbs <wbs>');
     });
 });
 
