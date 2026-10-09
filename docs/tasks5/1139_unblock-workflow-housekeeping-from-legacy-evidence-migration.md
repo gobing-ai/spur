@@ -4,7 +4,7 @@ name: Unblock workflow housekeeping from legacy evidence-migration failures
 status: done
 template: issue
 created_at: 2026-10-09T06:08:08.615Z
-updated_at: "2026-10-09T20:51:59.679Z"
+updated_at: "2026-10-09T21:39:30.509Z"
 
 feature_id: E71
 priority: P1
@@ -105,9 +105,9 @@ Scenario: AC5 — a divergent foreign evidence copy cannot block persist-out (re
   And a divergent owned verdict still fails with durable evidence conflicts
 
 Scenario: AC6 — a phantom run citation fails at record (req: R6)
-  Given a verdict whose check evidence cites .spur/run/bb-base.sha that exists in no plane of the tree
+  Given a verdict whose check evidence cites .spur/run/<phantom>.sha that exists in no plane of the tree
   When `spur task record` renders Testing
-  Then it fails naming .spur/run/bb-base.sha and the check row
+  Then it fails naming .spur/run/<phantom>.sha and the check row
   And the task file is unchanged
 ```
 
