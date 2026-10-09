@@ -308,3 +308,18 @@ commits of its own (detached at the batch base) so it was only removed. Marker: 
 Task 1078 (G72) is done at `5fb883e72` with a PASS verdict artifact (gate 10095/0, test-cf 0).
 
 Chain state for the remaining work to 1077: 1079 (G72) -> 1080 (G73) -> 1081 (G73) -> 1077.
+
+## 2026-10-09 13:20 — dev-run 1143 (--auto --next --agent inline --worktree --wrap)
+
+- Task 1143 (A33): ts-libs publish-trigger assertion. Implementation landed upstream only, in
+  `/Users/robin/xprojects/ts-libs`: `9e607148` (hint + `verify-publish` CLI + `findPublishRun` split + docs),
+  `a0b0855` (branch-push followTags guard + JSDoc + README), `93c85f0` (guard every printed tag push),
+  `4c38d3f` (widen the push-guard test sweep). No Spur source change beyond two base-tree gate repairs.
+- Two pre-existing base-tree defects repaired in-tree: `inline-pipeline-driver.md:792-794` forbidden
+  invocation, and the stale `plugins/sp/lib/{idea-handoff,inline-run}.generated.mjs` twins (byte-equality
+  tests fail against them). Both proven at base `17d06fe`; recorded in the task Solution.
+- Gate PASS at digest `sha256:b32c5868…`; review PASS after two fix rounds (1×P2 branch guard, 1×P2 tag
+  guards, 5×P3, 2×P4); verify PASS `Confidence: HIGH`; recorded and transitioned `testing → done`.
+- Run id `84ba2184-7942-4b91-8521-df988c68b306`; worktree `../spur-new-run-1143-9d38` FF-merged as
+  `df4d8b847`, branch deleted, marker `merged`. Wrap run `99860791-7a21-46e1-9e4b-7f557efaf986` reached
+  done with `doc-sync` narration-only (`invalid-learnings-shape`) — learnings appended manually above.

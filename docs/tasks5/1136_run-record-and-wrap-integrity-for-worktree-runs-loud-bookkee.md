@@ -277,7 +277,7 @@ contract, the optional `--duration-ms` and single ownership of the terminal-reas
 
 Out-of-task repair (disclosed): `script-contract-check` failed at base commit `17d06fe18` with the
 `forbidden_invocation` kind on an unguarded `bun plugins/sp/scripts/task-diffstat.ts` in shipped prose
-(`plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:806`; verified by running the checker
+(`plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:805`; verified by running the checker
 in a clean worktree at that commit). The line was rewritten to the guarded idiom so the task gate can
 be green; no behaviour change.
 
@@ -324,7 +324,7 @@ contract, the optional `--duration-ms` and single ownership of the terminal-reas
 
 Out-of-task repair (disclosed): `script-contract-check` failed at base commit `17d06fe18` with the
 `forbidden_invocation` kind on an unguarded `bun plugins/sp/scripts/task-diffstat.ts` in shipped prose
-(`plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:806`; verified by running the checker
+(`plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:805`; verified by running the checker
 in a clean worktree at that commit). The line was rewritten to the guarded idiom so the task gate can
 be green; no behaviour change.
 
