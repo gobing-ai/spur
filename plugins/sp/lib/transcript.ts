@@ -23,7 +23,14 @@ export interface Row {
     timestamp?: string;
     isMeta?: boolean;
     isCompactSummary?: boolean;
-    message?: { id?: string; content?: unknown; usage?: Record<string, number | undefined> };
+    id?: string; // pi: the row id doubles as the once-per-message usage key
+    message?: {
+        id?: string;
+        role?: string;
+        content?: unknown;
+        usage?: Record<string, number | undefined>;
+        toolCallId?: string;
+    };
 }
 
 /** Running measurement of one segment or window. */
@@ -33,11 +40,13 @@ export interface Acc {
     asks: Map<string, number>;
     toolIds: Set<string>;
     messages: Map<string, Tokens>;
+    compactions: number;
 }
 
 const SESSION_ID = /^[A-Za-z0-9_-]+$/;
 /** Host tools whose call→result gap is the operator answering, not the agent working. */
-const OPERATOR_TOOLS = new Set(['AskUserQuestion']);
+const OPERATOR_TOOLS = new Set(['AskUserQuestion', 'ask_user_question']);
+const PI_ROLES = new Set(['user', 'assistant', 'toolResult']);
 
 export const zeroTokens = (): Tokens => ({ input: 0, cacheCreate: 0, cacheRead: 0, output: 0 });
 
@@ -67,6 +76,14 @@ export function formatTokenSplit(t: Tokens | null): string {
 
 /** Operator prompt text, or undefined for tool results, meta rows and compaction summaries. */
 export function promptText(row: Row): string | undefined {
+    if (row.type === 'message') {
+        // pi (1130): only a user-role message with text content is a prompt; toolResult rows are not.
+        if (row.message?.role !== 'user') return undefined;
+        const content = row.message.content;
+        if (typeof content === 'string') return content;
+        if (!Array.isArray(content)) return undefined;
+        return (content as Block[]).find((b) => b.type === 'text')?.text;
+    }
     if (row.type !== 'user' || row.isMeta || row.isCompactSummary) return undefined;
     const content = row.message?.content;
     if (typeof content === 'string') return content;
@@ -95,11 +112,38 @@ export const newAcc = (ts: number): Acc => ({
     asks: new Map(),
     toolIds: new Set(),
     messages: new Map(),
+    compactions: 0,
 });
 
 /** Fold one timestamped non-prompt record into a segment or window. */
 export function accumulate(acc: Acc, row: Row, ts: number): void {
     acc.last = Math.max(acc.last, ts);
+    if (row.type === 'message') {
+        // pi (1130): mirrors the importer's field semantics (piRole / normalizeOmpToolCall /
+        // ompToolResultTiming) — toolCall blocks on assistant rows, results paired by toolCallId.
+        const m = row.message;
+        if (m?.role === 'assistant') {
+            const blocks = Array.isArray(m.content) ? (m.content as Block[]) : [];
+            for (const b of blocks) {
+                if (b.type === 'toolCall' && b.id) {
+                    acc.toolIds.add(b.id);
+                    if (b.name && OPERATOR_TOOLS.has(b.name)) acc.asks.set(b.id, ts);
+                }
+            }
+            const u = m.usage;
+            if (u && row.id)
+                acc.messages.set(row.id, {
+                    input: u.input ?? 0,
+                    cacheCreate: u.cacheWrite ?? 0,
+                    cacheRead: u.cacheRead ?? 0,
+                    output: u.output ?? 0,
+                });
+        } else if (m?.role === 'toolResult' && m.toolCallId && acc.asks.has(m.toolCallId)) {
+            acc.askMs += ts - (acc.asks.get(m.toolCallId) ?? ts);
+        }
+        return;
+    }
+    if (row.type === 'compaction') acc.compactions++; // pi-only row type (1130 R4)
     const blocks = Array.isArray(row.message?.content) ? (row.message.content as Block[]) : [];
     for (const b of blocks) {
         if (b.type === 'tool_use' && b.id) {
@@ -121,8 +165,21 @@ export function accumulate(acc: Acc, row: Row, ts: number): void {
     }
 }
 
+/** First row matching a known shape decides: `type:"message"` with a pi role → pi, else Claude. */
+export function sniffFormat(rows: Row[]): 'claude' | 'pi' | 'unknown' {
+    for (const row of rows) {
+        if (row.type === 'message' && PI_ROLES.has(row.message?.role ?? '')) return 'pi';
+        if (row.type === 'user' || row.type === 'assistant') return 'claude';
+    }
+    return 'unknown';
+}
+
 /** Timestamped rows in file order; malformed lines counted, timestamp-less rows dropped. */
-export function parseRows(lines: string[]): { rows: [Row, number][]; skippedLines: number } {
+export function parseRows(lines: string[]): {
+    rows: [Row, number][];
+    skippedLines: number;
+    format: 'claude' | 'pi' | 'unknown';
+} {
     const rows: [Row, number][] = [];
     let skippedLines = 0;
     for (const line of lines) {
@@ -137,7 +194,7 @@ export function parseRows(lines: string[]): { rows: [Row, number][]; skippedLine
         const ts = row.timestamp ? Date.parse(row.timestamp) : Number.NaN;
         if (!Number.isNaN(ts)) rows.push([row, ts]);
     }
-    return { rows, skippedLines };
+    return { rows, skippedLines, format: sniffFormat(rows.map(([r]) => r)) };
 }
 
 export type Resolved = { ok: true; path: string } | { ok: false; reason: string };
@@ -149,7 +206,11 @@ export function resolveTranscript(
 ): Resolved {
     if (override) return existsSync(override) ? { ok: true, path: override } : { ok: false, reason: 'no transcript' };
     const id = env.CLAUDE_CODE_SESSION_ID;
-    if (!id) return { ok: false, reason: 'no host session id (CLAUDE_CODE_SESSION_ID); pass --transcript <path>' };
+    if (!id)
+        return {
+            ok: false,
+            reason: 'no host session id; pass --transcript <path> (pi: ~/.pi/agent/sessions/<cwd-slug>/<file>.jsonl)',
+        };
     if (!SESSION_ID.test(id)) return { ok: false, reason: 'refusing a session id with path characters' };
     if (!existsSync(projectsRoot)) return { ok: false, reason: `no transcript root ${projectsRoot}` };
     for (const dir of readdirSync(projectsRoot)) {

@@ -33,9 +33,9 @@ export type Rendered<T> = T & { work: string; wait: string; token: string };
 export interface Timeline {
     available: true;
     transcript?: string;
-    segments: Rendered<Span & { index: number; start: string; prompt: string }>[];
+    segments: Rendered<Span & { index: number; start: string; prompt: string; compactions?: number }>[];
     stages?: Rendered<Span & { segments: string }>[];
-    totals: Rendered<Span & { elapsedMs: number; elapsed: string }>;
+    totals: Rendered<Span & { elapsedMs: number; elapsed: string; compactions?: number }>;
     skippedLines: number;
 }
 
@@ -68,7 +68,8 @@ interface Open extends Acc {
 
 export function buildTimeline(lines: string[], group?: string): Timeline {
     const open: Open[] = [];
-    const { rows, skippedLines } = parseRows(lines);
+    const { rows, skippedLines, format } = parseRows(lines);
+    const isPi = format === 'pi';
 
     for (const [row, ts] of rows) {
         const prompt = promptText(row);
@@ -80,28 +81,34 @@ export function buildTimeline(lines: string[], group?: string): Timeline {
         if (seg) accumulate(seg, row, ts); // rows before the first prompt are session preamble
     }
 
-    const segments = open.map((seg, i) => {
-        const next = open[i + 1]?.start;
-        const idle = next === undefined ? 0 : Math.max(0, next - seg.last);
-        const oneLine = seg.prompt.replace(/\s+/g, ' ').trim();
-        return render({
-            index: i + 1,
-            start: new Date(seg.start).toISOString(),
-            prompt: oneLine.length > PROMPT_EXCERPT ? `${oneLine.slice(0, PROMPT_EXCERPT)}…` : oneLine,
-            workMs: seg.last - seg.start - seg.askMs,
-            waitMs: idle + seg.askMs,
-            toolCalls: seg.toolIds.size,
-            tokens: sumTokens([...seg.messages.values()]),
-        });
-    });
+    const segments = open.map(
+        (seg, i): Rendered<Span & { index: number; start: string; prompt: string; compactions?: number }> => {
+            const next = open[i + 1]?.start;
+            const idle = next === undefined ? 0 : Math.max(0, next - seg.last);
+            const oneLine = seg.prompt.replace(/\s+/g, ' ').trim();
+            const span = {
+                index: i + 1,
+                start: new Date(seg.start).toISOString(),
+                prompt: oneLine.length > PROMPT_EXCERPT ? `${oneLine.slice(0, PROMPT_EXCERPT)}…` : oneLine,
+                workMs: seg.last - seg.start - seg.askMs,
+                waitMs: idle + seg.askMs,
+                toolCalls: seg.toolIds.size,
+                tokens: sumTokens([...seg.messages.values()]),
+            };
+            return render(isPi ? { ...span, compactions: seg.compactions } : span);
+        },
+    );
 
     const first = open[0];
     const last = open.at(-1);
     const elapsedMs = first && last ? last.last - first.start : 0;
+    const totals = { ...sumSpans(segments), elapsedMs, elapsed: formatDuration(elapsedMs) };
     const timeline: Timeline = {
         available: true,
         segments,
-        totals: render({ ...sumSpans(segments), elapsedMs, elapsed: formatDuration(elapsedMs) }),
+        totals: render(
+            isPi ? { ...totals, compactions: segments.reduce((n, s) => n + (s.compactions ?? 0), 0) } : totals,
+        ),
         skippedLines,
     };
     if (group) {
@@ -141,6 +148,10 @@ export function main(
     }
     try {
         const timeline = buildTimeline(readFileSync(resolved.path, 'utf8').split('\n'), group);
+        if (timeline.segments.length === 0) {
+            write(`${JSON.stringify({ available: false, reason: 'unrecognized transcript format' })}\n`);
+            return 0;
+        }
         write(`${JSON.stringify({ ...timeline, transcript: resolved.path })}\n`);
         return 0;
     } catch (error) {

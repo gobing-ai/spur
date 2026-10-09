@@ -24,7 +24,9 @@ compact, evidence-backed report of outcomes, resolved issues, remaining risks, a
 
 Use this skill immediately after focused operations when the operator asks what happened, what was
 resolved, or how the session could improve. Use imported-history analysis for ended sessions,
-cross-agent windows, recurrence, trends, or quantitative performance forensics.
+cross-agent windows, recurrence, trends, or quantitative performance forensics: on pi, run
+`spur history analyze --source pi --session <file-stem>` where `<file-stem>` is the transcript
+basename without `.jsonl` (e.g. `2026-10-07T22-44-33-625Z_01a1188a-…`), not the bare uuid.
 
 ## Arguments
 

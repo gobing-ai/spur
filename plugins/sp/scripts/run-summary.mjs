@@ -14,7 +14,8 @@ import { existsSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 var SESSION_ID = /^[A-Za-z0-9_-]+$/;
-var OPERATOR_TOOLS = new Set(["AskUserQuestion"]);
+var OPERATOR_TOOLS = new Set(["AskUserQuestion", "ask_user_question"]);
+var PI_ROLES = new Set(["user", "assistant", "toolResult"]);
 var zeroTokens = () => ({ input: 0, cacheCreate: 0, cacheRead: 0, output: 0 });
 function formatDuration(ms) {
   const s = Math.round(ms / 1000);
@@ -35,6 +36,16 @@ function formatTokenSplit(t) {
   return `${formatTokens(nonCached + t.cacheRead)} / ${formatTokens(nonCached)}`;
 }
 function promptText(row) {
+  if (row.type === "message") {
+    if (row.message?.role !== "user")
+      return;
+    const content2 = row.message.content;
+    if (typeof content2 === "string")
+      return content2;
+    if (!Array.isArray(content2))
+      return;
+    return content2.find((b) => b.type === "text")?.text;
+  }
   if (row.type !== "user" || row.isMeta || row.isCompactSummary)
     return;
   const content = row.message?.content;
@@ -64,10 +75,37 @@ var newAcc = (ts) => ({
   askMs: 0,
   asks: new Map,
   toolIds: new Set,
-  messages: new Map
+  messages: new Map,
+  compactions: 0
 });
 function accumulate(acc, row, ts) {
   acc.last = Math.max(acc.last, ts);
+  if (row.type === "message") {
+    const m = row.message;
+    if (m?.role === "assistant") {
+      const blocks2 = Array.isArray(m.content) ? m.content : [];
+      for (const b of blocks2) {
+        if (b.type === "toolCall" && b.id) {
+          acc.toolIds.add(b.id);
+          if (b.name && OPERATOR_TOOLS.has(b.name))
+            acc.asks.set(b.id, ts);
+        }
+      }
+      const u2 = m.usage;
+      if (u2 && row.id)
+        acc.messages.set(row.id, {
+          input: u2.input ?? 0,
+          cacheCreate: u2.cacheWrite ?? 0,
+          cacheRead: u2.cacheRead ?? 0,
+          output: u2.output ?? 0
+        });
+    } else if (m?.role === "toolResult" && m.toolCallId && acc.asks.has(m.toolCallId)) {
+      acc.askMs += ts - (acc.asks.get(m.toolCallId) ?? ts);
+    }
+    return;
+  }
+  if (row.type === "compaction")
+    acc.compactions++;
   const blocks = Array.isArray(row.message?.content) ? row.message.content : [];
   for (const b of blocks) {
     if (b.type === "tool_use" && b.id) {
@@ -88,6 +126,15 @@ function accumulate(acc, row, ts) {
     });
   }
 }
+function sniffFormat(rows) {
+  for (const row of rows) {
+    if (row.type === "message" && PI_ROLES.has(row.message?.role ?? ""))
+      return "pi";
+    if (row.type === "user" || row.type === "assistant")
+      return "claude";
+  }
+  return "unknown";
+}
 function parseRows(lines) {
   const rows = [];
   let skippedLines = 0;
@@ -105,14 +152,17 @@ function parseRows(lines) {
     if (!Number.isNaN(ts))
       rows.push([row, ts]);
   }
-  return { rows, skippedLines };
+  return { rows, skippedLines, format: sniffFormat(rows.map(([r]) => r)) };
 }
 function resolveTranscript(env, projectsRoot = join(homedir(), ".claude", "projects"), override) {
   if (override)
     return existsSync(override) ? { ok: true, path: override } : { ok: false, reason: "no transcript" };
   const id = env.CLAUDE_CODE_SESSION_ID;
   if (!id)
-    return { ok: false, reason: "no host session id (CLAUDE_CODE_SESSION_ID); pass --transcript <path>" };
+    return {
+      ok: false,
+      reason: "no host session id; pass --transcript <path> (pi: ~/.pi/agent/sessions/<cwd-slug>/<file>.jsonl)"
+    };
   if (!SESSION_ID.test(id))
     return { ok: false, reason: "refusing a session id with path characters" };
   if (!existsSync(projectsRoot))

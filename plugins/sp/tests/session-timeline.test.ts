@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -239,6 +239,49 @@ describe('main CLI surface', () => {
             (r) => JSON.stringify(r),
         );
         expect(buildTimeline(rows).segments[0]?.prompt).toBe(`${'x'.repeat(80)}…`);
+    });
+});
+
+describe('pi transcripts (1130)', () => {
+    const fixturePath = join(import.meta.dir, 'fixtures', 'pi-session.jsonl');
+    const piLines = (): string[] => readFileSync(fixturePath, 'utf8').split('\n');
+    const fixtureToolCalls = (): number => piLines().reduce((n, l) => n + l.split('"toolCall"').length - 1, 0);
+
+    test('AC1: a real pi transcript slice yields measured segments', () => {
+        const tl = buildTimeline(piLines());
+        expect(tl.segments).toHaveLength(2);
+        for (const seg of tl.segments) expect(seg.workMs).toBeGreaterThan(0);
+        // Each toolCall block counted once, split across the two prompt segments.
+        expect(tl.segments.reduce((n, s) => n + s.toolCalls, 0)).toBe(fixtureToolCalls());
+        expect(tl.totals.toolCalls).toBe(fixtureToolCalls());
+        expect(tl.totals.tokens.output).toBeGreaterThan(0);
+        expect(tl.totals.compactions).toBe(1);
+        expect(tl.segments[0]?.compactions).toBe(1);
+        // The ask_user_question gate inside segment 2 is operator wait, not work (R1).
+        expect(tl.segments[1]).toMatchObject({ waitMs: 30_000, workMs: 20_000 });
+    });
+
+    test('AC2: an unknown JSONL shape is reported, not hidden', () => {
+        const out: string[] = [];
+        const path = join(mkdtempSync(join(tmpdir(), 'session-timeline-unknown-')), 'u.jsonl');
+        writeFileSync(path, `${JSON.stringify({ type: 'mystery', timestamp: at(0) })}\n`);
+        expect(main(['--transcript', path], {}, (s) => out.push(s), '/nope')).toBe(0);
+        expect(JSON.parse(out.join(''))).toEqual({ available: false, reason: 'unrecognized transcript format' });
+    });
+
+    test('AC3: no host id names the --transcript remedy including the pi path', () => {
+        const out: string[] = [];
+        expect(main([], {}, (s) => out.push(s), '/nope')).toBe(0);
+        const parsed = JSON.parse(out.join(''));
+        expect(parsed.available).toBe(false);
+        expect(parsed.reason).toContain('--transcript');
+        expect(parsed.reason).toContain('(pi:');
+    });
+
+    test('Claude output carries no compactions field (R4 absent for Claude)', () => {
+        const tl = buildTimeline(fixture());
+        expect('compactions' in tl.totals).toBe(false);
+        for (const seg of tl.segments) expect('compactions' in seg).toBe(false);
     });
 });
 

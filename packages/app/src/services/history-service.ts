@@ -58,6 +58,7 @@ import {
     type SourceSummaryRow,
     selectionPopulation,
     selectorDigest,
+    sessionMatchLookup,
     sessionSpans,
     sessionToolDurations,
     sessionWatermarks,
@@ -800,6 +801,7 @@ export class HistoryService {
         const warnings = [
             ...buildWarnings(driftRows, coverage),
             ...derivedWarnings(derived),
+            ...(await sessionNotFoundWarnings(db, selector)),
             ...(opts.extraWarnings ?? []),
         ];
 
@@ -1399,6 +1401,26 @@ function buildCoverage(
             validationErrorSamples: err.validationErrors,
         };
     });
+}
+
+/**
+ * Task 1131 R4: a `--session` selector that matches zero `history_message` rows is almost
+ * always a truncated id (pi stores sessions as `<file-stem>_<uuid>` and operators pass the
+ * bare uuid tail), so the run must be loud instead of silently returning an empty artifact.
+ * Suggests up to 3 stored ids containing the given value; absent when the id matched or no
+ * stored id contains it.
+ */
+async function sessionNotFoundWarnings(db: DbAdapter, selector: ArtifactSelector): Promise<ArtifactWarning[]> {
+    if (selector.sessionId === null) return [];
+    const lookup = await sessionMatchLookup(db, selector.sessionId);
+    if (lookup.matched > 0) return [];
+    const suggestion = lookup.similar.length > 0 ? ` Did you mean: ${lookup.similar.join(', ')}?` : '';
+    return [
+        {
+            code: 'session-not-found',
+            detail: `no history_message rows match session '${selector.sessionId}'${suggestion}`,
+        },
+    ];
 }
 
 /** Advisory warnings from the drift alarm (Q10) and empty sources. */
