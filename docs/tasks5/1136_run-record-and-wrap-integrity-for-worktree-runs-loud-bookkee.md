@@ -25,7 +25,7 @@ done_reason: unforced close; PASS artifact at .spur/memory/evidence/1136-verdict
 `{"ok":false,"error":"run 85fab6d4-… closed done with zero action_rows rows; emit --action/--actions-file during the run (no backfill); see inline-pipeline-driver.md#structured-trace-emission-adr-117-task-0868","code":"NO_ACTION_ROWS","actionRows":0}`.
 The only non-lying options were to leave the row falsely `running` or to re-emit the trace afterwards; 93 rows were re-emitted post-run (all `--estimated`, since none had been timed) and the correction was written into the run log. **The contract forbids backfill at close — and it was right to; the defect is that the driver let a silent no-op happen at all.**
 
-**Defect 2 — a stale digest nearly reused a gate receipt (12 m 20 s lost).** After deleting a stray untracked artifact the tree's real digest moved from `sha256:e1f2afbf…` to `sha256:21996f6e…`. The driver passed the *file's* value (the older one) to `quality-gate.ts recheck`; the gate's `readReceiptStatus(receiptPath, env.proofDigest)` compared it with `.spur/run/1132-check-receipt.json`'s `inputDigest`, matched, and correctly-skipped by its own rules:
+**Defect 2 — a stale digest nearly reused a gate receipt (12 m 20 s lost).** After deleting a stray untracked artifact the tree's real digest moved from `sha256:e1f2afbf…` to `sha256:21996f6e…`. The driver passed the *file's* value (the older one) to `quality-gate.ts recheck`; the gate's `readReceiptStatus(receiptPath, env.proofDigest)` compared it with the run's `1132-check-receipt.json` `inputDigest`, matched, and correctly-skipped by its own rules:
 `check.reused — full-tier PASS receipt at input digest sha256:e1f2afbf…; gate skipped`.
 A PASS for a tree that no longer existed was one accepted command away. The driver caught it, recomputed the digest, and re-ran the gate for real (12 m 20 s), but the reuse decision trusts a caller-supplied string that the caller is demonstrably capable of getting wrong.
 
@@ -229,7 +229,7 @@ Rationale: per-tree DB isolation is correct, so the owning tree travels explicit
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — an action row emitted from the execution tree lands in the owning tree (req: R1) | MET | test | `packages/app/tests/services/inline-run-setup.test.ts` "AC1/R1" + acceptance drill `.spur/run/1136-acceptance-drill.log` |
+| AC1 — an action row emitted from the execution tree lands in the owning tree (req: R1) | MET | test | `packages/app/tests/services/inline-run-setup.test.ts` "AC1/R1" + acceptance drill `.spur/memory/runs/1136-acceptance-drill.log` |
 | AC2 — suppressed bookkeeping output is rejected by a pin (req: R2) | MET | test | `plugins/sp/tests/dogfood-testing/bookkeeping-contract.test.ts` "a snippet redirecting inline-run-setup to /dev/null is rejected naming file and line" |
 | AC3 — a stale supplied digest cannot reuse a gate receipt (req: R3) | MET | test | `plugins/sp/tests/quality-gate-receipt.test.ts` + `packages/app/tests/services/quality-gate.test.ts` stale/refusal cases; drill 2 |
 | AC4 — a node duration is the emitter's measurement (req: R4) | MET | test | `packages/app/tests/services/inline-run-setup.test.ts` AC4 cases; `plugins/sp/tests/inline-run-trace.test.ts` `--node-enter` E2E |
@@ -251,7 +251,7 @@ Verification commands (task worktree `spur-new-sp-run-1136-18f9bb0b`, final tree
 - `bun run build:scripts` (⇒ `build:plugin-lib` + twin conversion) — PASS; `script-contract-check`
   0 violations.
 
-Acceptance drill (real CLI; full transcript in `.spur/run/1136-acceptance-drill.log`):
+Acceptance drill (real CLI; full transcript in `.spur/memory/runs/1136-acceptance-drill.log`):
 
 - **AC1/R1** — run row in tree A, `--action` from tree B (`/tmp/spur-1136-drill/{A,B}`): without
   `--project-root` → `{"ok":false,…,"code":"RUN_NOT_FOUND"}` exit 1; with it → exit 0 and
