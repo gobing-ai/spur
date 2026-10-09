@@ -3,6 +3,30 @@ import { createRequire } from "node:module";
 var __require = /* @__PURE__ */ createRequire(import.meta.url);
 
 // plugins/sp/scripts/batch-preflight.ts
+var NON_ABORTING_PREFLIGHT_CODES = new Set([
+  "L4.scenario-unverified",
+  "L4.verifying-incomplete-tasks"
+]);
+function classifyFeaturePreflightFindings(findings) {
+  const aborting = [];
+  const nonAborting = [];
+  for (const f of findings) {
+    if (f.severity === "error") {
+      if (NON_ABORTING_PREFLIGHT_CODES.has(f.code)) {
+        nonAborting.push(f);
+      } else {
+        aborting.push(f);
+      }
+    } else {
+      nonAborting.push(f);
+    }
+  }
+  return {
+    aborting,
+    nonAborting,
+    shouldAbort: aborting.length > 0
+  };
+}
 function quickReadiness(input) {
   const status = (input.status ?? "").toLowerCase();
   const operation = input.operation;
@@ -190,6 +214,7 @@ function parsePreflightCliArgs(argv) {
   let filteredCount = null;
   let requiredSections = [];
   let presentSections = [];
+  let classifyFeature = null;
   for (let i = 0;i < argv.length; i++) {
     const a = argv[i];
     if (a === "--help" || a === "-h")
@@ -214,7 +239,9 @@ function parsePreflightCliArgs(argv) {
       presentSections = raw.length === 0 ? [] : raw.split(",").map((s) => s.trim()).filter(Boolean);
     } else if (a === "--wbs")
       wbs = argv[++i] ?? wbs;
-    else if (a === "--status")
+    else if (a === "--classify-feature") {
+      classifyFeature = argv[++i] ?? "[]";
+    } else if (a === "--status")
       status = argv[++i] ?? null;
     else if (a === "--deps") {
       const raw = argv[++i] ?? "";
@@ -240,7 +267,8 @@ function parsePreflightCliArgs(argv) {
     force,
     filteredCount,
     requiredSections,
-    presentSections
+    presentSections,
+    classifyFeature
   };
 }
 var PREFLIGHT_CLI_USAGE = `Usage:
@@ -253,6 +281,24 @@ function runPreflightCli(argv) {
   const args = parsePreflightCliArgs(argv);
   if (args.help)
     return { exitCode: 0, stdout: "", stderr: PREFLIGHT_CLI_USAGE };
+  if (args.classifyFeature !== null) {
+    try {
+      const findings = JSON.parse(args.classifyFeature);
+      const res = classifyFeaturePreflightFindings(Array.isArray(findings) ? findings : []);
+      return {
+        exitCode: res.shouldAbort ? 1 : 0,
+        stdout: `${JSON.stringify(res, null, 2)}
+`,
+        stderr: ""
+      };
+    } catch (e) {
+      return {
+        exitCode: 1,
+        stdout: "",
+        stderr: `Invalid JSON for --classify-feature: ${String(e)}`
+      };
+    }
+  }
   if (!args.status)
     return { exitCode: 1, stdout: "", stderr: PREFLIGHT_CLI_USAGE };
   if (args.recovery) {
@@ -327,5 +373,7 @@ export {
   quickReadiness,
   preflightTask,
   parsePreflightCliArgs,
-  PREFLIGHT_CLI_USAGE
+  classifyFeaturePreflightFindings,
+  PREFLIGHT_CLI_USAGE,
+  NON_ABORTING_PREFLIGHT_CODES
 };

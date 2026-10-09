@@ -38,10 +38,11 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 
 Flags: `--tasks <selector>` (required — explicit WBS list, status pseudo-list, `feature:<id>`,
 or `ready`), `--feature <id>` (sugar for `feature:<id>`; when the effective selector is
-feature-derived, `dev-runall` runs `spur feature check <id> --strict --json` **once** before
+feature-derived, `dev-runall` runs `spur feature check <id> --fix --json` then `spur feature check <id> --strict --json` **once** before
 resolving tasks — a non-zero strict check aborts the batch with verdict `aborted` and the
 structured findings, before any task pipeline action, task 0510 R2; scoped: `L4.scenario-unverified` and `L4.verifying-incomplete-tasks`
-(expected pre-run states of a not-yet-run or reopened feature) are reported verbatim but do not abort —
+(expected pre-run states of a not-yet-run or reopened feature) are reported verbatim but do not abort (the non-aborting set is
+`NON_ABORTING_PREFLIGHT_CODES` in `plugins/sp/scripts/batch-preflight.ts`; `--fix` repairs land in the report's `autoRepairs`) —
 any other strict error aborts), `--mode`
 `<sequential|parallel>` (default `sequential`; `parallel` fans out a proven-independent subset —
 see `execution-batch.md` § Parallel isolation), `--concurrency <n>`

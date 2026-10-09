@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
 import {
+    classifyFeaturePreflightFindings,
+    NON_ABORTING_PREFLIGHT_CODES,
     parsePreflightCliArgs,
     preflightTask,
     quickReadiness,
@@ -327,5 +329,40 @@ describe('batch-preflight CLI arg parsing (task 0814 R2)', () => {
         const skip = Bun.spawnSync(['bun', script, '--wbs', '1', '--status', 'done']);
         expect(skip.exitCode).toBe(2);
         expect(skip.stdout.toString()).toContain('skip A8');
+    });
+
+    test('1132 R4: feature preflight classifies L4.scenario-unverified and L4.verifying-incomplete-tasks as nonAborting', () => {
+        expect(NON_ABORTING_PREFLIGHT_CODES.has('L4.scenario-unverified')).toBe(true);
+        expect(NON_ABORTING_PREFLIGHT_CODES.has('L4.verifying-incomplete-tasks')).toBe(true);
+
+        const findings = [
+            { layer: 'L4', code: 'L4.verifying-incomplete-tasks', severity: 'error', message: 'incomplete tasks' },
+            { layer: 'L4', code: 'L4.scenario-unverified', severity: 'error', message: 'unverified' },
+            { layer: 'L2', code: 'L2.heading-level', severity: 'warning', message: 'heading warn' },
+        ];
+        const res = classifyFeaturePreflightFindings(findings);
+        expect(res.shouldAbort).toBe(false);
+        expect(res.aborting).toEqual([]);
+        expect(res.nonAborting.map((f) => f.code)).toEqual([
+            'L4.verifying-incomplete-tasks',
+            'L4.scenario-unverified',
+            'L2.heading-level',
+        ]);
+
+        // An unexpected error code aborts
+        const fatal = [
+            ...findings,
+            { layer: 'L1', code: 'L1.schema-validation', severity: 'error', message: 'bad schema' },
+        ];
+        const resFatal = classifyFeaturePreflightFindings(fatal);
+        expect(resFatal.shouldAbort).toBe(true);
+        expect(resFatal.aborting.map((f) => f.code)).toEqual(['L1.schema-validation']);
+
+        // CLI invocation
+        const script = join(import.meta.dir, '..', 'scripts', 'batch-preflight.ts');
+        const cliOk = Bun.spawnSync(['bun', script, '--classify-feature', JSON.stringify(findings)]);
+        expect(cliOk.exitCode).toBe(0);
+        const cliFail = Bun.spawnSync(['bun', script, '--classify-feature', JSON.stringify(fatal)]);
+        expect(cliFail.exitCode).toBe(1);
     });
 });

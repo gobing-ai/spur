@@ -803,6 +803,7 @@ export type {
 export {
     DependencyMutationError,
     DuplicateFollowUpError,
+    ParentFeatureStatusError,
     SectionMutationError,
     TASK_ACTION_COMMANDS,
     TaskCandidateInvalidError,

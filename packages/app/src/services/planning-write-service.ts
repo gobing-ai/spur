@@ -169,6 +169,10 @@ export interface WriteResult {
      * can repair the row. Absent when the hook succeeded or was not configured.
      */
     readonly bookkeepingError?: string;
+    /** 1132 R1: sections normalized at write time, e.g. `[{section: 'Requirements', kind: 'requirement', count: 2}]`. */
+    readonly normalized?: Array<{ section: string; kind: string; count: number }>;
+    /** 1132 R2: parent feature auto-reopened to `active` so the link could proceed. */
+    readonly featureReopened?: { id: string; from: string; to: string };
     /**
      * 1054 R1: message from a failed post-commit done close-audit reconciliation
      * (unforced close). Set by the transition path (task-transition.ts:298); the

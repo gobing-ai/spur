@@ -2162,7 +2162,11 @@ Only this section exists.
             // the L4 "missing feature_id" warning. Post-0339: placeholder
             // Requirements/AC trip L3 empty-section errors, so populate them too.
             const reqBody = join(cwd, 'req-strict-core.md');
-            await Bun.write(reqBody, 'R1. Done gate must not block on L4 warnings under --strict-core.\n');
+            // Box CHECKED on purpose: 1132 R1 normalizes the loose `R1. …` form into
+            // `- [ ] R1. …`, and an OPEN box is an L3 error at `--as done` (0800 R1) — it
+            // would block done on an L3 error and mask this test's actual subject (L4
+            // warnings must not block). Same reason the AC box below is checked.
+            await Bun.write(reqBody, '- [x] R1. Done gate must not block on L4 warnings under --strict-core.\n');
             await main(['task', 'update', wbs, '--section', 'Requirements', '--from-file', reqBody], {
                 cwd,
                 output: createCapturedOutput(),

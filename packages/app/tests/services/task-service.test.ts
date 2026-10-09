@@ -845,9 +845,11 @@ describe('TaskService', () => {
                 const first = children[0];
                 if (!first) throw new Error('Expected a result');
                 const raw = await isolateFs.readFile(first.ref.filePath);
-                expect(raw).toContain('- R1. First.');
-                expect(raw).toContain('- R2. Second.');
-                expect(raw).toContain('- R3. Third.');
+                // 1132 R1: the run-on paragraph bulletizes, then the write-time normalizer
+                // adds the checkbox marker to each loose `- R<n>.` item.
+                expect(raw).toContain('- [ ] R1. First.');
+                expect(raw).toContain('- [ ] R2. Second.');
+                expect(raw).toContain('- [ ] R3. Third.');
                 expect(MarkdownDocument.parse(raw, 'task').getSection('Requirements')).not.toContain(
                     'Keep empty until requirements are known',
                 );
@@ -2469,15 +2471,20 @@ describe('TaskService 0416: WBS collision guard + baseCounter', () => {
             return path;
         }
 
-        test('R-items without the checkbox marker warn without blocking', async () => {
-            const created = await svc.create({ title: 'Checkbox warn' });
+        test('R-items without the checkbox marker are normalized at write time (1132 R1)', async () => {
+            const created = await svc.create({ title: 'Checkbox normalize' });
             const src = await writeReq('no-box', '- R1 — first\n- R2. second');
 
             const result = await svc.updateSection(created.ref.id, 'Requirements', src);
 
-            expect((result.warnings ?? []).join('\n')).toContain('L3.requirements-checkbox');
+            // 1132 R1 supersedes the write-then-warn loop: the checkbox is added by the
+            // write-time normalizer, so the L3 advisory has nothing left to report.
+            expect((result.warnings ?? []).join('\n')).not.toContain('L3.requirements-checkbox');
+            expect(result.normalized).toEqual([{ section: 'Requirements', kind: 'requirement', count: 2 }]);
             const fs = createNodeFileSystem(root());
-            expect(await fs.readFile(result.ref.filePath)).toContain('- R2. second');
+            const landed = await fs.readFile(result.ref.filePath);
+            expect(landed).toContain('- [ ] R1. first');
+            expect(landed).toContain('- [ ] R2. second');
         });
 
         test('conforming `- [ ] R1.` items stay silent', async () => {

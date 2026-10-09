@@ -1049,7 +1049,11 @@ transitions:
       guard:
           kind: shell
           options:
-              command: '$spurBin task check $wbs --precheck'
+              # 1132 R4 (auto-fix-first): repair mechanically first, then judge fail-closed. The
+              # `--fix` output is captured to a run artifact so the batch report can carry the
+              # task-level repairs under `autoRepairs` (feature-level repairs come from the
+              # `feature check --fix` preflight); only `--precheck` decides this transition.
+              command: '$spurBin task check $wbs --fix --json > ".spur/run/$wbs-auto-repairs.json" 2>/dev/null ; $spurBin task check $wbs --precheck'
     - from: precheck
       to: failed
       terminalReason: failed-check

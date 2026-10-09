@@ -15,10 +15,13 @@ import {
     DuplicateFollowUpError,
     type EntityRef,
     ensurePipelineRunLink,
+    FEATURE_LIFECYCLE_PROFILE,
+    FeatureService,
     GuardDeniedError,
     type GuardedTransitionResult,
     loadSectionMatrix,
     type MigrationReport,
+    ParentFeatureStatusError,
     PlanningWriteService,
     prepareBatchTaskReady,
     prepareCreatedTaskReady,
@@ -183,6 +186,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .option(...SHARED_OPTIONS.featureTrace)
         .option('--parent <wbs>', 'Parent WBS for sub-task grouping')
         .option('--template <variant>', `Template variant (${TASK_VARIANTS.join('|')})`)
+        .option('--no-reopen', "Do not reopen a 'verifying' parent feature to 'active'")
         .option(...SHARED_OPTIONS.folderTasks)
         .option(
             '--dedupe-within <seconds>',
@@ -230,6 +234,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     featureId: options.feature,
                     parentWbs: options.parent,
                     template: options.template,
+                    noReopen: options.reopen === false,
                     // Dedup guard: default 300s window for every create (feature-scoped
                     // or unscoped). Explicit --dedupe-within overrides the window.
                     // --allow-duplicate-name disables the guard entirely. Unscoped
@@ -337,6 +342,13 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                         context.output.error(err.message);
                     }
                     context.setExitCode(3);
+                } else if (err instanceof ParentFeatureStatusError) {
+                    writeCreateJsonError(context, options, 'parent-feature-status', err.message, {
+                        featureId: err.featureId,
+                        status: err.status,
+                        activeSiblings: err.activeSiblings,
+                    });
+                    context.setExitCode(1);
                 } else if (err instanceof TaskCandidateInvalidError) {
                     // F21 task 0787 (R4): invalid candidate input → ONE parseable
                     // `--json` error (raw or enveloped) carrying the checker
@@ -459,6 +471,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
             '--no-lifecycle',
             'Suppress lifecycle workflow run creation (use during pipeline runs to avoid orphaned lifecycle runs)',
         )
+        .option('--no-reopen', "Do not reopen a 'verifying' parent feature to 'active'")
         .option('--assignee <spec-id>', 'Set the assignee frontmatter field to an agent spec id')
         .option(
             '--add-tag <tag>',
@@ -592,7 +605,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     const warnings: string[] = [];
                     let result: Awaited<ReturnType<typeof svc.updateField>> | undefined;
                     for (const [key, value] of fields) {
-                        result = await svc.updateField(wbs, key, value);
+                        result = await svc.updateField(wbs, key, value, options.reopen === false);
                         warnings.push(...(result.warnings ?? []));
                     }
                     if (result === undefined) return;
@@ -766,6 +779,13 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                 if (err instanceof SectionMutationError) {
                     writeJsonError(context.output, options, `[${err.code}] ${err.message}`, 'INTERNAL_ERROR');
                     context.setExitCode(err.code === 'usage' ? 2 : 3);
+                } else if (err instanceof ParentFeatureStatusError) {
+                    writeJsonError(context.output, options, err.message, 'VALIDATION_FAILED', {
+                        featureId: err.featureId,
+                        status: err.status,
+                        activeSiblings: err.activeSiblings,
+                    });
+                    context.setExitCode(1);
                 } else {
                     writeJsonError(context.output, options, String(err));
                     context.setExitCode(1);
@@ -1191,12 +1211,23 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     batchFile = tmpPath;
                     readiness = READY_DONE;
                 }
-                const { children, parentsWired } = await svc.batchCreate(batchFile);
+                const { children, parentsWired, featureReopened } = await svc.batchCreate(batchFile);
                 if (options.json) {
                     const ids = children.map((r) => r.ref.id);
+                    // 1132 R1: per-item write-time normalizations ride the batch result.
+                    const normalized = children
+                        .map((r, i) => ({ wbs: ids[i] ?? r.ref.id, normalized: r.normalized ?? [] }))
+                        .filter((row) => row.normalized.length > 0);
                     context.output.write(
                         toEnvelopeJson(
-                            { created: children.length, wbs: ids, parentsWired, ...readiness },
+                            {
+                                created: children.length,
+                                wbs: ids,
+                                parentsWired,
+                                ...(normalized.length > 0 ? { normalized } : {}),
+                                ...(featureReopened.some((r) => r !== undefined) ? { featureReopened } : {}),
+                                ...readiness,
+                            },
                             { enveloped: options.jsonEnvelope },
                         ),
                     );
@@ -1922,9 +1953,14 @@ export async function makeService(
     noLifecycle = false,
     provenanceBypass = false,
 ): Promise<TaskService> {
-    const foldersConfig = (await resolvePlanningFolders(context.fs)).foldersConfig;
+    const resolved = await resolvePlanningFolders(context.fs);
+    const foldersConfig = resolved.foldersConfig;
     // Normalize the override: relative and absolute spellings are the same folder (0522 R2).
     const tasksDir = context.fs.resolve(folderOverride ?? foldersConfig.active_folder);
+    // 1132 P1: the features dir comes from config, never from a basename heuristic on
+    // tasksDir — a phase folder (`docs/tasks5`) has a sibling `docs/features`, and the guard
+    // that reads it (R2) must not go inert just because the folder is not literally `tasks`.
+    const featuresDir = context.fs.resolve(resolved.featuresDir);
     const lifecycle = noLifecycle
         ? undefined
         : makeLifecycleAdapter(context, TASK_LIFECYCLE_PROFILE, { provenanceBypass });
@@ -1941,9 +1977,32 @@ export async function makeService(
             await reconcileExistingLifecycleRow(() => context.getDb(), TASK_LIFECYCLE_PROFILE, ref.id, to);
         },
     });
+    // 1132 R2: the parent-status guard reopens a `verifying` feature through the FEATURE
+    // lifecycle profile. It must not borrow this task's write service: that one carries
+    // `TASK_LIFECYCLE_PROFILE`, whose FSM declares no `verifying` state, so the transition
+    // ended as `FSMError: Cannot reseed run … to undeclared state "verifying"`. One
+    // FeatureService per makeService call, reusing the same resolved folders.
+    const featureWriteService = new PlanningWriteService({
+        fs: context.fs,
+        lifecycle: makeLifecycleAdapter(context, FEATURE_LIFECYCLE_PROFILE),
+        emitter: makePlanningEmitter(context),
+    });
+    const featureTransition = async (id: string, to: string) => {
+        const svc = new FeatureService({
+            fs: context.fs,
+            writeService: featureWriteService,
+            featuresDir,
+            tasksDir,
+            foldersConfig,
+        });
+        const wr = await svc.transition(id, to);
+        return { fromStatus: wr.fromStatus, toStatus: wr.toStatus };
+    };
     return new TaskService({
         fs: context.fs,
         tasksDir,
+        featuresDir,
+        featureTransition,
         writeService,
         getDb: () => context.getDb(),
         sectionMatrix: await loadSectionMatrix(context.cwd, { embeddedSchemas: EMBEDDED_SPUR_SCHEMAS }),

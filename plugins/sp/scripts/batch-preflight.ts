@@ -25,6 +25,51 @@ export type PreflightResult =
     | { action: 'run'; code?: string; reason?: string }
     | { action: 'skip'; code: string; reason: string; unmetDeps?: string[] };
 
+// ── Feature preflight classification (1132 R4) ──────────────────────────────
+/**
+ * 1132 R4: Codes that are expected pre-run states under `feature check --strict`
+ * and must not abort the batch. Structured classification in code (replaces prose-only).
+ */
+export const NON_ABORTING_PREFLIGHT_CODES = new Set<string>([
+    'L4.scenario-unverified',
+    'L4.verifying-incomplete-tasks',
+]);
+
+export interface FeaturePreflightFinding {
+    layer: string;
+    code: string;
+    severity: string;
+    message: string;
+    section?: string;
+}
+
+export interface FeaturePreflightClassification {
+    aborting: FeaturePreflightFinding[];
+    nonAborting: FeaturePreflightFinding[];
+    shouldAbort: boolean;
+}
+
+export function classifyFeaturePreflightFindings(findings: FeaturePreflightFinding[]): FeaturePreflightClassification {
+    const aborting: FeaturePreflightFinding[] = [];
+    const nonAborting: FeaturePreflightFinding[] = [];
+    for (const f of findings) {
+        if (f.severity === 'error') {
+            if (NON_ABORTING_PREFLIGHT_CODES.has(f.code)) {
+                nonAborting.push(f);
+            } else {
+                aborting.push(f);
+            }
+        } else {
+            nonAborting.push(f);
+        }
+    }
+    return {
+        aborting,
+        nonAborting,
+        shouldAbort: aborting.length > 0,
+    };
+}
+
 // ── Command-aware quick readiness (task 0814 R2) ──────────────────────────────
 // Read-only admission decision for the requested dev operation. Distinguishes
 // runnable / needs-refinement / blocked / skipped / invalid outcomes without
@@ -299,6 +344,8 @@ export interface PreflightCliArgs {
     requiredSections: string[];
     /** Sections actually present in the task. */
     presentSections: string[];
+    /** Feature findings to classify (1132 R4). */
+    classifyFeature: string | null;
 }
 
 export function parsePreflightCliArgs(argv: string[]): PreflightCliArgs {
@@ -314,6 +361,7 @@ export function parsePreflightCliArgs(argv: string[]): PreflightCliArgs {
     let filteredCount: number | null = null;
     let requiredSections: string[] = [];
     let presentSections: string[] = [];
+    let classifyFeature: string | null = null;
 
     for (let i = 0; i < argv.length; i++) {
         const a = argv[i];
@@ -346,7 +394,9 @@ export function parsePreflightCliArgs(argv: string[]): PreflightCliArgs {
                           .map((s) => s.trim())
                           .filter(Boolean);
         } else if (a === '--wbs') wbs = argv[++i] ?? wbs;
-        else if (a === '--status') status = argv[++i] ?? null;
+        else if (a === '--classify-feature') {
+            classifyFeature = argv[++i] ?? '[]';
+        } else if (a === '--status') status = argv[++i] ?? null;
         else if (a === '--deps') {
             const raw = argv[++i] ?? '';
             deps =
@@ -378,6 +428,7 @@ export function parsePreflightCliArgs(argv: string[]): PreflightCliArgs {
         filteredCount,
         requiredSections,
         presentSections,
+        classifyFeature,
     };
 }
 
@@ -392,6 +443,26 @@ Exit: 0 = run (or recovery hint printed); 2 = skip; 1 = usage.`;
 export function runPreflightCli(argv: string[]): { exitCode: number; stdout: string; stderr: string } {
     const args = parsePreflightCliArgs(argv);
     if (args.help) return { exitCode: 0, stdout: '', stderr: PREFLIGHT_CLI_USAGE };
+
+    // Feature findings classification (1132 R4)
+    if (args.classifyFeature !== null) {
+        try {
+            const findings = JSON.parse(args.classifyFeature);
+            const res = classifyFeaturePreflightFindings(Array.isArray(findings) ? findings : []);
+            return {
+                exitCode: res.shouldAbort ? 1 : 0,
+                stdout: `${JSON.stringify(res, null, 2)}\n`,
+                stderr: '',
+            };
+        } catch (e) {
+            return {
+                exitCode: 1,
+                stdout: '',
+                stderr: `Invalid JSON for --classify-feature: ${String(e)}`,
+            };
+        }
+    }
+
     if (!args.status) return { exitCode: 1, stdout: '', stderr: PREFLIGHT_CLI_USAGE };
 
     if (args.recovery) {

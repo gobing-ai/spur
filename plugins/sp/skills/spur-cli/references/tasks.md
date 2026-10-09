@@ -38,9 +38,9 @@ re-reading or re-tokenizing the task.
 
 | Verb | Purpose | Key flags |
 | ---- | ------- | --------- |
-| `create <title>` | Allocate a new task (race-safe WBS) | `--feature <id>` `--parent <wbs>` `--template <variant>` `--dedupe-within <s>` `--allow-duplicate-name` `--skip-ready` `--agent <selector>` `--folder` `--json` |
+| `create <title>` | Allocate a new task (race-safe WBS) | `--feature <id>` `--no-reopen` `--parent <wbs>` `--template <variant>` `--dedupe-within <s>` `--allow-duplicate-name` `--skip-ready` `--agent <selector>` `--folder` `--json` |
 | `show <wbs>` | Print one task's frontmatter + body | `--folder` `--json` |
-| `update <wbs> [status]` | Lifecycle transition, section replace, **or** frontmatter set | `--section <name> --from-file <path>` `--assignee <spec-id>` (exclusive with `--section`) `--feature <id>` `--priority <p>` `--ac-numbering task-local` `--ac-altitude <a>` `--estimate-hours <n>` `--no-lifecycle` `--force-done` `--reason <text>` `--provenance-bypass` `--verdict-dir <path>` `--folder` `--json` |
+| `update <wbs> [status]` | Lifecycle transition, section replace, **or** frontmatter set | `--section <name> --from-file <path>` `--assignee <spec-id>` (exclusive with `--section`) `--feature <id>` `--no-reopen` `--priority <p>` `--ac-numbering task-local` `--ac-altitude <a>` `--estimate-hours <n>` `--no-lifecycle` `--force-done` `--reason <text>` `--provenance-bypass` `--verdict-dir <path>` `--folder` `--json` |
 | `deps <wbs> <op> [values...]` | Mutate `dependencies[]` frontmatter array (ops: `set`, `add`, `remove`, `clear`) | `--folder` `--json` |
 | `sections <wbs> <op> [name]` | Initialize, add, or list canonical task sections (ops: `init`, `add`, `list`) | `--folder` `--json` |
 | `list` | List tasks, filtered | `--status <s>` `--phase <p>` `--parent <wbs>` `--feature <id>` `--folder` `--json` |
@@ -67,8 +67,11 @@ tasks folder. **Exit codes:** `0` success, `1` error, `2` invalid usage.
 spur task create "Add email validation" --feature H2 --parent 0040
 ```
 
-- **`--feature <id>`** wires traceability: it derives the task's `Background` from the feature's
-  `Goal` and records `feature_id` in frontmatter (L4 traceability reads this edge).
+- **`--feature <id>`** wires traceability: it derives the task's `Background` from the feature's `Goal`
+  and records `feature_id` in frontmatter (L4 traceability reads this edge). The parent feature's
+  status is checked before any write: `done`/`cancelled` is rejected with the status plus up to three
+  `active` sibling ids, and `verifying` is reopened to `active` through the guarded feature transition
+  (`featureReopened` in `--json`); `--no-reopen` suppresses only that reopen.
 - **`--parent <wbs>`** groups the new task under a parent WBS for sub-task decomposition.
 - **`--template <variant>`** selects the section-matrix variant that shapes the new file's sections:
   `standard·feature-impl·issue·review·meta·brainstorm`. The default is **`feature-impl` when

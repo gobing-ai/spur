@@ -40,7 +40,8 @@ spur task create [options] <title>
 
 | Flag | Description |
 |---|---|
-| `--feature <id>` | Feature ID for traceability and Goal→Background derivation |
+| `--feature <id>` | Feature ID for traceability and Goal→Background derivation; a `done`/`cancelled` parent is rejected with up to three `active` sibling ids, a `verifying` parent is reopened to `active` (`featureReopened` in `--json`) |
+| `--no-reopen` | Do not reopen a `verifying` parent feature to `active` — keeps the pre-1132 accept-as-is behavior; never bypasses the `done`/`cancelled` rejection |
 | `--parent <wbs>` | Parent WBS for sub-task grouping |
 | `--template <variant>` | Template variant: `standard · feature-impl · issue · review · meta · brainstorm` (default: `feature-impl` when `--feature` is given, else `standard`; unknown variant → exit 2) |
 | `--folder <path>` | Custom tasks folder |
@@ -128,7 +129,8 @@ resolve to a spec under `.spur/agents/` — otherwise exit `2` naming the unknow
 | `--section <name>` | Section name to write (requires `--from-file`; body-only format) |
 | `--from-file <path>` | File to read section body from (requires `--section`) |
 | `--append` | With `--section`: append the new body after the existing section content (existing content + one blank line + new body; surrounding whitespace trimmed) instead of replacing it wholesale (task 1057). An empty/missing section is created. Requires `--section`; section names are case-sensitive |
-| `--feature <id>` | Set the `feature_id` frontmatter field (allow-listed post-create path) |
+| `--feature <id>` | Set the `feature_id` frontmatter field (allow-listed post-create path); same parent-status guard as `create`: `done`/`cancelled` rejected, `verifying` reopened to `active` (`featureReopened` in `--json`) |
+| `--no-reopen` | Do not reopen a `verifying` parent feature to `active` on this link |
 | `--priority <p>` | Set the `priority` frontmatter field (`P0`–`P3`) |
 | `--ac-numbering <mode>` | Set the `ac_numbering` frontmatter field (task-local) — opts the task into the Requirements↔AC coverage check |
 | `--ac-altitude <mode>` | Set the `ac_altitude` frontmatter field: `graduating` (default; DD-09 feature-AC subset rule enforced) or `task-local` (skip it — task scenarios are intentionally not feature ship criteria) |

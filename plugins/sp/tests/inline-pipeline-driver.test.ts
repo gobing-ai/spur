@@ -272,6 +272,8 @@ function runInlineSmoke(
                 let command = expand(action.options?.command ?? '', vars);
                 // 1002 R4: the precheck→implement guard is `$spurBin task check $wbs --precheck`;
                 // the fake spur handles `task check` (exit 0), so no status-file simulation remains.
+                // 1132 R4: the guard first runs a repair pass (`task check $wbs --fix`), also
+                // handled by the fake — it therefore consumes one CHECK_COUNTER slot.
                 // 1003 R2: the verify-stage lint gate is `spur task verdict` itself — the fake
                 // spur already handles `task verdict`, no separate lint step remains to simulate.
                 // 0823: the quality gate is a plugin script (quality-gate.ts run|recheck) the
@@ -397,7 +399,10 @@ describe('0503 interactive inline pipeline driver smoke', () => {
     });
 
     test('the record-to-done task-check guard blocks a failed structural check', () => {
-        const result = runInlineSmoke({ failCheckAt: 2 });
+        // 1132 R4 added the auto-fix-first repair check to the precheck guard, so the
+        // pipeline now issues check #1 (`--fix`) and #2 (`--precheck`) before the
+        // record→done gate at #3 — the positional failure moved with it.
+        const result = runInlineSmoke({ failCheckAt: 3 });
 
         expect(result.terminal).toBe('failed');
         expect(result.hostStages).toEqual(['implement', 'review', 'verify']);

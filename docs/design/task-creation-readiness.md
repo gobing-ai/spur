@@ -3,7 +3,7 @@ kind: design
 title: "Task creation and implementation readiness"
 status: implemented
 created_at: 2026-09-06
-updated_at: 2026-09-06
+updated_at: 2026-10-08
 related: [F21]
 tags: [contract, F21, planning]
 adr: ADR-109
@@ -101,6 +101,48 @@ that the design is correct.
 Missing, stale, failed or unprepared-skip evidence yields the existing ready-refinement handoff.
 Ready specifications retain dependency ordering; prerequisites are enforced by existing execution
 gates. The monorepo handoff and seeded workflow fallback have the same outcome contract.
+
+## Write-time normalization and the parent-status link guard (1132)
+
+Three write-path behaviors close the write→check→rewrite loop and the terminal-parent link hole.
+Normalization is **lossless**: it rewrites markers and numbering punctuation, never the author's
+words.
+
+| Surface | Behavior | Report field |
+| --- | --- | --- |
+| `spur task update <wbs> --section Requirements --from-file` | Loose R-item shapes (`R1:`, `R1 -`, `**R1**`, `**R1.**`, missing checkbox) become `- [ ] R1. …`, R-number and text unchanged | `normalized: [{section, kind, count}]` |
+| `spur task update <wbs> --section "Acceptance Criteria" --from-file` | Bare `- AC1 …` bullets become `- [ ] AC1 — …`; when **every** item is a gherkin `Scenario:` carrying `(req: Rn)`, frontmatter `ac_altitude: task-local` + `ac_numbering: task-local` are set | `normalized` (kind `ac-altitude` for the implied frontmatter) |
+| `spur task batch-create` | Requirements and AC bodies normalize through the same predicate before the files commit | per-item `normalized` |
+
+The normalizer is one pure function, `normalizeTaskSection` (`packages/app/src/services/
+task-section-normalizer.ts`), and it shares one "is this an R-item" answer with the checker: it
+consumes the R-item regular expression exported from `structural-repair.ts` (the same predicate
+`task check --fix` uses) as its detection fallback, and it applies that module's
+"already checkboxed → byte-untouched" skip. Its own grammar is deliberately a **superset** of what
+the checker flags — the checker does not flag `R2: text` or a bare `**R3**`, and normalizing those
+loose authoring shapes is exactly the point of R1 — so write-time normalization repairs more than
+`task check --fix` would, never less.
+
+**Parent-status link guard.** `task create --feature` / `task update --feature` resolve the parent
+feature and act on its status **before** any write (service layer, `TaskService`, so HTTP writers
+get the same guard):
+
+| Parent status | Outcome |
+| --- | --- |
+| `done` / `cancelled` | Rejected — structured error naming the status and up to three `active` siblings in the same ID group; no task file is written |
+| `verifying` | Reopened to `active` through the existing guarded feature transition (never a raw frontmatter write); result carries `featureReopened: {id, from: "verifying", to: "active"}` |
+| anything else | Link proceeds unchanged |
+
+**Flag decision — `--no-reopen` (operator-consented, 2026-10-08).** R2's authoring left the flag to
+explicit consent under the public-surface rule (`AGENTS.md` § Spur CLI surface). Consent was granted,
+so `--no-reopen` ships on `task create` / `task update`: it restores the pre-1132 behavior by
+accepting a `verifying` parent **without** reopening it, and never bypasses the `done`/`cancelled`
+rejection. Without the flag the reopen is automatic.
+
+**`feature check --fix` reopen.** A `verifying` or `done` feature that still has linked live tasks
+(`backlog|todo|wip|testing|blocked`) is reopened to `active` and reported as repair kind
+`feature-reopen`; with no live tasks it is a no-op. Feature-check severities are untouched —
+`L4.verifying-incomplete-tasks` stays a warning before `done`.
 
 ## Delivery
 

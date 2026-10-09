@@ -28,7 +28,14 @@ import { type CheckFindings, FINDING_CODES, type MatrixEntry } from './planning-
 
 /** One applied repair, rendered by the CLI in the per-file report. */
 export interface StructuralRepair {
-    kind: 'heading-level' | 'section-order' | 'missing-section' | 'requirement-checkbox' | 'disallowed-section';
+    // `feature-reopen` (1132 R3): the repair restores the linked-task lifecycle, not text.
+    kind:
+        | 'heading-level'
+        | 'section-order'
+        | 'missing-section'
+        | 'requirement-checkbox'
+        | 'disallowed-section'
+        | 'feature-reopen';
     section: string;
     detail: string;
 }
@@ -99,13 +106,16 @@ function scanHeadings(body: string, level: number): HeadingLine[] {
     return headings;
 }
 
+/** R-numbered requirement line shape (1132 R1): bullet optional, emphasis runs allowed. */
+export const REQUIREMENT_LINE_RE = /^(\s*)([-*](?![*_]))?\s*[*_]{0,2}R(\d+)\.?[*_]{0,2}(\s.*)?$/;
+
 /** R-numbered requirement lines lacking the `[ ] ` checkbox marker. */
 function requirementsMissingCheckbox(body: string): Array<{ index: number; bullet: string }> {
     const out: Array<{ index: number; bullet: string }> = [];
     for (const [i, line] of body.split('\n').entries()) {
         if (/\[[ xX]\]/.test(line)) continue;
         // A bullet `*` must not be the first char of a `**R1**` emphasis run.
-        const m = /^(\s*)([-*](?![*_]))?\s*[*_]{0,2}R\d+\.?[*_]{0,2}(\s.*)?$/.exec(line);
+        const m = REQUIREMENT_LINE_RE.exec(line);
         if (m !== null) out.push({ index: i, bullet: m[2] ?? '' });
     }
     return out;

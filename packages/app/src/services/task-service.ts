@@ -38,6 +38,7 @@ import {
     readFeatureAcBody,
     taskCoversAnyFeatureScenario,
 } from './feature-check';
+import { FeatureService } from './feature-service';
 import { ensurePipelineRunLink, TASK_FORWARD_CHAIN } from './pipeline-run-link';
 import { type CheckFindings, FINDING_CODES, type SectionMatrix } from './planning-check-base';
 import type { EntityRef, PlanningEventName, PlanningWriteService, WriteResult } from './planning-write-service';
@@ -60,6 +61,7 @@ import {
     renderSolutionFromDiff,
     renderTesting,
 } from './task-record';
+import { normalizeTaskSection } from './task-section-normalizer';
 import { evaluateTaskSize } from './task-size-precheck';
 import { reconcileDoneCloseAudit, runTransitionCheckGate } from './task-transition';
 import type { VerifyVerdict as CanonicalVerifyVerdict } from './verify-verdict';
@@ -176,6 +178,42 @@ export class TaskCandidateInvalidError extends Error {
 }
 
 /**
+ * 1132 R2: a task cannot link to a terminal parent feature. Carries the offending
+ * status and up to three `active` siblings in the same ID group so the CLI/agent can
+ * re-point the link without a second lookup.
+ */
+export class ParentFeatureStatusError extends Error {
+    readonly featureId: string;
+    readonly status: string;
+    readonly activeSiblings: string[];
+    constructor(featureId: string, status: string, activeSiblings: string[]) {
+        const group = featureId[0] ?? '';
+        const hint =
+            activeSiblings.length > 0
+                ? `active siblings in group ${group}: ${activeSiblings.join(', ')}`
+                : `no active sibling features in group ${group} — reopen ${featureId} to active first`;
+        super(
+            `parent-feature-status: feature ${featureId} is ${status}; new tasks cannot link to a ` +
+                `done/cancelled parent. ${hint}`,
+        );
+        this.name = 'ParentFeatureStatusError';
+        this.featureId = featureId;
+        this.status = status;
+        this.activeSiblings = activeSiblings;
+    }
+}
+
+/**
+ * The `features/` directory that belongs to a tasks directory (1132 P1). A phase folder
+ * (`docs/tasks5`) is still a tasks dir, so the rule is "parent of the tasks dir", never a
+ * basename match on `/tasks` — the latter silently resolved to the tasks dir itself for every
+ * non-default phase folder, leaving 1132 R2's parent guard inert in the real layout.
+ */
+export function featuresDirFor(tasksDir: string): string {
+    return `${dirname(tasksDir)}/features`;
+}
+
+/**
  * Resolved shape of a candidate task awaiting its WBS (F21 task 0787). Everything
  * create/batchCreate need to render the file, decided BEFORE the create lock so
  * content validation cannot race allocation. `fm` is the frontmatter OBJECT —
@@ -186,6 +224,8 @@ interface TaskCandidateShape {
     readonly status: string;
     readonly fm: Record<string, unknown>;
     readonly taskBodies: Partial<Record<TaskSection, string>>;
+    /** 1132 R1: normalizations applied while resolving the bodies (reported via `--json`). */
+    readonly normalized?: Array<{ section: string; kind: string; count: number }>;
 }
 
 /**
@@ -256,6 +296,22 @@ export interface TaskServiceContext {
     writeService: PlanningWriteService;
     /** Tasks folder path (active_folder from config; see DEFAULT_TASKS_DIR). */
     tasksDir: string;
+    /**
+     * Features folder path (`features.dir` from config). Omitted → the sibling
+     * `features/` directory of {@link tasksDir} (see `featuresDirFor`). Callers that
+     * resolve planning folders must pass it: the sibling heuristic only holds for the
+     * default `docs/tasks`-style layout, not for a phase folder like `docs/tasks5`.
+     */
+    featuresDir?: string;
+    /**
+     * 1132 R2: reopen a feature through ITS OWN lifecycle FSM. Required on every surface
+     * that can write a feature: the feature profile declares the `verifying → active`
+     * edge, while this service's write service carries the TASK profile, whose FSM has no
+     * `verifying` state at all — reusing it for a feature transition fails with
+     * `FSMError: … undeclared state "verifying"`. Omitted → {@link TaskService}'s own
+     * FeatureService (a caller that resolved neither, e.g. a bare service test).
+     */
+    featureTransition?: (id: string, to: string) => Promise<{ fromStatus?: string; toStatus?: string } | undefined>;
     /** Project name for atomic writes. */
     projectName?: string;
     /** Actor identifier for history lines (default: 'system'). */
@@ -591,9 +647,18 @@ export class TaskService {
         }
 
         const taskBodies: Partial<Record<TaskSection, string>> = {};
+        const normalized: Array<{ section: string; kind: string; count: number }> = [];
+        // 1132 R1 (review 2, P3): a normalization may imply frontmatter (gherkin-only AC ⇒
+        // `ac_altitude`/`ac_numbering: task-local`). Carrying only `normalized` reported a change
+        // that was never applied, so the DD-09 subset rule stayed armed and the `(req: Rn)`
+        // coverage opt-in stayed off on the primary decomposition verb.
+        let impliedFrontmatter: Record<string, string> = {};
         if (background !== '') taskBodies.Background = background;
         if ((input.requirements ?? '').trim() !== '') {
-            taskBodies.Requirements = bulletizeRequirements(input.requirements ?? '');
+            // 1132 R1: batch-create normalizes loose requirement shapes at write time.
+            const nb = normalizeTaskSection('Requirements', bulletizeRequirements(input.requirements ?? ''));
+            taskBodies.Requirements = nb.body;
+            normalized.push(...nb.normalized);
         }
         if ((input.design ?? '').trim() !== '') {
             taskBodies.Design = (input.design ?? '').trim();
@@ -602,7 +667,13 @@ export class TaskService {
             taskBodies.Plan = (input.plan ?? '').trim();
         }
         if ((input.acceptanceCriteria ?? '').trim() !== '') {
-            taskBodies['Acceptance Criteria'] = normalizeAcFence((input.acceptanceCriteria ?? '').trim());
+            const nb = normalizeTaskSection(
+                'Acceptance Criteria',
+                normalizeAcFence((input.acceptanceCriteria ?? '').trim()),
+            );
+            taskBodies['Acceptance Criteria'] = nb.body;
+            normalized.push(...nb.normalized);
+            if (nb.frontmatter !== undefined) impliedFrontmatter = { ...impliedFrontmatter, ...nb.frontmatter };
         }
         if (taskBodies.Background === undefined) {
             taskBodies.Background = `Captured from the creation title: "${input.title}".`;
@@ -633,6 +704,7 @@ export class TaskService {
             template: variant,
             created_at: now,
             updated_at: now,
+            ...impliedFrontmatter,
             ...(input.featureId !== undefined ? { feature_id: input.featureId } : {}),
             ...(input.parentWbs !== undefined ? { parent_wbs: input.parentWbs } : {}),
             ...(input.priority !== undefined ? { priority: input.priority } : {}),
@@ -659,7 +731,9 @@ export class TaskService {
             status = probeFindings.some((f) => f.severity === 'error') ? 'backlog' : 'todo';
         }
 
-        return { variant, status, fm: fmFor(status), taskBodies };
+        // 1132 R1: carry the normalizations applied while building the bodies so the CLI can
+        // report them (`normalized`) — `create` and `batchCreate` both read this.
+        return { variant, status, fm: fmFor(status), taskBodies, ...(normalized.length > 0 ? { normalized } : {}) };
     }
 
     /**
@@ -679,6 +753,83 @@ export class TaskService {
         }
         const checker = new TaskCheckService(this.ctx.fs, matrix);
         return checker.checkContentPolicy(raw, wbs, { asStatus }).findings;
+    }
+
+    /**
+     * The features dir for this corpus: the configured one, else the `features/` sibling
+     * of the active tasks dir. The sibling rule must not key on the folder BASENAME — a
+     * phase folder (`docs/tasks5`) is still a tasks dir, and its sibling is `docs/features`.
+     */
+    private deriveFeaturesDir(): string {
+        return this.ctx.featuresDir ?? featuresDirFor(this.ctx.tasksDir);
+    }
+
+    /**
+     * The {@link FeatureService} this task service reads and reopens features through — built
+     * from the same resolved dirs the feature verbs use, so lifecycle validation matches.
+     */
+    private newFeatureService(): FeatureService {
+        return new FeatureService({
+            fs: this.ctx.fs,
+            writeService: this.writeService,
+            featuresDir: this.deriveFeaturesDir(),
+            tasksDir: this.ctx.tasksDir,
+        });
+    }
+
+    /**
+     * 1132 R2: the parent feature's status, or `undefined` when it cannot be resolved (no
+     * features dir, unknown id). Split from {@link guardParentFeature} so batch-create can
+     * validate every parent BEFORE reopening any of them.
+     */
+    private async readParentFeatureStatus(featureId: string): Promise<string | undefined> {
+        try {
+            const summaries = await this.newFeatureService().list();
+            return summaries.find((f) => f.id === featureId)?.status;
+        } catch {
+            return undefined; // no readable features dir → nothing to guard
+        }
+    }
+
+    /**
+     * 1132 R2: parent-status link guard for task→feature links (`create --feature`,
+     * `update --feature`). A `done`/`cancelled` parent cannot accept new work — reject
+     * with up to three active sibling suggestions. A `verifying` parent is reopened to
+     * `active` through the guarded FeatureService.transition (lifecycle validation,
+     * history, event) and the reopen is reported as `featureReopened`. `noReopen`
+     * (`--no-reopen`) restores the accept-as-is behavior. Unknown features are left to
+     * the caller's own validation.
+     */
+    private async guardParentFeature(featureId: string, noReopen?: boolean): Promise<WriteResult['featureReopened']> {
+        const svc = this.newFeatureService();
+        let summaries: Awaited<ReturnType<typeof svc.list>>;
+        try {
+            summaries = await svc.list();
+        } catch {
+            return undefined; // no readable features dir → nothing to guard
+        }
+        const feature = summaries.find((f) => f.id === featureId);
+        if (feature === undefined) return undefined;
+        if (feature.status === 'verifying') {
+            if (noReopen === true) return undefined;
+            // The caller's port carries the FEATURE lifecycle profile; the local fallback
+            // (service-level tests, callers that resolved nothing) uses this service's own
+            // FeatureService.
+            const wr =
+                this.ctx.featureTransition !== undefined
+                    ? await this.ctx.featureTransition(featureId, 'active')
+                    : await svc.transition(featureId, 'active');
+            return { id: featureId, from: wr?.fromStatus ?? 'verifying', to: wr?.toStatus ?? 'active' };
+        }
+        if (feature.status === 'done' || feature.status === 'cancelled') {
+            const siblings: string[] = [];
+            for (const f of summaries) {
+                if (siblings.length >= 3) break;
+                if (f.id !== featureId && f.id[0] === featureId[0] && f.status === 'active') siblings.push(f.id);
+            }
+            throw new ParentFeatureStatusError(featureId, feature.status, siblings);
+        }
+        return undefined;
     }
 
     /**
@@ -733,6 +884,12 @@ export class TaskService {
          * envelope (task 0510 post-mortem).
          */
         dedupeWithinSec?: number | null;
+        /**
+         * 1132 R2: keep today's behavior when the parent feature is `verifying` —
+         * accept the link WITHOUT reopening the feature to `active`. Default (off)
+         * reopens via the guarded FeatureService.transition and reports it.
+         */
+        noReopen?: boolean;
     }): Promise<WriteResult> {
         const folder = this.ctx.tasksDir;
 
@@ -749,9 +906,18 @@ export class TaskService {
         });
         this.validateCandidateOrThrow(params.title, shape);
 
+        // 1132 R2: the parent-status link guard runs AFTER candidate validation and BEFORE the
+        // write — a create that fails validation never touches the parent. It runs inside the
+        // create lock, immediately after the dedupe refusal, so a refused duplicate also cannot
+        // leave a `verifying` parent reopened: away from the lock the dedupe check would have to
+        // run twice. A terminal parent still rejects before anything lands. Residual: an
+        // allocation failure after this point can leave the parent reopened; that is an I/O
+        // fault (WBS collision / disk), and re-running the create is the documented recovery.
+        let featureReopened: WriteResult['featureReopened'];
+
         // WBS allocation + write run inside the create-lock so concurrent
         // creates cannot allocate the same number and clobber each other.
-        return this.writeService.createAllocated(folder, async () => {
+        const created = await this.writeService.createAllocated(folder, async () => {
             // Dedup guard (task 0341 R4, extended to unscoped creates): when a dedupe
             // window is requested, refuse creation if an existing task in the same
             // collision scope (same feature, or no feature for unscoped creates) has
@@ -765,6 +931,9 @@ export class TaskService {
                     throw new DuplicateFollowUpError(collision.wbs, collision.name, params.title);
                 }
             }
+            if (params.featureId !== undefined) {
+                featureReopened = await this.guardParentFeature(params.featureId, params.noReopen);
+            }
             const slug = this.slugify(params.title);
             const { wbs, filePath } = await this.allocateWbsChecked(slug);
 
@@ -773,6 +942,14 @@ export class TaskService {
             const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder };
             return { ref, content };
         });
+        // 1132 R1/R2: surface normalizations recorded on the shape and the guarded
+        // parent reopen without changing the write-service return contract.
+        if (featureReopened === undefined && shape.normalized === undefined) return created;
+        return {
+            ...created,
+            ...(featureReopened !== undefined ? { featureReopened } : {}),
+            ...(shape.normalized !== undefined ? { normalized: shape.normalized } : {}),
+        };
     }
 
     // ── show ──
@@ -830,7 +1007,7 @@ export class TaskService {
         return await this.writeService.updateFrontmatter(ref, 'assignee', agentId);
     }
 
-    async updateField(wbs: string, key: string, value: string): Promise<WriteResult> {
+    async updateField(wbs: string, key: string, value: string, noReopen?: boolean): Promise<WriteResult> {
         // `done_forced` / `done_reason` are set by the CLI verdict-guard override
         // path (R3, task 0292) — they record an operator's explicit decision to
         // advance a non-PASS task to `done`. Status itself stays on `updateStatus`.
@@ -867,7 +1044,11 @@ export class TaskService {
         }
         const filePath = await this.resolveTaskFile(wbs);
         const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder: this.ctx.tasksDir };
+        // 1132 R2: the same guard apply-time as create — a terminal feature rejects the
+        // re-point, a verifying feature reopens first.
+        const featureReopened = key === 'feature_id' ? await this.guardParentFeature(value, noReopen) : undefined;
         let result = await this.writeService.updateFrontmatter(ref, key, fmValue);
+        if (featureReopened !== undefined) result = { ...result, featureReopened };
         // Attaching a feature AFTER the AC was written is the common idea-pipeline
         // order; re-run the DD-09 subset warning against the AC already on disk so the
         // orphan scenarios surface now rather than at the next `task check`.
@@ -1245,7 +1426,11 @@ export class TaskService {
     async updateSection(wbs: string, sectionName: string, sourceFile: string, append = false): Promise<WriteResult> {
         const filePath = await this.resolveTaskFile(wbs);
         const raw = await this.ctx.fs.readFile(sourceFile);
-        const body = stripLeadingSectionHeader(raw, sectionName);
+        // 1132 R1: normalize lossless authoring shapes at write time (Requirements / AC)
+        // so write-time and `task check` share one predicate and the write→check→rewrite
+        // loop disappears. Gherkin-only AC bodies instead imply the task-local frontmatter.
+        const normalization = normalizeTaskSection(sectionName, stripLeadingSectionHeader(raw, sectionName));
+        const body = normalization.body;
         // R1 (0510): an explicit Solution update must carry a recognized `file:line`
         // citation. Reject before any write so an invalid authored Solution never lands
         // on disk for a later lifecycle check to reject — the same predicate the L3
@@ -1261,6 +1446,16 @@ export class TaskService {
         }
         const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder: this.ctx.tasksDir };
         let result = await this.writeService.updateSection(ref, sectionName, body, append);
+
+        // 1132 R1: report what was normalized, and let gherkin-only AC imply the
+        // task-local flags (skipped when already set — idempotent re-writes stay no-ops).
+        if (normalization.normalized.length > 0) result = { ...result, normalized: normalization.normalized };
+        if (normalization.frontmatter !== undefined) {
+            const fm = MarkdownDocument.parse(await this.ctx.fs.readFile(filePath), 'task').frontmatterData;
+            for (const [k, v] of Object.entries(normalization.frontmatter)) {
+                if (fm?.[k] !== v) await this.writeService.updateFrontmatter(ref, k, v);
+            }
+        }
 
         if (sectionName === 'Acceptance Criteria') {
             const warnings = await this.checkAcSubsetWarning(filePath, body);
@@ -1738,7 +1933,12 @@ export class TaskService {
      *   order as the input array. `parentsWired` — one {@link ParentWireResult}
      *   per distinct parent touched by the wire-up pass.
      */
-    async batchCreate(jsonPath: string): Promise<{ children: WriteResult[]; parentsWired: ParentWireResult[] }> {
+    async batchCreate(jsonPath: string): Promise<{
+        children: WriteResult[];
+        parentsWired: ParentWireResult[];
+        /** 1132 R2: parent features reopened to `active` so the batch links could proceed. */
+        featureReopened: Array<WriteResult['featureReopened']>;
+    }> {
         const raw = await this.ctx.fs.readFile(jsonPath);
         let parsed: unknown;
         try {
@@ -1790,6 +1990,29 @@ export class TaskService {
             }
             prepared.push({ item, shape });
         }
+        // 1132 R2 (review P4): the parent-status link guard covers batch-create too — the
+        // origin defect was a batch runnable against a `verifying`/terminal parent, and it is
+        // reachable through this verb as well. Two phases so a terminal parent on a LATER feature
+        // cannot abort a batch whose earlier parent was already reopened: phase 1 rejects with
+        // `noReopen` (terminal parents throw, nothing is reopened), phase 2 reopens the verifying
+        // parents of the surviving set.
+        const distinctFeatures = [
+            ...new Set(
+                prepared
+                    .map(({ item }) => item.feature_id)
+                    .filter((f): f is string => typeof f === 'string' && f !== ''),
+            ),
+        ];
+        const parentStatuses = new Map<string, string | undefined>();
+        for (const fid of distinctFeatures) {
+            await this.guardParentFeature(fid, true); // reject-only pass
+            parentStatuses.set(fid, await this.readParentFeatureStatus(fid));
+        }
+        const reopened: Array<WriteResult['featureReopened']> = [];
+        for (const fid of distinctFeatures) {
+            if (parentStatuses.get(fid) !== 'verifying') continue;
+            reopened.push(await this.guardParentFeature(fid));
+        }
         const writeResults: WriteResult[] = [];
         const createdRefs: EntityRef[] = [];
 
@@ -1811,7 +2034,7 @@ export class TaskService {
         }
 
         const parentsWired = await this.wireUpParents(this.collectDistinctParents(items));
-        return { children: writeResults, parentsWired };
+        return { children: writeResults, parentsWired, featureReopened: reopened };
     }
 
     /**
@@ -1879,7 +2102,7 @@ export class TaskService {
         // Allocate + write inside the create-lock (race-safe WBS allocation).
         // Content was resolved and content-validated up-front by batchCreate
         // (F21 task 0787 R2) — rendering here only stamps the real allocated WBS.
-        return this.writeService.createAllocated(folder, async () => {
+        const created = await this.writeService.createAllocated(folder, async () => {
             const slug = this.slugify(item.name);
             const { wbs, filePath } = await this.allocateWbsChecked(slug);
 
@@ -1888,6 +2111,8 @@ export class TaskService {
             const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder };
             return { ref, content };
         });
+        // 1132 R1: report the write-time normalizations for this batch item.
+        return shape.normalized !== undefined ? { ...created, normalized: shape.normalized } : created;
     }
 
     // ── refresh ──
@@ -2205,7 +2430,7 @@ export class TaskService {
     }
 
     private async deriveBackground(featureId: string): Promise<string> {
-        const featuresDir = this.ctx.tasksDir.replace(/\/tasks$/, '/features');
+        const featuresDir = this.deriveFeaturesDir();
         let entries: string[] = [];
         try {
             entries = await this.ctx.fs.readDir(featuresDir);

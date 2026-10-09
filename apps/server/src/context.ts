@@ -490,6 +490,17 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
                         },
                     }),
                     tasksDir: folders.tasksDir,
+                    // 1132 P1: same resolved features dir the feature service uses — without it
+                    // the parent-status link guard falls back to a sibling heuristic that is
+                    // wrong for a phase folder or a non-sibling `features.dir`.
+                    featuresDir: folders.featuresDir,
+                    // 1132 R2: reopen through the FEATURE lifecycle profile via this context's own
+                    // feature service — the task write service carries the task profile, whose FSM
+                    // has no `verifying` state, so reusing it fails the reopen.
+                    featureTransition: async (id: string, to: string) => {
+                        const wr = await this.featureService().transition(id, to);
+                        return { fromStatus: wr.fromStatus, toStatus: wr.toStatus };
+                    },
                     foldersConfig: folders.foldersConfig,
                     projectName: 'spur',
                     ...(options.sectionMatrix !== undefined ? { sectionMatrix: options.sectionMatrix } : {}),

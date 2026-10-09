@@ -206,6 +206,11 @@ export class FeatureCheckService extends PlanningCheckService {
             asStatus?: string;
             /** Repair structural findings (heading presence/level/order, R-item checkboxes) in place before validating (task 0619). */
             fix?: boolean;
+            /** 1132 R3: transition callback for feature-reopen repair under --fix. */
+            transitionPort?: (
+                id: string,
+                to: string,
+            ) => Promise<{ fromStatus?: string; toStatus?: string } | undefined>;
             /**
              * Inventory-report text (1004 R1): cross-check the report's
              * `## Requirement inventory` items against the feature's AC
@@ -230,6 +235,61 @@ export class FeatureCheckService extends PlanningCheckService {
                 await this.fs.writeFile(filePath, fixed.content);
                 repairs = fixed.repairs;
                 raw = fixed.content;
+            }
+
+            // 1132 R3: feature check --fix reopens a verifying or done feature to active
+            // when it has linked live tasks (backlog|todo|wip|testing|blocked).
+            if (probeStatus === 'verifying' || probeStatus === 'done') {
+                const taskScanDirs =
+                    options?.tasksDirs && options.tasksDirs.length > 0
+                        ? options.tasksDirs
+                        : options?.tasksDir
+                          ? [options.tasksDir]
+                          : [];
+                let hasLiveTask = false;
+                for (const td of taskScanDirs) {
+                    try {
+                        const entries = await this.fs.readDir(td);
+                        for (const entry of entries) {
+                            if (!/^\d{4}_.+\.md$/.test(entry)) continue;
+                            try {
+                                const tr = await this.fs.readFile(`${td}/${entry}`);
+                                const tDoc = MarkdownDocument.parse(tr, 'task');
+                                const tfm = tDoc.frontmatterData ?? {};
+                                const tfid =
+                                    (tfm.feature_id as string | undefined) ?? (tfm['feature-id'] as string | undefined);
+                                if (tfid === featureId) {
+                                    const st = (tfm.status as string | undefined) ?? 'backlog';
+                                    if (['backlog', 'todo', 'wip', 'testing', 'blocked'].includes(st)) {
+                                        hasLiveTask = true;
+                                        break;
+                                    }
+                                }
+                            } catch {
+                                // ignore unparseable
+                            }
+                        }
+                        if (hasLiveTask) break;
+                    } catch {
+                        // ignore unreadable dir
+                    }
+                }
+                if (hasLiveTask) {
+                    if (options?.transitionPort !== undefined) {
+                        await options.transitionPort(featureId, 'active');
+                        raw = await this.fs.readFile(filePath);
+                    } else {
+                        const docToReopen = MarkdownDocument.parse(raw, 'feature');
+                        docToReopen.setFrontmatterField('status', 'active');
+                        raw = docToReopen.serialize();
+                        await this.fs.writeFile(filePath, raw);
+                    }
+                    repairs.push({
+                        kind: 'feature-reopen',
+                        section: 'Frontmatter',
+                        detail: `reopened feature ${featureId} (${probeStatus} -> active) due to linked live task(s)`,
+                    });
+                }
             }
         }
         const findings: CheckFeatureFindings[] = [];

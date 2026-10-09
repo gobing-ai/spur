@@ -76,21 +76,33 @@ dependency resolution, or worktree task execution:
 
 ```bash
 # monorepo source; installed projects use their resolved `spur` binary
+# 1132 R4 (auto-fix-first): repair before checking — machine repairs land first, the
+# strict check then judges the repaired file. `--fix` output is collected as
+# `autoRepairs` in the batch report.
+bun run apps/cli/src/index.ts feature check <id> --fix --json
 bun run apps/cli/src/index.ts feature check <id> --strict --json
 ```
 
 - **Abort shape.** A non-zero check aborts the batch immediately: verdict `aborted`, zero attempted
   tasks, and the structured feature findings (the `--json` finding list) reported verbatim. This is
-  the same abort vocabulary as cycle / unknown selector (Step 4/Step 5). **Scoped to structural
-  findings:** `L4.scenario-unverified` is the expected state of any not-yet-run feature (its
-  covering tasks have no PASS verdicts yet) and `L4.verifying-incomplete-tasks` is the expected
-  state of a `verifying` feature that gained new live tasks (a warning in `FeatureCheckService`
-  until `done`); `--strict` elevates both to error, so they are reported verbatim but do **not**
-  abort the batch; every other error finding (L1–L3 structural,
-  `L4.malformed-verdict-artifact`, `L4.uncovered-feature-scenario`) still aborts. The terminal
-  feature-transition gate enforces scenario verification after the batch runs, so pre-run unverified
-  scenarios and incomplete tasks are transient, not defects (dogfood 2026-08-11, feature I2;
-  2026-10-08, feature H1).
+  the same abort vocabulary as cycle / unknown selector (Step 4/Step 5). **Expected pre-run
+  states are classified in code, not here:** the non-aborting set lives in
+  `NON_ABORTING_PREFLIGHT_CODES` (`plugins/sp/scripts/batch-preflight.ts`), consumed through
+  `classifyFeaturePreflightFindings`, which splits the finding list into `aborting` and
+  `nonAborting` and reports `shouldAbort`. `L4.scenario-unverified` is the expected state of any
+  not-yet-run feature (its covering tasks have no PASS verdicts yet) and
+  `L4.verifying-incomplete-tasks` is the expected state of a `verifying` feature that gained new
+  live tasks (a warning in `FeatureCheckService` until `done`); `--strict` elevates both to error,
+  so they are reported verbatim but do **not** abort the batch; every other error finding (L1–L3
+  structural, `L4.malformed-verdict-artifact`, `L4.uncovered-feature-scenario`) still aborts. The
+  terminal feature-transition gate enforces scenario verification after the batch runs, so pre-run
+  unverified scenarios and incomplete tasks are transient, not defects (dogfood 2026-08-11,
+  feature I2; 2026-10-08, feature H1). Extend the set by editing that constant, never this prose.
+- **Auto-repairs are reported.** Structural repairs applied by `--fix` are listed under
+  `autoRepairs` in the batch report, so a green preflight that only passed after a machine repair is
+  visible rather than silent. Two producers: the task-level `task check <wbs> --fix` inside the
+  task-pipeline precheck guard (its `--json` output is captured at
+  `.spur/run/<wbs>-auto-repairs.json`) and the feature-level `feature check <id> --fix` pass above.
 - **Exactly once.** The check runs once per batch, before `task list`; it is not re-run per task.
 - **Non-feature exclusion.** Explicit WBS lists, status pseudo-lists, and `ready` selectors add no
   feature check — only an effective `feature:<id>` selector is feature-derived. When explicit
@@ -104,6 +116,17 @@ bun run apps/cli/src/index.ts feature check <id> --strict --json
   expected pre-run state.
 - **Scope.** This preflight is advisory to severity policy: it does not alter `FeatureCheckService`,
   `L3.scope-delineation` severity, `feature sync`, or batch-create.
+
+**Semantic precheck failure under `--auto` (1132 R5).** Per-task precheck runs
+`task check <wbs> --fix` before `--precheck` (the task-pipeline precheck guard), so lossless
+format defects are repaired in place and never reach the strict verdict. A finding that survives
+`--fix` is semantic, and the two profiles diverge:
+
+- **`--auto`:** the task gets **one** `/sp:dev-refineall --auto` refinement pass (exactly one — never
+a loop). If the re-run precheck still fails, the task is marked **skipped** with its findings
+recorded in the batch report, and independent tasks keep running. The batch does not abort.
+- **without `--auto`:** unchanged halt behavior — the batch stops on the failing task (`--keep-going`
+still skips only its in-batch dependents).
 
 `--tasks <value>` (or the effective value after normalization) resolves to a frozen set of task WBS numbers. Resolution happens **once, at
 kickoff** — the driver never re-queries `spur task list` to recompute membership mid-batch (R2.1).
@@ -246,6 +269,10 @@ publish visible plan §2.7: A/Z rows now; one letter per task after this freeze 
 for wbs in plan:                                       # default sequential mode
     if any dependency of wbs failed earlier in THIS batch:
         report += skipped(wbs, reason); continue       # only relevant under --keep-going
+    task check <wbs> --fix; task check <wbs> --precheck   # 1132 R4/R5 — repair first, then judge
+    if precheck fails on semantic findings:
+        if --auto: one /sp:dev-refineall --auto pass; still failing → report += skipped(wbs, findings); continue
+        else:      HALT (unchanged non-auto behavior)
     preflight = batch-preflight(wbs)                   # Step 2.6 — TABLE A STOP
     if preflight.action == skip:
         report += preflight-skip(wbs, preflight); continue
@@ -271,7 +298,7 @@ for wbs in plan:                                       # default sequential mode
     if terminal == failed:
         if --keep-going: mark wbs + in-batch dependents as failed/skipped; continue
         else:            HALT; remaining → not-attempted; break    # stop-the-batch default (R3.1)
-emit batch report (per-task outcome + preflight skips + recovery hints + batch verdict)
+emit batch report (per-task outcome + preflight skips + recovery hints + autoRepairs + batch verdict)
 ```
 
 Parallel mode keeps the same lifecycle but swaps the inner loop for the per-task-worktree fan-out

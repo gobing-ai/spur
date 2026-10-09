@@ -34,12 +34,13 @@ All verbs accept `--json` (and `--json-envelope`); folder-scoped verbs accept `-
 ```bash
 spur task create <title> [--feature <id>] [--parent <wbs>] [--template <variant>]
 spur task create [--folder <path>] [--dedupe-within <seconds>] [--allow-duplicate-name]
-spur task create [--skip-ready] [--agent <selector>] [--json]
+spur task create [--skip-ready] [--agent <selector>] [--no-reopen] [--json]
 ```
 
 | Flag | Description |
 | --- | --- |
-| `--feature <id>` | Link to a feature for traceability |
+| `--feature <id>` | Link to a feature for traceability (a `done`/`cancelled` parent is rejected with up to three `active` siblings; `verifying` is reopened to `active`) |
+| `--no-reopen` | Do not reopen a `verifying` parent feature to `active` |
 | `--parent <wbs>` | Parent WBS for sub-task grouping |
 | `--template <variant>` | `standard` \| `feature-impl` \| `issue` \| `review` \| `meta` \| `brainstorm` |
 | `--dedupe-within <seconds>` | Override the dedup window (on by default for 300 s when `--feature` is set) |
@@ -78,7 +79,8 @@ spur task update 0010 --feature F7 --priority P0                # (c) scalar fie
 | --- | --- |
 | `--section <name>` | Section name to write (requires `--from-file`) |
 | `--from-file <path>` | File to read the section body from |
-| `--feature <id>` | Set the `feature_id` edge |
+| `--feature <id>` | Set the `feature_id` edge; same parent-status guard as `create` |
+| `--no-reopen` | Do not reopen a `verifying` parent feature to `active` on this link |
 | `--priority <p>` | Set priority (`P0`–`P3`) |
 | `--ac-numbering <mode>` | Opt the task into the requirements↔AC coverage check |
 | `--ac-altitude <mode>` | `graduating` (default) or `task-local` (skip the feature-AC subset rule) |

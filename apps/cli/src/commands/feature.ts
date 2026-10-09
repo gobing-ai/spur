@@ -467,6 +467,13 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
                         asStatus: options.as,
                         fix: options.fix === true,
                         inventory: inventoryText,
+                        transitionPort:
+                            options.fix === true
+                                ? async (targetId: string, to: string) => {
+                                      const featureSvc = await makeService(context, options.folder);
+                                      return featureSvc.transition(targetId, to);
+                                  }
+                                : undefined,
                     });
                     results.push(result);
                     if (!json) {

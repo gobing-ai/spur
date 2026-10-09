@@ -1105,6 +1105,49 @@ describe('execution-batch spec contract (task 1121 — WT-4d invoking-tree relin
         expect(SPEC.split(DIFF_CONDITION)).toHaveLength(3); // two occurrences → three slices
     });
 
+    // ─── 1132 R4/R5 — auto-fix-first gates + the --auto refine-once rule ───
+    // The batch driver is an agent-interpreted runbook, so these pins are its executable half:
+    // without them a regression in the repair-before-judge order or in the bounded refine lane
+    // would pass every gate (verifier finding on task 1132, AC5/AC6).
+
+    test('1132 R4 — the pipeline precheck repairs before it judges, and captures the repairs', () => {
+        // Segmented so the source carries no runtime-path literal (rule `sp-runtime-path`).
+        const pipelinePath = join(import.meta.dir, '..', '..', '..', '..', 'config', 'workflows', 'task-pipeline.yaml');
+        const pipeline = readFileSync(pipelinePath, 'utf8');
+        const guard = pipeline.slice(pipeline.indexOf('- from: precheck'));
+        const fixAt = guard.indexOf('task check $wbs --fix');
+        const precheckAt = guard.indexOf('task check $wbs --precheck');
+        expect(fixAt).toBeGreaterThan(-1);
+        expect(precheckAt).toBeGreaterThan(fixAt);
+        // The captured artifact is what lets the batch report carry task-level `autoRepairs`.
+        expect(guard).toContain('$wbs-auto-repairs.json');
+    });
+
+    test('1132 R4 — the feature preflight repairs first, and the exemption lives in code', () => {
+        expect(SPEC).toContain('feature check <id> --fix --json');
+        expect(SPEC).toContain('feature check <id> --strict --json');
+        const fixAt = SPEC.indexOf('feature check <id> --fix --json');
+        const strictAt = SPEC.indexOf('feature check <id> --strict --json');
+        expect(strictAt).toBeGreaterThan(fixAt);
+        // Prose points at the constant; no second copy of the code list lives in the runbook.
+        expect(SPEC).toContain('NON_ABORTING_PREFLIGHT_CODES');
+        expect(SPEC).toContain('autoRepairs');
+    });
+
+    test('1132 R5/AC6 — --auto gets ONE refine pass, then the task is skipped and the batch continues', () => {
+        expect(SPEC).toContain('**Semantic precheck failure under `--auto` (1132 R5).**');
+        expect(SPEC).toContain('one** `/sp:dev-refineall --auto` refinement pass');
+        // The bound is explicit (exactly one), the fallback is a reported skip, and independence
+        // is stated — the three clauses R5 asks for.
+        expect(SPEC).toContain('exactly one');
+        expect(SPEC).toContain('marked **skipped** with its findings');
+        expect(SPEC).toContain('The batch does not abort');
+        // Non-auto behavior is unchanged (halt), so the rule is not a blanket softening.
+        expect(SPEC).toContain('unchanged halt behavior');
+        // The driver loop carries the same branch, so the prose is not merely descriptive.
+        expect(SPEC).toContain('/sp:dev-refineall --auto pass');
+    });
+
     test('AC2 — a failed relink warns, names the stale workspace state in the batch report, never halts', () => {
         for (const block of [CREATE_BLOCK, REUSE_BLOCK]) {
             expect(block).toContain('invoking tree workspace links are stale');
