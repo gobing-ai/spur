@@ -4,7 +4,7 @@ name: Unblock workflow housekeeping from legacy evidence-migration failures
 status: done
 template: issue
 created_at: 2026-10-09T06:08:08.615Z
-updated_at: "2026-10-09T21:39:30.509Z"
+updated_at: "2026-10-09T22:04:20.119Z"
 
 feature_id: E71
 priority: P1
@@ -179,7 +179,7 @@ Tradeoff: `superseded` widens a public JSON enum, which is additive. Consumers t
 | `missingRequiredItem` accepts a full durable pair | `packages/app/src/services/run-storage.ts:653` | Both `missing-required-item` files have their pair under `.spur/memory/runs/` |
 | `clean` action finalizes stale runs on migration failure; skips only file-deleting reclamation; per-failure remedy line | `apps/cli/src/commands/workflow.ts:1518` | DB-only finalization must not be held hostage to file-migration hygiene (R1/R2) |
 | Foreign-divergent evidence skip + `evidenceSkipped` | `packages/app/src/services/inline-run-setup.ts:395` | A divergent copy of another task's evidence must not block teardown (R5) |
-| `persist-out.json` written beside the stdout envelope | `packages/app/src/services/inline-run-setup.ts:1671` | The pre-removal check reads the recorded outcome instead of recomputing it |
+| `persist-out.json` written beside the stdout envelope | `packages/app/src/services/inline-run-setup.ts:1967` | The pre-removal check reads the recorded outcome instead of recomputing it |
 | Pre-removal check accepts the foreign-divergent set | `plugins/sp/scripts/persist-out-check.ts:166` | Same set as the recorded outcome (R5) |
 | Record-time citation resolution | `packages/app/src/services/task-service.ts:2490` | Teardown must not be the first detector of a phantom citation (R6) |
 | Shared citation module (regex, literalization, extraction, planes) | `packages/app/src/workflow/run-citation.ts:1` | One contract for persist-out and the record step; no drifting copies |
@@ -196,22 +196,29 @@ consumer that switches on `outcome` treats unknown values as non-failure, and on
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `apps/cli/src/commands/workflow.ts:1518` runs `svc.clean(minutes, dryRun)` on the migration-failure path; log/checkpoint reclamation stays behind the zero-failure gate and the command still exits 1. |
-| R2 | MET | Per-failure `source`/`reason`/`remedy` line in human output and `remedy` on every `migration.failures[]` entry; `cleaned[]` carries the finalized runs separately from `migration` (`apps/cli/tests/commands/workflow.test.ts`, F5). |
-| R3 | MET | `packages/app/src/services/run-storage.ts:593` hoists `allTargetsIdentical` above family validation; `:738` and `:778` consult `isDurableTargetValid` and emit `superseded`; shape failures with no durable counterpart emit `preserved (unclassified: …)`; `:653` accepts a full durable pair for a missing sibling. |
-| R4 | MET | `spur workflow clean` on the invoking tree, run 1: `Finalized 70 stale run(s) (>30m)` + `Evidence migration: 2 migrated, 1123 already present, 0 failed.`, exit 0; run 2: `No stale runs older than 30m.` + `0 failed`, and no `housekeeping skipped` line in either. |
-| R5 | MET | `packages/app/src/services/inline-run-setup.ts:395` records `evidenceSkipped[{name, reason:'foreign-divergent', newer}]` and never overwrites the invoking-tree copy; a divergent owned file still throws `durable evidence conflicts` (`packages/app/tests/services/persist-worktree-runs.test.ts`, F6/F7). |
-| R6 | MET | `packages/app/src/services/task-service.ts:2490` resolves every rendered Testing citation across `.spur/run/`, `.spur/memory/evidence/` and `.spur/memory/runs/` and throws before the first section write, naming the citation and its source row (`packages/app/tests/services/task-record.test.ts`, F8). |
+| R1 | MET | `apps/cli/src/commands/workflow.ts:1516-1518` — on `migration.failures.length > 0` the action sets exit 1 and still calls `svc.clean(minutes, dryRun)` (skipped only under `--logs`); the failure envelope reports `logs.reclaimed: []` and `checkpoints.reclaimed: []` (`apps/cli/src/commands/workflow.ts:1519-1535`), so file-deleting reclamation stays fail-closed. Re-verify 2026-10-09: `(cd apps/cli && bun test tests/commands/workflow.test.ts)` 173 pass / 0 fail. |
+| R2 | MET | `packages/app/src/services/run-storage.ts:138` failureRemedy map, attached to every failure at `packages/app/src/services/run-storage.ts:517` and `:540`; `cleaned[]` emitted beside `migration` in the JSON envelope (`apps/cli/src/commands/workflow.ts:1533`). Covered by the F5 e2e in `apps/cli/tests/commands/workflow.test.ts` (173 pass / 0 fail this run). |
+| R3 | MET | (a) `packages/app/src/services/run-storage.ts:592-596` allTargetsIdentical hoisted above family validation; (b) `packages/app/src/services/run-storage.ts:403` isDurableTargetValid consulted on shape failure (`:735-742`, outcome `superseded`, reason `durable canonical`) and identity failure (`:778-785`); outcome enum widened at `packages/app/src/services/run-storage.ts:113`; (d) durable-pair check at `packages/app/src/services/run-storage.ts:652-656`. Re-verify: `run-storage.test.ts` green inside the 297 pass / 0 fail `packages/app` focused run. |
+| R4 | MET | Re-verify 2026-10-09 on this repository with the source CLI: `bun run apps/cli/src/index.ts workflow clean --dry-run --json` exit 0, `migration.failures` 0, outcomes 1128 already-present / 11 superseded / 5294 preserved / 3 would-migrate, `cleaned` 0 (no stale rows remain after the original two-run apply recorded at verify time: run 1 finalized 70 rows, run 2 finalized none, both 0 failed, no housekeeping-skipped line). |
+| R5 | MET | `packages/app/src/services/inline-run-setup.ts:390-397` — an owned divergent file throws `durable evidence conflicts`; a foreign one is pushed to evidenceSkipped with reason `foreign-divergent` and the newer side, and is not copied. `plugins/sp/scripts/persist-out-check.ts:166-170` reads the recorded `persist-out.json` (written at `packages/app/src/services/inline-run-setup.ts:1967`). Re-verify: `persist-worktree-runs.test.ts` + `plugins/sp/tests/persist-out-check.test.ts` green (297/0 app run; 65/0 plugin run). |
+| R6 | MET | `packages/app/src/services/task-service.ts:1720-1723` renders Testing then asserts citations resolve before the write; refusal text at `packages/app/src/services/task-service.ts:2486-2492` names the citation and its origin row; shared extractor `packages/app/src/workflow/run-citation.ts:30-31` (direct-child only, subpaths skipped) and planes at `packages/app/src/workflow/run-citation.ts:73`. Re-verify: `task-record.test.ts` + `run-citation.test.ts` green (297 pass / 0 fail). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | e2e | `apps/cli/tests/commands/workflow.test.ts` — a migration failure still finalizes the stale row, skips log/checkpoint reclamation, and exits 1 naming the failed file. |
-| AC2 | MET | e2e | `clean --json` carries `source`/`reason`/`remedy` per failure and lists `cleaned` separately from `migration`. |
-| AC3 | MET | unit | `packages/app/tests/services/run-storage.test.ts` — byte-identical stale-binding and durable-pair cases are `already-present`, a valid differing durable copy is `superseded`, a check-result verdict with no durable copy is `preserved (unclassified)`, and `failures` stays empty. |
-| AC4 | MET | e2e | Two consecutive `spur workflow clean` runs on this repository both exit 0 with 0 migration failures; the second finalizes nothing. |
-| AC5 | MET | unit | `persistWorktreeRuns` succeeds for a non-owning task, reports `evidenceSkipped` with the newer side, leaves the invoking-tree copy byte-identical, and still throws for a divergent owned file. |
-| AC6 | MET | unit | `spur task record` fails naming the phantom citation and its check row, leaving the task file unchanged; a citation present in the runs plane is accepted. |
+| Scenario: AC1 — a migration failure no longer blocks stale-run finalization (req: R1) | MET | test | `apps/cli/tests/commands/workflow.test.ts` F5 e2e (forced migration failure → stale row finalized, reclamation skipped, exit 1 naming the file); 173 pass / 0 fail this run. |
+| Scenario: AC2 — failures are reported with a remedy in both outputs (req: R2) | MET | test | Same e2e asserts `source`/`reason`/`remedy` per `migration.failures` entry and `cleaned` separate from `migration`; 173 pass / 0 fail this run. |
+| Scenario: AC3 — identical and superseded scratch copies are not failures (req: R3) | MET | test | `packages/app/tests/services/run-storage.test.ts` F1–F4 (already-present / superseded / already-present / preserved-unclassified; failures empty; durable bytes unchanged); green this run. |
+| Scenario: AC4 — this repository converges (req: R4) | MET | command | `bun run apps/cli/src/index.ts workflow clean --dry-run --json` on this repository: exit 0, 0 migration failures, 0 stale rows left to finalize (converged after the recorded two-run apply). |
+| Scenario: AC5 — a divergent foreign evidence copy cannot block persist-out (req: R5) | MET | test | `packages/app/tests/services/persist-worktree-runs.test.ts` F6/F7 (foreign divergent skipped + reported with newer side, invoking copy byte-identical; owned divergent still throws); green this run. |
+| Scenario: AC6 — a phantom run citation fails at record (req: R6) | MET | test | `packages/app/tests/services/task-record.test.ts` F8 (phantom citation refused naming citation + check row, task file unchanged); green this run. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+
+#### Re-verify — 2026-10-09 (`/sp:dev-verifyall --force --fix all`)
+
+- Focused suites re-run: `packages/app` (run-storage, persist-worktree-runs, task-record, run-citation, confidence-taxonomy, inline-run-setup, quality-gate) 297 pass / 0 fail; `apps/cli` `workflow.test.ts` 173 pass / 0 fail; `plugins/sp` (persist-out-check, quality-gate-receipt, bookkeeping-contract, inline-run-trace) 65 pass / 0 fail; `bun run lint` exit 0.
+- R4 probe on this repository (source CLI): `workflow clean --dry-run --json` exit 0, 0 migration failures, 0 stale rows left.
+- Fix pass: Solution anchor for the `persist-out.json` write corrected `:1671` → `packages/app/src/services/inline-run-setup.ts:1967`. Gitignored writes: `.spur/run/1139-verify-answer.txt` and `.spur/run/1139-verdict.json` (re-derived, whole file).
+- Residual (P3): the global `spur` binary is the 2026-10-06 npm install and still reports 46 failures / exit 1 until the next release or `bun link` from `apps/cli`.
 
 #### R4 — this repository converges (AC4)
 
