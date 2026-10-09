@@ -4,7 +4,7 @@ name: Refuse executable source registered from run scratch
 status: todo
 template: standard
 created_at: 2026-10-09T16:51:46.326Z
-updated_at: "2026-10-09T16:52:24.352Z"
+updated_at: "2026-10-09T16:54:36.680Z"
 
 ac_numbering: task-local
 ac_altitude: task-local
@@ -28,6 +28,15 @@ during this session and blocked a driver message with its own issue list.
 Task 1141 R5 names this class as the one a corpus rule cannot cover: `.spur/run` is gitignored
 (`.gitignore:133`), so the rule engine — which reads tracked files — cannot see it. The executable
 source needs a runtime guard at registration instead.
+
+**Recurrence evidence (2026-10-09, second occurrence).** The review-session run received a message whose text is the scratch hook's output verbatim: `Add verification for: …` is assembled at `.spur/run/stop-hook-proposed-checkable.ts:490` from the issue strings pushed at `:478` (source citations), `:482` (confidence level) and `:487` (hedge phrases). The received message carried the confidence class, so the string is that code's product.
+
+Two further facts sharpen this task:
+
+1. **No discoverable registration.** `plugins/sp/hooks/hooks.json` — the tracked hook set — registers `agent-lifecycle` and `fleet-guest-stop` on `Stop`; `.claude/settings.json` holds sandbox configuration; `.rulesync/hooks.json` holds no matching entry. A search for `Add verification for` finds it in no tracked file, no plugin hook and no installed hook location — only in the three scratch sources. So a message can carry this text with nothing on disk explaining its origin.
+2. **The migration classified the sources as preserved, not relocated.** `.spur/memory/run-storage-migration.json` records `.spur/run/stop-hook-proposed-checkable.ts` with no destination and status `preserved`, so the durable-evidence pass deliberately left executable source in scratch.
+
+R1's guard therefore also supplies the missing discoverability: the refusal names the path, which is what an operator needs when the emitter cannot otherwise be found.
 
 ### Requirements
 
