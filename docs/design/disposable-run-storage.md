@@ -3,7 +3,7 @@ kind: design
 title: Disposable run storage and durable evidence
 status: implemented
 created_at: 2026-09-30
-updated_at: 2026-10-02
+updated_at: 2026-10-09
 related: [E71, E7, F93, docs/design/run-record-contract.md, "1056"]
 tags: [contract, workflow, planning]
 ---
@@ -53,6 +53,8 @@ Use small path functions/constants at existing app seams where multiple callers 
 4. Engine and inline run records write directly to the durable run directory. DB trace/status stays authoritative; `.state.json` is the existing projection, not a replacement engine snapshot. Inspection and coordination references resolve the durable pair with migrated legacy fallback.
 5. Session producer, observer and history importer share the durable session-root convention. Active/paused session identity is stable; no folder move under a running process.
 6. Worktree result export carries canonical verdicts, both receipt copies, run records, registered artifact rows/bytes and session roots into the destination before worktree disposal. Resource references are redirected through the existing DB owner; proof digests and receipt provenance are unchanged. Unequal canonical evidence or nested retained bytes fail export. The persist-out delegate also exits 1 with `ok:false` for reported flat record conflicts and external-key conflicts (1049: a skipped source run means the batch was not persisted — the delegate names the skipped source run ids and retains the worktree for manual reconciliation), retaining both copies and blocking teardown; the underlying copy service keeps its existing skip-reporting contract. Task-cited evidence subpaths (`.spur/run/<dir>/<file>`) are classified at extraction time through the `cited-directory:<name>` skip vocabulary (0984 R5 / task 1056) rather than obligating `<name>` as a flat file or truncating the path, deduped per directory and consuming no file copy budget, so nested evidence citations in merged task files do not block worktree teardown. Planning handoff gets durable registration before scratch removal. Task 1043 owns fail-closed record prevalidation and repair after an earlier row/file tear.
+
+7. Scratch is volatile: `.spur/run/` may be absent in a later run, so no tracked source, document or task record cites it as evidence of record or as an input required to exist. Recorded citations (`done_reason`, Testing evidence, review pointers) name the durable owner or the tracked task Testing section, and executable source never lives under `.spur/run/`. A reader whose input is cross-run scratch recomputes it or refuses with a named reason; recomputable receipts follow ADR-124, so a cleaned receipt costs a re-run and never a wrong verdict. The `cited-directory:<name>` skip vocabulary below remains a compatibility allowance for historical citations, not a license for new ones.
 
 Recorded verdict discovery includes corpus sweep, suppression inputs, residual folding and wrap-up metrics. Residual folding atomically updates the canonical recorded verdict and mirrors it to the attempt copy consumed by the pipeline. A malformed canonical verdict remains authoritative rejection. Registered summaries may use their original scratch name only when retained source provenance proves the mapping; their envelope still binds the producer run/action.
 

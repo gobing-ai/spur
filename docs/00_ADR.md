@@ -2117,6 +2117,20 @@ descriptions above record earlier stages, not supported configuration.
 - **Retains:** ADR-021/130 (application-service ownership), ADR-051 (public-surface consent), current E7 run identity/inspection and F93 tracked evidence behavior.
 - **Detail:** [disposable run storage](design/disposable-run-storage.md); topology in `03 §32`.
 
+**Amendment (2026-10-09, consumer boundary).** The scratch/durable split is also a **consumer**
+invariant, stated here because the entry fixed where lasting records live but not what may depend on
+scratch. `.spur/run/` may be absent in any later run, so no tracked source file, document or task
+record relies on it: a durable citation names the owning surface (`.spur/memory/evidence/` for
+structured evidence, `.spur/memory/runs/` for run records) or the tracked task Testing section,
+and `done_reason` and evidence pointers are durable citations. Executable source (hooks, scripts,
+libraries) never lives under `.spur/run/`. Within one run, code creates, reads and cleans scratch
+freely; a **cross-run read of scratch is a defect whose only correct outcomes are recomputation or
+a named refusal**, so a vanished gate receipt re-runs the gate (ADR-124) rather than yielding a
+wrong verdict. The `cited-directory:` persist-out skip vocabulary (1056) remains a compatibility
+allowance for historical citations, not a license for new ones. Rejected alternative: treating
+scratch as an implicit cache — it promotes volatile bytes to a completion authority and defeats the
+owner split this entry established.
+
 ## ADR-132: Every Execution Is a Run; the Run Id Is Spur's Session Id
 
 - **Status:** Accepted (design) · **Date:** 2026-10-04 · **Amends:** ADR-045 · **Extends:** ADR-117
