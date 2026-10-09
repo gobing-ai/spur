@@ -2,11 +2,11 @@
 schema_version: 1
 id: "E2"
 name: "Session-forensics extension of the history plane: forensic primitives, derived-variable analyze, multi-mode report, rewritten find-issue"
-status: verifying
+status: active
 priority: P2
 tags: ["wayfinder-map"]
 created_at: "2026-08-10T00:02:13.084Z"
-updated_at: "2026-08-17T00:44:49.635Z"
+updated_at: "2026-10-09T16:51:45.916Z"
 ---
 
 # E2: Session-forensics extension of the history plane: forensic primitives, derived-variable analyze, multi-mode report, rewritten find-issue
@@ -241,3 +241,5 @@ Consciously deferred past the destination (implementation-batch concerns, not ma
 
 - 2026-08-17T00:43:34.633Z backlog → active (system)
 - 2026-08-17T00:44:49.635Z active → verifying (system)
+- 2026-10-09T16:51:45.916Z verifying → active (system)
+
