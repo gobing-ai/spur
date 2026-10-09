@@ -4,11 +4,13 @@ name: Assert the publish trigger after a ts-libs release tag push
 status: todo
 template: standard
 created_at: 2026-10-09T16:51:45.274Z
-updated_at: "2026-10-09T16:52:23.699Z"
+updated_at: "2026-10-09T18:14:45.845Z"
 feature_id: A33
 
 ac_numbering: task-local
 ac_altitude: task-local
+priority: P2
+estimate_hours: 3
 ---
 
 ## 1143. Assert the publish trigger after a ts-libs release tag push
@@ -34,45 +36,71 @@ the visible difference from prior releases, and that is an inference, not eviden
 because the *failure mode* is what costs time — a release step that reports success while nothing is
 publishing, with no assertion to catch it.
 
+**Refine corrections (2026-10-09)**
+
+- **The root cause is now evidenced, not inferred.** ts-libs' `bump-ver --push` path already does what old R1/R2/R5 asked, as `ts-libs` task 0510 R4:
+  - it pushes each tag individually (`scripts/lib/release-commands.ts:276-284`);
+  - it polls `gh run list` for the aggregate tag;
+  - it dispatches `publish.yml` once at the tag ref when no push run appears (`ensurePublishWorkflowRun`, `:286-360`);
+  - npm skip-if-published already makes publishes idempotent (`:167-175`).
+
+  `docs/PACKAGE_RELEASE.md:178` records the platform rule: GitHub creates no workflow runs when more than three tags are pushed at once.
+- **The defect is the local-mode hint.** In the 2026-10-08 incident `bump-ver` ran **without** `--push`, so the 13 tags were created locally. The tool then printed `git push origin --tags` as the next step (`release-commands.ts:269-272`), which is exactly the pattern the push path avoids. The operator followed it, the aggregate tag reached the remote inside a 13-tag push, and no `Publish` run was created. The "partially rejected push" was incidental.
+- **Scope moves upstream** under the facade rule (fix `@gobing-ai/ts-*` in `/Users/robin/xprojects/ts-libs`, not in Spur). Spur's own `spur builder bump-ver` has no push step and is out of scope. Old R6 (out of scope: trigger list, trusted publishing, tag scheme) stands.
+- Feature: A33 (repo release-tooling integrity).
+
 ### Requirements
 
-- [ ] R1. The release procedure pushes the aggregate tag on its own (`git push origin <aggregate-tag>`), not as part of `git push --tags`, so unrelated already-existing tags cannot make the push report failure or mask the aggregate tag's ref update.
-- [ ] R2. Immediately after the push, the procedure asserts that a `Publish` run exists for that tag and reports the run URL. When no run exists it fails loudly, naming the tag and the absent run, instead of continuing as if the release were in flight.
-- [ ] R3. The atomic-writer path runs this assertion too, or refuses to report a completed release while the publish trigger is unverified. A release helper that cannot see the trigger reports the gap rather than success.
-- [ ] R4. The check-only path is exercisable without publishing anything, so the assertion is verifiable on demand (a dry run over an existing tag suffices).
-- [ ] R5. Idempotent re-entry: re-running the procedure for a tag whose packages are already published reports the existing run and the published versions rather than attempting a second publish.
-- [ ] R6. Out of scope, stated so it is not re-litigated here: the npm trusted-publishing configuration, the workflow's trigger list, and the tag naming scheme. A confirmed trigger defect discovered while implementing may file its own task with the evidence.
+- [ ] R1. **The local-mode hint never recommends `--tags`.** In ts-libs `scripts/lib/release-commands.ts:269-272`, replace the `git push origin --tags` line. The new hint prints:
+  - the branch push;
+  - one `git push origin refs/tags/<tag>:refs/tags/<tag>` per package tag, with the aggregate tag last;
+  - `bun scripts/builder.ts verify-publish <aggregateTag>`.
+
+  It also states the three-tag GitHub limit in one line.
+- [ ] R2. **A check-only publish verifier.** Add a `verify-publish <aggregate-tag> [--dispatch]` command to `scripts/builder.ts`. It runs the existing lookup from `ensurePublishWorkflowRun` without dispatching, prints the run id and URL, and exits 0 when a run exists. When none exists it exits 1, naming the tag and the absent run, and prints the recovery command. With `--dispatch` it performs the existing single dispatch and final lookup.
+- [ ] R3. **No dispatch in the lookup-only path.** Split `ensurePublishWorkflowRun` into `findPublishRun(tag, spawn, sleep)` (bounded lookups) and the dispatch tail. `bumpVersion --push` keeps calling the combined behaviour unchanged.
+- [ ] R4. **Tests (scripted `spawn`, no network).** Cover:
+  - (a) the local-mode hint lists per-tag refspecs and contains no `--tags`;
+  - (b) `verify-publish` with a matching run gives exit 0 and the URL;
+  - (c) no run gives exit 1, zero `gh workflow run` calls, and the recovery text;
+  - (d) `--dispatch` with no run makes exactly one dispatch;
+  - (e) the existing `--push` tests at `scripts/tests/release-commands.test.ts:193-409` are unchanged.
+- [ ] R5. **Docs.** `docs/PACKAGE_RELEASE.md` names `verify-publish` as the post-push check for a local-mode release. This task's Testing records `verify-publish @gobing-ai/ts-libs-v0.5.19` against the real repository (read-only; that release already has a run).
 
 ### Acceptance Criteria
 
 ```gherkin
-Scenario: AC1 — the aggregate tag is pushed alone (req: R1)
-  Given a release that created the aggregate tag and other tags already exist on the remote
-  When the release procedure pushes
-  Then the push command names only the aggregate tag
-  And the command's exit status reflects that tag's ref update
+Scenario: AC1 — Local mode prints a safe push sequence (req: R1)
+  Given bump-ver runs without --push
+  When it finishes
+  Then the printed next steps push each tag by explicit refspec with the aggregate tag last
+  And the output contains no "git push origin --tags"
+  And it names verify-publish for the aggregate tag
+```
 
-Scenario: AC2 — a missing publish run fails loudly (req: R2)
-  Given a tag that was pushed but produced no Publish run
-  When the assertion runs
-  Then it exits non-zero with the tag name and the absence of a run
+```gherkin
+Scenario: AC2 — verify-publish reports an existing run without dispatching (req: R2, R3)
+  Given gh run list returns a run whose headBranch is the aggregate tag
+  When "builder.ts verify-publish <tag>" runs
+  Then it exits 0 printing the run id and URL
+  And no gh workflow run call is made
+```
 
-Scenario: AC3 — a successful trigger reports its run (req: R2)
-  Given a pushed aggregate tag with a Publish run in progress
-  When the assertion runs
-  Then it reports the run URL and exits zero
+```gherkin
+Scenario: AC3 — A missing run fails loudly with recovery (req: R2, R3)
+  Given gh run list never returns a run for the tag
+  When verify-publish runs without --dispatch
+  Then it exits 1 naming the tag and the absent Publish run
+  And it prints the --dispatch recovery and makes no dispatch
+  And with --dispatch exactly one workflow dispatch is made
+```
 
-Scenario: AC4 — the assertion is checkable without publishing (req: R4)
-  Given an existing released tag
-  When the check-only path runs
-  Then it reports that tag's Publish run and status
-  And it starts no new publish
-
-Scenario: AC5 — re-entry is safe (req: R5)
-  Given a tag whose packages are already published
-  When the procedure runs again
-  Then it reports the existing run and published versions
-  And it does not attempt a second publish
+```gherkin
+Scenario: AC4 — The push path is unchanged and evidence is recorded (req: R4, R5)
+  Given the existing release-commands tests
+  When the ts-libs test suite runs
+  Then they pass unchanged alongside the new tests
+  And this task's Testing records a real read-only verify-publish against ts-libs-v0.5.19
 ```
 
 ### Q&A
@@ -94,42 +122,37 @@ Scenario: AC5 — re-entry is safe (req: R5)
 - **Deferred:** anything about npm trusted publishing, workflow triggers, or tag naming — R6 keeps
   those out, and a confirmed defect found while implementing gets its own task with evidence.
 
+#### Q&A entry — 2026-10-09T18:14:44.590Z
+
+- **Q: Is the cause still unconfirmed?** A (closed 2026-10-09): no. GitHub does not create push events when more than three tags are pushed in one push, and ts-libs documents this at `docs/PACKAGE_RELEASE.md:178`. The local-mode hint led to exactly that push.
+- **Q: Fix in Spur or ts-libs?** A: ts-libs. The facade rule says to fix upstream, and Spur's release noun has no push step.
+- **Q: Should we make `--push` the default?** A: no. Local mode exists so the operator can review before publishing. This task makes the reviewed follow-up safe and checkable instead.
+- **Q: Release cadence?** A: a scripts-only change does not need a package release. It lands on ts-libs main.
+
 ### Design
 
-**Where this belongs.** ts-libs owns the release mechanics: the bump tool, the tag set, and the
-`Publish` workflow. The assertion belongs next to the bump tool so any caller benefits, and it
-belongs in the documented release recipe so a driver does not improvise it. This is release-tooling
-integrity, which is A33's surface.
-
-**Shape.** After the push, query the workflow's runs for the tag ref (`gh run list --workflow Publish
---branch <tag>` / the API's ref filter), match on the tag, and fail with an explicit message when the
-list is empty. A short bounded wait with polling covers GitHub's registration delay: the failure being
-fixed is a permanent non-trigger, so a poll that times out after a stated interval is the right
-sensitivity, not a single instant read.
-
-**Why not just retry the tag push?** A retry hides the class. The 0.5.18 path worked and this one did
-not, so the difference is in the invocation; pushing the aggregate tag alone removes the partially
-rejected push from the picture and makes the outcome attributable.
-
-**Standalone-tag push.** `git push origin --tags` is one command with N refs and one exit status;
-GitHub receives the refs it accepts, but the caller has no per-ref result. Pushing the aggregate tag
-alone makes the trigger's precondition unambiguous.
-
-**Impacted surfaces.** ts-libs release tooling and its docs; the release recipe that the spur-side
-1131-style tasks follow. No spur CLI or schema change. Confirming the trigger mechanism itself stays
-out of scope (R6) so this task does not become a workflow investigation.
+- **Location.** All edits are in `/Users/robin/xprojects/ts-libs`: `scripts/lib/release-commands.ts`, `scripts/builder.ts`, `scripts/tests/release-commands.test.ts` and `docs/PACKAGE_RELEASE.md`. Spur's tree gets no code edit; only this task records the evidence.
+- **Refactor shape (R3).**
+  - `findPublishRun(tag, spawn, sleep, log): Promise<PublishRunInfo | undefined>` holds the current `listRuns` loop.
+  - `ensurePublishWorkflowRun` becomes `findPublishRun(...) ?? dispatchAndConfirm(...)`, with byte-identical log lines so the existing assertions hold.
+- **CLI (R2).**
+  - `builder.ts` adds a `case 'verify-publish'` that parses `<tag>` plus `--dispatch` and prints usage on a missing tag.
+  - Exit codes: 0 when a run is found, 1 when it is absent or dispatch fails, 2 on usage.
+- **Boundaries.**
+  - No change to `publish.yml`, trusted publishing, tag names or the `--push` sequence.
+  - No tag deletion or re-push anywhere.
+- **Failure inventory (tests first).**
+  - The lookup-only path dispatching anyway.
+  - The aggregate tag not pushed last in the hint.
+  - A `gh` auth failure being reported as "no run". It must surface `gh run list failed`, as `:325-327` does today.
 
 ### Plan
 
-1. Read the ts-libs bump tool's push path and the Publish workflow's trigger, and record the exact
-   commands it emits today.
-2. Reproduce the assertion's building block by hand: `gh run list` filtered to an existing released
-   tag, and to a tag with no run (the 0.5.19 window before the manual dispatch).
-3. Implement the standalone aggregate-tag push plus the post-push assertion with a bounded poll, and
-   wire the release path to refuse a success report when the trigger is unverified.
-4. Exercise the check-only path against an already-released tag, and the re-entry path against a
-   published version.
-5. Record the output of both paths, including the failure message for a tag with no run.
+1. In ts-libs, write the R4 tests (a)–(d). Confirm they fail.
+2. R3: refactor. R1: change the hint. R2: add the `verify-publish` command.
+3. Run the ts-libs test suite and lint.
+4. R5: update the docs. Run `bun scripts/builder.ts verify-publish @gobing-ai/ts-libs-v0.5.19` (read-only) and record the output.
+5. Commit in ts-libs, then cite the commit in this task's Solution.
 
 ### Solution
 
@@ -145,7 +168,17 @@ out of scope (R6) so this task does not become a workflow investigation.
 
 ### References
 
-<!-- Links to features, docs, ADRs, related tasks, or external references. -->
+- ts-libs:
+  - local hint: `scripts/lib/release-commands.ts:269-272`;
+  - push sequence: `:276-284`;
+  - `ensurePublishWorkflowRun`: `:286-360`;
+  - publish skip: `:167-175`;
+  - CLI: `scripts/builder.ts:7-15,91`;
+  - tests: `scripts/tests/release-commands.test.ts:193-409`;
+  - platform rule: `docs/PACKAGE_RELEASE.md:178`;
+  - trigger: `.github/workflows/publish.yml`.
+- Incident: the task 1131 R3 ts-libs 0.5.19 adoption (2026-10-08), recovered with `gh workflow run Publish --ref @gobing-ai/ts-libs-v0.5.19`.
+- Facade rule: AGENTS.md (fix `@gobing-ai/ts-*` upstream).
 
 ### History
 

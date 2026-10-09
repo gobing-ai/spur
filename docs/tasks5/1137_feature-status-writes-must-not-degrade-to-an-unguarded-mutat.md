@@ -4,11 +4,13 @@ name: Feature status writes must not degrade to an unguarded mutation (feature-c
 status: todo
 template: feature-impl
 created_at: 2026-10-09T05:34:58.340Z
-updated_at: "2026-10-09T05:36:13.165Z"
+updated_at: "2026-10-09T18:11:04.203Z"
 feature_id: F21
 
 ac_altitude: task-local
 ac_numbering: task-local
+priority: P2
+estimate_hours: 8
 ---
 
 ## 1137. Feature status writes must not degrade to an unguarded mutation (feature-check fallback and the lifecycle-less server write service)
@@ -37,75 +39,101 @@ The `else` branch is the contract violation: it changes a feature's lifecycle st
 
 **Current code facts (verified 2026-10-08).** CLI wires a FEATURE-profile port at `apps/cli/src/commands/task.ts:1980-1998` (`new FeatureService({..., writeService: new PlanningWriteService({ fs, lifecycle: makeLifecycleAdapter(context, FEATURE_LIFECYCLE_PROFILE), ... }) })`) and the feature command wires the same at `apps/cli/src/commands/feature.ts:655`; `FeatureService.transition` (`packages/app/src/services/feature-service.ts:250`) delegates to `writeService.transition`, which is exactly where the profile matters (a task-profile write service raises `FSMError: … undeclared state "verifying"` — the failure 1132 hit in cycle 3).
 
+**Refine corrections (2026-10-09)**
+
+- **Defect 1 confirmed unchanged.** `packages/app/src/services/feature-check.ts:278-286` still carries the raw `else` fallback; `:283` is the **only** non-test `setFrontmatterField('status', …)` in `packages/`, `apps/`, `plugins/` and `scripts/` (`rg`, 2026-10-09). `feature sync` does not write status directly. R3's "one funnel across five paths" therefore shrinks to: delete that one raw write and pin that no other non-test module adds one.
+- **Defect 2 restated — the reopen was the wrong symptom.** `PlanningWriteServiceImpl.transition` appends the `## History` line (`planning-write-service.ts:490`) and emits `feature.transitioned` (`:512`) whatever the port is. Also, `verifying → active` is an `always` edge in `config/workflows/feature-lifecycle.yaml:89-93`. So the HTTP **reopen** through `apps/server/src/context.ts:500-503` already gets the same verdict, history and event as the CLI. The real hole is the generic **HTTP `feature.transition`** handler (`apps/server/src/modules/feature/handlers.ts:63-67`). It reaches `FeatureService.transition` over the permissive `SchemaLifecyclePort` (`planning-write-service.ts:86-95`), so a client can push `active → verifying` or `verifying → done` without the `feature check --as` guard, or reach an edge that does not exist (for example `backlog → done`).
+- **Server design follows the 0966 precedent.** Task transitions on the server already run an in-process gate (`transitionTaskGuarded`, `packages/app/src/services/task-transition.ts:229`, wired at `apps/server/src/context.ts:532-551`) instead of the CLI's spawning `LifecycleAdapter`. `makeLifecycleAdapter` (`apps/cli/src/workflow/make-lifecycle-adapter.ts:23`) needs `CliContext`, `resolveSpurBin` and shell guards, and `verifying` has a nested-workflow `onEnter`. Porting it to the server is the wrong fix.
+- Citation drift: the server feature service is still built at `apps/server/src/context.ts:558-565`; the reopen hook moved from `:501` to `:500-503`.
+
 ### Requirements
 
-- [ ] R1. **`feature check --fix` must not perform a raw frontmatter status write.** Remove the `else` fallback at `packages/app/src/services/feature-check.ts:281-286`: the reopen either goes through a lifecycle-backed transition, or the command fails loudly with an actionable, non-zero result naming the missing capability and the recovery ("configure/repair the feature lifecycle adapter, or supply a transition port"). A silent unvalidated write is never an acceptable degradation.
-- [ ] R2. **The server path must be as guarded as the CLI path.** `apps/server/src/context.ts:558-565` must build the feature service with a lifecycle-capable write service (or an equivalent guarded transition funnel), so the HTTP task→feature reopen in `apps/server/src/context.ts:501` validates the transition, records history, and emits the normal event, instead of riding the permissive `SchemaLifecyclePort`.
-- [ ] R3. **One funnel for feature status mutation.** Every feature-status write (CLI verbs, task-link reopen, `feature check --fix` repair, `feature sync`, wrapup transition) must route through a single funnel that (a) validates against the feature lifecycle profile, (b) appends the history line, and (c) is the only code allowed to set a feature's `status`. Direct `setFrontmatterField('status', …)` calls outside that funnel are removed or converted.
-- [ ] R4. **Fail loudly at the seam, not at the outcome.** A service that can mutate feature status must refuse construction (or refuse the mutation) when its write service cannot validate the transition, with a named error class and a message that names the profile it expected. "Optional port, silent fallback" is replaced by "required capability, loud failure".
-- [ ] R5. **Tests.** (a) a no-port `feature check --fix` on a `verifying` feature with linked live tasks leaves the file unchanged and exits non-zero with the actionable message; (b) the same call with a port reopens through the guarded transition (history line asserted); (c) a server-context test asserts the *route* (the guarded funnel was used, not a direct status write) for the HTTP reopen; (d) a construction/mutation test for R4's loud failure.
-- [ ] R6. **Docs.** The design satellite owning the feature lifecycle (`docs/design/planning-record-contracts.md` § feature check row, and the task-creation/link surface section) must state the single funnel and that the optional-port shape was transitional; the `feature check --fix` runbook entry must name the requirement instead of implying a bare status write.
-- [ ] R7. **Same-change bundle** — `bun run --filter @gobing-ai/spur build:bundle` plus `bun run build:scripts` when a plugin script is touched.
+- [ ] R1. **`feature check --fix` performs no raw status write.** Delete the `else` branch at `packages/app/src/services/feature-check.ts:281-286`. With no `transitionPort`, the reopen is not applied. The check reports an error finding `feature-reopen-unavailable`, which names the missing port and gives the recovery ("run `spur feature check <id> --fix` from the CLI, or call `spur feature update <id> active`"). The feature file stays byte-identical, and no `feature-reopen` repair entry is reported. Structural repairs (headings, R-item checkboxes) still apply.
+- [ ] R2. **The server validates feature transitions in-process.** Add `transitionFeatureGuarded` in `packages/app/src/services/feature-transition.ts`, mirroring `transitionTaskGuarded`, and route `apps/server/src/modules/feature/handlers.ts:63-67` and the reopen hook at `apps/server/src/context.ts:500-503` through it. It:
+  - (a) loads the `feature-lifecycle` graph with the existing `loadWorkflowDef`/`resolveWorkflowFile` (no spawn), and refuses an edge that is not declared;
+  - (b) runs the in-process `FeatureCheckService.check(id, { as: to })` for every edge whose YAML guard is `kind: shell`, and denies on error findings;
+  - (c) refuses a target state that declares `onEnter` actions (today: `verifying`), with the message "entering `verifying` runs feature verification; use `spur feature update <id> verifying` from the CLI";
+  - (d) throws `GuardDeniedError` for every refusal, which the handler already maps to HTTP 409 `GUARD_DENIED`.
+
+  `always` edges, including the `verifying → active` reopen, pass unchanged.
+- [ ] R3. **One raw status writer is not reintroduced.** Add a static pin test that fails when a non-test file under `packages/`, `apps/`, `plugins/` or `scripts/` calls `setFrontmatterField('status'` on a feature document. The only status writer is `PlanningWriteServiceImpl.transition`.
+- [ ] R4. **A missing graph fails loudly.** If `resolveWorkflowFile` cannot find `feature-lifecycle.yaml`, `transitionFeatureGuarded` throws `GuardDeniedError` naming the profile (`feature-lifecycle`) and the searched roots. It never falls back to `SchemaLifecyclePort`.
+- [ ] R5. **Tests (written first, each shown to fail without its fix).**
+  - (a) A no-port `feature check --fix` on a `verifying` feature with a live linked task leaves the file byte-identical and returns the `feature-reopen-unavailable` error.
+  - (b) The with-port reopen still yields `active` plus a History line.
+  - (c) A server-context `feature.transition` `active → verifying` on a feature whose check has error findings is denied with 409, and the file is unchanged.
+  - (d) An undeclared edge is denied.
+  - (e) The server reopen hook still reopens `verifying → active` with a History line.
+  - (f) The R3 pin.
+- [ ] R6. **Docs.**
+  - `docs/design/planning-record-contracts.md` (feature-check row and the task→feature link section) states that the reopen requires a port and that the raw fallback was removed.
+  - The server surface satellite that documents `feature.transition` states the in-process guard and the 409 refusals, including `→ verifying`.
+- [ ] R7. **Same-change bundle.** Run `bun run --filter @gobing-ai/spur build:bundle`. No plugin script is touched, so `build:scripts` is not required.
 
 ### Acceptance Criteria
 
 ```gherkin
-Scenario: AC1 — No port means no write, and a loud failure instead (req: R1)
+Scenario: AC1 — No port means no status write and an actionable finding (req: R1)
   Given a verifying feature with one linked live todo task
-  When "feature check <id> --fix" runs through a caller that supplies no transition port
+  When feature check runs with fix enabled and no transition port
   Then the feature file is byte-identical afterwards
-  And the result is a non-zero failure naming the missing lifecycle capability and the recovery
-  And no repair entry claims a reopen
+  And the result carries the error finding "feature-reopen-unavailable" naming the CLI recovery
+  And no repair entry of kind feature-reopen is reported
 ```
 
 ```gherkin
-Scenario: AC2 — With a port the reopen still goes through the guarded transition (req: R1)
+Scenario: AC2 — With a port the reopen still goes through the transition (req: R1)
   Given the same feature and a transition port bound to the feature lifecycle profile
-  When "feature check <id> --fix" runs
-  Then the feature is active and carries the transition history line
+  When feature check runs with fix enabled
+  Then the feature is active and its History section gains one verifying → active line
   And the reported repair is kind feature-reopen
 ```
 
 ```gherkin
-Scenario: AC3 — The HTTP reopen is guarded, not permissive (req: R2)
-  Given the server context and a verifying parent feature
-  When a task is created through the server context against that feature
-  Then the reopen is performed by the guarded funnel
-  And the feature history line exists
-  And the permissive fallback path is not taken
+Scenario: AC3 — The server denies a guarded edge whose check fails (req: R2)
+  Given the server context and an active feature whose "feature check --as verifying" has error findings
+  When the HTTP feature.transition moves it to verifying
+  Then the response is 409 GUARD_DENIED
+  And the feature file is byte-identical afterwards
 ```
 
 ```gherkin
-Scenario: AC4 — Status mutation has one owner (req: R3)
+Scenario: AC4 — The server refuses undeclared edges and onEnter targets (req: R2)
+  Given the server context and a backlog feature
+  When the HTTP feature.transition moves it to done
+  Then the response is 409 GUARD_DENIED naming the undeclared edge
+  And a clean active feature moved to verifying over HTTP is refused with the CLI recovery message
+```
+
+```gherkin
+Scenario: AC5 — The server reopen keeps working (req: R2)
+  Given the server context and a verifying feature
+  When a task is created against that feature through the server context
+  Then the feature is active with one verifying → active History line
+```
+
+```gherkin
+Scenario: AC6 — No second raw status writer exists (req: R3)
   Given the implemented change
-  When feature status writes across the CLI, task-link, feature-check and sync paths are inspected
-  Then each routes through the single funnel
-  And no other module sets a feature status field directly
+  When the static pin test scans non-test sources under packages, apps, plugins and scripts
+  Then no call to setFrontmatterField with "status" on a feature document is found
 ```
 
 ```gherkin
-Scenario: AC5 — A capability-less service fails loudly (req: R4)
-  Given a caller that constructs a status-mutating feature service without a lifecycle-capable write service
-  When the mutation is attempted
-  Then it fails with the named error class and a message naming the expected profile
+Scenario: AC7 — A missing lifecycle graph is a loud refusal (req: R4)
+  Given a server context whose workflow roots contain no feature-lifecycle.yaml
+  When any feature transition is requested
+  Then GuardDeniedError names the feature-lifecycle profile and the searched roots
   And no file is written
 ```
 
 ```gherkin
-Scenario: AC6 — The regression tests fail without their fixes (req: R5)
-  Given the four new tests
-  When each corresponding fix is reverted in an isolated copy
-  Then the test fails
-  And with the fix in place they pass inside "bun run spur-check"
-```
-
-```gherkin
-Scenario: AC7 — Owning docs and bundle reflect the single funnel (req: R6, R7)
-  Given the implementation is complete
-  When "bun run spur-check" and the bundle rebuild run
-  Then both pass
-  And the design satellite documents the funnel and the removed transitional port shape
-  And the feature-check runbook entry names the lifecycle requirement
+Scenario: AC8 — Tests fail without their fixes and the gates pass (req: R5, R6, R7)
+  Given the six new tests
+  When each fix is reverted in an isolated copy
+  Then the corresponding test fails
+  And with the fixes in place "bun run spur-check" and the bundle rebuild pass
+  And the owning design satellites state the port requirement and the server guard
 ```
 
 ### Q&A
@@ -114,28 +142,61 @@ Scenario: AC7 — Owning docs and bundle reflect the single funnel (req: R6, R7)
      condition. Not a parking lot for open questions — an unanswered question here means the task
      is not ready to hand off. Keep empty if none. -->
 
+#### Q&A entry — 2026-10-09T18:11:02.990Z
+
+- **Q: Port the CLI `LifecycleAdapter` to the server (Design option a) or add an in-process guard?** A (closed 2026-10-09): use an in-process guard, `transitionFeatureGuarded`. The adapter spawns `spurBin` guards and runs the nested `feature-verification` workflow `onEnter`; neither belongs in the server/Worker transport (ADR-021). Task transitions already use the in-process precedent (0966 R3).
+- **Q: Should the server run the `verifying` onEnter itself?** A: no. It refuses `→ verifying` with the CLI recovery. Starting a nested verification run from an HTTP handler is out of scope; revisit only if the Board needs a "send to verification" button.
+- **Q: Does R1 make `feature check --fix` fail as a whole?** A: no. It is one error finding, so the exit is non-zero as for any error finding. Structural repairs still apply. Only the status mutation is withheld.
+- **Q: Is a construction-time refusal (old R4) needed?** A: no. The single raw writer is deleted and pinned (R3), and the server path gets its own guard (R2). A required-port constructor change would ripple through every `FeatureServiceImpl` caller for no added safety.
+
 ### Design
 
-- **The optional port is the defect, not the fallback code.** A service whose purpose is to mutate lifecycle state must not accept "no way to validate this transition" as an input. Make the capability required: either the caller supplies a lifecycle-backed writer (as the CLI does with `FEATURE_LIFECYCLE_PROFILE`) or the mutation refuses with a named error. That inverts today's default from *succeed silently* to *fail loudly*, which is the only safe direction for a status write.
+- **R1, `feature-check.ts`.** Replace the `else` branch with `findings.push({ severity: 'error', code: 'feature-reopen-unavailable', message })` and skip the reopen repair. Keep the `transitionPort` branch byte-for-byte.
+- **R2, new `packages/app/src/services/feature-transition.ts`.** Signature:
 
-- **One funnel (R3) rather than three patched paths.** Today feature status can be set by: `FeatureService.transition` (guarded, history), the `feature-check` repair (guarded *or* raw), `feature sync` (derived status), and direct frontmatter edits in tests/scripts. The task consolidates the first three onto one funnel and removes the raw path. `FeatureService.transition` (`packages/app/src/services/feature-service.ts:250`) is already the right seam; the work is to make every caller use it and to stop any other writer from touching `status`.
+  ```ts
+  transitionFeatureGuarded(
+      deps: { features: FeatureService; check: FeatureCheckService; cwd: string },
+      input: { id: string; to: string; actor?: string },
+  ): Promise<WriteResult>
+  ```
 
-- **Server parity (R2) is a wiring fix with a design question.** The server has no lifecycle adapter today, so *task* transitions also ride the permissive `SchemaLifecyclePort`. Two candidate fixes: (a) construct the server's `PlanningWriteService` with the same lifecycle adapter the CLI builds (`makeLifecycleAdapter(context, FEATURE_LIFECYCLE_PROFILE)` — it needs `bundledConfigRoot`/config resolution to be available in the worker context), or (b) inject a guarded transition funnel that the server owns. Decide with the server's actual constraints (Cloudflare worker runtime, no filesystem config root) and record the choice in the design satellite; if (a) is impossible in the worker, (b) plus the loud-failure rule from R4 is the answer — never the permissive fallback.
+  Steps:
+  1. Resolve the graph: `resolveWorkflowFile(cwd, 'feature-lifecycle')`, then `loadWorkflowDef(path, { validateSchema: false })`. A `null` path throws `GuardDeniedError`, which covers R4.
+  2. Read the current status and find the matching `transitions[]` entry for `from → to`. No match throws (`undeclared edge <from> → <to>`).
+  3. If the target state's `onEnter` is non-empty, throw with the CLI recovery.
+  4. If `guard.kind === 'shell'`, run `check.check(id, { as: to })`. Any error finding throws `GuardDeniedError` carrying the finding messages.
+  5. Otherwise call `features.transition(id, to, actor)`. History and event come from the write service as today.
 
-- **Boundaries.** Do not change the feature lifecycle FSM's states or guards; do not add a new public CLI verb or flag; do not make `feature check --fix` stop repairing *structure* (headings, R-item checkboxes) — only the status mutation is affected; do not re-open the `L4.verifying-incomplete-tasks` severity decision; do not touch the corpus-owned `## Testing`/`## Review` write path.
-
-- **Failure inventory to write before code:** (a) requiring the port breaks a legitimate in-process caller (the operator's own scripts/testing) — the loud failure must name the recovery; (b) the server fix (a) being impossible in the worker and the fallback silently returning; (c) the funnel refactor double-writing history (one line from `transition`, one from the caller); (d) `feature sync`'s derived status change being forced through a lifecycle guard it does not need; (e) removing the raw path breaking a test that relied on it (must be re-pointed at the funnel, not re-added); (f) the loud failure surfacing as an unhandled throw in a pipeline state instead of a classified finding.
+  Server wiring:
+  - Add `transitionFeature(input)` on the server context next to `transitionTask`.
+  - The `feature.transition` handler and the 1132 reopen hook call it.
+  - Export it from the `@gobing-ai/spur-app` index.
+- **R3 pin.** Add `packages/app/tests/feature-status-writer-pin.test.ts`. It walks the four roots with `Bun.Glob`, skips `**/tests/**`, and asserts that no `setFrontmatterField('status'` call appears in a file that also references the `'feature'` domain. The 0 matches after the R1 deletion are the baseline.
+- **Boundaries.**
+  - No FSM state or guard edits.
+  - No new public CLI verb or flag; the HTTP contract shape is unchanged (409 is already mapped).
+  - The CLI path is untouched.
+  - `feature sync` is untouched.
+- **Failure inventory (write as tests first).**
+  - A shell-guard edge accidentally treated as `always`, which lets `verifying → done` through.
+  - The `as`-status not passed to the check, which re-creates the 0418 one-active-goal deadlock.
+  - The reopen hook double-writing History.
+  - A refused transition leaving a partial write.
+  - The YAML resolved from the bundled tier instead of the project tier (`resolveWorkflowFile` is project-first; assert the precedence).
 
 ### Plan
 
-1. **Failure inventory first** (Design's list), one row per way this change can be wrong.
-2. **Tests before implementation**: the no-port refusal (file byte-identical + non-zero + message), the with-port guarded reopen (history line asserted), a server-context route test, and the construction/mutation failure test — each demonstrated to fail before its fix.
-3. **Implement R1** — delete the raw fallback in `packages/app/src/services/feature-check.ts`; make the port (or a lifecycle-capable write service) required for the reopen; add the named error and its message.
-4. **Implement R2** — decide and implement the server wiring (adapter, or a server-owned guarded funnel), asserting the route in a test.
-5. **Implement R3/R4** — route every feature status write through the funnel; convert remaining direct `status` writes; add the construction/mutation refusal.
-6. **Docs (R6) + bundle (R7)**; then `bun run --filter @gobing-ai/spur build:bundle`.
-7. **Acceptance drill** — reproduce the original shape: `task create --feature <verifying>` over HTTP (server context) and via the CLI must both reopen through the funnel with a history line, and a `feature check --fix` run without a port must change nothing. Record the commands and outputs in Testing.
-8. `bun run spur-check` once on the final tree; record the evidence.
+1. Write the R5 tests (a)–(f) and the failure-inventory cases. Confirm each fails on the current tree.
+2. R1: delete the raw fallback and add the `feature-reopen-unavailable` finding.
+3. R2/R4: add `feature-transition.ts`, export it, add `transitionFeature` to the server context, and route the handler and the reopen hook through it.
+4. R3: add the pin test.
+5. R6: update the docs. R7: rebuild the bundle.
+6. Acceptance drill:
+   - over the server context: `active → verifying` with a failing check gives 409; `backlog → done` gives 409; reopen through task create gives `active` plus History;
+   - via the CLI: `spur feature check <id> --fix` still reopens.
+   - Record the commands and outputs.
+7. Run `bun run spur-check` once on the final tree.
 
 ### Solution
 
@@ -151,12 +212,18 @@ Scenario: AC7 — Owning docs and bundle reflect the single funnel (req: R6, R7)
 
 ### References
 
-- Found by review passes in run `85fab6d4-baf5-4db8-a0e9-810b12927fb4` (task 1132, 2026-10-08); re-confirmed in the session review of the same day.
-- Raw-write fallback: `packages/app/src/services/feature-check.ts:278-286`; port wired by the CLI at `apps/cli/src/commands/feature.ts:477`.
-- Unguarded server path: `apps/server/src/context.ts:558-565` (`FeatureServiceImpl` without a lifecycle adapter), reopen wired at `apps/server/src/context.ts:501`.
-- Guarded reference implementation: `apps/cli/src/commands/task.ts:1980-1998` (FEATURE lifecycle profile port) and `apps/cli/src/commands/feature.ts:655` (`makeLifecycleAdapter(context, FEATURE_LIFECYCLE_PROFILE)`); `packages/app/src/services/feature-service.ts:250` (`transition`).
-- The profile-mismatch failure this design exists to prevent: cycle 3 of the 1132 run, `FSMError: Cannot reseed run … to undeclared state "verifying"` when the task-profile write service was reused for a feature transition.
-- Related tasks/features: 1132 (origin), F21 (owner of the task→feature link surface), B7 (run-scoped executor session), ADR-021 (apps are thin transports; logic in `packages/app`).
+- Raw-write fallback: `packages/app/src/services/feature-check.ts:278-286`. The CLI wires the port at `apps/cli/src/commands/feature.ts:477`.
+- Server:
+  - generic transition handler: `apps/server/src/modules/feature/handlers.ts:63-67`;
+  - feature service without a lifecycle adapter: `apps/server/src/context.ts:558-565`;
+  - 1132 reopen hook: `apps/server/src/context.ts:500-503`;
+  - in-process task-gate precedent: `apps/server/src/context.ts:532-551` and `packages/app/src/services/task-transition.ts:229`.
+- Permissive port: `packages/app/src/services/planning-write-service.ts:86-95`. History and event emission: `:490` and `:512`.
+- Feature graph: `config/workflows/feature-lifecycle.yaml`.
+  - The `verifying` onEnter is at `:38-53`.
+  - The `verifying → active` reopen is an `always` edge at `:89-93`.
+- Graph loading: `packages/app/src/workflow/lifecycle-adapter.ts:362-375` (`loadWorkflowDef`). CLI adapter: `apps/cli/src/workflow/make-lifecycle-adapter.ts:23`.
+- Origin: run `85fab6d4-baf5-4db8-a0e9-810b12927fb4` (task 1132). Related: F21 (task→feature link surface), 0966 R3 (server task guard), ADR-021.
 
 ### History
 

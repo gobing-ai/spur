@@ -4,11 +4,13 @@ name: session-timeline must measure the pi host transcript so the review skill's
 status: todo
 template: feature-impl
 created_at: 2026-10-09T05:34:59.326Z
-updated_at: "2026-10-09T16:52:17.537Z"
+updated_at: "2026-10-09T18:12:17.979Z"
 feature_id: E5
 
 ac_altitude: task-local
 ac_numbering: task-local
+priority: P2
+estimate_hours: 3
 ---
 
 ## 1138. session-timeline must measure the pi host transcript so the review skill's time and token contract is available on pi
@@ -41,68 +43,84 @@ R5 prescribes. The reviewed session was ≈11.7 h of one pi transcript with hund
 
 **Session evidence (2026-10-09), reproduced while reviewing the session that filed this task.** (a) The review skill's documented invocation — `node scripts/session-timeline.mjs --group "..."`, with no `--transcript` — returns `{"available":false,"reason":"no host session id; pass --transcript <path> (pi: ~/.pi/agent/sessions/<cwd-slug>/<file>.jsonl)"}` on this pi host, so the measurement ran only with an explicit transcript path. (b) The segment list opened a segment for each skill-injection body: segment 1's prompt is the `<skill name="sp-dev-runall" …>` wrapper and segment 10's is the `<skill name="sp-dev-review-session" …>` wrapper, which is the R3 case in live data.
 
+**Refine corrections (2026-10-09)**
+
+**Most of the original scope shipped with task 1130 (done).** The task is narrowed to the residue.
+
+What 1130 already delivered, in `plugins/sp/lib/transcript.ts`, `plugins/sp/scripts/session-timeline.ts` and `plugins/sp/tests/session-timeline.test.ts` (pi block at `:245-286`):
+- pi schema detection (`sniffFormat`, `transcript.ts:169-175`);
+- pi prompt and tool parsing (`promptText` at `:78-86`, `accumulate` at `:121-145`);
+- usage mapping `cacheWrite → cacheCreate` with `reasoning` not added (`:135-140`);
+- `compaction` counting (`:146`);
+- a zero-segment result reported as `available:false` (`session-timeline.ts:151-153`);
+- a committed pi fixture (`plugins/sp/tests/fixtures/pi-session.jsonl`).
+
+Old R1, R2, R4, R6 (pi half) and most of R5 are therefore met and are removed.
+
+What is still open, verified on the current tree:
+1. **Old R8: the pi session is not resolved from the environment.** `resolveTranscript` (`transcript.ts:202-221`) reads only `CLAUDE_CODE_SESSION_ID`. pi exports `PI_SESSION_FILE` and `PI_SESSION_ID` into its bash tool env (`@earendil-works/pi-coding-agent/dist/core/tools/bash.js:137-147`), so the documented no-arg invocation fails on pi. The resolver is shared with `run-summary.ts:220`, so one fix covers both scripts, including 1146's summary.
+2. **Old R3: injected skill bodies still open segments on pi.** `promptText` returns the text of every `role:"user"` row, including `<skill name="…">` wrappers. The fixture has no such row, so nothing tests it.
+3. **The R5 reason is generic.** It says `unrecognized transcript format` even when the format was detected as `pi` and only prompts were missing, so the operator cannot tell a schema miss from an empty session.
+
 ### Requirements
 
-- [ ] R1. **Parse the pi transcript schema in addition to the Claude one, with no new flag.** Recognise `type:"message"` rows with `message.role` and content blocks (`text`, `tool_use`, `tool_result`), and use `row.timestamp` (ISO) for boundaries exactly as the Claude path does. Auto-detect by row shape; `--transcript <path>` stays the only input surface.
-- [ ] R2. **Map pi usage onto the existing token model correctly.** `cacheWrite` → `cacheCreate`; keep `cacheRead` as cache-read; do not double-count `reasoning` (it is already inside pi's `output`); ignore `cost` for token cells (it may be surfaced separately only if a caller asks). Verify the total = input + cacheCreate + cacheRead + output invariant and the `total / non-cached` rendering on a fixture.
-- [ ] R3. **Segment on operator prompts only.** A skill-injected body must not open a segment: classify `role:"user"` rows whose content is a `<skill name=…>` wrapper (and the injected-command shapes the hosts use) as injected, and count them in the transcript's metadata rather than as segments. Operator wait stays the idle gap before the next operator prompt plus `AskUserQuestion` answer time, unchanged.
-- [ ] R4. **Handle every observed row type explicitly and count what is skipped.** `custom`, `compaction`, `session_info`, `model_change`, `thinking_level_change`, `context_edit` must be recognised (skipped with a reason) rather than falling through, and `skippedLines` must be non-zero whenever unparseable content exists — the zero-segment case must never be reported as a successful measurement.
-- [ ] R5. **Honest availability.** When a transcript yields no segments, or its schema is unrecognised, the result is `{"available":false,"reason":"…"}` naming the detected schema and what was missing — never `available:true` with an empty segment list. (`--help` keeps the current two-flag surface.)
-- [ ] R6. **Fixture tests for both host shapes.** Committed fixtures: a Claude transcript and a pi transcript containing (a) three operator prompts including `continue`, (b) one skill-injected body, (c) one `compaction` row, (d) a fenced code block containing text that looks like a prompt, (e) assistant rows with pi's usage keys. Assertions: segment count and boundaries, work/wait split, token total and non-cached split, `skippedLines` behaviour, and the `available:false` path for an unrecognised schema.
-- [ ] R7. **Docs and install parity.** The review skill's Protocol step 1 and the script's usage/known-hosts notes name the supported transcript schemas and the pi mapping; `bun run build:scripts` regenerates `plugins/sp/scripts/session-timeline.mjs`, and the installed `~/.agents/scripts/sp/session-timeline.mjs` is refreshed by the normal plugin install path (no hand-edited copies).
+- [ ] R1. **Resolve the pi transcript from the environment.** In `resolveTranscript` (`plugins/sp/lib/transcript.ts`), the order is:
+  1. an explicit `--transcript` override;
+  2. `CLAUDE_CODE_SESSION_ID` (unchanged);
+  3. `PI_SESSION_FILE` when it is set and exists.
+
+  When `PI_SESSION_FILE` is set but missing on disk, the result is `{ok:false, reason:"PI_SESSION_FILE <path> does not exist"}`. `PI_SESSION_ID` is not used for lookup, because pi's session-file name is not derivable from the id alone. The change is shared, so `run-summary` gains it with no edit of its own.
+- [ ] R2. **Injected bodies do not open segments.** A `role:"user"` pi row whose first text block, after leading whitespace, starts with `<skill name="` is injected. It is accumulated into the open segment as activity, does not open a segment, and is counted in a new top-level `injectedPrompts` number on the timeline. Operator text that merely contains `<skill` later in the body is still a prompt. Claude rows are unchanged: their injected bodies already arrive as `isMeta`.
+- [ ] R3. **The unavailable reason names what was detected.** For zero segments the reason is:
+  - `"pi transcript with no operator prompts (<n> rows, <k> injected)"` when the format is known;
+  - `"unrecognized transcript format (row types: <top-5 type census>)"` when the format is `unknown`.
+
+  The census uses `row.type` counts from the parsed rows.
+- [ ] R4. **Fixtures and tests.**
+  - Extend `plugins/sp/tests/fixtures/pi-session.jsonl` with one `<skill name="sp-dev-run" …>` user row and one operator prompt containing `<skill` mid-text.
+  - Assert: the segment count is unchanged by the injected row; `injectedPrompts` is 1; the mid-text prompt opens a segment.
+  - Add tests for R1: `PI_SESSION_FILE` resolves; a missing file gives the named reason; the Claude id still wins when both are set.
+  - Add tests for both R3 reasons.
+  - Each test must be shown to fail before its fix.
+- [ ] R5. **Docs and generated parity.**
+  - `plugins/sp/skills/session-review/SKILL.md:93` and `plugins/sp/commands/dev-review-session.md` state that pi resolves via `PI_SESSION_FILE`.
+  - The no-host-id reason in `transcript.ts:212` names `PI_SESSION_FILE`.
+  - `bun run build:scripts` regenerates the `.mjs` files; the installed copy refreshes through `superskill install`, never by hand.
 
 ### Acceptance Criteria
 
 ```gherkin
-Scenario: AC1 — A pi transcript yields real segments (req: R1)
-  Given a pi transcript fixture with three operator prompts
-  When "session-timeline --transcript <fixture>" runs
-  Then it reports available true with exactly three segments
-  And each segment boundary is the operator prompt's timestamp
-  And no extra flag was required
+Scenario: AC1 — A pi session resolves from PI_SESSION_FILE (req: R1)
+  Given an environment with PI_SESSION_FILE pointing at an existing pi transcript and no Claude session id
+  When session-timeline and run-summary run without --transcript
+  Then both measure that transcript
+  And with PI_SESSION_FILE pointing at a missing path the result is available false naming that path
+  And when a Claude session id is also set the Claude transcript is resolved
 ```
 
 ```gherkin
-Scenario: AC2 — pi usage maps onto the token model without double counting (req: R2)
-  Given assistant rows carrying input, output, cacheRead, cacheWrite, reasoning and totalTokens
-  When the timeline is measured
-  Then cacheWrite is counted as cacheCreate and reasoning is not added on top of output
-  And the total equals input plus cacheCreate plus cacheRead plus output
-  And the non-cached cell equals total minus cacheRead
+Scenario: AC2 — A skill-injected body is counted, not segmented (req: R2)
+  Given the pi fixture with one skill-injected user row and one operator prompt containing "<skill" mid-text
+  When the timeline is built
+  Then the injected row opens no segment and injectedPrompts is 1
+  And the mid-text operator prompt opens its own segment
 ```
 
 ```gherkin
-Scenario: AC3 — A skill-injected body does not open a segment (req: R3)
-  Given a transcript whose skill-injected user row is followed by an operator prompt
-  When the timeline is measured
-  Then the injected body is not a segment boundary
-  And the injected row is reported in the transcript metadata rather than as a prompt
-  And operator wait time is unchanged by the injected row
+Scenario: AC3 — Zero-segment results say what was detected (req: R3)
+  Given a pi transcript containing only assistant and toolResult rows
+  When session-timeline runs on it
+  Then the result is available false with a reason naming the pi format and the row count
+  And an unknown-format file yields a reason listing its row-type census
 ```
 
 ```gherkin
-Scenario: AC4 — Unrecognised rows and schemas are reported, never silently zeroed (req: R4, R5)
-  Given a transcript containing custom, compaction, model_change and malformed rows
-  When the timeline is measured
-  Then recognised-but-skipped rows are counted and malformed content raises skippedLines
-  And a transcript with turns but no recognised segments returns available false with a named reason
-  And an unrecognised schema returns available false rather than an empty success
-```
-
-```gherkin
-Scenario: AC5 — Both host shapes are covered by committed fixtures (req: R6)
-  Given the two fixture transcripts
-  When the test suite runs
-  Then segments, work/wait split, token split, skipped-line counting and the unavailable path are all asserted
-  And each assertion is shown to fail when its mapping is removed
-```
-
-```gherkin
-Scenario: AC6 — Docs and regenerated script agree (req: R7)
-  Given the implementation is complete
-  When "bun run build:scripts" and the test suite run
-  Then the regenerated .mjs is byte-identical to a fresh conversion
-  And the review skill and the script usage note name the supported schemas
+Scenario: AC4 — Tests fail without fixes and docs match (req: R4, R5)
+  Given the new tests
+  When each fix is reverted
+  Then the corresponding test fails
+  And with fixes in place "bun run spur-check" and "bun run build:scripts" pass
+  And the session-review skill names PI_SESSION_FILE resolution
 ```
 
 ### Q&A
@@ -111,28 +129,41 @@ Scenario: AC6 — Docs and regenerated script agree (req: R7)
      condition. Not a parking lot for open questions — an unanswered question here means the task
      is not ready to hand off. Keep empty if none. -->
 
+#### Q&A entry — 2026-10-09T18:12:09.555Z
+
+- **Q: What happens to the original R1, R2, R4, R6 and R7?** A (closed 2026-10-09): they shipped with 1130 (see Refine corrections) and were removed rather than re-implemented. The fixture-based tests at `session-timeline.test.ts:245-286` are their evidence.
+- **Q: Should resolution also use `PI_SESSION_ID`?** A: no. pi's session file is named `<iso-timestamp>_<id>.jsonl`, so a lookup by id needs a directory scan and a cwd-slug guess. `PI_SESSION_FILE` is exact and is always set alongside the id.
+- **Q: What about other injected wrappers, such as `<command …>`?** A: only `<skill name="` is observed on pi. Widen the rule only when a transcript shows another shape. `injectedPrompts` makes such a miss visible.
+
 ### Design
 
-- **One measurement, two adapters.** Do not fork the script per host. Introduce a thin adapter layer: `detectSchema(rows)` → `claude` | `pi` | `unknown`, then per-schema `promptText(row)`, `isInjected(row)`, `usageOf(row)`, `isBoundaryRow(row)`. The existing segment/work/wait/token aggregation stays untouched, so both hosts share one accounting model and one set of assertions. This also makes a third host (codex/omp) a small adapter rather than a rewrite — the codex transcript shape is already known to the history importer, so the seam is worth having.
-
-- **Injected-prompt classification is the subtle part.** The Claude path keys on `isMeta`/`isCompactSummary`. Pi has no such flags: skill bodies arrive as ordinary `role:"user"` rows beginning with `<skill name="…"`. The rule must therefore be content-based (a `<skill …>` wrapper, and the analogous injected-command wrappers), and it must be **reported** (a count in the transcript metadata) rather than silently dropped, so a future host whose injected shape differs is visible instead of being miscounted as an operator prompt. Bias the rule toward *not* segmenting: a missed operator prompt merges two stages (a bounded error), while a misclassified injected body invents a stage and corrupts the wait split (an unbounded one).
-
-- **Honest unavailability is a contract, not politeness (R5).** The review skill's rule is "`n/a` only when the measurement reports `available:false` or omits it". A `{available:true, segments:[]}` result therefore *forces* a false measurement into the report. The script's own contract should be: segments parsed → available; turns present but none recognised → unavailable with a reason naming the detected schema; schema unrecognised → unavailable with the schema fingerprint (row types + a key census). That is what makes the failure self-announcing on the next host.
-
-- **Boundaries.** Do not change the aggregation math (work/wait/token invariants) or the CLI surface (`--transcript`, `--group`); do not add a host-detection flag; do not import history-import machinery (this script reads one transcript file, it is not an importer); do not hand-edit the installed `.agents/scripts/sp/*.mjs` copy — the source of truth is `plugins/sp/scripts/session-timeline.ts` and `bun run build:scripts` regenerates the `.mjs`.
-
-- **Failure inventory to write before code:** (a) pi fixture misdetected as Claude (fields are absent → must not throw); (b) the Claude path regressing while adding pi (both fixtures must run through the same assertions); (c) double-counting `reasoning` inside `output`; (d) an injected body counted as an operator prompt (the phantom-segment case); (e) an operator prompt that *starts* with `<` being wrongly classified as injected (bias: only a `<skill …>`/`<command …>` wrapper counts, and the count is reported so it is auditable); (f) a transcript with only tool rows reporting a bogus success; (g) `compaction`/`context_edit` rows shifting neither work nor wait incorrectly; (h) the regenerated `.mjs` drifting from the `.ts` source.
+- **`transcript.ts`.**
+  - In `resolveTranscript`, after the Claude-id branch fails for lack of an id, try `env.PI_SESSION_FILE` with `existsSync`.
+  - Add `isInjectedPrompt(row)` (pi-only `<skill name="` prefix test). `promptText` returns `undefined` for injected rows. The caller counts them by calling `isInjectedPrompt` before `promptText`.
+- **`session-timeline.ts`.**
+  - In `buildTimeline`, count injected rows and `accumulate` them into the open segment.
+  - Add `injectedPrompts` to `Timeline` only when `format === 'pi'`, as `compactions` is emitted only for pi, so Claude output is unchanged.
+  - `main` builds the R3 reason from `format`, the row count and a type census. `parseRows` already returns the rows.
+- **Boundaries.**
+  - No new flags.
+  - No change to the aggregation math.
+  - `run-summary` needs no edit beyond inheriting R1.
+  - `node:*` imports only (plugin standalone contract).
+- **Failure inventory (tests first).**
+  - An injected row dropped instead of accumulated, which loses its tool and usage time.
+  - Mid-text `<skill` misclassified.
+  - `PI_SESSION_FILE` taking precedence over an explicit `--transcript`.
+  - The Claude output gaining a new field, which breaks `session-timeline.test.ts:281`.
 
 ### Plan
 
-1. **Capture the fixtures first** — the pi transcript for this session already exists at `~/.pi/agent/sessions/--Users-robin-xprojects-spur-new--/2026-10-08T20-03-20-333Z_01a11d1c-f88c-76a7-81a7-896de0295d30.jsonl`; take a small, redacted slice (three operator prompts, the two skill bodies, a compaction row, a fenced block, assistant usage rows) as the committed fixture, plus a Claude fixture for regression.
-2. **Failure inventory first** (Design's list), one row per way the adapter can be wrong.
-3. **Tests before implementation** — assertions on segment count/boundaries, work/wait split, token total + non-cached split, `skippedLines`, and both unavailable paths; each mapping demonstrated to fail when removed.
-4. **Implement the adapter seam (R1/R2)** — `detectSchema`, per-schema `promptText`/`usageOf`, and the `cacheWrite → cacheCreate` mapping with the reasoning guard.
-5. **Implement R3/R4/R5** — injected-body classification with a reported count, explicit handling of `custom`/`compaction`/`session_info`/`model_change`/`thinking_level_change`/`context_edit`, `skippedLines` truthfulness, and the honest `available:false` reasons.
-6. **Docs and install parity (R7)** — the review skill's Protocol step 1 note, the script's usage note, `bun run build:scripts`; confirm the regenerated `.mjs` matches a fresh conversion.
-7. **Acceptance drill** — run the script against (a) this session's real pi transcript (`--group` on the real operator prompts) and (b) the Claude fixture, and record both outputs; then re-run the review skill's step 1 and confirm the time table is now populated rather than `n/a`.
-8. `bun run spur-check` once on the final tree; record the evidence.
+1. Extend the fixture and write the R4 tests. Confirm they fail.
+2. R1: change `resolveTranscript` and the reason text.
+3. R2: add `isInjectedPrompt` and the `injectedPrompts` counter.
+4. R3: add the reason builder.
+5. R5: update the docs and run `bun run build:scripts`.
+6. Acceptance drill. In a pi session, run `node "$(superskill script path sp session-timeline.mjs)"` with no arguments and record the populated output.
+7. Run `bun run spur-check`.
 
 ### Solution
 
@@ -148,11 +179,10 @@ Scenario: AC6 — Docs and regenerated script agree (req: R7)
 
 ### References
 
-- Observed in this session (pi host, session `01a11d1c-f88c-76a7-81a7-896de0295d30`): `{"available":false,"reason":"no host session id (CLAUDE_CODE_SESSION_ID)…"}` without an id; `{"available":true,"segments":[],"totals":{…zero…},"skippedLines":0}` with `--transcript` — a false `available`.
-- Script under test: `/Users/robin/.agents/scripts/sp/session-timeline.mjs` (generated) ← `plugins/sp/scripts/session-timeline.ts` (source; listed in the repo's `build:scripts` conversion chain). Claude-shaped parsing at `session-timeline.mjs:37` (`promptText`), usage model at `:81` (`row.message?.usage`), segment open at `:151-153`.
-- Transcript evidence: pi rows `{type:"message", message:{role, content[], usage}}` with usage keys `input, output, cacheRead, cacheWrite, reasoning, totalTokens, cost`; census for this session: 1096 `message` rows (8 user, 2 of them `<skill …>` bodies), 248 `custom`, 2 `compaction`, 3 `context_edit`, 5 `session_info`, 3 `model_change`, 2 `thinking_level_change`.
-- Consumers: `sp-session-review` / `sp-dev-review-session` Protocol step 1 (the time/token table), and the 0912 workflow-baseline diagnostics drawn from that measurement (`docs/reports/i31/0912-workflow-baseline.md`, F1/F2/F4 anchors).
-- Related: ADR-117 (structured trace on every execution surface), E5 (session forensics), E71/E7 (run record), and the history importer's existing per-host adapters as prior art for schema detection.
+- Shipped base: task 1130. Code: `plugins/sp/lib/transcript.ts:78-221`, `plugins/sp/scripts/session-timeline.ts:68-160`, `plugins/sp/scripts/run-summary.ts:220`. Tests: `plugins/sp/tests/session-timeline.test.ts:245-286`. Fixture: `plugins/sp/tests/fixtures/pi-session.jsonl`.
+- pi env export: `@earendil-works/pi-coding-agent/dist/core/tools/bash.js:137-147` (`PI_SESSION_ID`, `PI_SESSION_FILE`).
+- Docs: `plugins/sp/skills/session-review/SKILL.md:93`, `plugins/sp/commands/dev-review-session.md:18`.
+- Consumer: task 1146 (the execution summary reuses `resolveTranscript`).
 
 ### History
 

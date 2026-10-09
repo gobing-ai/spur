@@ -4,10 +4,13 @@ name: Make fix-iteration checks cheap and load-tolerant instead of re-running th
 status: todo
 template: standard
 created_at: 2026-10-09T16:51:44.722Z
-updated_at: "2026-10-09T16:52:23.334Z"
+updated_at: "2026-10-09T18:13:39.129Z"
 
 ac_numbering: task-local
 ac_altitude: task-local
+feature_id: H1
+priority: P2
+estimate_hours: 5
 ---
 
 ## 1142. Make fix-iteration checks cheap and load-tolerant instead of re-running the full gate
@@ -34,44 +37,77 @@ occurrence consumed a complete gate cycle, and the first looked like a failure o
 gate. Task 1127 serialized *gates* host-wide (the lock logs `queueWaitMs`), but concurrent *test*
 runs still contend for CPU, so the timeout bound remains the defect.
 
+**Refine corrections (2026-10-09)**
+
+- **The driver policy half already exists.** Task 1127 R8 (`plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:671-683`) forbids implement and test-fix workers from running the full gate. They run the **changed-path matrix** instead (`plugins/sp/skills/code-implementation/SKILL.md:127-152`). Old R1's "the driver never invoked the cheap tiers" is therefore wrong in its premise.
+- **The actual gap is that the matrix and the light tier miss three of the four observed failure classes.**
+  - The matrix runs targeted tests and typechecks, but **no biome check** and **no rule presets**.
+  - `planLightChecks` (`packages/app/src/services/quality-gate.ts:397-425`) runs biome, typecheck and related tests, but **no rule presets**.
+  - `scopeFromFiles` maps only `<ws>/src/**` → `<ws>/tests/**`, so a change to `plugins/sp/skills/**`, `commands/**` or `references/**` maps to **no test**. The `R44 — skill BODY budgets` test in `plugins/sp/tests/skill-structure.test.ts` therefore never runs before the full gate.
+
+  The result: biome diffs, `every-export-has-tsdoc` (post-check preset) and skill budgets were all first seen at the full gate.
+- **Status-test flake.** `apps/cli/tests/commands/status.test.ts:13-16` calls `main(['status'])` with **no `cwd`**, so it scans the live repository (the whole corpus), unlike its siblings, which use a `mkdtemp` cwd (`:19-35`). Unloaded, the file runs in 0.78 s (measured 2026-10-09). The 5 s default bound is only reached because a real-repo scan contends for CPU. The fix is to isolate the input, not to change the bound.
+- Feature: H1 (spur-dev umbrella skill; owns the driver reference and the 1127 lineage).
+
 ### Requirements
 
-- [ ] R1. During a task's fix iterations the driver runs the cheap tiers first: `bunx biome check` over the changed paths, then both rule presets, then the tests the changed paths own. A full gate runs at the quality boundary and after any post-gate source edit, never as the fix-iteration check.
-- [ ] R2. The iteration check uses the existing scope-aware `light` mode in `packages/app/src/services/quality-gate.ts` for the test tier, so the scope comes from the changed files and the full-tier receipt is preserved. No new script, verb or flag is introduced.
-- [ ] R3. The classes that cost a full gate in the session above are reproduced by the iteration check with the whole check measured under 30 seconds: a biome formatter diff, a violation of the `recommended-pre-check` rule set, and the tests owned by the changed paths.
-- [ ] R4. `status command > reports project status` stops being load-sensitive. Either its timing bound is re-derived from what the command actually needs on a loaded host, or the test is made deterministic (for example by injecting the slow dependency) — a raised constant with no justification is not the fix. The chosen bound is stated with its ground.
-- [ ] R5. The driver reference states the iteration order and names the light tier, so a later session does not re-derive the policy from scratch.
+- [ ] R1. **The light tier covers the cheap failure classes.** `planLightChecks` appends, after the biome step, two plans:
+  - `rules:pre` → `bun run test-pre-check`;
+  - `rules:post` → `bun run test-post-check`.
+
+  They run whenever the scope is non-empty, in the existing light receipt. The full-tier receipt is still preserved (`quality-gate.ts:519`).
+- [ ] R2. **Plugin prose changes map to their structure tests.** In `scopeFromFiles`, a changed path under `plugins/sp/{skills,commands,agents,references}/**` adds `plugins/sp/tests/skill-structure.test.ts` to the `plugins/sp` workspace's tests. Under `plugins/sp/commands/**` it also adds `plugins/sp/tests/flag-contract-parity.test.ts`. A changed `plugins/sp/scripts/<x>.ts` maps to `plugins/sp/tests/<x>.test.ts` when that file exists.
+- [ ] R3. **Workers use the light tier as their iteration check.** `inline-pipeline-driver.md` § 1127 R8 and `code-implementation/SKILL.md` § Changed-path targeted checks state the order:
+  1. the changed-path matrix (narrow behaviour tests);
+  2. `bun plugins/sp/scripts/quality-gate.ts light` (biome, typecheck, rule presets, related tests).
+
+  Neither step takes the full-gate lock. The pipeline's `test` / `test-recheck` hop remains the only full gate. No new script, verb or flag.
+- [ ] R4. **Measured speed and catch.** On a fixture tree, the light tier finishes in under 30 s and fails on each of these seeded defects:
+  - (a) a biome formatter diff in a changed `.ts` file;
+  - (b) an exported function without TSDoc (post-check preset);
+  - (c) a skill `SKILL.md` body over its R44 budget.
+- [ ] R5. **The status test is deterministic.** `status.test.ts` `reports project status` passes a fresh `mkdtemp` cwd with a minimal `.spur/config.yaml`, as its sibling does, so it no longer scans the live repository. The default 5000 ms bound is kept. Testing records the per-test time unloaded and under four concurrent `bun run test` runs.
 
 ### Acceptance Criteria
 
 ```gherkin
-Scenario: AC1 — a formatter nit never costs a full gate (req: R1, R3)
-  Given a change with a biome formatter diff on two files
-  When the driver runs its fix-iteration check
-  Then the diff is reported within 30 seconds of total check time
-  And no full quality gate ran
+Scenario: AC1 — The light tier runs the rule presets (req: R1)
+  Given a non-empty light scope
+  When planLightChecks builds the plan
+  Then the plan contains rules:pre and rules:post after format-lint:changed
+  And a light run leaves an existing full-tier receipt intact
+```
 
-Scenario: AC2 — the light tier is scope-aware and keeps the full receipt (req: R2)
-  Given a change to two files under packages/app
-  When the iteration check's test tier runs
-  Then it exercises the changed scope and reports the changed file count
-  And the full-tier check receipt at the same input digest is byte-identical afterwards
+```gherkin
+Scenario: AC2 — Plugin prose changes select their structure tests (req: R2)
+  Given a changed path plugins/sp/skills/x/SKILL.md and a changed plugins/sp/commands/y.md
+  When scopeFromFiles computes the scope
+  Then the tests include plugins/sp/tests/skill-structure.test.ts and plugins/sp/tests/flag-contract-parity.test.ts
+  And a changed plugins/sp/scripts/z.ts selects plugins/sp/tests/z.test.ts when it exists
+```
 
-Scenario: AC3 — a rule violation surfaces before the full gate (req: R1, R3)
-  Given a change that violates a recommended-pre-check rule, such as raw SQL outside packages/domain
-  When the iteration check runs
-  Then the rule violation is reported by the preset run
-  And the full gate was not invoked
+```gherkin
+Scenario: AC3 — The light tier catches the three cheap classes quickly (req: R4)
+  Given a fixture tree seeded with a biome diff, an undocumented export and an over-budget skill body
+  When "quality-gate.ts light" runs on it
+  Then it fails naming each class
+  And the measured wall clock is under 30 seconds
+```
 
-Scenario: AC4 — the status command test survives a loaded host (req: R4)
-  Given three concurrent worktrees running full suites
-  When apps/cli/tests/commands/status.test.ts runs
-  Then it passes without a timeout
-  And its timing bound is documented with the ground for the value
+```gherkin
+Scenario: AC4 — Worker docs state the iteration order (req: R3)
+  Given the updated driver reference and code-implementation skill
+  When a reader looks up the worker iteration check
+  Then the matrix and the light tier are named in order
+  And the full gate is named only for the test and test-recheck hops
+```
 
-Scenario: AC5 — the policy is written down (req: R5)
-  Given the inline driver reference
-  Then it states the cheap-tier order and names the light mode
+```gherkin
+Scenario: AC5 — The status smoke test no longer reads the live repository (req: R5)
+  Given the status smoke test
+  When it runs
+  Then it passes a temporary cwd and stays under the default 5000 ms bound
+  And the Testing section records its unloaded and loaded timings
 ```
 
 ### Q&A
@@ -94,52 +130,38 @@ Scenario: AC5 — the policy is written down (req: R5)
 - **Deferred:** any change to gate scheduling or to the host-wide lock (task 1127 already serialized
   gates); any change to the rule set itself.
 
+#### Q&A entry — 2026-10-09T18:13:37.680Z
+
+- **Q: Should we add a new "iteration" mode?** A (closed 2026-10-09): no. The existing `light` mode (0939/ADR-124) is the iteration tier. This task fills its coverage gaps and points the worker docs at it.
+- **Q: Is the rule-preset cost acceptable inside light?** A: yes. The pre-check preset ran 50 rules in 7.7 s and post-check took about 1 s (session measurement). That is well inside the R4 budget of 30 s.
+- **Q: What about the status-test bound?** A: keep 5000 ms. The test was slow only because it scanned the live repository; isolating the cwd removes the load sensitivity at its source.
+
 ### Design
 
-**Surface.** Driver policy plus one test bound. The gate script already has the tiers; the defect is
-that the driver's iteration loop calls the full tier every time. The fix is an ordered check ladder in
-the driver contract, and a rebind of the `status` test's timing.
-
-**Iteration ladder (order is the contract).**
-1. `bunx biome check --write` over the changed paths — catches formatter and import-order classes.
-2. `bun run test-pre-check` and `bun run test-post-check` — 50 + 2 rules in under 10 seconds
-   combined, which is where `raw-sql-only-in-domain`, `every-export-has-tsdoc` and the corpus gates
-   live.
-3. The tests the changed paths own, run inside the owning workspace so its `bunfig.toml` preload
-   applies — or `light` mode, which derives that scope itself.
-4. The full gate once, at the boundary, and again after any post-gate source edit.
-
-**Why the light tier rather than a new script.** It already derives scope from changed files, skips
-checks that passed at the same digest, and preserves the full-tier receipt (quality-gate service,
-`tier: 'light'`). A second implementation would drift from the receipt semantics that the record
-stage depends on.
-
-**Timing bound for the status test.** A hard 5 s bound on a command that shells out and reads project
-state is a contention-sensitive assertion: it measures host load as much as the command. The fix
-either injects the slow dependency so the assertion is about behavior, or derives the bound from a
-measured worst case on a loaded host and states that measurement next to the constant. The second
-option is acceptable only with the measurement recorded, because an unbounded raise hides real
-regressions.
-
-**Rejected alternative.** Skipping the rule presets because "the full gate runs them anyway". The
-session evidence shows the presets are 7.7 s and the full gate is 6–12 min; the presets are the
-cheapest way to catch the class that actually failed.
-
-**Impacted surfaces.** The inline driver reference and its contract tests; the status command test.
-No change to the gate script, the rules, or the CLI surface.
+- **`quality-gate.ts`.**
+  - `planLightChecks`: after `format-lint:changed`, push `{id:'rules:pre', cmd:'bun run test-pre-check'}` and `{id:'rules:post', cmd:'bun run test-post-check'}` when `scope.files.length > 0`.
+  - `scopeFromFiles`: add a `plugins/sp` branch implementing the R2 mappings, with each candidate tested by `exists()` as the `src → tests` branch already does.
+  - Tests go in `packages/app/tests/services/quality-gate*.test.ts`, extending the existing plan and scope assertions.
+- **Docs.** Two prose edits (R3). The `inline-pipeline-parity-check` and the skill budget test must stay green.
+- **Status test.** Copy the sibling's `mkdtemp` + `.spur/config.yaml` setup. Assert `exitCode === 0` instead of `typeof number`, which is a stronger smoke check.
+- **Boundaries.**
+  - No change to the full gate, the gate lock, or the receipt schema.
+  - No new flag or verb.
+  - No change to the `test`/`test-recheck` YAML.
+- **Failure inventory (tests first).**
+  - Rule presets running from a workspace cwd. They must run from the repo root, so their plans carry no `cd`.
+  - A plugin mapping selecting a non-existent test.
+  - The light tier overwriting a full receipt.
+  - The skill-structure test being slow enough to break R4.
 
 ### Plan
 
-1. Reproduce the 30-second claim: time biome over two changed files, both presets, and the light
-   tier on a two-file change; record the numbers.
-2. Write the iteration ladder into the driver reference and extend the driver contract tests to pin
-   the order and the named light mode.
-3. Diagnose the status test's slow path, then fix it by dependency injection if the slowness is an
-   environmental read, or rebind the constant with a recorded loaded-host measurement if it is not.
-4. Verify: run the light tier twice at one digest and confirm the full-tier receipt is unchanged;
-   run the presets against a planted rule violation and confirm the reported class; run the status
-   test with two concurrent full suites running.
-5. Report the measured check time and the bound's ground in Testing.
+1. Write the plan and scope tests for R1/R2 and the seeded fixture for R4. Confirm they fail.
+2. Implement R1/R2 in `quality-gate.ts`.
+3. R5: isolate the status test, then measure it unloaded and under load.
+4. R3: make the doc edits.
+5. Acceptance drill. Seed the three defects in a scratch worktree, run `bun plugins/sp/scripts/quality-gate.ts light`, and record the output and wall clock.
+6. Run `bun run spur-check`.
 
 ### Solution
 
@@ -155,7 +177,11 @@ No change to the gate script, the rules, or the CLI surface.
 
 ### References
 
-<!-- Links to features, docs, ADRs, related tasks, or external references. -->
+- Light tier: `packages/app/src/services/quality-gate.ts:184-189` (tiers), `:340-366` (`scopeFromFiles`), `:397-425` (`planLightChecks`), `:519` (full receipt preserved). CLI script: `plugins/sp/scripts/quality-gate.ts:43`.
+- Worker rule: `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:671-683` (1127 R8). Matrix: `plugins/sp/skills/code-implementation/SKILL.md:127-152`.
+- Presets: `package.json:79-80`. Budget test: `plugins/sp/tests/skill-structure.test.ts` (R44).
+- Status test: `apps/cli/tests/commands/status.test.ts:13-16`; sibling pattern at `:18-42`.
+- Lineage: 0939 (light tier), 1111 (deferred tier), 1127 (gate lock and worker rule).
 
 ### History
 

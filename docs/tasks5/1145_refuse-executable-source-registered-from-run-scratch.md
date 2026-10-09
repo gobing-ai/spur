@@ -1,13 +1,14 @@
 ---
 schema_version: 1
 name: Refuse executable source registered from run scratch
-status: todo
+status: cancelled
 template: standard
 created_at: 2026-10-09T16:51:46.326Z
-updated_at: "2026-10-09T16:54:36.680Z"
+updated_at: "2026-10-09T17:59:25.869Z"
 
 ac_numbering: task-local
 ac_altitude: task-local
+feature_id: E71
 ---
 
 ## 1145. Refuse executable source registered from run scratch
@@ -37,6 +38,20 @@ Two further facts sharpen this task:
 2. **The migration classified the sources as preserved, not relocated.** `.spur/memory/run-storage-migration.json` records `.spur/run/stop-hook-proposed-checkable.ts` with no destination and status `preserved`, so the durable-evidence pass deliberately left executable source in scratch.
 
 R1's guard therefore also supplies the missing discoverability: the refusal names the path, which is what an operator needs when the emitter cannot otherwise be found.
+
+**Refine corrections (2026-10-09) — premise invalid; task cancelled**
+
+- "A search for `Add verification for` finds it in no tracked file, no plugin hook and no installed hook location" → **false**. The string is emitted by the installed Superskill `cc` anti-hallucination prevent-stop guard:
+  - `~/.pi/agent/plugins/cc/pi-stop.ts:254` (pi);
+  - `~/.codex/plugins/cache/superskill/cc/0.3.35/scripts/anti-hallucination/ah_guard.ts` (codex);
+  - `~/.omp/plugins/cache/plugins/superskill___cc___0.3.35/scripts/anti-hallucination/ah_guard.ts` (omp).
+
+  The received message is that guard's product, not scratch code's.
+- "executable source … registered from scratch" → **no registration points into `.spur/run`**. Searched `~/.claude/settings.json`, `.claude/`, `~/.pi/agent/*.json`, `~/.codex/hooks.json`, `~/.omp/agent/*` and `plugins/sp/hooks/hooks.json`. The only hits are transcript and mission records, which are data.
+
+  The `.spur/run/stop-hook-*.ts` files (2026-09-30) are working drafts of that external guard: `stop-hook-original.ts` is the 633-line `ah_guard.ts` engine with header "Anti-Hallucination Guard - prevent-stop hook engine", and the "proposed" files are edits to it. They were run by hand during a diagnosis, not loaded by a host.
+- Consequence: R1–R4's registration guard would defend a surface that no Spur or host loader exposes (YAGNI). R5's "relocate to a tracked owner" belongs to the Superskill `cc` plugin repository, not to Spur.
+- Resolution: **cancelled**. The stray drafts are disposable scratch under ADR-131, so the operator may delete them. Any change to the guard's behavior is a Superskill `cc` task. 1141 R5's hand-off to this task is withdrawn in 1141.
 
 ### Requirements
 
@@ -156,4 +171,5 @@ standalone contract tests. No schema or CLI surface change.
 ### History
 
 - 2026-10-09T16:52:24.352Z backlog → todo (system)
+- 2026-10-09T17:59:25.869Z todo → cancelled (system)
 

@@ -4,10 +4,13 @@ name: Retarget task done_reason evidence pointers from run scratch to durable ev
 status: todo
 template: standard
 created_at: 2026-10-09T16:43:56.946Z
-updated_at: "2026-10-09T16:44:17.881Z"
+updated_at: "2026-10-09T17:57:44.394Z"
 
 ac_numbering: task-local
 ac_altitude: task-local
+feature_id: E71
+priority: P2
+estimate_hours: 3
 ---
 
 ## 1140. Retarget task done_reason evidence pointers from run scratch to durable evidence
@@ -35,48 +38,61 @@ update surface. `spur task migrate-anchors` already performs the same class of w
 it qualifies in-repo evidence anchors — and carries the `--dry-run` and `--wbs` options a bounded
 migration needs.
 
+**Refine corrections (2026-10-09)**
+
+- "Seventeen task files" → `rg '^done_reason:.*\.spur/run/'` finds **22**:
+  - 16 `.spur/run/<wbs>-verdict.json` and 1 `.spur/run/1086/verdict.json`. All 17 have a durable `.spur/memory/evidence/<wbs>-verdict.json`.
+  - 3 legacy verdict pointers have no durable copy and no scratch copy: 0494, 0497, 0562. All three have a populated tracked Testing section.
+  - 2 prose mentions of spike directories: 0490 and 0491 cite `.spur/run/049x-spike/`. These describe where a spike ran; they do not cite a verdict.
+  - Resolution: the class is **verdict-evidence pointers**. Spike-dir prose is out of scope here and for 1141's rule.
+- R1 "unresolved pointer left byte-identical" → that leaves 3 permanent violations, so 1141's rule could never go green. ADR-131 names the tracked Testing section as a durable owner, so the resolution is: retarget an unresolved verdict pointer to the tracked Testing section when that section is non-empty, and leave it unchanged (reported) only when Testing is empty too.
+- R5 "outcome enum per row" → `migrate-anchors` already reports `fileReports[].doneReasons[{from,to}]` (1089 R3). Extend that shape (`kind`, `unresolved`) instead of adding a parallel report.
+- Feature: none → **E71** (ADR-131 consumer invariant).
+
 ### Requirements
 
-- [ ] R1. Every task whose `done_reason` names a run-scratch verdict path (`.spur/run/<wbs>-verdict.json` or an equivalent `.spur/run/` evidence file) is retargeted to the durable owner for that evidence, and only when the durable copy resolves. A pointer whose durable copy is absent is left byte-identical and reported as unresolved; no pointer is invented or synthesized.
-- [ ] R2. The rewrite runs through the existing corpus surface `spur task migrate-anchors`, extended to qualify `done_reason` evidence pointers. `--dry-run` reports the complete change set without writing any file, and `--wbs <wbs>` scopes the pass to one task. No new public noun, verb or flag is introduced.
-- [ ] R3. The pass is idempotent. A second invocation rewrites nothing and reports zero rewrites; a pointer that already names the durable owner is not touched, and its surrounding frontmatter is byte-identical afterwards.
-- [ ] R4. Every byte outside the retargeted pointer value is preserved: other frontmatter fields, all sections, and all history entries. Prose sections that describe the scratch mechanism — including mentions of `.spur/run/` paths as runtime description — are never rewritten, because they document the mechanism rather than cite evidence.
-- [ ] R5. `--json` emits a machine-readable report with one row per task: the wbs, the outcome (`rewritten`, `already-durable`, `durable-copy-missing`, `no-pointer`), and the old and new pointer values for rewrites. The human output names the same outcomes.
+- [ ] R1. `spur task migrate-anchors` retargets a `done_reason` verdict pointer, matching `.spur/run/<wbs>-verdict.json` or `.spur/run/<wbs>/verdict.json` as a substring of the value, to `.spur/memory/evidence/<wbs>-verdict.json` when that file exists under the repo root. Only the matched path substring changes.
+- [ ] R2. When no durable verdict exists but the task's tracked `Testing` section is non-empty, the pointer substring is replaced with `tracked Testing section (scratch verdict not retained)`. When both are absent, the value is left unchanged and the row is reported `unresolved`.
+- [ ] R3. The report keeps the existing `fileReports[].doneReasons[{from,to}]` shape and adds `kind: 'absolute-path' | 'durable-evidence' | 'tracked-testing'`, plus `doneReasonUnresolved?: string` on the file report. `--dry-run` writes nothing. `--wbs` scopes to one task. No new noun, verb or flag.
+- [ ] R4. Idempotent: a second run yields zero `doneReasons` rows. The existing absolute-path normalization (1089 R3) still applies first, so an absolute scratch pointer resolves in one pass.
+- [ ] R5. Only the `done_reason` value changes. Sections, other frontmatter and History bytes are preserved. Prose `.spur/run/` mentions, including the 0490/0491 spike-dir pointers, are never touched.
+- [ ] R6. The pass runs once on this repository. The resulting corpus diff (expected 20 rewrites, 0 unresolved) is committed with this task.
 
 ### Acceptance Criteria
 
 ```gherkin
-Scenario: AC1 — dry-run reports the change set and writes nothing (req: R2, R5)
-  Given a task corpus containing tasks whose done_reason names a run-scratch verdict path
-  When `spur task migrate-anchors --dry-run --json` runs
-  Then every such task appears in the report with outcome rewritten and its old/new pointer values
-  And no task file's bytes change on disk
+Scenario: AC1 — a scratch verdict pointer is retargeted to durable evidence (req: R1, R5)
+  Given a done task whose done_reason is "unforced close; PASS artifact at .spur/run/1046-verdict.json"
+  And .spur/memory/evidence/1046-verdict.json exists
+  When `spur task migrate-anchors --wbs 1046` runs
+  Then done_reason reads "unforced close; PASS artifact at .spur/memory/evidence/1046-verdict.json"
+  And no other byte of the file changes
 
-Scenario: AC2 — a resolvable pointer is retargeted to the durable owner (req: R1)
-  Given a done task whose done_reason names `.spur/run/<wbs>-verdict.json`
-  And `.spur/memory/evidence/<wbs>-verdict.json` exists with the canonical verdict bytes
-  When the pass runs without --dry-run
-  Then that task's done_reason names the durable evidence path
-  And the named path resolves on disk
-
-Scenario: AC3 — an unresolved pointer is reported and left alone (req: R1)
-  Given a done task whose done_reason names a run-scratch path
-  And no canonical copy exists under `.spur/memory/evidence/`
+Scenario: AC2 — a subpath verdict pointer is normalized (req: R1)
+  Given done_reason cites .spur/run/1086/verdict.json and .spur/memory/evidence/1086-verdict.json exists
   When the pass runs
-  Then the report carries outcome durable-copy-missing for that task
-  And its done_reason is unchanged
+  Then done_reason cites .spur/memory/evidence/1086-verdict.json
 
-Scenario: AC4 — a second run is a no-op (req: R3)
-  Given a corpus already migrated by the pass
-  When the pass runs again
-  Then the report carries zero rewritten rows
-  And every previously migrated pointer still names the durable owner
+Scenario: AC3 — a pointer with no durable copy falls back to tracked Testing (req: R2)
+  Given done_reason cites .spur/run/0562-verdict.json with no durable copy
+  And the task's Testing section is non-empty
+  When the pass runs
+  Then the pointer substring reads "tracked Testing section (scratch verdict not retained)"
+  And the row kind is tracked-testing
 
-Scenario: AC5 — only the pointer value changes (req: R4)
-  Given a task with a scratch done_reason plus a Testing section that describes `.spur/run/` outputs
-  When the pass rewrites that task's pointer
-  Then the diff for that file touches only the done_reason value
-  And the Testing section bytes are identical
+Scenario: AC4 — a pointer with neither owner is reported, not rewritten (req: R2, R3)
+  Given done_reason cites a scratch verdict with no durable copy and an empty Testing section
+  When `spur task migrate-anchors --json` runs
+  Then the file report carries doneReasonUnresolved with the pointer
+  And the file bytes are unchanged
+
+Scenario: AC5 — dry-run, idempotency and prose safety on this repository (req: R3, R4, R5, R6)
+  Given the repository corpus
+  When `spur task migrate-anchors --dry-run --json` runs
+  Then 20 doneReasons rows are reported and no file changes
+  When the pass is applied and then run again
+  Then the second run reports zero doneReasons rows
+  And the 0490/0491 done_reason values are byte-identical
 ```
 
 ### Q&A
@@ -104,51 +120,36 @@ Scenario: AC5 — only the pointer value changes (req: R4)
 - **Deferred:** any change to the `cited-directory:` skip vocabulary, and the executable-source class
   under `.spur/run/` (a gitignored directory, so it is not a corpus concern).
 
+#### Q&A entry — 2026-10-09T17:57:38.592Z
+
+- **Q: Are the 0490/0491 spike-directory mentions in scope?** A: No. They are historical prose about where a spike ran and cite no verdict. ADR-131 binds evidence citations; 1141's rule matches the same verdict-file class.
+- **Q: Leave the 3 legacy pointers unchanged (original R1)?** A: No. Retarget them to the tracked Testing section, which ADR-131 names as a durable owner. Otherwise 1141's rule is permanently red.
+- **Q: New outcome enum or extend the existing report?** A: Extend `doneReasons` with a `kind` field. The 1089 R3 shape already exists and is consumed by `apps/cli` human output.
+
 ### Design
 
-**Surface.** Extend `spur task migrate-anchors` rather than add a verb or a flag. It already owns
-"qualify in-repo evidence anchors to repo-relative paths" on the task corpus, it already carries
-`--dry-run` and `--wbs`, and qualifying a `done_reason` pointer is the same operation on a different
-field. No public-surface consent is required because the noun, verb and flag set are unchanged
-(ADR-051). A new `spur task update --done-reason` flag was rejected as a public-surface addition
-whose only caller would be this one migration.
+`packages/app/src/services/anchor-qualifier.ts`:
 
-**Classification.** Read the frontmatter `done_reason` string, extract a `.spur/run/<name>` evidence
-path if one is present, and resolve the durable counterpart under `.spur/memory/evidence/` using the
-existing evidence-root constant rather than a hand-built path. Rewrite only when the durable file
-exists; otherwise report and preserve. Multiple pointers in one string are each considered.
+- Rename nothing. Add `retargetScratchVerdict(reason: string, repoRoot: string, hasTesting: boolean, exists: (p) => boolean): {to: string; kind} | {unresolved: string} | null`. It uses `SCRATCH_VERDICT_RE = /\.spur\/run\/(\d{4})(?:-|\/)verdict\.json/`.
+- In `qualifyAnchors` (@397–410), compose it after `normalizeDoneReason`: `const step1 = normalizeDoneReason(v) ?? v; const step2 = retargetScratchVerdict(step1, …)`. Write the final value once through the existing `opts.writeField` path. `hasTesting` is `(doc.getSection('Testing') ?? '').replace(/<!--[\s\S]*?-->/g,'').trim().length > 0`.
+- `AnchorFileReport.doneReasons` items gain `kind`. Add `doneReasonUnresolved?: string`. CLI human output (`apps/cli/src/commands/task.ts` migrate-anchors) prints `done_reason: <from> → <to> (<kind>)` and `done_reason unresolved: <ptr>`.
+- `existsSync` on `join(repoRoot, '.spur/memory/evidence', '<wbs>-verdict.json')` decides. The durable plane is gitignored, so this is a local fact. Running the pass on a fresh clone yields `tracked-testing` rather than `durable-evidence`; acceptable, because both are ADR-131 owners.
 
-**Invariants.** The write is byte-preserving outside the pointer value: parse the frontmatter, replace
-the value, and leave every other byte of the file untouched — no reformatting, no section
-normalization, no history append. The pass is idempotent because the matcher requires a `.spur/run/`
-prefix, so a durable pointer never matches a second time. Historical prose sections are out of scope
-by construction: only the frontmatter pointer field is read.
-
-**Fallback behavior stated by the amended ADR.** An unresolved durable pointer is not an error to
-repair by invention — the pass reports `durable-copy-missing` and stops. That keeps the migration
-honest when a scratch artifact predates the durable relocation and has no canonical copy.
-
-**Relationship to ADR-131's `cited-directory:` allowance.** The persist-out `cited-directory:` skip
-vocabulary stays as compatibility for historical citations inside task bodies; this migration
-retires the frontmatter class instead of extending that allowance.
-
-**Impacted surfaces.** `packages/app` migrate-anchors service and its report types, the CLI verb's
-options wiring, and the corpus files it rewrites. No schema, contract or artifact-shape change.
+Same-change doc: the `spur task migrate-anchors` entry in `plugins/sp/skills/spur-cli/references/task.md` gains one line on done_reason retargeting.
 
 ### Plan
 
-1. Read the existing `migrate-anchors` service and its report shape; confirm where a second anchor
-   class fits without duplicating the walk or the write path.
-2. Add the `done_reason` pointer matcher and the durable resolution check, reusing the evidence-root
-   constant and the existing frontmatter read/write seam.
-3. Extend the report rows with the new outcomes and old/new pointer values.
-4. Write the AC1–AC5 cases first against a fixture corpus of four tasks (resolvable pointer,
-   unresolved pointer, already-durable pointer, pointer plus prose mention); they fail before the
-   matcher exists.
-5. Run the focused suite, then `spur task migrate-anchors --dry-run --json` over the real corpus and
-   compare the reported set against the seventeen known tasks.
-6. Apply the pass, re-run `--dry-run` to confirm zero rewrites, then `spur task check` over the
-   affected tasks and the rule presets.
+1. Failure modes first in `packages/app/tests/services/anchor-qualifier.test.ts`:
+   - F1: a scratch verdict pointer is left as-is.
+   - F2: the subpath form is missed.
+   - F3: a durable-missing pointer is silently dropped or rewritten without Testing.
+   - F4: the second run rewrites again.
+   - F5: a prose `.spur/run/` mention in Testing is rewritten.
+   - F6: an absolute plus scratch pointer needs two passes.
+2. Implement `retargetScratchVerdict` and compose it in `qualifyAnchors`. Extend the report types. Update CLI human output.
+3. `(cd packages/app && bun test tests/services/anchor-qualifier.test.ts)`; `(cd apps/cli && bun test tests/commands/task.test.ts)`.
+4. On this repo: run `spur task migrate-anchors --dry-run --json`, assert 20 rows and 0 unresolved, then apply and run again to confirm 0 rows. Commit the corpus diff.
+5. `bun run spur-check`.
 
 ### Solution
 
@@ -164,7 +165,8 @@ options wiring, and the corpus files it rewrites. No schema, contract or artifac
 
 ### References
 
-<!-- Links to features, docs, ADRs, related tasks, or external references. -->
+- ADR-131 (2026-10-09 amendment). `packages/app/src/services/anchor-qualifier.ts:130-141,397-410` (1089 R3 precedent).
+- Blocks 1141 (rule must be green on the migrated corpus).
 
 ### History
 
