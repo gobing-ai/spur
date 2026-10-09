@@ -125,6 +125,9 @@ Feature: Session forensics implementation
 | 0580 | Mapper fidelity: codex roles, claude usage, tool_name pollution, epoch-0 sentinel | done |
 | 0581 | Per-step token/time and cache-efficiency sections in the analyze artifact | done |
 | 0624 | Close the 0622 history data-plane residue: per-response usage dedup, claude forensic blind spots, empty sources and ETL tables | done |
+| 1130 | Parse pi transcripts in session-timeline | done |
+| 1131 | Fix tool-call args digest collisions and attach pi tool durations in history import | done |
+| 1138 | session-timeline must measure the pi host transcript so the review skill's time and token contract is available on pi | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
