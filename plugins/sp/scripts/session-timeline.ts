@@ -16,11 +16,14 @@ import {
     accumulate,
     formatDuration,
     formatTokenSplit,
+    isInjectedPrompt,
     newAcc,
     parseRows,
     promptText,
+    type Row,
     resolveTranscript,
     type Span,
+    sniffFormat,
     sumSpans,
     sumTokens,
 } from '../lib/transcript';
@@ -37,6 +40,8 @@ export interface Timeline {
     stages?: Rendered<Span & { segments: string }>[];
     totals: Rendered<Span & { elapsedMs: number; elapsed: string; compactions?: number }>;
     skippedLines: number;
+    /** pi only (1138 R2): skill-injected user bodies counted as activity, never as segments. */
+    injectedPrompts?: number;
 }
 
 const PROMPT_EXCERPT = 80;
@@ -70,8 +75,17 @@ export function buildTimeline(lines: string[], group?: string): Timeline {
     const open: Open[] = [];
     const { rows, skippedLines, format } = parseRows(lines);
     const isPi = format === 'pi';
+    let injectedPrompts = 0;
 
     for (const [row, ts] of rows) {
+        // 1138 R2: an injected skill body is activity, not a prompt — accumulate it into the open
+        // segment (its tools and usage are real work) and count it, never open a segment.
+        if (isPi && isInjectedPrompt(row)) {
+            injectedPrompts++;
+            const injectedSeg = open.at(-1);
+            if (injectedSeg) accumulate(injectedSeg, row, ts);
+            continue;
+        }
         const prompt = promptText(row);
         if (prompt !== undefined) {
             open.push({ start: ts, prompt, ...newAcc(ts) });
@@ -110,6 +124,8 @@ export function buildTimeline(lines: string[], group?: string): Timeline {
             isPi ? { ...totals, compactions: segments.reduce((n, s) => n + (s.compactions ?? 0), 0) } : totals,
         ),
         skippedLines,
+        // Emitted only for pi, as `compactions` is, so Claude output is unchanged (1138 R2).
+        ...(isPi ? { injectedPrompts } : {}),
     };
     if (group) {
         timeline.stages = parseGroups(group, segments.length).map(([a, b]) =>
@@ -120,6 +136,30 @@ export function buildTimeline(lines: string[], group?: string): Timeline {
 }
 
 export const SESSION_TIMELINE_USAGE = 'usage: session-timeline [--transcript <path>] [--group "1-3,4,..."]';
+
+/**
+ * 1138 R3: a zero-segment result must say WHAT was detected, so an unparseable-but-recognised
+ * transcript can never read as an authoritative all-zero timeline. A known format names the
+ * row count and the injected count; an unknown one lists the top-5 row-type census.
+ */
+export function zeroSegmentReason(rows: [Row, number][]): string {
+    const format = sniffFormat(rows.map(([r]) => r));
+    if (format === 'unknown') {
+        const counts = new Map<string, number>();
+        for (const [r] of rows) {
+            const kind = typeof r.type === 'string' && r.type !== '' ? r.type : '(untyped)';
+            counts.set(kind, (counts.get(kind) ?? 0) + 1);
+        }
+        const census = [...counts.entries()]
+            .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+            .slice(0, 5)
+            .map(([kind, n]) => `${kind} ${n}`)
+            .join(', ');
+        return `unrecognized transcript format (row types: ${census})`;
+    }
+    const injected = rows.filter(([r]) => isInjectedPrompt(r)).length;
+    return `${format} transcript with no operator prompts (${rows.length} rows, ${injected} injected)`;
+}
 
 export function main(
     argv: string[],
@@ -147,9 +187,10 @@ export function main(
         return 0;
     }
     try {
-        const timeline = buildTimeline(readFileSync(resolved.path, 'utf8').split('\n'), group);
+        const lines = readFileSync(resolved.path, 'utf8').split('\n');
+        const timeline = buildTimeline(lines, group);
         if (timeline.segments.length === 0) {
-            write(`${JSON.stringify({ available: false, reason: 'unrecognized transcript format' })}\n`);
+            write(`${JSON.stringify({ available: false, reason: zeroSegmentReason(parseRows(lines).rows) })}\n`);
             return 0;
         }
         write(`${JSON.stringify({ ...timeline, transcript: resolved.path })}\n`);

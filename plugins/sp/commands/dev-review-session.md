@@ -16,7 +16,9 @@ implement-ready tasks for further fixing; `--triage` is an alias of `--fix auto`
 it defers nothing: every actionable finding is fixed inline and no task is filed. The result includes a non-overlapping time breakdown —
 work time, operator wait, tool calls and tokens (total / non-cached) per stage, measured from the host transcript by
 `session-timeline.mjs` — with durations in `M:SS` or `H:MM:SS` form and `n/a` only when that
-measurement is unavailable.
+measurement is unavailable. The transcript resolves from `--transcript`, else
+`CLAUDE_CODE_SESSION_ID`, else `PI_SESSION_FILE` (the pi host sets it and no Claude session id); a
+skill-injected `<skill name="…">` body counts as activity in `injectedPrompts`, never as a segment.
 
 ## Argument Flags
 

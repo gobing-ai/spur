@@ -56,6 +56,16 @@ as `M:SS` below one hour and `H:MM:SS` at one hour or above; unavailable measure
 Operator waits remain separate from execution bottlenecks. Improvements use the shared
 environment-improvement placement rule and remain proposals only.
 
+The transcript is resolved from `--transcript`, else `CLAUDE_CODE_SESSION_ID`, else `PI_SESSION_FILE`
+(the pi host exports `PI_SESSION_ID`/`PI_SESSION_FILE` and no Claude session id; the path is not
+derivable from the id, so the exact file variable is the lookup). With none of them the measurement
+reports `available:false` with a reason. A pi `role:"user"` row whose first text block opens with
+`<skill name="` is a skill-injected body: it is accumulated as activity and counted in the pi-only
+`injectedPrompts` field, but it opens no segment, so only the operator's prompts segment the session.
+A zero-segment result is always `available:false` naming what was detected — the format, row and
+injected counts for a recognised transcript, or a top-5 row-type census for an unrecognised one — so
+a transcript that parses to nothing can never render as an authoritative all-zero timeline.
+
 ## Boundaries
 
 - No workflow YAML, subprocess, subagent, history import, baseline, cache, or atomic publication.

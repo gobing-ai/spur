@@ -79,6 +79,8 @@ export function promptText(row: Row): string | undefined {
     if (row.type === 'message') {
         // pi (1130): only a user-role message with text content is a prompt; toolResult rows are not.
         if (row.message?.role !== 'user') return undefined;
+        // pi (1138 R2): a skill-injected body is activity, not an operator prompt.
+        if (isInjectedPrompt(row)) return undefined;
         const content = row.message.content;
         if (typeof content === 'string') return content;
         if (!Array.isArray(content)) return undefined;
@@ -89,6 +91,24 @@ export function promptText(row: Row): string | undefined {
     if (typeof content === 'string') return content;
     if (!Array.isArray(content) || (content as Block[]).some((b) => b.type === 'tool_result')) return undefined;
     return (content as Block[]).find((b) => b.type === 'text')?.text;
+}
+
+/**
+ * 1138 R2: a pi user row whose first text block, after leading whitespace, opens with
+ * `<skill name="`, is an injected body (pi has no `isMeta` to key on). It is accumulated as
+ * activity and must not open a segment. Operator text that merely CONTAINS `<skill` later in the
+ * body is still a prompt. Claude rows are unaffected: their injected bodies already arrive as `isMeta`.
+ */
+export function isInjectedPrompt(row: Row): boolean {
+    if (row.type !== 'message' || row.message?.role !== 'user') return false;
+    const content = row.message.content;
+    const text =
+        typeof content === 'string'
+            ? content
+            : Array.isArray(content)
+              ? (content as Block[]).find((b) => b.type === 'text')?.text
+              : undefined;
+    return typeof text === 'string' && text.replace(/^\s+/, '').startsWith('<skill name="');
 }
 
 export function sumTokens(all: Tokens[]): Tokens {
@@ -206,11 +226,23 @@ export function resolveTranscript(
 ): Resolved {
     if (override) return existsSync(override) ? { ok: true, path: override } : { ok: false, reason: 'no transcript' };
     const id = env.CLAUDE_CODE_SESSION_ID;
-    if (!id)
+    if (!id) {
+        // 1138 R1: pi exports PI_SESSION_FILE (an exact path) and no Claude session id. Order is
+        // explicit override → Claude id → PI_SESSION_FILE; PI_SESSION_ID is never used for lookup
+        // because pi's filename embeds a timestamp, so the path is not derivable from the id.
+        const piFile = env.PI_SESSION_FILE;
+        if (piFile !== undefined && piFile !== '') {
+            return existsSync(piFile)
+                ? { ok: true, path: piFile }
+                : { ok: false, reason: `PI_SESSION_FILE ${piFile} does not exist` };
+        }
         return {
             ok: false,
-            reason: 'no host session id; pass --transcript <path> (pi: ~/.pi/agent/sessions/<cwd-slug>/<file>.jsonl)',
+            reason:
+                'no host session id; pass --transcript <path> (pi: ~/.pi/agent/sessions/<cwd-slug>/<file>.jsonl, ' +
+                'or set PI_SESSION_FILE)',
         };
+    }
     if (!SESSION_ID.test(id)) return { ok: false, reason: 'refusing a session id with path characters' };
     if (!existsSync(projectsRoot)) return { ok: false, reason: `no transcript root ${projectsRoot}` };
     for (const dir of readdirSync(projectsRoot)) {
