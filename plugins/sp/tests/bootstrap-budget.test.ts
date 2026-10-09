@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 /**
@@ -101,5 +101,41 @@ describe('bootstrap manifest parsing', () => {
         expect(() => parseBootstrapReads('## Bootstrap reads\n\n- sequential-inline: none\n')).toThrow(
             'lists no reference file',
         );
+    });
+});
+
+/**
+ * Task 1128 AC3 — the split moved WT-1…WT-7 into on-demand siblings; each step must be defined
+ * exactly once across references/, or a driver reading one file follows a stale copy. `#` lines
+ * inside fenced code are shell comments, not headings.
+ */
+describe('worktree step headings are defined once (task 1128 AC3)', () => {
+    const REFERENCES = join(SPUR_DEV, 'references');
+
+    function wtHeadings(markdown: string): string[] {
+        const ids: string[] = [];
+        let fenced = false;
+        for (const line of markdown.split('\n')) {
+            if (/^\s*(```|~~~)/.test(line)) fenced = !fenced;
+            else if (!fenced) ids.push(...(/^#{2,6}\s+(WT-\d+[a-z]?)\b/.exec(line)?.slice(1, 2) ?? []));
+        }
+        return ids;
+    }
+
+    test('each WT-1…WT-7 heading appears in exactly one place', () => {
+        const owners = new Map<string, string[]>();
+        for (const name of readdirSync(REFERENCES).filter((n) => n.endsWith('.md'))) {
+            for (const id of wtHeadings(readFileSync(join(REFERENCES, name), 'utf8'))) {
+                owners.set(id, [...(owners.get(id) ?? []), name]);
+            }
+        }
+        for (let n = 1; n <= 7; n++) {
+            expect([`WT-${n}`, owners.get(`WT-${n}`)?.length ?? 0]).toEqual([`WT-${n}`, 1]);
+        }
+        for (const [id, files] of owners) expect([id, files]).toEqual([id, [...new Set(files)]]);
+    });
+
+    test('a fenced `# WT-n` comment is not a heading', () => {
+        expect(wtHeadings('```bash\n### WT-1 — not a heading\n```\n### WT-2 — real\n')).toEqual(['WT-2']);
     });
 });

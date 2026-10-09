@@ -83,8 +83,8 @@ parallel file beside the live pipeline, adding a `residual-sweep` FSM stage reac
 verdict guard. It was **deleted rather than promoted** on 2026-08-20 (ADR-076): it had zero live
 callers, and a resolved-fact comparison showed it declared **5** model queries against the canonical
 pipeline's **4**, so promotion would have raised cost against a goal of lowering it. `task-pipeline.yaml`
-is the single canonical task pipeline. Two-layer plan rendering is the inline driver's job
-(`plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:56-60`).
+is the single canonical task pipeline. Two-layer plan rendering is the batch driver's job
+(`plugins/sp/skills/spur-dev/references/execution-batch.md:247-254`).
 
 **D5 transition (ADR-071/072/076).** The proof-state invariant (ADR-071) requires remediation to be
 separated from a digest-bound quality → review → `--fix none` proof chain. The task pipeline half
