@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: Assert the publish trigger after a ts-libs release tag push
-status: todo
+status: done
 template: standard
 created_at: 2026-10-09T16:51:45.274Z
-updated_at: "2026-10-09T18:14:45.845Z"
+updated_at: "2026-10-09T20:09:23.059Z"
 feature_id: A33
 
 ac_numbering: task-local
 ac_altitude: task-local
 priority: P2
 estimate_hours: 3
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1143-verdict.json
 ---
 
 ## 1143. Assert the publish trigger after a ts-libs release tag push
@@ -51,21 +53,21 @@ publishing, with no assertion to catch it.
 
 ### Requirements
 
-- [ ] R1. **The local-mode hint never recommends `--tags`.** In ts-libs `scripts/lib/release-commands.ts:269-272`, replace the `git push origin --tags` line. The new hint prints:
+- [x] R1. **The local-mode hint never recommends `--tags`.** In ts-libs `scripts/lib/release-commands.ts:269-272`, replace the `git push origin --tags` line. The new hint prints:
   - the branch push;
   - one `git push origin refs/tags/<tag>:refs/tags/<tag>` per package tag, with the aggregate tag last;
   - `bun scripts/builder.ts verify-publish <aggregateTag>`.
 
   It also states the three-tag GitHub limit in one line.
-- [ ] R2. **A check-only publish verifier.** Add a `verify-publish <aggregate-tag> [--dispatch]` command to `scripts/builder.ts`. It runs the existing lookup from `ensurePublishWorkflowRun` without dispatching, prints the run id and URL, and exits 0 when a run exists. When none exists it exits 1, naming the tag and the absent run, and prints the recovery command. With `--dispatch` it performs the existing single dispatch and final lookup.
-- [ ] R3. **No dispatch in the lookup-only path.** Split `ensurePublishWorkflowRun` into `findPublishRun(tag, spawn, sleep)` (bounded lookups) and the dispatch tail. `bumpVersion --push` keeps calling the combined behaviour unchanged.
-- [ ] R4. **Tests (scripted `spawn`, no network).** Cover:
+- [x] R2. **A check-only publish verifier.** Add a `verify-publish <aggregate-tag> [--dispatch]` command to `scripts/builder.ts`. It runs the existing lookup from `ensurePublishWorkflowRun` without dispatching, prints the run id and URL, and exits 0 when a run exists. When none exists it exits 1, naming the tag and the absent run, and prints the recovery command. With `--dispatch` it performs the existing single dispatch and final lookup.
+- [x] R3. **No dispatch in the lookup-only path.** Split `ensurePublishWorkflowRun` into `findPublishRun(tag, spawn, sleep)` (bounded lookups) and the dispatch tail. `bumpVersion --push` keeps calling the combined behaviour unchanged.
+- [x] R4. **Tests (scripted `spawn`, no network).** Cover:
   - (a) the local-mode hint lists per-tag refspecs and contains no `--tags`;
   - (b) `verify-publish` with a matching run gives exit 0 and the URL;
   - (c) no run gives exit 1, zero `gh workflow run` calls, and the recovery text;
   - (d) `--dispatch` with no run makes exactly one dispatch;
   - (e) the existing `--push` tests at `scripts/tests/release-commands.test.ts:193-409` are unchanged.
-- [ ] R5. **Docs.** `docs/PACKAGE_RELEASE.md` names `verify-publish` as the post-push check for a local-mode release. This task's Testing records `verify-publish @gobing-ai/ts-libs-v0.5.19` against the real repository (read-only; that release already has a run).
+- [x] R5. **Docs.** `docs/PACKAGE_RELEASE.md` names `verify-publish` as the post-push check for a local-mode release. This task's Testing records `verify-publish @gobing-ai/ts-libs-v0.5.19` against the real repository (read-only; that release already has a run).
 
 ### Acceptance Criteria
 
@@ -156,15 +158,93 @@ Scenario: AC4 — The push path is unchanged and evidence is recorded (req: R4, 
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+All code changes landed upstream in `/Users/robin/xprojects/ts-libs` under the facade rule — four commits:
+
+- `9e607148` `feat(release): verify-publish command and safe local-mode push hint (1143)`
+- `a0b0855` `fix(release): guard the local-mode branch push against followTags (1143)` (review finding #1)
+- `93c85f0` `fix(release): apply the followTags guard to every printed local-mode push (1143)` (review finding #2)
+- `4c38d3f` `test(release): widen the local-mode push-guard sweep and ban --tags outright (1143)` (review finding #7)
+
+**Upstream — `/Users/robin/xprojects/ts-libs`**
+
+- ts-libs `scripts/lib/release-commands.ts` line 269-278 — (R1) Replaced the local-mode hint's `git push origin --tags` with `git push --no-follow-tags origin <branch>`, one `git push origin refs/tags/<tag>:refs/tags/<tag>` per package tag (aggregate tag last), the `verify-publish` post-push check, and a one-line statement of GitHub's >3-tag rule. The `--no-follow-tags` guard matches what the `--push` path already does via `branchPushArgs` (`branchPushArgs` / `tagPushArgs`); without it, `push.followTags=true` would re-create the 13-tag push that caused the incident.
+- ts-libs `scripts/lib/release-commands.ts` line 299-311 — (R3) Extracted `queryPublishRun(aggregateTag, spawn)` (one `gh run list`, throws `gh run list failed` on non-zero, `undefined` when no match).
+- ts-libs `scripts/lib/release-commands.ts` line 337-350 — (R3) Added `findPublishRun(aggregateTag, spawn, sleep, log)`: bounded polling (≤ `PUBLISH_RUN_LOOKUP_ATTEMPTS` × `PUBLISH_RUN_LOOKUP_INTERVAL_MS`) that never dispatches; returns `PublishRunInfo | undefined`.
+- ts-libs `scripts/lib/release-commands.ts` line 352-390 — (R3) `ensurePublishWorkflowRun` is now `findPublishRun(...) ?? dispatchAndConfirm(...)`; its log lines are byte-identical to the previous revision, so the existing `--push` assertions hold unchanged.
+- ts-libs `scripts/lib/release-commands.ts` line 408-451 — (R2) `verifyPublish(aggregateTag, {dispatch, spawn, sleep, log, errorLog})`: without `--dispatch`, returns 0 and logs the run id + URL when found, or logs the tag plus the `--dispatch` recovery command and returns 1 when absent; with `--dispatch`, delegates to `ensurePublishWorkflowRun` and returns 0/1.
+- ts-libs `scripts/builder.ts` (the `verify-publish` subcommand) — (R2) Added the `verify-publish <aggregate-tag> [--dispatch]` subcommand and widened `usage()`/`fail()` with an explicit exit code so usage errors exit 2 while every pre-existing caller keeps exit 1.
+- ts-libs `scripts/tests/release-commands.test.ts` line 300-397, 496-513 — (R4) New `verifyPublish` suite covering R4(b)–(d) plus `gh` failure surfacing, and the R4(a) local-mode-hint test.
+- ts-libs `docs/PACKAGE_RELEASE.md` line 48-55, 60-66, 197 and ts-libs `scripts/README.md` line 8-18, 29-34 — (R5) Document `verify-publish` as the post-push check for a local-mode release and list it in the command reference.
+
+**Spur tree — gate repairs required by two pre-existing base-tree defects (not caused by this task; proven at base `17d06fe`)**
+
+- `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:792-794` — the runtime-contract note instructed `wbs=<wbs> bun plugins/sp/scripts/task-diffstat.ts`, which trips the `forbidden_invocation` rule in shipped surfaces (`scripts/commands/script-contract-check.ts:143-169`). Repointed to the house idiom `wbs=<wbs> node "$(superskill script path sp task-diffstat.mjs)"`. Introduced by `802d66b63`; it left `script-contract-check` red for every pipeline run on this base.
+- `plugins/sp/lib/idea-handoff.generated.mjs`, `plugins/sp/lib/inline-run.generated.mjs` — regenerated. The committed twins were built against `@gobing-ai/ts-llm-jsonl-importer` 0.5.18; the installed dependency is 0.5.19 (task 1131 R3), whose renamed redaction symbol changed the bundle bytes, so `bundle-plugin-lib.test.ts` byte-equality assertions failed against the committed artifacts. Regeneration is deterministic and install-topology independent (verified: the invoking tree produces byte-identical output). Documented here rather than silently absorbed.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | ts-libs `scripts/lib/release-commands.ts` line 268-282 — local-mode hint prints the branch push, one guarded `refs/tags/<tag>:refs/tags/<tag>` push per package tag, the aggregate tag last, the `verify-publish` check, and one line stating GitHub's >3-tag rule; no `--tags` form remains. Asserted by ts-libs `scripts/tests/release-commands.test.ts` line 496-523 (no `--tags`; per-tag guarded refspecs; aggregate tag last by index; guard sweep over every printed push). |
+| R2 | MET | ts-libs `scripts/lib/release-commands.ts` line 409-450 — `verifyPublish(tag, opts)` returns 0 and logs the run id + URL when a run is found, returns 1 naming the tag plus the `--dispatch` recovery when absent; ts-libs `scripts/builder.ts` (the `verify-publish` subcommand) parses `<tag>` + `--dispatch` and exits 0/1/2. Fresh CLI run: `bun scripts/builder.ts verify-publish @gobing-ai/ts-libs-v0.5.19` → exit 0 with run 37850267092; `@gobing-ai/ts-libs-v999.999.999` → exit 1 with recovery text; no tag → usage, exit 2. |
+| R3 | MET | ts-libs `scripts/lib/release-commands.ts` line 296-311 (`queryPublishRun` — one `gh run list`, throws `gh run list failed` on non-zero, `undefined` on no match), line 313-333 (`findPublishRun` — bounded `PUBLISH_RUN_LOOKUP_ATTEMPTS` × `PUBLISH_RUN_LOOKUP_INTERVAL_MS` polling, never dispatches), line 335-397 (`ensurePublishWorkflowRun` = find or dispatch tail) — the lookup-only path makes zero `gh workflow run` calls, asserted at ts-libs `scripts/tests/release-commands.test.ts` line 305-314. `bumpVersion --push` calls the combined behaviour and its log lines are byte-identical to the previous revision. |
+| R4 | MET | ts-libs `scripts/tests/release-commands.test.ts` — (a) line 496-523, (b) line 305-314, (c) line 322-333, (d) line 344-357, all over a scripted `spawn` with no network; (e) the 6 pre-existing `ensurePublishWorkflowRun` tests and `push path verifies the Publish run and reports it` pass unmodified. Fresh run: `bun test scripts/tests/release-commands.test.ts` → 34 pass / 0 fail; `bun test scripts/tests/` → 92 pass / 0 fail. |
+| R5 | MET | ts-libs `docs/PACKAGE_RELEASE.md` line 44-66 and 197, and ts-libs `scripts/README.md` line 8-35, name `verify-publish` as the post-push check for a local-mode release, describe the `--dispatch` recovery, and state the bounded-lookup caveat. `### Testing` records the real read-only run against the incident's aggregate tag (exit 0, run 37850267092) plus the negative and usage cases. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: AC1 — Local mode prints a safe push sequence (req: R1) | MET | test | ts-libs `scripts/tests/release-commands.test.ts` line 496-523 — asserts the output contains no `--tags`, contains the guarded per-tag refspecs with the aggregate tag last, and names `verify-publish`; the guard sweep proves no printed push can follow tags. |
+| Scenario: AC2 — verify-publish reports an existing run without dispatching (req: R2, R3) | MET | test | ts-libs `scripts/tests/release-commands.test.ts` line 305-314 — exit 0, run id and URL logged, exactly one `gh run list` call and no `gh workflow run`. Confirmed live: run 37850267092 printed with exit 0. |
+| Scenario: AC3 — A missing run fails loudly with recovery (req: R2, R3) | MET | test | ts-libs `scripts/tests/release-commands.test.ts` line 322-357 — exit 1 naming the tag, recovery text printed, zero dispatch calls; with `--dispatch` exactly one dispatch is made. Confirmed live: exit 1 with the recovery command for a non-existent tag. |
+| Scenario: AC4 — The push path is unchanged and evidence is recorded (req: R4, R5) | MET | test | All pre-existing `--push` release-commands tests pass unmodified (`bun test scripts/tests/` → 92 pass / 0 fail); `### Testing` records the real read-only `verify-publish` run against the incident aggregate tag (ts-libs `scripts/lib/release-commands.ts` line 409-450), exit 0 with run 37850267092. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review Report — 1143
+
+**Scope:** ts-libs `9e607148`, `a0b0855`, `93c85f0`, `4c38d3f` — `scripts/lib/release-commands.ts`, `scripts/lib/release.ts`, `scripts/builder.ts`, `scripts/tests/release-commands.test.ts`, `scripts/README.md`, `docs/PACKAGE_RELEASE.md`; Spur worktree — `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md`, `plugins/sp/lib/{idea-handoff,inline-run}.generated.mjs`, task `Solution`/`Testing`.
+**Dimensions:** functional, security, efficiency, correctness, usability, architecture
+**Verdict:** PASS
+
+##### Findings (ranked)
+
+| # | Priority | Dimension | Finding | Location | Disposition |
+|---|----------|-----------|---------|----------|-------------|
+| 1 | P2 (major) | correctness | The local-mode hint's branch push printed bare `git push origin <branch>`, omitting the `push.followTags` guard the `--push` path applies (`branchPushArgs`). Under `push.followTags=true` it would push all 13 release tags at once — the exact silent non-trigger this task exists to prevent. | ts-libs `scripts/lib/release-commands.ts` line 270, mirroring `branchPushArgs` | FIXED (`a0b0855`); assertion locked at ts-libs `scripts/tests/release-commands.test.ts` line 504-505 |
+| 2 | P2 (major) | correctness | The same omission on every printed *tag* push (`git push origin refs/tags/<tag>:refs/tags/<tag>`), while `tagPushArgs` guards the identical refspec form. Confirmed empirically, not just from git-push(1): a scratch repo with 5 annotated tags on one commit and `push.followTags=true` pushed 5 tags unguarded and 1 tag guarded. | ts-libs `scripts/lib/release-commands.ts` line 273, 275, mirroring `tagPushArgs` | FIXED (`93c85f0`); per-tag assertions plus a guard sweep at ts-libs `scripts/tests/release-commands.test.ts` line 506-523 |
+| 3 | P3 (minor) | architecture | The pre-existing `ensurePublishWorkflowRun` JSDoc was pasted verbatim onto the extracted `queryPublishRun`, documenting dispatch behaviour that function does not have, and duplicated on its original owner. | ts-libs `scripts/lib/release-commands.ts` line 299-311 | RESOLVED (`a0b0855`) |
+| 4 | P3 (minor) | usability | `scripts/README.md` enumerates every `builder.ts` subcommand but did not list the new public `verify-publish`. | ts-libs `scripts/README.md` line 8-18 | RESOLVED (`a0b0855`) |
+| 5 | P3 (minor) | functional | R5/AC4's second clause required the real read-only `verify-publish` run in `### Testing`, and the Solution did not record the two pre-existing Spur-side gate repairs. | `docs/tasks5/1143_assert-the-publish-trigger-after-a-ts-libs-release-tag-push.md` `### Testing` | DONE (`37850267092` recorded; gate repairs documented in `### Solution`) |
+| 6 | P3 (minor) | usability | The check-only form's bounded ~10s lookup was undocumented, so a scripted verify fired the instant the tag lands could report a false "no run" for a merely-late trigger. | ts-libs `docs/PACKAGE_RELEASE.md` line 60-66, `scripts/README.md` | RESOLVED (`93c85f0`) |
+| 7 | P4 (advisory) | correctness | The `--tags` negative assertion matched only the literal `git push origin --tags`, and the guard sweep filtered on `push origin` — a bare `git push --tags` would evade both. | ts-libs `scripts/tests/release-commands.test.ts` line 503, 515 | RESOLVED (`4c38d3f`, test-only hardening after the PASS review) |
+| 8 | P4 (advisory) | security | Reviewed and clean: all `gh`/`git` invocations use argv arrays with no shell, so tag values cannot be injected; a `gh` auth failure throws `gh run list failed` and is never misreported as "no run"; `--dispatch` dispatches at most once on every path; the 0/1/2 exit widening is confined to the new `verify-publish` case with every pre-existing caller still exiting 1; the `--push` log lines are byte-identical to the previous revision. | ts-libs `scripts/lib/release-commands.ts` line 303-321, 329-357, 361-397; ts-libs `scripts/builder.ts` (the `verify-publish` subcommand) | ACCEPTED |
+
+##### Functional Traceability
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 (local-mode hint: branch push, per-tag refspecs, aggregate last, `verify-publish`, three-tag limit, no `--tags`) | MET | ts-libs `scripts/lib/release-commands.ts` line 272-280; every printed push guarded (findings 1–2 fixed); ts-libs `scripts/tests/release-commands.test.ts` line 496-523 |
+| R2 (`verify-publish <tag> [--dispatch]`; 0 found / 1 absent + recovery / 2 usage) | MET | ts-libs `scripts/lib/release-commands.ts` line 392-450; ts-libs `scripts/builder.ts` (the `verify-publish` subcommand); ts-libs `scripts/tests/release-commands.test.ts` line 300-397 |
+| R3 (lookup split from dispatch; `--push` unchanged) | MET | `queryPublishRun` `:296-311`, `findPublishRun` `:313-333`, `ensurePublishWorkflowRun` `:335-390` — combined behaviour and log lines preserved |
+| R4 (tests a–e, scripted `spawn`, no network) | MET | (a) `:496-523`; (b) `:305-314`; (c) `:322-333`; (d) `:344-357`; (e) the pre-existing `--push` suite passes unmodified |
+| R5 (docs + recorded read-only run) | MET | ts-libs `docs/PACKAGE_RELEASE.md` line 44-66, 197, `scripts/README.md`; `### Testing` records exit 0 with run `37850267092`, exit 1 recovery on the negative tag, exit 2 on usage |
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| AC1 — local mode prints a safe push sequence (req: R1) | MET | test | ts-libs `scripts/tests/release-commands.test.ts` line 496-523 — no `--tags` anywhere, guarded per-tag refspecs with the aggregate tag last, `verify-publish` named |
+| AC2 — verify-publish reports an existing run without dispatching (req: R2, R3) | MET | test | ts-libs `scripts/tests/release-commands.test.ts` line 305-314 — exit 0, run id + URL logged, exactly one `gh run list`, zero `gh workflow run` |
+| AC3 — a missing run fails loudly with recovery (req: R2, R3) | MET | test | ts-libs `scripts/tests/release-commands.test.ts` line 322-357 — exit 1 naming the tag, recovery text printed, zero dispatches; `--dispatch` makes exactly one |
+| AC4 — the push path is unchanged and evidence is recorded (req: R4, R5) | MET | test | pre-existing `--push` tests pass unmodified; `### Testing` records the real read-only `verify-publish @gobing-ai/ts-libs-v0.5.19` |
+
+**Residual risk:** the review was read-only and could not re-run the ts-libs suite or `git show`; suite results are taken from `### Testing` and re-confirmed by the coordinator (`bun run check` 2870 pass / 0 fail). Finding 7's hardening (`4c38d3f`) landed after the PASS review and is test-only — it cannot introduce a P1–P3 defect, and the file's suite was re-run green. No workflow trigger, trusted-publishing or tag-scheme change was made; no publish was executed, per R6.
+
+**Next:** Verify against R1–R5 / AC1–AC4, then record.
 
 ### References
 
@@ -183,4 +263,7 @@ Scenario: AC4 — The push path is unchanged and evidence is recorded (req: R4, 
 ### History
 
 - 2026-10-09T16:52:23.699Z backlog → todo (system)
+- 2026-10-09T19:01:00.842Z todo → wip (system)
+- 2026-10-09T20:08:48.667Z wip → testing (system)
+- 2026-10-09T20:09:23.054Z testing → done (system)
 

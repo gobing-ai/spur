@@ -790,7 +790,7 @@ Each item below cost a driver cycle to discover. They are contracts, not tips.
   against the confirmed tree's cwd, so pass a worktree-relative path such as
   `.spur/run/<wbs>-triage.decision`.
 - **`task-diffstat.ts` reads `wbs` from the environment and writes an artifact.** Invoke it as
-  `wbs=<wbs> bun plugins/sp/scripts/task-diffstat.ts`; stdout stays empty, so assert success on
+  `wbs=<wbs> node "$(superskill script path sp task-diffstat.mjs)"`; stdout stays empty, so assert success on
   `.spur/run/<wbs>-diffstat.json` and never on command output.
 - **The verify answer grammar is exact.** One `Verdict:` line, one `Confidence:` line, then
   `### Per-Requirement Traceability` (`| Req | Status | Evidence |`) and
