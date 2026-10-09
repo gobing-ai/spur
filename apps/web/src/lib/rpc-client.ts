@@ -38,6 +38,7 @@ export function resolveApiUrl(
     return origin && origin !== 'null' ? new URL('/api', origin).toString() : 'http://localhost:3000/api';
 }
 
+/** Default abort deadline for board API calls, in milliseconds. */
 export const DEFAULT_FETCH_TIMEOUT_MS = 30_000;
 
 /**
