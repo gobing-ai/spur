@@ -885,6 +885,59 @@ Feature: Disposal
         expect(raw).toContain('| Priority | Dimension | Location | Finding |');
     });
 
+    test('records a Testing section only when its .spur/run citations resolve (F8/AC6)', async () => {
+        const wbs = await createTask(svc);
+        const root = tasksDir.replace('/tasks', '');
+        const fs = createNodeFileSystem(root);
+        const verdictPath = join(root, '.spur', 'run', `${wbs}-verdict.json`);
+        await fs.writeFile(
+            verdictPath,
+            JSON.stringify({
+                wbs,
+                verdict: 'PASS',
+                requirements: [
+                    {
+                        id: 'R1',
+                        status: 'MET',
+                        evidence: 'artifacts `.spur/run/bb-base.sha` and `.spur/run/missing.log`',
+                    },
+                ],
+                checks: [{ name: 'Security', status: 'P4', evidence: 'clean' }],
+            }),
+        );
+
+        const taskPath = `${tasksDir}/${wbs}_record-test-task.md`;
+        const before = await fs.readFile(taskPath);
+
+        await expect(svc.record(wbs, { verdictFile: verdictPath })).rejects.toThrow(/\.spur\/run\/bb-base\.sha/);
+        await expect(svc.record(wbs, { verdictFile: verdictPath })).rejects.toThrow(/requirement R1/);
+        // The task file is unchanged — the refusal happens before any section is written.
+        expect(await fs.readFile(taskPath)).toBe(before);
+    });
+
+    test('a Testing citation resolving in the durable planes is accepted (F8/AC6)', async () => {
+        const wbs = await createTask(svc);
+        const root = tasksDir.replace('/tasks', '');
+        const fs = createNodeFileSystem(root);
+        const verdictPath = join(root, '.spur', 'run', `${wbs}-verdict.json`);
+        await fs.writeFile(
+            verdictPath,
+            JSON.stringify({
+                wbs,
+                verdict: 'PASS',
+                requirements: [{ id: 'R1', status: 'MET', evidence: 'see `.spur/run/bb-base.sha`' }],
+                checks: [{ name: 'Security', status: 'P4', evidence: 'clean' }],
+            }),
+        );
+        // The cited file lives in the durable runs plane, not scratch.
+        await fs.writeFile(join(root, '.spur', 'memory', 'runs', 'bb-base.sha'), 'abc123\n');
+
+        const result = await svc.record(wbs, { verdictFile: verdictPath });
+        expect(result.testingWritten).toBe(true);
+        const raw = await fs.readFile(`${tasksDir}/${wbs}_record-test-task.md`);
+        expect(raw).toContain('.spur/run/bb-base.sha');
+    });
+
     test('R2 (0692): record flips the Requirements box a PASS verdict proves', async () => {
         const wbs = await createTask(svc);
 

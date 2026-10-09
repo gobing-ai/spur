@@ -127,6 +127,42 @@ describe('persist-out-check', () => {
         expect(runMain(['--from', wt, '--root', '/tmp'], wt).code).toBe(1);
     });
 
+    test('foreign-divergent evidence recorded in persist-out.json passes check (1139/R5)', () => {
+        const { wt, invoke } = makeTrees();
+        mkdirSync(join(invoke, '.spur', 'memory', 'evidence'), { recursive: true });
+        writeFileSync(join(wt, '.spur', 'memory', 'evidence', '0870-verdict.json'), 'wt-diff');
+        writeFileSync(join(invoke, '.spur', 'memory', 'evidence', '0870-verdict.json'), 'inv-diff');
+
+        // Without persist-out.json it blocks as divergent
+        expect(runMain(['--from', wt, '--task-file', '/t/1139_a.md'], invoke).code).toBe(1);
+
+        // With persist-out.json recording foreign-divergent skip it passes
+        const persistOutPath = join(invoke, '.spur', 'run', 'persist-out.json');
+        writeFileSync(
+            persistOutPath,
+            JSON.stringify({
+                ok: true,
+                persisted: 1,
+                skipped: [],
+                evidenceSkipped: [{ name: '0870-verdict.json', reason: 'foreign-divergent', newer: 'invoking' }],
+            }),
+        );
+        expect(runMain(['--from', wt, '--task-file', '/t/1139_a.md'], invoke).code).toBe(0);
+
+        // Also test with explicit --success-json flag
+        const customSuccessPath = join(invoke, 'custom-success.json');
+        writeFileSync(
+            customSuccessPath,
+            JSON.stringify({
+                ok: true,
+                evidenceSkipped: [{ name: '0870-verdict.json', reason: 'foreign-divergent', newer: 'worktree' }],
+            }),
+        );
+        expect(
+            runMain(['--from', wt, '--task-file', '/t/1139_a.md', '--success-json', customSuccessPath], invoke).code,
+        ).toBe(0);
+    });
+
     test('default invoke root is the MAIN repo, never the worktree cwd (vacuous-pass guard)', () => {
         const repo = makeTrees();
         // Promote the fixture pair to a real git repo + linked worktree.

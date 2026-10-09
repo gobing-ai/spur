@@ -74,6 +74,7 @@ import { resolveDurableArtifactPath } from '../workflow/actions/run-path';
 import { parseFeatureVerificationReceipt } from '../workflow/feature-verification-receipt';
 import type { WorkflowObservabilityBus } from '../workflow/observability';
 import { computeProofInputFingerprint, readProofInputContents } from '../workflow/proof-input-fingerprint';
+import { asLiteralRunFileName, RUN_CITATION_RE, SAFE_RUN_ID_RE } from '../workflow/run-citation';
 import { loadRunCorrelation } from '../workflow/run-correlation';
 import { InvalidWorkflowRunIdError } from '../workflow/run-record';
 import { splitLaunchCommand } from '../workflow/split-launch-command';
@@ -237,6 +238,13 @@ export interface PersistWorktreeRunsInput {
     readonly taskFiles?: readonly string[];
 }
 
+/** One durable-evidence file skipped because a forwarded task does not own it (1139 R5). */
+export interface PersistWorktreeRunsEvidenceSkip {
+    readonly name: string;
+    readonly reason: 'foreign-divergent';
+    readonly newer: 'invoking' | 'worktree';
+}
+
 /** Successful persist-out: inserted run-row count plus the collision / record skips. */
 export interface PersistWorktreeRunsSuccess {
     readonly ok: true;
@@ -250,16 +258,8 @@ export interface PersistWorktreeRunsSuccess {
      * (a citation resolving to anything but a regular file is not a file the copy set can own).
      */
     readonly skipped: ReadonlyArray<{ id: string; reason: string }>;
+    readonly evidenceSkipped?: ReadonlyArray<PersistWorktreeRunsEvidenceSkip>;
 }
-
-/**
- * DB-sourced run ids become `.spur/memory/runs/<id>.md` / `.state.json` filenames in the invoking
- * tree, so every id read from the worktree DB must be a single safe filename component —
- * the same charset the script's `SAFE_RUN_ID_RE` arg guard (task 0804 R8) enforces for
- * driver-supplied ids. The script keeps its own copy (portable twin); this persistence
- * seam re-checks because its ids come from the worktree DB, not the driver.
- */
-const SAFE_RUN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 /**
  * Cap on distinct literal `.spur/run/<file>` citations one persist-out copies/verifies for
@@ -267,43 +267,6 @@ const SAFE_RUN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
  * batch's corpus, not to whatever a hand-edited task file lists.
  */
 export const MAX_CITED_RUN_FILES = 64;
-
-/**
- * A cited run-evidence reference extracted from a merged task file (0984 R3): `.spur/run/`
- * followed by name characters, with an optional subpath continuation group. The charset
- * deliberately includes template metachars (`*`, `…`, `{`, `<`, `?`, `,`) so abbreviated and
- * glob references stay attached to one capture and are classified non-literal by
- * {@link asLiteralRunFileName}, instead of a truncated prefix (`fadca099-` out of
- * `fadca099-…-wrapup-learnings.md`) masquerading as a real filename. The leading alnum
- * requirement already refuses `<runId>-…` placeholders and `..` traversal outright. The
- * lookbehind keeps only repo-relative citations (`.spur/run/…`, `./.spur/run/…`): a
- * root-qualified path (`knowledge-kit/.spur/run/…`, `/abs/.spur/run/…`, `~/.spur/run/…`) is
- * another project's evidence, which this teardown neither owns nor can lose, so it must not
- * trip the missing-in-both refusal.
- *
- * 1056 R1 (skip, not resolve): when the name is followed by `/rest`, the citation addresses
- * a subpath of `.spur/run/<name>` — the copy set owns direct-child files only (0984 R5), so
- * the continuation is captured as group 2 and the extraction loop classifies the citation as
- * `cited-directory:<name>` instead of obligating `<name>`. A captured continuation — not a
- * negative lookahead on `/` — is required: the greedy name charset would backtrack to a
- * SHORTER capture to satisfy a lookahead, yielding a wrong name (`triage-1051-105`).
- */
-const RUN_CITATION_RE = /(?<![\w~:-]|[\w~:-]\/)\.spur\/run\/([A-Za-z0-9][A-Za-z0-9._*?<>{}|,\u2026-]*)(\/[^\s`]*)?/g;
-
-/**
- * Reduce one captured reference to a literal direct-child file name, or `undefined` when it
- * is not one (0984 R3): template/abbreviated references (`fadca099-…`, `run-*-ac87.log`,
- * `{batch-report.md,…}`) and `..` runs are not literal files, so they carry no copy
- * obligation and never fail the pass. A surviving name is a single safe component — joining
- * it under `.spur/run/` cannot escape the directory. Trailing sentence punctuation is prose,
- * not name: `… .spur/run/x.json.` must not become a phantom `x.json.` (fatal, blocks
- * teardown) and `… .spur/run/x.json, …` must not drop the citation as non-literal.
- */
-function asLiteralRunFileName(citation: string): string | undefined {
-    const name = citation.replace(/[.,]+$/, '');
-    if (!SAFE_RUN_ID_RE.test(name) || name.includes('..')) return undefined;
-    return name;
-}
 
 async function readExistingRunFile(path: string): Promise<Buffer | undefined> {
     const stat = await lstat(path).catch((error: NodeJS.ErrnoException) => {
@@ -371,6 +334,26 @@ export async function persistWorktreeRuns(input: PersistWorktreeRunsInput): Prom
     const fromEvidence = runStoragePaths(fromDir).evidenceDir;
     const toEvidence = runStoragePaths(toDir).evidenceDir;
     const evidenceCopies: Array<{ source: string; target: string; bytes: Buffer }> = [];
+    const evidenceSkipped: PersistWorktreeRunsEvidenceSkip[] = [];
+
+    // Ownership computation hoisted for R5 foreign-divergent detection.
+    const forwardedWbs = new Set<string>();
+    for (const taskFile of input.taskFiles ?? []) {
+        const wbs = /^(\d{4})_/.exec(basename(taskFile))?.[1];
+        if (wbs !== undefined) forwardedWbs.add(wbs);
+    }
+    const hasTaskFilter = input.taskFiles !== undefined;
+    const worktreeRunIds = new Set<string>();
+    const ownerDb = await openInlineRunProjectDb(fromDir);
+    try {
+        for (const row of await listRunIdRows(ownerDb.adapter)) {
+            if (!SAFE_RUN_ID_RE.test(row.id)) throw new InvalidWorkflowRunIdError(row.id);
+            worktreeRunIds.add(row.id);
+        }
+    } finally {
+        ownerDb.close();
+    }
+
     // Canonical verdicts and both receipt identities travel even without scratch citations.
     // Validate and snapshot the complete family before opening the destination database.
     await resolveDurableArtifactPath(fs, fromDir, join(fromEvidence, 'probe.json'), 'evidence');
@@ -385,24 +368,33 @@ export async function persistWorktreeRuns(input: PersistWorktreeRunsInput): Prom
         if (!stat.isFile()) throw new Error(`persist-out: durable evidence is not a regular file: ${name}`);
         const bytes = await readFile(source);
         const verdictWbs = /^(\d{4})-verdict\.json$/.exec(name)?.[1];
+        let isOwned = false;
         if (verdictWbs !== undefined) {
             const parsed = parseVerifyVerdict(bytes.toString(), verdictWbs);
             const raw = JSON.parse(bytes.toString()) as { wbs?: unknown };
             if (!parsed || parsed.wbs !== verdictWbs || (raw.wbs !== undefined && raw.wbs !== verdictWbs)) {
                 throw new Error(`persist-out: malformed durable verdict identity: ${name}`);
             }
+            isOwned = hasTaskFilter ? forwardedWbs.has(verdictWbs) : true;
         } else if (name.endsWith('-feature-verification.json')) {
             const receipt = parseFeatureVerificationReceipt(bytes.toString());
             const owner = name.slice(0, -'-feature-verification.json'.length);
             if (owner !== receipt.runId && owner !== receipt.featureId) {
                 throw new Error(`persist-out: malformed durable receipt identity: ${name}`);
             }
+            isOwned = worktreeRunIds.has(receipt.runId);
         } else {
             throw new Error(`persist-out: unclassified durable evidence: ${name}`);
         }
         const existing = await readExistingRunFile(target);
         if (existing !== undefined && !existing.equals(bytes)) {
-            throw new Error(`persist-out: durable evidence conflicts: ${name}`);
+            if (isOwned) {
+                throw new Error(`persist-out: durable evidence conflicts: ${name}`);
+            }
+            const targetStat = await lstat(target);
+            const newer: 'invoking' | 'worktree' = targetStat.mtimeMs >= stat.mtimeMs ? 'invoking' : 'worktree';
+            evidenceSkipped.push({ name, reason: 'foreign-divergent', newer });
+            continue;
         }
         evidenceCopies.push({ source, target, bytes });
     }
@@ -446,21 +438,11 @@ export async function persistWorktreeRuns(input: PersistWorktreeRunsInput): Prom
     // worktree run row) — joins the cited set, so it rides the same copy/no-op/refuse pipeline
     // below even when the task file never cites it. Runs before any invoking-tree write.
     if ((input.taskFiles ?? []).length > 0) {
-        const prefixes = (input.taskFiles ?? []).flatMap((taskFile) => {
-            const wbs = /^(\d{4})_/.exec(basename(taskFile))?.[1];
-            return wbs === undefined ? [] : [`${wbs}-`];
-        });
+        const prefixes = [...forwardedWbs].map((wbs) => `${wbs}-`);
         const recordNames = new Set<string>();
-        const owner = await openInlineRunProjectDb(fromDir);
-        try {
-            for (const row of await listRunIdRows(owner.adapter)) {
-                if (!SAFE_RUN_ID_RE.test(row.id)) throw new InvalidWorkflowRunIdError(row.id);
-                prefixes.push(`${row.id}-`);
-                // The two-file run record is the record copy's job (conflict = skip, not throw).
-                recordNames.add(`${row.id}.md`).add(`${row.id}.state.json`);
-            }
-        } finally {
-            owner.close();
+        for (const runId of worktreeRunIds) {
+            prefixes.push(`${runId}-`);
+            recordNames.add(`${runId}.md`).add(`${runId}.state.json`);
         }
         // 1012 R4: only an absent evidence dir means "nothing owned"; any other listing failure
         // (ENOTDIR, EACCES, …) propagates here, before the first invoking-tree write.
@@ -644,6 +626,7 @@ export async function persistWorktreeRuns(input: PersistWorktreeRunsInput): Prom
                 ok: true,
                 persisted: persistedIds.length,
                 skipped: [...skipped, ...recordSkips, ...citedSkips],
+                ...(evidenceSkipped.length > 0 ? { evidenceSkipped } : {}),
             };
         } finally {
             target.close();
@@ -1972,7 +1955,18 @@ export async function runInlineRunPersistOut(input: InlineRunPersistOutInput): P
             process.stdout.write(`${JSON.stringify({ ...result, ok: false, error })}\n`);
             return 1;
         }
-        process.stdout.write(`${JSON.stringify({ ok: true, persisted: result.persisted, skipped: result.skipped })}\n`);
+        const resultPayload = {
+            ok: true,
+            persisted: result.persisted,
+            skipped: result.skipped,
+            ...(result.evidenceSkipped ? { evidenceSkipped: result.evidenceSkipped } : {}),
+        };
+        try {
+            const toRunDir = join(process.cwd(), '.spur', 'run');
+            mkdirSync(toRunDir, { recursive: true });
+            writeFileSync(join(toRunDir, 'persist-out.json'), JSON.stringify(resultPayload, null, 2));
+        } catch {}
+        process.stdout.write(`${JSON.stringify(resultPayload)}\n`);
         return 0;
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

@@ -106,7 +106,7 @@ obligation; neither do root-qualified paths (`knowledge-kit/.spur/run/…`, `/ab
 which cite another project's evidence — cite foreign run artifacts that way, never bare. A citation missing in BOTH trees, a divergent cited file (never overwritten — reconcile
 by hand), an unreadable task file, or more than 64 distinct cited files fails the pass → WT-5.
 
-**Durable planes ride it too (E71).** Persist-out copies canonical task verdicts, feature run/latest receipts, nested run artifacts and owned sessions before teardown. Artifact and task-run-link rows are exported with run rows, and stored path references are redirected to the invoking tree. Conflicting or unreadable retained evidence refuses teardown.
+**Durable planes ride it too (E71).** Persist-out copies canonical task verdicts, feature run/latest receipts, nested run artifacts and owned sessions before teardown. Artifact and task-run-link rows are exported with run rows, and stored path references are redirected to the invoking tree. Conflicting or unreadable **owned** retained evidence refuses teardown. A divergent copy of evidence a forwarded task does **not** own (its WBS is not a forwarded task's and its receipt `runId` is not a worktree run row) is `foreign-divergent` (1139 R5): it is skipped, reported as `evidenceSkipped[{name, reason:'foreign-divergent', newer:'invoking'|'worktree'}]`, and the invoking-tree copy is never overwritten — another task's newer verdict can no longer block this batch's teardown. A divergent **owned** file still fails with `durable evidence conflicts`. `persist-out-check` accepts the same foreign-divergent set from the success JSON and does not recompute it.
 
 **Owned evidence rides it too (1012).** With at least one `--task-file`, persist-out also treats as
 copy obligations the worktree's `.spur/run/` direct children named `<wbs>-…` (the WBS is each
@@ -121,9 +121,10 @@ matching neither a citation nor an ownership prefix are left behind. An absent w
 means nothing is owned; any other listing failure (not a directory, permission denied) fails the
 pass before the invoking tree is written → WT-5. Without `--task-file` nothing is enumerated.
 
-The shapes are pinned (task 0975 R1; `record-missing` and citation behavior per 0984): idempotent on re-persist;
+The shapes are pinned (task 0975 R1; `record-missing`, citation behavior per 0984; `evidenceSkipped` per 1139 R5): idempotent on re-persist;
 success exits 0 printing
-`{"ok":true,"persisted":<n>,"skipped":[{"id":<run-id>,"reason":"id-exists"|"external-key-conflict"|"record-conflict:<file>"|"record-missing:<file>"|"cited-directory:<name>"|"cited-symlink:<name>"|"cited-non-file:<name>"}]}`
+`{"ok":true,"persisted":<n>,"skipped":[{"id":<run-id>,"reason":"id-exists"|"external-key-conflict"|"record-conflict:<file>"|"record-missing:<file>"|"cited-directory:<name>"|"cited-symlink:<name>"|"cited-non-file:<name>"}],"evidenceSkipped":[{"name":<file>,"reason":"foreign-divergent","newer":"invoking"|"worktree"}]}`
+(`evidenceSkipped` is omitted when empty; the same object is written to `<invoking-tree>/.spur/run/persist-out.json` for `persist-out-check` to read)
 — an `external-key-conflict` skip leaves the target run unchanged **and fails the pass (1049)**: the delegate exits 1 printing `{"ok":false,"error":…}` naming the skipped source run ids, because that (workflow, external key) identity already belongs to a different receiving run — the batch was not persisted, so reconcile the source worktree by hand (it stays the provenance owner of record) before any teardown: auditable reconciliation names the original archived DB snapshot and the skipped source run identities, verifies the archive by file hash and by merged-commit ancestry of the source branch, and treats any residual deletion as explicit operator-authorized cleanup under the strict canonical evidence rules above. An `id-exists` replay repairs missing owned artifacts and task links without duplicating them. A
 `record-conflict:<file>` never overwrites a divergent invoking-tree record and causes the delegate to exit 1, retaining the worktree. A
 `record-missing:<file>` skip is a known `task-lifecycle`/`feature-lifecycle` row with no record file

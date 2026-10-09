@@ -1515,6 +1515,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             const migration = await svc.migrateRunStorage({ dryRun, logsOnly });
             if (migration.failures.length > 0) {
                 context.setExitCode(1);
+                const result = logsOnly ? undefined : await svc.clean(minutes, dryRun);
                 const logs = {
                     retentionDays: resolveWorkflowLogRetentionDays(context.spurConfig ?? null),
                     dryRun,
@@ -1529,7 +1530,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                                 : {
                                       olderThanMinutes: minutes,
                                       dryRun,
-                                      cleaned: [],
+                                      cleaned: result?.cleaned ?? [],
                                       logs,
                                       checkpoints: { reclaimed: [], skipped: [], failures: [] },
                                       migration,
@@ -1539,9 +1540,23 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                     );
                 } else {
                     for (const failure of migration.failures) {
+                        const remedySuffix = failure.remedy ? ` — ${failure.remedy}` : '';
                         context.output.error(
-                            `Migration failed for ${failure.source}: ${failure.reason}; housekeeping skipped.`,
+                            `Migration failed for ${failure.source}: ${failure.reason}${remedySuffix}; log/checkpoint reclamation skipped.`,
                         );
+                    }
+                    if (result !== undefined) {
+                        const verb = dryRun ? 'Would finalize' : 'Finalized';
+                        if (result.cleaned.length === 0) {
+                            const ageMsg = force ? '' : ` older than ${minutes}m`;
+                            context.output.write(`No stale runs${ageMsg}.`);
+                        } else {
+                            const ageMsg = force ? ' (all non-terminal)' : ` (>${minutes}m)`;
+                            context.output.write(
+                                `${verb} ${result.cleaned.length} stale run(s)${ageMsg}:\n` +
+                                    result.cleaned.map((r) => `  ${r.runId} (started ${r.startedAt})`).join('\n'),
+                            );
+                        }
                     }
                 }
                 return;

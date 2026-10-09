@@ -153,6 +153,70 @@ describe('persistWorktreeRuns (task 0975 R1)', () => {
             to.cleanup();
         }
     });
+
+    test('foreign divergent evidence is skipped with newer side reported, not fatal (F6/AC5)', async () => {
+        const from = makeDir('persist-foreign-from-');
+        const to = makeDir('persist-foreign-to-');
+        try {
+            await seedWorktree(from.dir, 'run_f6');
+            const source = join(runStoragePaths(from.dir).evidenceDir, '0870-verdict.json');
+            const target = join(runStoragePaths(to.dir).evidenceDir, '0870-verdict.json');
+            mkdirSync(dirname(source), { recursive: true });
+            mkdirSync(dirname(target), { recursive: true });
+            writeFileSync(source, '{"wbs":"0870","verdict":"PASS"}');
+            writeFileSync(target, '{"wbs":"0870","verdict":"FAIL"}');
+
+            // Write the merged task file in to.dir for task 1139
+            mkdirSync(join(to.dir, 'docs/tasks5'), { recursive: true });
+            writeFileSync(join(to.dir, 'docs/tasks5/1139_test.md'), '# task 1139\n');
+
+            // Persist for a task that does NOT own 0870 (e.g. task 1139)
+            const result = await persistWorktreeRuns({
+                fromWorkdir: from.dir,
+                toWorkdir: to.dir,
+                taskFiles: ['docs/tasks5/1139_test.md'],
+            });
+
+            expect(result.ok).toBe(true);
+            expect(result.evidenceSkipped).toBeDefined();
+            expect(result.evidenceSkipped?.length).toBe(1);
+            expect(result.evidenceSkipped?.[0]?.name).toBe('0870-verdict.json');
+            expect(result.evidenceSkipped?.[0]?.reason).toBe('foreign-divergent');
+            expect(['invoking', 'worktree']).toContain(result.evidenceSkipped?.[0]?.newer ?? '');
+            // Invoking tree copy is never overwritten
+            expect(readFileSync(target, 'utf8')).toBe('{"wbs":"0870","verdict":"FAIL"}');
+        } finally {
+            from.cleanup();
+            to.cleanup();
+        }
+    });
+
+    test('owned divergent evidence still throws durable evidence conflicts (F7/AC5)', async () => {
+        const from = makeDir('persist-owned-from-');
+        const to = makeDir('persist-owned-to-');
+        try {
+            await seedWorktree(from.dir, 'run_f7');
+            const source = join(runStoragePaths(from.dir).evidenceDir, '1139-verdict.json');
+            const target = join(runStoragePaths(to.dir).evidenceDir, '1139-verdict.json');
+            mkdirSync(dirname(source), { recursive: true });
+            mkdirSync(dirname(target), { recursive: true });
+            writeFileSync(source, '{"wbs":"1139","verdict":"PASS"}');
+            writeFileSync(target, '{"wbs":"1139","verdict":"FAIL"}');
+
+            // Persist for task 1139 (which owns 1139-verdict.json)
+            await expect(
+                persistWorktreeRuns({
+                    fromWorkdir: from.dir,
+                    toWorkdir: to.dir,
+                    taskFiles: ['docs/tasks5/1139_test.md'],
+                }),
+            ).rejects.toThrow('durable evidence conflicts');
+            expect(readFileSync(target, 'utf8')).toBe('{"wbs":"1139","verdict":"FAIL"}');
+        } finally {
+            from.cleanup();
+            to.cleanup();
+        }
+    });
     test('copies rows and run records into the invoking tree; re-persist is idempotent', async () => {
         const from = makeDir('persist-from-');
         const to = makeDir('persist-to-');
