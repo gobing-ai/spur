@@ -103,15 +103,31 @@ function normalizeRequirementLine(line: string): { normalized: string; changed: 
 }
 
 /**
+ * Track fenced-code state line by line (1132 review P4, direct fix). A fenced block is documentation,
+ * not authoring: rewriting `- R2. …` inside a ``` fence silently corrupts a syntax example the author
+ * wrote on purpose. The AC gherkin detector deliberately still looks INSIDE fences (the canonical AC
+ * form wraps its scenarios in one), so only the line-rewriting passes skip fenced lines.
+ */
+function fenceAwareLines(body: string): Array<{ line: string; fenced: boolean }> {
+    let inFence = false;
+    return body.split('\n').map((line) => {
+        const isDelimiter = /^\s*(```|~~~)/.test(line);
+        const fenced = inFence || isDelimiter;
+        if (isDelimiter) inFence = !inFence;
+        return { line, fenced };
+    });
+}
+
+/**
  * Normalize one task section body losslessly (1132 R1). Returns the body to write plus
  * what changed, so the caller can report `normalized: [{section, kind, count}]` in
  * `--json` and merge implied frontmatter keys. Wording is never reworded.
  */
 export function normalizeTaskSection(name: string, body: string): SectionNormalizationResult {
     if (name === 'Requirements') {
-        const lines = body.split('\n');
         let count = 0;
-        const normalized = lines.map((line) => {
+        const normalized = fenceAwareLines(body).map(({ line, fenced }) => {
+            if (fenced) return line;
             const { normalized: next, changed } = normalizeRequirementLine(line);
             if (changed) count++;
             return next;
@@ -127,9 +143,9 @@ export function normalizeTaskSection(name: string, body: string): SectionNormali
                 frontmatter: { ac_altitude: 'task-local', ac_numbering: 'task-local' },
             };
         }
-        const lines = body.split('\n');
         let count = 0;
-        const normalized = lines.map((line) => {
+        const normalized = fenceAwareLines(body).map(({ line, fenced }) => {
+            if (fenced) return line;
             // 1132 review P2: an existing box is never flipped — rewriting a checked AC to an
             // open one would silently arm the hard `L3.unchecked-checklist` error at a
             // transition target. Only the bare `- AC1 …` authoring shape is normalized.

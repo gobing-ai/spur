@@ -1452,8 +1452,17 @@ export class TaskService {
         if (normalization.normalized.length > 0) result = { ...result, normalized: normalization.normalized };
         if (normalization.frontmatter !== undefined) {
             const fm = MarkdownDocument.parse(await this.ctx.fs.readFile(filePath), 'task').frontmatterData;
-            for (const [k, v] of Object.entries(normalization.frontmatter)) {
-                if (fm?.[k] !== v) await this.writeService.updateFrontmatter(ref, k, v);
+            const pending = Object.entries(normalization.frontmatter).filter(([k, v]) => fm?.[k] !== v);
+            for (const [k, v] of pending) {
+                await this.writeService.updateFrontmatter(ref, k, v);
+            }
+            // 1132 review P4 (direct fix): report only what changed. A repeat write of the same
+            // gherkin AC used to report `kind: 'ac-altitude'` while touching nothing, which is the
+            // same class of lying report the batch-create finding was.
+            if (pending.length === 0) {
+                const reported = (result.normalized ?? []).filter((n) => n.kind !== 'ac-altitude');
+                result =
+                    reported.length > 0 ? { ...result, normalized: reported } : { ...result, normalized: undefined };
             }
         }
 

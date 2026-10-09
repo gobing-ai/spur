@@ -52,7 +52,11 @@ describe('1132 — parent-status link guard on the server context', () => {
             // A phase folder whose sibling is NOT `<tasks>/../features` by accident: the point is
             // that the configured features dir is used (pass-3 P1 residue on the HTTP surface).
             const tasksDir = join(root, 'docs', 'tasksP');
-            const featuresDir = join(root, 'docs', 'features');
+            // Deliberately NOT the sibling of tasksDir: the pre-fix wiring used
+            // `<parent of tasksDir>/features`, so a fixture where the configured dir IS the
+            // sibling passed with or without the fix (review pass 4 found this test
+            // non-discriminating). With a non-sibling store, only the configured dir works.
+            const featuresDir = join(root, 'docs', 'feature-store');
             mkdirSync(tasksDir, { recursive: true });
             mkdirSync(featuresDir, { recursive: true });
             mkdirSync(join(root, '.spur'), { recursive: true });
@@ -66,7 +70,7 @@ describe('1132 — parent-status link guard on the server context', () => {
                     '      baseCounter: 0',
                     '  active: docs/tasksP',
                     'features:',
-                    '  dir: docs/features',
+                    '  dir: docs/feature-store',
                     '',
                 ].join('\n'),
             );

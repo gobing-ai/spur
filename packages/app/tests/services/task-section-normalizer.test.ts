@@ -118,6 +118,29 @@ describe('normalizeTaskSection', () => {
         }
     });
 
+    test('review P4 (direct fix): a fenced code block is documentation, never rewritten', () => {
+        const doc = [
+            '- R1. real item',
+            '',
+            '```text',
+            '- R2. documented example inside a fence',
+            'R3: also inside',
+            '```',
+            '- R4. second real item',
+        ].join('\n');
+        const r = normalizeTaskSection('Requirements', doc);
+        expect(r.normalized).toEqual([{ section: 'Requirements', kind: 'requirement', count: 2 }]);
+        expect(r.body).toContain('- [ ] R1. real item');
+        expect(r.body).toContain('- [ ] R4. second real item');
+        expect(r.body).toContain('```text\n- R2. documented example inside a fence\nR3: also inside\n```');
+        // The canonical AC form wraps gherkin in a fence: the gherkin DETECTOR must still see it.
+        const fenced = '```gherkin\nScenario: AC1 — probe (req: R1)\n  Then x\n```';
+        expect(normalizeTaskSection('Acceptance Criteria', fenced).frontmatter).toEqual({
+            ac_altitude: 'task-local',
+            ac_numbering: 'task-local',
+        });
+    });
+
     test('P2: an existing checkbox is never flipped (AC and Requirements)', () => {
         expect(normalizeTaskSection('Acceptance Criteria', '- [x] AC1 — done\n- AC2 bare').body).toBe(
             '- [x] AC1 — done\n- [ ] AC2 — bare',
@@ -316,6 +339,35 @@ describe('parent-status link guard', () => {
         // Reporting a change that was never written would re-arm the DD-09 subset rule.
         expect(raw).toContain('ac_altitude: task-local');
         expect(raw).toContain('ac_numbering: task-local');
+    });
+});
+
+describe('review P4 (direct fix) — the report matches what was written', () => {
+    test('a repeat gherkin-AC write reports no ac-altitude normalization', async () => {
+        const root = mkdtempSync(join(tmpdir(), 'spur-1132-idem-'));
+        try {
+            const featuresDir = join(root, 'features');
+            const tasksDir = join(root, 'tasks');
+            mkdirSync(featuresDir, { recursive: true });
+            mkdirSync(tasksDir, { recursive: true });
+            const fs = createNodeFileSystem(root);
+            const svc = new TaskService({
+                fs,
+                tasksDir,
+                featuresDir,
+                writeService: new PlanningWriteService({ fs }),
+                sectionMatrix: MATRIX,
+            });
+            const created = await svc.create({ title: 'idem', dedupeWithinSec: null });
+            const src = join(root, 'ac.md');
+            writeFileSync(src, 'Scenario: AC1 — probe (req: R1)\n  Then it holds');
+            const first = await svc.updateSection(created.ref.id, 'Acceptance Criteria', src);
+            expect(first.normalized).toEqual([{ section: 'Acceptance Criteria', kind: 'ac-altitude', count: 1 }]);
+            const second = await svc.updateSection(created.ref.id, 'Acceptance Criteria', src);
+            expect(second.normalized ?? []).toEqual([]);
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
     });
 });
 
