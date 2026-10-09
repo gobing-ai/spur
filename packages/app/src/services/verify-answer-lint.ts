@@ -172,6 +172,43 @@ export function lintVerifyAnswer(
         }
     }
 
+    // Confidence coherence (1133 R1/R2): the level must be earned by the rows. 1068 validated
+    // presence and vocabulary only, so `HIGH` beside a `PARTIAL`/`UNMET` row and `LOW` over a fully
+    // proven answer both passed. Two-sided on purpose — an overclaimed level launders an unproven
+    // claim as settled, and an underclaimed one hides work the evidence already did. `MEDIUM` is
+    // deliberately exempt in both directions: it is the only level that carries a caveat with no
+    // row to point at (1133 Design). Rows whose status does not normalize are already rejected by
+    // the row passes above and contribute nothing here — a malformed row is never read as MET.
+    const confidenceLevel = tables.confidence === null ? null : tables.confidence.value.toUpperCase();
+    if (confidenceLevel === 'HIGH' || confidenceLevel === 'LOW') {
+        const reqStatuses = tables.reqs.map((row) => normalizeReqStatus(row.status));
+        const acStatuses = tables.acs.map((row) => normalizeAcStatus(row.status));
+        const allRowsMet =
+            reqStatuses.length > 0 &&
+            reqStatuses.every((status) => status === 'MET') &&
+            acStatuses.every((status) => status === 'MET');
+        const hedgedRow = [...tables.reqs, ...tables.acs].some(
+            (row) =>
+                (normalizeReqStatus(row.status) ?? normalizeAcStatus(row.status)) === 'MET' &&
+                firstHedgedPhrase(row.evidence) !== null,
+        );
+        const line = tables.confidence?.line ?? 0;
+        if (confidenceLevel === 'HIGH' && (!allRowsMet || hedgedRow)) {
+            add(
+                line,
+                'confidence-unwarranted',
+                'Confidence HIGH is not earned by the rows: at least one row is not MET, or a MET ' +
+                    'row hedges its evidence (downgrade the level, or finish the row)',
+            );
+        } else if (confidenceLevel === 'LOW' && allRowsMet) {
+            add(
+                line,
+                'confidence-understated',
+                'Confidence LOW understates an answer whose every row is MET (raise the level to ' + 'HIGH or MEDIUM)',
+            );
+        }
+    }
+
     return findings;
 }
 

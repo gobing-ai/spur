@@ -36,7 +36,12 @@ When the guard runs
 Then the input is rejected
 `;
 
-function answer(reqs: string[], acs: string[], verdict = 'Verdict: PASS', confidence = 'Confidence: HIGH'): string {
+/**
+ * Answer fixture. Defaults to `MEDIUM` because this file's shared row fixtures carry a `PARTIAL`
+ * row: under the 1133 coherence rules `HIGH` beside a non-MET row is itself a finding, so `HIGH` is
+ * no longer a valid "otherwise clean" baseline here. Tests that assert a specific level pass it.
+ */
+function answer(reqs: string[], acs: string[], verdict = 'Verdict: PASS', confidence = 'Confidence: MEDIUM'): string {
     return [
         verdict,
         confidence,
@@ -97,13 +102,17 @@ describe('lintVerifyAnswer (task 1003 R1)', () => {
         expect(findings[0]?.message).toContain('invalid Confidence value "SURE"');
     });
 
-    test.each(['HIGH', 'MEDIUM', 'LOW'])('Confidence: %s is accepted (1068 R2)', (level) => {
+    test.each(['HIGH', 'MEDIUM', 'LOW'])('Confidence: %s is an accepted level (1068 R2)', (level) => {
+        // 1133 made the level earnable, so "accepted" can no longer mean "zero findings" on any one
+        // fixture: HIGH needs every row MET, LOW is understated when every row is MET, and this
+        // fixture has a PARTIAL row. The 1068 contract under test is vocabulary acceptance, so
+        // assert the absence of a vocabulary finding rather than of all findings.
         const findings = lintVerifyAnswer(
             answer(CLEAN_REQS, CLEAN_ACS, 'Verdict: PASS', `Confidence: ${level}`),
             TASK,
             null,
         );
-        expect(findings).toEqual([]);
+        expect(findings.filter((f) => f.rule === 'confidence-value' || f.rule === 'confidence-missing')).toEqual([]);
     });
 
     test('unknown requirement ID is rejected', () => {
@@ -219,7 +228,9 @@ describe('lintVerifyAnswer (task 1003 R1)', () => {
     test('AC header row closes a requirement table without a heading between', () => {
         const body = [
             'Verdict: PASS',
-            'Confidence: HIGH',
+            // MEDIUM, not HIGH: CLEAN_REQS carries a PARTIAL row, which 1133 makes incompatible with
+            // a HIGH claim. This case is about table-boundary parsing, so it uses a lawful level.
+            'Confidence: MEDIUM',
             '',
             '### Per-Requirement Traceability',
             '| Req | Status | Evidence |',
@@ -800,5 +811,139 @@ describe('AC identities containing colons (task 1118)', () => {
             null,
         );
         expect(junk.some((f) => f.rule === 'ac-identity')).toBe(true);
+    });
+});
+
+/**
+ * Confidence coherence (task 1133 R1–R5): the level must be earned by the rows.
+ *
+ * 1068 validated presence and vocabulary only, so `HIGH` beside a `PARTIAL`/`UNMET` row and `LOW`
+ * over a fully proven answer both passed. These cases pin the two-sided contract: unwarranted
+ * (level too high for its rows) and understated (level too low for them), with `MEDIUM` left open
+ * in both directions as the verifier's caveat-carrying middle.
+ */
+describe('lintVerifyAnswer confidence coherence (task 1133)', () => {
+    const ALL_MET_REQS = ['| R1 | MET | `src/a.ts:1` |', '| R2 | MET | `src/b.ts:2` |'];
+    const ALL_MET_ACS = ['| AC1 | MET | test | `tests/a.test.ts:1` |', '| AC2 | MET | test | `tests/b.test.ts:2` |'];
+    const ONE_UNMET_REQS = ['| R1 | MET | `src/a.ts:1` |', '| R2 | UNMET | `src/b.ts:2` |'];
+    const ONE_PARTIAL_REQS = ['| R1 | MET | `src/a.ts:1` |', '| R2 | PARTIAL | `src/b.ts:2` |'];
+
+    const rulesOf = (body: string): string[] => lintVerifyAnswer(body, TASK, null).map((f) => f.rule);
+
+    test('AC1 — HIGH beside an UNMET row is rejected as unwarranted', () => {
+        const findings = lintVerifyAnswer(
+            answer(ONE_UNMET_REQS, ALL_MET_ACS, 'Verdict: PARTIAL', 'Confidence: HIGH'),
+            TASK,
+            null,
+        );
+        const coherence = findings.filter((f) => f.rule === 'confidence-unwarranted');
+        expect(coherence.length).toBe(1);
+        expect(coherence[0]?.message).toContain('HIGH');
+        expect(coherence[0]?.line).toBe(2);
+    });
+
+    test('AC1 — HIGH beside a PARTIAL row is rejected as unwarranted', () => {
+        expect(rulesOf(answer(ONE_PARTIAL_REQS, ALL_MET_ACS, 'Verdict: PARTIAL', 'Confidence: HIGH'))).toContain(
+            'confidence-unwarranted',
+        );
+    });
+
+    test('AC1 — HIGH beside a non-MET AC row is rejected as unwarranted', () => {
+        expect(
+            rulesOf(
+                answer(
+                    ALL_MET_REQS,
+                    ['| AC1 | MET | test | `t.ts:1` |', '| AC2 | UNMET | test | `t.ts:2` |'],
+                    'Verdict: PARTIAL',
+                    'Confidence: HIGH',
+                ),
+            ),
+        ).toContain('confidence-unwarranted');
+    });
+
+    test('AC2 — HIGH beside hedged MET evidence is rejected as unwarranted', () => {
+        expect(
+            rulesOf(
+                answer(
+                    ['| R1 | MET | the guard likely rejects it |', '| R2 | MET | `src/b.ts:2` |'],
+                    ALL_MET_ACS,
+                    'Verdict: PASS',
+                    'Confidence: HIGH',
+                ),
+            ),
+        ).toContain('confidence-unwarranted');
+    });
+
+    test('AC3 — LOW over an all-MET answer is rejected as understated', () => {
+        const findings = lintVerifyAnswer(
+            answer(ALL_MET_REQS, ALL_MET_ACS, 'Verdict: PASS', 'Confidence: LOW'),
+            TASK,
+            null,
+        );
+        const coherence = findings.filter((f) => f.rule === 'confidence-understated');
+        expect(coherence.length).toBe(1);
+        expect(coherence[0]?.message).toContain('LOW');
+    });
+
+    test('AC3 — LOW beside a non-MET row stays clean (nothing is understated)', () => {
+        expect(rulesOf(answer(ONE_UNMET_REQS, ALL_MET_ACS, 'Verdict: PARTIAL', 'Confidence: LOW'))).not.toContain(
+            'confidence-understated',
+        );
+    });
+
+    test('AC4 — MEDIUM is never a coherence finding in either direction', () => {
+        expect(rulesOf(answer(ALL_MET_REQS, ALL_MET_ACS, 'Verdict: PASS', 'Confidence: MEDIUM'))).not.toContain(
+            'confidence-unwarranted',
+        );
+        expect(rulesOf(answer(ONE_UNMET_REQS, ALL_MET_ACS, 'Verdict: PARTIAL', 'Confidence: MEDIUM'))).not.toContain(
+            'confidence-unwarranted',
+        );
+        expect(rulesOf(answer(ALL_MET_REQS, ALL_MET_ACS, 'Verdict: PASS', 'Confidence: MEDIUM'))).not.toContain(
+            'confidence-understated',
+        );
+    });
+
+    test('AC5 — a warranted HIGH over an all-MET cited answer emits no coherence finding', () => {
+        expect(
+            lintVerifyAnswer(answer(ALL_MET_REQS, ALL_MET_ACS, 'Verdict: PASS', 'Confidence: HIGH'), TASK, null),
+        ).toEqual([]);
+    });
+
+    test('a lowercase level is normalized before the coherence decision', () => {
+        // The vocabulary check is case-insensitive (1068 R2), so `high` must reach the coherence
+        // rules as HIGH — not skip them by failing a case-sensitive comparison.
+        expect(rulesOf(answer(ONE_UNMET_REQS, ALL_MET_ACS, 'Verdict: PARTIAL', 'Confidence: high'))).toContain(
+            'confidence-unwarranted',
+        );
+        expect(
+            lintVerifyAnswer(answer(ALL_MET_REQS, ALL_MET_ACS, 'Verdict: PASS', 'Confidence: high'), TASK, null),
+        ).toEqual([]);
+    });
+
+    test('AC1 — HIGH beside a hedged AC row is rejected as unwarranted', () => {
+        // The AC row shares the hedge detector with requirement rows; pin the AC side too.
+        expect(
+            rulesOf(
+                answer(
+                    ALL_MET_REQS,
+                    [
+                        '| AC1 | MET | test | the guard probably rejects it |',
+                        '| AC2 | MET | test | `tests/b.test.ts:2` |',
+                    ],
+                    'Verdict: PASS',
+                    'Confidence: HIGH',
+                ),
+            ),
+        ).toContain('confidence-unwarranted');
+    });
+
+    test('AC6 — a malformed level reports once and never reaches the coherence rules', () => {
+        const findings = lintVerifyAnswer(
+            answer(ONE_UNMET_REQS, ALL_MET_ACS, 'Verdict: PARTIAL', 'Confidence: SURE'),
+            TASK,
+            null,
+        );
+        expect(findings.length).toBe(1);
+        expect(findings[0]?.rule).toBe('confidence-value');
     });
 });
