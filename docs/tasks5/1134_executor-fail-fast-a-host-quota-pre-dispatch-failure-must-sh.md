@@ -4,11 +4,14 @@ name: "Executor fail-fast: a host-quota pre-dispatch failure must shift executor
 status: todo
 template: feature-impl
 created_at: 2026-10-09T05:28:30.946Z
-updated_at: "2026-10-09T16:52:16.381Z"
-feature_id: B
+updated_at: "2026-10-09T18:16:56.291Z"
+feature_id: B6
 
 ac_altitude: task-local
 ac_numbering: task-local
+priority: P1
+estimate_hours: 14
+dependencies: ["1143"]
 ---
 
 ## 1134. Executor fail-fast: a host-quota pre-dispatch failure must shift executors, not consume the host session
@@ -33,18 +36,47 @@ The inline driver's fallback rule then fired — `~/.agents/skills/sp-spur-dev/r
 
 **Session evidence (2026-10-09).** A review stage on task 1133 ran **4h01m40s** for a diff of about 160 lines (action row `review/agent`, `duration_ms` 14,500,000 in `run-1133-c3f1`), and an earlier dispatch of the same stage returned no result and had to be retried. Both consumed the run rather than failing it, and the wall clock dominated that task's 7h51m window. The host-capacity class this task owns is a different trigger; the shared defect is that an unproductive dispatch is absorbed instead of surfaced.
 
+**Refine corrections (2026-10-09)**
+
+- R2 assumed the incident error classifies as quota. It does not: `classifyQuotaErrorRecord('429 {"code":"1310",...}')` returns `{quota:false}` on installed `@gobing-ai/ts-ai-runner@0.5.18`. Probed 2026-10-09. The classifier accepts only `{error:{type|code}}` envelopes with codes from a fixed allowlist (`ts-libs/packages/ai-runner/src/quota.ts:68-108`), and the Z.ai top-level `{"code":"1310"}` shape matches neither. Resolution: an upstream classifier extension becomes Plan step 0 (AGENTS.md: fix the `@gobing-ai/ts-*` facade, never add a Spur workaround). R2 is rewritten to match, and AC3 now names the incident record.
+- A native-subagent dispatch (the Agent tool) never passes through ts-ai-runner, so nothing upstream classifies its failure. Resolution: add a deterministic helper `classifyDispatchFailure(text)` in `packages/app/src/services/inline-run-setup.ts`. It wraps `classifyQuotaErrorRecord` and writes the fallback status file. The driver calls it through the existing run-scoped helper entry and never judges the prose itself.
+- The driver-rule citation `inline-pipeline-driver.md:465` points at the installed copy. The repo source is `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:533`.
+- R9 had no AC and no bound. Bounds already exist: the YAML `timeoutMs` (implement uses `implementTimeoutMs`, others `stepTimeoutMs`) is passed to host dispatch (driver reference §Timeout boundary, `:687-692`). Resolution: R9 adds no new bound. A null result or timeout becomes a recorded stage failure that never routes to host-inline fallback. AC10 added.
+- Feature: `B` was a generic root. Re-parented to B6 (executor availability lifecycle: ownership, recovery, usage producer), which owns `setExecutorAvailability` and the durable update path this task feeds. B6 reopened.
+
 ### Requirements
 
-- [ ] R1. **Contingent fallback in the inline driver.** A pre-dispatch failure classified as *host capacity exhaustion* (quota / credits / auth) must NOT fall back to another host-session attempt. The driver must (a) hand the stage to the subprocess dispatch path, which resolves an executor independently, or (b) when that path is unavailable, terminate the run at `failed` with `terminalReason: failed-agent` naming the executor and the observed reset time. Capability-shaped pre-dispatch failures (permission, missing capability, non-dispatch-eligible prose, below-floor size) keep today's host-inline fallback unchanged.
-- [ ] R2. **Reuse the upstream classifier; never invent text matching.** The driver reads the classified signal the runner already produces (`classifyQuotaErrorRecord` / the provider error's structured code such as `{"code":"1310"}`) and writes the outcome to a run-scoped status file. No new provider-specific matching, no scanning of prompts or output for quota vocabulary.
-- [ ] R3. **Inline attribution.** An inline host-session dispatch records the executor identity it actually used (`agent`, `model?`) into the run record before the stage runs, so a later classified exhaustion can be attributed. When no named executor is resolvable the driver records the classified no-op (the design's "observable but cannot write configuration") — never a silent drop.
-- [ ] R4. **Durable memory across runs.** An attributed exhaustion observation must reach the existing durable path (`agent_executor_updates` → `setExecutorAvailability`, `owner: quota`, with `since`/`reason`) so that the NEXT dispatch skips that rung **without any provider call**. Older/duplicate observations must not overwrite a newer one (the design's `(observedAt, observationId)` order).
-- [ ] R5. **Scheduled observation refresh — zero provider calls.** `bootstrap.scheduler.jobs` gains a job that (a) drains pending `agent_executor_updates`, (b) reports the `~/.config/spur/agent-usage.json` snapshot age, and (c) re-checks `owner: quota|probe` disables against their recorded TTL, re-enabling only through the ownership-scoped recovery path. It must make no provider request and must never auto-re-enable an `operator`-owned disable.
-- [ ] R6. **Make the gap observable.** `spur agent doctor --json` (already rendering `availability {disabled, owner, since, reason}` and the usage age) additionally reports the refresh job's last-run status and a count of inline stages that ran without executor attribution, so the operator can see whether fail-fast is actually able to fire.
-- [ ] R7. **Explicitly out of scope (do not build).** Per-provider health-check adapters; probing entries that are already disabled (forbidden by `docs/design/executor-availability.md` §2); a health probe per candidate executor at dispatch time; and any serve-side poller/timer that writes configuration without a separate operator-consented ADR-121 amendment. R5's zero-call observation refresh needs no amendment; anything that probes or writes config on a timer does.
-- [ ] R8. **Same-change docs and bundle.** Update the driver reference (`inline-pipeline-driver.md` dispatch/fallback and trace sections), the executor-availability design satellite (new section for the inline attribution + refresh job), and the run-record contract for the new status artifacts; rebuild the bundle with `bun run --filter @gobing-ai/spur build:bundle` and `bun run build:scripts`.
+- [ ] R1. **Contingent fallback in the inline driver.** A pre-dispatch failure classified as *host capacity exhaustion* (quota or credits) must NOT fall back to another host-session attempt. The driver must do one of two things:
+  - (a) hand the stage to the subprocess dispatch path, which resolves an executor independently; or
+  - (b) when that path is unavailable, terminate the run at `failed` with `terminalReason: failed-agent`, naming the executor and the observed reset time when the record carries one.
 
-- [ ] R9. Dispatch duration is bounded and a null result fails fast. An `agent.run` dispatch that returns no result, or that exceeds a stated bound, stops the stage as a recorded failure instead of consuming the run's wall clock. Boundary: R1–R5 cover a pre-dispatch host-capacity refusal, where the executor must shift; this requirement covers the dispatched-but-unproductive case. The two share only the surface (inline driver dispatch), not the fix.
+  Capability-shaped pre-dispatch failures (permission, missing capability, non-dispatch-eligible prose, below-floor size) keep today's host-inline fallback unchanged.
+- [ ] R2. **Classification is upstream and deterministic.**
+  - Upstream: `@gobing-ai/ts-ai-runner`'s `classifyQuotaErrorRecord` classifies the Z.ai allowance envelope (`{"code":"1310","message":...}` at top level, no `error` wrapper) as `{quota:true, reason:'usage_limit_reached'}`. This is an upstream release consumed through the existing catalog entry.
+  - Spur side: a single helper `classifyDispatchFailure(text)` in `inline-run-setup.ts` wraps that classifier and writes `.spur/run/<run-id>-dispatch-fallback.json` = `{stage, class: 'capacity'|'capability', reason?, resetAt?, decision}`.
+  - No provider-specific matching in Spur. No scanning of prompts or output for quota vocabulary.
+- [ ] R3. **Inline attribution.** An inline host-session dispatch records the executor identity it actually used (`agent`, `model?`) into the run record before the stage runs, so a later classified exhaustion can be attributed. When no named executor can be resolved, the driver records the classified no-op (the design's "observable but cannot write configuration"), never a silent drop.
+- [ ] R4. **Durable memory across runs.** An attributed exhaustion observation must reach the existing durable path, `agent_executor_updates` → `setExecutorAvailability` with `owner: quota` and `since`/`reason`. The NEXT dispatch then skips that rung **without any provider call**. An older or duplicate observation must not overwrite a newer one (the design's `(observedAt, observationId)` order).
+- [ ] R5. **Scheduled observation refresh, with zero provider calls.** `bootstrap.scheduler.jobs` gains a job that:
+  - (a) drains pending `agent_executor_updates`;
+  - (b) reports the age of the `~/.config/spur/agent-usage.json` snapshot;
+  - (c) re-checks `owner: quota|probe` disables against their recorded TTL, re-enabling only through the ownership-scoped recovery path.
+
+  It must make no provider request and must never auto-re-enable an `operator`-owned disable.
+- [ ] R6. **Make the gap observable.** `spur agent doctor --json` already renders `availability {disabled, owner, since, reason}` and the usage age. It must also report the refresh job's last-run status and a count of inline stages that ran without executor attribution, so the operator can see whether fail-fast is able to fire.
+- [ ] R7. **Explicitly out of scope (do not build).**
+  - Per-provider health-check adapters inside Spur.
+  - Probing entries that are already disabled (forbidden by `docs/design/executor-availability.md` §2).
+  - A health probe per candidate executor at dispatch time.
+  - Any serve-side poller or timer that writes configuration without a separate operator-consented ADR-121 amendment.
+
+  R5's zero-call observation refresh needs no amendment. Anything that probes or writes config on a timer does.
+- [ ] R8. **Docs and bundle ship in the same change.**
+  - Update the driver reference (`plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md`, dispatch/fallback and trace sections).
+  - Add a section to the executor-availability design satellite for inline attribution and the refresh job.
+  - Update the run-record contract for the new status artifact.
+  - Rebuild with `bun run --filter @gobing-ai/spur build:bundle` and `bun run build:scripts`.
+- [ ] R9. **A null or timed-out dispatch is a recorded failure, not a fallback trigger.** The dispatch bound stays the existing YAML `timeoutMs` (`implementTimeoutMs` / `stepTimeoutMs`), passed to the host dispatch as today. A dispatch that returns no result, or that hits that bound, records the stage as failed with `dispatch: null-result|timeout` and follows the stage's normal failure edge. It never triggers host-inline re-execution. Boundary: R1–R4 cover a pre-dispatch capacity refusal (the executor must shift); R9 covers the dispatched-but-unproductive case.
 
 ### Acceptance Criteria
 
@@ -67,9 +99,10 @@ Scenario: AC2 — Capability-shaped failures keep the host-inline fallback (req:
 
 ```gherkin
 Scenario: AC3 — Classification is the upstream classifier, recorded per attempt (req: R2)
-  Given a dispatch failure carrying a structured provider error code
-  When the driver classifies it
-  Then it consults the existing runner classification rather than pattern-matching text
+  Given the incident record 429 {"code":"1310","message":"Weekly/Monthly Limit Exhausted. Your limit will reset at 2026-10-13 01:47:29"}
+  When classifyDispatchFailure classifies it
+  Then the result is class capacity with reason usage_limit_reached via the upstream classifyQuotaErrorRecord
+  And Spur source contains no provider-code or quota-vocabulary matching of its own
   And the run-scoped status file records the classification, the executor, and the observation time
   And a generic 429, rate limit, overload, timeout or auth failure is NOT classified as exhaustion
 ```
@@ -128,11 +161,27 @@ Scenario: AC9 — The rejected refresh/probe shapes are absent from the change (
   And the design satellite states that a config-writing timer requires a separate ADR-121 amendment
 ```
 
+
+```gherkin
+Scenario: AC10 — A null or timed-out dispatch fails the stage without host-inline re-execution (req: R9)
+  Given a dispatched stage whose host dispatch returns no result, or exceeds the YAML timeoutMs
+  When the driver handles the return
+  Then the stage is recorded failed with dispatch null-result or timeout
+  And the stage follows its normal failure edge
+  And no host-inline attempt of that stage is started
+```
+
 ### Q&A
 
 <!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
      condition. Not a parking lot for open questions — an unanswered question here means the task
      is not ready to hand off. Keep empty if none. -->
+
+#### Q&A entry — 2026-10-09T18:02:29.746Z
+
+- **Q: Add Z.ai code `1310` to Spur, or upstream?** A: Upstream, in `ts-ai-runner`'s `QUOTA_CODES` handling, plus acceptance of a top-level `{code}` envelope. Detection is single-source by design (`executor-availability.md` §4), and AGENTS.md routes facade gaps to the released `@gobing-ai/ts-*` package. The exact-match allowlist stays; only verified codes are added (`1310` is the observed one; others are added when observed).
+- **Q: Split R5/R6 (scheduler job and doctor) into a separate task?** A: No. Both are small additions to existing surfaces (`serve.ts` scheduler block, the doctor JSON). Without R6 the operator cannot see whether R1–R4 can fire, so they ship together. Estimate reflects the full scope.
+- **Q: New dispatch timeout for R9?** A: No. The YAML `timeoutMs` already bounds dispatch. The defect was what happens after a null or failed dispatch, not the bound itself.
 
 ### Design
 
@@ -150,14 +199,29 @@ Scenario: AC9 — The rejected refresh/probe shapes are absent from the change (
 
 ### Plan
 
-1. **Write the failure inventory first** — each row a way this change can be wrong: (a) a capacity failure misrouted to host-inline (the original defect); (b) a capability failure misrouted to subprocess escalation, breaking the existing fallback; (c) exhaustion misclassified as a rate limit / auth error, so nothing is disabled; (d) an unattributed event silently dropped; (e) an older observation overwriting a newer one, resurrecting an exhausted rung; (f) the refresh job re-enabling an operator-owned disable; (g) the refresh job making a provider call; (h) escalation landing on an executor below the stage's tier floor; (i) a run that cannot escalate and does not stop, i.e. hangs or retries forever; (j) docs drifting from the driver's real branch.
-2. **Tests before implementation**, one per inventory row, at the cheapest surface that can fail: a driver-contract fixture (the inline driver smoke harness `plugins/sp/tests/inline-pipeline-driver.test.ts` already executes the real graph), a service test for the attribution/observation path, and a scheduler-job test asserting zero provider calls (spy on the executor/runner).
-3. **Implement R1–R3 (driver)** — classify, branch, escalate-or-stop, write the fallback status file, record attribution (or the no-attribution marker) before the stage runs. Keep the existing host-inline fallback for every non-capacity failure.
-4. **Implement R4** — route the attributed observation into the existing durable path; assert the `(observedAt, observationId)` ordering is honoured (no regression of a newer state).
-5. **Implement R5 + R6** — the `bootstrap.scheduler.jobs` observation-refresh entry with its zero-provider-call contract, plus the doctor additions (refresh last-run status, unattributed-stage count).
-6. **Docs and bundle (R8)** — driver reference, executor-availability satellite, run-record contract; `bun run --filter @gobing-ai/spur build:bundle` and `bun run build:scripts`.
-7. **Verify with a real re-run**, not only unit tests: force an exhausted executor (a disabled rung is enough) and confirm the next dispatch skips it with no provider call, and that a simulated capacity failure at dispatch routes to escalation instead of host-inline. Record both command outputs in Testing.
-8. Run `bun run spur-check` once on the final tree and record the evidence.
+0. **Upstream prerequisite (ts-libs).** In `/Users/robin/xprojects/ts-libs/packages/ai-runner/src/quota.ts`, make `tryParseErrorEnvelope` also accept a top-level `{code, message}` object, and map the verified provider code `1310` to `usage_limit_reached`. The exact-match allowlist stays. Write the failure modes first: a plain 429, a `{code:"1302"}` rate limit, and `1310` quoted inside a prompt are all negative. Release, bump the `catalog:` entry, and run `bun install`. Until the release lands, Spur work in steps 1–2 can proceed against a fixture of the classifier result.
+1. **Write the failure inventory first.** Each row is a way this change can be wrong:
+   - (a) a capacity failure misrouted to host-inline (the original defect);
+   - (b) a capability failure misrouted to subprocess escalation, breaking the existing fallback;
+   - (c) exhaustion misclassified as a rate limit or auth error, so nothing is disabled;
+   - (d) an unattributed event silently dropped;
+   - (e) an older observation overwriting a newer one, resurrecting an exhausted rung;
+   - (f) the refresh job re-enabling an operator-owned disable;
+   - (g) the refresh job making a provider call;
+   - (h) escalation landing on an executor below the stage's tier floor;
+   - (i) a run that cannot escalate and does not stop, i.e. hangs or retries forever;
+   - (j) a null or timed-out dispatch re-run host-inline (R9);
+   - (k) docs drifting from the driver's real branch.
+2. **Write the tests before the implementation**, one per inventory row, at the cheapest surface that can fail:
+   - a driver-contract fixture in `plugins/sp/tests/inline-pipeline-driver.test.ts`, which executes the real graph;
+   - a service test for `classifyDispatchFailure` and the attribution/observation path;
+   - a scheduler-job test asserting zero provider calls (spy on the runner).
+3. **Implement R1–R3 and R9 (driver).** Add `classifyDispatchFailure` in `inline-run-setup.ts`, then branch to escalate-or-stop and write the fallback status file. Record attribution, or the no-attribution marker, before the stage runs. A null or timed-out dispatch is a recorded failure. Keep the host-inline fallback for every capability-shaped failure.
+4. **Implement R4.** Route the attributed observation into `apps/cli/src/agent-quota-persistence.ts` → `setExecutorAvailability`. Assert that `(observedAt, observationId)` ordering holds.
+5. **Implement R5 and R6.** Register the observation-refresh job in the `registerSchedulerEntries` block of `apps/server/src/serve.ts`. Add the doctor fields (refresh last-run status, unattributed-stage count).
+6. **Docs and bundle (R8).** Update the driver reference, the executor-availability satellite and the run-record contract, then run `bun run --filter @gobing-ai/spur build:bundle` and `bun run build:scripts`.
+7. **Verify with a real re-run.** Force an exhausted executor (a disabled rung is enough) and confirm the next dispatch skips it with no provider call. Feed the incident record to `classifyDispatchFailure` and confirm it routes to escalation, not host-inline. Record both outputs in Testing.
+8. Run `bun run spur-check` once on the final tree.
 
 ### Solution
 
@@ -174,10 +238,12 @@ Scenario: AC9 — The rejected refresh/probe shapes are absent from the change (
 ### References
 
 - Incident: pipeline run `85fab6d4-baf5-4db8-a0e9-810b12927fb4` (task 1132), 2026-10-08. Dispatch died after 21 m 30 s with `429 {"code":"1310","message":"Weekly/Monthly Limit Exhausted. Your limit will reset at 2026-10-13 01:47:29"}`; host-inline fallback consumed 13:55–17:01 PDT (~3 h 06 m of an 8 h 22 m run).
-- Driver rule to change: `~/.agents/skills/sp-spur-dev/references/inline-pipeline-driver.md:465` ("Any pre-dispatch failure → execute the stage **once** in the host session"); related dispatch contract in the same file (native-subagent dispatch, chunked implement dispatch contract, trace emission).
+- Driver rule to change: `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:533` (installed copy: `~/.agents/skills/sp-spur-dev/references/inline-pipeline-driver.md:465`) ("Any pre-dispatch failure → execute the stage **once** in the host session"); related dispatch contract in the same file (native-subagent dispatch, chunked implement dispatch contract, trace emission).
 - Existing mechanism to reuse: `docs/design/executor-availability.md` §1 (ownership), §2 (eligibility, `disabled: boolean | {owner,since,reason}`, `cheapestEligibleExecutors`, final launch check, doctor rendering), §3 (`setExecutorAvailability`), §4 (quota events, upstream classification, ADR-121's no-poller decision, attribution rule), §5 (durable `agent_executor_updates`, migration 0048 owner/layer columns).
 - Code touchpoints: `apps/cli/src/agent-quota-persistence.ts`, `apps/cli/src/commands/workflow.ts` (subscription attach), `packages/app/src/services/inline-run-setup.ts` (run-scoped status helpers), `apps/server/src/serve.ts:226-253` (`bootstrap.scheduler.jobs` registration + `scheduler.job.executed`), `packages/config/src/index.ts:317-356` (`executorDisabledObjectSchema`, `AgentExecutorConfigSchema`).
 - Related features: B5/B6 (implemented), B7 (run-scoped executor session), B8 (runner capability matrix), I31 (post-B6 roadmap), ADR-111 / ADR-121.
+
+- Upstream classifier: `/Users/robin/xprojects/ts-libs/packages/ai-runner/src/quota.ts:68-108` (`QUOTA_CODES`, `tryParseErrorEnvelope`); installed `node_modules/@gobing-ai/ts-ai-runner/dist/quota.d.ts:67`.
 
 ### History
 
