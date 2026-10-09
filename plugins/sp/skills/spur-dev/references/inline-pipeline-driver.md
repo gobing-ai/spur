@@ -678,9 +678,10 @@ timeout waiting instead of working. Both therefore run only the **changed-path m
 the matrix, not a hand-picked "targeted tests and a lint pass" — and return. Carry
 `--gate-log <path>` through to the child **verbatim**: never paraphrase it into "re-run the named
 gate command". That paraphrase is not cosmetic — it dropped this rule in the H15 run (task
-Background, seq 232) and sent a worker into the locked gate. The pipeline's next `test` (recheck) stage re-acquires the lock and delivers the
-deciding verdict; that deciding run may wait for a live holder, so a queued worker's effective
-budget is dispatch timeout minus observed lock queue wait, not the timeout alone.
+Background, seq 232) and sent a worker into the locked gate. The pipeline's next `test` (recheck)
+stage re-acquires the lock and delivers the deciding verdict; that deciding run may wait for a live
+holder, so a queued worker's effective budget is dispatch timeout minus observed lock queue wait,
+not the timeout alone.
 
 **Timeout boundary (task 0727, amended by task 1108):** when the host's dispatch tool accepts a
 per-dispatch timeout (pi: subagent `timeoutMs`, default 30 min — pi-subagents `docs/tool-reference.md`
