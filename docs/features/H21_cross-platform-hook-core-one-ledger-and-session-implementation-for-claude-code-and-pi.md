@@ -2,11 +2,11 @@
 schema_version: 1
 id: "H21"
 name: "Cross-platform hook core: one ledger and session implementation for Claude Code and Pi"
-status: verifying
+status: active
 priority: P2
 tags: []
 created_at: "2026-09-26T06:12:07.748Z"
-updated_at: "2026-10-07T00:12:19.643Z"
+updated_at: "2026-10-10T07:29:39.184Z"
 ---
 
 # H21: Cross-platform hook core: one ledger and session implementation for Claude Code and Pi
@@ -68,4 +68,5 @@ Feature: Cross-platform hook core: one ledger and session implementation for Cla
 
 - 2026-10-07T00:12:13.067Z backlog → active (system)
 - 2026-10-07T00:12:19.643Z active → verifying (system)
+- 2026-10-10T07:29:39.184Z verifying → active (system)
 

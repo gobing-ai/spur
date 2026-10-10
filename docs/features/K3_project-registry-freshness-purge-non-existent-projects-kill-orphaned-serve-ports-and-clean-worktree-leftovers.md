@@ -2,11 +2,11 @@
 schema_version: 1
 id: "K3"
 name: "Project registry freshness: purge non-existent projects, kill orphaned serve ports, and clean worktree leftovers"
-status: done
+status: active
 priority: P2
 tags: []
 created_at: "2026-09-22T17:57:17.763Z"
-updated_at: "2026-09-22T18:44:03.299Z"
+updated_at: "2026-10-10T07:29:30.051Z"
 ---
 
 # K3: Project registry freshness: purge non-existent projects, kill orphaned serve ports, and clean worktree leftovers
@@ -87,3 +87,5 @@ Scenario: R4 — Cleanup projects.json on worktree removal across plugins/sp
 - 2026-09-22T18:41:45.621Z backlog → active (system)
 - 2026-09-22T18:41:46.035Z active → verifying (system)
 - 2026-09-22T18:44:03.299Z verifying → done (system)
+- 2026-10-10T07:29:30.051Z done → active (system)
+

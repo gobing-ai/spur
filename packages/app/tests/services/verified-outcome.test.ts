@@ -154,6 +154,7 @@ async function makeBindingEnv(
         id: string;
         status: string;
         definitionDigest?: string;
+        resumeDefinitionDigest?: string;
         startedAt?: string;
         completedAt?: string;
     }[],
@@ -164,8 +165,10 @@ async function makeBindingEnv(
     const cwd = mkdtempSync(join(tmpdir(), 'vo-bind-'));
     let n = 0;
     for (const run of runs) {
-        const metadata =
-            run.definitionDigest !== undefined ? JSON.stringify({ definitionDigest: run.definitionDigest }) : '{}';
+        const metadata = JSON.stringify({
+            definitionDigest: run.definitionDigest,
+            resumeDefinitionDigest: run.resumeDefinitionDigest,
+        });
         db.run(
             `INSERT INTO runs (id, workflow_name, mode, status, agent, started_at, completed_at, metadata_json)
              VALUES (?, 'task-pipeline', 'auto', ?, NULL, ?, ?, ?)`,
@@ -239,6 +242,35 @@ describe('verdict proof binding (0730 §B)', () => {
         expect(stat?.verifiedResults).toBe(1);
         expect(stat?.excludedReasons.certifyingRunFailed).toBe(0);
         db.close();
+    });
+
+    test.each([
+        ['sha256:resumed', 1],
+        ['sha256:launch', 0],
+    ] as const)('uses the resumed definition for proof %s', async (definitionDigest, verified) => {
+        const { db, cwd, fs } = await makeBindingEnv(
+            {
+                wbs: '0701',
+                verdict: 'PASS',
+                proof: { digest: 'sha256:abc', runId: 'run_cert', definitionDigest },
+            },
+            [
+                {
+                    id: 'run_cert',
+                    status: 'done',
+                    definitionDigest: 'sha256:launch',
+                    resumeDefinitionDigest: 'sha256:resumed',
+                },
+            ],
+        );
+        try {
+            const stat = await deriveVerifiedOutcome({ db, cwd, locator: stubLocator(cwd), fs }, {});
+            expect(stat?.verifiedResults).toBe(verified);
+            expect(stat?.excludedReasons.certifyingRunFailed).toBe(1 - verified);
+        } finally {
+            db.close();
+            rmSync(cwd, { recursive: true, force: true });
+        }
     });
 
     test('R5: a bound verdict whose definition digest differs from the run is not verified', async () => {

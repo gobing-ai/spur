@@ -2,11 +2,11 @@
 schema_version: 1
 id: "G63"
 name: "Projects board module and global input wiring"
-status: done
+status: active
 priority: P2
 tags: ["g6-program"]
 created_at: "2026-09-12T04:42:44.189Z"
-updated_at: "2026-09-13T03:31:00.930Z"
+updated_at: "2026-10-10T07:30:31.927Z"
 ---
 
 # G63: Projects board module and global input wiring
@@ -301,4 +301,5 @@ against the current tree; all are corrected in the tasks, not deferred.
 - 2026-09-13T03:30:59.981Z backlog → active (system)
 - 2026-09-13T03:31:00.466Z active → verifying (system)
 - 2026-09-13T03:31:00.930Z verifying → done (system)
+- 2026-10-10T07:30:31.927Z done → active (system)
 

@@ -1,6 +1,6 @@
 import type { ActionResult, ActionRunContext, ActionRunner } from '@gobing-ai/ts-dual-workflow-engine';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
-import { joinPath } from '@gobing-ai/ts-runtime';
+import { isAbsolutePath, joinPath, normalizeSeparators } from '@gobing-ai/ts-runtime';
 
 const KIND = 'file.read';
 
@@ -26,7 +26,9 @@ export class FileReadActionRunner implements ActionRunner {
             return { ok: false, error: 'file.read: path is required' };
         }
         const maxSize = asNumber(options.maxSize);
-        const resolved = joinPath(context.workdir ?? '.', rawPath);
+        const resolved = isAbsolutePath(rawPath)
+            ? normalizeSeparators(rawPath)
+            : joinPath(context.workdir ?? '.', rawPath);
 
         const stat = await this.fileSystem.stat(resolved);
         if (stat === null) {

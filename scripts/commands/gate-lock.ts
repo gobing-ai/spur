@@ -35,7 +35,7 @@ process.stdout.write(`gate-lock: acquired in ${lock.queueWaitMs}ms\n`);
 try {
     const result = spawnSync(args[0] ?? '', args.slice(1), { stdio: 'inherit' });
     if (result.error !== undefined) {
-        process.stderr.write(`gate-lock: ${args[1]} failed: ${result.error.message}\n`);
+        process.stderr.write(`gate-lock: ${args[0]} failed: ${result.error.message}\n`);
         process.exitCode = 1;
     } else {
         process.exitCode = result.status ?? 1;

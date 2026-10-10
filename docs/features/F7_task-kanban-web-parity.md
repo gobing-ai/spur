@@ -2,11 +2,11 @@
 schema_version: 1
 id: "F7"
 name: "Task Kanban web parity"
-status: verifying
+status: active
 priority: P2
 tags: []
 created_at: "2026-06-20T05:06:06.393Z"
-updated_at: "2026-07-25T19:33:18.149Z"
+updated_at: "2026-10-10T07:30:27.693Z"
 ---
 
 # F7: Task Kanban web parity
@@ -118,5 +118,8 @@ Feature: Task Kanban web parity
 ## Notes
 
 ## History
+
 - 2026-07-25T19:33:17.902Z backlog → active (system)
 - 2026-07-25T19:33:18.149Z active → verifying (system)
+- 2026-10-10T07:30:27.693Z verifying → active (system)
+

@@ -60,7 +60,7 @@ interface LinkedRun {
     status: string | null;
     startedAt: string | null;
     completedAt: string | null;
-    /** Definition digest stamped on the run row at creation (task 0603), when present. */
+    /** Effective definition digest for the run, including an approved resume, when present. */
     definitionDigest: string | null;
 }
 
@@ -70,13 +70,15 @@ export interface VerifiedOutcomeWindow {
     until?: string | null;
 }
 
-/** Extract the definition digest stamped on a run row (task 0603), or null when absent/unparseable. */
+/** Extract the effective run definition digest, or null when absent/unparseable. */
 function readRunDefinitionDigest(metadataJson: string): string | null {
     try {
-        const meta = JSON.parse(metadataJson) as { definitionDigest?: unknown };
-        return typeof meta.definitionDigest === 'string' && meta.definitionDigest.length > 0
-            ? meta.definitionDigest
-            : null;
+        const meta = JSON.parse(metadataJson) as { definitionDigest?: unknown; resumeDefinitionDigest?: unknown };
+        const digest =
+            typeof meta.resumeDefinitionDigest === 'string' && meta.resumeDefinitionDigest !== ''
+                ? meta.resumeDefinitionDigest
+                : meta.definitionDigest;
+        return typeof digest === 'string' && digest.length > 0 ? digest : null;
     } catch {
         return null;
     }

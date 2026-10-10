@@ -19,6 +19,25 @@ describe('FileReadActionRunner', () => {
         expect(result.data).toMatchObject({ content: 'hello', size: 5 });
     });
 
+    test.each(['/absolute/evidence.json', 'C:\\evidence.json'])('preserves absolute path %s', async (path) => {
+        const resolved = path.replaceAll('\\', '/');
+        const seen: string[] = [];
+        const fs = {
+            stat: async (p: string) => {
+                seen.push(p);
+                return { size: 2 };
+            },
+            readFile: async (p: string) => {
+                seen.push(p);
+                return '{}';
+            },
+        } as unknown as FileSystem;
+        const result = await new FileReadActionRunner(fs).execute({ path }, makeCtx());
+        expect(result.ok).toBe(true);
+        expect(seen).toEqual([resolved, resolved]);
+        expect(result.data).toMatchObject({ path: resolved });
+    });
+
     test('returns error when file not found', async () => {
         const fs = { stat: async () => null } as unknown as FileSystem;
         const runner = new FileReadActionRunner(fs);

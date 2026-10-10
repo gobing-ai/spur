@@ -37,4 +37,14 @@ describe('gate-lock wrapper', () => {
         });
         expect(result.exitCode).toBe(3);
     });
+    test('names the executable when a child cannot start', () => {
+        const command = 'spur-missing-gate-child-a71c';
+        const result = Bun.spawnSync(['bun', WRAPPER, '--', command], {
+            stdout: 'pipe',
+            stderr: 'pipe',
+            env: { ...getEnvVars() },
+        });
+        expect(result.exitCode).toBe(1);
+        expect(result.stderr.toString()).toContain(`gate-lock: ${command} failed:`);
+    });
 });
