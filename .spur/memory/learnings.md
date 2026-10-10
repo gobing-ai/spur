@@ -5805,3 +5805,90 @@ rg -in 'should|probably|likely|seems|appears to|might|maybe|I think|presumably|a
 - The wrapup reply accompanying this capture carried one hedge ("it should collapse into an ADR-022
   amendment instead") about whether ADR-135 is a new entry or an ADR-022 amendment. That remains an
   open judgment call for the operator and is not asserted as fact anywhere above.
+## 2026-10-10
+
+### Task 1151 — segment pi skill invocations as operator prompts
+
+- **A "wrapper" prefix is not evidence of an injected body.** `session-timeline` dropped every pi user
+  row opening `<skill name="` as an injected body, which silently discarded the prompts that start each
+  batch. When a classification rule has no true positive in a 2,452-row census, delete the class rather
+  than keeping it as an always-zero field.
+- **Regenerate every twin that bundles the changed module.** `plugins/sp/scripts/inline-run-setup.mjs`
+  inlines `lib/transcript.ts`, so deleting a helper from the lib left a copy of it under
+  `plugins/sp/scripts` and failed the "no longer exists" acceptance criterion until that twin was
+  converted too. Grep the whole target directory, not just the modules named in the plan.
+- **Line budgets survive formatting, not line merging.** Biome re-splits multiple statements written on
+  one source line, so a compaction that only joins statements buys nothing after `bun run format`.
+  Reduce statements, comments or structure instead.
+
+### Task 1153 — exempt `@home-node` from the DD-09 sweep
+
+- **A short-circuit that reads as "no data" is a latent trap.** `checkAcCoverage(…, 'task-local')`
+  returned `orphans: []` without computing it, and its own comment warned that the feature-side sweep
+  would misread it. Fix the computed value even when no caller reads it yet; the field is consumed the
+  day a second caller appears.
+- **Freeze a marker as a scenario-level tag read through the real parser** rather than matching wording.
+  Wording heuristics silently exempt a capability scenario that happens to be phrased like a structural
+  one.
+- **A structural repair can displace a neighbouring doc comment.** Adding a `const` doc block directly
+  above an already-documented exported interface orphaned that interface's TSDoc and failed
+  `every-export-has-tsdoc` at the gate — but not the test suite. Place new declarations above the
+  existing doc block, not between it and its declaration.
+
+### Task 1155 — reject physical overlap before `bundle-config` cleanup
+
+- **A lexical containment check is the wrong question for a destructive step.** `relative(resolve(t), SOURCE)`
+  answered "is the path textually inside the source?", so a symlinked parent aliased the repo, the guard
+  passed, and `rm` deleted the real `config/` before `cp` failed. Canonicalize both sides with `realpath`
+  and refuse overlap in both directions before any removal.
+- **Copy the implementation byte-for-byte and import the copy by absolute file URL** to test a destructive
+  path safely: the copied module's `import.meta.url` binds its own `SOURCE`, so the destructive cases run
+  against a disposable fixture instead of the live checkout.
+- **A fixture copy is still a measured source file.** Bun's coverage instrumentation picked up the temp
+  copy of the script from `$TMPDIR` and failed `coverage-gate`; placing the fixture repo under a
+  `tests/…/fixtures/…` path matched `coveragePathIgnorePatterns` and excluded it.
+
+### Task 1160 — parse raw numstat paths with `-z`
+
+- **Read Git's machine format, not its rendered one.** Under the default `core.quotepath`, a non-ASCII
+  hook path arrived as a C-quoted string that matched no sensitive pattern, so a safety classifier routed
+  it to the fast lane. `--numstat -z` yields raw NUL-terminated records and explicit rename pairs.
+- **Split a `-z` count header at its first two tabs only.** A raw path may itself contain tabs, newlines
+  or a literal ` => `, and an empty path field is the rename form that consumes the next two records.
+- **Binary rows and `-` counts must not be confused with malformed framing**: validate the frame
+  (termination, counts, rename halves) and fail safe, so a dropped row cannot silently bypass the lane.
+- `globToRegex` needs `dotAll`: without it a `**/*.sql` glob cannot match a `.sql` file beneath a
+  directory whose name contains a newline.
+
+### Task 1161 — revalidate the PR head during review wait polling
+
+- **A snapshot taken once is not an invariant.** `wait` captured `headRefOid` at start and filtered every
+  poll against it, so it could only ever answer about the commit it began on. Re-read and re-assert at
+  the top of every poll *and* immediately before each terminal emission.
+- **Pin the identity, not just the revision.** Pinning the PR **number** as well as the head means a
+  different PR appearing on the branch is a failure rather than a silent retarget.
+- **A final recheck narrows a race; it cannot close it.** Say so in the design and keep the downstream
+  guard (`collect`) as the second line of defence instead of claiming TOCTOU safety.
+
+### Task 1164 — allow inbox offsets beyond the page-size ceiling
+
+- **A page position is not a page size.** Routing `offset` through the limit parser applied the 500 cap
+  to a position, so every deep page repeated page 500. Give a different meaning its own parser.
+- **Prefer a strict decimal parser over `parseInt`.** `parseInt('12abc')` is 12 and `parseInt('+5')` is 5;
+  requiring the whole trimmed value to match `^[0-9]+$` and pass `Number.isSafeInteger` closes both
+  holes and documents the contract.
+
+### Task 1165 — pin the landing-record and reconcile failure diagnostics
+
+- **A non-fatal diagnostic is only pinned by a fault injected at that branch's own dependency.** A
+  SQLite `BEFORE UPDATE … RAISE(ABORT, …)` trigger rejects exactly the reconcile UPDATE; a regular file
+  at the durable records directory makes the recursive `mkdirSync` fail deterministically; a scoped
+  second-target-open spy exercises the outer catch.
+- **A namespace-level `spyOn(domain, 'createMigratedDb')` passthrough works on Bun 1.3.14** and is
+  self-verifying when the test asserts the injected failure actually reached the catch — a silent
+  non-interception fails the test rather than passing it vacuously.
+- **Citing a run-scoped path that lives only inside a temp fixture blocks `record`.** The verdict answer
+  named `.spur/run/persist-out.json`, which resolves in neither `.spur/run/` nor
+  `.spur/memory/{evidence,runs}/` here; describe fixture-local artifacts in prose instead of anchoring
+  them, or the record step refuses with "unresolved run citation".
+
