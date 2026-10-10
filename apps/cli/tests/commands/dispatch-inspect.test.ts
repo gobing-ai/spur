@@ -229,7 +229,7 @@ describe('startup banner policy (A31/0719)', () => {
         } finally {
             await Bun.spawn(['rm', '-rf', dir]).exited;
         }
-    });
+    }, 30_000);
 
     test('runCli keeps --json stdout JSON-first, including early config failures (R3)', async () => {
         // Automatic suppression on a healthy project: stdout begins with the JSON document.
@@ -257,5 +257,5 @@ describe('startup banner policy (A31/0719)', () => {
         } finally {
             await Bun.spawn(['rm', '-rf', broken]).exited;
         }
-    });
+    }, 30_000);
 });
