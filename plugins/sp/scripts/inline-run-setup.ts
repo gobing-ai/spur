@@ -19,9 +19,12 @@ function usage(): never {
     const text = [
         'Usage: bun plugins/sp/scripts/inline-run-setup.ts --run-id <id> --file <definition> [--spur-bin <path>]',
         '       bun plugins/sp/scripts/inline-run-setup.ts --fingerprint --task-file <path> [--feature-file <path>] [--spur-bin <path>]',
-        '       bun plugins/sp/scripts/inline-run-setup.ts --action --run-id <id> --node <state> --kind <kind> --status <done|failed> --ok <true|false> --duration-ms <n> [--estimated] [--spur-bin <path>]',
-        '       bun plugins/sp/scripts/inline-run-setup.ts --actions-file <json-file> --run-id <id> [--spur-bin <path>]  (1007 R5 batch trace emission)',
-        '       bun plugins/sp/scripts/inline-run-setup.ts --close --run-id <id> --status <done|failed|paused> [--reason <terminal-reason>] [--spur-bin <path>]',
+        '       bun plugins/sp/scripts/inline-run-setup.ts --action --run-id <id> --node <state> --kind <kind> --status <done|failed> --ok <true|false> [--duration-ms <n>] [--estimated] [--project-root <path>] [--spur-bin <path>]',
+        '       bun plugins/sp/scripts/inline-run-setup.ts --node-enter --run-id <id> --node <state> [--project-root <path>] [--spur-bin <path>]  (1136 R4: stamps the node enter time)',
+        '       bun plugins/sp/scripts/inline-run-setup.ts --actions-file <json-file> --run-id <id> [--project-root <path>] [--spur-bin <path>]  (1007 R5 batch trace emission)',
+        '       bun plugins/sp/scripts/inline-run-setup.ts --close --run-id <id> --status <done|failed|paused> [--reason <terminal-reason>] [--project-root <path>] [--spur-bin <path>]',
+        '       --project-root (1136 R1) names the tree that OWNS the run row; without it the run row is read from the cwd tree, and a miss exits 1 with RUN_NOT_FOUND',
+        '       --duration-ms is optional on --action (1136 R4): omitted, the duration is measured from the calling --node-enter; supplied, it records provenance host-reported',
         '       bun plugins/sp/scripts/inline-run-setup.ts --persist-out --from <worktree-path> [--task-file <path>]... [--spur-bin <path>]',
         '       terminal-reason is a closed enum (0937 R2): done, paused-operator, failed-check, failed-agent, failed-timeout, failed-guard, cancelled, interrupted, retry-exhausted',
         '       close defaults (1051 AC1): --status done → reason done, --status paused → reason paused-operator; --status failed requires an explicit --reason',
@@ -62,22 +65,7 @@ function resolveAppEntry(spurBin: string): { entry: string; portable: boolean } 
     return { entry, portable: true };
 }
 
-const TRACE_EXPORTS = ['runInlineRunTrace', 'isInlineRunCloseStatus', 'isInlineRunActionStatus'] as const;
 const SETUP_EXPORTS = ['readInstalledInventory', 'runInlineRunSetup', 'writeInlineRunOutcome'] as const;
-
-// 0937 R2 closed terminal-reason vocabulary for `--close`. COPIED from
-// packages/app/src/workflow/terminal-reason.ts (no value import); parity test asserts equality.
-const TERMINAL_REASONS = new Set([
-    'done',
-    'paused-operator',
-    'failed-check',
-    'failed-agent',
-    'failed-timeout',
-    'failed-guard',
-    'cancelled',
-    'interrupted',
-    'retry-exhausted',
-]);
 
 async function main(): Promise<void> {
     // The portable Node twin has no workspace imports; SQLite still uses Spur's existing Bun runtime.
@@ -94,6 +82,7 @@ async function main(): Promise<void> {
         close = false,
         decide = false,
         persistOut = false,
+        nodeEnter = false,
         estimated = false;
     const taskFiles: string[] = [];
     let spurBin = getEnvVar('SPUR_BIN') ?? '';
@@ -104,6 +93,7 @@ async function main(): Promise<void> {
         else if (flag === '--action') action = true;
         else if (flag === '--close') close = true;
         else if (flag === '--decide') decide = true;
+        else if (flag === '--node-enter') nodeEnter = true;
         else if (flag === '--persist-out') persistOut = true;
         else if (flag === '--estimated') estimated = true;
         else if (flag === '--task-file') taskFiles.push(argv[++i] ?? '');
@@ -118,6 +108,7 @@ async function main(): Promise<void> {
     const optionsJson = flags.get('--options-json') ?? '';
     const node = flags.get('--node') ?? '';
     const kind = flags.get('--kind') ?? '';
+    const projectRoot = flags.get('--project-root') ?? '';
     const status = flags.get('--status') ?? '';
     const reason = flags.get('--reason') ?? '';
     const okRaw = flags.get('--ok') ?? '';
@@ -132,15 +123,6 @@ async function main(): Promise<void> {
         if (runId !== '' || file !== '' || taskFiles.length !== 1 || (taskFiles[0] ?? '').trim() === '') usage();
         const { app } = await loadInlineApp<InlineApp>(spurBin, resolveAppEntry, ['runInlineRunFingerprint']);
         process.exit(await app.runInlineRunFingerprint({ taskFile: taskFiles[0] ?? '', featureFile }));
-    }
-
-    if (actionsFile !== '') {
-        if (action || close || fingerprint || decide || persistOut || file !== '' || taskFiles.length > 0) usage();
-        if (runId.trim() === '' || status !== '' || node !== '' || kind !== '') usage();
-        if (okRaw !== '' || durationRaw !== '') usage();
-        if (!SAFE_RUN_ID_RE.test(runId)) refuseUnsafeRunId(runId);
-        const { app } = await loadInlineApp<InlineApp>(spurBin, resolveAppEntry, ['runInlineRunTraceBatch']);
-        process.exit(await app.runInlineRunTraceBatch({ runId, actionsFile }));
     }
 
     if (decide) {
@@ -175,46 +157,25 @@ async function main(): Promise<void> {
         process.exit(await app.runInlineRunPersistOut({ from, taskFiles }));
     }
 
-    if (action || close) {
-        if (action && close) usage();
-        if (runId.trim() === '' || status.trim() === '') usage();
+    if (nodeEnter || actionsFile !== '' || action || close) {
         if (!SAFE_RUN_ID_RE.test(runId)) refuseUnsafeRunId(runId);
-        const { app } = await loadInlineApp<InlineApp>(spurBin, resolveAppEntry, TRACE_EXPORTS);
-        if (close) {
-            if (!app.isInlineRunCloseStatus(status)) usage();
-            // 0937 R2: failed close needs a declared closed-enum reason — before any write.
-            if (reason.trim() === '' ? status === 'failed' : !TERMINAL_REASONS.has(reason)) usage();
-            process.exit(
-                await app.runInlineRunTrace({
-                    runId,
-                    close: true,
-                    node: '',
-                    kind: '',
-                    status,
-                    ok: true,
-                    durationMs: 0,
-                    ...(reason.trim() === '' ? {} : { reason }),
-                }),
-            );
-        }
-        if (node.trim() === '' || kind.trim() === '') usage();
-        if (!app.isInlineRunActionStatus(status)) usage();
-        // `--ok` and `--duration-ms` are required and exact (0868 #2): no silent defaults.
-        if (okRaw !== 'true' && okRaw !== 'false') usage();
-        const durationMs = Number(durationRaw);
-        if (durationRaw.trim() === '' || !Number.isFinite(durationMs) || durationMs < 0) usage();
-        process.exit(
-            await app.runInlineRunTrace({
-                runId,
-                close: false,
-                node,
-                kind,
-                status,
-                ok: okRaw === 'true',
-                durationMs,
-                ...(estimated ? { estimated: true } : {}),
-            }),
-        );
+        const mode = nodeEnter ? 'node-enter' : actionsFile !== '' ? 'actions-file' : close ? 'close' : 'action';
+        const { app } = await loadInlineApp<InlineApp>(spurBin, resolveAppEntry, ['runInlineRunTraceMode']);
+        const code = await app.runInlineRunTraceMode({
+            mode,
+            runId,
+            node,
+            kind,
+            status,
+            reason,
+            ok: okRaw,
+            durationMs: durationRaw,
+            actionsFile,
+            projectRoot,
+            estimated,
+        });
+        if (code === 2) usage();
+        process.exit(code);
     }
 
     if (runId.trim() === '' || file.trim() === '') usage();

@@ -2051,13 +2051,17 @@ failureStates:
         await writeFile(oldLog, 'keep until migration succeeds');
         const oldMtime = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
         await utimes(oldLog, oldMtime, oldMtime);
-        await writeFile(join(runDir, '1025-verdict.json'), '{malformed');
+        const evDir = join(cwd, '.spur', 'memory', 'evidence');
+        await mkdir(evDir, { recursive: true });
+        await writeFile(join(evDir, '1025-verdict.json'), 'invalid durable json');
+        await writeFile(join(runDir, '1025-verdict.json'), '{"wbs":"1025","verdict":"PASS"}');
 
         const output = createCapturedOutput();
         const exitCode = await main(['workflow', 'clean', '--json'], { output, cwd, dbUrl: ':memory:' });
         expect(exitCode).toBe(1);
         const result = JSON.parse(output.messages[0] ?? '{}');
         expect(result.migration.failures).toHaveLength(1);
+        expect(result.migration.failures[0].remedy).toBe('repair the durable file by hand');
         expect(result.logs.reclaimed).toEqual([]);
         expect(await exists(oldLog)).toBe(true);
 
@@ -2072,6 +2076,52 @@ failureStates:
         ).toBe(0);
         expect(JSON.parse(logsOutput.messages[0] ?? '{}').migration.failures).toEqual([]);
         expect(await exists(oldLog)).toBe(false);
+    });
+
+    test('clean finalizes stale runs when evidence migration fails but skips log/checkpoint reclamation (F5/AC1/AC2)', async () => {
+        const cwd = await createTempProject();
+        const dbPath = join(cwd, '.spur', 'spur.db');
+        await mkdir(join(cwd, '.spur'), { recursive: true });
+        const db = await createMigratedDb({ url: dbPath });
+        const oldTime = Date.now() - 3600 * 1000;
+        await db.run(
+            'INSERT INTO runs (id, status, started_at, metadata_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+            ['stale-run-f5', 'running', oldTime, '{}', oldTime, oldTime],
+        );
+        db.close();
+
+        const runDir = join(cwd, '.spur', 'run');
+        await mkdir(runDir, { recursive: true });
+        const evDir = join(cwd, '.spur', 'memory', 'evidence');
+        await mkdir(evDir, { recursive: true });
+        await writeFile(join(evDir, '1025-verdict.json'), 'invalid durable json');
+        await writeFile(join(runDir, '1025-verdict.json'), '{"wbs":"1025","verdict":"PASS"}');
+
+        // Human output test
+        const outputHuman = createCapturedOutput();
+        const exitHuman = await main(['workflow', 'clean'], { output: outputHuman, cwd, dbUrl: dbPath });
+        expect(exitHuman).toBe(1);
+        expect(
+            outputHuman.errors.some(
+                (e) => e.includes('Migration failed') && e.includes('repair the durable file by hand'),
+            ),
+        ).toBe(true);
+        expect(
+            outputHuman.messages.some((m) => m.includes('Finalized 1 stale run(s)') && m.includes('stale-run-f5')),
+        ).toBe(true);
+
+        // JSON output test
+        const outputJson = createCapturedOutput();
+        const exitJson = await main(['workflow', 'clean', '--json'], { output: outputJson, cwd, dbUrl: dbPath });
+        expect(exitJson).toBe(1);
+        const result = JSON.parse(outputJson.messages[0] ?? '{}');
+        expect(result.migration.failures).toHaveLength(1);
+        expect(result.migration.failures[0].remedy).toBe('repair the durable file by hand');
+        expect(result.cleaned).toHaveLength(0); // already finalized on previous run
+        expect(result.logs.reclaimed).toEqual([]);
+        expect(result.checkpoints.reclaimed).toEqual([]);
+
+        await rm(cwd, { recursive: true, force: true });
     });
 
     test('clean rejects invalid --older-than', async () => {

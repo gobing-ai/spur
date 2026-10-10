@@ -3708,6 +3708,83 @@ updated_at: "2026-08-10T00:00:00.000Z"
         // asserted first (a sibling that must NOT be touched, an ambiguous anchor that must
         // NOT be guessed at, an unknown wbs that must fail loudly) because the unscoped pass
         // rewrites the whole corpus in one call — the scope is the whole point of the flag.
+        // 1140 R1–R3: the `done_reason` verdict-pointer class. The durable copy wins, the
+        // tracked Testing section is the fallback, and a pointer with neither owner is
+        // reported as unresolved and left byte-identical (AC1/AC3/AC4).
+        test('retargets scratch verdict pointers to durable evidence and reports the unresolved one', async () => {
+            const isoCwd = await mkdtemp(join(tmpdir(), 'spur-task-migrate-anchors-done-reason-'));
+            await mkdir(join(isoCwd, 'docs', 'tasks'), { recursive: true });
+            await mkdir(join(isoCwd, '.spur', 'memory', 'evidence'), { recursive: true });
+            await writeFile(join(isoCwd, '.spur', 'memory', 'evidence', '0001-verdict.json'), '{}\n');
+            const task = (wbs: string, reason: string, testing: string): string => `---
+template: standard
+schema_version: 1
+name: "t${wbs}"
+description: "fixture"
+status: done
+type: task
+profile: standard
+parent_wbs: null
+priority: P3
+tags: []
+dependencies: []
+created_at: "2026-08-10T00:00:00.000Z"
+updated_at: "2026-08-10T00:00:00.000Z"
+done_reason: "${reason}"
+---
+
+## ${wbs}. t${wbs}
+
+### Testing
+
+${testing}
+`;
+            const durablePath = join(isoCwd, 'docs', 'tasks', '0001_durable.md');
+            await writeFile(durablePath, task('0001', 'PASS artifact at .spur/run/0001-verdict.json', 'green'));
+            await writeFile(
+                join(isoCwd, 'docs', 'tasks', '0002_tracked.md'),
+                task('0002', 'Verified with PASS verdict in .spur/run/0002-verdict.json', '`suite` green'),
+            );
+            const unresolvedPath = join(isoCwd, 'docs', 'tasks', '0003_unresolved.md');
+            await writeFile(unresolvedPath, task('0003', 'Closed at .spur/run/0003-verdict.json', ''));
+            const unresolvedBefore = await readFile(unresolvedPath, 'utf8');
+            Bun.spawnSync(['git', 'init'], { cwd: isoCwd });
+            Bun.spawnSync(['git', 'add', '.'], { cwd: isoCwd });
+            try {
+                const dryOut = createCapturedOutput();
+                const dryCode = await main(['task', 'migrate-anchors', '--dry-run', '--json'], {
+                    cwd: isoCwd,
+                    output: dryOut,
+                });
+                expect(dryCode).toBe(0);
+                const dry = JSON.parse(dryOut.messages[0] ?? '{}');
+                expect(dry.reasons).toHaveLength(2);
+                expect(dry.unresolvedReasons).toHaveLength(1);
+                expect(dry.unresolvedReasons[0]).toContain('0003');
+                expect(await readFile(durablePath, 'utf8')).toContain('.spur/run/0001-verdict.json');
+
+                const applyOut = createCapturedOutput();
+                const applyCode = await main(['task', 'migrate-anchors'], { cwd: isoCwd, output: applyOut });
+                expect(applyCode).toBe(0);
+                expect(applyOut.messages[0]).toContain('2 done_reason rewrite(s)');
+
+                // Durable copy wins; the pointer substring changes and its surroundings do not.
+                // (The write pipeline re-emits the scalar unquoted and stamps `updated_at` —
+                // `planning-write-service.ts` sets it at the write step for every corpus write.)
+                const durable = await readFile(durablePath, 'utf8');
+                expect(durable).toContain('done_reason: PASS artifact at .spur/memory/evidence/0001-verdict.json');
+                expect(durable).toContain('### Testing\n\ngreen');
+                expect(durable).not.toContain('.spur/run/0001-verdict.json');
+                // No durable copy but a non-empty Testing section → the tracked owner.
+                const tracked = await readFile(join(isoCwd, 'docs', 'tasks', '0002_tracked.md'), 'utf8');
+                expect(tracked).toContain('tracked Testing section (scratch verdict not retained)');
+                // Neither owner → byte-identical, reported only.
+                expect(await readFile(unresolvedPath, 'utf8')).toBe(unresolvedBefore);
+            } finally {
+                rmSync(isoCwd, { recursive: true, force: true });
+            }
+        });
+
         test('--wbs qualifies only the named task and leaves a sibling fixture untouched', async () => {
             const isoCwd = await mkdtemp(join(tmpdir(), 'spur-task-migrate-anchors-scoped-'));
             await mkdir(join(isoCwd, 'docs', 'tasks'), { recursive: true });

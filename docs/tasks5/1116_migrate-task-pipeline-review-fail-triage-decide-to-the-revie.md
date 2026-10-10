@@ -4,7 +4,7 @@ name: Migrate task-pipeline review-fail-triage decide to the review-failure-clas
 status: done
 template: feature-impl
 created_at: 2026-10-07T16:29:03.402Z
-updated_at: "2026-10-08T16:36:27.273Z"
+updated_at: "2026-10-09T21:30:39.307Z"
 feature_id: P1
 
 dependencies: ["1094"]
@@ -12,7 +12,7 @@ tags: ["decision", "workflow"]
 priority: P2
 estimate_hours: 3
 done_forced: "false"
-done_reason: unforced close; PASS artifact at .spur/run/1116-verdict.json
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1116-verdict.json
 ---
 
 ## 1116. Migrate task-pipeline review-fail-triage decide to the review-failure-class catalog decision

@@ -13,9 +13,9 @@ tags: ["bug"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-14T18:15:15.298Z"
-updated_at: "2026-08-18T04:42:48.759Z"
+updated_at: "2026-10-09T21:30:30.614Z"
 done_forced: "true"
-done_reason: Verified with PASS verdict in .spur/run/0562-verdict.json; full test suite 5290 pass / 0 fail
+done_reason: Verified with PASS verdict in tracked Testing section (scratch verdict not retained); full test suite 5290 pass / 0 fail
 ---
 
 ## 0562. Prevent migration-number collisions between parallel features

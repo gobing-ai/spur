@@ -4,13 +4,13 @@ name: Integrate desktop PR 6 and verify macOS packaging
 status: done
 template: issue
 created_at: 2026-10-04T20:54:18.738Z
-updated_at: "2026-10-05T00:01:41.645Z"
+updated_at: "2026-10-09T21:30:34.545Z"
 
 ac_numbering: task-local
 ac_altitude: task-local
 feature_id: A71
 done_forced: "false"
-done_reason: unforced close; PASS artifact at .spur/run/1082-verdict.json
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1082-verdict.json
 ---
 
 ## 1082. Integrate desktop PR 6 and verify macOS packaging

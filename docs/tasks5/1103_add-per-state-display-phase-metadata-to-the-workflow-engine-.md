@@ -4,7 +4,7 @@ name: Add per-state display phase metadata to the workflow engine state schema
 status: done
 template: feature-impl
 created_at: 2026-10-07T06:14:15.476Z
-updated_at: "2026-10-07T19:35:28.823Z"
+updated_at: "2026-10-09T21:30:37.413Z"
 feature_id: I13
 
 priority: P1
@@ -12,7 +12,7 @@ ac_numbering: task-local
 ac_altitude: task-local
 estimate_hours: 3
 done_forced: "false"
-done_reason: unforced close; PASS artifact at .spur/run/1103-verdict.json
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1103-verdict.json
 ---
 
 ## 1103. Add per-state display phase metadata to the workflow engine state schema

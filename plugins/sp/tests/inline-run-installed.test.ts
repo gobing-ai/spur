@@ -226,8 +226,10 @@ transitions:
             '--duration-ms',
             '1',
         );
-        expect(missingAction.status).toBe(0);
-        expect(JSON.parse(missingAction.stdout).ok).toBe(false);
+        // 1136 R1: a missing run row is a loud correctness failure on every emission mode — the
+        // installed twin exits 1 with RUN_NOT_FOUND instead of a logged best-effort no-op.
+        expect(missingAction.status, missingAction.stderr).toBe(1);
+        expect(JSON.parse(missingAction.stdout)).toMatchObject({ ok: false, code: 'RUN_NOT_FOUND' });
         expect(invoke('--close', '--run-id', 'missing-run', '--status', 'done').status).toBe(1);
         writeFileSync(definition, readFileSync(definition, 'utf8').replace('installed-smoke', 'drifted'));
         const drift = invoke('--run-id', 'drifted-run', '--file', 'installed-smoke');

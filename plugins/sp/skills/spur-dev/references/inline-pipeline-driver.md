@@ -644,6 +644,19 @@ execution tree, and an ad-hoc git worktree created for a comparison is removed b
 reports. The G65 batch's implement dispatches left an 867 MB worktree plus a trail of `/tmp` scratch
 files that outlived the run (2026-09-15).
 
+**Driver scratch lives with the run (task 1136 R6).** Every driver scratch file — action-batch
+JSON, captured stage output, temporary status/answer files — lives under `.spur/run/<run-id>/`,
+never `/tmp` or `$TMPDIR`: the OS may reap a temp directory mid-run, and a reaped scratch file
+surfaces as an unrelated downstream failure. Run-scoped files directly under `.spur/run/` keep
+their existing `<run-id>-*` naming (the `no-env-files` rule still bans `.env` names).
+
+**Declared vars are checked before a shell action runs (task 1136 R6).** Before executing a `shell`
+action whose command references a declared workflow var (for example `$qualityGateCmd`), the driver
+confirms the var is exported and non-empty; when it is not, the action fails by name —
+`shell action requires $qualityGateCmd but it is empty/unset` — and the command never runs. The
+check is scoped to vars the workflow declares with a value: legitimately empty optional vars
+(`$featureSpecPath` for an orphan task, `$gateFindings` on a green gate) pass unchanged. This turnsa silently empty `$qualityGateCmd` into a named failure instead of a shell that runs nothing.
+
 **Verify-stage artifact contract.** A verify handoff names
 [`code-verification/references/verdict-schema.md`](../../code-verification/references/verdict-schema.md)
 as the canonical answer schema and carries this compact form verbatim:
@@ -842,7 +855,9 @@ Each item below cost a driver cycle to discover. They are contracts, not tips.
   `.spur/run/<wbs>-triage.decision`.
 - **`task-diffstat.ts` reads `wbs` from the environment and writes an artifact.** Invoke it as
   `wbs=<wbs> node "$(superskill script path sp task-diffstat.mjs)"`; stdout stays empty, so assert success on
-  `.spur/run/<wbs>-diffstat.json` and never on command output.
+  `.spur/run/<wbs>-diffstat.json` and never on command output. Never the bare unguarded
+  source-repo path form — the script-contract check forbids it on a shipped surface because it
+  shadows the installed twin in a consumer.
 - **The verify answer grammar is exact.** One `Verdict:` line, one `Confidence:` line, then
   `### Per-Requirement Traceability` (`| Req | Status | Evidence |`) and
   `### Acceptance Criteria Verification` (`| AC | Status | Evidence Type | Evidence |`). Requirement

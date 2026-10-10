@@ -29,9 +29,12 @@ function usage() {
   const text = [
     "Usage: bun plugins/sp/scripts/inline-run-setup.ts --run-id <id> --file <definition> [--spur-bin <path>]",
     "       bun plugins/sp/scripts/inline-run-setup.ts --fingerprint --task-file <path> [--feature-file <path>] [--spur-bin <path>]",
-    "       bun plugins/sp/scripts/inline-run-setup.ts --action --run-id <id> --node <state> --kind <kind> --status <done|failed> --ok <true|false> --duration-ms <n> [--estimated] [--spur-bin <path>]",
-    "       bun plugins/sp/scripts/inline-run-setup.ts --actions-file <json-file> --run-id <id> [--spur-bin <path>]  (1007 R5 batch trace emission)",
-    "       bun plugins/sp/scripts/inline-run-setup.ts --close --run-id <id> --status <done|failed|paused> [--reason <terminal-reason>] [--spur-bin <path>]",
+    "       bun plugins/sp/scripts/inline-run-setup.ts --action --run-id <id> --node <state> --kind <kind> --status <done|failed> --ok <true|false> [--duration-ms <n>] [--estimated] [--project-root <path>] [--spur-bin <path>]",
+    "       bun plugins/sp/scripts/inline-run-setup.ts --node-enter --run-id <id> --node <state> [--project-root <path>] [--spur-bin <path>]  (1136 R4: stamps the node enter time)",
+    "       bun plugins/sp/scripts/inline-run-setup.ts --actions-file <json-file> --run-id <id> [--project-root <path>] [--spur-bin <path>]  (1007 R5 batch trace emission)",
+    "       bun plugins/sp/scripts/inline-run-setup.ts --close --run-id <id> --status <done|failed|paused> [--reason <terminal-reason>] [--project-root <path>] [--spur-bin <path>]",
+    "       --project-root (1136 R1) names the tree that OWNS the run row; without it the run row is read from the cwd tree, and a miss exits 1 with RUN_NOT_FOUND",
+    "       --duration-ms is optional on --action (1136 R4): omitted, the duration is measured from the calling --node-enter; supplied, it records provenance host-reported",
     "       bun plugins/sp/scripts/inline-run-setup.ts --persist-out --from <worktree-path> [--task-file <path>]... [--spur-bin <path>]",
     "       terminal-reason is a closed enum (0937 R2): done, paused-operator, failed-check, failed-agent, failed-timeout, failed-guard, cancelled, interrupted, retry-exhausted",
     "       close defaults (1051 AC1): --status done \u2192 reason done, --status paused \u2192 reason paused-operator; --status failed requires an explicit --reason",
@@ -66,19 +69,7 @@ function resolveAppEntry(spurBin) {
   }
   return { entry, portable: true };
 }
-var TRACE_EXPORTS = ["runInlineRunTrace", "isInlineRunCloseStatus", "isInlineRunActionStatus"];
 var SETUP_EXPORTS = ["readInstalledInventory", "runInlineRunSetup", "writeInlineRunOutcome"];
-var TERMINAL_REASONS = new Set([
-  "done",
-  "paused-operator",
-  "failed-check",
-  "failed-agent",
-  "failed-timeout",
-  "failed-guard",
-  "cancelled",
-  "interrupted",
-  "retry-exhausted"
-]);
 async function main() {
   if (!process.versions.bun) {
     const child = spawnSync("bun", [fileURLToPath(import.meta.url), ...process.argv.slice(2)], {
@@ -89,7 +80,7 @@ async function main() {
     process.exit(child.status ?? 1);
   }
   const flags = new Map;
-  let fingerprint = false, action = false, close = false, decide = false, persistOut = false, estimated = false;
+  let fingerprint = false, action = false, close = false, decide = false, persistOut = false, nodeEnter = false, estimated = false;
   const taskFiles = [];
   let spurBin = getEnvVar("SPUR_BIN") ?? "";
   const argv = process.argv.slice(2);
@@ -103,6 +94,8 @@ async function main() {
       close = true;
     else if (flag === "--decide")
       decide = true;
+    else if (flag === "--node-enter")
+      nodeEnter = true;
     else if (flag === "--persist-out")
       persistOut = true;
     else if (flag === "--estimated")
@@ -121,6 +114,7 @@ async function main() {
   const optionsJson = flags.get("--options-json") ?? "";
   const node = flags.get("--node") ?? "";
   const kind = flags.get("--kind") ?? "";
+  const projectRoot = flags.get("--project-root") ?? "";
   const status = flags.get("--status") ?? "";
   const reason = flags.get("--reason") ?? "";
   const okRaw = flags.get("--ok") ?? "";
@@ -133,18 +127,6 @@ async function main() {
       usage();
     const { app: app2 } = await loadInlineApp(spurBin, resolveAppEntry, ["runInlineRunFingerprint"]);
     process.exit(await app2.runInlineRunFingerprint({ taskFile: taskFiles[0] ?? "", featureFile }));
-  }
-  if (actionsFile !== "") {
-    if (action || close || fingerprint || decide || persistOut || file !== "" || taskFiles.length > 0)
-      usage();
-    if (runId.trim() === "" || status !== "" || node !== "" || kind !== "")
-      usage();
-    if (okRaw !== "" || durationRaw !== "")
-      usage();
-    if (!SAFE_RUN_ID_RE.test(runId))
-      refuseUnsafeRunId(runId);
-    const { app: app2 } = await loadInlineApp(spurBin, resolveAppEntry, ["runInlineRunTraceBatch"]);
-    process.exit(await app2.runInlineRunTraceBatch({ runId, actionsFile }));
   }
   if (decide) {
     if (action || close || fingerprint || file !== "" || taskFiles.length > 0)
@@ -177,49 +159,27 @@ async function main() {
     const { app: app2 } = await loadInlineApp(spurBin, resolveAppEntry, ["runInlineRunPersistOut"]);
     process.exit(await app2.runInlineRunPersistOut({ from, taskFiles }));
   }
-  if (action || close) {
-    if (action && close)
-      usage();
-    if (runId.trim() === "" || status.trim() === "")
-      usage();
+  if (nodeEnter || actionsFile !== "" || action || close) {
     if (!SAFE_RUN_ID_RE.test(runId))
       refuseUnsafeRunId(runId);
-    const { app: app2 } = await loadInlineApp(spurBin, resolveAppEntry, TRACE_EXPORTS);
-    if (close) {
-      if (!app2.isInlineRunCloseStatus(status))
-        usage();
-      if (reason.trim() === "" ? status === "failed" : !TERMINAL_REASONS.has(reason))
-        usage();
-      process.exit(await app2.runInlineRunTrace({
-        runId,
-        close: true,
-        node: "",
-        kind: "",
-        status,
-        ok: true,
-        durationMs: 0,
-        ...reason.trim() === "" ? {} : { reason }
-      }));
-    }
-    if (node.trim() === "" || kind.trim() === "")
-      usage();
-    if (!app2.isInlineRunActionStatus(status))
-      usage();
-    if (okRaw !== "true" && okRaw !== "false")
-      usage();
-    const durationMs = Number(durationRaw);
-    if (durationRaw.trim() === "" || !Number.isFinite(durationMs) || durationMs < 0)
-      usage();
-    process.exit(await app2.runInlineRunTrace({
+    const mode = nodeEnter ? "node-enter" : actionsFile !== "" ? "actions-file" : close ? "close" : "action";
+    const { app: app2 } = await loadInlineApp(spurBin, resolveAppEntry, ["runInlineRunTraceMode"]);
+    const code = await app2.runInlineRunTraceMode({
+      mode,
       runId,
-      close: false,
       node,
       kind,
       status,
-      ok: okRaw === "true",
-      durationMs,
-      ...estimated ? { estimated: true } : {}
-    }));
+      reason,
+      ok: okRaw,
+      durationMs: durationRaw,
+      actionsFile,
+      projectRoot,
+      estimated
+    });
+    if (code === 2)
+      usage();
+    process.exit(code);
   }
   if (runId.trim() === "" || file.trim() === "")
     usage();

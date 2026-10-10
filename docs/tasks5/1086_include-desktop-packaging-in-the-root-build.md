@@ -4,12 +4,12 @@ name: Include desktop packaging in the root build
 status: done
 template: standard
 created_at: 2026-10-05T01:52:28.356Z
-updated_at: "2026-10-05T23:15:05.320Z"
+updated_at: "2026-10-09T21:30:35.048Z"
 
 ac_altitude: task-local
 ac_numbering: task-local
 done_forced: "false"
-done_reason: unforced close; PASS artifact at .spur/run/1086/verdict.json
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1086-verdict.json
 ---
 
 ## 1086. Include desktop packaging in the root build

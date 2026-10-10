@@ -4,11 +4,11 @@ name: "F3 acceptance: re-verify the W2 feature-management scenarios"
 status: done
 template: feature-impl
 created_at: 2026-10-08T17:39:23.987Z
-updated_at: "2026-10-08T17:45:37.778Z"
+updated_at: "2026-10-09T21:30:40.535Z"
 feature_id: F3
 
 done_forced: "true"
-done_reason: "Inline acceptance re-verify (operator-chosen F3 closure); verdict PASS HIGH from .spur/run/1126-verdict.json, no pipeline run"
+done_reason: "Inline acceptance re-verify (operator-chosen F3 closure); verdict PASS HIGH from .spur/memory/evidence/1126-verdict.json, no pipeline run"
 ---
 
 ## 1126. F3 acceptance: re-verify the W2 feature-management scenarios

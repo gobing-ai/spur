@@ -3,8 +3,8 @@ kind: design
 title: "Run record — two-file contract + the Observability read plane"
 status: implemented
 created_at: 2026-08-18
-updated_at: 2026-10-06
-related: [E7, I6, D3, "0598", "0610", "0683", "0709", "0712", "0925", "1051", "1053", "1064", "1134"]
+updated_at: 2026-10-09
+related: [E7, I6, D3, "0598", "0610", "0683", "0709", "0712", "0925", "1051", "1053", "1064", "1134", "1136"]
 tags: [contract, E7, I6, workflow, observability]
 ---
 
@@ -51,6 +51,13 @@ The 0594 injected-file-list cost idea is independent instrumentation, not a prer
 **1064 run registration and lazy record open baseline (2026-10-02).** `WorkflowRunLogSink` and the sync `spur workflow run` path eliminate orphan run records and unqueryable run IDs (feature D3):
 1. **Event-driven header:** The sync CLI human progress stream withholds `Run: <id>` and plan preview until the committed `workflow.run.started` event fires (`apps/cli/src/commands/workflow.ts`). Pre-row failures (such as `--vars` validation or engine setup) print no run ID.
 2. **Lazy record open:** `WorkflowRunLogSink` (`packages/app/src/observability/workflow-run-log-sink.ts`) defers directory creation and opening `<id>.md` to `ensureOpen()` on the first emitted event (with an `openFailed` latch for R8 inert degradation), so constructing a sink before row commit leaves no 0-byte `.md` or `.state.json` files.
+
+**1136 worktree run-trace integrity baseline (2026-10-09).** The inline run record stays per-tree, but the writer stops trusting its own cwd and its callers' arithmetic (incident: task 1132's run `85fab6d4-baf5-4db8-a0e9-810b12927fb4`, 93 action rows lost to a suppressed `RUN_NOT_FOUND`; a stale digest one accepted command away from certifying a tree that no longer existed):
+1. **Owning tree travels explicitly.** `inline-run-setup --action` / `--actions-file` / `--node-enter` / `--close` accept `--project-root <invoking-tree>` (the tree recorded by the WT-3 marker); the run row is read from that tree's `.spur/spur.db`, and the run record from its `.spur/memory/runs/`. Omitted, the cwd tree is used. Per-tree isolation is unchanged — the correction is that a run-row miss is now a loud `1`/`code: "RUN_NOT_FOUND"` on every emission mode, matching `--close`, instead of a logged best-effort no-op.
+2. **No suppressed bookkeeping.** Driver and execution-batch reference snippets must not redirect `inline-run-setup`, `quality-gate` or `persist-out*` stdout/stderr to `/dev/null`; a static pin fails any snippet that does.
+3. **Emitter-measured timing.** `--node-enter --run-id <id> --node <state>` stamps the enter time into the run-record state sidecar (`nodeEnters`, `visitedNodes`); a following `--action` without `--duration-ms` computes `duration = now − enter` and stamps `provenance: 'measured'`. A caller-supplied `--duration-ms` stays valid and records `provenance: 'host-reported'` (with `--estimated` marking a reconstructed value). A row whose computed start precedes `runs.started_at` is rejected (`1`); a duration that cannot be measured exits `1` with `code: "ACTION_DURATION_UNAVAILABLE"`.
+4. **Trace defects are visible.** At `--close`, the visited nodes recorded in the sidecar are compared with the nodes that emitted rows and the difference is reported as `missingNodes[]` in the close JSON and the run record — reported, never a close failure (failing would recreate the backfill pressure `NO_ACTION_ROWS` forbids). An operator pause is its own `kind: operator-wait` row so the wait is not charged to the neighbouring node.
+5. **The gate owns its reuse identity.** `quality-gate` recomputes the proof-input fingerprint (`resolveReceiptReuse` → `recomputeGateProofFingerprint`, the same function `inline-run-setup --fingerprint` uses, with `taskSpecPath`/`featureSpecPath` from env) before `readReceiptStatus` is consulted; a supplied `proofDigest` that differs from the recomputed value fails reuse with `check.reuse-refused — supplied <D1> != current <D2>`, and an impossible recompute (missing task path) refuses reuse rather than assuming it. The `status` mode obeys the same rule.
 
 
 

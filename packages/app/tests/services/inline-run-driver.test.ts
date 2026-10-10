@@ -47,6 +47,24 @@ async function inDir<T>(dir: string, fn: () => T | Promise<T>): Promise<T> {
     }
 }
 
+/**
+ * Task 1136 R4: an action row's computed start (`now - durationMs`) must not precede
+ * `runs.started_at`. These in-process tests call an action microseconds after setup, while a real
+ * run's first action always starts after the row exists; back-dating the seeded row keeps the
+ * fixture faithful to that ordering instead of asserting on scheduler noise.
+ */
+async function backdateRunStart(dir: string, runId: string, backMs = 60_000): Promise<void> {
+    const db = await openInlineRunProjectDb(dir);
+    try {
+        await db.adapter.run('UPDATE runs SET started_at = ? WHERE id = ?', [
+            new Date(Date.now() - backMs).toISOString(),
+            runId,
+        ]);
+    } finally {
+        db.close();
+    }
+}
+
 /** Capture stdout across an awaited runner: the write hook is restored before assertions. */
 async function captureAsync<T>(fn: () => Promise<T>): Promise<{ value: T; out: string }> {
     const original = process.stdout.write;
@@ -263,7 +281,8 @@ describe('runInlineRunSetup + runInlineRunTrace (moved driver bodies, 1006 R3)',
                     }),
                 ).toBe(0);
 
-                // Best-effort action on a MISSING run still exits 0 with {ok:false} (R3).
+                // Task 1136 R1: a missing run row is a loud correctness failure on every
+                // emission mode, not a logged best-effort no-op.
                 const ghost = await captureAsync(() =>
                     runInlineRunTrace({
                         runId: 'run-1006-ghost',
@@ -275,13 +294,17 @@ describe('runInlineRunSetup + runInlineRunTrace (moved driver bodies, 1006 R3)',
                         durationMs: 5,
                     }),
                 );
-                expect(ghost.value).toBe(0);
-                expect(JSON.parse(ghost.out.trimEnd().split('\n')[0] ?? '{}')).toMatchObject({ ok: false });
+                expect(ghost.value).toBe(1);
+                expect(JSON.parse(ghost.out.trimEnd().split('\n')[0] ?? '{}')).toMatchObject({
+                    ok: false,
+                    code: 'RUN_NOT_FOUND',
+                });
                 expect(readFileSync(join(p.dir, '.spur/memory/runs/run-1006-ghost.md'), 'utf8')).toContain(
                     'trace-emission-failed',
                 );
 
                 // A real action row records through the writer (exit 0, ok:true).
+                await backdateRunStart(p.dir, 'run-1006-trace');
                 const action = await captureAsync(() =>
                     runInlineRunTrace({
                         runId: 'run-1006-trace',
@@ -640,6 +663,7 @@ describe('inline close reasons and state projection (1051)', () => {
             runInlineRunSetup({ runId, file: 'inline-smoke', inventory: await INVENTORY(dir) }),
         );
         expect(setup.value, setup.out).toBe(0);
+        await backdateRunStart(dir, runId);
     };
     const recordAction = async (runId: string) => {
         const action = await captureAsync(() =>
@@ -1005,7 +1029,7 @@ describe('runInlineRunTraceBatch (1007 R5)', () => {
         }
     });
 
-    test('emission failure on a missing run reports {ok:false} and exits 0 (best-effort contract)', async () => {
+    test('emission failure on a missing run is a loud RUN_NOT_FOUND (1136 R1), and the run record names it', async () => {
         const p = makeProject('trace-batch-ghost');
         try {
             await inDir(p.dir, async () => {
@@ -1014,8 +1038,8 @@ describe('runInlineRunTraceBatch (1007 R5)', () => {
                 const batch = await captureAsync(() =>
                     runInlineRunTraceBatch({ runId: 'run-1006-ghost-batch', actionsFile: file }),
                 );
-                expect(batch.value).toBe(0);
-                expect(JSON.parse(batch.out.trimEnd())).toMatchObject({ ok: false, recorded: 0 });
+                expect(batch.value).toBe(1);
+                expect(JSON.parse(batch.out.trimEnd())).toMatchObject({ ok: false, code: 'RUN_NOT_FOUND' });
                 expect(readFileSync(join(p.dir, '.spur/memory/runs/run-1006-ghost-batch.md'), 'utf8')).toContain(
                     'trace-emission-failed',
                 );

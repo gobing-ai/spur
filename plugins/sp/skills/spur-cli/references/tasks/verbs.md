@@ -263,6 +263,13 @@ Qualify in-repo evidence anchors to repo-relative paths across the task corpus. 
 without rewriting, and schema-incompatible files in `skipped`. The write path uses the planning
 service rather than raw file edits.
 
+**`done_reason` scratch pointers are retargeted** (task 1140, ADR-131): a `.spur/run/<wbs>-verdict.json`
+or `.spur/run/<wbs>/verdict.json` substring becomes `.spur/memory/evidence/<wbs>-verdict.json` when
+that copy exists, else `tracked Testing section (scratch verdict not retained)` when Testing is
+non-empty; otherwise the value is left unchanged and reported in `doneReasonUnresolved`. Each
+`doneReasons` row carries `kind` (`absolute-path` | `durable-evidence` | `tracked-testing`). This is
+the repair for the `no-scratch-verdict-pointer` rule.
+
 **`--wbs <wbs>` scopes the pass to one task file** (task 1109 R1) — the wbs is resolved through the
 task locator and exactly that file is scanned, so the pipeline's implement stage can auto-repair a
 task's unique basename anchors without the corpus-wide pass rewriting unrelated files (the unscoped

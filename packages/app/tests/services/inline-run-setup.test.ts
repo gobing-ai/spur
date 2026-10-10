@@ -13,20 +13,27 @@ import {
     openInlineRunProjectDb,
     resolveWorkflowDefinition,
     runDecideForInlineRun,
+    runInlineRunNodeEnter,
     runInlineRunSetup,
     runInlineRunTrace,
     runInlineRunTraceBatch,
+    runInlineRunTraceMode,
+    runStoragePaths,
 } from '../../src';
 import { RunArtifactActionRunner } from '../../src/workflow/actions/run-artifact';
 
-// runInlineRunSetup narrates on stderr; keep that out of the test reporter (mirrors
-// inline-run-driver.test.ts). No test here asserts on stderr.
+// runInlineRunSetup narrates on stderr and the trace runners report JSON on stdout; keep both
+// out of the test reporter (mirrors inline-run-driver.test.ts). No test asserts on stderr;
+// stdout assertions go through captureStdout, which layers over this mute.
 let errSpy: ReturnType<typeof spyOn>;
+let outSpy: ReturnType<typeof spyOn>;
 beforeEach(() => {
     errSpy = spyOn(console, 'error').mockImplementation(() => {});
+    outSpy = spyOn(process.stdout, 'write').mockImplementation(() => true);
 });
 afterEach(() => {
     errSpy.mockRestore();
+    outSpy.mockRestore();
 });
 
 /**
@@ -970,14 +977,7 @@ describe('runDecideForInlineRun (0941 R5)', () => {
     });
 });
 
-/**
- * Task 1070 R1/R3 — the inline driver's action rows carry a host-reported provenance
- * stamp in `action_runs.result_json`, written through the existing writer `result`
- * boundary (no migration, no new column). A batch row's optional `estimated` is
- * validated before the first write, so validation stays all-or-nothing (1007 R5).
- */
-describe('inline action provenance stamp (1070 R1/R3)', () => {
-    const TRACE_WORKFLOW = `name: inline-smoke
+const TRACE_WORKFLOW = `name: inline-smoke
 initialState: start
 terminalStates:
     - end
@@ -995,84 +995,103 @@ transitions:
           kind: always
 `;
 
-    /** Real fixture project (git workdir + project-layer definition), mirroring the driver layout. */
-    function makeTraceProject(): { workdir: string; cleanup: () => void } {
-        const root = mkdtempSync(join(tmpdir(), 'spur-1070-trace-'));
-        const workdir = join(root, 'wt');
-        mkdirSync(join(workdir, '.spur', 'workflows'), { recursive: true });
-        mkdirSync(join(workdir, '.spur', 'run'), { recursive: true });
-        writeFileSync(join(workdir, '.gitignore'), '.spur/\n');
-        writeFileSync(join(workdir, 'README.md'), 'tracked\n');
-        writeFileSync(
-            join(workdir, '.spur', 'workflows', 'inline-smoke.yaml'),
-            `kind: state-machine\n${TRACE_WORKFLOW}`,
-        );
-        execSync('git init -q && git config user.email t@example.com && git config user.name t', { cwd: workdir });
-        execSync('git add -A && git commit -qm init', { cwd: workdir });
-        return { workdir, cleanup: () => rmSync(root, { recursive: true, force: true }) };
-    }
+/** Real fixture project (git workdir + project-layer definition), mirroring the driver layout. */
+function makeTraceProject(): { workdir: string; cleanup: () => void } {
+    const root = mkdtempSync(join(tmpdir(), 'spur-1070-trace-'));
+    const workdir = join(root, 'wt');
+    mkdirSync(join(workdir, '.spur', 'workflows'), { recursive: true });
+    mkdirSync(join(workdir, '.spur', 'run'), { recursive: true });
+    writeFileSync(join(workdir, '.gitignore'), '.spur/\n');
+    writeFileSync(join(workdir, 'README.md'), 'tracked\n');
+    writeFileSync(join(workdir, '.spur', 'workflows', 'inline-smoke.yaml'), `kind: state-machine\n${TRACE_WORKFLOW}`);
+    execSync('git init -q && git config user.email t@example.com && git config user.name t', { cwd: workdir });
+    execSync('git add -A && git commit -qm init', { cwd: workdir });
+    return { workdir, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+}
 
-    /** Run `fn` with the process cwd in `dir` — the trace runners read `process.cwd()`. */
-    async function inDir<T>(dir: string, fn: () => Promise<T>): Promise<T> {
-        const back = process.cwd();
-        process.chdir(dir);
+/** Run `fn` with the process cwd in `dir` — the trace runners read `process.cwd()`. */
+async function inDir<T>(dir: string, fn: () => Promise<T>): Promise<T> {
+    const back = process.cwd();
+    process.chdir(dir);
+    try {
+        return await fn();
+    } finally {
+        process.chdir(back);
+    }
+}
+
+/** Capture stdout across an awaited runner (it reports on stdout). */
+async function captureStdout<T>(fn: () => Promise<T>): Promise<{ value: T; out: string }> {
+    const original = process.stdout.write;
+    const chunks: string[] = [];
+    process.stdout.write = (chunk: unknown): boolean => {
+        chunks.push(String(chunk));
+        return true;
+    };
+    try {
+        return { value: await fn(), out: chunks.join('') };
+    } finally {
+        process.stdout.write = original;
+    }
+}
+
+/** Seed the authoritative run row through the real setup path (no hand-inserted row). */
+async function setupRun(workdir: string, runId: string): Promise<void> {
+    const selected = await resolveWorkflowDefinition(workdir, join(workdir, '.spur/workflows/inline-smoke.yaml'));
+    const inventory = {
+        name: selected.workflow.name,
+        kind: 'state-machine',
+        format: 'todo',
+        version: null,
+        definitionDigest: selected.digest,
+        source: { path: join(workdir, '.spur/workflows/inline-smoke.yaml'), layer: 'registered' },
+        steps: [
+            { id: 'start', initial: true },
+            { id: 'end', terminal: true },
+        ],
+    };
+    expect(await runInlineRunSetup({ runId, file: 'inline-smoke', inventory })).toBe(0);
+    // Backdate started_at by 60s so fast test actions with positive durationMs don't precede started_at.
+    const projectDb = await openInlineRunProjectDb(workdir);
+    try {
+        const past = new Date(Date.now() - 60_000).toISOString();
+        await projectDb.adapter.run('UPDATE runs SET started_at = ? WHERE id = ?', [past, runId]);
+        const runDir = runStoragePaths(workdir).recordsDir;
+        const statePath = join(runDir, `${runId}.state.json`);
         try {
-            return await fn();
-        } finally {
-            process.chdir(back);
-        }
+            const state = JSON.parse(readFileSync(statePath, 'utf8'));
+            state.startedAt = past;
+            writeFileSync(statePath, `${JSON.stringify(state, null, 4)}\n`);
+        } catch {}
+    } finally {
+        projectDb.close();
     }
+}
 
-    /** Capture stdout across an awaited runner (it reports on stdout). */
-    async function captureStdout<T>(fn: () => Promise<T>): Promise<{ value: T; out: string }> {
-        const original = process.stdout.write;
-        const chunks: string[] = [];
-        process.stdout.write = (chunk: unknown): boolean => {
-            chunks.push(String(chunk));
-            return true;
-        };
-        try {
-            return { value: await fn(), out: chunks.join('') };
-        } finally {
-            process.stdout.write = original;
-        }
+/** Read the stored `result_json` values for a run, keyed by node. */
+async function storedResultJson(workdir: string, runId: string): Promise<Map<string, string | null>> {
+    const projectDb = await openInlineRunProjectDb(workdir);
+    try {
+        const rows = await new ActionRunDao(projectDb.adapter).actionRowsByRunId(runId);
+        return new Map(rows.map((row) => [row.node, row.result_json]));
+    } finally {
+        projectDb.close();
     }
+}
 
-    /** Seed the authoritative run row through the real setup path (no hand-inserted row). */
-    async function setupRun(workdir: string, runId: string): Promise<void> {
-        const selected = await resolveWorkflowDefinition(workdir, join(workdir, '.spur/workflows/inline-smoke.yaml'));
-        const inventory = {
-            name: selected.workflow.name,
-            kind: 'state-machine',
-            format: 'todo',
-            version: null,
-            definitionDigest: selected.digest,
-            source: { path: join(workdir, '.spur/workflows/inline-smoke.yaml'), layer: 'registered' },
-            steps: [
-                { id: 'start', initial: true },
-                { id: 'end', terminal: true },
-            ],
-        };
-        expect(await runInlineRunSetup({ runId, file: 'inline-smoke', inventory })).toBe(0);
-    }
+function actionsFile(entries: readonly unknown[]): string {
+    const path = join(tmpdir(), `spur-1070-actions-${Math.random().toString(36).slice(2)}.json`);
+    writeFileSync(path, `${JSON.stringify(entries)}\n`);
+    return path;
+}
 
-    /** Read the stored `result_json` values for a run, keyed by node. */
-    async function storedResultJson(workdir: string, runId: string): Promise<Map<string, string | null>> {
-        const projectDb = await openInlineRunProjectDb(workdir);
-        try {
-            const rows = await new ActionRunDao(projectDb.adapter).actionRowsByRunId(runId);
-            return new Map(rows.map((row) => [row.node, row.result_json]));
-        } finally {
-            projectDb.close();
-        }
-    }
-
-    function actionsFile(entries: readonly unknown[]): string {
-        const path = join(tmpdir(), `spur-1070-actions-${Math.random().toString(36).slice(2)}.json`);
-        writeFileSync(path, `${JSON.stringify(entries)}\n`);
-        return path;
-    }
-
+/**
+ * Task 1070 R1/R3 — the inline driver's action rows carry a host-reported provenance
+ * stamp in `action_runs.result_json`, written through the existing writer `result`
+ * boundary (no migration, no new column). A batch row's optional `estimated` is
+ * validated before the first write, so validation stays all-or-nothing (1007 R5).
+ */
+describe('inline action provenance stamp (1070 R1/R3)', () => {
     test('runInlineRunTrace stamps host-reported provenance and the estimated flag (1070 R1/AC1)', async () => {
         const p = makeTraceProject();
         try {
@@ -1184,5 +1203,392 @@ transitions:
         } finally {
             p.cleanup();
         }
+    });
+});
+
+describe('worktree run-record integrity (task 1136 R1/R4/R5)', () => {
+    test('AC1/R1: action row emitted with --project-root from execution tree B lands in owning tree A', async () => {
+        const treeA = makeTraceProject();
+        const treeB = makeTraceProject();
+        const runId = 'run-1136-ac1';
+        try {
+            await inDir(treeA.workdir, async () => {
+                await setupRun(treeA.workdir, runId);
+            });
+
+            await inDir(treeB.workdir, async () => {
+                // Without --project-root: missing in tree B, exits 1 with RUN_NOT_FOUND (not silent exit 0)
+                const miss = await captureStdout(() =>
+                    runInlineRunTrace({
+                        runId,
+                        close: false,
+                        node: 'implement',
+                        kind: 'agent.run',
+                        status: 'done',
+                        ok: true,
+                        durationMs: 42,
+                    }),
+                );
+                expect(miss.value).toBe(1);
+                expect(JSON.parse(miss.out)).toMatchObject({ ok: false, runId, code: 'RUN_NOT_FOUND' });
+
+                // With --project-root treeA: lands in tree A
+                const hit = await captureStdout(() =>
+                    runInlineRunTrace({
+                        runId,
+                        close: false,
+                        node: 'implement',
+                        kind: 'agent.run',
+                        status: 'done',
+                        ok: true,
+                        durationMs: 42,
+                        projectRoot: treeA.workdir,
+                    }),
+                );
+                expect(hit.value).toBe(0);
+                expect(JSON.parse(hit.out)).toMatchObject({ ok: true, runId });
+            });
+
+            // The row was written to tree A's database, not tree B's
+            expect((await storedResultJson(treeA.workdir, runId)).get('implement')).toBeDefined();
+            expect((await storedResultJson(treeB.workdir, runId)).size).toBe(0);
+        } finally {
+            treeA.cleanup();
+            treeB.cleanup();
+        }
+    });
+
+    test('failure inventory (a): --project-root pointing at a tree without the row exits 1 with RUN_NOT_FOUND', async () => {
+        const treeA = makeTraceProject();
+        const treeB = makeTraceProject();
+        const runId = 'run-1136-inv-a';
+        try {
+            await inDir(treeB.workdir, async () => {
+                const res = await captureStdout(() =>
+                    runInlineRunTrace({
+                        runId,
+                        close: false,
+                        node: 'implement',
+                        kind: 'agent.run',
+                        status: 'done',
+                        ok: true,
+                        durationMs: 10,
+                        projectRoot: treeA.workdir,
+                    }),
+                );
+                expect(res.value).toBe(1);
+                expect(JSON.parse(res.out)).toMatchObject({ ok: false, runId, code: 'RUN_NOT_FOUND' });
+            });
+        } finally {
+            treeA.cleanup();
+            treeB.cleanup();
+        }
+    });
+
+    test('failure inventory (b): loud --action miss on missing run row exits 1 with RUN_NOT_FOUND', async () => {
+        const p = makeTraceProject();
+        const runId = 'run-1136-inv-b-missing';
+        try {
+            await inDir(p.workdir, async () => {
+                const res = await captureStdout(() =>
+                    runInlineRunTrace({
+                        runId,
+                        close: false,
+                        node: 'implement',
+                        kind: 'agent.run',
+                        status: 'done',
+                        ok: true,
+                        durationMs: 10,
+                    }),
+                );
+                expect(res.value).toBe(1);
+                expect(JSON.parse(res.out)).toMatchObject({ ok: false, runId, code: 'RUN_NOT_FOUND' });
+            });
+        } finally {
+            p.cleanup();
+        }
+    });
+
+    test('AC4/R4: --node-enter followed by --action without --duration-ms computes measured duration from emitter clock', async () => {
+        const p = makeTraceProject();
+        const runId = 'run-1136-ac4-measured';
+        try {
+            await inDir(p.workdir, async () => {
+                await setupRun(p.workdir, runId);
+                const enter = await captureStdout(() =>
+                    runInlineRunNodeEnter({
+                        runId,
+                        node: 'implement',
+                    }),
+                );
+                expect(enter.value).toBe(0);
+                expect(JSON.parse(enter.out)).toMatchObject({ ok: true, runId, node: 'implement' });
+
+                await new Promise((r) => setTimeout(r, 20));
+
+                const action = await captureStdout(() =>
+                    runInlineRunTrace({
+                        runId,
+                        close: false,
+                        node: 'implement',
+                        kind: 'agent.run',
+                        status: 'done',
+                        ok: true,
+                    }),
+                );
+                expect(action.value).toBe(0);
+                expect(JSON.parse(action.out)).toMatchObject({ ok: true, runId });
+            });
+
+            const rows = await storedResultJson(p.workdir, runId);
+            const parsed = JSON.parse(rows.get('implement') ?? '{}');
+            expect(parsed).toEqual({
+                provenance: 'measured',
+                estimated: false,
+            });
+        } finally {
+            p.cleanup();
+        }
+    });
+
+    test('AC4/R4: caller-supplied --duration-ms is recorded as host-reported provenance', async () => {
+        const p = makeTraceProject();
+        const runId = 'run-1136-ac4-host';
+        try {
+            await inDir(p.workdir, async () => {
+                await setupRun(p.workdir, runId);
+                const action = await captureStdout(() =>
+                    runInlineRunTrace({
+                        runId,
+                        close: false,
+                        node: 'implement',
+                        kind: 'agent.run',
+                        status: 'done',
+                        ok: true,
+                        durationMs: 50,
+                    }),
+                );
+                expect(action.value).toBe(0);
+            });
+
+            const rows = await storedResultJson(p.workdir, runId);
+            const parsed = JSON.parse(rows.get('implement') ?? '{}');
+            expect(parsed).toEqual({
+                provenance: 'host-reported',
+                estimated: false,
+            });
+        } finally {
+            p.cleanup();
+        }
+    });
+
+    test('AC4/R4: action whose computed start precedes runs.started_at is rejected with exit 1', async () => {
+        const p = makeTraceProject();
+        const runId = 'run-1136-ac4-precedes';
+        try {
+            await inDir(p.workdir, async () => {
+                await setupRun(p.workdir, runId);
+                const action = await captureStdout(() =>
+                    runInlineRunTrace({
+                        runId,
+                        close: false,
+                        node: 'implement',
+                        kind: 'agent.run',
+                        status: 'done',
+                        ok: true,
+                        durationMs: 1000 * 60 * 60 * 24 * 365,
+                    }),
+                );
+                expect(action.value).toBe(1);
+                expect(JSON.parse(action.out)).toMatchObject({ ok: false, runId });
+            });
+        } finally {
+            p.cleanup();
+        }
+    });
+
+    test('AC5/R5 & failure inventory (d)/(e): close reports missingNodes for visited declared states without action rows', async () => {
+        const p = makeTraceProject();
+        const runId = 'run-1136-ac5-missing-nodes';
+        try {
+            await inDir(p.workdir, async () => {
+                await setupRun(p.workdir, runId);
+                for (const node of ['precheck', 'implement', 'approve', 'verify']) {
+                    await runInlineRunNodeEnter({ runId, node });
+                }
+                await runInlineRunTrace({
+                    runId,
+                    close: false,
+                    node: 'implement',
+                    kind: 'agent.run',
+                    status: 'done',
+                    ok: true,
+                    durationMs: 10,
+                });
+
+                await runInlineRunTrace({
+                    runId,
+                    close: false,
+                    node: 'approve',
+                    kind: 'operator-wait',
+                    status: 'done',
+                    ok: true,
+                    durationMs: 15,
+                });
+
+                const closeRes = await captureStdout(() =>
+                    runInlineRunTrace({
+                        runId,
+                        close: true,
+                        node: '',
+                        kind: '',
+                        status: 'done',
+                        ok: true,
+                        durationMs: 0,
+                    }),
+                );
+                expect(closeRes.value).toBe(0);
+                const parsed = JSON.parse(closeRes.out);
+                expect(parsed).toMatchObject({ ok: true, runId });
+                expect(parsed.missingNodes).toContain('precheck');
+                expect(parsed.missingNodes).toContain('verify');
+                expect(parsed.missingNodes).not.toContain('implement');
+                expect(parsed.missingNodes).not.toContain('approve');
+            });
+        } finally {
+            p.cleanup();
+        }
+    });
+
+    describe('runInlineRunTraceMode (task 1136, ADR-130 dispatcher)', () => {
+        /** Input preset: only the fields the mode under test cares about, overridable. */
+        const modeInput = (over: Partial<Parameters<typeof runInlineRunTraceMode>[0]> = {}) => ({
+            mode: 'action' as const,
+            runId: 'run-1136-mode',
+            node: 'implement',
+            kind: 'agent.run',
+            status: 'done',
+            reason: '',
+            ok: 'true',
+            durationMs: '7',
+            actionsFile: '',
+            projectRoot: '',
+            estimated: false,
+            ...over,
+        });
+
+        test('every mode dispatches to its runner; malformed invocations return the usage code 2', async () => {
+            const p = makeTraceProject();
+            const runId = 'run-1136-mode';
+            try {
+                await inDir(p.workdir, async () => {
+                    await setupRun(p.workdir, runId);
+
+                    // node-enter
+                    expect(
+                        await runInlineRunTraceMode(
+                            modeInput({ mode: 'node-enter', status: '', kind: '', ok: '', durationMs: '' }),
+                        ),
+                    ).toBe(0);
+                    // action without a duration, measured from the enter stamp
+                    expect(await runInlineRunTraceMode(modeInput({ durationMs: '' }))).toBe(0);
+                    // actions-file
+                    const file = actionsFile([
+                        { node: 'test', kind: 'shell', status: 'done', ok: true, durationMs: 3 },
+                    ]);
+                    expect(
+                        await runInlineRunTraceMode(
+                            modeInput({
+                                mode: 'actions-file',
+                                actionsFile: file,
+                                status: '',
+                                node: '',
+                                kind: '',
+                                ok: '',
+                                durationMs: '',
+                            }),
+                        ),
+                    ).toBe(0);
+                    // close: a done close lands, a failed close demands an enum reason, a paused close lands.
+                    expect(
+                        await runInlineRunTraceMode(modeInput({ mode: 'close', status: 'done', node: '', kind: '' })),
+                    ).toBe(0);
+                    expect(
+                        await runInlineRunTraceMode(
+                            modeInput({ mode: 'close', status: 'failed', reason: 'nope', node: '', kind: '' }),
+                        ),
+                    ).toBe(2);
+                    expect(
+                        await runInlineRunTraceMode(
+                            modeInput({ mode: 'close', status: 'failed', reason: 'failed-check', node: '', kind: '' }),
+                        ),
+                    ).toBe(0);
+                    expect(
+                        await runInlineRunTraceMode(modeInput({ mode: 'close', status: 'paused', node: '', kind: '' })),
+                    ).toBe(0);
+                });
+            } finally {
+                p.cleanup();
+            }
+        });
+
+        test('usage refusals: estimated on a non-action mode, bad node/kind/status/ok, bad duration, stray mode fields', async () => {
+            const p = makeTraceProject();
+            try {
+                await inDir(p.workdir, async () => {
+                    const refusals = [
+                        modeInput({ mode: 'close', status: 'done', estimated: true }),
+                        modeInput({ node: '' }),
+                        modeInput({ kind: '' }),
+                        modeInput({ status: 'paused' }),
+                        modeInput({ ok: '' }),
+                        modeInput({ ok: 'True' }),
+                        modeInput({ durationMs: 'nope' }),
+                        modeInput({ durationMs: '-1' }),
+                        modeInput({ mode: 'node-enter', status: 'done' }),
+                        modeInput({ mode: 'node-enter', status: '', kind: '', ok: 'true', durationMs: '' }),
+                        modeInput({ mode: 'node-enter', status: '', kind: '', ok: '', durationMs: '1' }),
+                        modeInput({ mode: 'actions-file', actionsFile: '' }),
+                        modeInput({
+                            mode: 'actions-file',
+                            actionsFile: 'x.json',
+                            status: '',
+                            kind: '',
+                            ok: '',
+                            node: 'n',
+                        }),
+                        modeInput({ mode: 'actions-file', actionsFile: 'x.json', status: '', kind: '', ok: 'true' }),
+                        modeInput({ mode: 'close', status: '' }),
+                    ];
+                    for (const input of refusals) {
+                        expect(await runInlineRunTraceMode(input), JSON.stringify(input)).toBe(2);
+                    }
+                });
+            } finally {
+                p.cleanup();
+            }
+        });
+
+        test('--project-root resolves the run row in the named tree, not the cwd tree', async () => {
+            const owner = makeTraceProject();
+            const other = makeTraceProject();
+            const runId = 'run-1136-mode-root';
+            try {
+                await inDir(owner.workdir, async () => {
+                    await setupRun(owner.workdir, runId);
+                });
+                await inDir(other.workdir, async () => {
+                    // Without the flag the owning tree's row is invisible: loud RUN_NOT_FOUND.
+                    expect(await runInlineRunTraceMode(modeInput({ runId }))).toBe(1);
+                    // With it, the row resolves and the emission lands in the owner.
+                    expect(await runInlineRunTraceMode(modeInput({ runId, projectRoot: owner.workdir }))).toBe(0);
+                });
+                expect((await storedResultJson(owner.workdir, runId)).get('implement')).toBeDefined();
+                expect((await storedResultJson(other.workdir, runId)).size).toBe(0);
+            } finally {
+                owner.cleanup();
+                other.cleanup();
+            }
+        });
     });
 });

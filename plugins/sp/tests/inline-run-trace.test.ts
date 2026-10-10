@@ -79,7 +79,7 @@ test('R4: setup → --action → --close lands an action_runs row queryable by r
             '--ok',
             'true',
             '--duration-ms',
-            '1234',
+            '50',
         ]);
         expect(action.status, action.stderr).toBe(0);
         expect(JSON.parse(action.stdout)).toMatchObject({ ok: true, runId });
@@ -102,7 +102,7 @@ test('R4: setup → --action → --close lands an action_runs row queryable by r
                 node: 'implement',
                 kind: 'agent.run',
                 status: 'done',
-                duration_ms: 1234,
+                duration_ms: 50,
                 ok: 1,
             });
             const run = db
@@ -120,11 +120,12 @@ test('R4: setup → --action → --close lands an action_runs row queryable by r
     }
 }, 60_000);
 
-test('R12: an unresolvable writer fails the emission open — recorded to the run log, exit 0, run unaffected', () => {
+test('R12/1136 R1: an action with no run row is a loud RUN_NOT_FOUND (never a silent no-op), and the run record names it', () => {
     const p = makeProject();
     const runId = 'run-0868-trace-fail';
     try {
-        // A spur-bin that resolves to no repo checkout: the shared writer is unreachable.
+        // Task 1136 R1 changed this contract: a missing run row is a correctness failure, not a
+        // best-effort emission failure. The call exits 1 and the run record carries the miss.
         const proc = runScript(p.workdir, [
             '--action',
             '--run-id',
@@ -139,13 +140,10 @@ test('R12: an unresolvable writer fails the emission open — recorded to the ru
             'true',
             '--duration-ms',
             '10',
-            '--spur-bin',
-            'bun /nonexistent/apps/cli/src/index.ts',
         ]);
 
-        // Never wedges the run: exit 0 with a structured failure on stdout.
-        expect(proc.status, proc.stderr).toBe(0);
-        expect(JSON.parse(proc.stdout)).toMatchObject({ ok: false, runId });
+        expect(proc.status, proc.stderr).toBe(1);
+        expect(JSON.parse(proc.stdout)).toMatchObject({ ok: false, runId, code: 'RUN_NOT_FOUND' });
 
         // And the failure is recorded where the driver can see it — the run-record
         // markdown (task 0927 R1; a fresh run has no legacy `.log` to fall back to).
@@ -154,7 +152,6 @@ test('R12: an unresolvable writer fails the emission open — recorded to the ru
         const log = readFileSync(logPath, 'utf8');
         expect(log).toContain('trace-emission-failed');
         expect(log).toContain(`run=${runId}`);
-        expect(log).toContain('node=implement');
         expect(existsSync(join(p.workdir, '.spur', 'memory', 'runs', `${runId}.log`))).toBe(false);
     } finally {
         p.cleanup();
@@ -198,7 +195,7 @@ test('--ok false is a valid value (ok=0), only miscased/omitted values are usage
     }
 }, 60_000);
 
-test('--ok and --duration-ms are required and exact: omitted or malformed values are usage errors (exit 2)', () => {
+test('--ok is required and exact; --duration-ms is optional but malformed values are usage errors (exit 2)', () => {
     const p = makeProject();
     try {
         for (const args of [
@@ -232,8 +229,6 @@ test('--ok and --duration-ms are required and exact: omitted or malformed values
                 '--duration-ms',
                 '5',
             ],
-            // --duration-ms omitted
-            ['--action', '--run-id', 'r1', '--node', 'start', '--kind', 'shell', '--status', 'done', '--ok', 'true'],
             // --duration-ms malformed
             [
                 '--action',
@@ -274,6 +269,80 @@ test('--ok and --duration-ms are required and exact: omitted or malformed values
         p.cleanup();
     }
 });
+
+test('1136 R4: --node-enter makes the duration optional — the emitter measures it and stamps provenance measured', () => {
+    const p = makeProject();
+    const runId = 'run-1136-node-enter';
+    try {
+        const setup = runScript(p.workdir, ['--run-id', runId, '--file', '.spur/workflows/inline-smoke.yaml']);
+        expect(setup.status, setup.stderr).toBe(0);
+
+        const enter = runScript(p.workdir, ['--node-enter', '--run-id', runId, '--node', 'implement']);
+        expect(enter.status, enter.stderr).toBe(0);
+        expect(JSON.parse(enter.stdout)).toMatchObject({ ok: true, runId, node: 'implement' });
+
+        const action = runScript(p.workdir, [
+            '--action',
+            '--run-id',
+            runId,
+            '--node',
+            'implement',
+            '--kind',
+            'agent.run',
+            '--status',
+            'done',
+            '--ok',
+            'true',
+        ]);
+        expect(action.status, action.stderr).toBe(0);
+        expect(JSON.parse(action.stdout)).toMatchObject({ ok: true, runId });
+
+        const db = new Database(join(p.workdir, '.spur', 'spur.db'), { readonly: true });
+        try {
+            const row = db
+                .query<{ duration_ms: number; result_json: string | null }, [string]>(
+                    'SELECT duration_ms, result_json FROM action_runs WHERE run_id = ?',
+                )
+                .get(runId);
+            expect(row?.duration_ms).toBeGreaterThanOrEqual(0);
+            expect(JSON.parse(row?.result_json ?? '{}')).toMatchObject({ provenance: 'measured' });
+        } finally {
+            db.close();
+        }
+    } finally {
+        p.cleanup();
+    }
+}, 60_000);
+
+test('1136 R4: --action without --duration-ms and without a --node-enter stamp exits 1 naming the missing stamp', () => {
+    const p = makeProject();
+    const runId = 'run-1136-no-enter';
+    try {
+        const setup = runScript(p.workdir, ['--run-id', runId, '--file', '.spur/workflows/inline-smoke.yaml']);
+        expect(setup.status, setup.stderr).toBe(0);
+        const action = runScript(p.workdir, [
+            '--action',
+            '--run-id',
+            runId,
+            '--node',
+            'implement',
+            '--kind',
+            'agent.run',
+            '--status',
+            'done',
+            '--ok',
+            'true',
+        ]);
+        expect(action.status, action.stderr).toBe(1);
+        expect(JSON.parse(action.stdout)).toMatchObject({
+            ok: false,
+            runId,
+            code: 'ACTION_DURATION_UNAVAILABLE',
+        });
+    } finally {
+        p.cleanup();
+    }
+}, 60_000);
 
 test('--close for a run id with no row fails loudly with a named error, never {"ok":true} (finding #4)', () => {
     const p = makeProject();
@@ -396,7 +465,8 @@ test('0975 AC4: --close --status done with at least one action row exits 0 repor
 
         const close = runScript(p.workdir, ['--close', '--run-id', runId, '--status', 'done']);
         expect(close.status, close.stderr).toBe(0);
-        expect(JSON.parse(close.stdout)).toEqual({ ok: true, runId, actionRows: 1 });
+        // 1136 R5: the close JSON also reports the visited nodes that never emitted a row.
+        expect(JSON.parse(close.stdout)).toEqual({ ok: true, runId, actionRows: 1, missingNodes: [] });
     } finally {
         p.cleanup();
     }
@@ -421,7 +491,7 @@ test('0975 AC4: --close --status failed with zero action rows stays a clean clos
             'failed-check',
         ]);
         expect(close.status, close.stderr).toBe(0);
-        expect(JSON.parse(close.stdout)).toEqual({ ok: true, runId, actionRows: 0 });
+        expect(JSON.parse(close.stdout)).toEqual({ ok: true, runId, actionRows: 0, missingNodes: [] });
 
         const db = new Database(join(p.workdir, '.spur', 'spur.db'), { readonly: true });
         try {
@@ -571,7 +641,7 @@ test('1070 R2/AC1: --action --estimated stamps host-reported provenance and the 
             '--ok',
             'true',
             '--duration-ms',
-            '1234',
+            '50',
         ]);
         expect(action.status, action.stderr).toBe(0);
         expect(JSON.parse(action.stdout)).toMatchObject({ ok: true, runId });
@@ -583,7 +653,7 @@ test('1070 R2/AC1: --action --estimated stamps host-reported provenance and the 
                     'SELECT result_json, ok, duration_ms FROM action_runs WHERE run_id = ?',
                 )
                 .get(runId);
-            expect(row).toMatchObject({ ok: 1, duration_ms: 1234 });
+            expect(row).toMatchObject({ ok: 1, duration_ms: 50 });
             expect(JSON.parse(row?.result_json ?? '')).toEqual({ provenance: 'host-reported', estimated: true });
         } finally {
             db.close();

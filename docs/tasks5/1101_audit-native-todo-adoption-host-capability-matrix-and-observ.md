@@ -4,11 +4,11 @@ name: "Audit native todo adoption: host capability matrix and observed behavior 
 status: done
 template: feature-impl
 created_at: 2026-10-07T05:39:24.638Z
-updated_at: "2026-10-07T19:25:25.816Z"
+updated_at: "2026-10-09T21:30:36.740Z"
 feature_id: I13
 
 done_forced: "true"
-done_reason: "wayfinder research ticket resolved inline via /sp:wayfinder I13; no task-pipeline run by design; standalone /sp:dev-verify PASS at .spur/run/1101-verdict.json"
+done_reason: "wayfinder research ticket resolved inline via /sp:wayfinder I13; no task-pipeline run by design; standalone /sp:dev-verify PASS at .spur/memory/evidence/1101-verdict.json"
 ---
 
 ## 1101. Audit native todo adoption: host capability matrix and observed behavior of recent dev runs

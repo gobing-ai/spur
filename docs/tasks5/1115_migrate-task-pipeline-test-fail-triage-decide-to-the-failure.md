@@ -4,7 +4,7 @@ name: Migrate task-pipeline test-fail-triage decide to the failure-class catalog
 status: done
 template: feature-impl
 created_at: 2026-10-07T16:29:03.102Z
-updated_at: "2026-10-08T16:27:49.951Z"
+updated_at: "2026-10-09T21:30:38.653Z"
 feature_id: P1
 
 dependencies: ["1094"]
@@ -12,7 +12,7 @@ tags: ["decision", "workflow"]
 priority: P2
 estimate_hours: 2
 done_forced: "false"
-done_reason: unforced close; PASS artifact at .spur/run/1115-verdict.json
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1115-verdict.json
 ---
 
 ## 1115. Migrate task-pipeline test-fail-triage decide to the failure-class catalog decision

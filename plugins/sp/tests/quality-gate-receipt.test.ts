@@ -653,10 +653,11 @@ describe('recheck no-progress skip (0940 R2)', () => {
                     {
                         wbs: '0939',
                         proofDigest: 'digest-1',
+                        taskSpecPath: 'docs/tasks/0939.md',
                         gateProbeCmd: 'exit 0',
                         qualityGateCmd: 'echo full-ran; exit 0',
                     },
-                    { cwd: dir },
+                    { cwd: dir, recomputeFingerprint: () => ({ ok: true, digest: 'digest-1' }) },
                 ),
             );
             expect(value.status).toBe('PASS');
@@ -705,7 +706,15 @@ describe('status reuse marker (0940 R3)', () => {
         try {
             writeReceipt(dir, receipt());
             const { out } = captureStdout(() =>
-                main(['status'], { wbs: '0939', proofDigest: 'digest-1' }, { cwd: dir }),
+                main(
+                    ['status'],
+                    {
+                        wbs: '0939',
+                        proofDigest: 'digest-1',
+                        taskSpecPath: 'docs/tasks/0939.md',
+                    },
+                    { cwd: dir, recomputeFingerprint: () => ({ ok: true, digest: 'digest-1' }) },
+                ),
             );
             expect(out).toContain('check.reused');
             const lines = out.trimEnd().split('\n');
@@ -725,6 +734,135 @@ describe('status reuse marker (0940 R3)', () => {
             );
             expect(out.trimEnd().endsWith('{"reuse":false,"reason":"missing"}')).toBe(true);
             expect(existsSync(join(dir, '.spur/run/0939-test-gate.log'))).toBe(false);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    // Task 1136 R3: the status mode is the gate's trust decision too, so it recomputes before
+    // consulting the receipt and refuses reuse when the recompute fails or disagrees.
+    test('status refuses reuse when the recompute fails, reporting reuse:false and the refusal', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-1136-status-refuse-'));
+        try {
+            writeReceipt(dir, receipt());
+            const { out } = captureStdout(() =>
+                main(
+                    ['status'],
+                    { wbs: '0939', proofDigest: 'digest-1', taskSpecPath: 'docs/tasks/0939.md' },
+                    { cwd: dir, recomputeFingerprint: () => ({ ok: false, error: 'missing task path' }) },
+                ),
+            );
+            expect(out).toContain('check.reuse-refused — recompute failed: missing task path');
+            expect(out.trimEnd().split('\n').at(-1)).toBe('{"reuse":false,"reason":"stale"}');
+            expect(readFileSync(join(dir, '.spur/run/0939-test-gate.log'), 'utf8')).toContain('check.reuse-refused');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('status refuses reuse when the supplied digest differs from the recomputed one', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-1136-status-stale-'));
+        try {
+            writeReceipt(dir, receipt());
+            const { out } = captureStdout(() =>
+                main(
+                    ['status'],
+                    { wbs: '0939', proofDigest: 'digest-1', taskSpecPath: 'docs/tasks/0939.md' },
+                    { cwd: dir, recomputeFingerprint: () => ({ ok: true, digest: 'digest-2' }) },
+                ),
+            );
+            expect(out).toContain('check.reuse-refused — supplied digest-1 != current digest-2');
+            expect(out.trimEnd().split('\n').at(-1)).toBe('{"reuse":false,"reason":"stale"}');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+});
+
+describe('stale supplied digest refusal (task 1136 R3/AC3)', () => {
+    test('AC3/R3: full-tier PASS receipt for D1 with recomputed D2 refuses reuse and logs supplied D1 != current D2', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-1136-stale-digest-'));
+        try {
+            writeReceipt(dir, receipt({ inputDigest: 'digest-1', status: 'PASS' }));
+            const { out, value } = captureStdout(() =>
+                runQualityGate(
+                    'recheck',
+                    {
+                        wbs: '0939',
+                        proofDigest: 'digest-1',
+                        taskSpecPath: 'docs/tasks/0939.md',
+                        gateProbeCmd: 'exit 0',
+                        qualityGateCmd: 'echo full-ran; exit 0',
+                    },
+                    {
+                        cwd: dir,
+                        recomputeFingerprint: () => ({ ok: true, digest: 'digest-2' }),
+                    },
+                ),
+            );
+            expect(value.status).toBe('PASS');
+            const log = readFileSync(join(dir, '.spur/run/0939-test-gate.log'), 'utf8');
+            expect(log).toContain('check.reuse-refused — supplied digest-1 != current digest-2');
+            expect(out).toContain('check.reuse-refused — supplied digest-1 != current digest-2');
+            expect(log).toContain('full-ran');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('AC3/R3: when proof recompute cannot run (missing task path), reuse is refused, never assumed', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-1136-missing-task-'));
+        try {
+            writeReceipt(dir, receipt({ inputDigest: 'digest-1', status: 'PASS' }));
+            const { out, value } = captureStdout(() =>
+                runQualityGate(
+                    'recheck',
+                    {
+                        wbs: '0939',
+                        proofDigest: 'digest-1',
+                        gateProbeCmd: 'exit 0',
+                        qualityGateCmd: 'echo full-ran; exit 0',
+                    },
+                    {
+                        cwd: dir,
+                        recomputeFingerprint: () => ({ ok: false, error: 'missing task path' }),
+                    },
+                ),
+            );
+            expect(value.status).toBe('PASS');
+            const log = readFileSync(join(dir, '.spur/run/0939-test-gate.log'), 'utf8');
+            expect(log).toContain('check.reuse-refused — recompute failed: missing task path');
+            expect(out).toContain('check.reuse-refused — recompute failed: missing task path');
+            expect(log).toContain('full-ran');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('failure inventory (c): fingerprint recompute receives execution tree cwd', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-1136-cwd-'));
+        let capturedCwd = '';
+        try {
+            writeReceipt(dir, receipt({ inputDigest: 'digest-1', status: 'PASS' }));
+            captureStdout(() =>
+                runQualityGate(
+                    'recheck',
+                    {
+                        wbs: '0939',
+                        proofDigest: 'digest-1',
+                        gateProbeCmd: 'exit 0',
+                        qualityGateCmd: 'echo full-ran; exit 0',
+                    },
+                    {
+                        cwd: dir,
+                        recomputeFingerprint: (c) => {
+                            capturedCwd = c;
+                            return { ok: false, error: 'missing task path' };
+                        },
+                    },
+                ),
+            );
+            expect(capturedCwd).toBe(dir);
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }

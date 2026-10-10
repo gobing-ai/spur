@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Rule: durable records must not cite run scratch as evidence"
-status: todo
+status: done
 template: standard
 created_at: 2026-10-09T16:43:57.789Z
-updated_at: "2026-10-09T18:08:18.475Z"
+updated_at: "2026-10-09T23:59:20.632Z"
 feature_id: E71
 
 ac_numbering: task-local
@@ -12,6 +12,8 @@ ac_altitude: task-local
 dependencies: ["1140"]
 priority: P2
 estimate_hours: 2
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1141-verdict.json
 ---
 
 ## 1141. Rule: durable records must not cite run scratch as evidence
@@ -43,11 +45,11 @@ directory string in general.
 
 ### Requirements
 
-- [ ] R1. A new rule file `config/rules/structure/scratch-evidence-pointer.yaml` with rule id `no-scratch-verdict-pointer` and severity `error`. Its `rg` evaluator uses the pattern `^done_reason:.*\.spur/run/[0-9]{4}(-|/)verdict\.json` over `docs/tasks*/**/*.md`. The description names the durable owner: `.spur/memory/evidence/<wbs>-verdict.json`, or the tracked Testing section, plus the repair command `spur task migrate-anchors --wbs <wbs>`.
-- [ ] R2. The pattern is anchored to the `done_reason:` frontmatter key, so prose mentions of `.spur/run/` in any section, design doc or source file never match. No allowlist.
-- [ ] R3. A two-sided e2e in `apps/cli/tests/commands/rule.test.ts` runs `spur rule run --file config/rules/structure/scratch-evidence-pointer.yaml --json` on a temp corpus with three cases. A task whose `done_reason` cites `.spur/run/0001-verdict.json` → 1 finding. A task whose pointer is `.spur/memory/evidence/0001-verdict.json` → 0 findings. A task with `.spur/run/0001-test-gate.status` only in its Testing body → 0 findings.
-- [ ] R4. After 1140 lands, `spur rule run --preset recommended-pre-check --fail-on warning` reports 0 findings for this rule on this repository. Regenerate `apps/cli/tests/fixtures/raw-json-baseline/rule-validate-preset.json` in the same change, since the preset's resolved rule list grows.
-- [ ] R5. The rule file's header comment states the class it cannot see: executable source under the gitignored `.spur/run/`. The header records that no hook or script loader registers from scratch (verified 2026-10-09, see 1145's cancellation), so no runtime guard is owed. It makes no claim to cover that class.
+- [x] R1. A new rule file `config/rules/structure/scratch-evidence-pointer.yaml` with rule id `no-scratch-verdict-pointer` and severity `error`. Its `rg` evaluator uses the pattern `^done_reason:.*\.spur/run/[0-9]{4}(-|/)verdict\.json` over `docs/tasks*/**/*.md`. The description names the durable owner: `.spur/memory/evidence/<wbs>-verdict.json`, or the tracked Testing section, plus the repair command `spur task migrate-anchors --wbs <wbs>`.
+- [x] R2. The pattern is anchored to the `done_reason:` frontmatter key, so prose mentions of `.spur/run/` in any section, design doc or source file never match. No allowlist.
+- [x] R3. A two-sided e2e in `apps/cli/tests/commands/rule.test.ts` runs `spur rule run --file config/rules/structure/scratch-evidence-pointer.yaml --json` on a temp corpus with three cases. A task whose `done_reason` cites `.spur/run/0001-verdict.json` → 1 finding. A task whose pointer is `.spur/memory/evidence/0001-verdict.json` → 0 findings. A task with `.spur/run/0001-test-gate.status` only in its Testing body → 0 findings.
+- [x] R4. After 1140 lands, `spur rule run --preset recommended-pre-check --fail-on warning` reports 0 findings for this rule on this repository. Regenerate `apps/cli/tests/fixtures/raw-json-baseline/rule-validate-preset.json` in the same change, since the preset's resolved rule list grows.
+- [x] R5. The rule file's header comment states the class it cannot see: executable source under the gitignored `.spur/run/`. The header records that no hook or script loader registers from scratch (verified 2026-10-09, see 1145's cancellation), so no runtime guard is owed. It makes no claim to cover that class.
 
 ### Acceptance Criteria
 
@@ -143,15 +145,59 @@ Validate with `spur rule validate config/rules/structure/scratch-evidence-pointe
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change map (file:line at the batch commit):
+
+| File | Change |
+| --- | --- |
+| `config/rules/structure/scratch-evidence-pointer.yaml:23` | New `structure` rule `no-scratch-verdict-pointer`, severity `error`, rg evaluator anchored to the frontmatter key (`pattern: "^done_reason:.*\.spur/run/[0-9]{4}(-|/)verdict\.json"`, `:34`) over `docs/tasks*/**/*.md`. The description names the durable owner and the `spur task migrate-anchors --wbs <wbs>` repair. |
+| `config/rules/structure/scratch-evidence-pointer.yaml:13` | Header records the class the rule cannot see — gitignored executable source under `.spur/run/` — and that no hook or script loader registers from scratch (verified 2026-10-09; task 1145's runtime guard was cancelled). |
+| `apps/cli/tests/commands/rule.test.ts:369` | E2E over a temp corpus with one task per case: a scratch pointer (`docs/tasks/0001_scratch.md`) yields exactly one `error` finding at line 4, a durable pointer (`0002`) and a file whose Testing body mentions `.spur/run/0003-test-gate.status` plus a scratch path in prose (`0003`) yield none; a second test asserts the description carries the durable owner and the repair command. |
+| `apps/cli/tests/fixtures/raw-json-baseline/rule-run.json`, `rule-validate-preset.json` | Recaptured because the preset's resolved rule list grew 50 → 51 (`apps/cli/tests/fixtures/raw-json-baseline/README.md`'s contract: recapture only on an intentional change that legitimately alters these bytes, in the same commit). |
+| `apps/cli/config/**` | `bun run --filter @gobing-ai/spur build:bundle` copies `config/rules` into the bundled CLI, so the rule ships with the installed surface. |
+
+Rationale: the ADR-131 invariant is corpus shape, so it belongs in the declarative rule engine rather than in `spur task check`; scoping to the `done_reason` key keeps the 600+ legitimate `.spur/run/` mechanism mentions out of the finding set, which removes any need for a document allowlist (R2).
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `config/rules/structure/scratch-evidence-pointer.yaml:23` id `no-scratch-verdict-pointer`, severity error, pattern at `config/rules/structure/scratch-evidence-pointer.yaml:34`; `spur rule validate` → valid, 1 rule (this run) |
+| R2 | MET | pattern anchored `^done_reason:`; prose case in `apps/cli/tests/commands/rule.test.ts:369` (30 pass this run) |
+| R3 | MET | `apps/cli/tests/commands/rule.test.ts:369` three-case temp corpus e2e, green this run |
+| R4 | MET | `spur rule run --preset recommended-pre-check --rule no-scratch-verdict-pointer --fail-on warning --json` → 0 findings, exit 0 (this run); full preset 51/51 pass in spur-check |
+| R5 | MET | `apps/cli/tests/commands/rule.test.ts:422` asserts header `config/rules/structure/scratch-evidence-pointer.yaml:13` names gitignored executable source as out of scope and records no loader registers from scratch |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — a scratch verdict pointer in done_reason is rejected (req: R1, R3) | MET | test | `apps/cli/tests/commands/rule.test.ts:369` |
+| AC2 — a durable pointer passes (req: R1, R3) | MET | test | `apps/cli/tests/commands/rule.test.ts:369` |
+| AC3 — a prose mention passes (req: R2, R3) | MET | test | `apps/cli/tests/commands/rule.test.ts:369` |
+| AC4 — the preset is green on the migrated repository (req: R4) | MET | command | preset rule run → 0 findings, exit 0 this run |
+| AC5 — the uncovered class is named (req: R5) | MET | test | `apps/cli/tests/commands/rule.test.ts:422` asserts the header (fails when the loader line is mutated, this run) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+Self-review over the full diff. No P1/P2 findings; disposition PASS.
+
+| Sev | Finding | Disposition |
+| --- | --- | --- |
+| P1 | — | none found |
+| P2 | — | none found |
+| P3 | The rule covers `done_reason` only; Testing-body and review-pointer citations of scratch stay unflagged (the ADR names them too). | Accepted and explicitly deferred by the task's own Q&A: those fields are free prose with no citation grammar, so a matcher there would need a grammar that does not exist. `done_reason` is the one machine-consumed pointer with a fixed shape. |
+| P3 | `ruleCount` is duplicated in two fixtures and in the `rule run --json` payload, so every future rule addition recaptures two byte fixtures. | Accepted: the recapture contract is documented in `apps/cli/tests/fixtures/raw-json-baseline/README.md` and the identity tests are the point — they red a silent envelope/byte regression. Both fixtures were recaptured in this change with only the count changing. |
+| P4 | The pattern requires a 4-digit wbs (`[0-9]{4}`), so a hypothetical 3- or 5-digit corpus wbs would evade it. | Accepted: the corpus's WBS numbering is four digits by construction (and `migrate-anchors`' retarget matches the same shape), so widening it would add noise against the directory name rather than a real pointer. |
+| P4 | A `.spur/run/<wbs>/verdict.json` pointer is matched but a deeper subpath (e.g. `<wbs>/nested/verdict.json`) is not. | Accepted: matches the retarget's scope in 1140, so the rule and its repair stay in lockstep; a deeper shape would be flagged as prose today. |
+
+Residual risk: this rule is an `error` in a preset the repo runs with `--fail-on warning`, so it is
+immediately gating — intended (the class has zero instances after 1140). Any tooling that still
+writes a scratch `done_reason` will red the pre-check until it writes the durable path; the repair is
+one `spur task migrate-anchors --wbs <wbs>` call.
 
 ### References
 
@@ -161,4 +207,7 @@ Validate with `spur rule validate config/rules/structure/scratch-evidence-pointe
 ### History
 
 - 2026-10-09T16:44:18.234Z backlog → todo (system)
+- 2026-10-09T23:09:04.048Z todo → wip (system)
+- 2026-10-09T23:09:53.929Z wip → testing (system)
+- 2026-10-09T23:09:54.877Z testing → done (system)
 

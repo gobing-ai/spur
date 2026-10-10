@@ -95,6 +95,11 @@ issues with its evidence. Notes stay report-only.
    segments, then map them to stages (`"1-3,4,5-6"`). It splits each segment into `work` and
    operator `wait` (idle before the next prompt plus AskUserQuestion answer time) and counts tokens
    once per message id.
+   The transcript resolves from `--transcript`, else `CLAUDE_CODE_SESSION_ID`, else `PI_SESSION_FILE`
+   (the pi host sets it and no Claude session id); with none of them the measurement reports
+   `available:false` with a reason and the table renders `n/a` instead of guessing. A
+   skill-injected body (`<skill name="…">`) is counted as activity in `injectedPrompts`, never as a
+   segment — only the operator's own prompts segment the session.
 2. **Inventory outcomes.** List requested outcomes and classify each as completed, partial, blocked,
    or not attempted. Collapse repeated attempts into one outcome.
 3. **Classify issues.** For every material issue, distinguish resolved, open, or attempted. Record

@@ -1,0 +1,34 @@
+# ADR-131 consumer invariant: `.spur/run/` may be absent in any later run, so a
+# durable record must not cite it as evidence. `done_reason` is the one
+# machine-consumed pointer with a fixed shape, so this rule anchors there: a task's
+# close rationale must name `.spur/memory/evidence/<wbs>-verdict.json` (or the
+# tracked `## Testing` section), never the scratch copy.
+#
+# Scope — the pointer field, not the directory string. 600+ tracked documents
+# legitimately mention `.spur/run/` while documenting what the pipeline writes
+# there (that is the mechanism the ADR governs); only a `done_reason:` value that
+# points at a scratch verdict is a citation of record. Prose mentions in any
+# section, design doc or source file never match, so no allowlist is needed.
+#
+# Out of scope, and this rule makes no claim to cover it: executable source under
+# the gitignored `.spur/run/` (a hook or script loader registered from scratch).
+# No loader registers from there — verified 2026-10-09, and the runtime-guard task
+# that would have covered the class (1145) was cancelled. The rule engine reads
+# tracked files only, so that class is invisible here by construction.
+#
+# Repair: `spur task migrate-anchors --wbs <wbs>` retargets the pointer (1140).
+include:
+  - "docs/tasks*/**/*.md"
+rules:
+  - id: no-scratch-verdict-pointer
+    description: >
+      done_reason cites a .spur/run verdict, which ADR-131 makes disposable: the
+      directory may be absent in any later run, so a consumer resolving this pointer
+      reads a broken reference. Cite .spur/memory/evidence/<wbs>-verdict.json, or the
+      tracked Testing section when no durable copy was retained; repair with
+      `spur task migrate-anchors --wbs <wbs>`.
+    severity: error
+    evaluator:
+      type: rg
+      config:
+        pattern: "^done_reason:.*\\.spur/run/[0-9]{4}(-|/)verdict\\.json"

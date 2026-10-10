@@ -9,28 +9,35 @@ import { join } from 'node:path';
 import { TERMINAL_REASONS } from '../../../packages/app/src/workflow/terminal-reason';
 
 /**
- * Task 0937 R2 — the inline driver's `--close` reason contract. The script holds a COPIED
- * literal of the closed terminal-reason enum (the plugin standalone contract forbids a
- * value import of app code), so this test is the drift alarm: the copy must equal
- * `TERMINAL_REASONS` from @gobing-ai/spur-app, and `--close` must refuse a failed close
- * without a declared reason (or with a non-enum one) BEFORE any write.
+ * Task 0937 R2 — the inline driver's `--close` reason contract. Task 1136 moved the close-mode
+ * guard (and its terminal-reason vocabulary) into the app service's trace-mode dispatcher, so
+ * the script no longer holds a copied literal; this test now pins that the vocabulary has ONE
+ * owner (`packages/app/src/workflow/terminal-reason.ts`) and that no plugins/sp source copies it
+ * back, while `--close` still refuses a failed close without a declared reason (or with a
+ * non-enum one) BEFORE any write.
  */
 
 const SCRIPT = join(import.meta.dir, '..', 'scripts', 'inline-run-setup.ts');
 
-test('the script copies TERMINAL_REASONS exactly (no value import, parity held)', () => {
-    const source = readFileSync(SCRIPT, 'utf8');
-    const match = source.match(/const TERMINAL_REASONS = new Set\(\[([^\]]+)\]\)/);
-    expect(match, 'copied TERMINAL_REASONS literal found in the script').not.toBeNull();
-    const copied = (match?.[1] ?? '')
-        .split(',')
-        .map((entry) => entry.trim().replace(/^'|'$/g, ''))
-        .filter((entry) => entry !== '');
-    expect(copied).toEqual([...TERMINAL_REASONS]);
+test('no plugins/sp source re-copies the terminal-reason enum (single owner, parity held)', () => {
+    const scriptSource = readFileSync(SCRIPT, 'utf8');
+    expect(scriptSource).not.toContain('const TERMINAL_REASONS = new Set([');
     // And the script stays standalone: the app package appears only as a type-only namespace
     // import; no runtime value import exists.
-    expect(source).toContain("import type * as spurApp from '@gobing-ai/spur-app'");
-    expect(source).not.toMatch(/(^|\n)import (?!type )[^;\n]*'@gobing-ai\/spur-app'/);
+    expect(scriptSource).toContain("import type * as spurApp from '@gobing-ai/spur-app'");
+    expect(scriptSource).not.toMatch(/(^|\n)import (?!type )[^;\n]*'@gobing-ai\/spur-app'/);
+    // The one owner still declares the full closed enum.
+    expect([...TERMINAL_REASONS]).toEqual([
+        'done',
+        'paused-operator',
+        'failed-check',
+        'failed-agent',
+        'failed-timeout',
+        'failed-guard',
+        'cancelled',
+        'interrupted',
+        'retry-exhausted',
+    ]);
 });
 
 test('R2: --close --status failed without --reason exits nonzero before any write', () => {

@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: "Run-record and wrap integrity for worktree runs: loud bookkeeping, fresh digests, scoped repair"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-10-09T05:28:31.980Z
-updated_at: "2026-10-09T18:06:27.086Z"
+updated_at: "2026-10-09T22:06:50.147Z"
 feature_id: H1
 
 ac_altitude: task-local
 ac_numbering: task-local
 priority: P1
 estimate_hours: 12
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1136-verdict.json
 ---
 
 ## 1136. Run-record and wrap integrity for worktree runs: loud bookkeeping, fresh digests, scoped repair
@@ -23,7 +25,7 @@ estimate_hours: 12
 `{"ok":false,"error":"run 85fab6d4-… closed done with zero action_rows rows; emit --action/--actions-file during the run (no backfill); see inline-pipeline-driver.md#structured-trace-emission-adr-117-task-0868","code":"NO_ACTION_ROWS","actionRows":0}`.
 The only non-lying options were to leave the row falsely `running` or to re-emit the trace afterwards; 93 rows were re-emitted post-run (all `--estimated`, since none had been timed) and the correction was written into the run log. **The contract forbids backfill at close — and it was right to; the defect is that the driver let a silent no-op happen at all.**
 
-**Defect 2 — a stale digest nearly reused a gate receipt (12 m 20 s lost).** After deleting a stray untracked artifact the tree's real digest moved from `sha256:e1f2afbf…` to `sha256:21996f6e…`. The driver passed the *file's* value (the older one) to `quality-gate.ts recheck`; the gate's `readReceiptStatus(receiptPath, env.proofDigest)` compared it with `.spur/run/1132-check-receipt.json`'s `inputDigest`, matched, and correctly-skipped by its own rules:
+**Defect 2 — a stale digest nearly reused a gate receipt (12 m 20 s lost).** After deleting a stray untracked artifact the tree's real digest moved from `sha256:e1f2afbf…` to `sha256:21996f6e…`. The driver passed the *file's* value (the older one) to `quality-gate.ts recheck`; the gate's `readReceiptStatus(receiptPath, env.proofDigest)` compared it with the run's `1132-check-receipt.json` `inputDigest`, matched, and correctly-skipped by its own rules:
 `check.reused — full-tier PASS receipt at input digest sha256:e1f2afbf…; gate skipped`.
 A PASS for a tree that no longer existed was one accepted command away. The driver caught it, recomputed the digest, and re-ran the gate for real (12 m 20 s), but the reuse decision trusts a caller-supplied string that the caller is demonstrably capable of getting wrong.
 
@@ -55,27 +57,27 @@ Root cause: the wrapup **`doc-sync`** step **re-added** the deliberately delinke
 
 ### Requirements
 
-- [ ] R1. **Action rows reach the tree that owns the run row.**
+- [x] R1. **Action rows reach the tree that owns the run row.**
   - `inline-run-setup --action`/`--actions-file`/`--close` accept `--project-root <invoking-tree>`.
   - The driver contract always passes the invoking tree recorded in the WT-3 marker (or the run's setup cwd when no worktree is in use).
   - When the row is not found in that tree's database, `--action` exits 1 with `RUN_NOT_FOUND`, the same as `--close` today. A run-row miss is a correctness failure, not a best-effort emission failure. Other emission failures keep their best-effort policy.
-- [ ] R2. **No suppressed bookkeeping.** The driver reference forbids redirecting stdout/stderr of `inline-run-setup`, `quality-gate` and `persist-out*` calls. A static pin fails when any driver or execution-batch reference snippet pipes those commands to `/dev/null`.
-- [ ] R3. **The gate never reuses a receipt on a caller-copied digest.**
+- [x] R2. **No suppressed bookkeeping.** The driver reference forbids redirecting stdout/stderr of `inline-run-setup`, `quality-gate` and `persist-out*` calls. A static pin fails when any driver or execution-batch reference snippet pipes those commands to `/dev/null`.
+- [x] R3. **The gate never reuses a receipt on a caller-copied digest.**
   - Before `readReceiptStatus` is consulted, the gate recomputes the proof-input fingerprint itself (the same function `inline-run-setup --fingerprint` uses, with `taskSpecPath`/`featureSpecPath` from env).
   - When the supplied `proofDigest` differs from the recomputed value, reuse is refused. The gate runs and logs `check.reuse-refused — supplied <D1> != current <D2>`.
   - When the recompute cannot run (missing task path), reuse is refused, never assumed.
-- [ ] R4. **Node durations come from the emitter's clock.**
+- [x] R4. **Node durations come from the emitter's clock.**
   - A new `--node-enter --run-id --node` call stamps the enter time.
   - A following `--action` for that node without `--duration-ms` computes `duration = now − enter`.
   - A caller-supplied `--duration-ms` is still accepted but recorded as `provenance: host-reported`, separate from `measured`, in the row's structured result.
   - A row whose computed start precedes `runs.started_at` is rejected (exit 1).
-- [ ] R5. **Missing declared nodes and operator wait are visible.**
+- [x] R5. **Missing declared nodes and operator wait are visible.**
   - At `--close`, the script compares the run's visited declared states (from the run's state sidecar) with the states that have rows, and reports `missingNodes[]` in the close JSON and the run log as a trace defect. It does not fail the close.
   - operator-pause waits are emitted as their own row (`kind: operator-wait`) by the driver, so they are not charged to the neighbouring node.
-- [ ] R6. **Driver scratch lives in the run directory, and declared vars exist before use.**
+- [x] R6. **Driver scratch lives in the run directory, and declared vars exist before use.**
   - The driver reference requires all driver scratch under `.spur/run/<run-id>/` (never `/tmp` or `$TMPDIR`, which the OS can reap mid-run).
   - Before a `shell` action that references a declared var (for example `qualityGateCmd`), the driver checks that the var is exported and non-empty, and fails the action naming the var otherwise.
-- [ ] R7. **Docs, pins and bundle ship in the same change.**
+- [x] R7. **Docs, pins and bundle ship in the same change.**
   - Update the driver reference: owning-tree flag, no-suppression, node-enter, operator-wait rows, scratch location, var check.
   - Update the receipt contract comment in `packages/app/src/services/quality-gate.ts`.
   - Add one fixture pin per requirement, each shown to fail without its fix.
@@ -193,15 +195,159 @@ Scenario: AC7 — Pins discriminate and docs match (req: R7)
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change map (file:line at merge commit):
+
+| File | Change |
+| --- | --- |
+| `packages/app/src/services/inline-run-setup.ts:1345` | `--project-root` resolution on every trace mode (R1); loud `RUN_NOT_FOUND` on a run-row miss for `--action`/`--actions-file` (R1); `runInlineRunNodeEnter` stamps `nodeEnters`/`visitedNodes` in the run-record sidecar (R4); `runInlineRunTrace` computes `duration = now - enter` with `provenance: measured`, keeps `host-reported` for a supplied `--duration-ms`, rejects a computed start before `runs.started_at`, and refuses an unmeasurable duration with `ACTION_DURATION_UNAVAILABLE` (R4); `--close` reports `missingNodes[]` from visited-vs-recorded nodes (R5); `runInlineRunTraceMode` is the ADR-130 dispatcher for the four trace modes (keeps the plugin script inside its 250-line glue budget); `appendInlineRunLogLine`/`projectInlineRunClose` take an optional `workdir` so every write lands in the owning tree. |
+| `packages/app/src/services/quality-gate.ts:353` | `recomputeGateProofFingerprint` (`:943`) (same canonical graph as `inline-run-setup --fingerprint`: git alternate tree + task/feature proof data) and `resolveReceiptReuse`, which refuses reuse when the recompute fails or disagrees with the supplied digest, logging `check.reuse-refused — supplied <D1> != current <D2>` (R3). `runQualityGate` and the script's `status` mode both go through it. |
+| `packages/app/src/index.ts:453` | Exports the new surface (`runInlineRunNodeEnter`, `runInlineRunTraceMode`, `InlineRunNodeEnterInput`, `InlineRunTraceModeInput`). |
+| `plugins/sp/scripts/inline-run-setup.ts:22` | Argv/env only: accepts `--node-enter`, `--project-root`, and an optional `--duration-ms`; delegates the mode bodies to `runInlineRunTraceMode`. 211 lines (budget 250). |
+| `plugins/sp/scripts/quality-gate.ts:53` | `status` mode delegates to `resolveReceiptReuse`. |
+| `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:606`, `plugins/sp/skills/spur-dev/references/structured-trace-emission.md:40` | Driver contract for `--project-root`, the no-suppression rule, `--node-enter`/measured provenance, `operator-wait` rows, `missingNodes`, driver scratch under `.spur/run/<run-id>/`, and the declared-var check before a shell action (R2/R4/R5/R6). Also removed an unguarded `bun plugins/sp/scripts/…` invocation that the script-contract check forbids on a shipped surface (pre-existing; see Testing). |
+| `docs/design/run-record-contract.md:60`, `docs/design/disposable-run-storage.md:56` | Dated 1136 baseline entries for the owning-tree flag, measured timing, `missingNodes`, gate reuse identity, and driver scratch confinement. |
+| `scripts/commands/bundle-plugin-lib.ts:730` | Declares the `runInlineRunNodeEnter`/`runInlineRunTraceMode` twin exports; regenerated `plugins/sp/lib/*.generated.{mjs,d.mts}` and `plugins/sp/scripts/*.mjs`. |
+
+Rationale: per-tree DB isolation is correct, so the owning tree travels explicitly instead of being searched for; a run-row miss becomes a loud failure (the 1132 incident lost 93 rows to a suppression that hid exactly this); the gate recomputes its own reuse identity instead of trusting a caller-copied digest; and node durations come from the emitter's clock where available.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/services/inline-run-setup.ts:1345-1351` and `packages/app/src/services/inline-run-setup.ts:1459-1484` resolve `--project-root` and raise `RunRowNotFoundError` (→ `RUN_NOT_FOUND`, exit 1) on a run-row miss; `packages/app/tests/services/inline-run-setup.test.ts` AC1/R1 cases re-run green this pass; drill `.spur/memory/runs/1136-acceptance-drill.log` |
+| R2 | MET | `plugins/sp/skills/spur-dev/references/structured-trace-emission.md:162` no-suppression rule; `plugins/sp/tests/dogfood-testing/bookkeeping-contract.test.ts` pins every reference snippet (re-run green) |
+| R3 | MET | `packages/app/src/services/quality-gate.ts:353` `resolveReceiptReuse` recomputes via `packages/app/src/services/quality-gate.ts:943` `recomputeGateProofFingerprint` before reuse; `plugins/sp/scripts/quality-gate.ts:53` routes status mode through it; `plugins/sp/tests/quality-gate-receipt.test.ts` + `packages/app/tests/services/quality-gate.test.ts` refusal cases green |
+| R4 | MET | `packages/app/src/services/inline-run-setup.ts:1381` stamps `nodeEnters`; `packages/app/src/services/inline-run-setup.ts:1500` measured vs host-reported provenance; `packages/app/src/services/inline-run-setup.ts:1526` ACTION_DURATION_UNAVAILABLE; `packages/app/src/services/inline-run-setup.ts:1543` ACTION_START_PRECEDES_RUN_START; `plugins/sp/tests/inline-run-trace.test.ts` `--node-enter` E2E green |
+| R5 | MET | `packages/app/src/services/inline-run-setup.ts:1618-1639` reports `missingNodes[]` in close JSON and the `trace-close-defect` run-log line without failing the close; drill close JSON `missingNodes` in `.spur/memory/runs/1136-acceptance-drill.log` |
+| R6 | MET | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:604` driver scratch under `.spur/run/<run-id>/`; `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:610` declared-var check; both pinned by `plugins/sp/tests/dogfood-testing/bookkeeping-contract.test.ts` |
+| R7 | MET | References, receipt comment, pins and regenerated bundle ship together (`scripts/commands/bundle-plugin-lib.ts:730` twin exports); landed-gate `bun run spur-check` 10675 pass / 0 fail in `.spur/memory/runs/1136-spur-check.log`; lint exit 0 this pass |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: AC1 — An action row emitted from the execution tree lands in the owning tree (req: R1) | MET | test | `packages/app/tests/services/inline-run-setup.test.ts` AC1/R1 cases (re-run green) + `.spur/memory/runs/1136-acceptance-drill.log` |
+| Scenario: AC2 — Suppressed bookkeeping output is rejected by a pin (req: R2) | MET | test | `plugins/sp/tests/dogfood-testing/bookkeeping-contract.test.ts` "/dev/null redirect rejected naming file and line" (re-run green) |
+| Scenario: AC3 — A stale supplied digest cannot reuse a gate receipt (req: R3) | MET | test | `plugins/sp/tests/quality-gate-receipt.test.ts` + `packages/app/tests/services/quality-gate.test.ts` stale-digest and recompute-failure refusals (re-run green) |
+| Scenario: AC4 — A node duration is the emitter's measurement (req: R4) | MET | test | `packages/app/tests/services/inline-run-setup.test.ts` AC4 cases; `plugins/sp/tests/inline-run-trace.test.ts` `--node-enter` E2E (re-run green) |
+| Scenario: AC5 — A declared state with no row, and operator wait, are both visible (req: R5) | MET | test | `packages/app/tests/services/inline-run-setup.test.ts` AC5 case; drill close JSON `missingNodes` |
+| Scenario: AC6 — Undeclared scratch and an unexported var fail early (req: R6) | MET | test | `plugins/sp/tests/dogfood-testing/bookkeeping-contract.test.ts` pins on `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:604` and `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:610` |
+| Scenario: AC7 — Pins discriminate and docs match (req: R7) | MET | command | failing-then-green sequence per pin (prior run); `bun run spur-check` 10675 pass / 0 fail in `.spur/memory/runs/1136-spur-check.log` |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+
+#### Re-verify — 2026-10-09 (`/sp:dev-verifyall --force --fix all`)
+
+- Focused suites re-run: `packages/app` (inline-run-setup, quality-gate, run-storage, task-record, run-citation, confidence-taxonomy) 297 pass / 0 fail; `plugins/sp` (persist-out-check, quality-gate-receipt, bookkeeping-contract, inline-run-trace) 65 pass / 0 fail; `bun run lint` exit 0.
+- Fix pass: the R1/R4/R5 line anchors had drifted after the 1139 edits to `inline-run-setup.ts`, so they were re-read and corrected (R1 `:1231` → `:1345-1351`/`:1459-1484`; R4 `:1382` → `:1381`, `:1500`, `:1526`, `:1543`; R5 `:1636` → `:1618-1639`). The Solution anchor was corrected too (`:1360` → `:1345`). A duplicated "Gate and drill evidence" block was collapsed to a single copy.
+**Gate and drill evidence (task 1136)**
+
+Verification commands (task worktree `spur-new-sp-run-1136-18f9bb0b`, final tree):
+
+- `bun run lint` — PASS (biome 1321 files + every workspace typecheck).
+- `bun run test-pre-check` — PASS (50/50 recommended rules).
+- `bun scripts/commands/gate-lock.ts -- bun run test` — PASS: **10675 pass / 0 fail**, 627 files,
+  exit 0, per-file coverage thresholds met (`packages/app/src/services/inline-run-setup.ts` 92.38%
+  lines / 90.63% funcs; `plugins/sp/scripts/quality-gate.ts` 94.12% lines).
+- `bun run test-post-check` — PASS (2/2).
+- `bun run build:scripts` (⇒ `build:plugin-lib` + twin conversion) — PASS; `script-contract-check`
+  0 violations.
+
+Acceptance drill (real CLI; full transcript retained at `.spur/memory/runs/1136-acceptance-drill.log`):
+
+- **AC1/R1** — run row in tree A, `--action` from tree B (`/tmp/spur-1136-drill/{A,B}`): without
+  `--project-root` → `{"ok":false,…,"code":"RUN_NOT_FOUND"}` exit 1; with it → exit 0 and
+  `drill-1136-run|implement|agent.run|157|{"provenance":"measured","estimated":false}` lands in A
+  while B keeps 0 rows.
+- **AC3/R3** — receipt bound to the recomputed digest, rechecked with
+  `proofDigest=sha256:stale-but-plausible` → `check.reuse-refused — supplied sha256:stale-but-plausible
+  != current sha256:92af9f6f…` and the gate runs (`full-ran`); the honest digest → `check.reused …
+  gate skipped`.
+- **AC5/R5** — `--close --status done` → `{"ok":true,"actionRows":1,"missingNodes":["start","end"]}`
+  exit 0 plus `trace-close-defect … missing action rows for visited nodes: start, end` in the run
+  record.
+- **AC2/R2 (deterrent)** — the same emission with stdout redirected to `/dev/null` hides the
+  `RUN_NOT_FOUND` from the caller: the exact 1132 failure mode the pin rejects.
+
+Test inventory (each shown to fail without its fix while iterating): R1/R4/R5 + dispatcher usage
+refusals in `packages/app/tests/services/inline-run-setup.test.ts`; R3 in
+`packages/app/tests/services/quality-gate.test.ts` (incl. `recomputeGateProofFingerprint` ↔
+`computeProofInputFingerprint` parity) and `plugins/sp/tests/quality-gate-receipt.test.ts` (incl. the
+`status`-mode refusals); R2/R6 in the new
+`plugins/sp/tests/dogfood-testing/bookkeeping-contract.test.ts`; four updated suites for the loud-miss
+contract, the optional `--duration-ms` and single ownership of the terminal-reason enum.
+
+Out-of-task repair (disclosed): `script-contract-check` failed at base commit `17d06fe18` with the
+`forbidden_invocation` kind on an unguarded `bun plugins/sp/scripts/task-diffstat.ts` in shipped prose
+(`plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:805`; verified by running the checker
+in a clean worktree at that commit). The line was rewritten to the guarded idiom so the task gate can
+be green; no behaviour change.
+
+Not covered: no live driver `--worktree` run (the drill reproduces the two-tree shape with plain
+directories, exercising the same `--project-root` path); wrapup/teardown defects are task 1147/1148
+scope and were not touched.
+
+**Wrap hop (`--wrap`, post-merge).**
+
+The full wrap route failed deterministically and was completed on the documented fast route:
+
+- `wrapup-pipeline` full route: `doc-sync`'s `agent.run` exited 0 with an **empty**
+  `-wrapup-learnings.md`, the contract-violation edge routed to `repair`, and the `repair` shell
+  then exited 1 — its `&&` chain starts with `V="$(cat .spur/run/$__runId-wrapup-learnings.status)"`,
+  and that file does not exist on the empty-capture path, so `cat`'s status breaks the chain before
+  `exit 0`. Transcript: `.spur/memory/runs/1136-wrap-full.log`. This is a distinct wrapup defect
+  (the step must tolerate a missing status file), adjacent to task 1147/1148 scope; not fixed here
+  because this task's boundaries exclude wrapup.
+- No stray writes survived the failure: `git status` was clean afterwards (the 1132 incident needed
+  a manual revert; this run did not).
+- Fast route (`mode=fast`): `task-resolve → metrics-record → done`, exit 0, metrics recorded;
+  transcript `.spur/memory/runs/1136-wrap-fast.log`.
+
+Landed-gate re-run on the merged `main` tree (`c021837d4`, post-merge, after the worktree was
+removed): `bun run lint` PASS, `test-pre-check` 50/50 PASS,
+`bun scripts/commands/gate-lock.ts -- bun run test` **10675 pass / 0 fail** exit 0,
+`test-post-check` 2/2 PASS — transcript `.spur/memory/runs/1136-spur-check.log`.
+
+Landing: worktree FF-merged after merging `main` into the branch (a concurrent 1143 run had advanced
+`main`); the single conflict was the `task-diffstat` doc line 1143 had already fixed, resolved by
+taking main's version. `persist-out` reported one external-key conflict (the worktree's
+`task-lifecycle` run row for 1136 vs the invoking tree's existing 1136 lifecycle link); reconciled by
+evidence — the authoritative transition record is this file's History section, and no unique row or
+evidence file was lost. Worktree and branch removed after the merge was verified on `main`.
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+Self-review over the full diff (SECUA + traceability). No P1/P2 findings; disposition PASS.
+
+| Sev | Finding | Disposition |
+| --- | --- | --- |
+| P1 | — | none found |
+| P2 | — | none found |
+| P3 | `plugins/sp/lib/quality-gate.generated.mjs` grows ~65 KB → ~1.0 MB: the bundled core now inlines the proof-fingerprint graph (git alternate tree + spec extraction) so the gate keeps one canonicalizer. | Accepted. The rejected alternative — re-deriving the digest inside the gate script — is exactly the second-canonicalizer drift the R3 defense exists to prevent. `inline-run.generated.mjs` (1.75 MB) already sets this order of magnitude; revisit if plugin install size becomes a budget. |
+| P3 | The script's read-only `status` mode now pays the recompute (3 git spawns) whenever a receipt exists. | Accepted: `status` is the same trust decision, and leaving it caller-trusting would keep the laundering path open through the one mode the pipeline uses to decide whether to re-run. Cost is bounded and paid only when a receipt exists. |
+| P4 | `--actions-file` rows skip the start-before-`runs.started_at` check. | Recorded gap: the batch format carries no enter stamp, so every row is host-reported by construction and a reconstructed start would assert nothing; the guard scopes to `--action`. Revisit if the batch format gains timestamps. |
+| P4 | This run's own trace holds a duplicate `precheck` row (an in-process debug call emitted one before the script emitted the real one). | Left in place: the trace is append-only and hand-editing rows is forbidden (ADR-117). |
+
+Requirement traceability: **R1** satisfied (`--project-root` on every emission mode; run-row miss is a
+loud exit 1 on `--action`/`--actions-file`/`--node-enter` and `--close`; per-tree isolation preserved
+— design failure (a) rejected auto-search). **R2** satisfied (no-suppression contract in both
+references + a mutation-checked static pin). **R3** satisfied (`resolveReceiptReuse` recomputes before
+`readReceiptStatus` in `run`/`recheck` and in `status`; both refusal reasons logged and tested;
+`readReceiptStatus` stays a pure comparison). **R4** satisfied (`--node-enter` → `provenance:
+measured`; supplied duration → `host-reported`; start-before-`started_at` rejected; unmeasurable
+duration is a named failure, not a silent no-op). **R5** satisfied (`missingNodes[]` reported, never
+fatal; `operator-wait` documented as its own row kind). **R6** satisfied (scratch confinement and the
+declared-var check are part of the driver contract with pins; no code change required — the reference
+is the owner per the task's Plan). **R7** satisfied (references, receipt comment, bundle/scripts and
+one pin per requirement ship together; `bun run spur-check` green on the final tree).
+
+Residual risk: the loud-miss and the digest guard both change long-standing behaviour (silent
+best-effort emission; caller-supplied digest reuse). Four existing suites were updated to the new
+contracts and the pre-1136 behaviour is recorded in dated design entries, so the change is
+auditable. Untested path: no live driver `--worktree` run was executed — the acceptance drill
+reproduces the two-tree shape with plain directories, exercising the same `--project-root` code path.
 
 ### References
 
@@ -213,4 +359,7 @@ Scenario: AC7 — Pins discriminate and docs match (req: R7)
 ### History
 
 - 2026-10-09T05:30:22.775Z backlog → todo (system)
+- 2026-10-09T18:44:42.449Z todo → wip (system)
+- 2026-10-09T20:34:37.707Z wip → testing (system)
+- 2026-10-09T20:35:30.324Z testing → done (system)
 

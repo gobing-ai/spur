@@ -4,10 +4,10 @@ name: Feature receipt verifier identity must not bind the absolute definition pa
 status: done
 template: standard
 created_at: 2026-09-26T00:09:10.239Z
-updated_at: "2026-09-26T00:43:16.036Z"
+updated_at: "2026-10-09T21:30:31.293Z"
 
 done_forced: "true"
-done_reason: "Implemented in-session before any pipeline run; inline run 88e5fdf6 closed failed-guard at precheck (implement requireDiff cannot re-certify existing diff; spur-check blocked by sandbox git-init tests unrelated to 0957). Evidence: verify PASS (.spur/run/0957-verdict.json, recorded), 21/21 receipt tests, bundled+source CLIs agree on D64. Operator-approved bypass."
+done_reason: "Implemented in-session before any pipeline run; inline run 88e5fdf6 closed failed-guard at precheck (implement requireDiff cannot re-certify existing diff; spur-check blocked by sandbox git-init tests unrelated to 0957). Evidence: verify PASS (.spur/memory/evidence/0957-verdict.json, recorded), 21/21 receipt tests, bundled+source CLIs agree on D64. Operator-approved bypass."
 ---
 
 ## 0957. Feature receipt verifier identity must not bind the absolute definition path

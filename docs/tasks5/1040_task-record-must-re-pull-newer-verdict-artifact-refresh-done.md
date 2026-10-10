@@ -4,7 +4,7 @@ name: task record must re-pull newer verdict artifact; refresh done_reason on re
 status: done
 template: issue
 created_at: 2026-10-01T18:14:27.154Z
-updated_at: "2026-10-08T15:51:32.781Z"
+updated_at: "2026-10-09T21:30:31.960Z"
 
 feature_id: F91
 ac_altitude: task-local
@@ -12,7 +12,7 @@ ac_numbering: task-local
 priority: P2
 estimate_hours: 2
 done_forced: "false"
-done_reason: unforced close; PASS artifact at .spur/run/1040-verdict.json
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1040-verdict.json
 ---
 
 ## 1040. task record must re-pull newer verdict artifact; refresh done_reason on re-close

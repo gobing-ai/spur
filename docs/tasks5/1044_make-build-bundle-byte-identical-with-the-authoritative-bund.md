@@ -4,11 +4,11 @@ name: Make build:bundle byte-identical with the authoritative bundle-plugin-lib 
 status: done
 template: feature-impl
 created_at: 2026-10-01T21:54:16.882Z
-updated_at: "2026-10-02T04:08:40.386Z"
+updated_at: "2026-10-09T21:30:32.481Z"
 feature_id: A33
 
 done_forced: "false"
-done_reason: unforced close; PASS artifact at .spur/run/1044-verdict.json
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1044-verdict.json
 ---
 
 ## 1044. Make build:bundle byte-identical with the authoritative bundle-plugin-lib test bundler

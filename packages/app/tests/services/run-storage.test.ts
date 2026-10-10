@@ -220,13 +220,406 @@ describe('migrateRunStorage (E71/1025)', () => {
             writeFileSync(join(scratch, '1025-verdict.json'), JSON.stringify({ verdict: 'PASS' }));
             const target = join(root, '.spur', 'memory', 'evidence', '1025-verdict.json');
             mkdirSync(join(root, '.spur', 'memory', 'evidence'), { recursive: true });
-            writeFileSync(target, JSON.stringify({ verdict: 'FAIL' }));
+            writeFileSync(target, 'not valid json');
             const result = await migrateRunStorage({ dirs, readRunStatus: statusMap({}), dryRun: false });
             expect(outcome(result, '1025').outcome).toBe('failed');
             expect(result.failures.length).toBeGreaterThan(0);
-            expect(readFileSync(target, 'utf8')).toBe(JSON.stringify({ verdict: 'FAIL' }));
+            expect(result.failures[0]?.reason).toBe('target-mismatch');
+            expect(result.failures[0]?.remedy).toBe('repair the durable file by hand');
+            expect(readFileSync(target, 'utf8')).toBe('not valid json');
             const preview = await migrateRunStorage({ dirs, readRunStatus: statusMap({}), dryRun: true });
             expect(preview.failures[0]?.reason).toBe('target-mismatch');
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('identical target behind a stale proof binding is already-present (F1/AC3)', async () => {
+        const { root, scratch, dirs } = makeProject();
+        try {
+            const verdictContent = JSON.stringify({
+                wbs: '1025',
+                verdict: 'PASS',
+                proof: { runId: 'stale-wrong-run-id' },
+            });
+            writeFileSync(join(scratch, '1025-verdict.json'), verdictContent);
+            const target = join(root, '.spur', 'memory', 'evidence', '1025-verdict.json');
+            mkdirSync(join(root, '.spur', 'memory', 'evidence'), { recursive: true });
+            writeFileSync(target, verdictContent);
+            const result = await migrateRunStorage({ dirs, readRunStatus: statusMap({}), dryRun: false });
+            expect(outcome(result, '1025').outcome).toBe('already-present');
+            expect(result.failures.length).toBe(0);
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('valid durable target that differs is superseded and preserved (F2/AC3)', async () => {
+        const { root, scratch, dirs } = makeProject();
+        try {
+            writeFileSync(join(scratch, '1025-verdict.json'), JSON.stringify({ wbs: '1025', verdict: 'PASS' }));
+            const target = join(root, '.spur', 'memory', 'evidence', '1025-verdict.json');
+            mkdirSync(join(root, '.spur', 'memory', 'evidence'), { recursive: true });
+            writeFileSync(target, JSON.stringify({ wbs: '1025', verdict: 'FAIL' }));
+            const result = await migrateRunStorage({ dirs, readRunStatus: statusMap({}), dryRun: false });
+            expect(outcome(result, '1025').outcome).toBe('superseded');
+            expect(outcome(result, '1025').reason).toBe('durable canonical');
+            expect(result.failures.length).toBe(0);
+            expect(readFileSync(target, 'utf8')).toBe(JSON.stringify({ wbs: '1025', verdict: 'FAIL' }));
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('unparseable or check-result-shaped verdict with no durable counterpart is preserved unclassified (F3/AC3)', async () => {
+        const { root, scratch, dirs } = makeProject();
+        try {
+            const checkResultShape = JSON.stringify({ hasVerdict: true, verdictIsPass: true });
+            writeFileSync(join(scratch, '2f720cbc-7e9f-40c2-98cf-af32ed9a01a6-verdict.json'), checkResultShape);
+            const result = await migrateRunStorage({ dirs, readRunStatus: statusMap({}), dryRun: false });
+            const entry = outcome(result, '2f720cbc-7e9f-40c2-98cf-af32ed9a01a6');
+            expect(entry.outcome).toBe('preserved');
+            expect(entry.reason).toContain('unclassified');
+            expect(result.failures.length).toBe(0);
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('run-record .md whose sibling exists in memory/runs is already-present (F4/AC3)', async () => {
+        const { root, scratch, dirs } = makeProject();
+        try {
+            const runId = '201a166a-3e31-4c3b-a425-3b0d1316a489';
+            writeFileSync(join(scratch, `${runId}.md`), '# Run 201a');
+            const runsDir = join(root, '.spur', 'memory', 'runs');
+            mkdirSync(runsDir, { recursive: true });
+            writeFileSync(join(runsDir, `${runId}.md`), '# Run 201a');
+            writeFileSync(join(runsDir, `${runId}.state.json`), JSON.stringify({ runId }));
+            const result = await migrateRunStorage({
+                dirs,
+                readRunStatus: statusMap({ [runId]: 'done' }),
+                dryRun: false,
+            });
+            expect(outcome(result, runId).outcome).toBe('already-present');
+            expect(result.failures.length).toBe(0);
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('valid durable receipt with different bytes is superseded, not failed (R3b)', async () => {
+        const { root, scratch, dirs } = makeProject();
+        try {
+            writeFileSync(
+                join(scratch, 'E71-feature-verification.json'),
+                JSON.stringify(receipt('E71', 'run-a', root)),
+            );
+            const target = join(root, '.spur', 'memory', 'evidence', 'E71-feature-verification.json');
+            mkdirSync(dirname(target), { recursive: true });
+            // Durable copy is a valid receipt for the same feature, a *different* run — canonical.
+            writeFileSync(target, JSON.stringify(receipt('E71', 'run-b', root)));
+            const result = await migrateRunStorage({
+                dirs,
+                readRunStatus: statusMap({ 'run-a': 'done' }),
+                dryRun: false,
+            });
+            const entry = result.entries.find((e) => e.family === 'feature-receipt' && e.identity === 'E71');
+            expect(entry?.outcome).toBe('superseded');
+            expect(entry?.reason).toBe('durable canonical');
+            expect(result.failures.length).toBe(0);
+            expect(JSON.parse(readFileSync(target, 'utf8')).runId).toBe('run-b');
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('unparseable receipt with no durable copy is preserved unclassified (R3c)', async () => {
+        const { root, scratch, dirs } = makeProject();
+        try {
+            writeFileSync(join(scratch, 'E71-feature-verification.json'), JSON.stringify({ featureId: 'E71' }));
+            const result = await migrateRunStorage({ dirs, readRunStatus: statusMap({}), dryRun: false });
+            const entry = result.entries.find((e) => e.family === 'feature-receipt');
+            expect(entry?.outcome).toBe('preserved');
+            expect(entry?.reason).toContain('unclassified');
+            expect(result.failures.length).toBe(0);
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('run-record pair with a valid but different durable pair is superseded (R3b)', async () => {
+        const { root, scratch, dirs } = makeProject();
+        try {
+            writeFileSync(join(scratch, 'run-s.md'), 'scratch record');
+            writeFileSync(join(scratch, 'run-s.state.json'), JSON.stringify({ runId: 'run-s' }));
+            const runsDir = join(root, '.spur', 'memory', 'runs');
+            mkdirSync(runsDir, { recursive: true });
+            writeFileSync(join(runsDir, 'run-s.md'), 'durable record');
+            writeFileSync(join(runsDir, 'run-s.state.json'), JSON.stringify({ runId: 'run-s' }));
+            const result = await migrateRunStorage({
+                dirs,
+                readRunStatus: statusMap({ 'run-s': 'done' }),
+                dryRun: false,
+            });
+            const entries = result.entries.filter((e) => e.identity === 'run-s');
+            expect(entries.length).toBe(2);
+            for (const entry of entries) expect(entry.outcome).toBe('superseded');
+            expect(result.failures.length).toBe(0);
+            expect(readFileSync(join(runsDir, 'run-s.md'), 'utf8')).toBe('durable record');
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('an invalid proof owner binding whose durable copy is valid is superseded, not failed (R3b)', async () => {
+        const { root, scratch, dirs } = makeProject();
+        try {
+            // Unsafe owner id (`bad/id`) — the owner gate cannot validate it, but the durable
+            // verdict is a valid same-family member, so durable wins.
+            writeFileSync(
+                join(scratch, '1025-verdict.json'),
+                JSON.stringify({ wbs: '1025', verdict: 'PASS', proof: { runId: 'bad/id' } }),
+            );
+            const target = join(root, '.spur', 'memory', 'evidence', '1025-verdict.json');
+            mkdirSync(dirname(target), { recursive: true });
+            writeFileSync(target, JSON.stringify({ wbs: '1025', verdict: 'FAIL' }));
+            const result = await migrateRunStorage({ dirs, readRunStatus: statusMap({}), dryRun: false });
+            expect(outcome(result, '1025').outcome).toBe('superseded');
+            expect(result.failures.length).toBe(0);
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('an invalid owner id with no durable copy fails with an owner-identity remedy (R3 failure set)', async () => {
+        const { root, scratch, dirs } = makeProject();
+        try {
+            writeFileSync(
+                join(scratch, '1025-verdict.json'),
+                JSON.stringify({ wbs: '1025', verdict: 'PASS', proof: { runId: 'bad/id' } }),
+            );
+            const result = await migrateRunStorage({ dirs, readRunStatus: statusMap({}), dryRun: false });
+            expect(outcome(result, '1025').outcome).toBe('failed');
+            expect(result.failures[0]?.reason).toContain('owner identity');
+            expect(result.failures[0]?.remedy).toBe('inspect source file and durable storage');
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('a durable pair whose state.json is invalid leaves the scratch pair failed, not superseded (R3 failure set)', async () => {
+        const { root, scratch, dirs } = makeProject();
+        try {
+            writeFileSync(join(scratch, 'run-b.md'), 'scratch record');
+            writeFileSync(join(scratch, 'run-b.state.json'), JSON.stringify({ runId: 'run-b' }));
+            const runsDir = join(root, '.spur', 'memory', 'runs');
+            mkdirSync(runsDir, { recursive: true });
+            writeFileSync(join(runsDir, 'run-b.md'), 'durable record');
+            writeFileSync(join(runsDir, 'run-b.state.json'), JSON.stringify({ runId: 'OTHER' }));
+            const result = await migrateRunStorage({
+                dirs,
+                readRunStatus: statusMap({ 'run-b': 'done' }),
+                dryRun: false,
+            });
+            const entries = result.entries.filter((e) => e.identity === 'run-b');
+            expect(entries.every((e) => e.outcome === 'failed')).toBe(true);
+            expect(result.failures.every((f) => f.reason === 'target-mismatch')).toBe(true);
+            expect(result.failures[0]?.remedy).toBe('repair the durable file by hand');
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('a state.json whose runId is not the unit identity fails with the run-state reason (R3 failure set)', async () => {
+        const { root, scratch, dirs } = makeProject();
+        try {
+            writeFileSync(join(scratch, 'run-c.md'), 'record body');
+            writeFileSync(join(scratch, 'run-c.state.json'), JSON.stringify({ runId: 'foreign' }));
+            const result = await migrateRunStorage({
+                dirs,
+                readRunStatus: statusMap({ 'run-c': 'done' }),
+                dryRun: false,
+            });
+            expect(outcome(result, 'run-c').outcome).toBe('failed');
+            expect(result.failures[0]?.reason).toContain('run-state identity or shape');
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('a write-failed migration carries its remedy', async () => {
+        const { root, scratch, dirs } = makeProject();
+        try {
+            writeFileSync(join(scratch, '1025-verdict.json'), JSON.stringify({ wbs: '1025', verdict: 'PASS' }));
+            const result = await migrateRunStorage({
+                dirs,
+                readRunStatus: statusMap({}),
+                dryRun: false,
+                atomicCopy: () => {
+                    throw new Error('disk full');
+                },
+            });
+            expect(result.failures[0]?.reason).toBe('write-failed');
+            expect(result.failures[0]?.remedy).toBe('check permissions/disk');
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('an incomplete run-record pair whose differing .md and full durable pair exist is already-present (R3d)', async () => {
+        const { root, scratch, dirs } = makeProject();
+        try {
+            writeFileSync(join(scratch, 'run-d.md'), 'scratch record');
+            const runsDir = join(root, '.spur', 'memory', 'runs');
+            mkdirSync(runsDir, { recursive: true });
+            writeFileSync(join(runsDir, 'run-d.md'), 'durable record');
+            writeFileSync(join(runsDir, 'run-d.state.json'), JSON.stringify({ runId: 'run-d' }));
+            const result = await migrateRunStorage({
+                dirs,
+                readRunStatus: statusMap({ 'run-d': 'done' }),
+                dryRun: false,
+            });
+            expect(outcome(result, 'run-d').outcome).toBe('already-present');
+            expect(result.failures.length).toBe(0);
+            expect(readFileSync(join(runsDir, 'run-d.md'), 'utf8')).toBe('durable record');
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('a malformed scratch verdict with a valid durable copy is superseded (R3b shape failure)', async () => {
+        const { root, scratch, dirs } = makeProject();
+        try {
+            writeFileSync(join(scratch, '1025-verdict.json'), '{ truncated');
+            const target = join(root, '.spur', 'memory', 'evidence', '1025-verdict.json');
+            mkdirSync(dirname(target), { recursive: true });
+            writeFileSync(target, JSON.stringify({ wbs: '1025', verdict: 'PASS' }));
+            const result = await migrateRunStorage({ dirs, readRunStatus: statusMap({}), dryRun: false });
+            expect(outcome(result, '1025').outcome).toBe('superseded');
+            expect(result.failures.length).toBe(0);
+            expect(readFileSync(target, 'utf8')).toContain('PASS');
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('a malformed scratch receipt with an invalid durable copy fails as target-mismatch', async () => {
+        const { root, scratch, dirs } = makeProject();
+        try {
+            writeFileSync(join(scratch, 'E71-feature-verification.json'), '{ truncated');
+            const target = join(root, '.spur', 'memory', 'evidence', 'E71-feature-verification.json');
+            mkdirSync(dirname(target), { recursive: true });
+            writeFileSync(target, 'also not a receipt');
+            const result = await migrateRunStorage({ dirs, readRunStatus: statusMap({}), dryRun: false });
+            const entry = result.entries.find((e) => e.family === 'feature-receipt');
+            expect(entry?.outcome).toBe('failed');
+            expect(result.failures[0]?.reason).toBe('target-mismatch');
+            expect(readFileSync(target, 'utf8')).toBe('also not a receipt');
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('a receipt whose identity does not match the whole unit fails with a receipt-identity reason', async () => {
+        const { root, scratch, dirs } = makeProject();
+        try {
+            // Prefix names E71 but the body claims feature F99 / run run-z, which matches neither
+            // the prefix nor the owner — an identity failure, not a shape failure.
+            writeFileSync(
+                join(scratch, 'E71-feature-verification.json'),
+                JSON.stringify(receipt('F99', 'run-z', root)),
+            );
+            const result = await migrateRunStorage({ dirs, readRunStatus: statusMap({}), dryRun: false });
+            const entry = result.entries.find((e) => e.family === 'feature-receipt');
+            expect(entry?.outcome).toBe('failed');
+            expect(result.failures[0]?.reason).toContain('receipt identity');
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('a verdict whose proof owner binding differs from the recorded owner fails', async () => {
+        const { root, scratch, dirs } = makeProject();
+        try {
+            writeFileSync(
+                join(scratch, '1025-verdict.json'),
+                JSON.stringify({
+                    wbs: '1025',
+                    verdict: 'PASS',
+                    // A non-string `proof.runId` cannot bind the recorded owner (which falls back to
+                    // `pipelineRunId`), so the proof row is classified as an identity failure.
+                    proof: { runId: 123 },
+                    pipelineRunId: 'owner-run',
+                }),
+            );
+            const result = await migrateRunStorage({
+                dirs,
+                readRunStatus: statusMap({ 'owner-run': 'done' }),
+                dryRun: false,
+            });
+            expect(outcome(result, '1025').outcome).toBe('failed');
+            expect(result.failures[0]?.reason).toContain('proof owner binding');
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('a non-JSON run-record state sibling is a shape failure, not a copy', async () => {
+        const { root, scratch, dirs } = makeProject();
+        try {
+            writeFileSync(join(scratch, 'run-e.md'), 'record body');
+            writeFileSync(join(scratch, 'run-e.state.json'), 'not json at all');
+            const result = await migrateRunStorage({
+                dirs,
+                readRunStatus: statusMap({ 'run-e': 'done' }),
+                dryRun: false,
+            });
+            const entry = result.entries.find((e) => e.identity === 'run-e');
+            expect(entry?.outcome).toBe('preserved');
+            expect(entry?.reason).toContain('unclassified');
+            expect(result.failures.length).toBe(0);
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('an identity-failing verdict whose durable copy is valid is superseded (R3b identity failure)', async () => {
+        const { root, scratch, dirs } = makeProject();
+        try {
+            // Scratch claims a foreign wbs behind the same filename; the durable copy is the
+            // valid same-identity verdict, so durable canonical wins rather than failing.
+            writeFileSync(
+                join(scratch, '1025-verdict.json'),
+                JSON.stringify({ wbs: '9999', verdict: 'PASS', proof: { runId: 'r' } }),
+            );
+            const target = join(root, '.spur', 'memory', 'evidence', '1025-verdict.json');
+            mkdirSync(dirname(target), { recursive: true });
+            writeFileSync(target, JSON.stringify({ wbs: '1025', verdict: 'FAIL' }));
+            const result = await migrateRunStorage({
+                dirs,
+                readRunStatus: statusMap({ r: 'done' }),
+                dryRun: false,
+            });
+            const entry = result.entries.find((e) => e.identity === '1025');
+            expect(entry?.outcome).toBe('superseded');
+            expect(result.failures.length).toBe(0);
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('an incomplete run-record pair with no durable pair fails with a re-record remedy', async () => {
+        const { root, scratch, dirs } = makeProject();
+        try {
+            writeFileSync(join(scratch, 'ghostly.md'), 'record without state');
+            const result = await migrateRunStorage({
+                dirs,
+                readRunStatus: statusMap({ ghostly: 'done' }),
+                dryRun: false,
+            });
+            expect(outcome(result, 'ghostly').outcome).toBe('failed');
+            expect(result.failures[0]?.reason).toContain('missing-required-item');
+            expect(result.failures[0]?.remedy).toBe('re-record the run');
         } finally {
             rmSync(root, { recursive: true, force: true });
         }
@@ -297,9 +690,13 @@ describe('migrateRunStorage (E71/1025)', () => {
             writeFileSync(join(scratch, '9001-verdict.json'), 'not json');
             writeFileSync(join(scratch, 'E71-feature-verification.json'), '{ truncated');
             const result = await migrateRunStorage({ dirs, readRunStatus: statusMap({}), dryRun: false });
-            expect(outcome(result, '9001').outcome).toBe('failed');
-            expect(outcome(result, 'E71').outcome).toBe('failed');
-            expect(result.failures.length).toBe(2);
+            expect(outcome(result, '9001').outcome).toBe('preserved');
+            expect(outcome(result, '9001').reason).toContain('unclassified');
+            expect(outcome(result, 'E71').outcome).toBe('preserved');
+            expect(outcome(result, 'E71').reason).toContain('unclassified');
+            expect(result.failures.length).toBe(0);
+            expect(existsSync(join(dirs.evidenceDir, '9001-verdict.json'))).toBeFalse();
+            expect(existsSync(join(dirs.evidenceDir, 'E71-feature-verification.json'))).toBeFalse();
         } finally {
             rmSync(root, { recursive: true, force: true });
         }
