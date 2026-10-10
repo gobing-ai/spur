@@ -1031,3 +1031,171 @@ describe('CLI subcommands over stubbed git/gh', () => {
         expect(help.stdout).toContain('Subcommands:');
     });
 });
+
+// ─── 1161: the PR head is revalidated on every poll and before any terminal output ───────────
+
+describe('wait revalidates the PR identity and head throughout polling (1161)', () => {
+    const HEAD_A = 'aaaa1111bbbb2222cccc3333dddd4444eeee5555';
+    const HEAD_B = 'bbbb2222cccc3333dddd4444eeee5555aaaa1111';
+    const PROMPT = 'pr view --json number,url,state,isDraft,headRefName,baseRefName,title,headRefOid';
+    const REVIEWS = /^api --method GET repos\/octo\/repo\/pulls\/[^/]+\/reviews --paginate --slurp$/;
+    const INLINE = /^api --method GET repos\/octo\/repo\/pulls\/[^/]+\/comments --paginate --slurp$/;
+
+    beforeEach(() => {
+        fix = mkdtempSync(join(tmpdir(), 'pr-review-1161-'));
+        writeFileSync(join(fix, 'calls.txt'), '');
+        setCommandRunner(makeStubRunner(fix));
+        seedHealthy(fix);
+    });
+
+    afterEach(() => {
+        setCommandRunner();
+        if (fix) rmSync(fix, { recursive: true, force: true });
+    });
+
+    const cleanReview = (head: string): string =>
+        `${JSON.stringify([
+            {
+                user: { login: 'chatgpt-codex-connector[bot]' },
+                commit_id: head,
+                submitted_at: '2026-08-12T00:00:00Z',
+                state: 'COMMENTED',
+                body: 'No actionable findings.',
+            },
+        ])}\n`;
+
+    /** Move the fixture's PR identity as seen by the NEXT `gh pr view`. */
+    const advance = (head: string, number = 7): void => {
+        const pr = JSON.parse(readFileSync(join(fix, 'pr.json'), 'utf8')) as Record<string, unknown>;
+        writeFileSync(join(fix, 'pr.json'), `${JSON.stringify({ ...pr, number, headRefOid: head })}\n`);
+    };
+
+    /** Stub wrapper: the Nth command matching `when` mutates the fixture before the stub runs. */
+    const stubWithMutation = (when: (argv: string) => boolean, mutate: () => void, nth = 1): void => {
+        const stub = makeStubRunner(fix);
+        let seen = 0;
+        setCommandRunner((cmd) => {
+            const argv = cmd.slice(1).join(' ');
+            if (when(argv) && ++seen === nth) mutate();
+            return stub(cmd);
+        });
+    };
+
+    const waitArgs = (extra: string[] = []): string[] => [
+        'wait',
+        '--head',
+        HEAD_A,
+        '--since',
+        '2026-08-01T00:00:00Z',
+        '--interval',
+        '1',
+        '--json',
+        ...extra,
+    ];
+
+    test('a head that advances between polls fails instead of returning CLEAN for the old head', () => {
+        // Poll 1 is still pending, so the only thing that can end the wait is poll 2 — where the
+        // head has already moved and `--head` no longer describes the branch's PR.
+        writeFileSync(join(fix, 'reviews.json'), '[]\n');
+        let views = 0;
+        const stub = makeStubRunner(fix);
+        setCommandRunner((cmd) => {
+            const argv = cmd.slice(1).join(' ');
+            if (argv === PROMPT && views++ === 1) advance(HEAD_B);
+            return stub(cmd);
+        });
+        const statusFile = join(fix, 'wait.status');
+        const res = runScript(waitArgs(['--timeout', '30', '--status-file', statusFile]));
+        expect(res.code).toBe(2);
+        expect(res.stdout).not.toContain('CLEAN');
+        expect(res.stdout).toContain('request a new review');
+        expect(readFileSync(statusFile, 'utf8').trim()).toBe('FAIL');
+        // No user-facing GitHub mutation is ever issued on the failure path.
+        expect(calls()).not.toContain('pr comment');
+        expect(calls()).not.toContain('push');
+    });
+
+    test('an old-head clean review exposed after the push never becomes CLEAN', () => {
+        writeFileSync(join(fix, 'reviews.json'), '[]\n');
+        let reviewFetches = 0;
+        const stub = makeStubRunner(fix);
+        setCommandRunner((cmd) => {
+            const argv = cmd.slice(1).join(' ');
+            if (REVIEWS.test(argv) && ++reviewFetches === 2) {
+                advance(HEAD_B);
+                writeFileSync(join(fix, 'reviews.json'), cleanReview(HEAD_A));
+            }
+            return stub(cmd);
+        });
+        const statusFile = join(fix, 'wait.status');
+        const res = runScript(waitArgs(['--timeout', '30', '--status-file', statusFile]));
+        expect(res.code).toBe(2);
+        expect(res.stdout).not.toContain('CLEAN');
+        expect(readFileSync(statusFile, 'utf8').trim()).toBe('FAIL');
+    });
+
+    test('a head that advances during the evidence fetch fails before FOUND is emitted', () => {
+        writeFileSync(
+            join(fix, 'inline.json'),
+            `${JSON.stringify([
+                {
+                    user: { login: 'codex[bot]' },
+                    commit_id: HEAD_A,
+                    created_at: '2026-08-12T00:00:00Z',
+                    path: 'src/a.ts',
+                    line: 9,
+                    body: '**P2** race',
+                    html_url: 'u',
+                },
+            ])}\n`,
+        );
+        stubWithMutation(
+            (argv) => INLINE.test(argv),
+            () => advance(HEAD_B),
+        );
+        const statusFile = join(fix, 'wait.status');
+        const res = runScript(waitArgs(['--timeout', '30', '--status-file', statusFile]));
+        expect(res.code).toBe(2);
+        expect(res.stdout).not.toContain('FOUND');
+        expect(readFileSync(statusFile, 'utf8').trim()).toBe('FAIL');
+    });
+
+    test('a PR that disappears mid-wait fails instead of polling on a stale identity', () => {
+        writeFileSync(join(fix, 'reviews.json'), '[]\n');
+        // The 2nd view is the loop's first poll: the initial view pinned the identity.
+        stubWithMutation(
+            (argv) => argv === PROMPT,
+            () => rmSync(join(fix, 'pr.json')),
+            2,
+        );
+        const res = runScript(waitArgs(['--timeout', '30']));
+        expect(res.code).toBe(2);
+        expect(res.stdout).toContain('no longer the branch');
+    });
+
+    test('a switched PR number on the same branch fails instead of retargeting', () => {
+        writeFileSync(join(fix, 'reviews.json'), '[]\n');
+        stubWithMutation(
+            (argv) => argv === PROMPT,
+            () => advance(HEAD_A, 8),
+            2,
+        );
+        const statusFile = join(fix, 'wait.status');
+        const res = runScript(waitArgs(['--timeout', '30', '--status-file', statusFile]));
+        expect(res.code).toBe(2);
+        expect(res.stdout).toContain('no longer the branch');
+        expect(readFileSync(statusFile, 'utf8').trim()).toBe('FAIL');
+    });
+
+    test('a stable head keeps the documented exits: CLEAN 0, timeout pending 3', () => {
+        writeFileSync(join(fix, 'reviews.json'), cleanReview(HEAD_A));
+        const clean = runScript(waitArgs(['--timeout', '5']));
+        expect(clean.code).toBe(0);
+        expect(JSON.parse(clean.stdout)).toMatchObject({ verdict: 'CLEAN', head: HEAD_A, findings: [] });
+        // No review for this head and the deadline already passed → one-poll timeout.
+        writeFileSync(join(fix, 'reviews.json'), '[]\n');
+        const pending = runScript(waitArgs(['--timeout', '0']));
+        expect(pending.code).toBe(3);
+        expect(JSON.parse(pending.stdout).verdict).toBe('TIMEOUT');
+    });
+});

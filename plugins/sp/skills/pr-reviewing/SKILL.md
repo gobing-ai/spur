@@ -112,9 +112,13 @@ unrelated uncommitted changes make safe editing or committing ambiguous.
 **Current-HEAD invariant.** Treat the PR's pushed `headRefOid` as the review identity. After every
 preflight, push, commit, and request, record the returned HEAD and require `wait`, `collect`, and
 the report to match that exact HEAD. A result for an older commit is stale; a result absent for the
-current HEAD is pending, not clean. Reject uncorrelated issue/conversation comments rather than
-using them to manufacture a current-HEAD result. In `fix` mode, discard the old result after the
-fix commit and judge only the forced re-review for the new pushed HEAD.
+current HEAD is pending, not clean. `wait` re-asserts this at two points, not one: at the start of
+every poll, and again immediately before it emits FOUND/CLEAN/TIMEOUT — a head that moved while the
+review was being fetched, or between polls, fails the wait (exit 2) instead of accepting an old-head
+result. The pinned identity is the PR number AND the expected head, so a different PR appearing on
+the branch is also a failure, never a silent retarget. Reject uncorrelated issue/conversation
+comments rather than using them to manufacture a current-HEAD result. In `fix` mode, discard the old
+result after the fix commit and judge only the forced re-review for the new pushed HEAD.
 
 **Reviewer authority.** Codex is an independent reviewer, not an authority. For every finding that
 may lead to a code change: inspect the referenced code, verify reachability and intended behavior,

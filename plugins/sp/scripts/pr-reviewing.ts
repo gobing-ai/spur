@@ -703,6 +703,26 @@ function cmdRequest(args: ParsedArgs): void {
     );
 }
 
+/**
+ * 1161 R1: re-read the PR and re-assert the pinned identity + expected head. Called at the start of
+ * every poll and again immediately before any FOUND/CLEAN/TIMEOUT status or output, because a head
+ * captured once at wait start lets a later push return CLEAN for an old commit. A vanished PR, a
+ * different PR on the branch, or a moved head is FAIL/exit2 through the existing error channel.
+ */
+function revalidateWaitTarget(args: ParsedArgs, number: number): GhPr {
+    const fresh = viewPr();
+    if (!fresh || fresh.number !== number) {
+        writeStatus(args, 'FAIL');
+        fail(
+            args,
+            `PR #${number} is no longer the branch's PR (view reports ${fresh ? `#${fresh.number}` : 'none'}) — request a fresh review`,
+            2,
+        );
+    }
+    requireExpectedHead(args, fresh);
+    return fresh;
+}
+
 function cmdWait(args: ParsedArgs): void {
     const since = args.flags.get('--since') ?? new Date().toISOString();
     const timeoutSec = Number(args.flags.get('--timeout') ?? '600');
@@ -715,36 +735,41 @@ function cmdWait(args: ParsedArgs): void {
         writeStatus(args, 'FAIL');
         fail(args, 'no PR for the current branch', 2);
     }
+    const number = pr.number; // 1161 R1: pinned — a switched PR number is a failure, not a retarget.
     requireExpectedHead(args, pr);
-    const deadline = Date.now() + timeoutSec * 1000;
+    const deadline = Date.now() + timeoutSec * 1000; // fixed once; validation never resets it
     for (;;) {
-        const reviews = fetchReviews(ctx, pr.number);
+        const observed = revalidateWaitTarget(args, number);
+        const reviews = fetchReviews(ctx, number);
         const findings = normalizeFindings(
             reviews,
-            fetchInlineComments(ctx, pr.number),
-            fetchIssueComments(ctx, pr.number),
+            fetchInlineComments(ctx, number),
+            fetchIssueComments(ctx, number),
             since,
-            pr.headRefOid,
+            observed.headRefOid,
         );
         if (findings.length > 0) {
+            revalidateWaitTarget(args, number); // pre-return recheck: never FOUND for a moved head
             writeStatus(args, 'FOUND');
             emit(args, { ok: true, verdict: 'FOUND', findings }, renderFindings(findings));
             return;
         }
-        if (hasCurrentCleanReview(reviews, since, pr.headRefOid)) {
+        if (hasCurrentCleanReview(reviews, since, observed.headRefOid)) {
+            const fresh = revalidateWaitTarget(args, number); // pre-return recheck: never CLEAN for a moved head
             writeStatus(args, 'CLEAN');
             emit(
                 args,
-                { ok: true, verdict: 'CLEAN', pr: pr.number, url: pr.url, head: pr.headRefOid, findings: [] },
-                `Codex review completed cleanly for HEAD ${pr.headRefOid.slice(0, 7)}.`,
+                { ok: true, verdict: 'CLEAN', pr: fresh.number, url: fresh.url, head: fresh.headRefOid, findings: [] },
+                `Codex review completed cleanly for HEAD ${fresh.headRefOid.slice(0, 7)}.`,
             );
             return;
         }
         if (Date.now() >= deadline) {
+            revalidateWaitTarget(args, number); // a head moved while pending is a failure, not a timeout
             writeStatus(args, 'TIMEOUT');
             emit(
                 args,
-                { ok: true, verdict: 'TIMEOUT', pr: pr.number, url: pr.url },
+                { ok: true, verdict: 'TIMEOUT', pr: number, url: pr.url },
                 `No Codex review within ${timeoutSec}s — still pending. Collect later with /sp:dev-pr-review collect.\nPR: ${pr.url}`,
             );
             throw new ScriptExit('', 3, args.booleans.has('--json'));
