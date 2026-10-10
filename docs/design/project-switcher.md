@@ -83,11 +83,13 @@ entry becomes stale and any lingering serve process becomes an orphaned backgrou
 
 **The `refreshProjects` operation** (`ProjectRegistry.refreshProjects`):
 1. **Directory existence check**: check `existsSync(normalizeProjectPath(entry.path))`. If the path exists, pass.
-2. **Process termination for missing paths**: if the directory does not exist and `entry.port > 0`:
-   - Probe if the port is currently live via `isPortLive(entry.port)`.
-   - If occupied, resolve the listening PID (`lsof -t -iTCP:<port> -sTCP:LISTEN` or `fuser`).
-   - Filter out `process.pid` and `process.ppid` to prevent accidental self-termination.
-   - Send `SIGTERM`, wait for a bounded duration (up to 2s), and escalate to `SIGKILL` only if the port remains bound.
+2. **Ownership-verified process termination for missing paths** (1156): if the directory does not exist and `entry.port > 0`, route the listener through the shared `stopRegisteredProject` helper (`packages/app/src/services/project-stop.ts`):
+   - Probe if the port is currently live via `isPortLive(entry.port)`; an absent listener needs no signal.
+   - Resolve the listening PID (`lsof -t -iTCP:<port> -sTCP:LISTEN` or `fuser`), rejecting `process.pid`, `process.ppid`, and PIDs <= 1.
+   - Require the local HTTP identity over one loopback host (127.0.0.1, falling back to ::1, never mixing hosts): `GET /api/health` must report `service: 'spur'` and `GET /api/project` must report the exact normalized registry path; malformed/absent/mismatched identity or a network failure fails closed.
+   - Rediscover the listener PID unchanged immediately before each signal; a changed PID is a replacement and is never signaled.
+   - Send `SIGTERM`, wait for a bounded duration (up to 2s), and escalate to `SIGKILL` only when ownership fully revalidates with the same PID. A `terminated` record is reported only after the original listener is observed gone — a foreign or unverified listener survives unsignaled while the deleted registration is still purged.
+   - This is local ownership verification, not authentication against a malicious local server; a portable PID-reuse race remains between the final check and the signal.
 3. **Atomic registry purge**: remove the missing project entry from `projects.json` under `withLock`.
 
 **Invocation seams**:
@@ -199,7 +201,7 @@ Registration preserves an existing project name because fleet mailbox IDs use th
 | `remove <name\|path>` | Drop entry (does not kill a running process — warn if port > 0) |
 | `list [--json] [--fleet]` | Table / JSON of name, path, port, running; `--fleet` (0835/0836/0858) also resolves each project's `agent.fleet` declaration, orchestrator binding and capacity under the same verb |
 | `start <name\|path> [--port]` | Spawn `spur serve` in project path (detached child); wait until health OK; update registry |
-| `stop <name\|path>` | SIGTERM process listening on registered port (or recorded pid if we add it later); set port 0 |
+| `stop <name\|path>` | Ownership-verified stop (1156): SIGTERM the registered port's listener only after it proves `service:spur` and the exact project path over loopback HTTP with a stable PID; refuse (exit 1, port preserved, never `Stopped`) for foreign/unverified listeners; an absent listener is an idempotent success that sets port 0 |
 
 `--json` on list/start/stop for machine use. Noun name **`projects`** (plural) matches multi-entry
 resource; keep `spur serve` as the low-level launcher.

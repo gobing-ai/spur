@@ -78,10 +78,14 @@ async function agentList(enveloped?: boolean): Promise<string> {
 
 async function agentDoctor(enveloped?: boolean): Promise<string> {
     const out = capture();
-    const svc = new AgentService({ cwd: process.cwd(), env: {}, output: out });
+    // Hermetic scratch root: the doctor embeds `.spur/run` observations (attribution
+    // ledger counts, refresh-job status) resolved from cwd — a repo-root cwd leaks live
+    // run artifacts into the byte-identical baseline (task 1156 gate failure).
+    const scratch = await mkdtemp(join(tmpdir(), 'spur-0697-'));
+    const svc = new AgentService({ cwd: scratch, env: {}, output: out });
     await svc.doctor({ json: true, ...(enveloped === undefined ? {} : { enveloped }) }, {
         doctorRunner: { runAll: async () => DOCTOR_RESULTS },
-        fileSystem: createNodeFileSystem(await mkdtemp(join(tmpdir(), 'spur-0697-'))),
+        fileSystem: createNodeFileSystem(scratch),
         now: () => 0,
     } as never);
     return out.messages.join('\n');

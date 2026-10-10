@@ -32,6 +32,10 @@ export interface RefreshProjectsOptions {
     killTimeoutMs?: number;
     /** Optional ProcessExecutor to use for process inspection (default: NodeProcessExecutor). */
     processExecutor?: ProcessExecutor;
+    /** Injectable fetch implementation for ownership probes (tests, 1156). */
+    fetchImpl?: typeof fetch;
+    /** Per-request timeout in milliseconds for the ownership probes (default: 1000, 1156). */
+    requestTimeoutMs?: number;
 }
 
 /** Test override function type for process killing. */
@@ -574,13 +578,18 @@ export class ProjectRegistry {
 
     /**
      * Verify all registered project folders exist on disk; purge missing ones.
-     * For purged entries with port > 0, if the port is currently live, discover
-     * its listening process ID and terminate it cleanly (SIGTERM -> bounded wait -> SIGKILL).
+     * For purged entries with port > 0 and a live port, route the listener through
+     * the shared ownership-verified stop (1156): only a proven Spur server serving
+     * this exact project path is signaled, and a terminated record is reported
+     * only after the original listener is observed gone.
      */
     async refreshProjects(options?: RefreshProjectsOptions): Promise<RefreshProjectsResult> {
         const terminate = options?.terminateProcesses ?? true;
         const killTimeoutMs = options?.killTimeoutMs ?? 2000;
         const executor = options?.processExecutor ?? new NodeProcessExecutor();
+        // Dynamic import: project-stop depends on this module's process helpers, so a
+        // static import would create a cycle. Resolved once per refresh, cached after.
+        const { stopRegisteredProject } = await import('./project-stop');
 
         return this.withLock(async () => {
             const data = this.readRaw();
@@ -595,28 +604,14 @@ export class ProjectRegistry {
                 } else {
                     removed.push(project);
                     if (terminate && project.port > 0) {
-                        const live = await isPortLive(project.port);
-                        if (live) {
-                            const pid = await findListeningPid(project.port, executor);
-                            if (pid !== undefined) {
-                                sendSignalToPid(pid, 'SIGTERM');
-                                let stillLive = true;
-                                const pollInterval = 50;
-                                const maxTicks = Math.ceil(killTimeoutMs / pollInterval);
-                                for (let tick = 0; tick < maxTicks; tick++) {
-                                    await new Promise((r) => setTimeout(r, pollInterval));
-                                    stillLive = await isPortLive(project.port);
-                                    if (!stillLive) break;
-                                }
-
-                                if (stillLive) {
-                                    sendSignalToPid(pid, 'SIGKILL');
-                                    await new Promise((r) => setTimeout(r, pollInterval));
-                                    terminated.push({ pid, port: project.port, signal: 'SIGKILL' });
-                                } else {
-                                    terminated.push({ pid, port: project.port, signal: 'SIGTERM' });
-                                }
-                            }
+                        const stop = await stopRegisteredProject(project, {
+                            processExecutor: executor,
+                            killTimeoutMs,
+                            fetchImpl: options?.fetchImpl,
+                            requestTimeoutMs: options?.requestTimeoutMs,
+                        });
+                        if (stop.stopped && stop.terminated) {
+                            terminated.push(stop.terminated);
                         }
                     }
                 }

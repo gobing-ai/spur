@@ -429,7 +429,18 @@ describe('ProjectRegistry', () => {
                 },
             });
 
-            const result = await registry.refreshProjects({ killTimeoutMs: 200 });
+            // 1156: termination now requires ownership proof — the listener must
+            // answer service:spur and this exact project path over loopback HTTP.
+            const ownedFetch = (async (input: string | URL) => {
+                const url = new URL(String(input));
+                const body =
+                    url.pathname === '/api/health'
+                        ? { status: 'ok', service: 'spur' }
+                        : { name: 'Zombied Serve', path: normalizeProjectPath(missingDir) };
+                return { ok: true, status: 200, json: async () => body } as unknown as Response;
+            }) as unknown as typeof fetch;
+
+            const result = await registry.refreshProjects({ killTimeoutMs: 200, fetchImpl: ownedFetch });
             expect(result.removed).toHaveLength(1);
             expect(result.removed[0]?.name).toBe('Zombied Serve');
             expect(result.terminated).toHaveLength(1);
@@ -440,23 +451,69 @@ describe('ProjectRegistry', () => {
             expect(remaining).toHaveLength(0);
         });
 
-        it('escalates to SIGKILL if port remains bound after killTimeoutMs', async () => {
-            const missingDir = join(tempDir, 'stubborn-serve');
-            await registry.upsert({ name: 'Stubborn Serve', path: missingDir, port: 3789 });
+        // 1156 AC1 regression: before ownership verification, refresh SIGTERMed whatever
+        // PID owned the stale port — including a foreign service (proven in review a71c).
+        it('purges the deleted registration but never signals a foreign listener', async () => {
+            const missingDir = join(tempDir, 'deleted-foreign-port');
+            await registry.upsert({ name: 'Foreign Port', path: missingDir, port: 3457 });
 
-            // Port stays in-use even after SIGTERM
-            setPortProbeForTests(async (port) => (port === 3789 ? 'in-use' : 'available'));
-
+            setPortProbeForTests(async (port) => (port === 3457 ? 'in-use' : 'available'));
             const signalsReceived: Array<{ pid: number; signal: string }> = [];
             setProcessHelpersForTests({
-                pidFinder: (port) => (port === 3789 ? 88888 : undefined),
+                pidFinder: (port) => (port === 3457 ? 99998 : undefined),
                 processKiller: (pid, signal) => {
                     signalsReceived.push({ pid, signal });
                     return true;
                 },
             });
 
-            const result = await registry.refreshProjects({ killTimeoutMs: 100 });
+            // A non-Spur service answers the port: identity proof fails closed.
+            const foreignFetch = (async (input: string | URL) => {
+                const url = new URL(String(input));
+                const body =
+                    url.pathname === '/api/health' ? { status: 'ok', service: 'nginx' } : { error: 'Not Found' };
+                return { ok: true, status: 200, json: async () => body } as unknown as Response;
+            }) as unknown as typeof fetch;
+
+            const result = await registry.refreshProjects({ killTimeoutMs: 100, fetchImpl: foreignFetch });
+            expect(result.removed).toHaveLength(1);
+            expect(result.removed[0]?.name).toBe('Foreign Port');
+            expect(result.terminated).toHaveLength(0);
+            expect(result.terminatedProcesses).toHaveLength(0);
+            expect(signalsReceived).toEqual([]);
+            expect(registry.readRaw().projects).toHaveLength(0);
+        });
+
+        it('escalates to SIGKILL if port remains bound after killTimeoutMs', async () => {
+            const missingDir = join(tempDir, 'stubborn-serve');
+            await registry.upsert({ name: 'Stubborn Serve', path: missingDir, port: 3789 });
+
+            // Port stays in-use after SIGTERM; the verified listener dies on SIGKILL.
+            let liveState = true;
+            setPortProbeForTests(async (port) => (port === 3789 && liveState ? 'in-use' : 'available'));
+
+            const signalsReceived: Array<{ pid: number; signal: string }> = [];
+            setProcessHelpersForTests({
+                pidFinder: (port) => (port === 3789 ? 88888 : undefined),
+                processKiller: (pid, signal) => {
+                    signalsReceived.push({ pid, signal });
+                    if (signal === 'SIGKILL') {
+                        liveState = false;
+                    }
+                    return true;
+                },
+            });
+
+            const ownedFetch = (async (input: string | URL) => {
+                const url = new URL(String(input));
+                const body =
+                    url.pathname === '/api/health'
+                        ? { status: 'ok', service: 'spur' }
+                        : { name: 'Stubborn Serve', path: normalizeProjectPath(missingDir) };
+                return { ok: true, status: 200, json: async () => body } as unknown as Response;
+            }) as unknown as typeof fetch;
+
+            const result = await registry.refreshProjects({ killTimeoutMs: 100, fetchImpl: ownedFetch });
             expect(result.removed).toHaveLength(1);
             expect(result.terminated).toHaveLength(1);
             expect(result.terminated[0]).toEqual({ pid: 88888, port: 3789, signal: 'SIGKILL' });

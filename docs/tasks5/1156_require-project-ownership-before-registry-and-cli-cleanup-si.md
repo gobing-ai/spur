@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: Require project ownership before registry and CLI cleanup signal a listener
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-10-10T07:29:30.396Z
-updated_at: "2026-10-10T16:28:18.810Z"
+updated_at: "2026-10-10T23:26:00.132Z"
 feature_id: K3
 
 ac_altitude: task-local
 ac_numbering: task-local
 priority: P1
 estimate_hours: 5
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1156-verdict.json
 ---
 
 ## 1156. Require project ownership before registry and CLI cleanup signal a listener
@@ -27,11 +29,11 @@ Registry list automatically terminates whatever PID owns a stale deleted project
 
 ### Requirements
 
-- [ ] R1. Require verified Spur server and exact project ownership before signaling any process in refresh or CLI stop; make unverified listeners non-destructive
-- [ ] R2. Existing project listings and verified owned-server cleanup remain supported, and foreign listeners survive
-- [ ] R3. Add the reproducing regression and validate the affected callers through the existing test seams.
-- [ ] R4. Before each SIGTERM/SIGKILL, verify service:spur and exact canonical project path over the same loopback host, and rediscover the listener PID unchanged. Missing/malformed/mismatched identity, network timeout, self/parent PID or PID change means no signal. Do not signal a replacement listener while waiting/escalating.
-- [ ] R5. Report termination only after a signal succeeded and the original listener disappeared. Explicit stop of a live unverified listener uses the existing error/exit-1 response and leaves its registry port intact; absent listener is an idempotent successful stop and clears the stale port. Refresh may purge a deleted registration but leaves terminated empty for unverified/failed cleanup.
+- [x] R1. Require verified Spur server and exact project ownership before signaling any process in refresh or CLI stop; make unverified listeners non-destructive
+- [x] R2. Existing project listings and verified owned-server cleanup remain supported, and foreign listeners survive
+- [x] R3. Add the reproducing regression and validate the affected callers through the existing test seams.
+- [x] R4. Before each SIGTERM/SIGKILL, verify service:spur and exact canonical project path over the same loopback host, and rediscover the listener PID unchanged. Missing/malformed/mismatched identity, network timeout, self/parent PID or PID change means no signal. Do not signal a replacement listener while waiting/escalating.
+- [x] R5. Report termination only after a signal succeeded and the original listener disappeared. Explicit stop of a live unverified listener uses the existing error/exit-1 response and leaves its registry port intact; absent listener is an idempotent successful stop and clears the stale port. Refresh may purge a deleted registration but leaves terminated empty for unverified/failed cleanup.
 
 ### Acceptance Criteria
 
@@ -84,15 +86,63 @@ Scenario: AC3 — Changed or unknown identity blocks every signal (req: R3, R4, 
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Implemented the shared ownership-verified stop (1156) so no registry or CLI cleanup path signals an unverified listener.
+
+**File:line change map**
+
+- `packages/app/src/services/project-stop.ts:172` — new `stopRegisteredProject(entry, options)`: absent listener → idempotent `stopped:true`; verified listener → SIGTERM, bounded wait, SIGKILL only after full ownership revalidation with the same PID; `terminated` reported only after the original listener is observed gone; every failure mode returns `{stopped:false, reason}` for the caller's existing error channel.
+- `packages/app/src/services/project-stop.ts:122` — internal `verifyProjectListener`: discovers the PID (rejecting undefined, ≤1, self, parent), probes identity, then rediscovers the PID unchanged immediately before signaling.
+- `packages/app/src/services/project-stop.ts:83` — internal `probeOwnershipIdentity`: `GET /api/health` (`service==='spur'`) and `GET /api/project` (normalized path exact match) over one loopback host (127.0.0.1 → [::1] fallback, never mixed), `redirect:'error'`, finite 1s timeout; malformed/absent/mismatched identity or network failure fails closed.
+- `packages/app/src/services/project-stop.ts:52` — `setProjectStopFetchForTests` process-wide fetch seam (CLI tests cannot pass options through `main()`).
+- `packages/app/src/services/project-registry.ts:592,607` — `refreshProjects` routes deleted-entry cleanup through the helper (dynamic import avoids a module cycle with the process helpers); purged registrations still purge, `terminated` only carries confirmed outcomes. `RefreshProjectsOptions` gains `fetchImpl`/`requestTimeoutMs` (packages/app/src/services/project-registry.ts:34-35).
+- `apps/cli/src/commands/projects.ts:428` — `projects stop` replaces the unverified fuser kill loop with `stopRegisteredProject`; refusal throws through the existing `{ok:false,error}` / `Error:` + exit-1 channel (port preserved, never prints `Stopped`); absent listener keeps the existing success shape and clears the port.
+- `packages/app/src/index.ts:600-605` — facade exports `stopRegisteredProject`, its option/result types, and the fetch seam.
+- `docs/design/project-switcher.md:87-93,202` — owning satellite updated: ownership-verified termination algorithm and the new `stop` verb contract.
+
+**Tests**
+
+- `packages/app/tests/services/project-stop.test.ts` (new, 18 cases): foreign service, other-project Spur, missing/malformed identity, non-OK health, both-host timeout, IPv4→IPv6 fallback, absent listener, unsafe self/parent/system PID, no PID, PID switch before TERM and before KILL, identity loss before KILL, SIGTERM/SIGKILL success, failed SIGTERM, SIGKILL survivor, path normalization equivalence.
+- `packages/app/tests/services/project-registry.test.ts` — kill tests now supply ownership fetch; new AC1 regression: foreign listener on a deleted project's port is purged-but-never-signaled.
+- `apps/cli/tests/commands/projects.test.ts` — stop success via seams, idempotent absent-listener stop, foreign-listener refusal (exit 1, no `Stopped`, port preserved, no signals), self-PID refusal, clean with verified termination, clean purging a foreign listener with empty `terminatedProcesses`. The removed fuser-loop test was replaced by the refusal matrix (that code path no longer exists).
+
+Residual (documented in module header and Q&A): local ownership verification is not authentication against a malicious local server, and a portable PID-reuse race remains between the final check and the signal.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Both cleanup paths route through the ownership-verified helper (packages/app/src/services/project-registry.ts:604-615, apps/cli/src/commands/projects.ts:428-444; guards at packages/app/src/services/project-stop.ts:122-147,190-217); unverified listeners are never signaled. Executed: project-stop.test.ts 18 pass / project-registry.test.ts 29 pass / projects.test.ts 23 pass (0 fail), plus full gate PASS. |
+| R2 | MET | Existing success shapes preserved (apps/cli/src/commands/projects.ts:436-444 unchanged success branch; refusal uses the pre-existing error channel at :445-457); listings unchanged except refresh internals (packages/app/src/services/project-registry.ts:423-441). Executed: projects.test.ts 23 pass covering existing text/JSON success shapes; full gate PASS. |
+| R3 | MET | Regression tests added and executed green: packages/app/tests/services/project-stop.test.ts (18 cases), AC1 foreign-listener regression at packages/app/tests/services/project-registry.test.ts:455-481, CLI refusal matrix at apps/cli/tests/commands/projects.test.ts:599-661 — 70/70 pass, 0 fail, all through injected fetch/executor/pid/signal seams with fake PIDs. |
+| R4 | MET | Pre-signal verification chain at source: service==='spur' + exact normalized path over one loopback host (packages/app/src/services/project-stop.ts:93-118), PID guards (:130-137), PID rediscovery before TERM (:142-146), full revalidation before KILL (:205-211). Executed: project-stop.test.ts 18 pass (PID switch before TERM/KILL, self/parent, malformed identity, timeout cases). |
+| R5 | MET | Terminated records gated on observed disappearance (packages/app/src/services/project-stop.ts:196-199,214-217); CLI refusal preserves port + exit 1 (apps/cli/src/commands/projects.ts:430-435); absent-listener idempotence (project-stop.ts:178-183); refresh purges with empty terminated on refusal (project-registry.ts:610-613). Executed: projects.test.ts 23 pass (refusal: no Stopped, port preserved; absent-listener idempotent success); implement-stage public-surface probe against a throwaway root: foreign listener → cli-exit=1 with refusal error and port preserved, listener still alive; after listener exit → cli-exit=0, Stopped, port cleared. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Foreign listeners survive automatic and explicit cleanup (req: R1, R3, R4, R5) | MET | test | project-registry.test.ts:455-481 (refresh purges foreign listener, zero signals, empty terminated) 29 pass; projects.test.ts:599-640 (exit 1, no Stopped, port preserved, zero signals) 23 pass; project-stop.test.ts:147-169 (foreign service / other-path refusals) 18 pass. Plus live probe: python http.server on the registered port → exit 1 refusal, listener alive, port preserved. |
+| AC2 — Verified cleanup keeps existing success responses (req: R2, R3, R4, R5) | MET | test | project-stop.test.ts:116-132,235-251 (verified TERM and KILL-escalation with confirmed termination) 18 pass; projects.test.ts:410-452 (existing stopped JSON + Stopped project text shapes) and :572-597 (idempotent absent-listener stop, port cleared, zero signals) 23 pass. Live probe: absent listener → exit 0, Stopped, port cleared. |
+| AC3 — Changed or unknown identity blocks every signal (req: R3, R4, R5) | MET | test | project-stop.test.ts:171-233,253-304 (malformed JSON, non-OK health, both-host timeout, self/parent/system PID, no PID, PID switch before TERM and before KILL, identity loss before KILL, failed TERM, KILL survivor — all refusal with no terminated record) 18 pass. Guards at packages/app/src/services/project-stop.ts:130-146,205-217. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+Second-pass multi-dimensional review (functional traceability + SECUA + architecture depth) by an independent fresh reviewer after the doc-fix remediation. Verdict: PASS — no P1/P2 findings; the first pass's only OPEN item (spur-cli reference drift) is verified fixed and faithful; implementation matches R1–R5 and AC1–AC3 with direct source evidence.
+
+| Priority | Finding | Location | Disposition |
+| --- | --- | --- | --- |
+| P3 (minor) | refreshProjects holds the advisory registry lock across up to 4×1s HTTP probe timeouts plus 2×2s kill waits per stale entry; list()/board /api/projects route through it. Bounded and fail-closed; probe window is new, lock-held kill wait pre-existed | packages/app/src/services/project-registry.ts:586-615 | DEFER — revisit with sibling task 1157's lock work; restructuring probes outside withLock would reopen the check-to-act race this task froze |
+| P4 (advisory) | Feature file K3 AC I2 still says "the listening process receives a termination signal" unconditionally; 1156 deliberately narrows to verified-owned listeners. Feature records are tool-owned (T4) — reconcile at feature wrap | docs/features/K3_project-registry-freshness-purge-non-existent-projects-kill-orphaned-serve-ports-and-clean-worktree-leftovers.md:47-53 | ACCEPTED |
+| P4 (advisory) | Test-only seam setProjectStopFetchForTests exported from the public facade; consistent with the established setPortProbeForTests/setProcessHelpersForTests pattern and required because CLI tests cannot pass options through main() | packages/app/src/index.ts:600-605 | ACCEPTED |
+| P4 (advisory) | Drive-by test-hermeticity fix (scratch-root cwd for agent doctor keeping .spur/run artifacts out of the byte-identical baseline); outside 1156's core scope but minimal, commented, and justified by an observed gate failure in this run tree | packages/app/tests/services/json-envelope-adoption.test.ts:81-88 | ACCEPTED |
+
+Residual risks (honestly documented in-module and in Q&A): local identity proof is not authentication against a malicious local server; the portable PID-reuse check-to-signal race remains (no pidfd redesign per Q&A); a replacement listener binding the port instantly after a verified kill yields a conservative refusal rather than a false terminated record (fail-closed, per R5).
+
+Correct-with-evidence highlights: spur-cli reference remediation verified faithful (plugins/sp/skills/spur-cli/references/projects.md:25,39-40,79-82 vs project-stop.ts:122-145, apps/cli/src/commands/projects.ts:428-434); ownership algorithm matches the frozen Design (PID guards, single-host identity probes, PID rediscovery before signaling); server wire shapes verified at source (apps/server/src/modules/health/index.ts:60,89-91); R5 confirmed-disappearance-only termination records preserved.
 
 ### References
 
@@ -121,4 +171,7 @@ Planning-only receipt: no implementation pipeline or behavior-change verificatio
 ### History
 
 - 2026-10-10T07:29:34.355Z backlog → todo (system)
+- 2026-10-10T17:03:28.935Z todo → wip (system)
+- 2026-10-10T23:14:39.734Z wip → testing (system)
+- 2026-10-10T23:26:00.127Z testing → done (system)
 

@@ -7,6 +7,7 @@ import {
     type OrchestratorBinding,
     ProjectRegistry,
     startRegisteredProject,
+    stopRegisteredProject,
 } from '@gobing-ai/spur-app';
 import { createMigratedDb, type DbAdapter, type ProjectStrategy, ProjectStrategyDao } from '@gobing-ai/spur-domain';
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
@@ -418,36 +419,17 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
                 }
 
                 if (entry.port > 0) {
-                    // Signal process(es) bound to the port. Best-effort: never
-                    // SIGTERM ourselves (or our parent) — tests and in-process
-                    // listeners share the port with the CLI, and Linux `fuser`
-                    // correctly returns the host PID, which would suicide the
-                    // suite (CI exit 143). Use ProcessExecutor (not Bun.spawn).
-                    try {
-                        const result = await new NodeProcessExecutor().run({
-                            command: 'fuser',
-                            args: [`${entry.port}/tcp`],
-                            forceBuffered: true,
-                            rejectOnError: false,
-                        });
-                        const outputStr = `${result.stdout}\n${result.stderr}`;
-                        const pids = outputStr
-                            .trim()
-                            .split(/\s+/)
-                            .map(Number)
-                            .filter((n) => Number.isInteger(n) && n > 1);
-                        const self = process.pid;
-                        const parent = process.ppid;
-                        for (const pid of pids) {
-                            if (pid === self || pid === parent) continue;
-                            try {
-                                process.kill(pid, 'SIGTERM');
-                            } catch {
-                                // ESRCH / EPERM — ignore per-pid
-                            }
-                        }
-                    } catch {
-                        // Best-effort process kill (fuser missing, etc.)
+                    // 1156: the shared ownership-verified stop — a live listener is
+                    // signaled only after it proves service:spur and this exact
+                    // project path over loopback HTTP, with the PID rediscovered
+                    // unchanged. A foreign/unverified listener is refused (exit 1,
+                    // port preserved, never reported Stopped); an absent listener is
+                    // an idempotent success that clears the stale port.
+                    const result = await stopRegisteredProject(entry, {
+                        processExecutor: new NodeProcessExecutor(),
+                    });
+                    if (!result.stopped) {
+                        throw new Error(result.reason ?? `Refused to stop project "${entry.name}"`);
                     }
                     await registry.setPort(entry.path, 0);
                 }
