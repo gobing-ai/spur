@@ -8,7 +8,7 @@
  * straight from the two SKILL.md documents. Deeper fixture/live parity assertions are wired
  * by 0517 (per the 2026-08-11 decomposition).
  */
-import { describe, expect, spyOn, test } from 'bun:test';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
@@ -74,26 +74,31 @@ Options:
 });
 
 describe('cli-surface — captureCliSurface live source-local capture', () => {
+    let rootSurface: ReturnType<typeof captureCliSurface>;
+
+    beforeAll(() => {
+        rootSurface = captureCliSurface();
+    }, 15_000); // 1150 R3: root capture measured at 429ms isolated, 3850ms under load fixture
+
     test('root capture returns sorted commands, flags, and full provenance', () => {
-        const surface = captureCliSurface();
-        expect(surface.commands.length).toBeGreaterThan(0);
-        expect(surface.commands).toContain('task');
-        expect(surface.commands).toEqual([...surface.commands].sort());
-        expect(surface.flags).toContain('--help');
-        expect(surface.provenance.entryPath.endsWith('apps/cli/src/index.ts')).toBe(true);
-        expect(surface.provenance.packageName).toBe('@gobing-ai/spur');
-        expect(surface.provenance.packageVersion).toMatch(/^\d+\.\d+\.\d+/);
+        expect(rootSurface.commands.length).toBeGreaterThan(0);
+        expect(rootSurface.commands).toContain('task');
+        expect(rootSurface.commands).toEqual([...rootSurface.commands].sort());
+        expect(rootSurface.flags).toContain('--help');
+        expect(rootSurface.provenance.entryPath.endsWith('apps/cli/src/index.ts')).toBe(true);
+        expect(rootSurface.provenance.packageName).toBe('@gobing-ai/spur');
+        expect(rootSurface.provenance.packageVersion).toMatch(/^\d+\.\d+\.\d+/);
     });
 
     test('noun and noun+verb captures resolve their own surfaces', () => {
         const noun = captureCliSurface(['task']);
         expect(noun.commands).toContain('update');
-        expect(noun.provenance.packageVersion).toBe(captureCliSurface().provenance.packageVersion);
+        expect(noun.provenance.packageVersion).toBe(rootSurface.provenance.packageVersion);
 
         const verb = captureCliSurface(['task', 'update']);
         expect(verb.flags).toContain('--section');
         expect(verb.flags).toContain('--json');
-    });
+    }, 15_000); // 1150 R3: noun/verb captures measured at 986ms isolated, 4896ms under load fixture
 });
 
 describe('cli-surface — captureCliSurface failure branches', () => {
