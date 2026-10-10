@@ -2,7 +2,7 @@
 name: session-review
 description: "Review the active coding-agent session: separate resolved from open issues with evidence, propose bounded improvements. With --fix auto (alias --triage), apply pure-doc / 1–2-line fixes inline and file the rest as tasks; with --fix all, fix every actionable finding inline and file none. Triggers: review this session, wrap-up, triage findings."
 license: Apache-2.0
-version: 1.2.0
+version: 1.3.0
 metadata:
   author: spur
   platforms: "claude-code,codex,openclaw,opencode,antigravity,pi"
@@ -151,10 +151,30 @@ step 4 excludes. Use `n/a` for any value not supported by the measurement.
 | --- | --- | --- | --- | --- |
 
 Evidence names the tool result, verification command, or concrete repository state visible in the
-session. Do not list ordinary implementation steps as issues. **Confidence** is `HIGH`, `MEDIUM`, or
-`LOW` for that row's claim, with its grounds in the cell (a level without grounds is not
-verification); any API/library statement in a row cites the installed source as `path:line` or a URL,
-and a claim the session could not ground is written `LOW` with the missing evidence named.
+session. Do not list ordinary implementation steps as issues.
+
+**Confidence** is `HIGH`, `MEDIUM`, or `LOW` for that row's claim. The level is **derived from the
+check that produced the claim, never assessed from how the row reads**, and the cell carries that
+verifier (e.g. `HIGH — gate exit 0, /tmp/g0.log re-run this session`). Add the row's **falsifier**
+when the level is not `HIGH`: what would have made it fail, or what moves it up. The same ladder
+grades this report's Open-issues table.
+
+| Level | Verifies when | Not this |
+| --- | --- | --- |
+| `HIGH` | An executed check in this session produced the result and its raw output is reachable (command + exit code, test counts, query row, gate log). Re-runnable now. | The code or change "looks correct"; a claim asserted only in prose. |
+| `MEDIUM` | The claim is inferred from observed facts, rests on prior-session or delegated evidence, or names state that moved after the check (stale by construction). Name which of the three. | Presenting an inference as an observation. |
+| `LOW` | No executable check was run. Name the missing evidence **and** the command that would ground it. | Dropping the row instead of marking it. |
+
+Two guards against level inflation:
+
+- Evidence that cannot be re-run, or that is only the agent's own summary, **caps the row at
+  `MEDIUM`** — a re-run is what promotes it.
+- An all-`HIGH` multi-finding review is a signal the ladder was not applied, not a clean session.
+  Where every row genuinely is `HIGH`, the cells show distinct check results rather than repeated
+  phrasing.
+
+Any API/library statement in a row cites the installed source as `path:line` or a URL, and a claim
+the session could not ground is written `LOW` with the missing evidence named.
 
 ### Open issues and risks
 
