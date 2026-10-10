@@ -908,7 +908,7 @@ states:
             options:
                 command: >-
                     V=".spur/run/$wbs-verdict.json"; [ -f "$V" ] || exit 0;
-                    jq --arg ack "$ackLowConfidence" '. + {checks: ((.checks // []) | map(select(.name != "confidence"))) + [{name: "confidence", status: (if ((.confidence // "LOW") != "LOW" or $ack == "true") then "pass" else "warn" end), evidence: ((.confidence // "LOW (absent from artifact)") + (if $ack == "true" then " (operator-acknowledged)" else "" end))}]}' "$V" > "$V.tmp" && mv "$V.tmp" "$V";
+                    jq --arg ack "$ackLowConfidence" '. + {checks: (((.checks // []) | map(select(.name != "confidence"))) + [{name: "confidence", status: (if ((.confidence // "LOW") != "LOW" or $ack == "true") then "pass" else "warn" end), evidence: ((.confidence // "LOW (absent from artifact)") + (if $ack == "true" then " (operator-acknowledged)" else "" end))}])}' "$V" > "$V.tmp" && mv "$V.tmp" "$V";
                     printf 'confidence: %s (ack=%s)\n' "$(jq -r '.confidence // "LOW (absent)"' "$V")" "$ackLowConfidence" >> ".spur/run/$wbs-test-gate.log";
                     exit 0
           # (e) one jq mutation binds the verdict to the proof digest (0703 R3; runId 0730 §B.2 /

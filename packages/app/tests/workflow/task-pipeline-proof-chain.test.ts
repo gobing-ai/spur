@@ -496,14 +496,14 @@ describe('task-pipeline busy-retry classifiers, done guard projection, route-id 
 // like HIGH. These pin the gate that now reads it, and the operator acknowledgement that is the
 // only way to certify a verdict the verifier would not stand behind.
 describe('task-pipeline confidence gate (session finding after 1088)', () => {
-    const runSh = (script: string, cwd: string, env?: Record<string, string>): { code: number } => {
+    const runSh = (script: string, cwd: string, env?: Record<string, string>): { code: number; stderr: string } => {
         const proc = Bun.spawnSync(['sh', '-c', script], {
             cwd,
             env: env === undefined ? { ...getEnvVars() } : { ...getEnvVars(), ...env },
             stdout: 'pipe',
             stderr: 'pipe',
         });
-        return { code: proc.exitCode };
+        return { code: proc.exitCode, stderr: proc.stderr.toString() };
     };
 
     /** Render the verify → record guard with the run's vars substituted for literals. */
@@ -630,12 +630,19 @@ describe('task-pipeline confidence gate (session finding after 1088)', () => {
                 // The graph guard's decision is the contract the row must agree with.
                 expect(runSh(renderVerifyGuard(dir, ack), dir).code === 0, `guard ${label}`).toBe(admitted);
                 const row = renderConfidenceRow(ack);
-                expect(runSh(row, dir).code, `row ${label}`).toBe(0);
+                const res = runSh(row, dir);
+                expect(res.code, `row ${label}: ${res.stderr}`).toBe(0);
                 const artifact = JSON.parse(readFileSync(join(dir, '.spur', 'run', 't9002-verdict.json'), 'utf8')) as {
                     requirements: unknown[];
                     acceptanceCriteria: unknown[];
                     checks: Array<{ name?: string; status?: string; evidence?: string }>;
                 };
+                expect(artifact.checks.length, `confidence check recorded for ${label}: ${res.stderr}`).toBeGreaterThan(
+                    0,
+                );
+                expect(artifact.checks.find((c) => c.name === 'confidence')?.status, `confidence status ${label}`).toBe(
+                    admitted ? 'pass' : 'warn',
+                );
                 expect(
                     aggregateVerifyVerdict({
                         requirements: artifact.requirements as never,
