@@ -4,11 +4,13 @@ name: Session-timeline must segment operator skill invocations on pi, not count 
 status: todo
 template: issue
 created_at: 2026-10-10T02:49:17.069Z
-updated_at: "2026-10-10T02:49:49.859Z"
+updated_at: "2026-10-10T03:31:47.929Z"
 feature_id: E5
 
 ac_altitude: task-local
 ac_numbering: task-local
+priority: P2
+estimate_hours: 2
 ---
 
 ## 1151. Session-timeline must segment operator skill invocations on pi, not count them as injected bodies
@@ -52,104 +54,156 @@ inline --worktree --wrap` (7619 chars total). The distinguishing signal is text 
 tag, with one caveat: a slash invocation with **no** arguments would carry none either, so the rule
 needs a decision rather than a bare suffix test.
 
+**Refinement 2026-10-09 — pi does not inject skill bodies as user messages at all.** Census of every
+local pi transcript (`~/.pi/agent/sessions/*/*.jsonl`: 2,153 files, 2,452 user rows whose first text
+block opens `<skill name="`): **2,450 carry operator arguments after `</skill>`; the 2 argument-less
+rows are also operator invocations** — the assistant's next turn reads "The user has triggered the
+rd3-anti-hallucination skill…" (`--Users-robin-xprojects-magnifier--/2026-04-22T01-24-15-964Z_…jsonl`)
+and likewise for `codex-history-ingest` (`--Users-robin-xprojects-spur--/2026-05-30T23-20-47-949Z_…jsonl`).
+No row in any file is a harness-injected body; every wrapper row has exactly one text block. The 1138
+fixture row (`plugins/sp/tests/fixtures/pi-session.jsonl:32`) is synthetic and has no real counterpart.
+
+So the bug is wider than "invocations with arguments are dropped": the `injectedPrompts` class has no
+true positives on pi. Every `<skill name=` user row is an operator prompt.
+
+**Location correction.** The predicate is `isInjectedPrompt` in the shared
+`plugins/sp/lib/transcript.ts:102`, called from `promptText` (`:83`) and from
+`plugins/sp/scripts/session-timeline.ts:83,160`. `promptText` is also consumed by
+`plugins/sp/scripts/run-summary.ts:130` (excludes prompt rows from a run window's accumulation), so the
+change reaches both scripts and both committed `.mjs` twins.
+
 ### Requirements
 
-- [ ] R1. **An operator skill invocation opens a segment on pi.** A pi user message whose text is
-  a `<skill name="…" …>…</skill>` wrapper **followed by non-whitespace text** is segmented like any
-  other operator prompt, and that trailing text (the invocation's arguments) is the segment's prompt.
-- [ ] R2. **An injected skill body is still never segmented.** A pi user message that is *only* the
-  wrapper (no text after the closing tag) keeps counting in `injectedPrompts` and opens no segment —
-  task 1138's AC2/R2 behaviour is preserved verbatim, and a Claude transcript's `injectedPrompts`
-  stays absent.
-- [ ] R3. **The no-argument case is decided, not guessed.** The rule states what it does with a
-  `<skill …>` wrapper that carries no trailing arguments (today: injected), and the decision is
-  recorded in the task's Q&A with its reasoning — a slash invocation with no arguments is
-  indistinguishable from an injected body by text alone, so the choice must be explicit.
-- [ ] R4. **Fixtures and pins cover both directions.** `plugins/sp/tests/fixtures/pi-session.jsonl`
-  gains an invocation-shaped row (wrapper + trailing args) and the session-timeline suite asserts:
-  the invocation opens a segment carrying its args, the body-only row does not, and the segment
-  count/token accounting of the existing fixture rows is unchanged.
+- [ ] R1. **Every pi skill invocation opens a segment.** A pi `role:"user"` row whose first text block,
+  after leading whitespace, opens with `<skill name="X"` is an operator prompt. Its segment prompt is
+  `/X` followed by the trimmed text after the last `</skill>` when non-empty (e.g.
+  `/sp-dev-runall --tasks 1135,1142 --auto …`), else `/X` alone. The wrapper body never appears in the
+  prompt excerpt.
+- [ ] R2. **Delete the injected-body class.** Remove `isInjectedPrompt` (`lib/transcript.ts`), the
+  pi-only `injectedPrompts` timeline field and its counter (`session-timeline.ts:44,78-87,128`), and
+  the `, N injected` fragment of the zero-segment reason (`session-timeline.ts:160-161`). Claude output
+  is unchanged (it never had the field).
+- [ ] R3. **The argument-less decision is recorded** in Q&A and in the `promptText` doc comment: an
+  argument-less wrapper is an operator invocation (census evidence above), rendered `/X`.
+- [ ] R4. **Fixture and pins reflect real shapes.** In `plugins/sp/tests/fixtures/pi-session.jsonl`,
+  replace the synthetic body-only row (`new00002`) with a real-shaped invocation
+  (`<skill name="sp-dev-run" location="/x/SKILL.md">\nbody\n</skill>\n\n--triage`) and add one
+  argument-less wrapper row. The 1138 "injected skill body is counted, never segmented" tests are
+  replaced (they pinned the wrong behaviour), the segment-count assertions are updated to the new
+  count, and the "operator note … `<skill name=` later in the body" row still segments as plain text.
+- [ ] R5. **Prose owners follow.** Update the injected-body sentences in
+  `plugins/sp/skills/session-review/SKILL.md:105`, `plugins/sp/commands/dev-review-session.md:21`, and
+  `docs/design/session-review.md:62-66` to the invocation rule.
+- [ ] R6. **Sibling consumer and twins.** `run-summary` tests stay green unchanged (a user row carries no
+  usage, so reclassifying it as a prompt does not move tokens); regenerate both twins with
+  `superskill script convert sp session-timeline.ts` and `superskill script convert sp run-summary.ts`.
 
 ### Acceptance Criteria
 
 ```gherkin
 Scenario: AC1 — A skill invocation with arguments becomes an operator segment (req: R1)
-  Given a pi transcript row whose user text is a skill wrapper followed by "--triage"
+  Given a pi row whose user text is a skill wrapper named "sp-dev-run" followed by "--triage"
   When session-timeline builds the timeline
-  Then that row opens a segment whose prompt contains "--triage"
-  And it is not counted in injectedPrompts
+  Then that row opens a segment whose prompt is "/sp-dev-run --triage"
+  And the prompt excerpt does not contain the wrapper body
 ```
 
 ```gherkin
-Scenario: AC2 — An injected skill body stays injected (req: R2)
-  Given a pi transcript row whose user text is only the skill wrapper
+Scenario: AC2 — An argument-less wrapper is still an operator segment (req: R1, R3)
+  Given a pi row whose user text is only a skill wrapper named "rd3-anti-hallucination"
   When session-timeline builds the timeline
-  Then it opens no segment
-  And injectedPrompts includes it
-  And a Claude transcript still reports no injectedPrompts field
+  Then that row opens a segment whose prompt is "/rd3-anti-hallucination"
 ```
 
 ```gherkin
-Scenario: AC3 — The reviewed session's own transcript attributes every prompt (req: R1, R4)
-  Given a transcript with five skill-invocation prompts and four plain prompts
-  When session-timeline runs
-  Then it reports nine segments
-  And no prompt is counted as injected
+Scenario: AC3 — The injected-body class is gone (req: R2)
+  Given the pi fixture and the Claude fixture
+  When session-timeline builds each timeline
+  Then neither timeline has an "injectedPrompts" field
+  And a zero-segment pi reason names format and row count without an "injected" count
+  And "isInjectedPrompt" no longer exists in plugins/sp/lib or plugins/sp/scripts
 ```
 
 ```gherkin
-Scenario: AC4 — The rule for a wrapper without arguments is documented (req: R3)
-  Given the task's Q&A and the `isInjectedPrompt` doc comment
-  Then both state the chosen behaviour for an argument-less wrapper
+Scenario: AC4 — Plain operator text mentioning <skill is unaffected (req: R4)
+  Given the fixture row "operator note: the <skill name=\"x\"> wrapper above is injected…"
+  When session-timeline builds the timeline
+  Then that row opens a segment with its text unchanged
+```
+
+```gherkin
+Scenario: AC5 — Real transcript attributes every prompt (req: R1)
+  Given ~/.pi/agent/sessions/--Users-robin-xprojects-spur-new--/2026-10-09T18-40-54-199Z_01a121f7-dbb6-763c-bb33-714a4899f716.jsonl
+  When "bun plugins/sp/scripts/session-timeline.ts --transcript <that file>" runs
+  Then it reports 12 segments: one prompt starting "/sp-dev-run " and two starting "/sp-dev-runall --tasks"
+```
+
+```gherkin
+Scenario: AC6 — Twins and sibling stay consistent (req: R6)
+  Given the regenerated session-timeline.mjs and run-summary.mjs
+  When the plugin script-contract and run-summary tests run
+  Then they pass
+```
+
+```gherkin
+Scenario: AC7 — Prose owners describe the invocation rule (req: R5)
+  Given session-review SKILL.md, dev-review-session.md and docs/design/session-review.md
+  When each is searched for "injectedPrompts"
+  Then none matches
+  And each states that a pi skill wrapper row is an operator invocation rendered "/<name> <args>"
 ```
 
 ### Q&A
 
 <!-- Clarifications and triage decisions. Keep empty if none. -->
 
+#### Q&A entry — 2026-10-10T03:31:28.408Z
+
+- **Q: Argument-less wrapper — injected or invocation?** A: Invocation. 2,452/2,452 observed wrapper
+  rows are operator-typed; the 2 argument-less ones are answered as "the user has triggered the
+  skill". Rendered `/X` so the excerpt is readable and distinct.
+- **Q: Keep `injectedPrompts` as an always-0 field for compatibility?** A: No — delete. It is a
+  pi-only field added two days ago by 1138, read by no code (only prose in R5's three owners), and a
+  field that can never be non-zero is misleading evidence. If a future pi version injects bodies, the
+  marker will be a record field, not text, and gets its own task.
+- **Q: Why `/X` and not the raw trailing text?** A: The skill name is the stage label the review
+  groups by (`--group`); arguments alone ("--triage") lose which command ran.
+
 ### Design
 
-- **The discriminator.** Text after the closing `</skill>` tag, trimmed and non-empty. Measured on
-  this session: the invocation row ends `…</skill>\n\n--tasks 1135,1142 --auto --next --agent inline
-  --worktree --wrap`; the 1138 fixture's injected row is `  <skill name="sp-dev-run"
-  location="/x/SKILL.md">\ninjected body\n</skill>` with nothing after the tag.
-- **Shape of the change.** One predicate in `isInjectedPrompt`
-  (`plugins/sp/scripts/session-timeline.ts`) plus the segment's `prompt` extraction, which must yield
-  the trailing argument text rather than the wrapper body — a wrapper-only row never reaches it.
-- **Why the caveat matters (R3).** A slash invocation with no arguments carries nothing after the
-  tag, so a pure suffix test would file it as injected. That is the current behaviour for that case
-  and this task keeps it, but the decision is recorded rather than left implicit; distinguishing it
-  would need a harness-side marker (a record field), which is a separate change.
-- **Non-goals.** No change to the Claude Code path, to `injectedPrompts` semantics for body-only
-  rows, or to token counting. No change to who owns the measurement contract (E5).
-- **Failure inventory (write before code):** an invocation whose arguments are whitespace-only; a
-  wrapper split across content blocks; a body-only row that nonetheless contains a stray `</skill>`
-  in its text; a segment whose prompt must not include the wrapper body; a Claude row that happens to
-  contain `<skill name=` (must not enter this branch at all).
+- **Shape of the change.** In `promptText` (`plugins/sp/lib/transcript.ts:77`), the pi branch replaces
+  `if (isInjectedPrompt(row)) return undefined;` with: take the first text block; if it (left-trimmed)
+  matches `^<skill name="([^"]+)"`, return `` `/${name}` `` + (`text.slice(lastIndexOf('</skill>') + 8).trim()`
+  prefixed by a space when non-empty). Otherwise return the text as today. Delete `isInjectedPrompt`.
+  In `session-timeline.ts`, drop the injected branch, counter, field, and reason fragment.
+- **Non-goals.** Claude Code path unchanged (its injected bodies are `isMeta`). No token-accounting
+  change. No new CLI flag.
+- **Failure inventory (write before code):** wrapper with whitespace-only trailing text → `/X`;
+  trailing text containing a second `</skill>` → use the last one; wrapper with no closing tag → `/X`
+  plus nothing (do not dump the body); `name` with no closing quote → not a wrapper, plain text;
+  Claude row containing `<skill name=` → never enters the pi branch; plain operator text that merely
+  mentions `<skill` later → plain text (fixture row `new00001`).
 
 ### Plan
 
-1. Write the failing fixture case first: add the invocation-shaped row to
-   `plugins/sp/tests/fixtures/pi-session.jsonl` and assert the new segment + unchanged injected count.
-2. Split the predicate: keep the prefix test for "looks like a wrapper", add the trailing-text rule,
-   and extract the argument text as the segment prompt.
-3. Record the argument-less-wrapper decision in the task Q&A and in the predicate's doc comment (R3).
-4. Re-run `plugins/sp/tests/session-timeline.test.ts`, then `bun run spur-check` once.
-5. Re-run this session's own review measurement against `$PI_SESSION_FILE` and record the segment
-   count (9) in Testing.
+1. Fixture first: edit `plugins/sp/tests/fixtures/pi-session.jsonl` (R4) and rewrite the 1138
+   injected-body tests in `plugins/sp/tests/session-timeline.test.ts` (~lines 252, 291-320) to AC1-AC4.
+   Run `(cd plugins/sp && bun test tests/session-timeline.test.ts)` → red.
+2. Implement the Design change in `plugins/sp/lib/transcript.ts` and `plugins/sp/scripts/session-timeline.ts`.
+   Re-run → green; run `(cd plugins/sp && bun test tests/run-summary.test.ts)` unchanged-green.
+3. Update the three prose owners (R5).
+4. Regenerate twins: `superskill script convert sp session-timeline.ts && superskill script convert sp run-summary.ts`;
+   `git diff --stat plugins/sp/scripts/*.mjs` shows only those two.
+5. AC5 manual measurement against the named transcript; record segment count in `## Testing`.
+6. `bun run spur-check` once; commit `fix(sp): segment pi skill invocations as operator prompts (1151)`.
 
 ### Root Cause
 
-`isInjectedPrompt` classifies by prefix only:
-
-```js
-return typeof text === "string" && text.replace(/^\s+/, "").startsWith('<skill name="');
-```
-
-pi uses one record shape for both cases (`type: "message"`, `message.role: "user"`), so the prefix is
-not a discriminator between a skill body the harness injected and a slash invocation the operator
-typed. The harness appends the invocation's arguments after the wrapper's closing `</skill>`, which
-the injected bodies do not carry — that suffix is what the prefix test ignores.
+Task 1138 assumed pi delivers skill bodies as user messages (it has no `isMeta`) and classified every
+user row starting `<skill name="` as injected. pi in fact records the **operator's** `/skill` invocation
+in that wrapper shape — the skill body is expanded into the wrapper and the arguments follow
+`</skill>` — and does not inject bodies as separate user rows (census in Background). The prefix test
+therefore discards exactly the prompts that start each batch.
 
 ### Solution
 

@@ -4,7 +4,7 @@ name: Stop the full quality gate from failing on load-sensitive test timeouts
 status: todo
 template: standard
 created_at: 2026-10-10T02:48:42.957Z
-updated_at: "2026-10-10T02:49:24.014Z"
+updated_at: "2026-10-10T03:32:34.908Z"
 feature_id: H1
 
 ac_altitude: task-local
@@ -43,26 +43,50 @@ closed; it is recorded here only so the two causes are not conflated.
 gate by adding the light tier. It did not change the full gate's load sensitivity, which is what
 this task owns.
 
+**Refinement 2026-10-09 — budget facts corrected against the code.** The table's Budget column was
+inverted: the two 20 s/30 s victims run on **declared** budgets, the two ~5 s victims on bun's
+**undeclared** 5 000 ms default.
+
+| Victim (current name) | Declared budget | Source |
+| --- | --- | --- |
+| `shell.test.ts` › `a var carrying shell metacharacters cannot execute from a guard (0435)` | `SPAWN_TIMEOUT_MS = 20_000` | `packages/app/tests/workflow/guards/shell.test.ts:14` |
+| `proof-fingerprint.test.ts` › `captures the digest into the declared var` | `slowTest` = `30_000` | `packages/app/tests/workflow/actions/proof-fingerprint.test.ts:14` (landed 29dee6d70, 18:49 on 10-09 — in force during the failing run) |
+| `cli-surface.test.ts` › `noun and noun+verb captures resolve their own surfaces` | none → bun default 5 000 ms | `plugins/sp/tests/helpers/cli-surface.test.ts:88` |
+| `inline-run-trace.test.ts` › renamed by 1136 (1d4f1a680) to `--ok is required and exact; --duration-ms is optional but malformed values are usage errors (exit 2)` | none → bun default 5 000 ms | `plugins/sp/tests/inline-run-trace.test.ts:198-271` |
+
+Same-file sibling with the identical shape: `inline-run-trace.test.ts:363` "a malformed invocation is a
+usage error (exit 2), never a silent emission" — a loop of `runScript` spawns on the bun default. Every
+other test in that file already declares `60_000`.
+
+Fresh isolated baseline (2026-10-09 20:28 PDT, host load average 11.7): `shell.test.ts` +
+`proof-fingerprint.test.ts` = 22 tests in 1.95 s; `cli-surface.test.ts` + `inline-run-trace.test.ts` =
+33 tests in 14.0–19.5 s. All pass.
+
+**What this changes.** Only the two bun-default victims are plausible budget/work problems. The two
+declared-budget victims stalled **15–70× past their isolated time** — no measured budget explains
+that, so raising them is forbidden by R2 until the load fixture reproduces and diagnoses the stall.
+
 ### Requirements
 
-- [ ] R1. **Reproduce the class deterministically.** A load fixture (concurrent CPU/system load, e.g.
-  a bounded script that runs N busy processes, or a second suite invocation) under which the current
-  suite fails at least one of the four named tests, and under which the fixed suite passes. The
-  fixture and its captured output are the task's evidence, not a narrative.
-- [ ] R2. **Fix the contention, do not weaken the assertions.** For each victim, choose and record
-  one of: (a) an explicit, justified budget where the test's real work genuinely exceeds the
-  default; (b) remove the accidental contention in the test itself (unnecessary spawn, serialized
-  wait, oversized fixture); (c) bound the host-side concurrency for the spawn-heavy files. Forbidden:
-  `.skip`, deleting an assertion, a budget with no measured basis, or any change that lets a genuine
-  hang pass.
-- [ ] R3. **Every budget change cites the measurement it came from** — the slowest observed duration
-  (full-gate runs and isolated runs both), so the margin is derived rather than guessed.
-- [ ] R4. **Re-verify under load.** Three consecutive full `bun run spur-check` runs against the load
-  fixture all exit 0 with zero test failures; the three logs are stored as evidence.
-- [ ] R5. **A real hang still fails.** A seeded indefinite hang in one test still fails the gate,
-  proving the bounds were tightened with evidence rather than removed.
-- [ ] R6. **No new surface.** No new CLI verb or flag, no new dependency; the change stays inside the
-  affected test files (plus a workspace `bunfig.toml` test setting only if R2(c) is chosen).
+- [ ] R1. **Reproduce the class deterministically.** A load fixture (N busy processes, N =
+  2 × `getconf _NPROCESSORS_ONLN`, killed on exit) under which the current tree fails at least one
+  named victim. The fixture command and pre-fix capture are recorded in `## Testing`.
+- [ ] R2. **Fix the contention, do not weaken the assertions.** Per victim: (a) remove accidental work
+  (redundant spawn), then (b) a measured explicit budget. Forbidden: `.skip`, deleting an assertion, a
+  budget with no measured basis, raising a declared budget on a victim whose stall is ≥ 5× its
+  isolated time, or anything that lets a genuine hang pass.
+- [ ] R3. **Every budget change cites its measurement** (slowest full-gate-under-fixture and isolated
+  durations) in a one-line comment beside the number.
+- [ ] R4. **Re-verify under load.** Three consecutive full `bun run spur-check` runs under the fixture,
+  zero failures; logs stored as evidence.
+- [ ] R5. **A real hang still fails.** A seeded `await new Promise(() => {})` in one changed test fails
+  the gate and names that test.
+- [ ] R6. **No new surface.** Test files only (plus at most one workspace `bunfig.toml` test setting);
+  no CLI verb/flag, no dependency, no production code.
+- [ ] R7. **Declared-budget victims are diagnosed, not padded.** For `shell.test.ts` (0435) and
+  `proof-fingerprint` (captures the digest): if the fixture reproduces the stall, record where the time
+  goes (spawn wait vs. CPU) and fix that cause; if it does not reproduce in 3 fixture runs, record
+  "not reproduced" with the logs and leave the test unchanged.
 
 ### Acceptance Criteria
 
@@ -70,8 +94,8 @@ this task owns.
 Scenario: AC1 — The class reproduces under the load fixture (req: R1)
   Given the load fixture is running
   When the full "bun run spur-check" suite runs on the pre-fix tree
-  Then at least one of the four named tests fails
-  And the same test passes in isolation within seconds
+  Then at least one of the four named tests fails on a timeout
+  And the same test passes in isolation
 ```
 
 ```gherkin
@@ -79,12 +103,11 @@ Scenario: AC2 — The fixed gate is green under the same load (req: R2, R4)
   Given the load fixture is running
   When the full suite runs three consecutive times on the fixed tree
   Then every run exits 0 with zero failing tests
-  And no test reports a timeout
 ```
 
 ```gherkin
 Scenario: AC3 — A genuine hang still fails the gate (req: R5)
-  Given a test seeded with an indefinite hang
+  Given a changed test seeded with an indefinite hang
   When the full suite runs
   Then the gate exits non-zero and names that test
 ```
@@ -92,17 +115,22 @@ Scenario: AC3 — A genuine hang still fails the gate (req: R5)
 ```gherkin
 Scenario: AC4 — Every budget is measurement-backed (req: R3)
   Given the changed test files
-  When each modified budget is inspected
-  Then it cites the slowest observed duration it was derived from
-  And each affected test completes inside its budget when run in isolation
+  When each new or modified budget is inspected
+  Then a comment beside it cites the slowest observed duration it was derived from
 ```
 
 ```gherkin
 Scenario: AC5 — No surface or dependency was added (req: R6)
   Given the final diff
-  When it is inspected
   Then it touches only test files (and at most one workspace test setting)
-  And no CLI verb, flag, or dependency was added
+```
+
+```gherkin
+Scenario: AC6 — Declared-budget victims are diagnosed or left unchanged (req: R7)
+  Given the shell.test.ts 0435 and proof-fingerprint "captures the digest" tests
+  When their diff and the Testing section are inspected
+  Then each either has a recorded stall cause with a matching fix
+  Or is recorded "not reproduced" with logs and has no diff
 ```
 
 ### Q&A
@@ -111,55 +139,58 @@ Scenario: AC5 — No surface or dependency was added (req: R6)
      condition. Not a parking lot for open questions — an unanswered question here means the task
      is not ready to hand off. Keep empty if none. -->
 
+#### Q&A entry — 2026-10-10T03:32:34.087Z
+
+- **Q: Should we raise the 20 s/30 s budgets?** A: No. Both stalled 15–70× past isolated time; a
+  budget that absorbs that would also absorb a real hang. R7 diagnoses or leaves them.
+- **Q: Bound test concurrency in bunfig?** A: No — the suite is already serial; the contention is
+  external host load (load average ~11 from parallel agents). Out of scope.
+- **Q: Add a rule banning spawning tests on the bun default budget?** A: Deferred; add only if this
+  class recurs after 1150 lands.
+- **Q: Run order relative to 1151/1152?** A: Last — its three under-load full gates should run on a
+  tree that already contains the other two.
+
 ### Design
 
-**Classifier first.** The four victims are two different shapes, and only one of them is a budget
-problem:
+**Classification (corrected).**
 
-| Victim | Slowest full-gate | Isolated | Reading |
+| Victim | Budget | Shape | Lever |
 | --- | --- | --- | --- |
-| `proof-fingerprint > captures the digest…` | 30 000 ms (hit the cap) | ~4 s for 13 tests | shell-out (git) work; the cap is the default, not a chosen budget |
-| `cli-surface > …resolve their own surfaces` | 5786 ms (over 5 s) | 4.99 s | spawns the CLI twice; sits AT the declared budget, so any load tips it |
-| `inline-run-trace > --ok and --duration-ms…` | 5242 ms (over 5 s) | 9.89 s for 14 tests | each case spawns a process; the declared 5 s is per-file budget for one case |
-| `EnvShellGuardRunner > metacharacters…` | 20 000 ms (hit the cap) | 286 ms | the isolated run is 70× under; this is contention, not work |
+| `cli-surface` › `…resolve their own surfaces` | bun default 5 s | 3 cold CLI spawns (`Bun.spawnSync([bun, 'run', apps/cli/src/index.ts, …, '--help'])`, `plugins/sp/tests/helpers/cli-surface.ts:108`); the middle `captureCliSurface()` re-captures the root only to compare `packageVersion` | (a) capture the root once per describe (`beforeAll`) and reuse it in both tests → 2 spawns; then (b) a measured budget |
+| `inline-run-trace:198` (renamed) and sibling `:363` | bun default 5 s | 4+ sequential `runScript` spawns each | (b) declare the file's existing `60_000` convention with a measurement comment |
+| `proof-fingerprint` › `captures the digest…` | 30 s declared | git shell-out; ~2 s file isolated | R7: diagnose under fixture or leave |
+| `shell.test.ts` › 0435 metacharacters | 20 s declared | one `printf` spawn through `NodeProcessExecutor` (execa); ~0.3 s isolated | R7: diagnose under fixture or leave |
 
-So: `EnvShellGuardRunner` is contention (fix the test or its scheduling, not the budget); the two
-5 s cases are under-budgeted single cases in a spawn-heavy file (justify a budget); the 30 s case
-hit a default nobody chose (state a budget with a measurement behind it).
+**Why lever 3 (bunfig concurrency) is out.** The suite already runs serially in one `bun test`
+process (`package.json` `test`), and the host-wide gate lock already serializes full gates — the load
+comes from other host processes, which no repo setting can bound. Dropped from scope.
 
-**Prefer determinism levers, in this order.**
-1. Remove accidental contention (e.g. a spawn that can be resolved in-process, a fixture that can be
-   reused, a redundant second CLI invocation).
-2. Give the file/case an explicit budget derived from R3's measurement.
-3. Only if 1–2 cannot hold under load, bound host-side concurrency for the spawn-heavy files
-   (workspace `bunfig.toml`), and record why.
+**Invariants.** No assertion relaxed, no `.skip`, budget provenance beside every number, hang still
+fails (AC3). The 1129-class assertion failure (`AC5/R5: a digest mismatch names drifted paths`, caused
+by a foreign fast-forward into the working tree) stays out of scope.
 
-**Invariants.** The timeout outcome stays an assertion: after the change, an indefinite hang must
-still fail the gate (AC3). No test loses coverage, no assertion is relaxed, no `.skip`. Budgets carry
-their provenance in a one-line comment beside the number so the next reader can re-derive them.
+**Load fixture (scratch, not committed):**
 
-**Blast radius.** Test files only (four named victims + any sibling in the same files), plus a
-workspace test setting only under lever 3. No production code, no workflow YAML, no public surface.
-
-**Evidence to keep.** The load-fixture script, the pre-fix failure capture, the three post-fix gate
-logs, and the seeded-hang failure log — all in the task's Testing section.
+```sh
+N=$(( $(getconf _NPROCESSORS_ONLN) * 2 )); pids=""
+for i in $(seq $N); do (while :; do :; done) & pids="$pids $!"; done
+trap 'kill $pids' EXIT
+bun run spur-check 2>&1 | tee "$LOG"
+```
 
 ### Plan
 
-1. **Write the load fixture first.** A bounded script (e.g. `N` CPU-bound processes for the duration,
-   or a second suite invocation) whose intensity makes at least one named victim fail on the current
-   tree. Record the pre-fix capture. Do not tune the fixture until a victim actually fails — a fixture
-   that cannot reproduce the class proves nothing.
-2. **Classify each victim** with two measurements: full-gate duration under the fixture and isolated
-   duration. Write both into the task's Testing section.
-3. **Fix in the order above** (de-contention → measured budget → concurrency bound), smallest diff per
-   victim, budget provenance as a one-line comment.
-4. **Verify the class is gone**: three consecutive full `bun run spur-check` runs under the fixture,
-   all exit 0; keep the logs.
-5. **Prove the bound still bites**: seed an indefinite hang in one test, run the gate, confirm it
-   fails and names the test; remove the seed.
-6. **Final gate**: `bun run spur-check` once on the final tree, plus each changed test in isolation to
-   record the margin (AC4).
+1. **Reproduce (R1).** Run the fixture with `bun run spur-check` on the pre-fix tree; if no victim
+   fails, run the four victim files under the fixture (`(cd plugins/sp && bun test …)`,
+   `(cd packages/app && bun test …)`) to get per-file failure. Save the capture.
+2. **Measure.** For each victim: isolated duration and duration under fixture → `## Testing` table.
+3. **Fix the bun-default victims.** `cli-surface.test.ts`: hoist one root capture; add measured budget.
+   `inline-run-trace.test.ts:198,363`: add `60_000` with a measurement comment.
+4. **R7 for declared-budget victims.** Only if step 1 reproduced their stall: instrument
+   (timestamps around the spawn) to locate the wait, fix that cause. Otherwise record "not reproduced".
+5. **Verify.** Three full gates under the fixture (R4); seeded hang (R5) then remove it; final
+   `bun run spur-check` without fixture.
+6. Commit `test: …load-sensitive budgets (1150)`.
 
 ### Solution
 

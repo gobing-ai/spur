@@ -4,11 +4,13 @@ name: Wrapup repair step must tolerate a missing learnings status file
 status: todo
 template: issue
 created_at: 2026-10-10T02:50:01.484Z
-updated_at: "2026-10-10T02:51:07.319Z"
+updated_at: "2026-10-10T03:30:44.619Z"
 feature_id: H1
 
 ac_altitude: task-local
 ac_numbering: task-local
+priority: P1
+estimate_hours: 1
 ---
 
 ## 1152. Wrapup repair step must tolerate a missing learnings status file
@@ -44,40 +46,88 @@ workflow failed: wrapup-pipeline -> repair — Command "mkdir -p .spur/run && R=
 reaching `repair` — its `doc-sync` agent failed with `402 … requires more credits` and the run
 terminated `failed-check`. Only the `repair`-entered case above exercises the missing-status-file path.
 
+**Refinement 2026-10-09 — the defect is deterministic, not intermittent.** The only writer of
+`.spur/run/<run>-wrapup-learnings.status` is `learnings-validate`'s shell
+(`config/workflows/wrapup-pipeline.yaml:278`). The `doc-sync → repair` contract-violation edge
+(`:529`) bypasses `learnings-validate`, so on that edge the status file **never** exists and the
+`repair` shell exits 1 on **every** entry — the ADR-118/0871 repair lane has never completed for its
+primary input. Only the `learnings-validate → repair` (invalid-shape) entry, which always has the file,
+works today. Reproduced in isolation:
+
+```sh
+sh -c 'V="$(cat /nonexistent 2>/dev/null)" && echo ok'           # prints nothing, exit 1
+sh -c 'V="$(cat /nonexistent 2>/dev/null || true)" && echo ok'   # ok
+```
+
+The existing pin `packages/app/tests/workflow/wrapup-pipeline.test.ts` › "0871 contract-first routing"
+› "repair is cheap (shell only)…" only asserts the command *text* (`toContain('wrapup-repair.status')`)
+and never executes it, which is why the regression shipped green.
+
 ### Requirements
 
 - [ ] R1. **A missing learnings status file is not a step failure.** With
-  `.spur/run/<run>-wrapup-learnings.status` absent, the `repair` shell still writes
-  `.spur/run/<run>-wrapup-repair.status` (the `contract-violation:` line) and exits 0, so the wrap
-  proceeds to `doc-tripwire` and `metrics-record` as its description declares.
-- [ ] R2. **The three observed inputs keep their distinct outcomes.** An absent status file, an
-  explicit `invalid-learnings-shape` value, and any other value each write their own repair-status
-  line (narration-only vs contract-violation), and each exits 0.
-- [ ] R3. **A pin covers the absent-file case**, shown to fail against the current chain (the
-  `&&`-joined `cat`), and green after the change.
+  `.spur/run/<run>-wrapup-learnings.status` absent (the `doc-sync → repair` contract-violation entry),
+  the `repair` shell writes `.spur/run/<run>-wrapup-repair.status` with the `contract-violation:` line
+  and exits 0, so the wrap proceeds to `doc-tripwire` as the state description declares.
+- [ ] R2. **Both reachable entries keep their distinct outcomes.** Absent file → `contract-violation:`
+  line; `invalid-learnings-shape` (the `learnings-validate → repair` entry) → `invalid-learnings-shape:`
+  line. Any other value (not reachable today: `PASS` routes to `learnings-append`) falls to the
+  `contract-violation:` line. All exit 0.
+- [ ] R3. **The pin executes the shell, not its text.** A test runs the `repair` `onEnter` command via
+  `sh -c` in a temp cwd with `__runId` in env (the existing 0783 R2 `runGuard` pattern in the same file)
+  for the absent and `invalid-learnings-shape` cases, asserting exit 0 and the status line. Shown red
+  against the current chain before the fix.
+- [ ] R4. **Write failure stays loud.** If the repair status cannot be written (unwritable `.spur/run`),
+  the shell still exits non-zero — the `|| true` applies to the read only.
 
 ### Acceptance Criteria
 
 ```gherkin
 Scenario: AC1 — An absent learnings status file does not fail the repair lane (req: R1, R3)
-  Given a wrapup run whose doc-sync wrote no learnings status file
-  When the repair state's shell runs
-  Then it writes a repair status naming the contract violation
-  And it exits 0
-  And the wrap continues to doc-tripwire
+  Given a temp cwd with no ".spur/run/r1-wrapup-learnings.status"
+  When the repair state's onEnter shell runs with __runId=r1
+  Then it exits 0
+  And ".spur/run/r1-wrapup-repair.status" starts with "contract-violation:"
 ```
 
 ```gherkin
-Scenario: AC2 — The narration-only shape is still distinguished (req: R2)
-  Given the status file contains "invalid-learnings-shape"
+Scenario: AC2 — The narration-only shape is still distinguished (req: R2, R3)
+  Given ".spur/run/r2-wrapup-learnings.status" contains "invalid-learnings-shape"
+  When the repair shell runs with __runId=r2
+  Then it exits 0
+  And ".spur/run/r2-wrapup-repair.status" starts with "invalid-learnings-shape:"
+```
+
+```gherkin
+Scenario: AC3 — The pin was red before the fix (req: R3)
+  Given the pre-fix wrapup-pipeline.yaml
+  When the AC1 test runs
+  Then it fails on exit status 1
+```
+
+```gherkin
+Scenario: AC4 — A failed status write is still loud (req: R4)
+  Given ".spur/run" exists but is not writable
   When the repair shell runs
-  Then the repair status names invalid-learnings-shape
-  And it exits 0
+  Then it exits non-zero
 ```
 
 ### Q&A
 
 <!-- Clarifications and triage decisions. Keep empty if none. -->
+
+#### Q&A entry — 2026-10-10T03:30:43.623Z
+
+- **Q: `|| true` on the read, or `[ -f ] && V=…`?** A: `|| true` — one token, keeps the existing
+  three-way `if` and vocabulary; an absent file and an empty file both mean "not classified as
+  invalid-shape", which is exactly the `contract-violation` branch.
+- **Q: Whitespace-only status file?** A: `$(…)` strips trailing newlines only; a whitespace value is
+  not `invalid-learnings-shape`, so it takes the `contract-violation` branch. Correct; no trim needed.
+- **Q: Authorization.** A: `config/workflows/wrapup-pipeline.yaml` is a shipped Spur workflow (not
+  `.github/workflows/`); the edit is one token, authorized by the operator approving this task for
+  implementation. `apps/cli/config/` is gitignored and regenerated by `bun run bundle:config`.
+- **Q: Why not restructure repair?** A: Out of scope; 1147 owns doc-sync write-scope and onEnter error
+  detail.
 
 ### Design
 
@@ -96,12 +146,14 @@ Scenario: AC2 — The narration-only shape is still distinguished (req: R2)
 
 ### Plan
 
-1. Add the pin first: a test that runs the `repair` shell with no status file present and asserts the
-   repair-status line plus exit 0; confirm it fails against the current chain.
-2. Apply the one-line `|| true` to the `repair` `onEnter` shell in `config/workflows/wrapup-pipeline.yaml`.
-3. Re-run the pin, then `bun run spur-check` once (this touches a shipped workflow, so the repo-wide
-   contract checks matter).
-4. Record the verification in `## Testing`.
+1. In `packages/app/tests/workflow/wrapup-pipeline.test.ts`, describe "0871 contract-first routing",
+   add AC1/AC2/AC4 executing `shellsOf(def, 'repair')[0].options.command` via
+   `spawnSync('sh', ['-c', cmd], { cwd, env: { ...getEnvVars(), __runId } })`. Run
+   `(cd packages/app && bun test tests/workflow/wrapup-pipeline.test.ts)` → AC1 red (AC3 evidence).
+2. Edit `config/workflows/wrapup-pipeline.yaml:324`:
+   `V="$(cat .spur/run/$__runId-wrapup-learnings.status 2>/dev/null || true)" &&`.
+3. Re-run the file → green. Run `bun run spur-check` once (shipped workflow; contract checks).
+4. Record red/green output in `## Testing`; commit `fix(workflows): …(1152)`.
 
 ### Root Cause
 
