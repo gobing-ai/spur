@@ -1,6 +1,15 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { execSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+    existsSync,
+    mkdirSync,
+    mkdtempSync,
+    readdirSync,
+    readFileSync,
+    realpathSync,
+    rmSync,
+    writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openInlineRunProjectDb, resolveWorkflowDefinition, runStoragePaths } from '../../src';
@@ -1121,6 +1130,144 @@ describe('runInlineRunTraceBatch (1007 R5)', () => {
             });
         } finally {
             p.cleanup();
+        }
+    });
+});
+
+// ─── 1165 R2/R3: persist-out names each reconcile failure on its own path ─────────────────────
+
+describe('1165 — persist-out names its reconcile failures', () => {
+    /** The runners narrate on stderr; assert the exact channel the diagnostic is written to. */
+    async function captureStderrAsync<T>(fn: () => Promise<T>): Promise<{ value: T; err: string }> {
+        const original = process.stderr.write;
+        const chunks: string[] = [];
+        process.stderr.write = ((chunk: unknown): boolean => {
+            chunks.push(String(chunk));
+            return true;
+        }) as typeof process.stderr.write;
+        try {
+            return { value: await fn(), err: chunks.join('') };
+        } finally {
+            process.stderr.write = original;
+        }
+    }
+
+    const seedStaleLifecycleRow = async (dir: string, id: string): Promise<void> => {
+        const db = await openInlineRunProjectDb(dir);
+        try {
+            await db.adapter.run(
+                `INSERT INTO runs (id, workflow_name, mode, status, agent, external_key, started_at, completed_at,
+                                   metadata_json, created_at, updated_at)
+                 VALUES (?, 'task-lifecycle', 'state-machine', 'interrupted', NULL, 'task:1165', '2026-10-09T05:36:13.642Z', NULL, '{}', 1, 1)`,
+                id,
+            );
+        } finally {
+            db.close();
+        }
+    };
+
+    const terminalTask = (dir: string): void => {
+        const taskDir = join(dir, 'docs/tasks5');
+        mkdirSync(taskDir, { recursive: true });
+        writeFileSync(join(taskDir, '1165_test.md'), '---\nstatus: done\n---\n# 1165\n');
+    };
+
+    test('AC2: a rejected receiving-lifecycle update is named with its task id and error', async () => {
+        const from = makeProject('persist-1165-inner-from');
+        const to = makeProject('persist-1165-inner-to');
+        try {
+            terminalTask(to.dir);
+            await seedStaleLifecycleRow(to.dir, 'run_1165_stale');
+            // A real SQLite trigger rejects exactly the reconciliation UPDATE of that row; the
+            // empty transfer performs no update of its own, so only reconcile hits it.
+            const target = await openInlineRunProjectDb(to.dir);
+            try {
+                await target.adapter.exec(
+                    `CREATE TRIGGER reject_1165_reconcile BEFORE UPDATE ON runs
+                     WHEN OLD.id = 'run_1165_stale'
+                     BEGIN SELECT RAISE(ABORT, '1165 injected reconcile update failure'); END`,
+                );
+            } finally {
+                target.close();
+            }
+
+            await inDir(to.dir, async () => {
+                const pass = await captureStderrAsync(() =>
+                    captureAsync(() =>
+                        runInlineRunPersistOut({ from: from.dir, taskFiles: ['docs/tasks5/1165_test.md'] }),
+                    ),
+                );
+                expect(pass.value.value).toBe(0);
+                // The diagnostic names the task and carries the injected error verbatim.
+                expect(pass.err).toContain(
+                    'persist-out: reconcile skipped for 1165: 1165 injected reconcile update failure',
+                );
+                // …and it is the PER-TASK path, never the outer "unavailable" one.
+                expect(pass.err).not.toContain('lifecycle reconcile unavailable');
+                // Success payload is unchanged, in stdout and in the sidecar.
+                const payload = { ok: true, persisted: 0, skipped: [] };
+                expect(JSON.parse(pass.value.out.trimEnd())).toEqual(payload);
+                expect(JSON.parse(readFileSync(join(to.dir, '.spur', 'run', 'persist-out.json'), 'utf8'))).toEqual(
+                    payload,
+                );
+                // The rejected update left the receiving row stale.
+                const after = await openInlineRunProjectDb(to.dir);
+                try {
+                    expect(
+                        await after.adapter.queryFirst<{ status: string }>(
+                            'SELECT status FROM runs WHERE external_key = ?',
+                            'task:1165',
+                        ),
+                    ).toEqual({ status: 'interrupted' });
+                } finally {
+                    after.close();
+                }
+            });
+        } finally {
+            from.cleanup();
+            to.cleanup();
+        }
+    });
+
+    test('AC3: a failed post-transfer target open is named as lifecycle reconcile unavailable', async () => {
+        const domain = await import('@gobing-ai/spur-domain');
+        const from = makeProject('persist-1165-outer-from');
+        const to = makeProject('persist-1165-outer-to');
+        const original = domain.createMigratedDb;
+        const targetUrl = join(realpathSync(to.dir), '.spur', 'spur.db');
+        let targetOpens = 0;
+        const spy = spyOn(domain, 'createMigratedDb').mockImplementation(async (options: { url: string }) => {
+            if (options.url === targetUrl && ++targetOpens === 2) {
+                throw new Error('1165 injected reconcile open failure');
+            }
+            return original(options);
+        });
+        try {
+            terminalTask(to.dir);
+            await seedStaleLifecycleRow(to.dir, 'run_1165_outer');
+            await inDir(to.dir, async () => {
+                const pass = await captureStderrAsync(() =>
+                    captureAsync(() =>
+                        runInlineRunPersistOut({ from: from.dir, taskFiles: ['docs/tasks5/1165_test.md'] }),
+                    ),
+                );
+                expect(pass.value.value).toBe(0);
+                expect(pass.err).toContain(
+                    'persist-out: lifecycle reconcile unavailable: 1165 injected reconcile open failure',
+                );
+                expect(pass.err).not.toContain('reconcile skipped for');
+                const payload = { ok: true, persisted: 0, skipped: [] };
+                expect(JSON.parse(pass.value.out.trimEnd())).toEqual(payload);
+                expect(JSON.parse(readFileSync(join(to.dir, '.spur', 'run', 'persist-out.json'), 'utf8'))).toEqual(
+                    payload,
+                );
+                // Target-open #1 is the real transfer; #2 is the reconcile attempt.
+                expect(targetOpens).toBe(2);
+            });
+        } finally {
+            spy.mockRestore();
+            from.cleanup();
+            to.cleanup();
         }
     });
 });

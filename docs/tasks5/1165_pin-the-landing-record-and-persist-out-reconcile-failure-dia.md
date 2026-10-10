@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Pin the landing-record and persist-out reconcile failure diagnostics
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-10-10T16:02:04.236Z
-updated_at: "2026-10-10T16:19:41.387Z"
+updated_at: "2026-10-10T19:42:22.500Z"
 feature_id: E71
 
 ac_altitude: task-local
@@ -12,6 +12,8 @@ ac_numbering: task-local
 dependencies: ["1148", "1149"]
 priority: P2
 estimate_hours: 2
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1165-verdict.json
 ---
 
 ## 1165. Pin the landing-record and persist-out reconcile failure diagnostics
@@ -33,9 +35,9 @@ Refinement evidence: both existing test files pass (64 tests, 0 failures). An is
 
 ### Requirements
 
-- [ ] R1. Add a regression test in `packages/app/tests/services/inline-run-setup.test.ts` that forces owning-tree landing-record publication to fail for a real markerless linked-worktree run closed `done`. Assert the linked tree's durable run record contains `landing-record-failed run=<runId> path=<recordPath>:` followed by nonempty error detail, and close still returns 0 with successful stdout and committed terminal status.
-- [ ] R2. Add two independent tests in `packages/app/tests/services/inline-run-driver.test.ts`: one fails a receiving lifecycle update and pins `persist-out: reconcile skipped for <wbs>: <detail>`; the other fails the post-transfer target DB open and pins `persist-out: lifecycle reconcile unavailable: <detail>`. Each must call the real `runInlineRunPersistOut`, assert return 0, exactly one successful stdout JSON document, and unchanged fixture payload `{ok:true,persisted:0,skipped:[]}` in stdout and `.spur/run/persist-out.json`.
-- [ ] R3. Prove each of the three tests fails specifically on its missing-diagnostic assertion when only its corresponding catch body is temporarily emptied. Restore source after each mutation and rerun the two unmodified suites successfully; retain commands and outcomes as implementation evidence.
+- [x] R1. Add a regression test in `packages/app/tests/services/inline-run-setup.test.ts` that forces owning-tree landing-record publication to fail for a real markerless linked-worktree run closed `done`. Assert the linked tree's durable run record contains `landing-record-failed run=<runId> path=<recordPath>:` followed by nonempty error detail, and close still returns 0 with successful stdout and committed terminal status.
+- [x] R2. Add two independent tests in `packages/app/tests/services/inline-run-driver.test.ts`: one fails a receiving lifecycle update and pins `persist-out: reconcile skipped for <wbs>: <detail>`; the other fails the post-transfer target DB open and pins `persist-out: lifecycle reconcile unavailable: <detail>`. Each must call the real `runInlineRunPersistOut`, assert return 0, exactly one successful stdout JSON document, and unchanged fixture payload `{ok:true,persisted:0,skipped:[]}` in stdout and `.spur/run/persist-out.json`.
+- [x] R3. Prove each of the three tests fails specifically on its missing-diagnostic assertion when only its corresponding catch body is temporarily emptied. Restore source after each mutation and rerun the two unmodified suites successfully; retain commands and outcomes as implementation evidence.
 
 Out of scope: production behavior or API changes, new helpers exported from production, new dependencies, permission-based fixtures, blanket module mocks, new CLI flags, plugin regeneration, lifecycle policy changes, cleanup of real worktrees/data, and unrelated coverage work. Only the two named test files are expected production-tree implementation edits, plus task-owned evidence.
 
@@ -106,15 +108,86 @@ Scenario: AC3 — A failed post-transfer database open is named on stderr (req: 
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Test-only hardening: the three non-fatal reconcile/landing diagnostics that 1148 and 1149 added are now each pinned by a real-runner regression whose failure depends on that one catch body.
+
+Change map (one anchor per row):
+
+| file:line | What changed |
+| --- | --- |
+| `packages/app/tests/services/inline-run-setup.test.ts:1654` | AC1: the existing markerless-worktree fixture (real `git init` + `git worktree add`, canonicalized temp roots, a `running` run plus a completed action row so `NO_ACTION_ROWS` cannot fire) with one addition — a regular file written at the OWNING tree's `recordsDir`, so the landing branch's recursive `mkdirSync` fails deterministically on any permission model. The close still returns 0, stdout still reports `ok:true`, the stored run status is `done`, and the LINKED tree's writable run record carries `landing-record-failed run=<id> path=<owning record path>:` followed by nonempty error detail. |
+| `packages/app/tests/services/inline-run-driver.test.ts:1139` | AC2 + AC3, each with its own fault and its own observation point. AC2: an empty source (the exact stable transfer payload), a readable forwarded `status: done` task, a seeded `interrupted` `task:1165` lifecycle row in the target, and a real SQLite `BEFORE UPDATE ON runs … RAISE(ABORT, '1165 injected reconcile update failure')` trigger on that row — real reconciliation reaches `finalizeRun`, the update is rejected, and the inner catch emits `persist-out: reconcile skipped for 1165: <injected error>` with no outer diagnostic, unchanged payload/sidecar, and the row still `interrupted`. |
+| `packages/app/tests/services/inline-run-driver.test.ts:1220` | AC3: fresh empty-source/target projects and a readable terminal task, with `spyOn(domain, 'createMigratedDb')` counting calls only for the canonical target URL — the first (real transfer) passes through, the second (reconcile) throws `1165 injected reconcile open failure`. The outer catch emits `persist-out: lifecycle reconcile unavailable: <injected error>`, no per-task diagnostic appears, the payload/sidecar stay the fixture success payload, and exactly two target opens are asserted. The spy is a namespace-import spy on a passthrough of the saved original, restored in `finally`; no `mock.module`, no internal same-module spy, no collaborator mock. |
+
+Why this shape: each diagnostic is a non-fatal branch whose whole value is the message, so the only
+faithful pin is a real run whose fault is injected at that branch's specific dependency — a
+regular-file obstruction for the landing directory, a SQLite trigger for the reconcile UPDATE, and a
+scoped second-open spy for the reconcile connection. All three fixtures are temporary, the injected
+`run_1165_stale`/`run_1165_outer` rows and the trigger live only inside the disposable target DB,
+and the regression tests assert the unchanged success contract alongside the diagnostic, so a future
+change cannot buy a quieter log by dropping the message.
+
+R3 mutation evidence (each run with the two unmodified suites green before and after):
+- leaving only the landing-record catch empty → AC1 fails, 0 pass / 1 fail.
+- leaving only the per-task reconcile catch empty → AC2 fails, 1 pass / 1 fail.
+- leaving only the outer reconcile catch empty → AC3 fails, 1 pass / 1 fail.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/tests/services/inline-run-setup.test.ts:1654` builds a real `git init` main repo plus a linked worktree with no WT-3 marker, seeds a `running` run and a completed action row (so the zero-row close guard cannot fire), then writes a regular file at `runStoragePaths(mainRepo).recordsDir` so the landing branch's recursive `mkdirSync` fails deterministically. The close returns 0, stdout reports `ok:true`, the stored status is `done`, and the LINKED tree's durable record contains `landing-record-failed run=run_1165_landing path=<owning record path>:` followed by nonempty error detail |
+| R2 | MET | Two independent tests at `packages/app/tests/services/inline-run-driver.test.ts:1139`: (inner) an empty source yields the exact stable payload, a seeded `interrupted` `task:1165` row in the target plus a real `BEFORE UPDATE` trigger rejecting that row's update produces `persist-out: reconcile skipped for 1165: 1165 injected reconcile update failure` and leaves the row `interrupted`; (outer) a namespace-level passthrough spy rejects only the second canonical target open and produces `persist-out: lifecycle reconcile unavailable: 1165 injected reconcile open failure`. Each asserts the other diagnostic absent, stdout and the persist-out sidecar written beside the fixture's run equal `{ok:true,persisted:0,skipped:[]}`, and exit 0 |
+| R3 | MET | Mutation evidence for all three catches is recorded in `## Solution` and was re-run this session: emptying the landing-record catch fails AC1 (0 pass / 1 fail), emptying the per-task catch fails AC2, emptying the outer catch fails AC3, each with the two suites otherwise green (67 pass / 0 fail) and the production source restored afterwards |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — A failed landing-record write is logged, not swallowed (req: R1, R3) | MET | test | `cd packages/app && bun test tests/services/inline-run-setup.test.ts tests/services/inline-run-driver.test.ts` — 67 pass / 0 fail. The landing case asserts exit 0, `ok:true`, stored status `done`, the exact run id and owning record path in the diagnostic, nonempty detail, and the AC's mutation clause |
+| AC2 — A failed task reconcile is named on stderr (req: R2, R3) | MET | test | Same suite: the trigger case asserts the exact `persist-out: reconcile skipped for 1165: <injected error>` line, absence of the outer diagnostic, unchanged stdout and sidecar payload, the stale receiving row, and the mutation clause |
+| AC3 — A failed post-transfer database open is named on stderr (req: R2, R3) | MET | test | Same suite: the spy case asserts the exact `persist-out: lifecycle reconcile unavailable: <injected error>` line, absence of the per-task diagnostic, unchanged stdout and sidecar payload, exit 0, exactly two canonical target opens, and the mutation clause |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review Report — 1165
+**Scope:** 1165 diff (2 test files: `packages/app/tests/services/inline-run-setup.test.ts`, `packages/app/tests/services/inline-run-driver.test.ts`, plus the task file). Test-only — no production file changed.
+**Dimensions:** functional, security, efficiency, correctness, usability, architecture
+**Verdict:** PASS
+
+##### Findings (ranked)
+
+| # | Priority | Dimension | Finding | Location | Disposition |
+|---|----------|-----------|---------|----------|-------------|
+| 1 | P4 (advisory) | correctness | The AC3 fixture depends on `spyOn` over an ESM namespace (`@gobing-ai/spur-domain`). It works on Bun 1.3.14 and the test asserts the injected failure actually reached the catch (`targetOpens === 2` plus the exact message), so a silent non-interception would fail the test rather than pass it vacuously. | `packages/app/tests/services/inline-run-driver.test.ts:1220` | ACCEPTED |
+| 2 | P4 (advisory) | usability | AC3 asserts the outer diagnostic is absent from the PER-TASK message rather than asserting the negative direction separately; the per-task branch cannot run in that fixture because the second open fails before reconciliation starts, so the assertion is sound but reads as belt-and-braces. | `packages/app/tests/services/inline-run-driver.test.ts:1258` | ACCEPTED |
+
+##### Functional Traceability
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | `packages/app/tests/services/inline-run-setup.test.ts:1654` — real markerless linked worktree, regular file at the owning `recordsDir`, close returns 0 with `ok:true` and stored status `done`, and the linked tree's record carries `landing-record-failed run=<id> path=<owning path>:` plus nonempty detail |
+| R2 | MET | `packages/app/tests/services/inline-run-driver.test.ts:1139` — two independent tests: the SQLite-trigger rejection pins `persist-out: reconcile skipped for 1165: <injected>` (and the row stays `interrupted`), and the scoped second-target-open rejection pins `persist-out: lifecycle reconcile unavailable: <injected>`; each asserts its own message present, the other absent, unchanged payload + sidecar, and exit 0 |
+| R3 | MET | Mutation evidence recorded in `## Solution`: emptying only the landing-record catch fails AC1 (0 pass / 1 fail); emptying only the per-task catch fails AC2 (1 pass / 1 fail); emptying only the outer catch fails AC3 (1 pass / 1 fail) — each with the two suites otherwise green and the source restored afterwards |
+
+##### Acceptance Criteria Verification
+
+AC1, AC2 and AC3 are each a real-runner regression with a fault injected at that branch's specific
+dependency (directory obstruction, SQLite trigger, second-open spy), and each asserts the unchanged
+success contract alongside the diagnostic. All three ACs' "removing only this catch diagnostic makes
+this regression test fail" clauses are demonstrated, not asserted.
+
+##### Residual Risk
+
+The only structural note is finding 1: one fixture relies on namespace-level `spyOn`. It is
+self-verifying (a non-intercepting spy makes the test fail), the spy is restored in `finally`, and no
+production behaviour, export, dependency, schema, config or generated artifact changed — so the blast
+radius is the two test files.
+
+**Next:** proceed to verify.
 
 ### References
 
@@ -145,4 +218,7 @@ Final deterministic gates: `spur task check 1165 --as todo --json` PASS, no find
 ### History
 
 - 2026-10-10T16:19:16.132Z backlog → todo (system)
+- 2026-10-10T19:35:05.661Z todo → wip (system)
+- 2026-10-10T19:42:14.645Z wip → testing (system)
+- 2026-10-10T19:42:22.495Z testing → done (system)
 
