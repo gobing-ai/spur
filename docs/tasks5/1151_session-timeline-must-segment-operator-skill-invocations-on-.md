@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: Session-timeline must segment operator skill invocations on pi, not count them as injected bodies
-status: todo
+status: done
 template: issue
 created_at: 2026-10-10T02:49:17.069Z
-updated_at: "2026-10-10T16:25:09.681Z"
+updated_at: "2026-10-10T17:02:40.747Z"
 feature_id: E5
 
 ac_altitude: task-local
 ac_numbering: task-local
 priority: P2
 estimate_hours: 2
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1151-verdict.json
 ---
 
 ## 1151. Session-timeline must segment operator skill invocations on pi, not count them as injected bodies
@@ -80,27 +82,27 @@ change reaches both scripts and both committed `.mjs` twins.
 
 ### Requirements
 
-- [ ] R1. **Every pi skill invocation opens a segment.** A pi `role:"user"` row whose first text block,
+- [x] R1. **Every pi skill invocation opens a segment.** A pi `role:"user"` row whose first text block,
   after leading whitespace, opens with `<skill name="X"` is an operator prompt. Its segment prompt is
   `/X` followed by the trimmed text after the last `</skill>` when non-empty (e.g.
   `/sp-dev-runall --tasks 1135,1142 --auto …`), else `/X` alone. The wrapper body never appears in the
   prompt excerpt.
-- [ ] R2. **Delete the injected-body class.** Remove `isInjectedPrompt` (`lib/transcript.ts`), the
+- [x] R2. **Delete the injected-body class.** Remove `isInjectedPrompt` (`lib/transcript.ts`), the
   pi-only `injectedPrompts` timeline field and its counter (`session-timeline.ts:44,78-87,128`), and
   the `, N injected` fragment of the zero-segment reason (`session-timeline.ts:160-161`). Claude output
   is unchanged (it never had the field).
-- [ ] R3. **The argument-less decision is recorded** in Q&A and in the `promptText` doc comment: an
+- [x] R3. **The argument-less decision is recorded** in Q&A and in the `promptText` doc comment: an
   argument-less wrapper is an operator invocation (census evidence above), rendered `/X`.
-- [ ] R4. **Fixture and pins reflect real shapes.** In `plugins/sp/tests/fixtures/pi-session.jsonl`,
+- [x] R4. **Fixture and pins reflect real shapes.** In `plugins/sp/tests/fixtures/pi-session.jsonl`,
   replace the synthetic body-only row (`new00002`) with a real-shaped invocation
   (`<skill name="sp-dev-run" location="/x/SKILL.md">\nbody\n</skill>\n\n--triage`) and add one
   argument-less wrapper row. The 1138 "injected skill body is counted, never segmented" tests are
   replaced (they pinned the wrong behaviour), the segment-count assertions are updated to the new
   count, and the "operator note … `<skill name=` later in the body" row still segments as plain text.
-- [ ] R5. **Prose owners follow.** Update the injected-body sentences in
+- [x] R5. **Prose owners follow.** Update the injected-body sentences in
   `plugins/sp/skills/session-review/SKILL.md:105`, `plugins/sp/commands/dev-review-session.md:21`, and
   `docs/design/session-review.md:62-66` to the invocation rule.
-- [ ] R6. **Sibling consumer and twins.** `run-summary` tests preserve token totals and correctly exclude user prompts from accumulation; add a window-boundary regression if existing coverage does not observe it; regenerate both twins with
+- [x] R6. **Sibling consumer and twins.** `run-summary` tests preserve token totals and correctly exclude user prompts from accumulation; add a window-boundary regression if existing coverage does not observe it; regenerate both twins with
   `superskill script convert sp session-timeline.ts` and `superskill script convert sp run-summary.ts`.
 
 ### Acceptance Criteria
@@ -238,15 +240,98 @@ therefore discards exactly the prompts that start each batch.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Reclassified the pi `<skill name="X">` user row: it is the operator's own `/skill` invocation, not a skill-injected body, so it now opens an operator segment rendered `/X <args>` (or `/X` with no arguments). The pi-only `injectedPrompts` class and its counter are deleted.
+
+Change map (one anchor per row):
+
+| file:line | What changed |
+| --- | --- |
+| `plugins/sp/lib/transcript.ts:101` | `promptText`: the pi user branch no longer drops wrapper rows — it returns `skillInvocationPrompt(text) ?? text`, so a wrapper becomes `/X <args>` and every other row is unchanged. |
+| `plugins/sp/lib/transcript.ts:117` | `firstTextContent`: the string-or-first-`type:text`-block read extracted so the pi branch and the wrapper detector cannot disagree on what "the text" is. |
+| `plugins/sp/lib/transcript.ts:133` | `skillInvocationPrompt`: the anchored `^\s*<skill name="([^"]+)"` detector; arguments are the text after the LAST `</skill>` (a body may quote the tag), a missing closing tag renders `/X` alone, a malformed name is not a wrapper. `isInjectedPrompt` is deleted. |
+| `plugins/sp/scripts/session-timeline.ts:35` | `Timeline`: the pi-only `injectedPrompts?: number` field is removed — it could never be non-zero (pi injects no user-row bodies) and read as misleading evidence. |
+| `plugins/sp/scripts/session-timeline.ts:71` | `buildTimeline`: the injected-body branch, its counter and the conditional field spread are deleted; the loop is back to prompt-vs-activity only, so a wrapper row opens a segment like any operator prompt. |
+| `plugins/sp/scripts/session-timeline.ts:132` | `zeroSegmentReason`: the `, N injected` fragment is dropped; the reason names the format and the row count (unknown formats keep the top-5 row-type census). |
+| `plugins/sp/tests/fixtures/pi-session.jsonl` | The synthetic body-only row is replaced by a real-shaped invocation (`… </skill>\n\n--triage`), an argument-less `rd3-anti-hallucination` wrapper row is added, and an assistant activity row keeps each new segment's span measurable. |
+| `plugins/sp/tests/session-timeline.test.ts:309` | The 1138 tests that pinned the wrong behavior (injected body counted, never segmented) are replaced by AC1-AC4: invocation rendering, argument-less rendering, the deleted class (field + reason + a source scan of `plugins/sp/lib` and `plugins/sp/scripts`), the unaffected mid-body mention, and explicit parser edges (leading whitespace, string content, missing/repeated/malformed closing tags, non-user role, Claude rows). |
+| `plugins/sp/tests/run-summary.test.ts:551` | The sibling consumer regression: a wrapper row on the implement window's END boundary is classified as a prompt and the windowed summary (`rows`, `total`) is identical with and without it — token accounting conserved (R6). |
+| `plugins/sp/skills/session-review/SKILL.md:105` | Prose owner: the transcript note now states the wrapper row is the operator's invocation, rendered `/<name> <args>`. |
+| `plugins/sp/commands/dev-review-session.md:21` | Prose owner: same correction in the command's measurement note. |
+| `docs/design/session-review.md:63` | Prose owner: the design owner's transcript paragraph replaces the injected-body sentences and the "injected counts" zero-segment wording. |
+| `plugins/sp/scripts/session-timeline.mjs` | Regenerated twin (`superskill script convert sp session-timeline.ts`). |
+| `plugins/sp/scripts/run-summary.mjs` | Regenerated twin (`superskill script convert sp run-summary.ts`). |
+| `plugins/sp/scripts/inline-run-setup.mjs` | Regenerated twin: it bundles `lib/transcript.ts`, so the deleted helper would otherwise survive in `plugins/sp/scripts` (AC3). |
+
+Rationale: the prefix test (`startsWith('<skill name="')`) discarded exactly the prompts that start every batch. pi has no `isMeta`, but it also never injects skill bodies as user rows — a 2,452-row census found none, and the only body-only row in the fixture was synthetic. The class therefore had no true positives on pi and was deleted rather than kept as an always-zero field.
 
 ### Testing
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `plugins/sp/lib/transcript.ts:101` routes a pi user row through `skillInvocationPrompt` (`:133`), which returns `/X` plus the trimmed text after the LAST `</skill>`; `plugins/sp/tests/session-timeline.test.ts:309` pins the invocation, argument-less and seven parser-edge cases |
+| R2 | MET | `isInjectedPrompt` is deleted from `plugins/sp/lib/transcript.ts`; the `injectedPrompts` field, counter and reason fragment are removed at `plugins/sp/scripts/session-timeline.ts:35,71,132`; three `.mjs` twins regenerated so no copy survives under `plugins/sp/scripts` (AC3 source scan) |
+| R3 | MET | The argument-less decision is recorded in the `promptText` doc comment at `plugins/sp/lib/transcript.ts:94` and in the task Q&A; `plugins/sp/tests/session-timeline.test.ts:322` pins `/rd3-anti-hallucination` |
+| R4 | MET | `plugins/sp/tests/fixtures/pi-session.jsonl` replaces the synthetic body-only row with a real-shaped `--triage` invocation, adds the argument-less wrapper row and keeps the mid-body-mention row as plain text, pinned at `plugins/sp/tests/session-timeline.test.ts:333` |
+| R5 | MET | `plugins/sp/skills/session-review/SKILL.md:105`, `plugins/sp/commands/dev-review-session.md:21`, `docs/design/session-review.md:63` all state the invocation rule; `grep injectedPrompts` over the three owners returns nothing |
+| R6 | MET | `plugins/sp/tests/run-summary.test.ts:551` pins the sibling consumer's conserved windowed totals; `session-timeline.mjs`, `run-summary.mjs`, `inline-run-setup.mjs` regenerated via `superskill script convert`; `bun run script-contract-check` reports 23 scripts baselined, 0 violations |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — A skill invocation with arguments becomes an operator segment (req: R1) | MET | test | `plugins/sp/tests/session-timeline.test.ts:319` asserts the fixture invocation segment renders `/sp-dev-run --triage` and contains neither `body` nor `<skill`; `(cd plugins/sp && bun test tests/session-timeline.test.ts)` 39 pass / 0 fail |
+| AC2 — An argument-less wrapper is still an operator segment (req: R1, R3) | MET | test | `plugins/sp/tests/session-timeline.test.ts:322` asserts `/rd3-anti-hallucination` for the added argument-less fixture row |
+| AC3 — The injected-body class is gone (req: R2) | MET | test | `plugins/sp/tests/session-timeline.test.ts:326` asserts no `injectedPrompts` field, no `injected` fragment in the zero-segment reason, and no `isInjectedPrompt` token in any `.ts`/`.mjs` under `plugins/sp/lib` or `plugins/sp/scripts` |
+| AC4 — Plain operator text mentioning <skill is unaffected (req: R4) | MET | test | `plugins/sp/tests/session-timeline.test.ts:333` keeps the `operator note: the <skill name="x"> wrapper above is injected…` fixture row verbatim as a segment prompt |
+| AC5 — Real transcript attributes every prompt (req: R1) | MET | command | `bun plugins/sp/scripts/session-timeline.ts --transcript <snapshot>` on the hashed 2026-10-09 capture (sha256 `f0a4c78d4c6d064d438ec5e43ca44fa95518cda3fb29ad499c4a1d2043d839af`, observed 2026-10-10T16:45:42Z) yields 15 segments equal to the independent timestamped-eligible-user-row oracle (15), with 0 wrapper body leaks and 4 `/`-rendered invocations; this session's capture (`30673e29…`) yields 1 = 1 and renders `/sp-dev-runall --tasks 1155,1160,1161,1164,1153,1151,1165 --agent inline --auto …` |
+| AC6 — Twins and sibling stay consistent (req: R6) | MET | command | `bun run script-contract-check` PASS (23 baselined, 0 violations); `(cd plugins/sp && bun test tests/session-timeline.test.ts tests/run-summary.test.ts)` 61 pass / 0 fail; `node plugins/sp/scripts/session-timeline.mjs --transcript <fixture>` produces the same five prompt renderings as the `.ts` entry |
+| AC7 — Prose owners describe the invocation rule (req: R5) | MET | command | `grep -n injectedPrompts plugins/sp/skills/session-review/SKILL.md plugins/sp/commands/dev-review-session.md docs/design/session-review.md` returns no match (exit 1); each of `plugins/sp/skills/session-review/SKILL.md:105`, `plugins/sp/commands/dev-review-session.md:21`, `docs/design/session-review.md:63` states the wrapper row is the operator's invocation rendered `/<name> <args>` |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review Report — 1151
+**Scope:** 1151 diff (12 files: `plugins/sp/lib/transcript.ts`, `plugins/sp/scripts/session-timeline.ts`, `plugins/sp/tests/{session-timeline,run-summary}.test.ts`, `plugins/sp/tests/fixtures/pi-session.jsonl`, three regenerated `.mjs` twins, three prose owners)
+**Dimensions:** functional, security, efficiency, correctness, usability, architecture
+**Verdict:** PASS
+
+##### Findings (ranked)
+
+| # | Priority | Dimension | Finding | Location | Disposition |
+|---|----------|-----------|---------|----------|-------------|
+| 1 | P4 (advisory) | testing | The sibling `run-summary` regression pins invariance plus a direct classification assertion; a pi user row carries no usage or tool calls, so the windowed summary cannot distinguish prompt from activity on its own — the fail-before pins live in `session-timeline.test.ts` | `plugins/sp/tests/run-summary.test.ts:551` | ACCEPTED |
+
+##### Functional Traceability
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | `plugins/sp/lib/transcript.ts:101` (`promptText` → `skillInvocationPrompt`), `:133` (last-`</skill>` argument slice, missing-close → `/X`); pinned by `plugins/sp/tests/session-timeline.test.ts:309` (invocation + argument-less + parser edges) |
+| R2 | MET | `isInjectedPrompt` deleted (`plugins/sp/lib/transcript.ts`), `injectedPrompts` field/counter removed (`plugins/sp/scripts/session-timeline.ts:35,71`), reason fragment removed (`:132`); three twins regenerated so no copy survives in `plugins/sp/scripts` — pinned by the AC3 source scan |
+| R3 | MET | Argument-less decision recorded in the `promptText` doc comment and in the task Q&A; pinned by the `rd3-anti-hallucination` fixture row |
+| R4 | MET | `plugins/sp/tests/fixtures/pi-session.jsonl` — real-shaped `--triage` invocation replaces the synthetic body-only row, argument-less wrapper row added, `new00001` mid-body mention still segments |
+| R5 | MET | `plugins/sp/skills/session-review/SKILL.md:105`, `plugins/sp/commands/dev-review-session.md:21`, `docs/design/session-review.md:63` — no `injectedPrompts`, each states the invocation rule |
+| R6 | MET | `plugins/sp/tests/run-summary.test.ts:551`; `session-timeline.mjs` / `run-summary.mjs` / `inline-run-setup.mjs` regenerated via `superskill script convert`; `bun run script-contract-check` PASS (23 scripts, 0 violations) |
+
+##### Acceptance Criteria Verification
+
+All seven scenarios are task-local and were exercised in the implement stage: AC1 (invocation →
+`/sp-dev-run --triage`), AC2 (argument-less → `/rd3-anti-hallucination`), AC3 (no field, no reason
+fragment, no helper in `plugins/sp/lib` or `plugins/sp/scripts`), AC4 (mid-body mention unchanged),
+AC5 (real transcript: independent timestamped-eligible-user-row oracle 15 = segments 15 on the
+2026-10-09 capture, 1 = 1 on this session's capture; zero body leaks), AC6 (twin + sibling suites
+green), AC7 (three prose owners clean).
+
+##### Residual Risk
+
+The pi wrapper rule is a protocol frozen from a 2,452-row census, not a guarantee about future pi
+versions — the task's refinement records that explicitly and scopes a future structural marker to
+its own task. No security, efficiency or architecture concern: the change is a read-only text
+classification with one anchored regex plus a `lastIndexOf`, inside an existing deep module.
+
+**Next:** proceed to verify.
 
 ### References
 
@@ -269,3 +354,8 @@ Outcome: refined; depth: ready; status: todo → todo; corrections: 4.
 Planning-only receipt: no implementation pipeline or behavior-change verification PASS is claimed. Recheck source and ownership before implementation; batch began on main at 13da1554f with one worktree, no WIP tasks and a clean tree. Runtime Bun 1.3.14; no dependency install needed for refinement.
 
 ### History
+
+- 2026-10-10T16:45:58.839Z todo → wip (system)
+- 2026-10-10T17:02:23.602Z wip → testing (system)
+- 2026-10-10T17:02:40.739Z testing → done (system)
+

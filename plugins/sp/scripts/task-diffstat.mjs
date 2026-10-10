@@ -16,7 +16,7 @@ var SENSITIVE_PREFIXES = ["drizzle/", "packages/config/", ".github/", "plugins/s
 var SENSITIVE_GLOBS = ["apps/server/src/**/auth*", "**/*secret*", "**/*.sql"];
 function globToRegex(glob) {
   const escaped = glob.replace(/[.+^${}()|[\]\\]/g, "\\$&").replaceAll("**/", "\x00").replaceAll("**", "\x01").replaceAll("*", "[^/]*").replaceAll("\x00", "(?:.*/)?").replaceAll("\x01", ".*");
-  return new RegExp(`^${escaped}$`);
+  return new RegExp(`^${escaped}$`, "s");
 }
 var SENSITIVE_MATCHERS = [
   ...SENSITIVE_PREFIXES.map((prefix) => ({
@@ -52,22 +52,12 @@ function countNewlines(path, cwd) {
       lines += 1;
   return lines;
 }
-function expandDiffPath(raw) {
-  const arrow = raw.indexOf(" => ");
-  if (arrow === -1)
-    return [raw];
-  const open = raw.indexOf("{");
-  const close = raw.lastIndexOf("}");
-  if (open !== -1 && close > open && open < arrow && arrow < close) {
-    const inner = raw.slice(open + 1, close);
-    const innerArrow = inner.indexOf(" => ");
-    if (innerArrow !== -1) {
-      const head = raw.slice(0, open);
-      const tail = raw.slice(close + 1);
-      return [head + inner.slice(0, innerArrow) + tail, head + inner.slice(innerArrow + 4) + tail];
-    }
-  }
-  return [raw.slice(0, arrow), raw.slice(arrow + 4)];
+function addCounts(add, del) {
+  for (const count of [add, del])
+    if (count !== "-" && !/^\d+$/.test(count))
+      return null;
+  const [a, d] = [add === "-" ? 0 : Number(add), del === "-" ? 0 : Number(del)];
+  return Number.isSafeInteger(a) && Number.isSafeInteger(d) ? [a, d] : null;
 }
 function runDiffstat(env, options = {}, git = defaultGitRunner(options.cwd)) {
   const cwd = options.cwd;
@@ -99,23 +89,37 @@ function runDiffstat(env, options = {}, git = defaultGitRunner(options.cwd)) {
   } catch {}
   if (!/^[0-9a-f]{7,40}$/i.test(base))
     return failSafe("run base .spur/run/<wbs>-base.sha missing or malformed");
-  const numstat = git(["diff", "--numstat", base]);
+  const numstat = git(["diff", "--numstat", "-z", base]);
   if (numstat.status !== 0)
     return failSafe(`git diff --numstat failed (status=${numstat.status})`);
+  if (numstat.stdout.length > 0 && !numstat.stdout.endsWith("\x00"))
+    return failSafe("git diff --numstat -z output is not NUL-terminated (malformed framing)");
   const paths = new Set;
   let insertions = 0;
   let deletions = 0;
-  for (const line of numstat.stdout.split(`
-`)) {
-    const row2 = /^(\d+|-)\t(\d+|-)\t(.+)$/.exec(line);
-    if (!row2)
+  const records = numstat.stdout.split("\x00").slice(0, -1);
+  for (let i = 0;i < records.length; i++) {
+    const header = records[i] ?? "";
+    const first = header.indexOf("\t");
+    const second = header.indexOf("\t", first + 1);
+    if (first < 1 || second < first + 2)
+      return failSafe("git diff --numstat -z record is missing counts or path");
+    const counts = addCounts(header.slice(0, first), header.slice(first + 1, second));
+    if (counts === null)
+      return failSafe("git diff --numstat -z record has a malformed count");
+    insertions += counts[0];
+    deletions += counts[1];
+    const path = header.slice(second + 1);
+    if (path !== "") {
+      paths.add(path);
       continue;
-    for (const p of expandDiffPath(row2[3] ?? ""))
-      paths.add(p);
-    if (row2[1] !== "-")
-      insertions += Number(row2[1]);
-    if (row2[2] !== "-")
-      deletions += Number(row2[2]);
+    }
+    const oldPath = records[++i];
+    const newPath = records[++i];
+    if (!oldPath || !newPath)
+      return failSafe("git diff --numstat -z rename record has incomplete paths");
+    paths.add(oldPath);
+    paths.add(newPath);
   }
   const others = git(["ls-files", "--others", "--exclude-standard", "-z"]);
   if (others.status !== 0)
@@ -161,7 +165,6 @@ export {
   sensitiveReasonForPath,
   runDiffstat,
   main,
-  expandDiffPath,
   TASK_DIFFSTAT_USAGE,
   SENSITIVE_PREFIXES,
   SENSITIVE_GLOBS

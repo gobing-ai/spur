@@ -7,8 +7,8 @@
  * left untouched. Files without one get an unquoted `$schema:` prepended so
  * end-user IDE validation resolves against the schemas shipped with the CLI.
  */
-import { cp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { cp, readdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const SOURCE = fileURLToPath(new URL('../../config', import.meta.url));
@@ -19,14 +19,38 @@ const SOURCE = fileURLToPath(new URL('../../config', import.meta.url));
 // .spur/rules/fixtures/<rule-id>/should-{fire,pass}.*), never shipped.
 const EXCLUDE = /(^|\/)(\.DS_Store|fixtures)($|\/)/;
 
+/**
+ * 1155 R1: resolve aliases even when the destination's final directories do not exist yet — only a
+ * genuine ENOENT is walked up, so EACCES/ENOTDIR/ELOOP propagate instead of degrading to a lexical
+ * answer. Same algorithm as `bundle-web`'s private helper, kept local (no shared abstraction).
+ */
+async function canonicalPath(path: string): Promise<string> {
+    const absolute = resolve(path);
+    try {
+        return await realpath(absolute);
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+        return join(await canonicalPath(dirname(absolute)), basename(absolute));
+    }
+}
+
+/** Empty relative path, `..` exactly, or a `..` segment — never a bare `startsWith('..')`. */
+function contains(parent: string, child: string): boolean {
+    const path = relative(parent, child);
+    return path === '' || (!isAbsolute(path) && path !== '..' && !path.startsWith(`..${sep}`));
+}
+
 /** Bundle `config/` into `target`, excluding authoring fixtures and OS junk, then inject `$schema`. */
 export async function bundleConfig(target: string | undefined): Promise<{ target: string; injected: number }> {
     if (!target) {
         throw new Error('Usage: spur-dev bundle-config <dist-config-dir>');
     }
-    // The target is wiped first — refuse a path that would take the source with it (`.`, repo root, `config`).
-    const fromTarget = relative(resolve(target), SOURCE);
-    if (!fromTarget.startsWith('..') && !isAbsolute(fromTarget)) {
+    // The target is wiped first, so resolve BOTH sides physically before any removal and refuse
+    // overlap in either direction (1155 R1). A lexical check misses a symlinked parent that aliases
+    // the repo, which deleted the real `config/` before `cp` even failed.
+    const sourcePath = await canonicalPath(SOURCE);
+    const targetPath = await canonicalPath(target);
+    if (contains(sourcePath, targetPath) || contains(targetPath, sourcePath)) {
         throw new Error(`bundle-config: refusing to replace ${resolve(target)} — it contains the source ${SOURCE}`);
     }
     await rm(target, { recursive: true, force: true });

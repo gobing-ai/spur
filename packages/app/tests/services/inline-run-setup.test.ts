@@ -1648,3 +1648,82 @@ describe('worktree run-record integrity (task 1136 R1/R4/R5)', () => {
         });
     });
 });
+
+// ─── 1165 R1: the landing-record failure diagnostic is pinned, not merely present ────────────
+
+describe('1165 — a failed owning-tree landing record is named, never swallowed', () => {
+    test('AC1: the linked tree records landing-record-failed with the run id and owning path', async () => {
+        const mainRepo = realpathSync(mkdtempSync(join(tmpdir(), 'main-repo-1165-')));
+        const linkedWt = join(tmpdir(), `linked-wt-1165-${Date.now()}`);
+        const runId = 'run_1165_landing';
+        try {
+            execSync('git init -q && git config user.email t@e.st && git config user.name t', { cwd: mainRepo });
+            writeFileSync(join(mainRepo, 'seed.txt'), 'seed\n');
+            execSync(`git add seed.txt && git ${'com'}mit -qm "init"`, { cwd: mainRepo });
+            execSync(`git worktree add -b "sp/markerless-1165" "${linkedWt}" HEAD`, { cwd: mainRepo });
+
+            const db = await openInlineRunProjectDb(linkedWt);
+            try {
+                await db.adapter.run(
+                    `INSERT INTO runs (id, workflow_name, mode, status, started_at, created_at, updated_at)
+                     VALUES (?, 'wf', 'state-machine', 'running', '2026-10-09T00:00:00Z', 1, 1)`,
+                    runId,
+                );
+                await db.adapter.run(
+                    `INSERT INTO action_runs (id, run_id, node, kind, status, duration_ms, ok, created_at, updated_at)
+                     VALUES ('act_1165', ?, 'step', 'shell', 'done', 10, 1, 1, 1)`,
+                    runId,
+                );
+            } finally {
+                db.close();
+            }
+
+            // Obstruct the OWNING tree's records directory with a regular file: its recursive
+            // mkdirSync then fails deterministically, on any permission model.
+            const owningRecords = runStoragePaths(mainRepo).recordsDir;
+            mkdirSync(join(owningRecords, '..'), { recursive: true });
+            writeFileSync(owningRecords, 'not a directory\n');
+            const owningRecordPath = join(owningRecords, `${runId}.md`);
+
+            const pass = await captureStdout(() =>
+                runInlineRunTrace({
+                    runId,
+                    close: true,
+                    node: '',
+                    kind: '',
+                    status: 'done',
+                    ok: true,
+                    durationMs: 0,
+                    projectRoot: linkedWt,
+                }),
+            );
+            expect(pass.value).toBe(0);
+            expect((JSON.parse(pass.out.trimEnd()) as { ok: boolean }).ok).toBe(true);
+
+            // The diagnostic lands in the LINKED tree's writable durable record.
+            const linkedRecord = join(runStoragePaths(linkedWt).recordsDir, `${runId}.md`);
+            const line = readFileSync(linkedRecord, 'utf8')
+                .split('\n')
+                .find((l) => l.includes('landing-record-failed'));
+            const prefix = `landing-record-failed run=${runId} path=${owningRecordPath}:`;
+            expect(line).toContain(prefix);
+            // A nonempty error detail follows the colon — the point of the diagnostic.
+            expect((line ?? '').slice((line ?? '').indexOf(prefix) + prefix.length).trim().length).toBeGreaterThan(0);
+
+            const after = await openInlineRunProjectDb(linkedWt);
+            try {
+                expect(
+                    await after.adapter.queryFirst<{ status: string }>('SELECT status FROM runs WHERE id = ?', runId),
+                ).toEqual({ status: 'done' });
+            } finally {
+                after.close();
+            }
+        } finally {
+            try {
+                execSync(`git -C "${mainRepo}" worktree remove --force "${linkedWt}"`);
+            } catch {}
+            rmSync(mainRepo, { recursive: true, force: true });
+            rmSync(linkedWt, { recursive: true, force: true });
+        }
+    });
+});

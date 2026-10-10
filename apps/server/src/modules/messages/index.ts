@@ -24,15 +24,14 @@ export const messagesModule: ServerModule = {
         if (!ctx) return;
 
         // GET /api/messages/inbox — one agent's inbox queue.
-        // Query: ?agent=<id> (required) &limit=<int, default 50, max 500> &offset=<int>
+        // Query: ?agent=<id> (required) &limit=<int, default 50, max 500> &offset=<int, default 0, no ceiling>
         app.get('/api/messages/inbox', async (c) => {
             const agent = c.req.query('agent');
             if (!agent) {
                 return c.json({ error: 'missing required query parameter: agent' }, 400);
             }
             const limit = parseLimit(c.req.query('limit'), 50);
-            const offsetParam = c.req.query('offset');
-            const offset = offsetParam === undefined ? undefined : parseLimit(offsetParam, 0);
+            const offset = parseOffset(c.req.query('offset'));
             const svc = ctx.coordination();
             const result = await svc.getInbox(agent, limit, offset);
             return c.json(result);
@@ -134,13 +133,26 @@ function errMsg(err: unknown): string {
 }
 
 /**
- * Parse a limit/offset query param. Returns `fallback` for missing/non-numeric
- * values; clamps to [0, 500] (limit-style usage). For offset semantics the caller
- * passes `0` as the fallback.
+ * Parse a page-size query param. Returns `fallback` for missing/non-numeric values and clamps to
+ * `[0, 500]` — a limit is a page size, never a position. Offsets go through {@link parseOffset}.
  */
 function parseLimit(raw: string | undefined, fallback: number): number {
     if (raw === undefined) return fallback;
     const parsed = Number.parseInt(raw, 10);
     if (Number.isNaN(parsed) || parsed < 0) return fallback;
     return Math.min(parsed, 500);
+}
+
+/**
+ * Parse the inbox `offset` query param (1164 R1): a page POSITION, so it must not inherit
+ * `parseLimit`'s 500 ceiling. A complete nonnegative decimal safe integer is forwarded unchanged;
+ * anything else (blank, sign, fraction, exponent, hex, trailing text, unsafe magnitude) falls back
+ * to 0. Deliberately stricter than `parseInt`, which accepted `12abc` as 12.
+ */
+function parseOffset(raw: string | undefined): number | undefined {
+    if (raw === undefined) return undefined;
+    const trimmed = raw.trim();
+    if (!/^[0-9]+$/.test(trimmed)) return 0;
+    const parsed = Number(trimmed);
+    return Number.isSafeInteger(parsed) ? parsed : 0;
 }

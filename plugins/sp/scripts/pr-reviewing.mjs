@@ -480,6 +480,15 @@ ${requestMarker(pr.headRefOid)}`;
   writeStatus(args, "REQUESTED");
   emit(args, { ok: true, requested: true, pr: pr.number, url: pr.url, head: pr.headRefOid, requestedAt, body }, `Requested GitHub Codex review on PR #${pr.number} (${pr.url}) at HEAD ${pr.headRefOid.slice(0, 7)}.`);
 }
+function revalidateWaitTarget(args, number) {
+  const fresh = viewPr();
+  if (!fresh || fresh.number !== number) {
+    writeStatus(args, "FAIL");
+    fail(args, `PR #${number} is no longer the branch's PR (view reports ${fresh ? `#${fresh.number}` : "none"}) \u2014 request a fresh review`, 2);
+  }
+  requireExpectedHead(args, fresh);
+  return fresh;
+}
 function cmdWait(args) {
   const since = args.flags.get("--since") ?? new Date().toISOString();
   const timeoutSec = Number(args.flags.get("--timeout") ?? "600");
@@ -494,24 +503,29 @@ function cmdWait(args) {
     writeStatus(args, "FAIL");
     fail(args, "no PR for the current branch", 2);
   }
+  const number = pr.number;
   requireExpectedHead(args, pr);
   const deadline = Date.now() + timeoutSec * 1000;
   for (;; ) {
-    const reviews = fetchReviews(ctx, pr.number);
-    const findings = normalizeFindings(reviews, fetchInlineComments(ctx, pr.number), fetchIssueComments(ctx, pr.number), since, pr.headRefOid);
+    const observed = revalidateWaitTarget(args, number);
+    const reviews = fetchReviews(ctx, number);
+    const findings = normalizeFindings(reviews, fetchInlineComments(ctx, number), fetchIssueComments(ctx, number), since, observed.headRefOid);
     if (findings.length > 0) {
+      revalidateWaitTarget(args, number);
       writeStatus(args, "FOUND");
       emit(args, { ok: true, verdict: "FOUND", findings }, renderFindings(findings));
       return;
     }
-    if (hasCurrentCleanReview(reviews, since, pr.headRefOid)) {
+    if (hasCurrentCleanReview(reviews, since, observed.headRefOid)) {
+      const fresh = revalidateWaitTarget(args, number);
       writeStatus(args, "CLEAN");
-      emit(args, { ok: true, verdict: "CLEAN", pr: pr.number, url: pr.url, head: pr.headRefOid, findings: [] }, `Codex review completed cleanly for HEAD ${pr.headRefOid.slice(0, 7)}.`);
+      emit(args, { ok: true, verdict: "CLEAN", pr: fresh.number, url: fresh.url, head: fresh.headRefOid, findings: [] }, `Codex review completed cleanly for HEAD ${fresh.headRefOid.slice(0, 7)}.`);
       return;
     }
     if (Date.now() >= deadline) {
+      revalidateWaitTarget(args, number);
       writeStatus(args, "TIMEOUT");
-      emit(args, { ok: true, verdict: "TIMEOUT", pr: pr.number, url: pr.url }, `No Codex review within ${timeoutSec}s \u2014 still pending. Collect later with /sp:dev-pr-review collect.
+      emit(args, { ok: true, verdict: "TIMEOUT", pr: number, url: pr.url }, `No Codex review within ${timeoutSec}s \u2014 still pending. Collect later with /sp:dev-pr-review collect.
 PR: ${pr.url}`);
       throw new ScriptExit("", 3, args.booleans.has("--json"));
     }

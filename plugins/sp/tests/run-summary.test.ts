@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { Row } from '../lib/transcript';
+import { promptText, type Row } from '../lib/transcript';
 import {
     actorSplit,
     buildRunSummary,
@@ -545,5 +545,49 @@ describe('1146 — run-summary failure surfaces', () => {
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
+    });
+});
+
+describe('1151 — a pi skill-invocation wrapper on a window boundary', () => {
+    // R6: prompt reclassification must not disturb token accounting. A pi `/skill` invocation is an
+    // OPERATOR PROMPT (1151 R1), so it is excluded from window accumulation exactly like any other
+    // user row — and a pi user row carries no usage or tool calls, so the measured span and the
+    // token totals of the window it sits in are unchanged either way.
+    const wrapper = (s: number) => ({
+        type: 'message',
+        id: `w${s}`,
+        timestamp: at(s),
+        message: {
+            role: 'user',
+            content: [
+                {
+                    type: 'text',
+                    text: '<skill name="sp-dev-runall" location="/x/SKILL.md">\nbody\n</skill>\n\n--tasks 1,2',
+                },
+            ],
+        },
+    });
+    const progressInput = [
+        {
+            progress: progress('r1', [
+                ['implement', 1, 'passed', 10, 30],
+                ['verify', 1, 'passed', 60, 80],
+            ]),
+        },
+    ];
+
+    test('F24/R6: the wrapper row is a prompt, and the windowed summary is unchanged by it', () => {
+        // The classification itself: this fails on the pre-1151 code, which dropped wrapper rows.
+        expect(promptText(wrapper(30))).toBe('/sp-dev-runall --tasks 1,2');
+        const without = buildRunSummary(runFixture(), progressInput, at(0));
+        // Placed exactly at the implement window's END boundary — the position where a row treated
+        // as activity instead of a prompt would be accumulated into that window.
+        const withWrapper = buildRunSummary([...runFixture(), JSON.stringify(wrapper(30))], progressInput, at(0));
+        expect(withWrapper.rows).toEqual(without.rows);
+        expect(withWrapper.total).toEqual(without.total);
+        expect(withWrapper.rows.find((r) => r.stage === 'implement')).toMatchObject({
+            workMs: 20_000,
+            toolCalls: 3,
+        });
     });
 });

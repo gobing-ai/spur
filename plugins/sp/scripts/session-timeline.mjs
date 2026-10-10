@@ -39,14 +39,10 @@ function promptText(row) {
   if (row.type === "message") {
     if (row.message?.role !== "user")
       return;
-    if (isInjectedPrompt(row))
+    const text = firstTextContent(row);
+    if (text === undefined)
       return;
-    const content2 = row.message.content;
-    if (typeof content2 === "string")
-      return content2;
-    if (!Array.isArray(content2))
-      return;
-    return content2.find((b) => b.type === "text")?.text;
+    return skillInvocationPrompt(text) ?? text;
   }
   if (row.type !== "user" || row.isMeta || row.isCompactSummary)
     return;
@@ -57,12 +53,21 @@ function promptText(row) {
     return;
   return content.find((b) => b.type === "text")?.text;
 }
-function isInjectedPrompt(row) {
-  if (row.type !== "message" || row.message?.role !== "user")
-    return false;
-  const content = row.message.content;
-  const text = typeof content === "string" ? content : Array.isArray(content) ? content.find((b) => b.type === "text")?.text : undefined;
-  return typeof text === "string" && text.replace(/^\s+/, "").startsWith('<skill name="');
+function firstTextContent(row) {
+  const content = row.message?.content;
+  if (typeof content === "string")
+    return content;
+  if (!Array.isArray(content))
+    return;
+  return content.find((b) => b.type === "text")?.text;
+}
+function skillInvocationPrompt(text) {
+  const name = /^\s*<skill name="([^"]+)"/.exec(text)?.[1];
+  if (name === undefined)
+    return;
+  const close = text.lastIndexOf("</skill>");
+  const args = close < 0 ? "" : text.slice(close + "</skill>".length).trim();
+  return args === "" ? `/${name}` : `/${name} ${args}`;
 }
 function sumTokens(all) {
   const total = zeroTokens();
@@ -212,15 +217,7 @@ function buildTimeline(lines, group) {
   const open = [];
   const { rows, skippedLines, format } = parseRows(lines);
   const isPi = format === "pi";
-  let injectedPrompts = 0;
   for (const [row, ts] of rows) {
-    if (isPi && isInjectedPrompt(row)) {
-      injectedPrompts++;
-      const injectedSeg = open.at(-1);
-      if (injectedSeg)
-        accumulate(injectedSeg, row, ts);
-      continue;
-    }
     const prompt = promptText(row);
     if (prompt !== undefined) {
       open.push({ start: ts, prompt, ...newAcc(ts) });
@@ -253,8 +250,7 @@ function buildTimeline(lines, group) {
     available: true,
     segments,
     totals: render(isPi ? { ...totals, compactions: segments.reduce((n, s) => n + (s.compactions ?? 0), 0) } : totals),
-    skippedLines,
-    ...isPi ? { injectedPrompts } : {}
+    skippedLines
   };
   if (group) {
     timeline.stages = parseGroups(group, segments.length).map(([a, b]) => render({ ...sumSpans(segments.slice(a - 1, b)), segments: a === b ? `${a}` : `${a}-${b}` }));
@@ -273,8 +269,7 @@ function zeroSegmentReason(rows) {
     const census = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 5).map(([kind, n]) => `${kind} ${n}`).join(", ");
     return `unrecognized transcript format (row types: ${census})`;
   }
-  const injected = rows.filter(([r]) => isInjectedPrompt(r)).length;
-  return `${format} transcript with no operator prompts (${rows.length} rows, ${injected} injected)`;
+  return `${format} transcript with no operator prompts (${rows.length} rows)`;
 }
 function main(argv, env = getEnvVars(), write = (s) => process.stdout.write(s), projectsRoot, writeErr = (s) => process.stderr.write(s)) {
   let transcript;

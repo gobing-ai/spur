@@ -379,7 +379,7 @@ can't express). Web consumes via `fetchWithTimeout` + `resolveApiUrl` and native
 
 | Method | Path                      | Body / Query                         | Response                                                                  | Notes                             |
 | ------ | ------------------------- | ------------------------------------ | ------------------------------------------------------------------------- | --------------------------------- |
-| GET    | `/api/messages/inbox`     | `?agent=<id>&limit=<n>&offset=<n>`              | `{ messages: [{id, fromId, body, status, createdAt, inReplyTo}], count }` | One agent's inbox queue; `agent` is required.          |
+| GET    | `/api/messages/inbox`     | `?agent=<id>&limit=<n>&offset=<n>`              | `{ messages: [{id, fromId, body, status, createdAt, inReplyTo}], count }` | One agent's inbox queue; `agent` is required. `limit` defaults to 50 and is capped at 500; `offset` is a page position with no ceiling (a nonnegative decimal safe integer, otherwise 0, omitted stays omitted).          |
 | GET    | `/api/messages`           | `?limit=<n>`                         | `{ messages: [...], count }`                                              | Global message feed (all agents). |
 | POST   | `/api/messages`           | `{ to, body, from?, requestKey?, projectPath? }` | `{ msgId, toId, status: 'queued', injected, replayed?, requestKey? }` (201) | Enqueue a message; a mismatched `projectPath` returns 409 before writing. |
 | POST   | `/api/messages/:id/reply` | `{ body }`                   | `{ msgId, toId, status: 'queued', injected }` (201)                                 | Reply to the original sender as the original recipient. |

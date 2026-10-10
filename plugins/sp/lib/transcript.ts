@@ -88,17 +88,23 @@ export function formatTokenSplit(t: Tokens | null): string {
     return `${formatTokens(nonCached + t.cacheRead)} / ${formatTokens(nonCached)}`;
 }
 
-/** Operator prompt text, or undefined for tool results, meta rows and compaction summaries. */
+/**
+ * Operator prompt text, or undefined for tool results, meta rows and compaction summaries.
+ *
+ * pi (1151 R1/R3): pi records the OPERATOR'S own `/skill` invocation as a user message that opens
+ * with `<skill name="X" …>` and whose arguments follow the closing tag — it does not inject skill
+ * bodies as user rows (a 2,452-row census of local transcripts found none; the one synthetic
+ * body-only fixture row had no real counterpart). Every such row is therefore an operator prompt,
+ * rendered `/X <args>`; an ARGUMENT-LESS wrapper is still an invocation and renders `/X` (the skill
+ * name is the stage label the review groups by, so arguments alone would lose which command ran).
+ */
 export function promptText(row: Row): string | undefined {
     if (row.type === 'message') {
         // pi (1130): only a user-role message with text content is a prompt; toolResult rows are not.
         if (row.message?.role !== 'user') return undefined;
-        // pi (1138 R2): a skill-injected body is activity, not an operator prompt.
-        if (isInjectedPrompt(row)) return undefined;
-        const content = row.message.content;
-        if (typeof content === 'string') return content;
-        if (!Array.isArray(content)) return undefined;
-        return (content as Block[]).find((b) => b.type === 'text')?.text;
+        const text = firstTextContent(row);
+        if (text === undefined) return undefined;
+        return skillInvocationPrompt(text) ?? text;
     }
     if (row.type !== 'user' || row.isMeta || row.isCompactSummary) return undefined;
     const content = row.message?.content;
@@ -107,22 +113,29 @@ export function promptText(row: Row): string | undefined {
     return (content as Block[]).find((b) => b.type === 'text')?.text;
 }
 
+/** First `type:text` block of a pi message, or its string content. */
+function firstTextContent(row: Row): string | undefined {
+    const content = row.message?.content;
+    if (typeof content === 'string') return content;
+    if (!Array.isArray(content)) return undefined;
+    return (content as Block[]).find((b) => b.type === 'text')?.text;
+}
+
 /**
- * 1138 R2: a pi user row whose first text block, after leading whitespace, opens with
- * `<skill name="`, is an injected body (pi has no `isMeta` to key on). It is accumulated as
- * activity and must not open a segment. Operator text that merely CONTAINS `<skill` later in the
- * body is still a prompt. Claude rows are unaffected: their injected bodies already arrive as `isMeta`.
+ * 1151 R1: `/X <args>` for a pi operator `/skill` invocation wrapper, undefined for anything else.
+ *
+ * The wrapper is `^\s*<skill name="X"` — the anchored, complete quoted name is the only signal;
+ * text that merely CONTAINS `<skill` later in the body stays plain operator text. Arguments are the
+ * text after the LAST `</skill>` (a body may itself quote the tag); a wrapper with no closing tag
+ * renders `/X` alone rather than dumping the body as the prompt. A malformed name (no closing quote)
+ * is not a wrapper.
  */
-export function isInjectedPrompt(row: Row): boolean {
-    if (row.type !== 'message' || row.message?.role !== 'user') return false;
-    const content = row.message.content;
-    const text =
-        typeof content === 'string'
-            ? content
-            : Array.isArray(content)
-              ? (content as Block[]).find((b) => b.type === 'text')?.text
-              : undefined;
-    return typeof text === 'string' && text.replace(/^\s+/, '').startsWith('<skill name="');
+export function skillInvocationPrompt(text: string): string | undefined {
+    const name = /^\s*<skill name="([^"]+)"/.exec(text)?.[1];
+    if (name === undefined) return undefined;
+    const close = text.lastIndexOf('</skill>');
+    const args = close < 0 ? '' : text.slice(close + '</skill>'.length).trim();
+    return args === '' ? `/${name}` : `/${name} ${args}`;
 }
 
 export function sumTokens(all: Tokens[]): Tokens {

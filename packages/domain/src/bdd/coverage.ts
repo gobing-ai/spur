@@ -98,9 +98,10 @@ function extractCoversAliases(text: string): string[] {
  * @param taskAc     Task-level AC (the implementation — subset of feature)
  * @param taskChecklist  Optional checklist items from the task (Tier-2 AC)
  * @param acAltitude Declared AC altitude (task 0584 / ADR-062): `task-local`
- *        skips the DD-09 subset rule (the task's criteria sit at a finer
+ *        relaxes the DD-09 subset rule (the task's criteria sit at a finer
  *        altitude than the feature's ship contract); absent or `graduating`
- *        enforces it. The field is the only input — never inferred from
+ *        enforces it. `orphans` is always computed — altitude never changes it
+ *        (task 1153 R2). The field is the only input — never inferred from
  *        notation or template (R4).
  */
 export function checkAcCoverage(
@@ -109,19 +110,6 @@ export function checkAcCoverage(
     taskChecklist?: ChecklistItem[],
     acAltitude?: 'graduating' | 'task-local',
 ): CoverageResult {
-    // task-local: criteria are finer-grained than the feature's ship contract,
-    // so the subset rule does not apply (DD-09 skipped, task 0584 R3).
-    //
-    // CAUTION: `orphans` in this early return is NOT a computed result — it is empty
-    // because the subset comparison never ran. Callers on the altitude-aware path read
-    // only `uncovered`, so this is inert today, but the feature-side orphan sweep
-    // (`feature-check.ts`, which intersects `.orphans` across linked tasks) reads that
-    // field from this same function. If a caller ever passes an altitude AND reads
-    // `orphans`, it would see "no orphans" for a reason that has nothing to do with
-    // coverage. Compute the orphan set before returning if that day comes.
-    if (acAltitude === 'task-local') {
-        return { covered: true, orphans: [], uncovered: [], issues: [] };
-    }
     const featureParsed = parseForCoverage(featureAc);
     const taskParsed = parseForCoverage(taskAc);
 
@@ -199,6 +187,13 @@ export function checkAcCoverage(
                 message: `Feature scenario "${title}" has no covering task scenario.`,
             });
         }
+    }
+
+    // task-local relaxes only the subset rule (0584 R3); `orphans` is always computed (1153 R2),
+    // so an altitude-aware caller reads a real orphan set. Subset violations are exactly the
+    // `error` issues; orphan issues are `warning`.
+    if (acAltitude === 'task-local') {
+        return { covered: true, orphans, uncovered: [], issues: issues.filter((i) => i.severity !== 'error') };
     }
 
     return {
