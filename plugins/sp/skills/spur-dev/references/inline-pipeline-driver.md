@@ -538,6 +538,49 @@ reformulate the prose into a command, spawn a subagent for it, or silently promo
 Beyond the deterministic `estimate_hours` floor in condition 5, no token estimate, model heuristic,
 or configuration switch is added.
 
+**Contingent fallback (task 1134 R1/R2) — capacity is not capability.** That fallback is correct for
+capability-shaped failures and **wrong when the exhausted resource is the host session's own
+provider quota**: re-selecting the same exhausted provider cannot succeed by construction, and the
+run collapses into one serial host worker with no executor diversity. So classify the pre-dispatch
+failure before falling back:
+
+```bash
+DISPATCH_SCRIPT=plugins/sp/scripts/inline-run-dispatch.ts; [ -f config/plugin-scripts.json -a -f "$DISPATCH_SCRIPT" ] || DISPATCH_SCRIPT="$(superskill script path sp inline-run-dispatch.mjs 2>/dev/null)"
+bun "$DISPATCH_SCRIPT" --dispatch-failure --run-id "$RUN_ID" --stage <state-id> --decision <escalate|stop> \
+  --text-file <bounded failure record> [--executor <name>] [--agent <a>] [--model <m>]
+```
+
+The helper wraps the upstream `@gobing-ai/ts-ai-runner` classifier (Spur matches **no** provider
+code or quota vocabulary of its own) and writes `.spur/run/<run-id>-dispatch-fallback.json` as
+`{stage, class, reason?, resetAt?, decision, executor, attribution, observedAt}`. Read `.class` from
+that file — never judge the prose yourself.
+
+- **`class: capability`** (generic 429, rate limit, overload, auth failure, timeout, missing
+  permission, missing capability, non-dispatch-eligible prose, below the size floor) → today's
+  fallback, unchanged: execute the stage once in the host session and log
+  `stage <id> executed inline in session <session-id>`.
+- **`class: capacity`** (a confirmed exhausted usage allowance or credit balance) → the stage is
+  **never** re-executed in the orchestrating host session. Hand it to the subprocess dispatch path
+  (`--agent auto|name` resolves an executor through the registry and can pick another rung); when
+  that path is unavailable, terminate the run at `failed` with `terminalReason: failed-agent`,
+  naming the executor and the record's `resetAt` when it carries one. Record
+  `stage <id> capacity exhaustion: <executor> <reason> reset <resetAt|unknown> — escalate|stop`.
+
+**Attribution before dispatch (task 1134 R3).** Immediately before each inline `agent.run` stage,
+record the executor identity the stage will use, so a later classified exhaustion can be attributed
+to a rung configuration can disable:
+
+```bash
+bun "$DISPATCH_SCRIPT" --attribution --run-id "$RUN_ID" --stage <state-id> \
+  [--executor <name>] [--agent <name>] [--model <m>]     # omit --executor for the no-attribution marker
+```
+
+This appends one line to `.spur/run/<run-id>-attribution.jsonl` and one run-log line
+(`stage <id> attribution: <executor|none>`). When no named executor resolves, pass no `--executor`:
+the ledger records the explicit `executor: null` marker — never a silent drop. An unattributed stage
+is observable but cannot write configuration (executor-availability §4), and `spur agent doctor
+--json` counts those stages as `inlineFailFast.unattributedStages`.
+
 **Pre-dispatch permission check (2026-09-15 subagent-dispatch evaluation).** Claude Code exposes no
 dry-run permission API, so the contract is **name-capabilities + fail-fast blocker** — never a
 permission-probing subsystem. Before dispatching a stage, the driver names the stage's required
@@ -713,6 +756,14 @@ Background, seq 232) and sent a worker into the locked gate. The pipeline's next
 stage re-acquires the lock and delivers the deciding verdict; that deciding run may wait for a live
 holder, so a queued worker's effective budget is dispatch timeout minus observed lock queue wait,
 not the timeout alone.
+
+**Null or timed-out dispatch (task 1134 R9).** The dispatch bound stays the existing YAML
+`timeoutMs` (`implementTimeoutMs` / `stepTimeoutMs`), passed to the host dispatch as today — R9 adds
+no new bound. A dispatch that returns **no result**, or that hits that bound, is a **recorded stage
+failure**, not a fallback trigger: record the stage failed with `dispatch: null-result|timeout`,
+follow the stage's normal failure edge (implement's default `fail` policy routes the run to
+`failed`), and start **no** host-inline attempt of that stage. R1–R4 cover a *pre-dispatch* capacity
+refusal (the executor must shift); R9 covers the *dispatched-but-unproductive* case.
 
 **Timeout boundary (task 0727, amended by task 1108):** when the host's dispatch tool accepts a
 per-dispatch timeout (pi: subagent `timeoutMs`, default 30 min — pi-subagents `docs/tool-reference.md`

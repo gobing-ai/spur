@@ -131,6 +131,15 @@ export {
     loopSleep,
     runAgentLoopCore,
 } from './services/agent-loop-service';
+export type { ObservationRefreshStatus } from './services/agent-quota-refresh';
+export {
+    type ObservationRefreshOptions,
+    type ObservationRefreshOutcome,
+    observationRefreshStatusPath,
+    QUOTA_DISABLE_TTL_MS,
+    readObservationRefreshStatus,
+    runObservationRefresh,
+} from './services/agent-quota-refresh';
 export {
     type AgentQuotaDrainSummary,
     type AgentQuotaEventBus,
@@ -428,16 +437,26 @@ export type {
 } from './services/inline-run-setup';
 export {
     appendInlineRunLogLine,
+    classifyDispatchFailure,
+    countUnattributedInlineStages,
     createOrAttachInlineRun,
+    type DispatchFailureClass,
+    type DispatchFailureClassification,
+    type DispatchFallbackDecision,
     type InlineDecideInput,
     type InlineDecideOutcome,
     type InlineRunActionEntry,
+    type InlineRunDispatchFailureInput,
+    type InlineRunDispatchFallbackRecord,
     type InlineRunNodeEnterInput,
     type InlineRunProjectDb,
     type InlineRunStateOutcome,
     type InlineRunTraceBatchInput,
     type InlineRunTraceInput,
     type InlineRunTraceModeInput,
+    type InlineStageAttribution,
+    inlineRunAttributionPath,
+    inlineRunDispatchFallbackPath,
     inlineRunRecordLogPath,
     isInlineRunActionStatus,
     isInlineRunCloseStatus,
@@ -447,8 +466,10 @@ export {
     persistWorktreeRuns,
     type ReadInstalledInventoryInput,
     readInstalledInventory,
+    recordInlineRunAttribution,
     runDecideForInlineRun,
     runInlineRunDecide,
+    runInlineRunDispatchFailure,
     runInlineRunFingerprint,
     runInlineRunNodeEnter,
     runInlineRunPersistOut,

@@ -58,6 +58,7 @@ import {
 import { AgentRunLog } from '../observability/agent-run-log';
 import { toEnvelopeJson } from '../output/envelope';
 import { readWorkflowRunRecord } from '../workflow/run-record';
+import { readObservationRefreshStatus } from './agent-quota-refresh';
 import { type NormalizedAgentUsage, normalizeAgentUsage } from './agent-usage';
 import {
     capabilityDiagnostic,
@@ -77,6 +78,7 @@ import {
 } from './executor-tier';
 import { classifyDispatch } from './failure-classification';
 import { FleetService, mergeAgentSpecs } from './fleet-service';
+import { countUnattributedInlineStages } from './inline-run-setup';
 import { RunSessionObserver, type RunSessionOverlapRegistry } from './run-session-observer';
 import { resolveRunRecordDir } from './run-storage';
 
@@ -844,6 +846,14 @@ export class AgentService {
                         rolesSource: this.ctx.rolesSource ?? 'config',
                         cache: cacheField,
                         usage: usage ?? null,
+                        // 1134 R6: can fail-fast actually fire? The scheduled observation-refresh
+                        // job's last run (null when it never ran) plus the count of inline stages
+                        // that ran without executor attribution — an unattributed stage cannot be
+                        // disabled later, so a non-zero count means the trigger is blind.
+                        inlineFailFast: {
+                            refreshJob: readObservationRefreshStatus(this.ctx.cwd),
+                            unattributedStages: countUnattributedInlineStages(this.ctx.cwd),
+                        },
                     },
                     { enveloped },
                 ),

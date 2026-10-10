@@ -4,7 +4,7 @@ name: session-timeline must measure the pi host transcript so the review skill's
 status: done
 template: feature-impl
 created_at: 2026-10-09T05:34:59.326Z
-updated_at: "2026-10-09T23:22:19.165Z"
+updated_at: "2026-10-10T00:08:16.241Z"
 feature_id: E5
 
 ac_altitude: task-local
@@ -186,22 +186,22 @@ Tradeoff: `injectedPrompts` is a new optional field on the pi timeline only, so 
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
-- Confidence: HIGH
+- Confidence: MEDIUM
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `plugins/sp/lib/transcript.ts:222` resolves `PI_SESSION_FILE` after the Claude id and names a missing file; live drill on this pi host ran the script with no arguments and measured the transcript. |
-| R2 | MET | `plugins/sp/lib/transcript.ts:102` `isInjectedPrompt` + `plugins/sp/scripts/session-timeline.ts:83` count and accumulate injected rows; the live drill reported `injectedPrompts: 2` with the skill wrappers opening no segment. |
-| R3 | MET | `plugins/sp/scripts/session-timeline.ts:145` `zeroSegmentReason` names the format, row count and injected count, or a top-5 type census; both reasons asserted. |
-| R4 | MET | `plugins/sp/tests/fixtures/pi-session.jsonl` gained one injected row and one mid-text `<skill` prompt; 37 tests in `plugins/sp/tests/session-timeline.test.ts` pass, and each fix reverted fails its tests (2/2/3). |
-| R5 | MET | `plugins/sp/skills/session-review/SKILL.md`, `plugins/sp/commands/dev-review-session.md` and `docs/design/session-review.md` state the resolution order; the no-host-id reason names `PI_SESSION_FILE`; `bun run build:scripts` regenerated `session-timeline.mjs` and `run-summary.mjs`. |
+| R1 | MET | `plugins/sp/lib/transcript.ts:233` resolves PI_SESSION_FILE after the Claude id and names a missing file (`plugins/sp/lib/transcript.ts:237`); `plugins/sp/tests/session-timeline.test.ts` 37 pass; mutant (branch disabled) → 2 fail, this run |
+| R2 | MET | `plugins/sp/lib/transcript.ts:102` isInjectedPrompt; `plugins/sp/scripts/session-timeline.ts:83` counts and accumulates; mutant (predicate false) → 2 fail, this run |
+| R3 | MET | `plugins/sp/scripts/session-timeline.ts:145` zeroSegmentReason; mutant (always unknown) → 1 fail, this run |
+| R4 | MET | `plugins/sp/tests/fixtures/pi-session.jsonl` injected + mid-text rows; `bun test tests/session-timeline.test.ts` 37 pass / 0 fail this run; all three mutants killed |
+| R5 | MET | `plugins/sp/skills/session-review/SKILL.md:98`, `plugins/sp/commands/dev-review-session.md:20`, `docs/design/session-review.md:59` name PI_SESSION_FILE; `bun run build:scripts` exit 0 this run with zero git drift in `.mjs` |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | e2e | Live drill: with `PI_SESSION_FILE` set and no Claude id, the script with no arguments returned `available: true` with 2 segments; a missing file yields the named `PI_SESSION_FILE <path> does not exist` reason; the Claude id still wins when both are set (unit). |
-| AC2 | MET | unit | The fixture's injected row opens no segment (3 segments, `injectedPrompts` 1) and the mid-text `<skill` operator prompt opens its own. |
-| AC3 | MET | unit | A pi transcript of only assistant and toolResult rows returns `pi transcript with no operator prompts (2 rows, 0 injected)`; an unknown file returns `unrecognized transcript format (row types: mystery 2, other 1)`. |
-| AC4 | PARTIAL | e2e | Each fix reverted fails its tests (R1 2, R2 2, R3 3); `bun run build:scripts` and `bun run test-post-check` pass; the suite is 10721 pass / 0 fail. `bun run spur-check` cannot exit 0 because of 20 pre-existing `no-scratch-verdict-pointer` findings in docs/tasks4 and docs/tasks5, reproduced at the pre-change base `0304f3830` in an untouched worktree — unrelated to this task. |
+| AC1 — A pi session resolves from PI_SESSION_FILE (req: R1) | MET | test | `plugins/sp/tests/session-timeline.test.ts` PI_SESSION_FILE cases, 37 pass this run; run-summary shares `resolveTranscript` (`plugins/sp/scripts/run-summary.mjs:171`) |
+| AC2 — A skill-injected body is counted, not segmented (req: R2) | MET | test | `plugins/sp/tests/session-timeline.test.ts` injected-row cases, 37 pass this run |
+| AC3 — Zero-segment results say what was detected (req: R3) | MET | test | `plugins/sp/tests/session-timeline.test.ts` reason cases, 37 pass this run |
+| AC4 — Tests fail without fixes and docs match (req: R4, R5) | MET | command | mutants killed (2/2/1) and `bun run build:scripts` exit 0 this run; operator-run unsandboxed `bun run gate` (format + spur-check) this turn: lint/typecheck clean, 51 pre-check rules pass, 10734 pass / 0 fail across 629 files, 2 post-check rules pass; `plugins/sp/scripts/session-timeline.ts` 100% lines |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

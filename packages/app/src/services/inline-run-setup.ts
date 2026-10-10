@@ -38,6 +38,7 @@ const {
     mkdirSync,
     openSync,
     readFileSync,
+    readdirSync,
     renameSync,
     unlinkSync,
     writeFileSync,
@@ -45,7 +46,7 @@ const {
 } = await import('node:fs');
 const { lstat, mkdir, readdir, readFile } = await import('node:fs/promises');
 
-import { basename, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import type { SpurConfig } from '@gobing-ai/spur-config';
 import { getEnvVars } from '@gobing-ai/spur-config';
 import type { DbAdapter, RunDefinitionSource } from '@gobing-ai/spur-domain';
@@ -59,6 +60,12 @@ import {
     SystemEventDao,
     transferRunTables,
 } from '@gobing-ai/spur-domain';
+import {
+    buildQuotaObservation,
+    classifyQuotaErrorRecord,
+    MAX_QUOTA_EVIDENCE_BYTES,
+    type QuotaExhaustionReason,
+} from '@gobing-ai/ts-ai-runner';
 import {
     createDefaultWorkflowEngineHost,
     DbWorkflowPersistenceAdapter,
@@ -85,6 +92,11 @@ import {
     resolveWorkflowDefinition,
     type WorkflowLayerId,
 } from '../workflow/workflow-resolver';
+import {
+    type AgentQuotaUpdatesContext,
+    drainPendingAgentQuotaUpdates,
+    recordAgentQuotaEvent,
+} from './agent-quota-updates';
 import { ensureDurablePlaneIgnored, runStoragePaths } from './run-storage';
 import { registerSystemEventTap, type SystemEventBus, type SystemEventTap } from './system-event-tap';
 import { parseVerifyVerdict } from './verify-verdict';
@@ -2016,4 +2028,287 @@ export async function runInlineRunSetup(input: InlineRunSetupDriverInput): Promi
         projectDb.close();
     }
     return exitCode;
+}
+
+// ---------------------------------------------------------------------------
+// Inline dispatch fail-fast (task 1134 R1–R4)
+// ---------------------------------------------------------------------------
+
+/** Which side of the fail-fast branch a failed inline dispatch belongs to. */
+export type DispatchFailureClass = 'capacity' | 'capability';
+
+/** Result of {@link classifyDispatchFailure} — capacity-shaped or not. */
+export interface DispatchFailureClassification {
+    readonly class: DispatchFailureClass;
+    /** Upstream-normalized reason; present only for a confirmed capacity observation. */
+    readonly reason?: QuotaExhaustionReason;
+    /** Observed reset instant (ISO, UTC) when the confirmed record carries one. */
+    readonly resetAt?: string;
+}
+
+/** Driver decision recorded beside the classification (R1: escalate or stop, never host-inline). */
+export type DispatchFallbackDecision = 'escalate' | 'stop' | 'host-inline';
+
+/**
+ * Local `YYYY-MM-DD HH:MM[:SS]` extraction. Runs ONLY on a record the upstream classifier already
+ * confirmed as capacity exhaustion, and matches no quota vocabulary of its own — Spur adds no
+ * provider-code or quota-word matching (1134 R2). A missing zone is read as UTC: the evidence is
+ * bounded provider error text, not a user-facing local timestamp.
+ */
+const RESET_AT_PATTERN = /(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}(?::\d{2})?)/g;
+
+/** Last parseable reset instant in a confirmed capacity record, normalized to UTC ISO. */
+function extractResetAt(record: string): string | undefined {
+    RESET_AT_PATTERN.lastIndex = 0;
+    let resolved: string | undefined;
+    let match: RegExpExecArray | null = RESET_AT_PATTERN.exec(record);
+    while (match !== null) {
+        const clock = match[2] ?? '';
+        const iso = `${match[1] ?? ''}T${clock.length === 5 ? `${clock}:00` : clock}Z`;
+        const parsed = Date.parse(iso);
+        if (!Number.isNaN(parsed)) resolved = new Date(parsed).toISOString();
+        match = RESET_AT_PATTERN.exec(record);
+    }
+    return resolved;
+}
+
+/**
+ * Classify a pre-dispatch failure record through the upstream quota classifier
+ * (`@gobing-ai/ts-ai-runner`). Capacity-shaped (a confirmed exhausted usage allowance or credit
+ * balance) means the host session cannot succeed by construction, so the driver must escalate or
+ * stop; everything else — a generic 429, rate limit, overload, auth failure, timeout, missing
+ * permission, prose input — is capability-shaped and keeps today's host-inline fallback.
+ */
+export function classifyDispatchFailure(text: string): DispatchFailureClassification {
+    const classification = classifyQuotaErrorRecord(text);
+    if (!classification.quota) return { class: 'capability' };
+    const resetAt = extractResetAt(text);
+    return {
+        class: 'capacity',
+        reason: classification.reason,
+        ...(resetAt === undefined ? {} : { resetAt }),
+    };
+}
+
+/** One attribution record: the executor identity an inline stage actually used (R3). */
+export interface InlineStageAttribution {
+    readonly stage: string;
+    /** Resolved executor name; `null` is the explicit no-attribution marker. */
+    readonly executor: string | null;
+    readonly agent: string | null;
+    readonly model?: string;
+    readonly observedAt: string;
+}
+
+/** Append-only attribution ledger for one inline run (`.spur/run/<run-id>-attribution.jsonl`). */
+export function inlineRunAttributionPath(projectRoot: string, runId: string): string {
+    return join(runStoragePaths(projectRoot).scratchDir, `${runId}-attribution.jsonl`);
+}
+
+/**
+ * Record the executor identity an inline stage used BEFORE the stage runs (R3). Without it a later
+ * classified exhaustion is observable but cannot write configuration (executor-availability §4).
+ * When no executor resolves, the explicit `executor: null` marker is written — never a silent drop.
+ */
+export function recordInlineRunAttribution(
+    projectRoot: string,
+    runId: string,
+    attribution: InlineStageAttribution,
+): void {
+    const path = inlineRunAttributionPath(projectRoot, runId);
+    mkdirSync(runStoragePaths(projectRoot).scratchDir, { recursive: true });
+    appendFileSync(path, `${JSON.stringify(attribution)}\n`);
+}
+
+/**
+ * Count inline stages that ran without executor attribution (R6) — the operator's signal that
+ * fail-fast could not have fired. Unreadable or malformed ledgers contribute nothing rather than
+ * failing the read.
+ */
+export function countUnattributedInlineStages(projectRoot: string): number {
+    const scratchDir = runStoragePaths(projectRoot).scratchDir;
+    let files: string[];
+    try {
+        files = readdirSync(scratchDir).filter((entry) => entry.endsWith('-attribution.jsonl'));
+    } catch {
+        return 0;
+    }
+    let count = 0;
+    for (const file of files) {
+        let text: string;
+        try {
+            text = readFileSync(join(scratchDir, file), 'utf8');
+        } catch {
+            continue;
+        }
+        for (const line of text.split('\n')) {
+            if (line.trim() === '') continue;
+            try {
+                const row = JSON.parse(line) as { executor?: unknown };
+                if (row.executor === null) count += 1;
+            } catch {
+                // A partial trailing line is not an attribution record; ignore it.
+            }
+        }
+    }
+    return count;
+}
+
+/** Run-scoped status artifact written by the fail-fast hop (task 1134 R1/R2/R3). */
+export interface InlineRunDispatchFallbackRecord {
+    readonly stage: string;
+    readonly class: DispatchFailureClass;
+    readonly reason?: QuotaExhaustionReason;
+    readonly resetAt?: string;
+    readonly decision: DispatchFallbackDecision;
+    /** Resolved executor the record is attributed to; null = no attribution. */
+    readonly executor: string | null;
+    readonly attribution: 'recorded' | 'no-attribution';
+    /** Present when the attributed capacity observation reached the durable record. */
+    readonly observationId?: string;
+    /** Durable-path outcome: recorded/duplicate/superseded, or the classified rejection. */
+    readonly recorded?: string;
+    /** Drain summary over the rows this hop applied. */
+    readonly applied?: number;
+    readonly observedAt: string;
+}
+
+/** Input for the `--dispatch-failure` mode; the plugin script resolves config (ADR-082). */
+export interface InlineRunDispatchFailureInput {
+    readonly runId: string;
+    readonly stage: string;
+    readonly decision: DispatchFallbackDecision;
+    /** Bounded failure record text (one of `text`/`textFile` is required). */
+    readonly text?: string;
+    readonly textFile?: string;
+    readonly executor?: string | null;
+    readonly agent?: string | null;
+    readonly model?: string;
+    /** Project working directory; defaults to `process.cwd()` (the driver's execution tree). */
+    readonly workdir?: string;
+    /** Effective config snapshot the composition root resolved (ADR-082). */
+    readonly spurConfig?: SpurConfig | null;
+}
+
+/** `.spur/run/<run-id>-dispatch-fallback.json` — the decision artifact the driver reads (R2). */
+export function inlineRunDispatchFallbackPath(projectRoot: string, runId: string): string {
+    return join(runStoragePaths(projectRoot).scratchDir, `${runId}-dispatch-fallback.json`);
+}
+
+/**
+ * Classify one failed inline dispatch, persist the decision artifact, and — for an attributed
+ * capacity exhaustion — carry it onto the existing durable availability path
+ * (`agent_executor_updates` → `setExecutorAvailability({owner: 'quota'})`) so the NEXT dispatch
+ * skips the rung without any provider call (R4). Exit 0 = the artifact was written and the
+ * classification is decided; 1 = the artifact could not be written (the driver must then stop,
+ * never silently re-run the stage in the host session).
+ */
+export async function runInlineRunDispatchFailure(input: InlineRunDispatchFailureInput): Promise<number> {
+    const workdir = input.workdir ?? process.cwd();
+    const record = readDispatchFailureText(input);
+    const classification = classifyDispatchFailure(record.text);
+    const observedAt = new Date().toISOString();
+    const executor = input.executor ?? null;
+    const agent = input.agent ?? null;
+    const outcome: InlineRunDispatchFallbackRecord = {
+        stage: input.stage,
+        class: classification.class,
+        ...(classification.reason === undefined ? {} : { reason: classification.reason }),
+        ...(classification.resetAt === undefined ? {} : { resetAt: classification.resetAt }),
+        decision: input.decision,
+        executor,
+        attribution: executor === null ? 'no-attribution' : 'recorded',
+        observedAt,
+    };
+    const durable =
+        classification.class === 'capacity' && executor !== null && classification.reason !== undefined
+            ? await recordCapacityExhaustion({
+                  workdir,
+                  runId: input.runId,
+                  observedAt,
+                  executor,
+                  agent,
+                  ...(input.model === undefined ? {} : { model: input.model }),
+                  reason: classification.reason,
+                  spurConfig: input.spurConfig ?? null,
+              })
+            : undefined;
+    const artifact: InlineRunDispatchFallbackRecord = {
+        ...outcome,
+        ...(durable?.observationId === undefined ? {} : { observationId: durable.observationId }),
+        ...(durable?.recorded === undefined ? {} : { recorded: durable.recorded }),
+        ...(durable?.applied === undefined ? {} : { applied: durable.applied }),
+    };
+    writeJsonArtifact(inlineRunDispatchFallbackPath(workdir, input.runId), artifact);
+    process.stdout.write(`${JSON.stringify({ ok: true, runId: input.runId, ...artifact })}\n`);
+    return 0;
+}
+
+/** Read the bounded failure record from `text`/`textFile` (exactly one must be present). */
+function readDispatchFailureText(input: InlineRunDispatchFailureInput): { text: string } {
+    if ((input.text === undefined) === (input.textFile === undefined)) {
+        throw new Error('exactly one of text/textFile is required');
+    }
+    if (input.text !== undefined) return { text: input.text };
+    const raw = readFileSync(input.textFile as string, 'utf8');
+    // Same trailing-evidence bound the upstream classifier applies; never a transcript.
+    return { text: raw.length > MAX_QUOTA_EVIDENCE_BYTES ? raw.slice(-MAX_QUOTA_EVIDENCE_BYTES) : raw };
+}
+
+/** Build the observation, record it as the latest desired state, and drain it to configuration. */
+async function recordCapacityExhaustion(args: {
+    workdir: string;
+    runId: string;
+    observedAt: string;
+    executor: string;
+    agent: string | null;
+    model?: string;
+    reason: QuotaExhaustionReason;
+    spurConfig: SpurConfig | null;
+}): Promise<{ observationId?: string; recorded: string; applied?: number }> {
+    const observation = buildQuotaObservation({
+        source: 'buffered-error',
+        reason: args.reason,
+        observedAt: new Date(args.observedAt),
+        attribution: {
+            projectId: args.workdir,
+            executor: args.executor,
+            ...(args.agent === null ? {} : { agent: args.agent }),
+            ...(args.model === undefined ? {} : { model: args.model }),
+        },
+    });
+    const projectDb = await openInlineRunProjectDb(args.workdir);
+    try {
+        const context: AgentQuotaUpdatesContext = {
+            getDb: async () => projectDb.adapter,
+            projectRoot: args.workdir,
+            loadAgentConfig: async () => args.spurConfig,
+            warn: (message) => appendInlineRunLogLine(args.runId, `dispatch-failure: ${message}`),
+        };
+        const outcome = await recordAgentQuotaEvent(context, observation, true);
+        const recorded =
+            typeof outcome === 'object' && 'rejected' in outcome ? `rejected: ${outcome.rejected}` : outcome;
+        const drain = await drainPendingAgentQuotaUpdates(context);
+        return {
+            observationId: observation.observationId,
+            recorded,
+            ...(drain.applied > 0 ? { applied: drain.applied } : {}),
+        };
+    } catch (error) {
+        return { observationId: observation.observationId, recorded: `failed: ${errorText(error)}` };
+    } finally {
+        projectDb.close();
+    }
+}
+
+/** Atomic JSON artifact write (temp sibling + rename). Throws so the caller exits nonzero. */
+function writeJsonArtifact(path: string, value: unknown): void {
+    mkdirSync(dirname(path), { recursive: true });
+    const temp = `${path}.tmp`;
+    writeFileSync(temp, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
+    renameSync(temp, path);
+}
+
+function errorText(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
 }

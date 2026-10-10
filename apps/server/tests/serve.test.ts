@@ -1724,7 +1724,9 @@ describe('startServer', () => {
         } as unknown as ServerContext;
 
         registerSchedulerEntries(scheduler, ctx);
-        expect(registered).toHaveLength(2);
+        // 1134 R5: the observation-refresh entry is registered last (after configured jobs).
+        expect(registered).toHaveLength(3);
+        expect(registered[2]?.cron).toBe('0 17 * * *');
         await registered[0]?.action(tickCtx);
         await registered[1]?.action(tickCtx);
 
@@ -1749,11 +1751,63 @@ describe('startServer', () => {
         });
     });
 
+    test('the observation-refresh entry drains, reports and makes zero provider calls (1134 R5)', async () => {
+        const registered: Array<{ cron: string; action: ScheduledAction }> = [];
+        const emitted: Array<{ name: string; payload: unknown }> = [];
+        const scheduler = {
+            register: (cron: string, action: ScheduledAction) => {
+                registered.push({ cron, action });
+            },
+            start: async () => {},
+            stop: async () => {},
+        };
+        const cwd = mkdtempSync(join(tmpdir(), 'spur-1134-serve-'));
+        mkdirSync(join(cwd, '.spur'), { recursive: true });
+        writeFileSync(
+            join(cwd, '.spur', 'config.yaml'),
+            ['agent:', '  executors:', '    - name: alpha', '      agent: omp', ''].join('\n'),
+        );
+        setEnvVar('SPUR_SKIP_GLOBAL_CONFIG', 'true');
+        const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(db);
+        try {
+            const ctx = {
+                getDb: async () => db,
+                cwd,
+                spurConfig: null,
+                eventBus: () => ({
+                    emit: (name: string, payload: unknown) => {
+                        emitted.push({ name, payload });
+                    },
+                }),
+                jobQueue: async () => ({ enqueue: async () => 'id' }),
+            } as unknown as ServerContext;
+            registerSchedulerEntries(scheduler, ctx);
+            const refresh = registered.at(-1);
+            expect(refresh?.cron).toBe('0 17 * * *');
+
+            await refresh?.action(tickCtx);
+
+            const payload = emitted
+                .map((entry) => entry.payload as { name: string; summary?: Record<string, unknown> })
+                .find((entry) => entry.summary !== undefined);
+            expect(emitted.map((entry) => entry.name)).toContain('scheduler.job.executed');
+            expect(payload?.name).toBe('observation-refresh');
+            expect(payload?.summary).toMatchObject({ applied: 0, expired: 0, failed: 0, providerRequests: 0 });
+            // Zero provider requests is structural: the job holds no provider seam at all.
+            expect(Object.keys(payload?.summary ?? {})).not.toContain('providers');
+        } finally {
+            removeEnvVar('SPUR_SKIP_GLOBAL_CONFIG');
+            db.close();
+            rmSync(cwd, { recursive: true, force: true });
+        }
+    });
+
     test('registerSchedulerEntries registers no built-in history refresh entry (task 0750)', () => {
         // The interval refresh is no longer a built-in gated by
         // `history.refresh.schedule_minutes`; periodic execution is declared as a
-        // `bootstrap.scheduler.jobs` entry like any other. Built-ins are the prune
-        // and smoke entries only, regardless of project config.
+        // `bootstrap.scheduler.jobs` entry like any other. Built-ins are the prune,
+        // smoke and (task 1134) observation-refresh entries, regardless of project config.
         const registered: Array<{ cron: string }> = [];
         const scheduler = {
             register: (cron: string) => {
@@ -1768,7 +1822,7 @@ describe('startServer', () => {
         } as unknown as ServerContext;
 
         registerSchedulerEntries(scheduler, ctx);
-        expect(registered.map((r) => r.cron)).toEqual(['300000', '600000']);
+        expect(registered.map((r) => r.cron)).toEqual(['300000', '600000', '0 17 * * *']);
     });
 
     test('registerSchedulerEntries leaves built-ins alone for an empty configured jobs list (task 0734)', () => {
@@ -1786,7 +1840,7 @@ describe('startServer', () => {
         } as unknown as ServerContext;
 
         registerSchedulerEntries(scheduler, ctx, []);
-        expect(registered.map((r) => r.cron)).toEqual(['300000', '600000']);
+        expect(registered.map((r) => r.cron)).toEqual(['300000', '600000', '0 17 * * *']);
     });
 
     test('registerSchedulerEntries registers configured jobs with exact schedules, names and payloads (task 0734)', async () => {
@@ -1824,7 +1878,7 @@ describe('startServer', () => {
         registerSchedulerEntries(scheduler, ctx, jobs);
 
         // Cron passes through verbatim; the interval form converts to milliseconds.
-        expect(registered.map((r) => r.cron)).toEqual(['300000', '600000', '30 2 * * *', '3600000']);
+        expect(registered.map((r) => r.cron)).toEqual(['300000', '600000', '30 2 * * *', '3600000', '0 17 * * *']);
 
         await registered[2]?.action(tickCtx);
         await registered[3]?.action(tickCtx);

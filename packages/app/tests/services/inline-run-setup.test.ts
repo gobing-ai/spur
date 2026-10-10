@@ -22,14 +22,18 @@ import {
 } from '../../src';
 import { RunArtifactActionRunner } from '../../src/workflow/actions/run-artifact';
 
-// runInlineRunSetup narrates on stderr; keep that out of the test reporter (mirrors
-// inline-run-driver.test.ts). No test here asserts on stderr.
+// runInlineRunSetup narrates on stderr and the trace runners report JSON on stdout; keep both
+// out of the test reporter (mirrors inline-run-driver.test.ts). No test asserts on stderr;
+// stdout assertions go through captureStdout, which layers over this mute.
 let errSpy: ReturnType<typeof spyOn>;
+let outSpy: ReturnType<typeof spyOn>;
 beforeEach(() => {
     errSpy = spyOn(console, 'error').mockImplementation(() => {});
+    outSpy = spyOn(process.stdout, 'write').mockImplementation(() => true);
 });
 afterEach(() => {
     errSpy.mockRestore();
+    outSpy.mockRestore();
 });
 
 /**

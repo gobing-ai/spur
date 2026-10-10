@@ -4,7 +4,7 @@ title: "Run record — two-file contract + the Observability read plane"
 status: implemented
 created_at: 2026-08-18
 updated_at: 2026-10-09
-related: [E7, I6, D3, "0598", "0610", "0683", "0709", "0712", "0925", "1051", "1053", "1064", "1136"]
+related: [E7, I6, D3, "0598", "0610", "0683", "0709", "0712", "0925", "1051", "1053", "1064", "1134", "1136"]
 tags: [contract, E7, I6, workflow, observability]
 ---
 
@@ -61,6 +61,25 @@ The 0594 injected-file-list cost idea is independent instrumentation, not a prer
 
 
 
+
+**1134 inline dispatch status artifacts (2026-10-09).** The inline full-pipeline driver writes two
+further run-scoped scratch artifacts under `.spur/run/`; neither is part of the pair, and neither is
+a record-owned sidecar (they are declared workflow data, classified like the WBS/feature-keyed
+evidence in §2):
+
+1. `<runId>-attribution.jsonl` — append-only, one line per inline `agent.run` dispatch, written
+   **before** the stage runs: `{stage, executor|null, agent|null, model?, observedAt}`. `executor:
+   null` is the explicit no-attribution marker (never an omitted field), and the doctor counts those
+   lines to report whether fail-fast can fire (`inlineFailFast.unattributedStages`).
+2. `<runId>-dispatch-fallback.json` — the fail-fast decision for one pre-dispatch failure:
+   `{stage, class: capacity|capability, reason?, resetAt?, decision: escalate|stop|host-inline,
+   executor|null, attribution, recorded?, applied?, observationId?, observedAt}`. The driver reads
+   this file instead of judging prose, so the branch is reproducible from the artifact.
+
+Both are bounded, recomputable scratch: they carry a bounded failure record and a classification,
+not a transcript, and the classification itself is the upstream `classifyQuotaErrorRecord` result.
+They follow `disposable-run-storage.md` reclamation like other `.spur/run` scratch, and the durable
+availability fact they may produce lives in `agent_executor_updates` + project config — not here.
 
 ## Feature E72 — Trace tab (implemented, 2026-10-04)
 

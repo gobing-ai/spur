@@ -62,6 +62,11 @@
             "twin": "inline-run-setup.mjs"
         },
         {
+            "rel": "inline-run-dispatch.ts",
+            "contract": "standard",
+            "twin": "inline-run-dispatch.mjs"
+        },
+        {
             "rel": "feature-verification-steps.ts",
             "contract": "standard",
             "twin": "feature-verification-steps.mjs"

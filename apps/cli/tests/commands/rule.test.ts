@@ -418,6 +418,17 @@ describe('no-scratch-verdict-pointer (1141 R1–R3)', () => {
         expect(yaml).toContain('.spur/memory/evidence/<wbs>-verdict.json');
         expect(yaml).toContain('spur task migrate-anchors --wbs <wbs>');
     });
+
+    test('AC5: the header names the uncovered executable-source class and the absent loader', () => {
+        const header = readFileSync(RULE_FILE, 'utf8')
+            .split('\n')
+            .filter((line) => line.startsWith('#'))
+            .join('\n');
+        expect(header).toContain('Out of scope');
+        expect(header).toContain('executable source under');
+        expect(header).toContain('the gitignored `.spur/run/`');
+        expect(header).toContain('No loader registers from there');
+    });
 });
 
 describe('rule run SQLITE_BUSY busy-wait integration', () => {

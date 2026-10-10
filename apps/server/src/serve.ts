@@ -1,3 +1,4 @@
+import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join } from 'node:path';
 import type { TimeoutPolicyMs } from '@gobing-ai/spur-app';
 import {
@@ -29,6 +30,7 @@ import {
     resolveRetentionQuotas,
     resolveSchedulerCustomTimeoutMs,
     resolveSchedulerJobTimeoutMs,
+    runObservationRefresh,
     SCHEDULER_CUSTOM_JOB,
     StrategyRuntime,
     startAgentQuotaUpdateConsumer,
@@ -135,6 +137,23 @@ export { HISTORY_REFRESH_JOB, SCHEDULER_CUSTOM_JOB } from '@gobing-ai/spur-app';
 
 const SYSTEM_EVENTS_PRUNE_CRON = '300000';
 const SMOKE_CRON = '600000';
+/**
+ * Observation-refresh schedule (1134 R5): hourly. The job makes zero provider requests, so this
+ * is a drain-and-expire cadence, not a health probe — it never spends the quota it protects.
+ */
+const OBSERVATION_REFRESH_CRON = '0 17 * * *';
+const OBSERVATION_REFRESH_JOB = 'observation-refresh';
+
+/**
+ * `~/.config/spur/agent-usage.json`, with `SPUR_AGENT_USAGE_SNAPSHOT` as the override. Mirrors
+ * `defaultAgentUsageSnapshotPath` in the CLI layer, which cannot be imported here (apps do not
+ * depend on each other) — keep the two in sync if the path moves.
+ */
+function defaultUsageSnapshotPath(env: Record<string, string | undefined>): string {
+    const override = env.SPUR_AGENT_USAGE_SNAPSHOT;
+    if (override !== undefined && override.length > 0) return override;
+    return join(env.HOME ?? homedir(), '.config', 'spur', 'agent-usage.json');
+}
 /** Options for {@link startServer}. */
 /**
  * Delay between the HTTP server accepting requests and the job worker (plus its
@@ -412,6 +431,54 @@ export function registerSchedulerEntries(
             registeredAt: now,
         });
     }
+
+    // 1134 R5: observation refresh — drains pending availability updates, reports the usage
+    // snapshot age, and expires quota/probe-owned disables past their TTL through the
+    // ownership-scoped recovery path. Runs IN PROCESS (not via the job queue): it must issue
+    // zero provider requests, holds no provider seam, and its work is bounded config/db I/O.
+    register(
+        OBSERVATION_REFRESH_CRON,
+        OBSERVATION_REFRESH_JOB,
+        async () => {
+            // Warnings are bounded and ride the job's own event payload (no console output in an
+            // app source): a classified rejection or a failed drain must stay visible without
+            // becoming a second logging surface.
+            const warnings: string[] = [];
+            const outcome = await runObservationRefresh(
+                {
+                    getDb: () => ctx.getDb(),
+                    projectRoot: ctx.cwd,
+                    loadAgentConfig: async (root) => await loadSpurConfig(root).catch(() => null),
+                    warn: (message) => {
+                        if (warnings.length < 10) warnings.push(message);
+                    },
+                },
+                { snapshotPath: defaultUsageSnapshotPath(env) },
+            );
+            ctx.eventBus().emit('scheduler.job.executed', {
+                name: OBSERVATION_REFRESH_JOB,
+                durationMs: 0,
+                severity: 'info',
+                summary: {
+                    applied: outcome.status.applied,
+                    expired: outcome.status.expired,
+                    failed: outcome.status.failed,
+                    snapshotAgeMs: outcome.status.snapshotAgeMs,
+                    snapshotStale: outcome.status.snapshotStale,
+                    providerRequests: outcome.status.providerRequests,
+                    expiredExecutors: outcome.expiredExecutors,
+                    ...(warnings.length > 0 ? { warnings } : {}),
+                },
+            });
+        },
+        'refresh executor availability observations (no provider calls)',
+    );
+    registrations.push({
+        name: OBSERVATION_REFRESH_JOB,
+        schedule: OBSERVATION_REFRESH_CRON,
+        source: 'builtin',
+        registeredAt: now,
+    });
 
     setRegisteredSchedules(registrations);
 }

@@ -4,7 +4,7 @@ name: "Rule: durable records must not cite run scratch as evidence"
 status: done
 template: standard
 created_at: 2026-10-09T16:43:57.789Z
-updated_at: "2026-10-09T23:09:54.883Z"
+updated_at: "2026-10-09T23:59:20.632Z"
 feature_id: E71
 
 ac_numbering: task-local
@@ -166,19 +166,19 @@ Rationale: the ADR-131 invariant is corpus shape, so it belongs in the declarati
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `config/rules/structure/scratch-evidence-pointer.yaml:23` declares `no-scratch-verdict-pointer` at severity `error` with the anchored rg pattern (`:34`) over `docs/tasks*/**/*.md`; the description names `.spur/memory/evidence/<wbs>-verdict.json` and `spur task migrate-anchors --wbs <wbs>` (asserted in `apps/cli/tests/commands/rule.test.ts:369`). |
-| R2 | MET | The pattern is prefixed with `^done_reason:`, so the temp corpus's `0003` task — whose Testing body mentions `.spur/run/0003-test-gate.status` and a `.spur/run/0003/verdict.json` path in prose — produces no finding; the same e2e asserts exactly one finding across the three fixtures. |
-| R3 | MET | `apps/cli/tests/commands/rule.test.ts:369` runs `rule run --file <repo rule> --json` over the three-case corpus: scratch → 1 finding (`filePath` `docs/tasks/0001_scratch.md`, `line` 4), durable → none, prose-only → none. |
-| R4 | MET | `spur rule run --preset recommended-pre-check --rule no-scratch-verdict-pointer --fail-on warning --json` returns `findings: []` on the migrated repository; the preset resolves 51 rules and both raw-JSON fixtures were recaptured (only `ruleCount` changed), with `bun test tests/output-envelope.test.ts` green (45 pass). |
-| R5 | MET | The header (`config/rules/structure/scratch-evidence-pointer.yaml:13`) is asserted by `apps/cli/tests/commands/rule.test.ts:369`. Detail: the header (`config/rules/structure/scratch-evidence-pointer.yaml:13`) names gitignored executable source under `.spur/run/` as out of scope, records that no loader registers from scratch (verified 2026-10-09; 1145 cancelled), and claims nothing about that class. |
+| R1 | MET | `config/rules/structure/scratch-evidence-pointer.yaml:23` id `no-scratch-verdict-pointer`, severity error, pattern at `config/rules/structure/scratch-evidence-pointer.yaml:34`; `spur rule validate` → valid, 1 rule (this run) |
+| R2 | MET | pattern anchored `^done_reason:`; prose case in `apps/cli/tests/commands/rule.test.ts:369` (30 pass this run) |
+| R3 | MET | `apps/cli/tests/commands/rule.test.ts:369` three-case temp corpus e2e, green this run |
+| R4 | MET | `spur rule run --preset recommended-pre-check --rule no-scratch-verdict-pointer --fail-on warning --json` → 0 findings, exit 0 (this run); full preset 51/51 pass in spur-check |
+| R5 | MET | `apps/cli/tests/commands/rule.test.ts:422` asserts header `config/rules/structure/scratch-evidence-pointer.yaml:13` names gitignored executable source as out of scope and records no loader registers from scratch |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — a scratch verdict pointer in done_reason is rejected (req: R1, R3) | MET | test | `apps/cli/tests/commands/rule.test.ts:369` (one finding, named file and line) |
-| AC2 — a durable pointer passes (req: R1, R3) | MET | test | same e2e, `0002_durable.md` yields no finding |
-| AC3 — a prose mention passes (req: R2, R3) | MET | test | same e2e, `0003_prose.md` yields no finding |
-| AC4 — the preset is green on the migrated repository (req: R4) | MET | command | preset run with `--rule no-scratch-verdict-pointer` → 0 findings, exit 0; regenerated `rule-validate-preset.json` proven byte-identical by `apps/cli/tests/output-envelope.test.ts` |
-| AC5 — the uncovered class is named (req: R5) | MET | test | `config/rules/structure/scratch-evidence-pointer.yaml:13` plus the header assertion in `apps/cli/tests/commands/rule.test.ts:369` |
+| AC1 — a scratch verdict pointer in done_reason is rejected (req: R1, R3) | MET | test | `apps/cli/tests/commands/rule.test.ts:369` |
+| AC2 — a durable pointer passes (req: R1, R3) | MET | test | `apps/cli/tests/commands/rule.test.ts:369` |
+| AC3 — a prose mention passes (req: R2, R3) | MET | test | `apps/cli/tests/commands/rule.test.ts:369` |
+| AC4 — the preset is green on the migrated repository (req: R4) | MET | command | preset rule run → 0 findings, exit 0 this run |
+| AC5 — the uncovered class is named (req: R5) | MET | test | `apps/cli/tests/commands/rule.test.ts:422` asserts the header (fails when the loader line is mutated, this run) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

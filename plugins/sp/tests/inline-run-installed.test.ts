@@ -334,8 +334,18 @@ test('a stale installed bundle fails --decide with a named skew error in the JSO
 }, 30_000);
 
 test('generated twins export every app operation the driver facade calls', () => {
-    const facade = readFileSync(resolve(import.meta.dir, '../scripts/inline-run-setup.ts'), 'utf8');
-    const names = new Set([...facade.matchAll(/\bapp\.([A-Za-z_$][\w$]*)/g)].map((m) => m[1] ?? '').filter(Boolean));
+    // Both inline facades (task 1134 split the fail-fast hop into its own script) go through the
+    // same generated twin, so both are scanned.
+    const facades = ['../scripts/inline-run-setup.ts', '../scripts/inline-run-dispatch.ts'].map((rel) =>
+        readFileSync(resolve(import.meta.dir, rel), 'utf8'),
+    );
+    const names = new Set(
+        facades.flatMap((facade) => [
+            ...[...facade.matchAll(/\bapp\.([A-Za-z_$][\w$]*)/g)].map((m) => m[1] ?? ''),
+            ...[...facade.matchAll(/\blib\.([A-Za-z_$][\w$]*)/g)].map((m) => m[1] ?? ''),
+        ]),
+    );
+    names.delete('');
     expect(names.size).toBeGreaterThan(0);
     for (const twin of [
         resolve(import.meta.dir, '../lib/inline-run.generated.mjs'),

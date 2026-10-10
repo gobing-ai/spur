@@ -3,8 +3,8 @@ kind: design
 title: "Executor availability"
 status: implemented
 created_at: 2026-09-07
-updated_at: 2026-09-18
-related: [B5]
+updated_at: 2026-10-09
+related: [B5, B6, "1134"]
 tags: [system, B5, agent]
 version: 1.2.0
 ---
@@ -260,3 +260,50 @@ The upstream release is a prerequisite for final Spur integration. No upstream p
 task ID, publication, or deployment is assumed or authorized by this planning document. Each
 implementation task must start from an isolated clean tree and carry its applicable documentation
 sync and harness verification gates. No implementation task is declared ready before decomposition.
+
+## 8. Inline attribution and the observation refresh (task 1134, 2026-10-09)
+
+A **pre-dispatch** failure on the interactive inline path is classified before the driver chooses a
+fallback (R1/R2). `classifyDispatchFailure(text)` in `packages/app/src/services/inline-run-setup.ts`
+wraps the upstream `classifyQuotaErrorRecord` — **no provider-code or quota-vocabulary matching
+exists in Spur**, and no per-provider adapter is added. The one upstream extension this feature
+needs is envelope-shaped, not provider-shaped: `tryParseErrorEnvelope` also accepts a top-level
+`{code, message}` pair (both strings, so an incidental `{"code":…}` echo is not an envelope), and
+`PROVIDER_QUOTA_CODES` maps the verified provider code `1310` onto the canonical
+`usage_limit_reached` reason. Capacity-shaped means the host session cannot succeed by
+construction, so the driver escalates to the subprocess dispatch path (which resolves an executor
+independently) or stops the run at `failed-agent` naming the executor and any observed reset time.
+Capability-shaped failures (permission, missing capability, non-dispatch-eligible prose, below the
+size floor) keep the existing single host-inline fallback.
+
+Every inline `agent.run` dispatch records the executor identity it actually used
+(`.spur/run/<run-id>-attribution.jsonl`, one line per stage) **before** the stage runs. When no
+executor resolves the line carries the explicit `executor: null` no-attribution marker — never a
+silent drop — because §4's rule applies unchanged: an unattributed observation is observable but
+cannot write configuration. The decision itself is durable at
+`.spur/run/<run-id>-dispatch-fallback.json` (`{stage, class, reason?, resetAt?, decision, executor,
+attribution, observedAt}`); the driver reads the file rather than judging prose.
+
+An attributed capacity exhaustion is carried onto the existing durable path —
+`recordAgentQuotaEvent` → `agent_executor_updates` → drain → `setExecutorAvailability({owner:
+'quota'})` — with no new availability model and no second override. Observation ordering is
+unchanged (`(observedAt, observationId)`), so an older or duplicate observation never overwrites a
+newer one.
+
+**Observation refresh job (R5).** `bootstrap.scheduler` registers an hourly `observation-refresh`
+entry (in-process, `apps/server/src/serve.ts`) that (a) drains pending `agent_executor_updates`,
+(b) reports the age of the `~/.config/spur/agent-usage.json` snapshot, and (c) hands
+quota/probe-owned disables whose recorded `since` is older than `QUOTA_DISABLE_TTL_MS` (6 h — the
+same threshold the doctor's usage staleness uses) to the ownership-scoped recovery path
+(`recordAgentQuotaEvent(..., false)` + drain). It makes **zero provider requests** — it holds no
+provider seam at all — and never re-enables an `operator`-owned disable; the drain's ownership
+precedence refuses that and records the classified no-op. A disable without a usable `since`
+cannot be shown to have expired and stays. Its last-run summary lands at
+`.spur/memory/observation-refresh.json`, and `spur agent doctor --json` reports it as
+`inlineFailFast.refreshJob` beside `inlineFailFast.unattributedStages` (R6) so the operator can see
+whether fail-fast is actually able to fire.
+
+**Boundary.** A timer that probes a provider or writes configuration is still out of scope: a probe
+spends the quota it protects, and a successful probe does not disprove an account-level weekly cap
+(the `1310` case). Adding one requires its own operator-consented ADR-121 amendment. R5's
+zero-call observation refresh needs none.
