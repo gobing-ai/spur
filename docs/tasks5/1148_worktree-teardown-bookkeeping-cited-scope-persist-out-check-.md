@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Worktree teardown bookkeeping: cited-scope persist-out-check, skipped-item report, markerless landing record"
-status: todo
+status: wip
 template: feature-impl
 created_at: 2026-10-09T18:05:11.361Z
-updated_at: "2026-10-09T18:08:18.281Z"
+updated_at: "2026-10-10T00:04:54.812Z"
 feature_id: E71
 
 priority: P2
@@ -140,4 +140,5 @@ Scenario: AC4 — Docs and bundle reflect the scoped check (req: R4)
 ### History
 
 - 2026-10-09T18:08:18.092Z backlog → todo (system)
+- 2026-10-10T00:04:54.812Z todo → wip (system)
 

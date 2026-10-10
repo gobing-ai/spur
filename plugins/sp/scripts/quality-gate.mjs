@@ -27643,6 +27643,8 @@ var phaseRunsTable = defineTable("phase_runs", {
   ...standardColumns
 });
 var phaseRuns = phaseRunsTable.table;
+var LIFECYCLE_WORKFLOWS = new Set(["task-lifecycle", "feature-lifecycle"]);
+var TERMINAL_STATUSES = new Set(["done", "failed", "cancelled"]);
 init_schema();
 var transitionRunsTable = defineTable("transition_runs", {
   id: text("id").primaryKey(),

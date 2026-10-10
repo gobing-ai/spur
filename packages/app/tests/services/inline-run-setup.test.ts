@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { execSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getEnvVar, setEnvVar } from '@gobing-ai/spur-config';
@@ -1588,6 +1588,62 @@ describe('worktree run-record integrity (task 1136 R1/R4/R5)', () => {
             } finally {
                 owner.cleanup();
                 other.cleanup();
+            }
+        });
+
+        test('1148 R3: markerless worktree run records landing: required at close done (AC3)', async () => {
+            const mainRepo = realpathSync(mkdtempSync(join(tmpdir(), 'main-repo-')));
+            const linkedWt = join(tmpdir(), `linked-wt-${Date.now()}`);
+            try {
+                execSync('git init -q && git config user.email t@e.st && git config user.name t', { cwd: mainRepo });
+                writeFileSync(join(mainRepo, 'seed.txt'), 'seed\n');
+                execSync('git add seed.txt && git commit -qm "init"', { cwd: mainRepo });
+                execSync(`git worktree add -b "sp/markerless" "${linkedWt}" HEAD`, { cwd: mainRepo });
+
+                const runId = 'run_markerless';
+                // Setup run in the linked worktree
+                const db = await openInlineRunProjectDb(linkedWt);
+                try {
+                    await db.adapter.run(
+                        `INSERT INTO runs (id, workflow_name, mode, status, started_at, created_at, updated_at)
+                         VALUES (?, 'wf', 'state-machine', 'running', '2026-10-09T00:00:00Z', 1, 1)`,
+                        runId,
+                    );
+                    await db.adapter.run(
+                        `INSERT INTO action_runs (id, run_id, node, kind, status, duration_ms, ok, created_at, updated_at)
+                         VALUES ('act_1', ?, 'step', 'shell', 'done', 10, 1, 1, 1)`,
+                        runId,
+                    );
+                } finally {
+                    db.close();
+                }
+
+                // Close the run done from the linked worktree (no WT-3 marker created)
+                const exit = await runInlineRunTrace({
+                    runId,
+                    close: true,
+                    node: '',
+                    kind: '',
+                    status: 'done',
+                    ok: true,
+                    durationMs: 0,
+                    projectRoot: linkedWt,
+                });
+                expect(exit).toBe(0);
+
+                // Verify landing: required is recorded in the owning tree's run record!
+                const owningRecords = runStoragePaths(mainRepo).recordsDir;
+                const recordPath = join(owningRecords, `${runId}.md`);
+                expect(existsSync(recordPath)).toBe(true);
+                const content = readFileSync(recordPath, 'utf8');
+                expect(content).toContain('landing: required branch=sp/markerless');
+                expect(content).toContain(`path=${linkedWt}`);
+            } finally {
+                try {
+                    execSync(`git -C "${mainRepo}" worktree remove --force "${linkedWt}"`);
+                } catch {}
+                rmSync(mainRepo, { recursive: true, force: true });
+                rmSync(linkedWt, { recursive: true, force: true });
             }
         });
     });

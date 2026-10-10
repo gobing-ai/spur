@@ -35,8 +35,10 @@ const {
     appendFileSync,
     closeSync,
     existsSync,
+    lstatSync,
     mkdirSync,
     openSync,
+    readdirSync,
     readFileSync,
     readdirSync,
     renameSync,
@@ -984,7 +986,14 @@ async function carryRunRecordDir(
     try {
         entries = await readdir(join(srcRoot, rel), { withFileTypes: true });
     } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+            // 1148 R2: the run's source directory is absent — name it instead of returning
+            // silently, so "nothing to carry" and "carried nothing" do not look the same.
+            // A missing per-ROW record (the directory exists, the pair does not) stays the
+            // record-copy path's `record-missing:<file>` report (0984 R5).
+            if (rel === '') skips.push({ id: runId, reason: 'source-missing' });
+            return;
+        }
         throw error;
     }
     for (const entry of entries) {
@@ -1444,6 +1453,68 @@ export async function runInlineRunNodeEnter(input: InlineRunNodeEnterInput): Pro
 }
 
 /**
+ * 1148 R3: Detect if the current workdir is a linked git worktree with no WT-3 marker.
+ * Pure filesystem inspection — no child_process spawn.
+ */
+function detectMarkerlessWorktree(
+    workdir: string,
+    runId: string,
+): { required: boolean; branch?: string; path?: string; base?: string; owningTree?: string } {
+    try {
+        const gitPath = join(workdir, '.git');
+        if (!existsSync(gitPath) || !lstatSync(gitPath).isFile()) {
+            return { required: false }; // Main working tree or not a git checkout
+        }
+        const gitContent = readFileSync(gitPath, 'utf8').trim();
+        const gitDirMatch = /^gitdir:\s*(.+)$/m.exec(gitContent);
+        if (!gitDirMatch?.[1]) {
+            return { required: false };
+        }
+        const gitDir = resolve(workdir, gitDirMatch[1]);
+        const commonDirFile = join(gitDir, 'commondir');
+        const commonDir = existsSync(commonDirFile)
+            ? resolve(gitDir, readFileSync(commonDirFile, 'utf8').trim())
+            : resolve(gitDir, '../..');
+        const owningTree = dirname(commonDir);
+
+        // Check if any WT-3 marker names this run
+        const markerDirs = [join(workdir, '.spur', 'run'), join(owningTree, '.spur', 'run')];
+        for (const dir of markerDirs) {
+            if (existsSync(dir)) {
+                try {
+                    for (const name of readdirSync(dir)) {
+                        if (name.startsWith('worktree-') && name.endsWith('.json')) {
+                            const marker = readFileSync(join(dir, name), 'utf8');
+                            if (marker.includes(runId)) {
+                                return { required: false };
+                            }
+                        }
+                    }
+                } catch {}
+            }
+        }
+
+        let branch = 'HEAD';
+        const headFile = join(gitDir, 'HEAD');
+        if (existsSync(headFile)) {
+            const headContent = readFileSync(headFile, 'utf8').trim();
+            const refMatch = /^ref:\s*refs\/heads\/(.+)$/.exec(headContent);
+            if (refMatch?.[1]) branch = refMatch[1];
+        }
+
+        return {
+            required: true,
+            branch,
+            path: resolve(workdir),
+            base: 'main',
+            owningTree,
+        };
+    } catch {
+        return { required: false };
+    }
+}
+
+/**
  * Emit one trace write through the SHARED `WorkflowActionTraceWriter` (task 0868 R5/R7).
  * `--action` is best-effort: an emission failure is recorded to the run log and reported
  * on stdout as `{"ok":false}`, and the caller exits 0 so the run still reaches its declared
@@ -1648,6 +1719,31 @@ export async function runInlineRunTrace(input: InlineRunTraceInput): Promise<num
                     `trace-close-defect run=${input.runId}: missing action rows for visited nodes: ${missingNodes.join(', ')}`,
                     workdir,
                 );
+            }
+        }
+
+        // 1148 R3: A worktree run without a marker records its landing obligation durably.
+        if (input.close && input.status === 'done') {
+            const markerless = detectMarkerlessWorktree(workdir, input.runId);
+            if (markerless.required && markerless.owningTree) {
+                const recordsDir = runStoragePaths(markerless.owningTree).recordsDir;
+                const recordPath = join(recordsDir, `${input.runId}.md`);
+                const line = `landing: required branch=${markerless.branch} path=${markerless.path} base=${markerless.base}\n`;
+                try {
+                    mkdirSync(recordsDir, { recursive: true });
+                    if (existsSync(recordPath)) {
+                        const content = readFileSync(recordPath, 'utf8');
+                        if (
+                            !content.includes('landing: required') &&
+                            !content.includes('landing: merged') &&
+                            !content.includes('landing: retained')
+                        ) {
+                            appendFileSync(recordPath, line);
+                        }
+                    } else {
+                        writeFileSync(recordPath, `# run ${input.runId}\n\n${line}`);
+                    }
+                } catch {}
             }
         }
 

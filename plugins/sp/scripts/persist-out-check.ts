@@ -1,21 +1,12 @@
 #!/usr/bin/env bun
 /**
- * persist-out-check — WT-4 pre-removal assertion for E71 persist-out (task 1067 R1).
+ * persist-out-check — WT-4 pre-removal assertion for E71 persist-out (task 1067 R1, 1148 R1).
  *
- * Before `git worktree remove`, verify the worktree's durable evidence would not be
- * abandoned: every file the worktree owns under `.spur/run/` (`<wbs>-*` per forwarded
- * task file, `<runId>-*` per forwarded run id) and the whole `.spur/memory/evidence/`
- * tree must exist in the invoking tree with identical bytes. Missing files BLOCK the
- * removal (persist-out was skipped or stale); divergent files block too (persist-out
- * never overwrites — reconcile by hand per execution-batch.md). No new public CLI verb:
- * this is a driver-side assertion step, not a corpus tool.
- *
- * ponytail: file-level comparison only — DB run rows and nested-run deep walks stay
- * persist-out's job (`inline-run-setup --persist-out`); this checks the planes E71
- * names as files. Listing caps (64/prefix, 256 evidence) refuse runaways by name.
- *
- * Node-builtin imports only; pure helpers are exported for tests. Exit 0 ok, 1
- * blocked/divergent, 2 usage error. Normal output is the finding lines themselves.
+ * Before `git worktree remove`, verify the worktree's OWNED durable evidence would not be abandoned:
+ * every `.spur/run/` and `.spur/memory/evidence/` file starting with a forwarded `<wbs>-`/`<runId>-`
+ * prefix must exist in the invoking tree with identical bytes. Unowned evidence is counted
+ * (`unowned: N`) and does not block (1148 R1). Node builtins only; helpers are exported for tests.
+ * Exit 0 ok, 1 blocked/divergent, 2 usage error. Normal output is the finding lines themselves.
  */
 
 import { spawnSync } from 'node:child_process';
@@ -26,7 +17,6 @@ const EVIDENCE_DIR = join('.spur', 'memory', 'evidence');
 const RUN_DIR = join('.spur', 'run');
 const NAMED_CAP = 32;
 const PREFIX_CAP = 64;
-const EVIDENCE_CAP = 256;
 
 /** Task files own their `<wbs>-*` evidence: leading digits before `_` in the basename. */
 export function wbsOfTaskFile(path: string): string | null {
@@ -34,49 +24,64 @@ export function wbsOfTaskFile(path: string): string | null {
     return m?.[1] ?? null;
 }
 
-function listFilesUnder(root: string, rel: string, cap: number): string[] | null {
-    const dir = join(root, rel);
+export interface ListObligationsResult {
+    files: string[];
+    unowned: number;
+}
+
+/** Recursively list files under `dir`, relative to `root`. */
+function walkFiles(dir: string, root: string): string[] {
     if (!existsSync(dir)) return [];
     const out: string[] = [];
-    const walk = (cur: string): boolean => {
-        for (const entry of readdirSync(cur, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
-            const p = join(cur, entry.name);
-            if (entry.isDirectory()) {
-                if (!walk(p)) return false;
-            } else {
-                out.push(relative(root, p));
-                if (out.length > cap) return false;
-            }
+    const walk = (cur: string): void => {
+        for (const e of readdirSync(cur, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+            const p = join(cur, e.name);
+            if (e.isDirectory()) walk(p);
+            else if (e.isFile()) out.push(relative(root, p));
         }
-        return true;
     };
-    return walk(dir) ? out : null;
+    walk(dir);
+    return out;
+}
+
+/** Owned evidence (prefix-matched) under one plane; null once a prefix exceeds PREFIX_CAP. */
+function collectOwned(rels: string[], prefixes: string[], counts: Map<string, number>, out: string[]): boolean {
+    for (const rel of rels) {
+        const prefix = prefixes.find((p) => basename(rel).startsWith(`${p}-`));
+        if (prefix === undefined) continue;
+        const count = (counts.get(prefix) ?? 0) + 1;
+        if (count > PREFIX_CAP) return false;
+        counts.set(prefix, count);
+        out.push(rel);
+    }
+    return true;
 }
 
 /**
- * Evidence files the worktree owns: `.spur/memory/evidence/**` plus `.spur/run/<prefix>-*`
- * direct children per task-file WBS / run id. Returns null on a cap overrun or a listing
- * failure (not a directory, permission denied) — the caller refuses either way.
+ * Evidence the worktree owns: `.spur/memory/evidence/` (recursive) and `.spur/run/` (flat) files
+ * whose basename starts with a forwarded `<wbs>-`/`<runId>-` prefix. Evidence matching no prefix is
+ * counted as `unowned` (1148 R1). Null when no prefix is forwarded or a prefix cap is exceeded.
  */
-export function listObligations(wtRoot: string, wbsList: string[], runIds: string[]): string[] | null {
-    const evidence = listFilesUnder(wtRoot, EVIDENCE_DIR, EVIDENCE_CAP);
-    if (evidence === null) return null;
-    const out = [...evidence];
-    const prefixes = [...wbsList, ...runIds];
-    for (const prefix of prefixes) {
-        const dir = join(wtRoot, RUN_DIR);
-        if (!existsSync(dir)) continue;
-        let entries: string[];
-        try {
-            entries = readdirSync(dir).sort();
-        } catch {
-            return null;
-        }
-        const owned = entries.filter((n) => n.startsWith(`${prefix}-`));
-        if (owned.length > PREFIX_CAP) return null;
-        out.push(...owned.map((n) => join(RUN_DIR, n)));
-    }
-    return [...new Set(out)].sort();
+export function listObligations(wtRoot: string, wbsList: string[], runIds: string[]): ListObligationsResult | null {
+    const prefixes = [...new Set([...wbsList, ...runIds].filter(Boolean))];
+    if (prefixes.length === 0) return null;
+
+    const evDir = join(wtRoot, EVIDENCE_DIR);
+    const runDir = join(wtRoot, RUN_DIR);
+    const evFiles = walkFiles(evDir, wtRoot);
+    const runFiles = existsSync(runDir)
+        ? readdirSync(runDir, { withFileTypes: true })
+              .filter((e) => e.isFile())
+              .map((e) => join(RUN_DIR, e.name))
+              .sort()
+        : [];
+
+    const files: string[] = [];
+    const counts = new Map<string, number>();
+    if (!collectOwned(evFiles, prefixes, counts, files)) return null;
+    if (!collectOwned(runFiles, prefixes, counts, files)) return null;
+    const unowned = evFiles.length - files.filter((f) => f.startsWith(EVIDENCE_DIR)).length;
+    return { files: [...new Set(files)].sort(), unowned };
 }
 
 /** Classify obligations against the invoking tree: missing, divergent (byte-differs), or ok. */
@@ -157,6 +162,12 @@ export function main(argv: string[], invokeRoot = defaultInvokeRoot(process.cwd(
             return 2;
         }
     }
+    if (wbsList.length === 0 && runIds.length === 0) {
+        process.stderr.write(
+            `${persistOutCheckUsage()}\npersist-out-check: at least one --task-file or --run-id prefix required\n`,
+        );
+        return 2;
+    }
     if (!wtRoot || !existsSync(wtRoot) || !statSync(wtRoot).isDirectory()) {
         process.stderr.write(
             `${persistOutCheckUsage()}\npersist-out-check: --from must be an existing worktree directory\n`,
@@ -164,6 +175,7 @@ export function main(argv: string[], invokeRoot = defaultInvokeRoot(process.cwd(
         return 2;
     }
     const foreignDivergent = new Set<string>();
+    const skips: Array<{ id: string; reason: string }> = [];
     const candidates = [
         successJsonPath,
         join(invokeRoot, '.spur', 'run', 'persist-out.json'),
@@ -181,17 +193,25 @@ export function main(argv: string[], invokeRoot = defaultInvokeRoot(process.cwd(
                         }
                     }
                 }
+                if (Array.isArray(parsed.skipped)) {
+                    for (const item of parsed.skipped) {
+                        if (typeof item.id === 'string' && typeof item.reason === 'string') {
+                            skips.push({ id: item.id, reason: item.reason });
+                        }
+                    }
+                }
                 break;
             } catch {}
         }
     }
-    const files = listObligations(wtRoot, wbsList, runIds);
-    if (files === null) {
+    const obligations = listObligations(wtRoot, wbsList, runIds);
+    if (obligations === null) {
         process.stderr.write(
-            `persist-out-check: BLOCKED — worktree evidence listing failed or exceeded caps (64/prefix, ${EVIDENCE_CAP} evidence files) — inspect by hand\n`,
+            `persist-out-check: BLOCKED — worktree evidence listing failed or exceeded caps (${PREFIX_CAP}/prefix) — inspect by hand\n`,
         );
         return 1;
     }
+    const { files, unowned } = obligations;
     const { missing, divergent, ok } = compareTrees(wtRoot, invokeRoot, files, foreignDivergent);
     const findings = [
         ...missing.map((f) => `MISSING ${f}`),
@@ -200,7 +220,13 @@ export function main(argv: string[], invokeRoot = defaultInvokeRoot(process.cwd(
     for (const line of findings.slice(0, NAMED_CAP)) process.stdout.write(`${line}\n`);
     if (findings.length > NAMED_CAP) process.stdout.write(`… +${findings.length - NAMED_CAP} more\n`);
     if (findings.length === 0) {
-        process.stdout.write(`persist-out-check: ok — ${ok} evidence file(s) persisted, nothing abandoned\n`);
+        for (const skip of skips) {
+            process.stdout.write(`SKIP ${skip.id}: ${skip.reason}\n`);
+        }
+        const abandonedMsg = skips.length > 0 ? `${skips.length} skipped` : 'nothing abandoned';
+        process.stdout.write(
+            `persist-out-check: ok — ${ok} evidence file(s) persisted, unowned: ${unowned}, ${abandonedMsg}\n`,
+        );
         return 0;
     }
     process.stderr.write(

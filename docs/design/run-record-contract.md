@@ -128,6 +128,28 @@ Per workflow-run instance exactly **two files**, both keyed by the run id under 
 - **Read/write, atomic replace.** Concurrent-safe because writers serialize on the temp+rename swap; readers never see a half-written file.
 - This file is the target of **all** mid-run readers (R3). It is *not* append-only — the rule only governs the markdown.
 
+### 1.1a The durable landing obligation (task 1148 R3)
+
+A run that executes in a **linked git worktree** without a WT-3 marker (`.spur/run/worktree-<id>.json`) has no
+marker on disk that a later landing step would find. Since `.spur/run` is disposable scratch under ADR-131, the
+obligation is recorded in the **canonical** run record instead: at `--close --status done`, the closing run appends
+
+```
+landing: required branch=<branch> path=<worktree> base=<ref>
+```
+
+as the last line of `.spur/memory/runs/<runId>.md` **in the owning tree** (the main checkout the worktree shares
+`.git` with — not the worktree itself). Detection is filesystem-only: `.git` is a file whose `gitdir:` line plus the
+linked `commondir` resolve the owning tree; no process spawn. A run in the main working tree writes no line, and a
+re-close does not duplicate one. The line is append-only like any other record content, so the landing step rewrites
+it to `landing: merged <sha>` or `landing: retained` rather than editing it in place.
+
+The worktree landing reference documents the sweep an operator or driver runs to find unlanded worktree runs:
+
+```bash
+rg -l '^landing: required' .spur/memory/runs
+```
+
 ### 1.3 Why this split is the whole point
 
 The operator's two-file rule exists *so that* the execution-log/audit-trail tab can read one append-only file while the pipeline's own control flow reads a small, order-independent state file. R3 proves the split is feasible: **every** mid-run reader needs state, not sequence.

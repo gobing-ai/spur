@@ -56,7 +56,7 @@ describe('persist-out-check', () => {
         writeFileSync(join(wt, '.spur', 'run', '1058-test-gate.log'), 'PASS\n');
         const files = listObligations(wt, ['1058'], []);
         expect(files).not.toBeNull();
-        const { missing } = compareTrees(wt, invoke, files ?? []);
+        const { missing } = compareTrees(wt, invoke, files?.files ?? []);
         expect(missing).toContain(join('.spur', 'memory', 'evidence', 'runs', '1058-verdict.json'));
         expect(missing).toContain(join('.spur', 'run', '1058-test-gate.log'));
         const run = runMain(['--from', wt, '--task-file', '/merged/docs/tasks5/1058_x.md'], invoke);
@@ -82,12 +82,65 @@ describe('persist-out-check', () => {
         expect(runMain(['--from', wt, '--task-file', '/t/1058_a.md'], invoke).code).toBe(1);
     });
 
-    test('evidence cap overrun refuses by name-capable failure', () => {
-        const { wt } = makeTrees();
+    test('AC1 — large worktree evidence tree does not block an owned-evidence check (1148 R1)', () => {
+        const { wt, invoke } = makeTrees();
         const evDir = join(wt, '.spur', 'memory', 'evidence');
-        for (let i = 0; i < 257; i++) writeFileSync(join(evDir, `f${i}.txt`), 'x');
-        expect(listObligations(wt, [], [])).toBeNull();
-        rmSync(evDir, { recursive: true, force: true });
+        const invEvDir = join(invoke, '.spur', 'memory', 'evidence');
+        mkdirSync(invEvDir, { recursive: true });
+        // 367 evidence files, of which 13 carry forwarded prefix 1058-, all persisted
+        for (let i = 0; i < 354; i++) writeFileSync(join(evDir, `unowned-${i}.txt`), 'u');
+        for (let i = 0; i < 13; i++) {
+            writeFileSync(join(evDir, `1058-f${i}.json`), 'v');
+            writeFileSync(join(invEvDir, `1058-f${i}.json`), 'v');
+        }
+        const obligations = listObligations(wt, ['1058'], []);
+        expect(obligations).not.toBeNull();
+        expect(obligations?.files).toHaveLength(13);
+        expect(obligations?.unowned).toBe(354);
+
+        const run = runMain(['--from', wt, '--task-file', '/t/1058_a.md'], invoke);
+        expect(run.code).toBe(0);
+        expect(run.out).toContain('13 evidence file(s) persisted, unowned: 354, nothing abandoned');
+
+        // Missing forwarded file still blocks
+        rmSync(join(invEvDir, '1058-f0.json'));
+        const failRun = runMain(['--from', wt, '--task-file', '/t/1058_a.md'], invoke);
+        expect(failRun.code).toBe(1);
+        expect(failRun.out).toContain('MISSING .spur/memory/evidence/1058-f0.json');
+
+        // Running with no forwarded prefix exits 2
+        expect(runMain(['--from', wt], invoke).code).toBe(2);
+    });
+
+    test('AC2 — skipped run-record items are printed and nothing abandoned omitted (1148 R2)', () => {
+        const { wt, invoke } = makeTrees();
+        mkdirSync(join(invoke, '.spur', 'memory', 'evidence'), { recursive: true });
+        writeFileSync(join(wt, '.spur', 'memory', 'evidence', '1058-v.json'), 'v');
+        writeFileSync(join(invoke, '.spur', 'memory', 'evidence', '1058-v.json'), 'v');
+
+        const successJson = join(invoke, 'persist-out.json');
+        writeFileSync(
+            successJson,
+            JSON.stringify({
+                ok: true,
+                persisted: 1,
+                skipped: [{ id: 'run_absent', reason: 'source-missing' }],
+            }),
+        );
+
+        const run = runMain(['--from', wt, '--task-file', '/t/1058_a.md', '--success-json', successJson], invoke);
+        expect(run.code).toBe(0);
+        expect(run.out).toContain('SKIP run_absent: source-missing');
+        expect(run.out).toContain('1 skipped');
+        expect(run.out).not.toContain('nothing abandoned');
+    });
+
+    test('prefix collision does not match shorter prefix', () => {
+        const { wt } = makeTrees();
+        writeFileSync(join(wt, '.spur', 'memory', 'evidence', '1130-verdict.json'), 'v');
+        const obligations = listObligations(wt, ['113'], []);
+        expect(obligations?.files).toHaveLength(0);
+        expect(obligations?.unowned).toBe(1);
     });
 
     test('missing --from is a usage error', () => {
@@ -102,11 +155,11 @@ describe('persist-out-check', () => {
         expect(runMain(['--from', join(wt, '.spur', 'run', '1058-verdict.json')], '/tmp').code).toBe(2);
     });
 
-    test('run-id cap (65 same-prefix run files) refuses; unnumbered task-file args are ignored', () => {
+    test('run-id cap (65 same-prefix run files) refuses; unnumbered task-file args exit 2 (1148 R1)', () => {
         const { wt, invoke } = makeTrees();
         for (let i = 0; i < 65; i++) writeFileSync(join(wt, '.spur', 'run', `1058-f${i}.log`), 'x');
         expect(listObligations(wt, [], ['1058'])).toBeNull();
-        expect(runMain(['--from', wt, '--task-file', '/t/no-digits.md'], invoke).code).toBe(0); // nothing owned
+        expect(runMain(['--from', wt, '--task-file', '/t/no-digits.md'], invoke).code).toBe(2); // nothing owned
     });
 
     test('finding lists are capped at 32 named files plus a +N more line', () => {
@@ -121,17 +174,20 @@ describe('persist-out-check', () => {
 
     test('flag plumbing: --spur-bin consumed, --root honored, empty --run-id ignored', () => {
         const { wt, invoke } = makeTrees();
-        expect(runMain(['--spur-bin', 'ignored', '--from', wt, '--run-id', ''], invoke).code).toBe(0);
+        expect(
+            runMain(['--spur-bin', 'ignored', '--from', wt, '--task-file', '/t/1058_a.md', '--run-id', ''], invoke)
+                .code,
+        ).toBe(0);
         // --root overrides the git-derived default: pointing at a tree without the evidence blocks.
-        writeFileSync(join(wt, '.spur', 'memory', 'evidence', 'note.md'), 'n');
-        expect(runMain(['--from', wt, '--root', '/tmp'], wt).code).toBe(1);
+        writeFileSync(join(wt, '.spur', 'memory', 'evidence', '1058-note.md'), 'n');
+        expect(runMain(['--from', wt, '--task-file', '/t/1058_a.md', '--root', '/tmp'], wt).code).toBe(1);
     });
 
     test('foreign-divergent evidence recorded in persist-out.json passes check (1139/R5)', () => {
         const { wt, invoke } = makeTrees();
         mkdirSync(join(invoke, '.spur', 'memory', 'evidence'), { recursive: true });
-        writeFileSync(join(wt, '.spur', 'memory', 'evidence', '0870-verdict.json'), 'wt-diff');
-        writeFileSync(join(invoke, '.spur', 'memory', 'evidence', '0870-verdict.json'), 'inv-diff');
+        writeFileSync(join(wt, '.spur', 'memory', 'evidence', '1139-verdict.json'), 'wt-diff');
+        writeFileSync(join(invoke, '.spur', 'memory', 'evidence', '1139-verdict.json'), 'inv-diff');
 
         // Without persist-out.json it blocks as divergent
         expect(runMain(['--from', wt, '--task-file', '/t/1139_a.md'], invoke).code).toBe(1);
@@ -144,7 +200,7 @@ describe('persist-out-check', () => {
                 ok: true,
                 persisted: 1,
                 skipped: [],
-                evidenceSkipped: [{ name: '0870-verdict.json', reason: 'foreign-divergent', newer: 'invoking' }],
+                evidenceSkipped: [{ name: '1139-verdict.json', reason: 'foreign-divergent', newer: 'invoking' }],
             }),
         );
         expect(runMain(['--from', wt, '--task-file', '/t/1139_a.md'], invoke).code).toBe(0);
@@ -155,7 +211,7 @@ describe('persist-out-check', () => {
             customSuccessPath,
             JSON.stringify({
                 ok: true,
-                evidenceSkipped: [{ name: '0870-verdict.json', reason: 'foreign-divergent', newer: 'worktree' }],
+                evidenceSkipped: [{ name: '1139-verdict.json', reason: 'foreign-divergent', newer: 'worktree' }],
             }),
         );
         expect(

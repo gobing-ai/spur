@@ -265,6 +265,26 @@ describe('persistWorktreeRuns (task 0975 R1)', () => {
         }
     });
 
+    test('absent run directory or file in worktree reports source-missing in skipped (1148 R2, AC2)', async () => {
+        const from = makeDir('persist-srcmissing-from-');
+        const to = makeDir('persist-srcmissing-to-');
+        try {
+            // A bookkeeping lifecycle row is the only kind allowed to have no record pair
+            // (0984 R5); a task-pipeline row missing its record still fails closed (1043 R1).
+            await seedWorktree(from.dir, 'run_missing', 'task-lifecycle');
+            // The run's durable record DIRECTORY is absent in the worktree.
+            const recordsDir = runStoragePaths(from.dir).recordsDir;
+            rmSync(recordsDir, { recursive: true, force: true });
+
+            const result = await persistWorktreeRuns({ fromWorkdir: from.dir, toWorkdir: to.dir });
+            expect(result.ok).toBe(true);
+            expect(result.skipped).toContainEqual({ id: 'run_missing', reason: 'source-missing' });
+        } finally {
+            from.cleanup();
+            to.cleanup();
+        }
+    });
+
     test('never overwrites a divergent invoking-tree record — reported as skipped', async () => {
         const from = makeDir('persist-conflict-from-');
         const to = makeDir('persist-conflict-to-');

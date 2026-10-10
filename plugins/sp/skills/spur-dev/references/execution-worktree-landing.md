@@ -420,3 +420,30 @@ anything, verify the leftover path is the batch's **owned** path — match it ag
 Recursive deletion of leftover directories that survived `git worktree remove` is **never
 automatic** — it requires explicit operator authorization. No automatic rebase, recovery merge,
 `git worktree prune`, or holder kill runs on this path.
+
+### WT-0 — markerless worktree runs (task 1148 R3)
+
+A worktree created by hand (or by a foreign tool) has **no WT-3 marker**, so nothing on disk tells a
+later landing step that a branch is waiting. `.spur/run` is disposable scratch under ADR-131, so a
+marker there could never be the durable obligation anyway.
+
+Instead, a run that closes `done` while its cwd is a **linked git worktree** and no WT-3 marker names
+it appends the obligation to its own canonical run record in the **owning tree**:
+
+```
+landing: required branch=<branch> path=<worktree> base=<ref>
+```
+
+appended to `.spur/memory/runs/<runId>.md`. Detection is filesystem-only — `.git` is a file whose
+`gitdir:` line plus the linked `commondir` resolve the owning tree; the step spawns no process, and a
+run in the main working tree writes no line.
+
+**The sweep.** Find every run still waiting to be landed:
+
+```bash
+rg -l '^landing: required' .spur/memory/runs
+```
+
+Each hit names the branch, the tree and the base ref, which is everything `--worktree <name>` needs to
+adopt and land it (reuse mode, § WT-2). A later WT-4 merge or retain rewrites the line to
+`landing: merged <sha>` or `landing: retained`; the obligation is append-only until then.

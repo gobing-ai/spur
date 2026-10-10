@@ -9,54 +9,55 @@ var EVIDENCE_DIR = join(".spur", "memory", "evidence");
 var RUN_DIR = join(".spur", "run");
 var NAMED_CAP = 32;
 var PREFIX_CAP = 64;
-var EVIDENCE_CAP = 256;
 function wbsOfTaskFile(path) {
   const m = /^(\d+)_/.exec(basename(path));
   return m?.[1] ?? null;
 }
-function listFilesUnder(root, rel, cap) {
-  const dir = join(root, rel);
+function walkFiles(dir, root) {
   if (!existsSync(dir))
     return [];
   const out = [];
   const walk = (cur) => {
-    for (const entry of readdirSync(cur, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
-      const p = join(cur, entry.name);
-      if (entry.isDirectory()) {
-        if (!walk(p))
-          return false;
-      } else {
+    for (const e of readdirSync(cur, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      const p = join(cur, e.name);
+      if (e.isDirectory())
+        walk(p);
+      else if (e.isFile())
         out.push(relative(root, p));
-        if (out.length > cap)
-          return false;
-      }
     }
-    return true;
   };
-  return walk(dir) ? out : null;
+  walk(dir);
+  return out;
+}
+function collectOwned(rels, prefixes, counts, out) {
+  for (const rel of rels) {
+    const prefix = prefixes.find((p) => basename(rel).startsWith(`${p}-`));
+    if (prefix === undefined)
+      continue;
+    const count = (counts.get(prefix) ?? 0) + 1;
+    if (count > PREFIX_CAP)
+      return false;
+    counts.set(prefix, count);
+    out.push(rel);
+  }
+  return true;
 }
 function listObligations(wtRoot, wbsList, runIds) {
-  const evidence = listFilesUnder(wtRoot, EVIDENCE_DIR, EVIDENCE_CAP);
-  if (evidence === null)
+  const prefixes = [...new Set([...wbsList, ...runIds].filter(Boolean))];
+  if (prefixes.length === 0)
     return null;
-  const out = [...evidence];
-  const prefixes = [...wbsList, ...runIds];
-  for (const prefix of prefixes) {
-    const dir = join(wtRoot, RUN_DIR);
-    if (!existsSync(dir))
-      continue;
-    let entries;
-    try {
-      entries = readdirSync(dir).sort();
-    } catch {
-      return null;
-    }
-    const owned = entries.filter((n) => n.startsWith(`${prefix}-`));
-    if (owned.length > PREFIX_CAP)
-      return null;
-    out.push(...owned.map((n) => join(RUN_DIR, n)));
-  }
-  return [...new Set(out)].sort();
+  const evDir = join(wtRoot, EVIDENCE_DIR);
+  const runDir = join(wtRoot, RUN_DIR);
+  const evFiles = walkFiles(evDir, wtRoot);
+  const runFiles = existsSync(runDir) ? readdirSync(runDir, { withFileTypes: true }).filter((e) => e.isFile()).map((e) => join(RUN_DIR, e.name)).sort() : [];
+  const files = [];
+  const counts = new Map;
+  if (!collectOwned(evFiles, prefixes, counts, files))
+    return null;
+  if (!collectOwned(runFiles, prefixes, counts, files))
+    return null;
+  const unowned = evFiles.length - files.filter((f) => f.startsWith(EVIDENCE_DIR)).length;
+  return { files: [...new Set(files)].sort(), unowned };
 }
 function compareTrees(wtRoot, invokeRoot, files, foreignDivergent = new Set) {
   const missing = [];
@@ -125,6 +126,12 @@ function main(argv, invokeRoot = defaultInvokeRoot(process.cwd())) {
       return 2;
     }
   }
+  if (wbsList.length === 0 && runIds.length === 0) {
+    process.stderr.write(`${persistOutCheckUsage()}
+persist-out-check: at least one --task-file or --run-id prefix required
+`);
+    return 2;
+  }
   if (!wtRoot || !existsSync(wtRoot) || !statSync(wtRoot).isDirectory()) {
     process.stderr.write(`${persistOutCheckUsage()}
 persist-out-check: --from must be an existing worktree directory
@@ -132,6 +139,7 @@ persist-out-check: --from must be an existing worktree directory
     return 2;
   }
   const foreignDivergent = new Set;
+  const skips = [];
   const candidates = [
     successJsonPath,
     join(invokeRoot, ".spur", "run", "persist-out.json"),
@@ -149,16 +157,24 @@ persist-out-check: --from must be an existing worktree directory
             }
           }
         }
+        if (Array.isArray(parsed.skipped)) {
+          for (const item of parsed.skipped) {
+            if (typeof item.id === "string" && typeof item.reason === "string") {
+              skips.push({ id: item.id, reason: item.reason });
+            }
+          }
+        }
         break;
       } catch {}
     }
   }
-  const files = listObligations(wtRoot, wbsList, runIds);
-  if (files === null) {
-    process.stderr.write(`persist-out-check: BLOCKED \u2014 worktree evidence listing failed or exceeded caps (64/prefix, ${EVIDENCE_CAP} evidence files) \u2014 inspect by hand
+  const obligations = listObligations(wtRoot, wbsList, runIds);
+  if (obligations === null) {
+    process.stderr.write(`persist-out-check: BLOCKED \u2014 worktree evidence listing failed or exceeded caps (${PREFIX_CAP}/prefix) \u2014 inspect by hand
 `);
     return 1;
   }
+  const { files, unowned } = obligations;
   const { missing, divergent, ok } = compareTrees(wtRoot, invokeRoot, files, foreignDivergent);
   const findings = [
     ...missing.map((f) => `MISSING ${f}`),
@@ -171,7 +187,12 @@ persist-out-check: --from must be an existing worktree directory
     process.stdout.write(`\u2026 +${findings.length - NAMED_CAP} more
 `);
   if (findings.length === 0) {
-    process.stdout.write(`persist-out-check: ok \u2014 ${ok} evidence file(s) persisted, nothing abandoned
+    for (const skip of skips) {
+      process.stdout.write(`SKIP ${skip.id}: ${skip.reason}
+`);
+    }
+    const abandonedMsg = skips.length > 0 ? `${skips.length} skipped` : "nothing abandoned";
+    process.stdout.write(`persist-out-check: ok \u2014 ${ok} evidence file(s) persisted, unowned: ${unowned}, ${abandonedMsg}
 `);
     return 0;
   }
