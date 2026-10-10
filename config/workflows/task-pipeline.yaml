@@ -63,7 +63,14 @@ name: task-pipeline
 # UNREACHABLE: a non-PASS verify could only end the run failed. `test-fix` also gained the
 # review-lane evidence projection (see its onEnter) so the repair hop is not fed an empty findings
 # list when the failing hop was `review-fail-triage` rather than the quality gate.
-version: "5"
+# v6 (task 1134 run, 2026-10-09): the `confidence` check row now encodes the SAME policy as the two
+# completion guards instead of a stricter one of its own. It warned for every level below HIGH, so a
+# MEDIUM certification was admitted by both guards but recomputed as PARTIAL by the CLI done gate —
+# the artifact was self-inconsistent and `done` was refused with no named level to act on. The row
+# now warns only for an unacknowledged LOW (or absent) level, which is exactly what the guards
+# refuse; `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts` pins the agreement for
+# HIGH/MEDIUM/LOW/absent × ack.
+version: "6"
 description: "Standard task pipeline: precheck → implement → quality-gate (test/fix/recheck) → review → approve → verify → record → done"
 # Task entity lifecycle (owned by task-lifecycle.yaml):
 #   normal: backlog → todo → wip → testing → done
@@ -867,15 +874,17 @@ states:
             options:
                 command: "$spurBin task verdict $wbs --from-answer .spur/run/$wbs-verify-answer.txt"
           # Session finding after 1088: the verifier's confidence level becomes a `confidence` check
-          # row (warn unless HIGH) and a gate-log line, so the level the completion guards enforce is
-          # visible in the artifact and the log — not only in the answer file. This is its own action
-          # because the proof-binding stamp below must stay the state's LAST action AND under the
-          # ADR-115 800-char shell cap.
+          # row and a gate-log line, so the level the completion guards enforce is visible in the
+          # artifact and the log — not only in the answer file. v6 (task 1134 run): the row warns for
+          # an unacknowledged LOW/absent level ONLY, matching the guards' ack rule; warning for
+          # MEDIUM too made an admitted certification aggregate to PARTIAL (self-inconsistent artifact,
+          # done refused). This is its own action because the proof-binding stamp below must stay the
+          # state's LAST action AND under the ADR-115 800-char shell cap.
           - kind: shell
             options:
                 command: >-
                     V=".spur/run/$wbs-verdict.json"; [ -f "$V" ] || exit 0;
-                    jq --arg ack "$ackLowConfidence" '. + {checks: ((.checks // []) | map(select(.name != "confidence"))) + [{name: "confidence", status: (if (.confidence // "LOW") == "HIGH" then "pass" else "warn" end), evidence: ((.confidence // "LOW (absent from artifact)") + (if $ack == "true" then " (operator-acknowledged)" else "" end))}]}' "$V" > "$V.tmp" && mv "$V.tmp" "$V";
+                    jq --arg ack "$ackLowConfidence" '. + {checks: ((.checks // []) | map(select(.name != "confidence"))) + [{name: "confidence", status: (if ((.confidence // "LOW") != "LOW" or $ack == "true") then "pass" else "warn" end), evidence: ((.confidence // "LOW (absent from artifact)") + (if $ack == "true" then " (operator-acknowledged)" else "" end))}]}' "$V" > "$V.tmp" && mv "$V.tmp" "$V";
                     printf 'confidence: %s (ack=%s)\n' "$(jq -r '.confidence // "LOW (absent)"' "$V")" "$ackLowConfidence" >> ".spur/run/$wbs-test-gate.log";
                     exit 0
           # (e) one jq mutation binds the verdict to the proof digest (0703 R3; runId 0730 §B.2 /

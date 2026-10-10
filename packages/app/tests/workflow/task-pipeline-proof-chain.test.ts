@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getEnvVars } from '@gobing-ai/spur-config';
 import { parse as parseYaml } from 'yaml';
+import { aggregateVerifyVerdict } from '../../src/services/verify-verdict';
 import { extractResolvedWorkflowFacts } from '../../src/workflow/composition-baseline';
 
 // Task 0703 (ADR-071): the task-pipeline proof chain must form ONE immutable bracket around the
@@ -281,8 +282,8 @@ describe('task-pipeline proof-input completeness and honest review evidence (tas
             .map((a) => String((a.options as Record<string, unknown> | undefined)?.command ?? ''))
             .map((c) => c.replace(/\n/g, ' '));
 
-    test('the workflow identity carries the current contract version (v5: onError-continue on the verify verdict action + test-fix review-lane evidence projection)', () => {
-        expect((DEF as unknown as { version: string }).version).toBe('5');
+    test('the workflow identity carries the current contract version (v6: the confidence row warns only for an unacknowledged LOW/absent level)', () => {
+        expect((DEF as unknown as { version: string }).version).toBe('6');
     });
 
     test('a featureSpecPath var exists and defaults to empty (orphan tasks stay compatible)', () => {
@@ -513,15 +514,21 @@ describe('task-pipeline confidence gate (session finding after 1088)', () => {
             .replaceAll('$wbs', 't9002')
             .replaceAll('../..', cwd);
 
-    function makeFixture(dir: string, confidence: string | undefined): void {
+    function makeFixture(dir: string, confidence: string | undefined, rows = false): void {
         mkdirSync(join(dir, '.spur', 'run'), { recursive: true });
         const digest = 'sha256:test-digest';
         const artifact = {
             wbs: 't9002',
             verdict: 'PASS',
             ...(confidence === undefined ? {} : { confidence }),
-            requirements: [],
-            acceptanceCriteria: [],
+            ...(rows
+                ? {
+                      requirements: [{ id: 'R1', status: 'MET', evidence: 'test: covered' }],
+                      acceptanceCriteria: [
+                          { id: 'AC1', status: 'MET', evidenceType: 'test', evidence: 'test: covered' },
+                      ],
+                  }
+                : { requirements: [], acceptanceCriteria: [] }),
             checks: [],
             proof: {
                 digest,
@@ -584,6 +591,61 @@ describe('task-pipeline confidence gate (session finding after 1088)', () => {
             expect(runSh(renderVerifyGuard(dir, 'true'), dir).code).toBe(0);
         } finally {
             rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    /** Render the verify state's confidence-row shell with the run's vars substituted. */
+    const renderConfidenceRow = (ack: string): string => {
+        const verify = DEF.states.find((s) => s.id === 'verify');
+        const action = (verify?.onEnter ?? []).find((a) => String(a.options?.command ?? '').includes('"confidence"'));
+        expect(action, 'verify state has no confidence-row shell').toBeDefined();
+        return String(action?.options?.command ?? '')
+            .replaceAll('$ackLowConfidence', ack)
+            .replaceAll('$wbs', 't9002');
+    };
+
+    // The verify row and the two completion guards are one policy seen twice: the guard decides
+    // whether the pipeline may cross into record/done, and the row decides what the persisted
+    // artifact aggregates to for the CLI's independent done gate. When they disagree, the artifact
+    // is self-inconsistent and `done` is refused with no named reason — the MEDIUM-confidence
+    // defect this matrix pins (a level admitted by both guards, refused by the aggregate).
+    test('behavioral: the confidence row agrees with the guards at every level (HIGH/MEDIUM/LOW/absent)', () => {
+        const matrix: ReadonlyArray<readonly [string | undefined, string, boolean]> = [
+            ['HIGH', '', true],
+            ['HIGH', 'true', true],
+            ['MEDIUM', '', true],
+            ['MEDIUM', 'true', true],
+            ['LOW', '', false],
+            ['LOW', 'true', true],
+            [undefined, '', false],
+            [undefined, 'true', true],
+        ];
+        const row = renderConfidenceRow('__ack__');
+        for (const [confidence, ack, admitted] of matrix) {
+            const dir = mkdtempSync(join(tmpdir(), 'spur-conf-row-'));
+            try {
+                makeFixture(dir, confidence, true);
+                const label = `${confidence ?? 'absent'}/ack=${ack === '' ? 'no' : 'yes'}`;
+                // The graph guard's decision is the contract the row must agree with.
+                expect(runSh(renderVerifyGuard(dir, ack), dir).code === 0, `guard ${label}`).toBe(admitted);
+                expect(runSh(row.replace('__ack__', ack), dir).code, `row ${label}`).toBe(0);
+                const artifact = JSON.parse(readFileSync(join(dir, '.spur', 'run', 't9002-verdict.json'), 'utf8')) as {
+                    requirements: unknown[];
+                    acceptanceCriteria: unknown[];
+                    checks: unknown[];
+                };
+                expect(
+                    aggregateVerifyVerdict({
+                        requirements: artifact.requirements as never,
+                        acceptanceCriteria: artifact.acceptanceCriteria as never,
+                        checks: artifact.checks as never,
+                        taskCheckPassed: true,
+                    }),
+                    `aggregate ${label}`,
+                ).toBe(admitted ? 'PASS' : 'PARTIAL');
+            } finally {
+                rmSync(dir, { recursive: true, force: true });
+            }
         }
     });
 });
