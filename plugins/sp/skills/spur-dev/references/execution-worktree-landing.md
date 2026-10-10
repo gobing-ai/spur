@@ -313,9 +313,9 @@ holding verified work while the branch ref still points at the old tip** (observ
   ```
 
   When the replay finished but was never finalized, `git rebase --continue` is the repair — it
-  advances the branch to the verified commit and clears the state. `git commit --amend` at that
-  moment amends the **detached** commit and leaves the branch behind: the amend looks successful and
-  the work looks landed when it is not.
+  advances the branch to the verified commit and clears the state. Amending (or committing) at that
+  moment targets the **detached** commit and leaves the branch behind: it looks successful and the
+  work looks landed when it is not.
 
 ### WT-5 — Failure path: retain and report (R5)
 
