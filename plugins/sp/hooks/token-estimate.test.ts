@@ -8,12 +8,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
     buildToolSummary,
+    cappedByteLength,
     estimateTokens,
     mapToolType,
     REDACTION_CAP_BYTES,
     recordToolUseEvent,
     redactText,
     resolveTokenEstimate,
+    SUMMARY_MAX_CHARS,
     scrubSecrets,
     truncateSummary,
 } from './context-post-tool';
@@ -72,6 +74,119 @@ describe('redactText (task 0248)', () => {
     ])('leaves non-secret text untouched: %j', (input) => {
         // A redactor that eats ordinary output is its own defect — the ledger exists
         // to be read.
+        expect(scrubSecrets(input)).toBe(input);
+    });
+});
+
+describe('scrubSecrets — quoted JSON sensitive fields (task 1158)', () => {
+    test.each([
+        ['{"password":"hunter2"}', '{"password":"***"}'],
+        ['{"token":"SYNTH-TOKEN-VALUE"}', '{"token":"***"}'],
+        ['{"api_key":"SYNTH-KEY"}', '{"api_key":"***"}'],
+        ['{"API_KEY":"SYNTH-KEY"}', '{"API_KEY":"***"}'],
+        ['{ "password" : "hunter2" }', '{ "password" : "***" }'],
+        ['{"TOKEN":"SYN-T"}', '{"TOKEN":"***"}'],
+        ['{"authorization":"Bearer SYNTH-AUTH"}', '{"authorization":"***"}'],
+        ['{"private_key":"SYN-PK"}', '{"private_key":"***"}'],
+    ])('redacts the quoted value of a sensitive key, keeping the key: %j', (input, expected) => {
+        // A closing quote after the key is what defeated the bare `key=` matcher.
+        expect(scrubSecrets(input)).toBe(expected);
+    });
+
+    test.each([
+        // (a) Shell-escaped `\"key\"` inside a double-quoted Bash argument — the real
+        // `curl -d "{\"password\":\"…\"}"` form. A pass keyed on a literal unescaped
+        // `"key"` never matched it, so the credential persisted verbatim into the ledger.
+        ['curl -d "{\\"password\\":\\"SYN-PW\\"}" https://x', 'curl -d "{\\"password\\":"***"}" https://x'],
+        // (b) Single-quoted JSON keys (`{'password':'…'}`).
+        [`{'password':'SYN-SQ'}`, `{'password':"***"}`],
+        // Single-quoted shell wrapping around plain JSON must keep redacting (no regression).
+        [`curl -d '{"password":"SYN-PW-1234"}' https://x`, `curl -d '{"password":"***"}' https://x`],
+        // (c) Sensitive key with an unquoted value (`{"password": 12345}`).
+        [`{"password": 12345}`, `{"password": "***"}`],
+    ])('redacts a sensitive value in any quoted / shell-escaped / unquoted form: %j', (input, expected) => {
+        expect(scrubSecrets(input)).toBe(expected);
+    });
+
+    test('redacts the whole shell-escaped value when a JSON-level escaped quote is inside it', () => {
+        // Raw Bash: the value holds a JSON-level escaped quote (`\"` -> raw `\\\"`),
+        // which is content, not the escaped opener's terminator. A regex that stopped
+        // at the first inner `\"` leaked the value's tail (`word`).
+        const input =
+            'curl -s -X POST https://api.example.com -d "{\\"username\\":\\"bob\\",\\"password\\":\\"p@ss\\\\\\"word\\"}"';
+        const out = scrubSecrets(input);
+        expect(out).not.toContain('p@ss');
+        // (`password` itself contains the substring `word`, so the exact-value pin
+        // below is the meaningful suffix check.)
+        expect(out).toContain('"{\\"username\\":\\"bob\\",\\"password\\":"***"}"');
+    });
+
+    test('fails closed: an escaped opener with no clean terminator redacts through end-of-input', () => {
+        // The value never gets a clean `\"` terminator (a bare `"` and ` u` follow).
+        // Falling through to the unquoted alternative matched only the leading `\` and
+        // leaked the whole value; the escaped alternative must redact to EOF instead.
+        const input = 'curl -d "{\\"password\\":\\"SYN-REAL-PW" u';
+        const out = scrubSecrets(input);
+        expect(out).not.toContain('SYN-REAL-PW');
+        expect(out).toBe('curl -d "{\\"password\\":"***"');
+    });
+
+    test('leaves an array value for a sensitive key redacted-as-readable, not mangled', () => {
+        // Out of scope for the scalar leak fix; the bare-value match stops at `[`/`{`
+        // so an object/array value is left intact rather than half-eaten.
+        expect(scrubSecrets('{"password": [1,2,3]}')).toBe('{"password": [1,2,3]}');
+    });
+
+    test('redacts nested and repeated quoted fields', () => {
+        const out = scrubSecrets('{"creds":{"token":"t1"},"token":"t2"}');
+        expect(out).not.toContain('t1');
+        expect(out).not.toContain('t2');
+        expect(out).toContain('"token":"***"');
+    });
+
+    test('redacts an escaped-quote value whole (distinct prefix and suffix both gone)', () => {
+        const cmd = 'curl -d {"password":"SYN-PRE\\"SYN-MID\\"SYN-POST"} https://example.test';
+        const out = scrubSecrets(cmd);
+        // A regex that stops at the first escaped quote would leak the suffix.
+        for (const marker of ['SYN-PRE', 'SYN-MID', 'SYN-POST']) expect(out).not.toContain(marker);
+        expect(out).toContain('"password":"***"');
+        expect(out).toContain('https://example.test');
+    });
+
+    test('treats escaped backslashes and inner spaces as value content', () => {
+        expect(scrubSecrets('{"secret":"has space and \\\\ backslash"}')).toBe('{"secret":"***"}');
+    });
+
+    test('redacts an empty quoted value', () => {
+        expect(scrubSecrets('{"token":""}')).toBe('{"token":"***"}');
+    });
+
+    test('redacts an unterminated quoted value through end-of-input', () => {
+        expect(scrubSecrets('{"secret":"abc')).toBe('{"secret":"***"');
+        // Trailing lone backslash must not survive as a suffix.
+        expect(scrubSecrets('{"secret":"abc\\')).toBe('{"secret":"***"');
+    });
+
+    test('redacts before the 200-char summary limit and 4096-byte cap', () => {
+        const summarySecret = 'SYNTH-SUMMARY-SECRET';
+        const farSecret = 'SYNTH-FAR-SECRET';
+        // summarySecret sits inside the first 200 chars; farSecret only past the 4 KiB cap.
+        const command = `${'a'.repeat(150)} {"password":"${summarySecret}"} ${'b'.repeat(4200)} {"api_key":"${farSecret}"}`;
+        const summary = buildToolSummary('Bash', { command });
+        expect(summary).toBeDefined();
+        expect(summary).not.toContain(summarySecret);
+        expect(summary).not.toContain(farSecret);
+        expect(summary?.length).toBeLessThanOrEqual(SUMMARY_MAX_CHARS);
+        expect(redactText(command)).not.toContain(farSecret);
+        // The cascade sees the scrubbed length, so the estimate still caps at 4 KiB.
+        expect(cappedByteLength(command)).toBe(REDACTION_CAP_BYTES);
+    });
+
+    test.each([
+        '{"token_count":5}',
+        '{"file":"my_secret_sauce_recipe.md"}',
+        'git commit -m "add token bucket rate limiter"',
+    ])('leaves harmless JSON keys and context readable: %j', (input) => {
         expect(scrubSecrets(input)).toBe(input);
     });
 });
@@ -288,6 +403,59 @@ describe('recordToolUseEvent (in-process)', () => {
             });
             expect(g?.type).toBe('grep');
             expect(String(g?.summary)).toContain('TODO');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('quoted JSON credentials are scrubbed from both the returned event and the ledger bytes (task 1158)', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-rec-json-'));
+        const ctx = join(dir, '.spur', 'context');
+        mkdirSync(ctx, { recursive: true });
+        try {
+            writeFileSync(join(ctx, '.session.json'), JSON.stringify({ session: 's-json' }));
+            // Synthetic values only — never persist a real credential.
+            const markers = ['SYN-PRE', 'SYN-MID', 'SYN-POST', 'SYN-TOKEN-VALUE', 'SYN-KEY'];
+            const command = `curl -s -X POST -d {"password":"SYN-PRE\\"SYN-MID\\"SYN-POST","token":"SYN-TOKEN-VALUE","api_key":"SYN-KEY"} https://example.test`;
+            const event = recordToolUseEvent(ctx, {
+                tool_name: 'Bash',
+                tool_input: { command },
+                tool_response: { content: 'ok' },
+            });
+            expect(event).not.toBeNull();
+            const summary = String(event?.summary);
+            for (const marker of markers) expect(summary).not.toContain(marker);
+            expect(summary).toContain('"password":"***"');
+            // Assert the raw appended bytes, not only the returned object.
+            const ledgerBytes = readFileSync(join(ctx, 'token-ledger.jsonl'), 'utf-8');
+            for (const marker of markers) expect(ledgerBytes).not.toContain(marker);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('scrubs shell-escaped JSON credentials from the persisted ledger bytes (task 1158)', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-rec-escaped-json-'));
+        const ctx = join(dir, '.spur', 'context');
+        mkdirSync(ctx, { recursive: true });
+        try {
+            writeFileSync(join(ctx, '.session.json'), JSON.stringify({ session: 's-esc' }));
+            // Synthetic values only. Real Bash form: JSON nested in a double-quoted arg,
+            // so every JSON quote reaches the hook as `\"`.
+            const markers = ['SYN-ESC-PW', 'SYN-ESC-TK'];
+            const command = `curl -s -X POST -d "{\\"password\\":\\"${markers[0]}\\",\\"token\\":\\"${markers[1]}\\"}" https://example.test`;
+            const event = recordToolUseEvent(ctx, {
+                tool_name: 'Bash',
+                tool_input: { command },
+                tool_response: { content: 'ok' },
+            });
+            expect(event).not.toBeNull();
+            const summary = String(event?.summary);
+            for (const marker of markers) expect(summary).not.toContain(marker);
+            expect(summary).toContain('\\"password\\":"***"');
+            // Assert the raw appended bytes — JSON.stringify re-escapes the backslashes.
+            const ledgerBytes = readFileSync(join(ctx, 'token-ledger.jsonl'), 'utf-8');
+            for (const marker of markers) expect(ledgerBytes).not.toContain(marker);
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }

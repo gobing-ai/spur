@@ -249,6 +249,30 @@ describe('context-post-tool — event recording', () => {
         }
     });
 
+    test('redacts quoted JSON credentials from a Bash summary before persisting (task 1158)', async () => {
+        const dir = makeTempProject();
+        try {
+            await runHook(START_HOOK, dir, {});
+            // Synthetic values only.
+            const markers = ['SYN-PRE', 'SYN-MID', 'SYN-POST', 'SYN-TOKEN-VALUE', 'SYN-KEY'];
+            const command = `curl -s -X POST -d {"password":"SYN-PRE\\"SYN-MID\\"SYN-POST","token":"SYN-TOKEN-VALUE","api_key":"SYN-KEY"} https://example.test`;
+            const { exitCode } = await runHook(POST_TOOL_HOOK, dir, {
+                tool_name: 'Bash',
+                tool_input: { command },
+                tool_response: { content: 'ok' },
+            });
+            expect(exitCode).toBe(0);
+            const ledgerRaw = readFileSync(join(dir, '.spur', 'context', 'token-ledger.jsonl'), 'utf-8');
+            for (const marker of markers) expect(ledgerRaw).not.toContain(marker);
+            const events = readLedger(dir).filter((e) => e.type === 'bash');
+            expect(events).toHaveLength(1);
+            expect(String(events[0]?.summary)).toContain('"password":"***"');
+            expect(String(events[0]?.summary)).toContain('https://example.test');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
     test('fails open (exit 0, no event) for tools outside the allowlist (task 0248)', async () => {
         const dir = makeTempProject();
         try {
