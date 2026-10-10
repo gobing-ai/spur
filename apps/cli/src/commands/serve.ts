@@ -109,6 +109,16 @@ export function registerServeCommand(
                     // PATH-independent child invocation for queued history refreshes (task 0717).
                     spurInvocation: resolveSpurArgv(),
                     ...(projectRoot !== undefined ? { cwd: projectRoot } : {}),
+                    onListening: ({ url, boardUrl }) => {
+                        context.output.write(`Spur server listening on ${url}`);
+                        if (boardUrl) {
+                            context.output.write(`Board UI available at ${boardUrl}`);
+                        } else {
+                            context.output.write(
+                                `Board UI static assets not found — /board will return 404 (health check: ${url}/api/health)`,
+                            );
+                        }
+                    },
                 });
             } catch (err) {
                 // errorMessage() classifies SQLITE_BUSY (bun:sqlite: message "database is locked",

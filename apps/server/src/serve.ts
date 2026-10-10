@@ -187,6 +187,8 @@ export interface StartServerOptions {
      * the boot path; tests pass 0.
      */
     jobWorkerStartDelayMs?: number;
+    /** Optional callback invoked once the HTTP server is listening and ready to accept requests. */
+    onListening?: (info: { port: number; host: string; url: string; boardUrl: string | null }) => void;
 }
 
 /**
@@ -1324,17 +1326,25 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                     shutdownReady = shutdown;
 
                     const url = `http://${options.host}:${options.port}`;
+                    const boardUrl = webDistPath ? `${url}/board` : null;
 
                     appRt.logger.info('Server started', {
                         port: options.port,
                         host: options.host,
-                        board: webDistPath ? `${url}/board` : null,
+                        board: boardUrl,
+                    });
+
+                    options.onListening?.({
+                        port: options.port,
+                        host: options.host,
+                        url,
+                        boardUrl,
                     });
 
                     if (options.openBrowser) {
                         // Only open the board when static assets resolved; otherwise the
                         // browser lands on a JSON 404 that looks like a broken install.
-                        if (!cancellation) await deps.openUrl(webDistPath ? `${url}/board` : `${url}/api/health`);
+                        if (!cancellation) await deps.openUrl(boardUrl ?? `${url}/api/health`);
                     }
                 } catch (error) {
                     // Partial callback startup owns these services; runtime plugin

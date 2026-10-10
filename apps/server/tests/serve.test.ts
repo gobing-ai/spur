@@ -609,6 +609,63 @@ describe('startServer', () => {
         expect(openedUrl).toBe('http://localhost:4101/api/health');
     });
 
+    test('invokes onListening callback with bound url and boardUrl once server is started', async () => {
+        installProcessMocks();
+        Bun.serve = (() => ({ stop: () => {}, ref: () => {}, unref: () => {} })) as unknown as typeof Bun.serve;
+
+        const webDistPath = mkdtempSync(join(tmpdir(), 'spur-web-dist-listening-'));
+        writeFileSync(join(webDistPath, 'index.html'), '<html>board</html>');
+
+        let listeningInfo: { port: number; host: string; url: string; boardUrl: string | null } | undefined;
+        await startServer(
+            {
+                port: 4102,
+                host: 'localhost',
+                openBrowser: false,
+                webDistPath,
+                keepAlive: false,
+                onListening: (info) => {
+                    listeningInfo = info;
+                },
+            },
+            makeDeps(),
+        );
+
+        expect(listeningInfo).toEqual({
+            port: 4102,
+            host: 'localhost',
+            url: 'http://localhost:4102',
+            boardUrl: 'http://localhost:4102/board',
+        });
+    });
+
+    test('invokes onListening callback with boardUrl: null when board assets are missing', async () => {
+        installProcessMocks();
+        Bun.serve = (() => ({ stop: () => {}, ref: () => {}, unref: () => {} })) as unknown as typeof Bun.serve;
+
+        let listeningInfo: { port: number; host: string; url: string; boardUrl: string | null } | undefined;
+        await startServer(
+            {
+                port: 4103,
+                host: 'localhost',
+                openBrowser: false,
+                webDistPath: join(tmpdir(), 'spur-web-dist-absent-listening'),
+                keepAlive: false,
+                onListening: (info) => {
+                    listeningInfo = info;
+                },
+            },
+            makeDeps(),
+        );
+
+        expect(listeningInfo).toEqual({
+            port: 4103,
+            host: 'localhost',
+            url: 'http://localhost:4103',
+            boardUrl: null,
+        });
+    });
+
     test('passes resolved webDistPath into ServerContext for static board serving', async () => {
         installProcessMocks();
         Bun.serve = (() => ({ stop: () => {}, ref: () => {}, unref: () => {} })) as unknown as typeof Bun.serve;

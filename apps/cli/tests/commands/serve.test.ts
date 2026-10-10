@@ -144,6 +144,46 @@ describe('registerServeCommand', () => {
         expect(resolveServeDbUrl('/tmp/project', { DATABASE_URL: 'custom.db' }, 'custom.db')).toBe('custom.db');
     });
 
+    test('prints server listening and board UI url when onListening fires with boardUrl', async () => {
+        const { ctx, writes } = makeCtx();
+        const { action } = captureServe(ctx, {
+            startServer: (async (options: StartServerOptions) => {
+                options.onListening?.({
+                    port: 3000,
+                    host: 'localhost',
+                    url: 'http://localhost:3000',
+                    boardUrl: 'http://localhost:3000/board',
+                });
+            }) as RegisterServeOptions['startServer'],
+        });
+
+        await action({ port: 3000, host: 'localhost', open: false, json: false });
+
+        expect(writes).toContain('Starting Spur server on http://localhost:3000 …');
+        expect(writes).toContain('Spur server listening on http://localhost:3000');
+        expect(writes).toContain('Board UI available at http://localhost:3000/board');
+    });
+
+    test('prints server listening and fallback notice when onListening fires without boardUrl', async () => {
+        const { ctx, writes } = makeCtx();
+        const { action } = captureServe(ctx, {
+            startServer: (async (options: StartServerOptions) => {
+                options.onListening?.({
+                    port: 3000,
+                    host: 'localhost',
+                    url: 'http://localhost:3000',
+                    boardUrl: null,
+                });
+            }) as RegisterServeOptions['startServer'],
+        });
+
+        await action({ port: 3000, host: 'localhost', open: false, json: false });
+
+        expect(writes).toContain('Starting Spur server on http://localhost:3000 …');
+        expect(writes).toContain('Spur server listening on http://localhost:3000');
+        expect(writes.some((w) => w.includes('/board will return 404'))).toBe(true);
+    });
+
     test('surfaces a startup error as a clean exit 1', async () => {
         const { ctx, errors, exit } = makeCtx();
         const { action } = captureServe(ctx, {
