@@ -26,7 +26,6 @@ runs a parallel process.
 | `/sp:dev-refine` | Planning→Exec | Fill one task's acceptance criteria, design, and plan just-in-time via Q&A |
 | `/sp:dev-run` | Execution | Run one task through its full pipeline; `--mode implement` for just the code step |
 | `/sp:dev-runall` | Exec (batch) | Run a batch of tasks through their pipelines in dependency order (`--feature <id>`) |
-| `/sp:dev-parallel` | Exec (batch) | Fan out independent tasks across parallel subagents; serialize on any conflict |
 | `/sp:dev-unit` | Execution | Generate or extend tests until the unit target is met |
 | `/sp:dev-review` | Execution | Multi-dimensional review of a task or a code path |
 | `/sp:dev-verify` | Execution | Map requirements → evidence; emit a PASS/PARTIAL/FAIL verdict |
@@ -73,7 +72,7 @@ verdict **stops the chain** with findings written into the task — there is no 
 ```text
 /sp:dev-run 0061 --auto        # full pipeline, HITL gates auto-confirmed
 /sp:dev-runall --feature F7 --auto
-/sp:dev-parallel --feature F7  # independent tasks fan out across subagents
+/sp:dev-runall --feature F7 --mode auto  # fan out only when dependency waves allow
 ```
 
 `--auto` skips objective confirmations only. Irreversible gates (branch cleanup, merges) always

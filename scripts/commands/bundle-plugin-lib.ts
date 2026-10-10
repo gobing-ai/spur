@@ -600,6 +600,25 @@ export declare function buildPhasedPlan(def: unknown): PhasedPlanItem[] | null;
 export declare function validatePhaseTable(def: unknown): string[];
 export declare function insertOnEntry(items: PhasedPlanItem[], stateId: string, def: unknown): PhasedPlanItem[];
 export declare function buildBatchPlan(tasks: BatchTask[]): PhasedPlanItem[][];
+export declare interface ScheduleTask {
+    wbs: string;
+    dependencies?: string[];
+    files?: string[];
+}
+export declare interface ScheduleOverlap {
+    before: string;
+    after: string;
+    files: string[];
+}
+export declare interface BatchSchedule {
+    order: string[];
+    waves: string[][];
+    cycle: string[] | null;
+    overlaps: ScheduleOverlap[];
+    mode: 'sequential' | 'parallel';
+    reason: string;
+}
+export declare function scheduleBatch(tasks: ScheduleTask[], opts?: { concurrency?: number }): BatchSchedule;
 export declare function taskPhaseChildren(taskLetter: string, plan: PhasedPlanItem[]): PhasedPlanItem[];
 export declare function hostStatus(
     outcome: 'pending' | 'active' | 'completed' | 'skipped' | 'failed' | 'blocked' | 'unattempted',

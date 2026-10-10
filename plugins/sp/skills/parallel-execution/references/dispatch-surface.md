@@ -70,7 +70,7 @@ own axis.
 Surface choice and model choice stay separate axes, but the invocation surface is where the
 cheap-model hint is applied. On hosts whose native subagent invocation accepts a per-call model
 override (Claude Code: the Agent tool's `model` parameter), dispatch read-only fan-out workers —
-`dev-parallel --mode investigation` and competency-lens review's read-only lenses — with the host's
+N-way investigation and competency-lens review's read-only lenses — with the host's
 cheapest capable model. The rule is owned by
 [fan-out-patterns.md § Cheap-model hint for read-only fan-out](fan-out-patterns.md#cheap-model-hint-for-read-only-fan-out)
 and carries two prohibitions and one exemption: invocation-side only, **never** a subagent

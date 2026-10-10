@@ -222,6 +222,118 @@ function buildBatchPlan(tasks) {
   }
   return waves;
 }
+var byWbs = (a, b) => a.localeCompare(b, "en", { numeric: true });
+function kahnOrder(nodes, preds) {
+  const indegree = new Map(nodes.map((n) => [n, preds.get(n)?.size ?? 0]));
+  const succ = new Map(nodes.map((n) => [n, []]));
+  for (const [n, ps] of preds)
+    for (const p of ps)
+      succ.get(p)?.push(n);
+  const ready = nodes.filter((n) => indegree.get(n) === 0).sort(byWbs);
+  const order = [];
+  for (let n = ready.shift();n !== undefined; n = ready.shift()) {
+    order.push(n);
+    for (const s of succ.get(n) ?? []) {
+      const d = (indegree.get(s) ?? 0) - 1;
+      indegree.set(s, d);
+      if (d === 0) {
+        ready.push(s);
+        ready.sort(byWbs);
+      }
+    }
+  }
+  return order;
+}
+function findCycle(remaining, preds) {
+  const state = new Map;
+  const stack = [];
+  const visit = (n) => {
+    state.set(n, "visiting");
+    stack.push(n);
+    for (const p of [...preds.get(n) ?? []].sort(byWbs)) {
+      if (!remaining.has(p))
+        continue;
+      if (state.get(p) === "visiting")
+        return [...stack.slice(stack.indexOf(p)), p];
+      if (!state.has(p)) {
+        const cycle = visit(p);
+        if (cycle)
+          return cycle;
+      }
+    }
+    stack.pop();
+    state.set(n, "done");
+    return null;
+  };
+  for (const n of [...remaining].sort(byWbs)) {
+    if (state.has(n))
+      continue;
+    const cycle = visit(n);
+    if (cycle)
+      return cycle;
+  }
+  return [];
+}
+function scheduleBatch(tasks, opts = {}) {
+  const byId = new Map;
+  for (const t of tasks)
+    if (!byId.has(t.wbs))
+      byId.set(t.wbs, t);
+  const nodes = [...byId.keys()].sort(byWbs);
+  const preds = new Map(nodes.map((n) => [n, new Set((byId.get(n)?.dependencies ?? []).filter((d) => byId.has(d)))]));
+  const depOrder = kahnOrder(nodes, preds);
+  if (depOrder.length < nodes.length) {
+    const cycle = findCycle(new Set(nodes.filter((n) => !depOrder.includes(n))), preds);
+    return {
+      order: [],
+      waves: [],
+      cycle,
+      overlaps: [],
+      mode: "sequential",
+      reason: `dependency cycle ${cycle.join(" → ")}`
+    };
+  }
+  const files = new Map(nodes.map((n) => [n, new Set((byId.get(n)?.files ?? []).map(normalizeTaskPath))]));
+  const overlaps = [];
+  for (let i = 0;i < depOrder.length; i++) {
+    const before = depOrder[i];
+    const beforeFiles = files.get(before) ?? new Set;
+    for (const after of depOrder.slice(i + 1)) {
+      const shared = [...beforeFiles].filter((f) => files.get(after)?.has(f)).sort();
+      if (shared.length === 0)
+        continue;
+      overlaps.push({ before, after, files: shared });
+      preds.get(after)?.add(before);
+    }
+  }
+  const order = kahnOrder(nodes, preds);
+  const level = new Map;
+  for (const n of order) {
+    let l = 0;
+    for (const p of preds.get(n) ?? [])
+      l = Math.max(l, (level.get(p) ?? 0) + 1);
+    level.set(n, l);
+  }
+  const waves = [];
+  for (const n of order) {
+    const l = level.get(n) ?? 0;
+    waves[l] = [...waves[l] ?? [], n].sort(byWbs);
+  }
+  const widest = Math.max(0, ...waves.map((w) => w.length));
+  const concurrency = opts.concurrency ?? 2;
+  let reason = `widest wave holds ${widest} independent tasks`;
+  if (nodes.length < 2)
+    reason = "fewer than two tasks";
+  else if (concurrency < 2)
+    reason = "concurrency is 1";
+  else if (widest < 2)
+    reason = "every wave holds one task (dependency or file-overlap chain)";
+  const mode = nodes.length >= 2 && concurrency >= 2 && widest >= 2 ? "parallel" : "sequential";
+  return { order, waves, cycle: null, overlaps, mode, reason };
+}
+function normalizeTaskPath(path) {
+  return path.trim().replace(/^\.\//, "");
+}
 function taskPhaseChildren(taskLetter, plan) {
   if (!Array.isArray(plan))
     return [];
@@ -250,12 +362,21 @@ function hostText(item) {
 }
 
 // plugins/sp/scripts/batch-plan.ts
-var BATCH_PLAN_USAGE = "usage: batch-plan.ts waves --tasks <tasks.json> | task-children --letter <A-Z> --plan <plan.json>";
+var BATCH_PLAN_USAGE = "usage: batch-plan.ts waves --tasks <tasks.json> | order --tasks <tasks.json> [--concurrency <n>] | task-children --letter <A-Z> --plan <plan.json>";
 function readJsonFile(path) {
   return JSON.parse(readFileSync(path, "utf8"));
 }
 function isBatchTask(value) {
   return typeof value === "object" && value !== null && typeof value.wbs === "string" && typeof value.name === "string";
+}
+function isStringArray(value) {
+  return Array.isArray(value) && value.every((v) => typeof v === "string");
+}
+function isScheduleTask(value) {
+  if (typeof value !== "object" || value === null)
+    return false;
+  const t = value;
+  return typeof t.wbs === "string" && (t.dependencies === undefined || isStringArray(t.dependencies)) && (t.files === undefined || isStringArray(t.files));
 }
 function main(argv) {
   const mode = argv[0];
@@ -279,6 +400,37 @@ function main(argv) {
       return 1;
     }
     process.stdout.write(`${JSON.stringify({ waves: buildBatchPlan(tasks) })}
+`);
+    return 0;
+  }
+  if (mode === "order") {
+    let tasksPath = "";
+    let concurrency = 2;
+    for (let i = 1;i + 1 < argv.length; i += 2) {
+      if (argv[i] === "--tasks")
+        tasksPath = argv[i + 1] ?? "";
+      else if (argv[i] === "--concurrency")
+        concurrency = Number(argv[i + 1]);
+    }
+    if (tasksPath === "" || !Number.isInteger(concurrency) || concurrency < 1) {
+      process.stderr.write(`${BATCH_PLAN_USAGE}
+`);
+      return 2;
+    }
+    let tasks;
+    try {
+      tasks = readJsonFile(tasksPath);
+    } catch (error) {
+      process.stderr.write(`batch-plan: cannot read ${tasksPath} \u2014 ${error instanceof Error ? error.message : String(error)}
+`);
+      return 1;
+    }
+    if (!Array.isArray(tasks) || !tasks.every(isScheduleTask)) {
+      process.stderr.write(`batch-plan: --tasks file must be a JSON array of {wbs, dependencies?, files?}
+`);
+      return 1;
+    }
+    process.stdout.write(`${JSON.stringify(scheduleBatch(tasks, { concurrency }))}
 `);
     return 0;
   }
@@ -323,6 +475,7 @@ function main(argv) {
 export {
   validatePhaseTable,
   taskPhaseChildren,
+  scheduleBatch,
   planLetter,
   planChild,
   main,

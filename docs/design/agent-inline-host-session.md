@@ -58,6 +58,10 @@ dispatch) — this keeps the primary use case (debugging dispatch issues on a ba
 Alternative considered: hard error — rejected; it makes the debugger's override useless exactly
 where batch dispatch bugs live.
 
+> **2026-10-10:** `dev-parallel` is retired; parallel task batches are `dev-runall --mode parallel|auto`.
+> The same rule carries over: explicit `--agent inline` pins `--mode auto` to sequential host-session
+> execution (execution-batch.md § 2.4a).
+
 ## Components
 
 1. `apps/cli/src/commands/agent.ts` — `inline` branch in `validateAgentSelector`/`runAgentRun`:

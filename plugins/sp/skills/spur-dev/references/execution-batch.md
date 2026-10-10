@@ -204,7 +204,18 @@ For each dependency edge to a task **outside** the frozen set, resolve its curre
 
 ### 2.4 Topological sort
 
-Topological-sort the remaining in-set, non-blocked tasks using Kahn's algorithm:
+Do not hand-run the sort — compute it. Write the remaining in-set, non-blocked tasks to a temp file
+as a JSON array of `{wbs, dependencies, files?}` (`dependencies` from `spur task show <wbs> --json`
+frontmatter; `files` = repo paths the task's Design/Plan names, omit when it names none) and run:
+
+```bash
+node "$(superskill script path sp batch-plan.mjs)" order --tasks <tasks.json> [--concurrency <n>]
+# → {"order":[…],"waves":[[…],…],"cycle":null|[…],"overlaps":[…],"mode":"sequential|parallel","reason":"…"}
+```
+
+`order` is the execution plan; a non-null `cycle` is the abort below. `waves`, `overlaps`, `mode`
+and `reason` feed `--mode auto` (§ 2.4a) and the batch report. The script implements Kahn's
+algorithm (ADR-130 glue over `scheduleBatch` in `packages/app/src/workflow/plan-projection.ts`):
 
 1. Seed the queue with zero-indegree nodes, **sorted WBS-ascending** (deterministic tie-break).
 2. Repeatedly dequeue the lowest-WBS zero-indegree node, emit it, decrement its successors'
@@ -214,7 +225,35 @@ Topological-sort the remaining in-set, non-blocked tasks using Kahn's algorithm:
 **Cycle handling (R2.3):** a cycle aborts the **entire batch** before any task runs. Reconstruct a
 representative cycle path via DFS over the remaining unsorted nodes and report it (e.g.
 `0040 → 0042 → 0040`). Do not run any task in a cyclic batch — running a prefix would partially
-execute work whose ordering is undefined.
+execute work whose ordering is undefined. The script reports it as `cycle` (e.g.
+`["0040","0042","0040"]`) with an empty `order`.
+
+**File overlap.** Two tasks that declare the same file get a serialization edge oriented by their
+dependency order (`overlaps[]` records each), so overlap never creates a cycle and never puts
+overlapping tasks in the same wave (`sp:parallel-execution` row 3). It only matters under parallel
+execution; sequential order stays a valid topological order either way.
+
+### 2.4a `--mode auto` resolution
+
+`--mode auto` is decided **once, here, by the active orchestrator** (the host session, or
+`sp:super-planner` when an explicit executor is set), after freeze, Step 2.3 blocking and
+the § 2.4 schedule, and before any task runs:
+
+| Condition (first match wins) | Resolved mode |
+| --- | --- |
+| `--worktree` present | `sequential` (parallel rejects `--worktree`) |
+| `--agent inline` explicitly passed | `sequential` (inline is the host-session driver) |
+| script `mode` is `sequential` (fewer than 2 tasks, `--concurrency 1`, or every wave holds one task) | `sequential` |
+| script `mode` is `parallel` | `parallel` |
+
+- **Sequential resolution** continues the Step 3 loop with the frozen `order` (host-inline, or
+  subprocess per task under an explicit executor).
+- **Parallel resolution** hands off to the explicit/parallel path as
+  `runall --tasks <order as comma WBS list> --mode parallel` plus the operator's other flags. The
+  explicit list carries the frozen membership, so the feature preflight (Step 1) is not re-run.
+- `--defer-gate` survives only a parallel resolution; a sequential one drops it.
+- The batch report records `mode: auto → <resolved>` with the script's `reason`, the widest wave,
+  and any `overlaps`.
 
 ### 2.5 Result
 
@@ -321,8 +360,8 @@ emit batch report (per-task outcome + preflight skips + recovery hints + autoRep
 ```
 
 Parallel mode keeps the same lifecycle but swaps the inner loop for the per-task-worktree fan-out
-specified in [§ Parallel isolation](#parallel-isolation---mode-parallel): identify a zero-edge,
-non-overlapping subset; **preflight each** selected task; run each ready task's `task-pipeline.yaml`
+specified in [§ Parallel isolation](#parallel-isolation---mode-parallel): take the zero-edge,
+non-overlapping frontier from the § 2.4 schedule's waves; **preflight each** selected task; run each ready task's `task-pipeline.yaml`
 invocation in its own create-mode worktree; integrate by rebase + `--ff-only` as tasks finish;
 recovery stays **sequential** (one WBS). If any decision-framework check fails, serialize and
 record the reason.

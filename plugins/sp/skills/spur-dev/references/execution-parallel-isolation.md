@@ -45,7 +45,10 @@ emit batch report (per-task outcomes + preflight skips + recovery hints + batch 
 - **Eligibility (R2).** A task becomes eligible only when all of its in-set dependencies are
   **integrated** onto the base ref — pipeline-terminal is not enough, because its branch must
   rebase over theirs. Omitting `--mode` stays sequential; this loop is entered only via
-  `--mode parallel` on `/sp:dev-runall`.
+  `--mode parallel` on `/sp:dev-runall`, directly or as a `--mode auto` resolution
+  ([execution-batch.md § 2.4a](execution-batch.md#24a---mode-auto-resolution)).
+- **Fan-out set.** Run order and eligibility come from the § 2.4 `batch-plan.mjs order` schedule;
+  its file-overlap edges are in-set dependencies here, so overlapping tasks never run at once.
 - **Workdir.** `spur workflow run` records the launch workdir (0784 R1), so launch with `cwd` = the
   task worktree: resume and `.spur/run/` artifact paths resolve there. Read the verdict from
   `$WT/.spur/run/<wbs>-verdict.json` before integration; WT-4a persists it into the invoking tree.

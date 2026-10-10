@@ -1,7 +1,7 @@
 ---
 description: Run a batch of tasks through their pipelines in dependency-correct order — resolve a set, topo-sort, run each via task-pipeline.yaml, emit a batch report
 role: planner
-argument-hint: "--tasks <selector> [--feature <id>] [--mode <sequential|parallel>] [--keep-going] [--auto] [--agent <inline|auto|name>] [--json] [--wrap] [--next] [--continue] [--worktree [<name>]] [--no-summary] [--defer-gate]"
+argument-hint: "--tasks <selector> [--feature <id>] [--mode <sequential|parallel|auto>] [--concurrency <n>] [--keep-going] [--auto] [--agent <inline|auto|name>] [--json] [--wrap] [--next] [--continue] [--worktree [<name>]] [--no-summary] [--defer-gate]"
 allowed-tools: ["Bash", "Read", "Skill"]
 ---
 
@@ -15,10 +15,10 @@ Wraps the **sp:spur-dev** skill.
 | --- | --- | --- |
 | `--tasks` `<selector>` | Task selector to run. | required |
 | `--feature` `<id>` | Restrict to a feature. | omitted |
-| `--mode` `<sequential\|parallel>` | Batch execution order. | sequential |
+| `--mode` `<sequential\|parallel\|auto>` | Batch execution order. `auto` computes the frozen batch's dependency waves and runs parallel only when a wave holds ≥2 independent tasks (see below). | sequential |
 | `--keep-going` | Continue past per-task failures. | off |
 | `--auto` | Skip objective HITL gates. | off |
-| `--agent` `<inline\|auto\|name>` | Who runs each task's pipeline stages. Interactive sequential omit/`inline` uses the host-session driver with unified inline semantics (task 0687 — see below)). `auto`, a name, parallel mode, and headless invocation use subprocesses. The opt-in `fleet` selector (0942) maps each task run to `executor: 'fleet'` so `agent.run` stages dispatch through the fleet control plane (ADR-126) instead of a subprocess. | omit |
+| `--agent` `<inline\|auto\|name>` | Who runs each task's pipeline stages. Interactive sequential omit/`inline` uses the host-session driver with unified inline semantics (task 0687 — see below). `auto`, a name, parallel mode, and headless invocation use subprocesses. The opt-in `fleet` selector (0942) maps each task run to `executor: 'fleet'` so `agent.run` stages dispatch through the fleet control plane (ADR-126) instead of a subprocess. | omit |
 | `--json` | Emit structured JSON. | off |
 | `--wrap` | Run the wrap hop **once for the batch** over the `done` subset only (Step 6 of execution-batch.md): `vars.feature` is passed only when every frozen task is `done`/`cancelled`; an empty done subset skips the wrap with a reason. The `--agent` selector is preserved into the `/sp:dev-wrap` handoff when supplied; omission remains omission. | off |
 | `--next` | Chain-to-completion via the next-router. | off |
@@ -26,14 +26,14 @@ Wraps the **sp:spur-dev** skill.
 | `--worktree` `[<name>]` | Run the batch in an isolated git worktree; FF-merge on success, retain on failure. Bare `--worktree` creates a fresh tree; `--worktree <name>` adopts an existing worktree by name/path/branch. | off |
 | `--no-summary` | Skip the measured execution summary (one row per task run: time, wait, tool calls, total / non-cached tokens) printed after the batch report. | off (summary printed) |
 | `--concurrency` `<n>` | Parallel-mode worker bound: at most `<n>` task pipelines run at once (task 0931); a dependent starts only after its in-set dependencies are integrated onto the base ref. No-op in sequential mode (ignored). | 2 |
-| `--defer-gate` | Opt-in parallel-batch gate policy (task 1111): each task's `test` hop runs the light tier and writes `DEFERRED`; the batch runs one integrated full gate on the base ref before the feature sync. Requires `--mode parallel`; default off. | off |
+| `--defer-gate` | Opt-in parallel-batch gate policy (task 1111): each task's `test` hop runs the light tier and writes `DEFERRED`; the batch runs one integrated full gate on the base ref before the feature sync. Requires `--mode parallel`, or `--mode auto` resolved to parallel (dropped with a note otherwise); default off. | off |
 
 For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).
 
 ## Usage
 
 ```
-/sp:dev-runall --tasks <selector> [--feature <id>] [--mode <sequential|parallel>] [--keep-going] [--auto] [--agent <inline|auto|name>] [--json] [--wrap] [--next] [--continue] [--worktree [<name>]] [--no-summary] [--defer-gate]
+/sp:dev-runall --tasks <selector> [--feature <id>] [--mode <sequential|parallel|auto>] [--concurrency <n>] [--keep-going] [--auto] [--agent <inline|auto|name>] [--json] [--wrap] [--next] [--continue] [--worktree [<name>]] [--no-summary] [--defer-gate]
 ```
 
 Flags: `--tasks <selector>` (required — explicit WBS list, status pseudo-list, `feature:<id>`,
@@ -44,8 +44,8 @@ structured findings, before any task pipeline action, task 0510 R2; scoped: `L4.
 (expected pre-run states of a not-yet-run or reopened feature) are reported verbatim but do not abort (the non-aborting set is
 `NON_ABORTING_PREFLIGHT_CODES` in `plugins/sp/scripts/batch-preflight.ts`; `--fix` repairs land in the report's `autoRepairs`) —
 any other strict error aborts), `--mode`
-`<sequential|parallel>` (default `sequential`; `parallel` fans out a proven-independent subset —
-see `execution-parallel-isolation.md`), `--concurrency <n>`
+`<sequential|parallel|auto>` (default `sequential`; `parallel` fans out a proven-independent subset —
+see `execution-parallel-isolation.md`; `auto` picks one per batch — see below), `--concurrency <n>`
 (parallel-mode worker bound — at most <n> task pipelines at once, default 2; a dependent task starts
 only after its in-set dependencies are **integrated** onto the base ref), `--keep-going`
 (batch failure policy — skip a failed task's in-batch dependents, continue independents; default
@@ -61,6 +61,15 @@ report as JSON), `--wrap` (trigger
 FF-merge onto the base ref on full success, retain intact on any failure/halt/non-FF; bare form
 creates a fresh tree, `<name>` form adopts an existing worktree by name/path/branch; see
 `execution-worktree-setup.md` + `execution-worktree-landing.md`).
+
+**`--mode auto` (smart scheduling).** Ordering is always dependency-correct — every mode
+topo-sorts the frozen set with `batch-plan.mjs order` (deterministic, never hand-sorted). `auto`
+additionally reads that schedule's dependency waves (tasks declaring the same file are serialized)
+and decides once, before the first task: `parallel` when some wave holds ≥2 independent tasks and
+`--concurrency` ≥2; otherwise `sequential` in the host session. `--worktree` or explicit
+`--agent inline` pins `sequential`. The batch report records `mode: auto → <resolved>` and why.
+Default stays `sequential`: parallel costs ~N× tokens, worktree setup and subprocess executors, which
+a dependency chain never pays back. Rules: execution-batch.md § 2.4a.
 
 **`--worktree` and parallel mode.** `--worktree --mode parallel` is **rejected** — parallel mode
 already isolates each task in its own worktree (see `execution-parallel-isolation.md`), and
@@ -98,7 +107,7 @@ full distinction.
   § 2.7 Visible batch plan.
 - Apply the [inline-default execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface). Interactive sequential omit/`inline` keeps the orchestrator in the host session through the [inline pipeline driver](../skills/spur-dev/references/inline-pipeline-driver.md); the resolved selector applies uniformly — eligible `agent.run` stages dispatch once to a native subagent with host fallback (0508). `--agent auto`, a name, or parallel mode retains the isolated per-task workflow boundary.
 - Apply the [shared startup contract](../skills/spur-dev/references/cross-cutting.md#shared-startup-contract-task-0814-r1r3r4r6r7r8) — publish the generated plan first, quick readiness before isolation, digest binding, comprehensive checks at owning boundaries (task 0814 R1/R3/R4/R7/R8; 1105 R1).
-- Interactive sequential omit/inline: `Skill(skill="sp:spur-dev", args="runall-inline $ARGUMENTS")`.
-- Explicit executor or parallel mode: `Skill(skill="sp:spur-dev", args="runall $ARGUMENTS")` → `sp:super-planner` agent.
+- Interactive sequential omit/inline, and `--mode auto` without an explicit executor: `Skill(skill="sp:spur-dev", args="runall-inline $ARGUMENTS")` — auto resolves in the host after freeze/order (§ 2.4a) and hands a parallel resolution to the `runall` path with the frozen explicit WBS list.
+- Explicit executor (any mode, including `auto`) or parallel mode: `Skill(skill="sp:spur-dev", args="runall $ARGUMENTS")` → `sp:super-planner` agent.
 - After the batch report, print the [execution summary](../skills/spur-dev/references/dev-operations.md#execution-summary) over every attempted run unless
   `--no-summary`.

@@ -1,7 +1,7 @@
 ---
 name: super-planner
 description: |
-  Use PROACTIVELY for "run this task end to end", "drive the batch", "execute the todo set", "/sp:dev-runall", or "/sp:dev-parallel". Planning and execution orchestration: owns the product/project management framing (intake, scope, sequencing) and drives the batch driver loop in sp:spur-dev/references/execution-batch.md — resolve+freeze -> topo-sort -> per-task run -> verdict inspect -> continue/halt -> batch report, with optional parallel fan-out. For a one-off verb, /sp:dev-run <wbs> is lighter; for "what single step next?", prefer /sp:dev-next — NOT this agent's job.
+  Use PROACTIVELY for "run this task end to end", "drive the batch", "execute the todo set", "/sp:dev-runall", or "fan out these tasks". Planning and execution orchestration: owns the product/project management framing (intake, scope, sequencing) and drives the batch driver loop in sp:spur-dev/references/execution-batch.md — resolve+freeze -> topo-sort -> per-task run -> verdict inspect -> continue/halt -> batch report, with optional parallel fan-out. For a one-off verb, /sp:dev-run <wbs> is lighter; for "what single step next?", prefer /sp:dev-next — NOT this agent's job.
 
   <example>
   Context: Batch execution of a feature's tasks
@@ -72,7 +72,6 @@ You own the spaces **between** task runs:
 - **Resolve + freeze** the task set:
   - from `--tasks <selector>`, or
   - from the convenience `--feature <id>` (normalized by the command layer / resolver to `feature:<id>` per execution-batch.md Step 1).
-  (See also dev-runall and dev-parallel which now both accept `--feature`.)
 - **Topologically order** the frozen set by `dependencies[]` (Step 2). Abort on cycle; pre-block
   unmet out-of-set deps.
 - **Preflight (Step 2.5 / 3.0)** - before each pipeline launch, evaluate TABLE A STOP rows
@@ -110,7 +109,7 @@ You explicitly do **NOT** own step-level execution:
 
 ## When to use
 
-- `/sp:dev-runall --feature <id>` (or `--tasks feature:<id>`), `/sp:dev-parallel --feature <id>`, or equivalent is invoked.
+- `/sp:dev-runall --feature <id>` (or `--tasks feature:<id>`, with any `--mode`), or equivalent is invoked.
 - The operator asks to "run all tasks", "run the batch", "execute the todo set", "runall ready", or "fan out tasks for feature X".
 - A feature's task batch is decomposed and ready for end-to-end (sequential or parallel) execution.
 
@@ -121,7 +120,7 @@ routes to you. On other platforms, invoke this agent directly when the batch dri
 
 | Platform | Invocation |
 | ---------- | ----------- |
-| Claude Code | Spawned by `/sp:dev-runall --feature <id>` (or `--tasks ...`) -> `Skill(skill="sp:spur-dev", args="runall $ARGUMENTS")` -> this agent (also handles parallel via dev-parallel) |
+| Claude Code | Spawned by `/sp:dev-runall --feature <id>` (or `--tasks ...`) -> `Skill(skill="sp:spur-dev", args="runall $ARGUMENTS")` -> this agent (also handles `--mode parallel` and parallel `--mode auto` resolutions) |
 | Other platforms | Spawn this agent directly; read execution-batch.md and drive the loop |
 
 ## Decision autonomy
@@ -173,8 +172,8 @@ When you fan out or dispatch a subagent, apply the four disciplines the SSOT
       cardinality is 1. Never loop recovery until done.
 - [ ] Emit the batch report at completion (clean / halted / aborted), including preflight skips.
 - [ ] Default to sequential execution. Enter parallel mode only when explicitly requested
-      (`--mode parallel` or `/sp:dev-parallel`) and the `sp:parallel-execution` decision framework
-      clears dependency, file-overlap, and token-budget checks.
+      (`--mode parallel`, or `--mode auto` resolved to parallel by the § 2.4a schedule) and the
+      `sp:parallel-execution` decision framework clears dependency, file-overlap, and token-budget checks.
 - [ ] To resolve a deferred `feature_id` under operator-chosen strict rigor, use the sp:spur-dev
       feature-link helper (single-task or sweep) - never invoke it automatically from within a
       batch run; surface it only when the operator explicitly requests strict traceability.

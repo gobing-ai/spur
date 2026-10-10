@@ -148,7 +148,7 @@ halt-on-first-failure. Never silently retried; the failure is still reported.
 
 ### `--defer-gate` — opt-in parallel-batch gate policy (task 1111 / H15)
 
-**Applies to:** `/sp-dev-runall --mode parallel`, `/sp-dev-parallel --mode fan-out`.
+**Applies to:** `/sp-dev-runall --mode parallel`, and `--mode auto` when it resolves to parallel.
 **Default:** off — every task pipeline runs its own FULL project gate inside its worktree.
 
 With `--defer-gate`, each task's `test` / `test-recheck` hop runs the **light tier** (changed-scope
@@ -167,9 +167,10 @@ Two properties are load-bearing and are asserted structurally:
   project gate; the per-task token is `DEFERRED`, and the `test → triage` /
   `test-recheck → triage` guards accept it only while `deferQualityGate = "true"`.
 
-`--defer-gate` without `--mode parallel` is rejected — the flag exists to move one full gate from N
-worktrees to the one place the integrated tree exists. Sequential and inline batches never set the
-var. ADR-124 carries the dated clarification.
+`--defer-gate` with `--mode sequential` (or omitted `--mode`) is rejected — the flag exists to move
+one full gate from N worktrees to the one place the integrated tree exists. Under `--mode auto` it
+applies only if the batch resolves to parallel; a sequential resolution drops it with a report note.
+Sequential and inline batches never set the var. ADR-124 carries the dated clarification.
 
 **Anchor:** `#flag-defer-gate`.
 
@@ -177,11 +178,11 @@ var. ADR-124 carries the dated clarification.
 
 **Anchor:** `#flag-concurrency`.
 
-`dev-runall` under `--mode parallel` (task 0931): at most `<n>` task pipelines run at once
+`dev-runall` under `--mode parallel` (task 0931), or `--mode auto` resolved to parallel: at most `<n>` task pipelines run at once
 (default 2, `n ≥ 1`). A dependent task starts only after every in-set dependency has been
 **integrated** onto the base ref — see
 [execution-batch.md § Parallel isolation](execution-batch.md#parallel-isolation---mode-parallel).
-Ignored in sequential mode. Each worker is one more concurrent quality gate; raise it only when
+Ignored in sequential mode; `--concurrency 1` pins `--mode auto` to sequential. Each worker is one more concurrent quality gate; raise it only when
 the host has the CPU for it.
 
 ### `--continue` — resume an interrupted batch from checkpoint
@@ -271,12 +272,12 @@ is the contract; divergence between `--dry-run` and the real run is a bug.
 
 **Anchor:** `#flag-tasks`.
 
-Batch operation (`dev-parallel`, `dev-refineall`, `dev-review`, `dev-runall`, `dev-verifyall`). An
+Batch operation (`dev-refineall`, `dev-review`, `dev-runall`, `dev-verifyall`). An
 explicit selector — WBS list, status pseudo-list (`todo`, `wip`), `feature:<id>`, or `ready` —
 resolving to the set the batch runs over. On `dev-review` the selector is restricted to the
 review-safe forms: comma WBS list and `feature:<id>` — status pseudo-lists and `ready` are
-rejected (they select work to do, not work to review). Required on `dev-parallel`, `dev-runall`,
-and `dev-verifyall`, where `--feature` is an optional restrictor. On `dev-refineall` it is instead
+rejected (they select work to do, not work to review). Required on `dev-runall` and
+`dev-verifyall`, where `--feature` is an optional restrictor. On `dev-refineall` it is instead
 one of a required pair — supply exactly one of `--feature` or `--tasks`.
 
 ### `--mode <kind>` — select an execution mode
@@ -284,8 +285,9 @@ one of a required pair — supply exactly one of `--feature` or `--tasks`.
 **Anchor:** `#flag-mode`.
 
 Select an execution mode: `full|implement` on `dev-run` (full pipeline vs implement-only),
-`sequential|parallel` on `dev-runall` (serial vs fanned-out-independent-subset),
-`fan-out|review-panel|investigation` on `dev-parallel`, the reconstruction depth
+`sequential|parallel|auto` on `dev-runall` (serial, fanned-out independent subset, or chosen from the
+frozen batch's dependency waves — see [execution-batch.md § 2.4](execution-batch.md#24-topological-sort)),
+the reconstruction depth
 `briefing|structure|architecture|design|full` on `dev-reverse`, and `daily|ad-hoc` on
 `dev-find-issue` (the history-anatomy report mode). Mode selection is explicit and orthogonal
 to `--next`.

@@ -534,15 +534,14 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         const superPlanner = readFileSync(join(AGENTS_DIR, 'super-planner.md'), 'utf8');
         const executionBatch = readFileSync(join(SKILLS_DIR, 'spur-dev', 'references', 'execution-batch.md'), 'utf8');
         const devRunall = readFileSync(join(PLUGIN_ROOT, 'commands', 'dev-runall.md'), 'utf8');
-        const devParallel = readFileSync(join(PLUGIN_ROOT, 'commands', 'dev-parallel.md'), 'utf8');
 
         expect(superPlanner).toContain('sp:parallel-execution');
         expect(superPlanner).not.toContain('Never run tasks in parallel (v1)');
         expect(executionBatch).toContain('optional parallel fan-out');
-        expect(devRunall).toContain('--mode <sequential|parallel>');
+        expect(devRunall).toContain('--mode <sequential|parallel|auto>');
         expect(devRunall).toContain('--feature <id>');
-        expect(devParallel).toContain('--feature <id>');
-        expect(devParallel).toContain('args="$ARGUMENTS"');
+        expect(executionBatch).toContain('batch-plan.mjs)" order --tasks');
+        expect(executionBatch).toContain('### 2.4a `--mode auto` resolution');
     });
 
     test('R30 — dev-idea, dev-wrap, dev-wrapall command docs exist and delegate to correct workflows', () => {

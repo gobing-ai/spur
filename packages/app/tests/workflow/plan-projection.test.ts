@@ -13,6 +13,7 @@ import {
     type PhasedPlanItem,
     planChild,
     planLetter,
+    scheduleBatch,
     taskPhaseChildren,
     validatePhaseTable,
 } from '../../src/workflow/plan-projection';
@@ -289,6 +290,77 @@ describe('buildBatchPlan (1104 AC5)', () => {
         const title = (waves.at(0) ?? []).find((i) => i.id === 'task.0001')?.title ?? '';
         expect(title.endsWith('…')).toBe(true);
         expect(title.isWellFormed()).toBe(true);
+    });
+});
+
+describe('scheduleBatch (dev-runall --mode auto)', () => {
+    test('orders by §2.4 Kahn with WBS-ascending tie-break and groups dependency waves', () => {
+        const s = scheduleBatch([
+            { wbs: '0042', dependencies: ['0040'] },
+            { wbs: '0041' },
+            { wbs: '0040' },
+            { wbs: '0043', dependencies: ['0042', '0041'] },
+        ]);
+        expect(s.cycle).toBeNull();
+        expect(s.order).toEqual(['0040', '0041', '0042', '0043']);
+        expect(s.waves).toEqual([['0040', '0041'], ['0042'], ['0043']]);
+        expect(s.mode).toBe('parallel');
+    });
+
+    test('a pure chain recommends sequential — no wave has two tasks', () => {
+        const s = scheduleBatch([{ wbs: '0002', dependencies: ['0001'] }, { wbs: '0001' }]);
+        expect(s.waves).toEqual([['0001'], ['0002']]);
+        expect(s.mode).toBe('sequential');
+    });
+
+    test('concurrency 1 and single-task batches stay sequential', () => {
+        expect(scheduleBatch([{ wbs: '0001' }, { wbs: '0002' }], { concurrency: 1 }).mode).toBe('sequential');
+        expect(scheduleBatch([{ wbs: '0001' }]).mode).toBe('sequential');
+        expect(scheduleBatch([]).mode).toBe('sequential');
+    });
+
+    test('out-of-set dependencies are ignored (Step 2.3 resolves them) and duplicates collapse', () => {
+        const s = scheduleBatch([{ wbs: '0002', dependencies: ['0999'] }, { wbs: '0001' }, { wbs: '0001' }]);
+        expect(s.order).toEqual(['0001', '0002']);
+        expect(s.waves).toEqual([['0001', '0002']]);
+    });
+
+    test('a dependency cycle aborts with a representative path and no order', () => {
+        const s = scheduleBatch([
+            { wbs: '0040', dependencies: ['0042'] },
+            { wbs: '0042', dependencies: ['0040'] },
+            { wbs: '0050' },
+        ]);
+        expect(s.cycle).toEqual(['0040', '0042', '0040']);
+        expect(s.order).toEqual([]);
+        expect(s.waves).toEqual([]);
+        expect(s.mode).toBe('sequential');
+    });
+
+    test('a self-dependency is a cycle', () => {
+        expect(scheduleBatch([{ wbs: '0001', dependencies: ['0001'] }]).cycle).toEqual(['0001', '0001']);
+    });
+
+    test('shared files serialize otherwise independent tasks', () => {
+        const s = scheduleBatch([
+            { wbs: '0001', files: ['src/a.ts'] },
+            { wbs: '0002', files: ['./src/a.ts', 'src/b.ts'] },
+            { wbs: '0003', files: ['src/c.ts'] },
+        ]);
+        expect(s.waves).toEqual([['0001', '0003'], ['0002']]);
+        expect(s.overlaps).toEqual([{ before: '0001', after: '0002', files: ['src/a.ts'] }]);
+        expect(s.mode).toBe('parallel');
+    });
+
+    test('overlap edges follow dependency order, so they never create a cycle', () => {
+        // 0001 depends on 0009, so 0009 runs first; the overlap must not force 0001 before 0009.
+        const s = scheduleBatch([
+            { wbs: '0001', dependencies: ['0009'], files: ['x.ts'] },
+            { wbs: '0009', files: ['x.ts'] },
+        ]);
+        expect(s.cycle).toBeNull();
+        expect(s.order).toEqual(['0009', '0001']);
+        expect(s.overlaps).toEqual([{ before: '0009', after: '0001', files: ['x.ts'] }]);
     });
 });
 

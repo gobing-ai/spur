@@ -1228,7 +1228,7 @@ unit:
   after the last integration the orchestrator runs the bounded sync plus one `feature refresh` per
   touched feature on the base ref and commits it once.
 - **One integrated full gate per batch (opt-in).** With `deferQualityGate: "true"`
-  (`--defer-gate` on a parallel `/sp:dev-runall` or `/sp:dev-parallel`), each task's `test` state runs
+  (`--defer-gate` on a parallel — explicit or `--mode auto`-resolved — `/sp:dev-runall`), each task's `test` state runs
   the light tier and records `DEFERRED` — never `PASS` — so the batch's one `full` gate runs on the
   integrated base ref over the merged slices, before the deferred corpus sync. The per-task
   "review only after a green full gate" invariant therefore holds at batch scope; default off keeps

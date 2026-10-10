@@ -64,7 +64,6 @@ The `sp` plugin provides **41 commands** across planning, execution, operations/
 | `/sp:dev-refineall`     | Planning (Batch) | Batch-refine tasks under a feature or selector before runall                                                                                                                           | `sp:spur-dev` (`refineall`)                      |
 | `/sp:dev-run`           | Execution        | Run a task: full pipeline, or `--mode implement` for just the code                                                                                                                     | `sp:spur-dev` (execution)                        |
 | `/sp:dev-runall`        | Exec (Batch)     | Run a **batch** of tasks through their pipelines in dependency-correct order (set resolve → topo-sort → per-task run → batch report)                                                   | `sp:spur-dev` (`runall` op → `sp:super-planner`) |
-| `/sp:dev-parallel`      | Exec (Batch)     | Fan out independent tasks or investigations in parallel via subagents                                                                                                                  | `sp:parallel-execution`                          |
 | `/sp:dev-unit`          | Execution        | Generate or extend tests until unit target is met; measure coverage                                                                                                                    | `sp:code-testing`                                |
 | `/sp:dev-review`        | Execution        | Multi-dimensional review (functional traceability + SECUA framework + architectural depth; WBS mode writes `Review`, Path mode is advisory)                                            | `sp:code-verification`                           |
 | `/sp:dev-verify`        | Execution        | Map requirements → evidence; emit a PASS/PARTIAL/FAIL verdict                                                                                                                          | `sp:code-verification`                           |
@@ -501,7 +500,7 @@ pauses**, even under `--auto`.
    pauses for confirmation.
 6. **Least privilege by design (R10).** Workflow, planning, and verification wrappers
    (`dev-idea`, `dev-wrap`, `dev-wrapall`, `dev-verify`, `dev-verifyall`, `dev-plan`,
-   `dev-refine`, `dev-parallel`, `dev-runall`) omit direct `Write`/`Edit` tools in frontmatter
+   `dev-refine`, `dev-runall`) omit direct `Write`/`Edit` tools in frontmatter
    `allowed-tools`. They mutate strictly via `spur` CLI verbs (`spur task update --section --from-file`)
    or workflow execution, ensuring wrapper agents cannot bypass corpus ownership gates.
 

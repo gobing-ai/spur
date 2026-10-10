@@ -345,12 +345,12 @@ describe('(b) frontmatter schema — description, argument-hint, allowed-tools',
         }
     });
 
-    test('44 command files exist with unique basenames', () => {
+    test('43 command files exist with unique basenames', () => {
         const files = listCommandFiles();
         // 1041: dev-job-dump and dev-job-resume added; dev-find-way split out of dev-brainstorm.
-        expect(files.length).toBe(44);
+        expect(files.length).toBe(43);
         const names = new Set(files.map((f) => f.replace(/\.md$/, '')));
-        expect(names.size).toBe(44);
+        expect(names.size).toBe(43);
     });
 });
 
@@ -433,10 +433,10 @@ describe('(d) allowed-tools coherence — Skill <-> Skill() call', () => {
 // ─── (e) validator integration — no violations on the real corpus ───────────
 
 describe('(e) validator integration — corpus is clean after the 28-file migration (task 0412)', () => {
-    test('validate() reports zero violations across all 44 commands', () => {
+    test('validate() reports zero violations across all 43 commands', () => {
         const result = validate(ROOT);
         // 1041: dev-job-dump and dev-job-resume added; dev-find-way split out of dev-brainstorm.
-        expect(result.fileCount).toBe(44);
+        expect(result.fileCount).toBe(43);
         expect(result.violations).toEqual([]);
     });
 });
@@ -1220,7 +1220,6 @@ describe('(j) task 0318 — least-privilege allowed-tools sweep', () => {
         { file: 'dev-verifyall.md', forbidden: ['Write', 'Edit'], expected: ['Bash', 'Read', 'Skill'] },
         { file: 'dev-plan.md', forbidden: ['Write', 'Edit'], expected: ['Bash', 'Read', 'Skill', 'AskUserQuestion'] },
         { file: 'dev-refine.md', forbidden: ['Write', 'Edit'], expected: ['Bash', 'Read', 'Skill', 'AskUserQuestion'] },
-        { file: 'dev-parallel.md', forbidden: ['Write', 'Edit'], expected: ['Bash', 'Read', 'Skill'] },
         { file: 'dev-runall.md', forbidden: ['Write', 'Edit'], expected: ['Bash', 'Read', 'Skill'] },
     ];
 

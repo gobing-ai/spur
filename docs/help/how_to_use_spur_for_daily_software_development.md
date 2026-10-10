@@ -4,7 +4,7 @@
 > was captured from the live `--help` output and exercised on the real project corpus.
 > For the **slash-command layer** (the `sp` plugin) layered on top of these CLI verbs —
 > `/sp:dev-plan`, `/sp:dev-run`, `/sp:dev-verify`, `/sp:dev-wrap`, the batch family
-> `/sp:dev-runall` / `/sp:dev-parallel` / `/sp:dev-verifyall` / `/sp:dev-wrapall`, the
+> `/sp:dev-runall` / `/sp:dev-verifyall` / `/sp:dev-wrapall`, the
 > status-aware router `/sp:dev-next`, and the `sp:super-planner` / `sp:super-coder` / `sp:super-reviewer` /
 > `sp:expert-spur` agents — see
 > [How to Use the `sp:dev-*` Slash Commands](./how_to_use_dev_slash_commands_for_daily_software_development.md).
@@ -673,7 +673,7 @@ never a parallel process.
 | --- | --- | --- |
 | `/sp:dev-next <wbs\|feature-id>` | "which verb next?" guessing | You want the **single best next step** for a task or feature frontier. `sp:next-router` inspects status, applies light gates, and dispatches exactly one `/sp:dev-*` command (or stops with a reason). New — also backs the `--next` auto-chains. |
 | `/sp:dev-runall --feature <id>` (or `--tasks feature:<id>`) | Steps 3–6 hand-walked per task | Drive a **batch** of tasks through `task-pipeline.yaml` in dependency-correct order. Delegates to **`sp:super-planner`** — the batch driver now **preflights** each WBS against stop-conditions (`plugins/sp/scripts/batch-preflight.ts`) and does at most **one** recovery hop via `sp:next-router` before continue/halt. |
-| `/sp:dev-parallel --feature <id>` | Sequential batch when tasks are independent | Fan out a proven-independent subset across subagents (`sp:parallel-execution`); serializes on dependency / file-overlap / budget failure. |
+| `/sp:dev-runall --feature <id> --mode auto` | Choosing sequential vs parallel by hand | Computes the batch's dependency waves (`batch-plan.mjs order`) and fans out per-task worktrees only when a wave holds ≥2 independent tasks; file overlap serializes. `--mode parallel` forces fan-out. |
 | `/sp:dev-verifyall` / `/sp:dev-wrapall` | Per-task verify/wrap loops | Batch-verify a feature's tasks, then batch-wrap (learnings, metrics, doc-sync, feature transition). |
 
 Single task? `/sp:dev-run <wbs>` (or delegate to `sp:super-planner` directly). Review-only?

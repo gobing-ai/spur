@@ -606,7 +606,7 @@ prompt the host cannot see is invisible until join. Record one run-log line per 
 stage <id> permission precheck: ok | <missing capability>
 ```
 
-Read-only investigation fan-out (`/sp:dev-parallel --mode investigation`) dispatches read-only
+Read-only investigation fan-out (N-way investigation) dispatches read-only
 worker shapes by construction — see the [pre-dispatch permission
 rule](../../parallel-execution/references/fan-out-patterns.md).
 

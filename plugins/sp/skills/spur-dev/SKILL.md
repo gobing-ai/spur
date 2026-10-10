@@ -110,6 +110,8 @@ Read this `SKILL.md` plus your mode's files below before the first dispatch; eve
 - --worktree: `references/execution-batch.md`, `references/execution-worktree-setup.md`
 - --mode parallel: `references/execution-batch.md`, `references/execution-parallel-isolation.md`
 
+`--mode auto` reads as sequential-inline until § 2.4a resolves it.
+
 Byte budgets for these sums live in `plugins/sp/tests/bootstrap-budget.test.ts`
 (`BOOTSTRAP_BUDGETS_BYTES`, task 1128); the test fails the build when a mode's bootstrap grows.
 

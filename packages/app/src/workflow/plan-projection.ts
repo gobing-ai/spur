@@ -323,6 +323,151 @@ export function buildBatchPlan(tasks: BatchTask[]): PhasedPlanItem[][] {
     return waves;
 }
 
+// ── Batch schedule (dev-runall --mode auto) ──────────────────────────────────
+
+/** One frozen batch task with its `dependencies[]` and the repo paths its Design/Plan names. */
+export interface ScheduleTask {
+    wbs: string;
+    dependencies?: string[];
+    files?: string[];
+}
+
+/** A serialization edge added because two tasks declare the same file. */
+export interface ScheduleOverlap {
+    before: string;
+    after: string;
+    files: string[];
+}
+
+/** Deterministic batch schedule: execution-batch.md §2.4 order plus the parallel recommendation. */
+export interface BatchSchedule {
+    /** §2.4 Kahn order, lowest-WBS-first tie-break. Empty on a cycle. */
+    order: string[];
+    /** Dependency levels: every task in wave N depends only on tasks in earlier waves. */
+    waves: string[][];
+    /** Representative dependency cycle (first node repeated last), else null. */
+    cycle: string[] | null;
+    overlaps: ScheduleOverlap[];
+    mode: 'sequential' | 'parallel';
+    reason: string;
+}
+
+const byWbs = (a: string, b: string): number => a.localeCompare(b, 'en', { numeric: true });
+
+/** Kahn's algorithm over `preds` (task → tasks it waits for); returns the emitted prefix. */
+function kahnOrder(nodes: string[], preds: Map<string, Set<string>>): string[] {
+    const indegree = new Map(nodes.map((n) => [n, preds.get(n)?.size ?? 0]));
+    const succ = new Map<string, string[]>(nodes.map((n) => [n, []]));
+    for (const [n, ps] of preds) for (const p of ps) succ.get(p)?.push(n);
+    const ready = nodes.filter((n) => indegree.get(n) === 0).sort(byWbs);
+    const order: string[] = [];
+    for (let n = ready.shift(); n !== undefined; n = ready.shift()) {
+        order.push(n);
+        for (const s of succ.get(n) ?? []) {
+            const d = (indegree.get(s) ?? 0) - 1;
+            indegree.set(s, d);
+            if (d === 0) {
+                ready.push(s);
+                ready.sort(byWbs);
+            }
+        }
+    }
+    return order;
+}
+
+/** DFS over the nodes Kahn could not emit; returns one cycle path such as `[a, b, a]`. */
+function findCycle(remaining: Set<string>, preds: Map<string, Set<string>>): string[] {
+    const state = new Map<string, 'visiting' | 'done'>();
+    const stack: string[] = [];
+    const visit = (n: string): string[] | null => {
+        state.set(n, 'visiting');
+        stack.push(n);
+        for (const p of [...(preds.get(n) ?? [])].sort(byWbs)) {
+            if (!remaining.has(p)) continue;
+            if (state.get(p) === 'visiting') return [...stack.slice(stack.indexOf(p)), p];
+            if (!state.has(p)) {
+                const cycle = visit(p);
+                if (cycle) return cycle;
+            }
+        }
+        stack.pop();
+        state.set(n, 'done');
+        return null;
+    };
+    for (const n of [...remaining].sort(byWbs)) {
+        if (state.has(n)) continue;
+        const cycle = visit(n);
+        if (cycle) return cycle;
+    }
+    return [];
+}
+
+/**
+ * Schedule a frozen batch for `/sp:dev-runall`. In-set `dependencies[]` are edges; out-of-set ones
+ * are ignored because Step 2.3 already resolved them by status. Declared file overlap adds a
+ * serialization edge (sp:parallel-execution row 3). Recommends `parallel` only when some wave
+ * holds ≥2 tasks and `concurrency` ≥2 — a chain gains nothing from worktree fan-out.
+ */
+export function scheduleBatch(tasks: ScheduleTask[], opts: { concurrency?: number } = {}): BatchSchedule {
+    const byId = new Map<string, ScheduleTask>();
+    for (const t of tasks) if (!byId.has(t.wbs)) byId.set(t.wbs, t);
+    const nodes = [...byId.keys()].sort(byWbs);
+    const preds = new Map(nodes.map((n) => [n, new Set((byId.get(n)?.dependencies ?? []).filter((d) => byId.has(d)))]));
+
+    const depOrder = kahnOrder(nodes, preds);
+    if (depOrder.length < nodes.length) {
+        const cycle = findCycle(new Set(nodes.filter((n) => !depOrder.includes(n))), preds);
+        return {
+            order: [],
+            waves: [],
+            cycle,
+            overlaps: [],
+            mode: 'sequential',
+            reason: `dependency cycle ${cycle.join(' → ')}`,
+        };
+    }
+
+    // Overlap edges always point forward in the dependency-only order, so they cannot close a cycle.
+    const files = new Map(nodes.map((n) => [n, new Set((byId.get(n)?.files ?? []).map(normalizeTaskPath))]));
+    const overlaps: ScheduleOverlap[] = [];
+    for (let i = 0; i < depOrder.length; i++) {
+        const before = depOrder[i] as string;
+        const beforeFiles = files.get(before) ?? new Set<string>();
+        for (const after of depOrder.slice(i + 1)) {
+            const shared = [...beforeFiles].filter((f) => files.get(after)?.has(f)).sort();
+            if (shared.length === 0) continue;
+            overlaps.push({ before, after, files: shared });
+            preds.get(after)?.add(before);
+        }
+    }
+
+    const order = kahnOrder(nodes, preds);
+    const level = new Map<string, number>();
+    for (const n of order) {
+        let l = 0;
+        for (const p of preds.get(n) ?? []) l = Math.max(l, (level.get(p) ?? 0) + 1);
+        level.set(n, l);
+    }
+    const waves: string[][] = [];
+    for (const n of order) {
+        const l = level.get(n) ?? 0;
+        waves[l] = [...(waves[l] ?? []), n].sort(byWbs);
+    }
+
+    const widest = Math.max(0, ...waves.map((w) => w.length));
+    const concurrency = opts.concurrency ?? 2;
+    let reason = `widest wave holds ${widest} independent tasks`;
+    if (nodes.length < 2) reason = 'fewer than two tasks';
+    else if (concurrency < 2) reason = 'concurrency is 1';
+    else if (widest < 2) reason = 'every wave holds one task (dependency or file-overlap chain)';
+    const mode = nodes.length >= 2 && concurrency >= 2 && widest >= 2 ? 'parallel' : 'sequential';
+    return { order, waves, cycle: null, overlaps, mode, reason };
+}
+
+function normalizeTaskPath(path: string): string {
+    return path.trim().replace(/^\.\//, '');
+}
+
 /**
  * A task row's phase digits (R5): one digit per phase row of the task's
  * workflow plan, addressed under the task's letter. Row ids stay

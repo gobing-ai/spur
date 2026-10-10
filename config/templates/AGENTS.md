@@ -36,7 +36,7 @@ All product development work goes through the harness by default.
 | ------ | ---------- | -------- |
 | Plan a feature (intake → AC → tasks) | `/sp:dev-plan`, `/sp:dev-idea` | Freeform feature files without gates |
 | Drive one task end-to-end | `/sp:dev-run <wbs>` or **`sp:super-planner`** | Implement with no task / no pipeline |
-| Batch or parallel task runs | `/sp:dev-runall` (host sequential; **`sp:super-planner`** explicit/parallel), `/sp:dev-parallel` | Unordered multi-task thrash |
+| Batch or parallel task runs | `/sp:dev-runall` (host sequential; `--mode parallel\|auto` → **`sp:super-planner`**) | Unordered multi-task thrash |
 | Batch-refine tasks under a feature | `/sp:dev-refineall --feature <id> --auto` | Hand-looping `/sp:dev-refine` per WBS |
 | Multi-step corpus CLI (tasks/features/rules/workflows) | **`sp:expert-spur`** | Raw Write/Edit on corpus files |
 | Look up `spur` verbs / flags / `--json` | Skill **`sp:spur-cli`** | Inventing flags from memory |

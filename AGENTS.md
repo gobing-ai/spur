@@ -31,7 +31,7 @@ All product work goes through the harness unless the operator explicitly overrid
 | ------------------------------------------------------ | --------------------------------------------------------------- | ------------------------------------ |
 | Plan a feature (intake → AC → tasks) | `/sp:dev-plan`, `/sp:dev-idea` | Freeform feature files without gates |
 | Drive one task end-to-end | `/sp:dev-run <wbs>` or **`sp:super-planner`** | Implement with no task/pipeline |
-| Batch or parallel task runs | `/sp:dev-runall`, `/sp:dev-parallel`, **`sp:super-planner`** | Unordered multi-task work |
+| Batch or parallel task runs | `/sp:dev-runall [--mode parallel\|auto]`, **`sp:super-planner`** | Unordered multi-task work |
 | Batch-refine tasks under a feature | `/sp:dev-refineall --feature <id> --auto` | Hand-looping task refinement |
 | Multi-step corpus CLI (tasks/features/rules/workflows) | **`sp:expert-spur`** | Raw corpus writes |
 | Look up `spur` verbs / flags / `--json` | Skill **`sp:spur-cli`** | Inventing flags |

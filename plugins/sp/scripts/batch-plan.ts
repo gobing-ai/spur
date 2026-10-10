@@ -9,6 +9,10 @@
  * Modes:
  *   waves --tasks <file>  file: JSON array of {wbs, name}; prints `{ waves: [...] }` — waves
  *                         of 24 tasks as A Prepare batch + A1..A4 + B..Y task rows + Z Batch report.
+ *   order --tasks <file> [--concurrency <n>]
+ *                         file: JSON array of {wbs, dependencies?, files?}; prints the scheduleBatch
+ *                         result `{ order, waves, cycle, overlaps, mode, reason }` (dev-runall §2.4
+ *                         order + the --mode auto recommendation). A cycle is data, not an error.
  *   task-children --letter <A-Z> --plan <file>
  *                         file: a `workflow show --format todo --json` payload (or a bare plan
  *                         array); prints the task's phase digits as a JSON array.
@@ -16,13 +20,13 @@
  * `node batch-plan.mjs` (committed twin) — keep the twin in lockstep.
  */
 import { readFileSync } from 'node:fs';
-import type { BatchTask, PhasedPlanItem } from '../lib/plan-projection.generated.mjs';
-import { buildBatchPlan, taskPhaseChildren } from '../lib/plan-projection.generated.mjs';
+import type { BatchTask, PhasedPlanItem, ScheduleTask } from '../lib/plan-projection.generated.mjs';
+import { buildBatchPlan, scheduleBatch, taskPhaseChildren } from '../lib/plan-projection.generated.mjs';
 
 export * from '../lib/plan-projection.generated.mjs';
 
 export const BATCH_PLAN_USAGE =
-    'usage: batch-plan.ts waves --tasks <tasks.json> | task-children --letter <A-Z> --plan <plan.json>';
+    'usage: batch-plan.ts waves --tasks <tasks.json> | order --tasks <tasks.json> [--concurrency <n>] | task-children --letter <A-Z> --plan <plan.json>';
 
 function readJsonFile(path: string): unknown {
     return JSON.parse(readFileSync(path, 'utf8'));
@@ -34,6 +38,20 @@ function isBatchTask(value: unknown): value is BatchTask {
         value !== null &&
         typeof (value as BatchTask).wbs === 'string' &&
         typeof (value as BatchTask).name === 'string'
+    );
+}
+
+function isStringArray(value: unknown): value is string[] {
+    return Array.isArray(value) && value.every((v) => typeof v === 'string');
+}
+
+function isScheduleTask(value: unknown): value is ScheduleTask {
+    if (typeof value !== 'object' || value === null) return false;
+    const t = value as ScheduleTask;
+    return (
+        typeof t.wbs === 'string' &&
+        (t.dependencies === undefined || isStringArray(t.dependencies)) &&
+        (t.files === undefined || isStringArray(t.files))
     );
 }
 
@@ -58,6 +76,33 @@ export function main(argv: string[]): number {
             return 1;
         }
         process.stdout.write(`${JSON.stringify({ waves: buildBatchPlan(tasks) })}\n`);
+        return 0;
+    }
+    if (mode === 'order') {
+        let tasksPath = '';
+        let concurrency = 2;
+        for (let i = 1; i + 1 < argv.length; i += 2) {
+            if (argv[i] === '--tasks') tasksPath = argv[i + 1] ?? '';
+            else if (argv[i] === '--concurrency') concurrency = Number(argv[i + 1]);
+        }
+        if (tasksPath === '' || !Number.isInteger(concurrency) || concurrency < 1) {
+            process.stderr.write(`${BATCH_PLAN_USAGE}\n`);
+            return 2;
+        }
+        let tasks: unknown;
+        try {
+            tasks = readJsonFile(tasksPath);
+        } catch (error) {
+            process.stderr.write(
+                `batch-plan: cannot read ${tasksPath} — ${error instanceof Error ? error.message : String(error)}\n`,
+            );
+            return 1;
+        }
+        if (!Array.isArray(tasks) || !tasks.every(isScheduleTask)) {
+            process.stderr.write('batch-plan: --tasks file must be a JSON array of {wbs, dependencies?, files?}\n');
+            return 1;
+        }
+        process.stdout.write(`${JSON.stringify(scheduleBatch(tasks, { concurrency }))}\n`);
         return 0;
     }
     if (mode === 'task-children') {

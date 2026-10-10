@@ -134,13 +134,13 @@ blocker** — never a permission-probing subsystem:
    [Keep a durable progress ledger](../SKILL.md#keep-a-durable-progress-ledger)).
 
 Read-only investigation fan-out avoids the write-permission class by construction:
-`dev-parallel --mode investigation` and competency-lens review's read-only lenses dispatch
+N-way investigation and competency-lens review's read-only lenses dispatch
 **read-only worker shapes** — search/read tools only, with no write surface declared.
 
 ## Cheap-model hint for read-only fan-out
 
 On hosts whose native subagent invocation accepts a per-call model override (Claude Code: the Agent
-tool's `model` parameter), dispatch read-only fan-out workers — `dev-parallel --mode investigation`
+tool's `model` parameter), dispatch read-only fan-out workers — N-way investigation
 and competency-lens review's read-only lenses — with the host's cheapest capable model. The rule is
 invocation-side, with two prohibitions and one exemption:
 

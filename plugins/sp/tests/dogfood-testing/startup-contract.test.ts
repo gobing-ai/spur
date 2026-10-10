@@ -111,7 +111,7 @@ describe('batch and command publish-first (task 1105 R3/R4) — spec pins', () =
     });
 
     test('AC2 — each workflow dev command publishes the plan as its first Implementation bullet', () => {
-        for (const cmd of ['dev-run', 'dev-runall', 'dev-parallel', 'dev-idea', 'dev-plan']) {
+        for (const cmd of ['dev-run', 'dev-runall', 'dev-idea', 'dev-plan']) {
             const md = readFileSync(join(COMMANDS_DIR, `${cmd}.md`), 'utf8');
             const impl = md.indexOf('## Implementation');
             expect(impl).toBeGreaterThan(0);
