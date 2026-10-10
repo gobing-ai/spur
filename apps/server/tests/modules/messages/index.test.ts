@@ -381,3 +381,117 @@ describe('POST /api/messages projectPath guard (0844 R4)', () => {
         expect(calls.send).toHaveLength(0);
     });
 });
+
+// ─── 1164: the inbox offset is a position, not a page size ───────────────────────────────────
+
+describe('GET /api/messages/inbox offset parsing (1164)', () => {
+    const appFor = (ctx: ServerContext): Hono => {
+        const app = new Hono();
+        messagesModule.mount(app, ctx);
+        return app;
+    };
+    const inboxRequest = (query: string) => new Request(`http://localhost/api/messages/inbox?agent=agent-b&${query}`);
+    const offsetOf = (calls: { inbox: Array<{ offset?: number }> }) => calls.inbox[0]?.offset;
+    const limitOf = (calls: { inbox: Array<{ limit?: number }> }) => calls.inbox[0]?.limit;
+
+    /** Deterministic newest-first corpus: id-0000 (newest) … id-1199 (oldest). */
+    const entries = (count: number) =>
+        Array.from({ length: count }, (_, i) => ({
+            id: `id-${String(i).padStart(4, '0')}`,
+            fromId: 'sender',
+            body: `message ${i}`,
+            status: 'queued',
+            createdAt: new Date(Date.UTC(2026, 0, 1) + i * 1000).toISOString(),
+            inReplyTo: null,
+        }));
+
+    /** Pagination-aware fixture: the service slices the corpus by the received offset/limit. */
+    function ctxWithPagedInbox(count: number): {
+        ctx: ServerContext;
+        calls: { inbox: Array<{ agent?: string; limit?: number; offset?: number }> };
+    } {
+        const all = entries(count);
+        const calls = { inbox: [] as Array<{ agent?: string; limit?: number; offset?: number }> };
+        const coordination = {
+            getInbox: async (agent: string, limit?: number, offset?: number) => {
+                calls.inbox.push({ agent, limit, offset });
+                const start = offset ?? 0;
+                const page = all.slice(start, start + (limit ?? all.length));
+                return { messages: page, count: page.length };
+            },
+        } as unknown as AgentCoordinationService;
+        return { ctx: { cwd: '/repo/wt', coordination: () => coordination } as unknown as ServerContext, calls };
+    }
+
+    test.each([
+        ['omitted offset stays undefined', '', undefined],
+        ['a blank offset is zero', 'offset=', 0],
+        ['a whitespace-only offset is zero', `offset=${encodeURIComponent('   ')}`, 0],
+        ['a negative offset is zero', 'offset=-5', 0],
+        ['an explicit plus sign is zero', `offset=${encodeURIComponent('+5')}`, 0],
+        ['a fraction is zero', 'offset=1.5', 0],
+        ['exponent notation is zero', 'offset=1e3', 0],
+        ['hex notation is zero', 'offset=0x10', 0],
+        ['trailing text is zero', `offset=${encodeURIComponent('12abc')}`, 0],
+        ['an unsafe integer is zero', `offset=${Number.MAX_SAFE_INTEGER + 2}`, 0],
+    ])('%s', async (_label, query, expected) => {
+        const { ctx, calls } = ctxWithStubs();
+        const res = await appFor(ctx).request(inboxRequest(query));
+        expect(res.status).toBe(200);
+        expect(offsetOf(calls)).toBe(expected);
+    });
+
+    test.each([500, 550, 1000])('offset %i is forwarded unchanged, past the page-size ceiling', async (offset) => {
+        const { ctx, calls } = ctxWithStubs();
+        const res = await appFor(ctx).request(inboxRequest(`limit=25&offset=${offset}`));
+        expect(res.status).toBe(200);
+        expect(offsetOf(calls)).toBe(offset);
+    });
+
+    test('a leading-zero offset and the maximum safe integer both round-trip', async () => {
+        const first = ctxWithStubs();
+        await appFor(first.ctx).request(inboxRequest('offset=00550'));
+        expect(offsetOf(first.calls)).toBe(550);
+        const last = ctxWithStubs();
+        await appFor(last.ctx).request(inboxRequest(`offset=${Number.MAX_SAFE_INTEGER}`));
+        expect(offsetOf(last.calls)).toBe(Number.MAX_SAFE_INTEGER);
+    });
+
+    test('the page-size ceiling is independent of the offset (limit 9999 → 500, offset 1000 → 1000)', async () => {
+        const { ctx, calls } = ctxWithStubs();
+        await appFor(ctx).request(inboxRequest('limit=9999&offset=1000'));
+        expect(limitOf(calls)).toBe(500);
+        expect(offsetOf(calls)).toBe(1000);
+    });
+
+    test('AC1: successive offsets return distinct pages from a pagination-aware fixture', async () => {
+        const { ctx, calls } = ctxWithPagedInbox(1200);
+        const page = async (offset: number): Promise<string[]> => {
+            const res = await appFor(ctx).request(inboxRequest(`limit=25&offset=${offset}`));
+            const body = (await res.json()) as { messages: Array<{ id: string }>; count: number };
+            expect(body.count).toBe(25);
+            return body.messages.map((m) => m.id);
+        };
+        const [p500, p550, p1000] = [await page(500), await page(550), await page(1000)];
+        expect(calls.inbox.map((c) => c.offset)).toEqual([500, 550, 1000]);
+        expect(p500[0]).toBe('id-0500');
+        expect(p550[0]).toBe('id-0550');
+        expect(p1000[0]).toBe('id-1000');
+        expect(new Set([...p500, ...p550, ...p1000]).size).toBe(75);
+    });
+
+    test('an offset past the end returns an empty page, never a wrapped or repeated one', async () => {
+        const { ctx, calls } = ctxWithPagedInbox(1200);
+        const res = await appFor(ctx).request(inboxRequest('limit=25&offset=5000'));
+        expect(offsetOf(calls)).toBe(5000);
+        expect(await res.json()).toEqual({ messages: [], count: 0 });
+    });
+
+    test('the global recent feed keeps its own clamped limit and no offset', async () => {
+        const { ctx, calls } = ctxWithStubs();
+        const app = appFor(ctx);
+        await app.request(new Request('http://localhost/api/messages?limit=9999'));
+        expect(calls.recent[0]?.limit).toBe(500);
+        expect(JSON.stringify(calls.recent[0])).not.toContain('offset');
+    });
+});
