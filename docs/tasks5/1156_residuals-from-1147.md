@@ -8,7 +8,7 @@ updated_at: "2026-10-10T05:39:27.978Z"
 
 ---
 
-## 1153. Residuals from 1147
+## 1156. Residuals from 1147
 
 ### Background
 

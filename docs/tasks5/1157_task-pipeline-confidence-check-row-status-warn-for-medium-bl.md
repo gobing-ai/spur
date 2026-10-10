@@ -9,7 +9,7 @@ feature_id: H1
 
 ---
 
-## 1154. task-pipeline confidence check-row status=warn for MEDIUM blocks the CLI done gate (warn maps to PARTIAL)
+## 1157. task-pipeline confidence check-row status=warn for MEDIUM blocks the CLI done gate (warn maps to PARTIAL)
 
 ### Background
 
