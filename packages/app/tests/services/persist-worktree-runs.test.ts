@@ -379,6 +379,36 @@ describe('persistWorktreeRuns cited evidence + record tolerance (task 0984)', ()
         }
     });
 
+    test('a citation that resolves only in the invoking scratch plane succeeds (1155)', async () => {
+        // A scratch artifact persisted by an earlier batch lives in the invoking tree's scratch
+        // plane while this worktree never held a copy. Probing only the inferred (records) plane
+        // reported it as "missing in both" and refused teardown of a green run — the exact refusal
+        // observed 2026-10-10 in knowledge-kit while closing task 0247.
+        const from = makeDir('cited-scratch-only-from-');
+        const to = makeDir('cited-scratch-only-to-');
+        try {
+            await seedWorktree(from.dir, 'run_1155');
+            mkdirSync(join(to.dir, '.spur', 'run'), { recursive: true });
+            writeFileSync(join(to.dir, '.spur', 'run', '1155-batch-report.md'), 'persisted earlier\n');
+            const taskFile = writeTaskFile(to.dir, 'docs/task-1155.md', ['1155-batch-report.md']);
+
+            const result = await persistWorktreeRuns({
+                fromWorkdir: from.dir,
+                toWorkdir: to.dir,
+                taskFiles: [taskFile],
+            });
+            expect(result).toEqual({ ok: true, persisted: 1, skipped: [] });
+            // The invoking-tree copy is left in place, unchanged.
+            expect(readFileSync(join(to.dir, '.spur', 'run', '1155-batch-report.md'), 'utf8')).toBe(
+                'persisted earlier\n',
+            );
+            expect(existsSync(join(from.dir, '.spur', 'run', '1155-batch-report.md'))).toBe(false);
+        } finally {
+            from.cleanup();
+            to.cleanup();
+        }
+    });
+
     test('a citation missing in both trees fails with zero writes (R1)', async () => {
         const from = makeDir('cited-missing-from-');
         const to = makeDir('cited-missing-to-');

@@ -500,7 +500,13 @@ export async function persistWorktreeRuns(input: PersistWorktreeRunsInput): Prom
         const sourceStat = sourceIsDurable ? await lstat(durablePath).catch(() => undefined) : scratchStat;
         const targetBytes = await readExistingRunFile(targetPath);
         if (sourceStat === undefined) {
-            if (targetBytes === undefined) {
+            // 1155: the source tree lacks the file, but the citation may still resolve in the OTHER
+            // invoking-tree plane. A scratch artifact persisted by an earlier batch lives in the
+            // invoking scratch (the planar rule above picks the target plane only when a source
+            // actually needs copying), and probing just the inferred plane reported such a file as
+            // "missing in both" — a false refusal that blocks teardown of a green run.
+            const otherTarget = sourceIsDurable ? join(toRunDir, name) : join(toRecordsDir, name);
+            if (targetBytes === undefined && (await readExistingRunFile(otherTarget)) === undefined) {
                 throw new Error(
                     `persist-out: cited run evidence .spur/run/${name} is missing in both the worktree and ` +
                         'the invoking tree — resolve or drop the citation before teardown (0984 R1)',
