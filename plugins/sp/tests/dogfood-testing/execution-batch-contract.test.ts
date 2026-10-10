@@ -1198,3 +1198,25 @@ describe('1146 — execution summary is a close product (AC6)', () => {
         }
     });
 });
+
+/**
+ * 1149 AC6 — the landing contract names the automatic receiving-row reconcile; a manual row
+ * DELETE is never the required exit, and the --next chain states the --worktree interaction.
+ */
+describe('1149 — landing names the reconcile, not a manual delete (AC6)', () => {
+    const ref = (name: string): string => readFileSync(referencePath(name), 'utf8');
+
+    test('landing and batch-report name the receiving-row reconcile; neither requires a DELETE', () => {
+        expect(ref('execution-worktree-landing.md')).toContain('automatically reconciles');
+        expect(ref('execution-batch-report.md')).toContain('reconciled automatically during persist-out');
+        for (const name of ['execution-worktree-landing.md', 'execution-batch-report.md']) {
+            expect(ref(name)).not.toMatch(/\bDELETE FROM\b/);
+        }
+    });
+
+    test('the --next chain contract states the --worktree interaction', () => {
+        const body = ref('cross-cutting.md');
+        expect(body).toContain('Worktree interaction (1149');
+        expect(body).toContain('external-key-conflict-bookkeeping');
+    });
+});

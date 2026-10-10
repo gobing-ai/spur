@@ -5,6 +5,7 @@ import {
     deriveVerdict,
     injectEarnedConfidenceRow,
 } from '../../src/services/task-verdict';
+import { aggregateVerifyVerdict } from '../../src/services/verify-verdict';
 
 const MET_ANSWER = [
     '| Req | Status | Evidence |',
@@ -699,6 +700,21 @@ describe('confidence check row (1156)', () => {
         expect(row?.status).toBe('pass');
         expect(row?.evidence).toContain('HIGH');
         expect(row?.evidence).toContain('2/2 rows MET');
+    });
+
+    test('an earned MEDIUM level stays pass, so the done gate does not recompute it as PARTIAL', () => {
+        const result = deriveVerdict(`Confidence: MEDIUM\n${MET_ANSWER}`, true);
+        const row = result.checks.find((c) => c.name === 'confidence');
+        expect(row?.status).toBe('pass');
+        expect(row?.evidence).toContain('MEDIUM');
+        expect(
+            aggregateVerifyVerdict({
+                requirements: result.requirements,
+                acceptanceCriteria: result.acceptanceCriteria,
+                checks: result.checks,
+                taskCheckPassed: true,
+            }),
+        ).toBe('PASS');
     });
 
     test('warn when the level is absent or LOW — the same policy the completion guards refuse', () => {

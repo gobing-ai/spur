@@ -479,6 +479,43 @@ test('0975 AC4: --close --status done with at least one action row exits 0 repor
     }
 }, 60_000);
 
+test('1146 AC3: --no-summary suppresses the summary at close and is refused outside --close', () => {
+    const p = makeProject();
+    const runId = 'run-1146-no-summary';
+    try {
+        const setup = runScript(p.workdir, ['--run-id', runId, '--file', '.spur/workflows/inline-smoke.yaml']);
+        expect(setup.status, setup.stderr).toBe(0);
+        const action = runScript(p.workdir, [
+            '--action',
+            '--run-id',
+            runId,
+            '--node',
+            'implement',
+            '--kind',
+            'shell',
+            '--status',
+            'done',
+            '--ok',
+            'true',
+            '--duration-ms',
+            '7',
+        ]);
+        expect(action.status, action.stderr).toBe(0);
+
+        const misuse = runScript(p.workdir, ['--node-enter', '--run-id', runId, '--node', 'implement', '--no-summary']);
+        expect(misuse.status).toBe(2);
+        expect(misuse.stderr).toContain('Usage:');
+
+        const close = runScript(p.workdir, ['--close', '--run-id', runId, '--status', 'done', '--no-summary']);
+        expect(close.status, close.stderr).toBe(0);
+        expect(JSON.parse(close.stdout)).not.toHaveProperty('summaryFile');
+        expect(existsSync(join(p.workdir, '.spur', 'run', `${runId}-summary.md`))).toBe(false);
+        expect(existsSync(join(p.workdir, '.spur', 'run', `${runId}-summary.json`))).toBe(false);
+    } finally {
+        p.cleanup();
+    }
+}, 60_000);
+
 test('0975 AC4: --close --status failed with zero action rows stays a clean close (exit 0)', () => {
     const p = makeProject();
     const runId = 'run-0975-failed-zero';
