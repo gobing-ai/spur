@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: Wrapup repair step must tolerate a missing learnings status file
-status: todo
+status: done
 template: issue
 created_at: 2026-10-10T02:50:01.484Z
-updated_at: "2026-10-10T16:25:39.380Z"
+updated_at: "2026-10-10T17:43:31.739Z"
 feature_id: H1
 
 ac_altitude: task-local
 ac_numbering: task-local
 priority: P1
 estimate_hours: 1
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1152-verdict.json
 ---
 
 ## 1152. Wrapup repair step must tolerate a missing learnings status file
@@ -71,19 +73,19 @@ and never executes it, which is why the regression shipped green.
 
 ### Requirements
 
-- [ ] R1. **A missing learnings status file is not a step failure.** With
+- [x] R1. **A missing learnings status file is not a step failure.** With
   `.spur/run/<run>-wrapup-learnings.status` absent (the `doc-sync → repair` contract-violation entry),
   the `repair` shell writes `.spur/run/<run>-wrapup-repair.status` with the `contract-violation:` line
   and exits 0, so the wrap proceeds to `doc-tripwire` as the state description declares.
-- [ ] R2. **Both reachable entries keep their distinct outcomes.** Absent file → `contract-violation:`
+- [x] R2. **Both reachable entries keep their distinct outcomes.** Absent file → `contract-violation:`
   line; `invalid-learnings-shape` (the `learnings-validate → repair` entry) → `invalid-learnings-shape:`
   line. Any other value (not reachable today: `PASS` routes to `learnings-append`) falls to the
   `contract-violation:` line. All exit 0.
-- [ ] R3. **The pin executes the shell, not its text.** A test runs the `repair` `onEnter` command via
+- [x] R3. **The pin executes the shell, not its text.** A test runs the `repair` `onEnter` command via
   `sh -c` in a temp cwd with `__runId` in env (the existing 0783 R2 `runGuard` pattern in the same file)
   for the absent and `invalid-learnings-shape` cases, asserting exit 0 and the status line. Shown red
   against the current chain before the fix.
-- [ ] R4. **Write failure stays loud.** If the repair status cannot be written (a directory at `.spur/run/<run>-wrapup-repair.status`),
+- [x] R4. **Write failure stays loud.** If the repair status cannot be written (a directory at `.spur/run/<run>-wrapup-repair.status`),
   the shell still exits non-zero — the `|| true` applies to the read only.
 
 ### Acceptance Criteria
@@ -157,15 +159,49 @@ exist.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+- `config/workflows/wrapup-pipeline.yaml:385`: Added `|| true` inside the cat command substitution `V="$(cat .spur/run/$__runId-wrapup-learnings.status 2>/dev/null || true)"`, so an absent file (the `doc-sync → repair` contract-violation entry) yields an empty string and continues to the `contract-violation:` branch instead of aborting the step with exit code 1. Write failure remains loud via `fi && exit 0`.
+- `packages/app/tests/workflow/wrapup-pipeline.test.ts:865-926`: Added test suite for task 1152 verifying absent file exits 0 with `contract-violation:` (AC1), empty/whitespace/other values exit 0 with `contract-violation:`, `invalid-learnings-shape` exits 0 with `invalid-learnings-shape:` (AC2), and directory collision on output path fails loudly with non-zero exit (AC4).
 
 ### Testing
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | wrapup-pipeline.yaml:383 adds |
+| R2 | MET | Unit tests verify invalid-learnings-shape and contract-violation branches remain distinct and exit 0 |
+| R3 | MET | wrapup-pipeline.test.ts:865-926 executes repair onEnter shell in isolated temp cwd; failed with exit 1 before fix and passes after |
+| R4 | MET | Directory collision test in wrapup-pipeline.test.ts:919 proves status output write failure exits non-zero |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — An absent learnings status file does not fail the repair lane (req: R1, R3) | MET | test | `bun test tests/workflow/wrapup-pipeline.test.ts -t "AC1"` exits 0 and verifies contract-violation prefix |
+| AC2 — The narration-only shape is still distinguished (req: R2, R3) | MET | test | `bun test tests/workflow/wrapup-pipeline.test.ts -t "AC2"` exits 0 and verifies invalid-learnings-shape prefix |
+| AC3 — The pin was red before the fix (req: R3) | MET | test | Pre-fix run of AC1 test against pre-fix YAML confirmed exit code 1 |
+| AC4 — A failed status write is still loud (req: R4) | MET | test | `bun test tests/workflow/wrapup-pipeline.test.ts -t "AC4"` asserts non-zero exit code when status output path is a directory |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+Verdict: PASS
+
+- Functional traceability: R1-R4 and AC1-AC4 satisfied. Absent status file yields empty string and contract-violation status; invalid shape yields invalid-learnings-shape; write errors fail loudly.
+- SECUA quality:
+  - Security: proper quoting on variables in shell command.
+  - Efficiency: eliminates pipeline failure and avoids redundant dispatches.
+  - Correctness: preserves loud write failure via `fi && exit 0`.
+  - Usability: clear diagnostics recorded to `.spur/run/<runId>-wrapup-repair.status`.
+  - Architecture: aligns with ADR-118 pilot specification.
+
+| Priority | Category | Location | Finding |
+| --- | --- | --- | --- |
+| P1 | none | none | none |
+| P2 | none | none | none |
+| P3 | none | none | none |
+| P4 | advisory | none | No findings (verify verdict PASS) |
 
 ### References
 
@@ -188,3 +224,8 @@ Outcome: refined; depth: ready; status: todo → todo; corrections: 4.
 Planning-only receipt: no implementation pipeline or behavior-change verification PASS is claimed. Recheck source and ownership before implementation; batch began on main at 13da1554f with one worktree, no WIP tasks and a clean tree. Runtime Bun 1.3.14; no dependency install needed for refinement.
 
 ### History
+
+- 2026-10-10T17:17:03.314Z todo → wip (system)
+- 2026-10-10T17:43:11.687Z wip → testing (system)
+- 2026-10-10T17:43:31.731Z testing → done (system)
+

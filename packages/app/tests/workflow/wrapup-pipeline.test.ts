@@ -864,6 +864,71 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
         });
     });
 
+    describe('1152: repair step tolerates missing learnings status (contract-violation entry)', () => {
+        const repairCmd = (): string => String(shellOf(def, 'repair', 0).options?.command ?? '');
+        const runShell = (command: string, cwd: string, env: Record<string, string>) =>
+            spawnSync('sh', ['-c', command], { cwd, encoding: 'utf8', env: { ...getEnvVars(), ...env } });
+
+        test('AC1 / R1: absent learnings status exits 0 and records contract-violation', () => {
+            const cwd = mkdtempSync(join(tmpdir(), 'wrapup-1152-absent-'));
+            try {
+                mkdirSync(join(cwd, '.spur/run'), { recursive: true });
+                const r = runShell(repairCmd(), cwd, { __runId: 'r1' });
+                expect(r.status).toBe(0);
+                const content = readFileSync(join(cwd, '.spur/run/r1-wrapup-repair.status'), 'utf8');
+                expect(content.startsWith('contract-violation:')).toBe(true);
+            } finally {
+                cleanup(cwd);
+            }
+        });
+
+        test('R1 / R2: empty, whitespace, and non-shape values record contract-violation and exit 0', () => {
+            for (const [val, tag] of [
+                ['', 'empty'],
+                ['   \n  ', 'whitespace'],
+                ['PASS', 'pass'],
+                ['random-error', 'other'],
+            ] as const) {
+                const cwd = mkdtempSync(join(tmpdir(), `wrapup-1152-${tag}-`));
+                try {
+                    mkdirSync(join(cwd, '.spur/run'), { recursive: true });
+                    writeFileSync(join(cwd, '.spur/run/r1-wrapup-learnings.status'), val);
+                    const r = runShell(repairCmd(), cwd, { __runId: 'r1' });
+                    expect(r.status, `expected exit 0 for ${tag}`).toBe(0);
+                    const content = readFileSync(join(cwd, '.spur/run/r1-wrapup-repair.status'), 'utf8');
+                    expect(content.startsWith('contract-violation:')).toBe(true);
+                } finally {
+                    cleanup(cwd);
+                }
+            }
+        });
+
+        test('AC2 / R2: invalid-learnings-shape records invalid-learnings-shape and exits 0', () => {
+            const cwd = mkdtempSync(join(tmpdir(), 'wrapup-1152-invalid-'));
+            try {
+                mkdirSync(join(cwd, '.spur/run'), { recursive: true });
+                writeFileSync(join(cwd, '.spur/run/r2-wrapup-learnings.status'), 'invalid-learnings-shape\n');
+                const r = runShell(repairCmd(), cwd, { __runId: 'r2' });
+                expect(r.status).toBe(0);
+                const content = readFileSync(join(cwd, '.spur/run/r2-wrapup-repair.status'), 'utf8');
+                expect(content.startsWith('invalid-learnings-shape:')).toBe(true);
+            } finally {
+                cleanup(cwd);
+            }
+        });
+
+        test('AC4 / R4: write failure stays loud (directory collision on status output)', () => {
+            const cwd = mkdtempSync(join(tmpdir(), 'wrapup-1152-failwrite-'));
+            try {
+                mkdirSync(join(cwd, '.spur/run/r4-wrapup-repair.status'), { recursive: true });
+                const r = runShell(repairCmd(), cwd, { __runId: 'r4' });
+                expect(r.status).not.toBe(0);
+            } finally {
+                cleanup(cwd);
+            }
+        });
+    });
+
     describe('1037: repo-wide doc tripwire between the doc-sync exits and metrics-record', () => {
         test('doc-tripwire runs docTripwireCmd via sh -c and records PASS/FAIL to a run-scoped status file', () => {
             const cmd = String(shellOf(def, 'doc-tripwire', 0).options?.command ?? '');

@@ -382,7 +382,7 @@ states:
           command: >-
             mkdir -p .spur/run &&
             R=".spur/run/$__runId-wrapup-repair.status" &&
-            V="$(cat .spur/run/$__runId-wrapup-learnings.status 2>/dev/null)" &&
+            V="$(cat .spur/run/$__runId-wrapup-learnings.status 2>/dev/null || true)" &&
             if [ "$V" = invalid-learnings-shape ]; then printf 'invalid-learnings-shape: narration-only learnings capture — append skipped, repair recorded (0986)\n' > "$R";
             else printf 'contract-violation: doc-sync learnings capture missed its declared contract — repair skipped re-dispatch (ADR-118 pilot)\n' > "$R";
             fi &&
