@@ -94,7 +94,11 @@ issues with its evidence. Notes stay report-only.
    operator prompt, read-only from the host transcript. Run it once without `--group` to list the
    segments, then map them to stages (`"1-3,4,5-6"`). It splits each segment into `work` and
    operator `wait` (idle before the next prompt plus AskUserQuestion answer time) and counts tokens
-   once per message id.
+   once per message id. On pi the transcript is `$PI_SESSION_FILE` (pass it as `--transcript` when
+   the run reports no host session id). **A measurement that returns `segments: []` with zero totals
+   while the session had operator prompts is an unreadable or stale adapter, not an empty session:**
+   compare the installed copy against this tree's `plugins/sp/scripts/session-timeline.mjs` and
+   refresh it with `superskill install sp` before reporting numbers; report `n/a` until then.
    The transcript resolves from `--transcript`, else `CLAUDE_CODE_SESSION_ID`, else `PI_SESSION_FILE`
    (the pi host sets it and no Claude session id); with none of them the measurement reports
    `available:false` with a reason and the table renders `n/a` instead of guessing. A
