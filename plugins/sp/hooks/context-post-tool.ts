@@ -72,6 +72,29 @@ export function estimateTokens(text: string): number {
 /** Scrub secret-like patterns without size capping. */
 export function scrubSecrets(text: string): string {
     let s = text;
+    // Quoted JSON fields first (task 1158): in `{"password": "…"}` the key is itself
+    // quoted, so the bare `key=value` pass below never sees a separator directly after
+    // the key and would persist the value verbatim. Match the quoted sensitive key, keep
+    // it, and replace the entire value. The key may be spelled three ways in real Bash:
+    // `"key"`, `'key'`, and the shell-escaped `\"key\"` inside a double-quoted argument
+    // (`curl -d "{\"password\":\"…\"}"`); the value may be quoted the same way or left
+    // unquoted (`{"password": 12345}`). Escape-aware: a `\"` or `\\` inside a value is
+    // content, never a terminator, and an unterminated value (including a trailing lone
+    // backslash) is redacted through end-of-input so a truncated command cannot leak a
+    // suffix. In the shell-escaped opener form the JSON quote shows up in three raw
+    // spellings: a terminator `\"`, a JSON-level escaped quote `\\\"` (escaped
+    // backslash + escaped quote) that is value content, and a bare `"` that is neither.
+    // That form gets a dedicated alternative whose body consumes `\\\"` as content and
+    // stops only at a clean `\"` terminator; when no clean terminator follows it fails
+    // closed and redacts through end-of-input, so a bare `"` cannot end the value early
+    // and leak its suffix. Runs before
+    // Bearer/`key=` passes so the whole value is replaced, not prefixed. The key must end
+    // on a sensitive word, so `token_count`, `tokens`, `tokenizer` and
+    // `authorization_header` stay readable.
+    s = s.replace(
+        /((\\?(["']))(?:[A-Za-z0-9]+[_-])*(?:api[_-]?key|password|passwd|secret|token|access[_-]?key|private[_-]?key|authorization)\2\s*:\s*)(?:\\\3(?:[^"\\]|\\\\(?:\\\3)|\\[^"])*(?:\\\3|[\s\S]*$)|"(?:[^"\\]|\\.)*(?:"|\\?$)|'(?:[^'\\]|\\.)*(?:'|\\?$)|[^\s,}\][{"']+)/gi,
+        '$1"***"',
+    );
     // Bearer / API key prefixes first (before generic key=value)
     s = s.replace(/\bBearer\s+[A-Za-z0-9._\-+=/]+/gi, 'Bearer ***');
     // `sk-` keys. Segments may be hyphen-separated (`sk-ant-api03-…`), so match the

@@ -2,7 +2,7 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.71.0
+version: 1.72.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
 updated_at: 2026-10-10
@@ -1259,11 +1259,16 @@ compatibility limits: [downstream Board module contract](design/downstream-board
 
 `plugins/sp/hooks` owns one indexed-context implementation. `recordToolUseEvent`
 (`context-post-tool.ts`), `recordSessionStart` (`context-session-start.ts`) and `recordSessionEnd`
-(`context-session-stop.ts`) append to `.spur/context/token-ledger.jsonl` and manage `.session.json`.
+(`context-session-stop.ts`) append to `.spur/context/token-ledger.jsonl` and manage `.session.json`;
+`context-owner.ts` is the shared, import-free module both session cores derive host-native owner
+identity from (task 1159), so adapter subprocess entrypoints stay free of untested logic.
 Claude Code reaches them through its hook entries; the Pi extension (`hooks/pi/guard-extension.ts`)
 normalizes `tool_result` / `session_start` / `session_shutdown` into the canonical Claude payload via
 `normalizePiToolEvent` and calls the same cores (agent fallback `pi`). Hosts never re-implement the
-row schema, token cascade, redaction or session reuse — a new host adds a normalizer. Row and
+row schema, token cascade, redaction or session reuse — a new host adds a normalizer. Two ownership
+invariants hold at the pointer: redaction and both byte caps apply before any summary is persisted,
+and only the pointer's recorded `{host, sessionId}` owner may append the `session_end` rollup or
+remove it, so a nested run reuses the parent ledger without being able to close it. Row and
 session-event contracts: [observability contracts](design/observability-contracts.md) §7.8b.
 
 ## 32. Disposable Run Storage and Durable Evidence (ADR-131; E71)

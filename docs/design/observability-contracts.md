@@ -3,8 +3,8 @@ kind: design
 title: "Observability and HTTP read contracts"
 status: implemented
 created_at: 2026-09-09
-updated_at: 2026-10-04
-related: ["0853", "0855", "0857", "0860", "0869", "0937"]
+updated_at: 2026-10-10
+related: ["0853", "0855", "0857", "0860", "0869", "0937", "1158", "1159"]
 tags: [contract, observability, server]
 ---
 
@@ -58,7 +58,7 @@ control plane.
 | Types                                            | `session_start` / `session_end` / `read` / `write` / `bash` / `grep` / `glob` (Edit → `write` + `action=edit`)                                                                                                           |
 | Token semantics                                  | Present only when estimated; **omit** when unknown (UI shows `—`). Cascade: response → Write input → Edit strings → Read stat; Bash/Grep/Glob from **capped** response size only                                         |
 | Capture tools                                    | PostToolUse matcher `Bash\|Grep\|Glob\|Read\|Write\|Edit` — no `*` / MCP without allowlist                                                                                                                               |
-| Redaction                                        | Summary only (command / pattern / glob, ≤~200 chars); never full stdout; cap estimate input **4 KiB**; strip secret-like patterns                                                                                        |
+| Redaction                                        | Summary only (command / pattern / glob, ≤~200 chars); never full stdout; cap estimate input **4 KiB**; strip secret-like patterns; a quoted/shell-escaped JSON credential field is redacted whole (task 1158)            |
 | `GET /api/observability/tool-use/stream`         | SSE: `connected` then `tool-use` frames when the JSONL grows (`fs.watch` + byte poll)                                                                                                                                    |
 | Missing file                                     | `200` + empty `events` (calm empty UI — not an error)                                                                                                                                                                    |
 | Hard I/O failure                                 | `500` + `{ error }`                                                                                                                                                                                                      |
@@ -70,6 +70,26 @@ fans out appends to SSE subscribers. The Node-only watcher loads only when a loc
 `ServerContext`; Worker bootstrap does not import its `node:fs` graph. The `connected` frame follows
 watcher subscription, so an immediate append cannot race initialization. Hooks stay file-append only
 with privacy default **summary over body**.
+
+**Redaction is a pre-storage boundary (task 1158).** `scrubSecrets` runs on the full summary text
+before the 200-char summary cap and the 4 KiB input cap, so no truncation can expose a value the
+scrubber removed. A JSON credential field whose **key** is quoted — `{"password":"…"}`, the
+single-quoted `'token':` spelling, the shell-escaped `\"api_key\"` of `curl -d "{\"password\":…}"`, or
+an unquoted scalar — is replaced whole, because the bare `key=value` pass needs the separator
+directly after the key and a closing quote sits there instead. Escape-aware: `\"` and `\\` inside a
+value are content, never a terminator, and an unterminated value (including a trailing lone
+backslash) is redacted through end-of-input, so a truncated command cannot leak a suffix. The key
+must end on a sensitive word, keeping `token_count`, `tokens`, `tokenizer`,
+`authorization_header` and filenames readable. This is one pass in the shared core — every caller
+(`redactText`, `cappedByteLength`, `truncateSummary`, and the Pi extension's tool-result recorder)
+inherits it, and no host adapter re-implements redaction (ADR-129).
+
+**Session teardown ownership (task 1159):** the private `.session.json` pointer records the creating
+host's `{host, sessionId}` owner, and only that owner's `SessionEnd` / `session_shutdown` may append
+the `session_end` rollup and remove the pointer. A nested run reuses the parent's ledger for tool
+recording but its shutdown is a no-op, so the parent's later events keep the same session id.
+Ownerless legacy pointers are never finalized (existing idle-start expiry retires them), and a
+repeated owning end never emits a second `session_end`.
 
 <a id="78c-observability-summary-aggregations"></a>
 

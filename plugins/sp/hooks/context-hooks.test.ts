@@ -10,13 +10,16 @@
  *  2. **context-post-tool** — appends `read`/`write` events with token estimates; ignores wrong tools.
  *  3. **context-session-stop** — scans ledger, writes `session_end` with totals, removes `.session.json`.
  *  4. **Fail-open** — every hook exits 0 on errors (malformed payload, missing `.session.json`, etc.).
+ *  5. **Ownership (task 1159)** — only the host-native owner recorded on the pointer may finalize
+ *     or remove it; nested children, legacy ownerless pointers and replaced pointers stay safe.
  */
 
 import { describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { getEnvVar } from '../lib/env';
+import { getEnvVar, removeEnvVar, setEnvVar } from '../lib/env';
+import type { SessionOwner } from './context-session-start';
 
 const HOOKS_DIR = import.meta.dir;
 const START_HOOK = join(HOOKS_DIR, 'context-session-start.ts');
@@ -36,13 +39,19 @@ async function runHook(
     projectDir: string,
     payload: unknown,
     stdinText?: string,
+    extraEnv?: Record<string, string>,
 ): Promise<{ exitCode: number | null; stdout: string; stderr: string }> {
     const proc = Bun.spawn([process.execPath, hookPath], {
         cwd: projectDir,
         stdin: new TextEncoder().encode(stdinText ?? JSON.stringify(payload)),
         stdout: 'pipe',
         stderr: 'pipe',
-        env: { CLAUDE_PROJECT_DIR: projectDir, PATH: getEnvVar('PATH') ?? '', HOME: getEnvVar('HOME') ?? '' },
+        env: {
+            CLAUDE_PROJECT_DIR: projectDir,
+            PATH: getEnvVar('PATH') ?? '',
+            HOME: getEnvVar('HOME') ?? '',
+            ...extraEnv,
+        },
     });
     const stdout = await new Response(proc.stdout).text();
     const stderr = await new Response(proc.stderr).text();
@@ -249,6 +258,30 @@ describe('context-post-tool — event recording', () => {
         }
     });
 
+    test('redacts quoted JSON credentials from a Bash summary before persisting (task 1158)', async () => {
+        const dir = makeTempProject();
+        try {
+            await runHook(START_HOOK, dir, {});
+            // Synthetic values only.
+            const markers = ['SYN-PRE', 'SYN-MID', 'SYN-POST', 'SYN-TOKEN-VALUE', 'SYN-KEY'];
+            const command = `curl -s -X POST -d {"password":"SYN-PRE\\"SYN-MID\\"SYN-POST","token":"SYN-TOKEN-VALUE","api_key":"SYN-KEY"} https://example.test`;
+            const { exitCode } = await runHook(POST_TOOL_HOOK, dir, {
+                tool_name: 'Bash',
+                tool_input: { command },
+                tool_response: { content: 'ok' },
+            });
+            expect(exitCode).toBe(0);
+            const ledgerRaw = readFileSync(join(dir, '.spur', 'context', 'token-ledger.jsonl'), 'utf-8');
+            for (const marker of markers) expect(ledgerRaw).not.toContain(marker);
+            const events = readLedger(dir).filter((e) => e.type === 'bash');
+            expect(events).toHaveLength(1);
+            expect(String(events[0]?.summary)).toContain('"password":"***"');
+            expect(String(events[0]?.summary)).toContain('https://example.test');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
     test('fails open (exit 0, no event) for tools outside the allowlist (task 0248)', async () => {
         const dir = makeTempProject();
         try {
@@ -363,8 +396,8 @@ describe('context-session-stop — session finalization', () => {
     test('computes totals from ledger and writes session_end event', async () => {
         const dir = makeTempProject();
         try {
-            // Start session.
-            await runHook(START_HOOK, dir, {});
+            // Start session — owner-gated shutdown (1159) needs the recorded owner to finalize.
+            await runHook(START_HOOK, dir, { session_id: 'claude-owner-A' });
             const session = readSession(dir);
             const sessionId = session?.session as string;
 
@@ -386,7 +419,7 @@ describe('context-session-stop — session finalization', () => {
             });
 
             // Stop.
-            const { exitCode } = await runHook(STOP_HOOK, dir, {});
+            const { exitCode } = await runHook(STOP_HOOK, dir, { session_id: 'claude-owner-A' });
             expect(exitCode).toBe(0);
 
             const ledger = readLedger(dir);
@@ -405,8 +438,8 @@ describe('context-session-stop — session finalization', () => {
     test('removes .session.json after writing session_end', async () => {
         const dir = makeTempProject();
         try {
-            await runHook(START_HOOK, dir, {});
-            await runHook(STOP_HOOK, dir, {});
+            await runHook(START_HOOK, dir, { session_id: 'claude-owner-A' });
+            await runHook(STOP_HOOK, dir, { session_id: 'claude-owner-A' });
             expect(readSession(dir)).toBeNull();
         } finally {
             rmSync(dir, { recursive: true, force: true });
@@ -503,9 +536,9 @@ describe('context-session-start — idempotency per in-flight session (task 0398
 
     test('start → stop → start yields a balanced, non-reused pair', async () => {
         const projectDir = makeTempProject();
-        await runHook(START_HOOK, projectDir, {});
-        await runHook(STOP_HOOK, projectDir, {});
-        await runHook(START_HOOK, projectDir, {});
+        await runHook(START_HOOK, projectDir, { session_id: 'claude-owner-A' });
+        await runHook(STOP_HOOK, projectDir, { session_id: 'claude-owner-A' });
+        await runHook(START_HOOK, projectDir, { session_id: 'claude-owner-A' });
 
         const events = ledgerLines(projectDir);
         expect(events.filter((e) => e.type === 'session_start')).toHaveLength(2);
@@ -742,14 +775,18 @@ describe('context-session-stop — recordSessionEnd core (0969 R3)', () => {
             const contextDir = join(dir, '.spur', 'context');
             writeFileSync(
                 join(contextDir, '.session.json'),
-                JSON.stringify({ session: 's1', started: new Date().toISOString() }),
+                JSON.stringify({
+                    session: 's1',
+                    started: new Date().toISOString(),
+                    owner: { host: 'claude', sessionId: 'owner-1' },
+                }),
             );
             writeFileSync(
                 join(contextDir, 'token-ledger.jsonl'),
                 `${JSON.stringify({ ts: 't', session: 's1', type: 'read' })}\n${JSON.stringify({ ts: 't', session: 's1', type: 'write', tokens: 3 })}\n`,
             );
             const { recordSessionEnd } = await import('./context-session-stop');
-            const event = recordSessionEnd(contextDir);
+            const event = recordSessionEnd(contextDir, undefined, { host: 'claude', sessionId: 'owner-1' });
             expect(event?.type).toBe('session_end');
             expect(event?.session).toBe('s1');
             expect(event?.totals).toEqual({ reads: 1, writes: 1, tokens: 3 });
@@ -771,6 +808,482 @@ describe('context-session-stop — recordSessionEnd core (0969 R3)', () => {
             expect(recordSessionEnd(contextDir)).toBeNull();
             // Fail-open paths write nothing.
             expect(existsSync(join(contextDir, 'token-ledger.jsonl'))).toBe(false);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+});
+
+// ---------------------------------------------------------------------------
+// context-session-stop — owner-gated finalization core (task 1159)
+// ---------------------------------------------------------------------------
+
+describe('context-session-stop — owner-gated finalization (task 1159)', () => {
+    const ownerA: SessionOwner = { host: 'claude', sessionId: 'owner-A' };
+    const ownerB: SessionOwner = { host: 'claude', sessionId: 'owner-B' };
+    const ctxDir = (dir: string) => join(dir, '.spur', 'context');
+    const endRows = (dir: string) => readLedger(dir).filter((e) => e.type === 'session_end');
+
+    test('nested child start reuses the parent ledger and its shutdown is a no-op; the parent still closes once', async () => {
+        const dir = makeTempProject();
+        try {
+            const ctx = ctxDir(dir);
+            const { recordSessionStart } = await import('./context-session-start');
+            const { recordSessionEnd } = await import('./context-session-stop');
+            const { recordToolUseEvent } = await import('./context-post-tool');
+
+            const ledgerId = recordSessionStart(ctx, {}, undefined, undefined, ownerA);
+            expect(ledgerId).not.toBeNull();
+
+            // Nested B carries SPUR_RUN_ID and its own native id — reuse without transferring owner.
+            const nestedId = recordSessionStart(ctx, { SPUR_RUN_ID: 'run-1' }, undefined, undefined, ownerB);
+            expect(nestedId).toBe(ledgerId);
+            expect(readSession(dir)?.owner).toEqual(ownerA);
+
+            // B's shutdown fails closed: no end row, pointer intact.
+            expect(recordSessionEnd(ctx, undefined, ownerB)).toBeNull();
+            expect(endRows(dir)).toHaveLength(0);
+            expect(readSession(dir)).not.toBeNull();
+
+            // The next real tool event is still attributed to A's ledger.
+            const evt = recordToolUseEvent(ctx, {
+                tool_name: 'Read',
+                tool_input: { file_path: '/a.ts' },
+                tool_response: { content: 'hi' },
+            });
+            expect(evt?.session).toBe(ledgerId);
+
+            // A finalizes exactly once; a repeated owning end produces no duplicate.
+            expect(recordSessionEnd(ctx, undefined, ownerA)?.type).toBe('session_end');
+            expect(endRows(dir)).toHaveLength(1);
+            expect(readSession(dir)).toBeNull();
+            expect(recordSessionEnd(ctx, undefined, ownerA)).toBeNull();
+            expect(endRows(dir)).toHaveLength(1);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('an owning caller finalizes even while SPUR_RUN_ID is set', async () => {
+        const dir = makeTempProject();
+        try {
+            const ctx = ctxDir(dir);
+            const { recordSessionStart } = await import('./context-session-start');
+            const { recordSessionEnd } = await import('./context-session-stop');
+            recordSessionStart(ctx, {}, undefined, undefined, ownerA);
+            setEnvVar('SPUR_RUN_ID', 'run-A');
+            try {
+                expect(recordSessionEnd(ctx, undefined, ownerA)?.type).toBe('session_end');
+            } finally {
+                removeEnvVar('SPUR_RUN_ID');
+            }
+            expect(endRows(dir)).toHaveLength(1);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('missing, mismatched or malformed caller identity cannot finalize or remove the pointer', async () => {
+        const dir = makeTempProject();
+        try {
+            const ctx = ctxDir(dir);
+            const { recordSessionStart } = await import('./context-session-start');
+            const { recordSessionEnd } = await import('./context-session-stop');
+            recordSessionStart(ctx, {}, undefined, undefined, ownerA);
+
+            expect(recordSessionEnd(ctx)).toBeNull(); // no caller identity
+            expect(recordSessionEnd(ctx, undefined, { host: 'pi', sessionId: 'owner-A' })).toBeNull(); // host mismatch
+            expect(recordSessionEnd(ctx, undefined, { host: 'claude', sessionId: 'other' })).toBeNull(); // id mismatch
+            expect(recordSessionEnd(ctx, undefined, { host: 'claude', sessionId: '   ' })).toBeNull(); // malformed
+
+            expect(endRows(dir)).toHaveLength(0);
+            expect(readSession(dir)).not.toBeNull();
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('a legacy ownerless pointer is never finalized by a matching caller', async () => {
+        const dir = makeTempProject();
+        try {
+            const ctx = ctxDir(dir);
+            writeFileSync(
+                join(ctx, '.session.json'),
+                JSON.stringify({ session: 'legacy-1', started: new Date().toISOString() }),
+            );
+            writeFileSync(
+                join(ctx, 'token-ledger.jsonl'),
+                `${JSON.stringify({ ts: 't', session: 'legacy-1', type: 'read' })}\n`,
+            );
+            const { recordSessionEnd } = await import('./context-session-stop');
+            expect(recordSessionEnd(ctx, undefined, { host: 'claude', sessionId: 'legacy-1' })).toBeNull();
+            expect(endRows(dir)).toHaveLength(0);
+            expect(readSession(dir)).not.toBeNull();
+            // Historical rows stay byte-identical — nothing was rewritten.
+            expect(readFileSync(join(ctx, 'token-ledger.jsonl'), 'utf-8')).toContain('"type":"read"');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('a malformed owner field on the pointer fails closed', async () => {
+        const dir = makeTempProject();
+        try {
+            const ctx = ctxDir(dir);
+            const { recordSessionEnd } = await import('./context-session-stop');
+            for (const owner of ['owner-A', { host: 'claude' }, { host: 'vscode', sessionId: 'x' }, null]) {
+                writeFileSync(join(ctx, '.session.json'), JSON.stringify({ session: 's-1', owner }));
+                expect(recordSessionEnd(ctx, undefined, ownerA)).toBeNull();
+            }
+            expect(endRows(dir)).toHaveLength(0);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('append failure returns null and retains the pointer', async () => {
+        const dir = makeTempProject();
+        try {
+            const ctx = ctxDir(dir);
+            const { recordSessionStart } = await import('./context-session-start');
+            const { recordSessionEnd } = await import('./context-session-stop');
+            recordSessionStart(ctx, {}, undefined, undefined, ownerA);
+            // A directory at the ledger path makes appendFileSync throw.
+            rmSync(join(ctx, 'token-ledger.jsonl'), { force: true });
+            mkdirSync(join(ctx, 'token-ledger.jsonl'));
+            expect(recordSessionEnd(ctx, undefined, ownerA)).toBeNull();
+            expect(readSession(dir)).not.toBeNull();
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('a replay after pointer-removal failure retries cleanup without duplicating the end row', async () => {
+        const dir = makeTempProject();
+        try {
+            const ctx = ctxDir(dir);
+            const { recordSessionStart } = await import('./context-session-start');
+            const { recordSessionEnd } = await import('./context-session-stop');
+            const ledgerId = recordSessionStart(ctx, {}, undefined, undefined, ownerA);
+            // Simulate the earlier failure: the end row landed but the pointer survived.
+            writeFileSync(
+                join(ctx, 'token-ledger.jsonl'),
+                `${readFileSync(join(ctx, 'token-ledger.jsonl'), 'utf-8')}${JSON.stringify({
+                    ts: 't',
+                    session: ledgerId,
+                    type: 'session_end',
+                    totals: { reads: 0, writes: 0, tokens: 0 },
+                })}\n`,
+            );
+            expect(recordSessionEnd(ctx, undefined, ownerA)?.type).toBe('session_end');
+            expect(endRows(dir)).toHaveLength(1); // not duplicated
+            expect(readSession(dir)).toBeNull(); // authorized cleanup retried
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('a pointer replaced during end recording is left untouched', async () => {
+        const dir = makeTempProject();
+        try {
+            const ctx = ctxDir(dir);
+            const { recordSessionStart } = await import('./context-session-start');
+            const { recordSessionEnd } = await import('./context-session-stop');
+            const ledgerId = recordSessionStart(ctx, {}, undefined, undefined, ownerA);
+            const replacement = {
+                session: 'session-replaced',
+                started: new Date().toISOString(),
+                owner: { host: 'pi', sessionId: 'pi-replaced' },
+            };
+            const event = recordSessionEnd(
+                ctx,
+                () => {
+                    // Runs after the first pointer read, before the removal re-read.
+                    writeFileSync(join(ctx, '.session.json'), JSON.stringify(replacement));
+                    return new Date('2026-01-01T00:00:00.000Z');
+                },
+                ownerA,
+            );
+            expect(event?.type).toBe('session_end');
+            expect(event?.session).toBe(ledgerId); // end still recorded for the original ledger
+            expect(endRows(dir).some((e) => e.session === ledgerId)).toBe(true);
+            // The newer pointer survives: removal required both the original id and owner.
+            expect(readSession(dir)?.session).toBe('session-replaced');
+            expect(readSession(dir)?.owner).toEqual({ host: 'pi', sessionId: 'pi-replaced' });
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Claude stdin adapters — owner identity threading (task 1159)
+// ---------------------------------------------------------------------------
+
+describe('Claude stdin adapters — owner identity (task 1159)', () => {
+    test('a child shutdown cannot finalize a parent-owned ledger; the parent records and closes once', async () => {
+        const dir = makeTempProject();
+        try {
+            await runHook(START_HOOK, dir, { session_id: 'claude-A' });
+            expect(readSession(dir)?.owner).toEqual({ host: 'claude', sessionId: 'claude-A' });
+            const ledgerId = readSession(dir)?.session;
+
+            // Nested child B with SPUR_RUN_ID reuses the parent ledger; ownership is unchanged.
+            await runHook(START_HOOK, dir, { session_id: 'claude-B' }, undefined, { SPUR_RUN_ID: 'run-1' });
+            expect(readSession(dir)?.owner).toEqual({ host: 'claude', sessionId: 'claude-A' });
+
+            const childEnd = await runHook(STOP_HOOK, dir, { session_id: 'claude-B' });
+            expect(childEnd.exitCode).toBe(0);
+            expect(readLedger(dir).filter((e) => e.type === 'session_end')).toHaveLength(0);
+            expect(readSession(dir)).not.toBeNull();
+
+            // The parent's next tool event still lands on its ledger.
+            await runHook(POST_TOOL_HOOK, dir, {
+                session_id: 'claude-A',
+                tool_name: 'Read',
+                tool_input: { file_path: '/a.ts' },
+                tool_response: { content: 'hi' },
+            });
+            const reads = readLedger(dir).filter((e) => e.type === 'read');
+            expect(reads).toHaveLength(1);
+            expect(reads[0]?.session).toBe(ledgerId);
+
+            // Parent finalizes exactly once; a repeated end produces no duplicate.
+            await runHook(STOP_HOOK, dir, { session_id: 'claude-A' });
+            expect(readLedger(dir).filter((e) => e.type === 'session_end')).toHaveLength(1);
+            expect(readSession(dir)).toBeNull();
+            await runHook(STOP_HOOK, dir, { session_id: 'claude-A' });
+            expect(readLedger(dir).filter((e) => e.type === 'session_end')).toHaveLength(1);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('CLAUDE_CODE_SESSION_ID is the identity fallback when the payload omits session_id', async () => {
+        const dir = makeTempProject();
+        try {
+            await runHook(START_HOOK, dir, {}, undefined, { CLAUDE_CODE_SESSION_ID: 'env-A' });
+            expect(readSession(dir)?.owner).toEqual({ host: 'claude', sessionId: 'env-A' });
+            await runHook(STOP_HOOK, dir, {}, undefined, { CLAUDE_CODE_SESSION_ID: 'env-A' });
+            expect(readLedger(dir).filter((e) => e.type === 'session_end')).toHaveLength(1);
+            expect(readSession(dir)).toBeNull();
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('the payload session_id takes precedence over CLAUDE_CODE_SESSION_ID', async () => {
+        const dir = makeTempProject();
+        try {
+            await runHook(START_HOOK, dir, { session_id: 'payload-A' }, undefined, {
+                CLAUDE_CODE_SESSION_ID: 'env-A',
+            });
+            expect(readSession(dir)?.owner).toEqual({ host: 'claude', sessionId: 'payload-A' });
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('malformed shutdown input cannot finalize a live pointer', async () => {
+        const dir = makeTempProject();
+        try {
+            await runHook(START_HOOK, dir, { session_id: 'claude-A' });
+            const { exitCode } = await runHook(STOP_HOOK, dir, {}, 'not json');
+            expect(exitCode).toBe(0);
+            expect(readLedger(dir).filter((e) => e.type === 'session_end')).toHaveLength(0);
+            expect(readSession(dir)).not.toBeNull();
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('a legacy ownerless pointer is never finalized by a matching Claude caller', async () => {
+        const dir = makeTempProject();
+        try {
+            const ctx = join(dir, '.spur', 'context');
+            writeFileSync(
+                join(ctx, '.session.json'),
+                JSON.stringify({ session: 'legacy-1', started: new Date().toISOString() }),
+            );
+            writeFileSync(
+                join(ctx, 'token-ledger.jsonl'),
+                `${JSON.stringify({ ts: 't', session: 'legacy-1', type: 'read' })}\n`,
+            );
+            const { exitCode } = await runHook(STOP_HOOK, dir, { session_id: 'legacy-1' });
+            expect(exitCode).toBe(0);
+            expect(readLedger(dir).filter((e) => e.type === 'session_end')).toHaveLength(0);
+            expect(readSession(dir)).not.toBeNull();
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Claude stdin adapters — pure owner derivation (task 1159)
+//
+// The owner derivation was inline in each hook's `import.meta.main` entrypoint, whose body Bun's
+// coverage never attributes (it runs in a spawned subprocess). It lives in ./context-owner so these
+// in-process units can exercise every branch the two hooks share.
+// ---------------------------------------------------------------------------
+
+describe('claudeHookOwnerFromPayloadText — pure owner derivation (task 1159)', () => {
+    const load = () => import('./context-owner');
+
+    test('reads and trims the payload session_id', async () => {
+        const { claudeHookOwnerFromPayloadText } = await load();
+        expect(claudeHookOwnerFromPayloadText('{"session_id":"  payload-A  "}', {})).toEqual({
+            host: 'claude',
+            sessionId: 'payload-A',
+        });
+    });
+
+    test('falls back to CLAUDE_CODE_SESSION_ID when the payload id is absent, empty or non-string', async () => {
+        const { claudeHookOwnerFromPayloadText } = await load();
+        const env = { CLAUDE_CODE_SESSION_ID: '  env-A  ' };
+        expect(claudeHookOwnerFromPayloadText('{}', env)).toEqual({ host: 'claude', sessionId: 'env-A' });
+        expect(claudeHookOwnerFromPayloadText('{"session_id":"   "}', env)).toEqual({
+            host: 'claude',
+            sessionId: 'env-A',
+        });
+        expect(claudeHookOwnerFromPayloadText('{"session_id":42}', env)).toEqual({
+            host: 'claude',
+            sessionId: 'env-A',
+        });
+    });
+
+    test('the payload id takes precedence over the env fallback', async () => {
+        const { claudeHookOwnerFromPayloadText } = await load();
+        expect(
+            claudeHookOwnerFromPayloadText('{"session_id":"payload-A"}', { CLAUDE_CODE_SESSION_ID: 'env-A' }),
+        ).toEqual({ host: 'claude', sessionId: 'payload-A' });
+    });
+
+    test.each([
+        ['empty text', '', {}],
+        ['whitespace text', '   ', {}],
+        ['malformed json', 'not json', {}],
+        ['empty object', '{}', {}],
+        ['null payload', 'null', {}],
+        ['non-object payload', '"a string"', {}],
+        ['whitespace env id', '{}', { CLAUDE_CODE_SESSION_ID: '   ' }],
+    ])('returns null for %s when no usable id exists', async (_label, text, env) => {
+        const { claudeHookOwnerFromPayloadText } = await load();
+        expect(claudeHookOwnerFromPayloadText(text, env)).toBeNull();
+    });
+
+    test('malformed stdin still degrades to the env fallback (fail-open)', async () => {
+        const { claudeHookOwnerFromPayloadText } = await load();
+        expect(claudeHookOwnerFromPayloadText('not json', { CLAUDE_CODE_SESSION_ID: 'env-A' })).toEqual({
+            host: 'claude',
+            sessionId: 'env-A',
+        });
+    });
+
+    test('the derived owner always carries the claude host, never a payload-supplied host', async () => {
+        const { claudeHookOwnerFromPayloadText } = await load();
+        expect(claudeHookOwnerFromPayloadText('{"session_id":"x","host":"vscode"}', {})).toEqual({
+            host: 'claude',
+            sessionId: 'x',
+        });
+    });
+
+    test('claudeSessionOwner derives from an already-parsed payload', async () => {
+        const { claudeSessionOwner } = await load();
+        expect(claudeSessionOwner({ session_id: 'p' }, {})).toEqual({ host: 'claude', sessionId: 'p' });
+        expect(claudeSessionOwner(null, {})).toBeNull();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Claude stdin adapters — stdin-to-core halves (task 1159)
+// ---------------------------------------------------------------------------
+
+describe('recordSessionStartFromPayloadText / recordSessionEndFromPayloadText (task 1159)', () => {
+    const withProjectDir = async (dir: string, fn: () => Promise<void>): Promise<void> => {
+        const prev = getEnvVar('CLAUDE_PROJECT_DIR');
+        setEnvVar('CLAUDE_PROJECT_DIR', dir);
+        try {
+            await fn();
+        } finally {
+            setEnvVar('CLAUDE_PROJECT_DIR', prev);
+        }
+    };
+
+    test('start adapter resolves CLAUDE_PROJECT_DIR and records the payload owner', async () => {
+        const dir = makeTempProject();
+        try {
+            await withProjectDir(dir, async () => {
+                const { recordSessionStartFromPayloadText } = await import('./context-session-start');
+                expect(recordSessionStartFromPayloadText('{"session_id":"claude-A"}', {})).not.toBeNull();
+                expect(readSession(dir)?.owner).toEqual({ host: 'claude', sessionId: 'claude-A' });
+            });
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('start adapter opens ownerless on malformed stdin', async () => {
+        const dir = makeTempProject();
+        try {
+            await withProjectDir(dir, async () => {
+                const { recordSessionStartFromPayloadText } = await import('./context-session-start');
+                expect(recordSessionStartFromPayloadText('not json', {})).not.toBeNull();
+                expect(readSession(dir)?.owner).toBeUndefined();
+            });
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('stop adapter finalizes only the payload-matched owner', async () => {
+        const dir = makeTempProject();
+        try {
+            await withProjectDir(dir, async () => {
+                const { recordSessionStart } = await import('./context-session-start');
+                const { recordSessionEndFromPayloadText } = await import('./context-session-stop');
+                const ctx = join(dir, '.spur', 'context');
+                recordSessionStart(ctx, {}, undefined, undefined, { host: 'claude', sessionId: 'claude-A' });
+                expect(recordSessionEndFromPayloadText('{"session_id":"claude-B"}', {})).toBeNull();
+                expect(recordSessionEndFromPayloadText('{"session_id":"claude-A"}', {})?.type).toBe('session_end');
+            });
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+});
+
+// ---------------------------------------------------------------------------
+// context-session-start — pointer-write failure + invalid host (task 1159)
+// ---------------------------------------------------------------------------
+
+describe('recordSessionStart — owner write guards (task 1159)', () => {
+    test('returns null when the pointer path cannot be written', async () => {
+        const dir = makeTempProject();
+        try {
+            const ctx = join(dir, '.spur', 'context');
+            // A directory at the pointer path makes writeFileSync throw (EISDIR).
+            mkdirSync(join(ctx, '.session.json'));
+            const { recordSessionStart } = await import('./context-session-start');
+            expect(
+                recordSessionStart(ctx, {}, undefined, undefined, { host: 'claude', sessionId: 'claude-A' }),
+            ).toBeNull();
+            expect(existsSync(join(ctx, 'token-ledger.jsonl'))).toBe(false);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('a non-claude/pi owner host is never recorded on the pointer', async () => {
+        const dir = makeTempProject();
+        try {
+            const ctx = join(dir, '.spur', 'context');
+            const { recordSessionStart } = await import('./context-session-start');
+            recordSessionStart(ctx, {}, undefined, undefined, {
+                host: 'vscode',
+                sessionId: 'x',
+            } as unknown as SessionOwner);
+            expect(readSession(dir)?.owner).toBeUndefined();
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
