@@ -5805,3 +5805,86 @@ rg -in 'should|probably|likely|seems|appears to|might|maybe|I think|presumably|a
 - The wrapup reply accompanying this capture carried one hedge ("it should collapse into an ADR-022
   amendment instead") about whether ADR-135 is a new entry or an ADR-022 amendment. That remains an
   open judgment call for the operator and is not asserted as fact anywhere above.
+Verification added: 11 claims re-checked against primary sources in this tree, each with `path:line`, method, and confidence.
+
+- **HIGH (9):** `getSessionId()` verified against the **repo-pinned 0.87.1** types (`session-manager.d.ts:246`, `:178`) — also present in the global 1.1.0, so not version-fragile; `import.meta.main` verified by direct probe on the pinned Bun 1.3.14 (`false` when imported, `true` as entry) rather than by assertion; thresholds at `bunfig.toml:15`; the entrypoint-lines-uncovered fact cited to `inline-1159-a10fd920-review-answer.txt:34`; `GLUE_BUDGET_LINES` at `script-contract-check.ts:489,586`; minute-granular ids at `context-session-start.ts:144`; `CLAUDE_CODE_SESSION_ID` fallback at `context-owner.ts:33-41` +4 test pins; adapter copy ignored at `.gitignore:84`; `SECRET_PATTERN` miss at `agent-execution.ts:7`; routing at `hooks.json:22,33`.
+- **MEDIUM (2 sub-claims + 1):** Superskill-as-generator (inferred from path); `SECRET_PATTERN` being off the ledger path (inferred, not reproduced); superskill's ownerless pointer (cross-repo). Split out rather than folded into HIGH.
+- **Not verified:** the `import.meta.main` *type declaration* — `@types/bun/index.d.ts` only re-references `bun-types`, which is not installed in this worktree, so only runtime behavior is evidence-backed.
+- **Correction found while verifying:** an earlier glob missed the types; the authoritative file is the repo-local pinned 0.87.1, and `bun-types` absence means I no longer cite the task record's version claim on trust.
+
+Scope unchanged: only the two `docs/` files modified; learnings artifact updated in place (140 lines, 11 verification rows).
+
+# Working learnings — tasks 1158, 1159 (feature H21)
+
+## 2026-10-10 — 1158: Redact quoted JSON credentials before persisting tool summaries
+
+**Root cause pattern (reuse this).** A bare `key=value` secret redactor silently misses the same secret once the key is quoted. `scrubSecrets` matched only when the separator sat immediately after the bare key, so `{"password":"…"}` reached `.spur/context/token-ledger.jsonl` as plaintext. Any secret scanner must be tested against the *real* spelling a tool command produces, not the canonical form — for Bash that means `"key"`, `'key'`, shell-escaped `\"key\"` inside a double-quoted argument (`curl -d "{\"password\":…}"`), and an unquoted scalar (`{"token": 12345}`).
+
+**Ordering is the guarantee.** The quoted pass runs first, on the full summary text, before the Bearer / `key=value` / Authorization passes and before the 200-char summary cap and 4 KiB input cap. Truncating before scrubbing would leave partial values; capping after scrubbing cannot re-expose what was removed. A redactor is only a pre-storage boundary if it runs pre-cap.
+
+**Escape-aware scanning, fail closed.** Inside a value, `\"` and `\\` are content, never terminators. When the terminator is ambiguous (shell-escaped opener), the regex consumes a JSON-level escaped quote as content, stops only at a clean `\"`, and otherwise redacts through end-of-input. Round-2 reviewer repro: treating an inner `\"` as the terminator leaked the suffix of a quote-bearing and of an unterminated value. Unterminated values, including a trailing lone backslash, redact to end of input so a truncated command cannot leak.
+
+**Negative pins carry as much weight as positive ones.** `token_count`, `tokens`, `tokenizer`, `authorization_header`, a benign quoted command, and a filename that merely *contains* a sensitive word (`{"file":"my_secret_sauce_recipe.md"}`) must stay byte-identical. An over-matching redactor makes the ledger unreadable, which is its own data loss.
+
+**One pass in the shared core, zero adapter churn.** Extending `scrubSecrets` fixed every caller — `truncateSummary`, `redactText`, `cappedByteLength`, and the Pi extension's `tool_result` recorder, which imports `recordToolUseEvent` — with no new helper, dependency, or public surface. Fix security behaviour at the shared seam, not per adapter.
+
+**Assert persisted bytes, not just the return value.** A regression that inspects only the returned event misses the actual leak vector. Pin `recordToolUseEvent` against a temp `.session.json` and assert markers are absent from the raw `token-ledger.jsonl` bytes, plus a spawned real-hook pin. Use synthetic markers only; never persist real credentials, never rewrite historical ledgers.
+
+**Gotchas.**
+- Token estimates legitimately change when redaction removes previously-leaked bytes. Do not pin the old numeric estimate; the cascade now sees the scrubbed length.
+- The gitignored installed adapter copy (`apps/cli/plugins/sp/hooks/context-post-tool.ts`) still carries the pre-fix code. It is Superskill-generated — regenerate via install, never hand-edit.
+- The same bug class exists on an adjacent pre-existing redactor (`SECRET_PATTERN` in `packages/app/src/observability/agent-execution.ts`, V9). File it as a follow-up rather than widening scope.
+
+## 2026-10-10 — 1159: Preserve parent ledger ownership when nested sessions end
+
+**Owner identity must be host-native.** Only the host's own native session id separates owner from child. The ledger id is shared by every nested run, `process.pid` is a fresh process per hook event, and `SPUR_RUN_ID` is present on nested children — none may gate teardown. Claude uses payload `session_id`, falling back to `CLAUDE_CODE_SESSION_ID` only when the payload id is absent or empty; Pi uses `ctx.sessionManager.getSessionId()` (V1).
+
+**Reuse must never transfer ownership.** A nested start returns the reused ledger id and writes nothing. Ownership is frozen at pointer creation, so a child inheriting the pointer cannot later close it, while a genuine owner that itself carries `SPUR_RUN_ID` still can.
+
+**Exactly-once shutdown needs two independent guards.** (1) Look for an existing `session_end` row before appending, so a replay after a failed pointer cleanup never writes a second rollup. (2) Re-read the pointer before deletion and require both the ledger id and the owner to be unchanged, so a pointer replaced mid-record is left untouched. Removal is best-effort; the end row is the idempotence anchor.
+
+**Fail closed on legacy state.** Ownerless pre-existing pointers stay readable and reusable for tool recording but cannot be finalized or removed — never delete or finalize a pointer you cannot attribute. Existing idle-start expiry retires them; there is no fabricated migration.
+
+**Gotchas.**
+- Owner-gating invalidates fixtures: any test seeding an ownerless happy-path pointer must be updated to seed an explicit owner, or it fails for the wrong reason.
+- Never use the test-runner PID as an identity in tests.
+- Bun leaves the bodies of `if (import.meta.main)` entrypoints uncovered when the module is imported by a test (V2: the runtime probe, plus the recorded per-file coverage showing exactly the entrypoint lines uncovered). Against the 90/90 per-measured-file threshold (V3) that forces the logic into a pure, import-free module (`context-owner.ts`) — which is also the half a unit test can reach. Write hook entrypoints as `stdin read → pure helper → exit(0)` and keep the logic below.
+- `context-session-start.ts` had to stay under `GLUE_BUDGET_LINES` (250, enforced by `scripts/commands/script-contract-check.ts`). The fix was a compaction — re-export `SessionOwner` from the start module, keep stop's import type-only — with no exported symbol, behaviour, or assertion dropped.
+- Accepted limits to restate rather than hide: the `CLAUDE_CODE_SESSION_ID` fallback can be inherited by a child, so a payload without `session_id` may derive the parent owner; minute-granular ledger ids (`session-YYYY-MM-DD-HHMM`) let a same-minute session suppress its own `session_end`; the idle-reuse heuristic lets independent concurrent sessions strand each other.
+- Plugin source and deployed wiring are different surfaces. `hooks.json` routes SessionStart/SessionEnd to `superskill hook run sp context-session-*`, whose in-CLI runners keep their own pointer with no owner field, so on the installed Claude path this fix is not the runtime; the Pi extension path (`plugin.json`) does exercise it. Say so in the verdict — a green plugin suite does not prove the deployed host path.
+
+## Cross-cutting — doc-sync and wrap discipline (both tasks)
+
+**The drift probe is a candidate list, not a work list.** It flagged every changed path under a doc-owned glob, including `plugins/sp/hooks/**` test files and the tool-owned task corpus. Only `docs/design/observability-contracts.md` and the derived `03` topology actually needed repair. Confirm each candidate against source before editing.
+
+**A satellite edited during a task must update its own metadata.** 1159 added the ownership paragraph but left `updated_at: 2026-10-04` and omitted `1159` from `related:`. A satellite's frontmatter is its machine-readable contract; a content change without it is itself drift.
+
+**Verify the authority before "repairing" it.** Both tasks sit inside ADR-129's existing boundary (one ledger/session core, hosts are normalizing adapters); neither introduces a new cross-module boundary, and a bugfix restoring an existing contract needs no ADR (§6.1). `docs/00_ADR.md` was checked and correctly left unchanged — touching an ADR to look responsive is worse than no edit. Likewise `docs/04_DESIGN.md`: no satellite was added, moved, or renamed, so the index pointers are unchanged and need no ceremonial edit, and a row intentionally absent for a superseded satellite must not be re-added.
+
+**Derive evidence for prose from code comments and tests, not from the task's own summary.** Every claim added to `observability-contracts.md` §7.8b was checked against `context-post-tool.ts` (pass ordering, escape handling, key-must-end-on-a-sensitive-word), `guard-extension.ts` (shared recorder import), and the negative-pin matrix in `token-estimate.test.ts`.
+
+## Verification — source citations and confidence
+
+Method: every API, library and environment claim was re-checked against a primary source in this
+tree during the wrap (installed pinned types, pinned runtime, source files, recorded pipeline
+artifacts) rather than carried over from the task record. Confidence reflects the strongest evidence
+actually obtained, not the plausibility of the claim.
+
+| # | Claim | Source citation | Method | Confidence |
+| --- | --- | --- | --- | --- |
+| V1 | Pi exposes `ctx.sessionManager.getSessionId(): string` on the context session manager; `ReadonlySessionManager` includes `getSessionId` | `node_modules/@earendil-works/pi-coding-agent/dist/core/session-manager.d.ts:246` (signature) and `:178` (the `Pick<…>` type) — repo-pinned `0.87.1` (`package.json` devDependencies) | grep of the installed pinned `.d.ts`; same signature also present in the globally installed `1.1.0`, so the usage is not version-fragile | HIGH |
+| V2 | `import.meta.main` is `true` only for the process entry, so an imported module's entrypoint block never executes under test | Runtime probe on the pinned Bun `1.3.14` (`bun --version`, `packageManager: bun@1.3.14`): a module printing `import.meta.main` reports `false` when imported and `true` when run as entry | direct execution, repeatable with a two-file probe | HIGH |
+| V3 | Coverage is gated per measured file at 90 % lines / 90 % functions | `bunfig.toml:15` `coverageThreshold = { lines = 0.9, functions = 0.9 }` | source read | HIGH |
+| V4 | The uncovered lines in the touched hooks are exactly the `import.meta.main` bodies | `.spur/run/inline-1159-a10fd920-review-answer.txt:34` (per-file coverage: `context-owner.ts` 100/100, `context-session-start.ts` 100 funcs / 95.65 lines, `context-session-stop.ts` 100 / 96.04; uncovered = start `215-217`, stop `199-201`) | recorded pipeline artifact | HIGH |
+| V5 | Plugin glue files are budgeted at 250 lines | `scripts/commands/script-contract-check.ts:489` (`GLUE_BUDGET_LINES = 250`), enforced at `:586` | source read | HIGH |
+| V6 | Ledger ids are minute-granular (`session-YYYY-MM-DD-HHMM`), so a same-minute session can suppress its own `session_end` | `plugins/sp/hooks/context-session-start.ts:144` | source read | HIGH |
+| V7 | `CLAUDE_CODE_SESSION_ID` is used only as a fallback when the Claude payload omits `session_id` | `plugins/sp/hooks/context-owner.ts:33-41`; pinned by tests at `plugins/sp/hooks/context-hooks.test.ts:1062,1075,1141,1177` | source read + existing green tests | HIGH (repo behavior) |
+| V8 | The installed hook adapter copy under `apps/cli/plugins/` is generated and must not be hand-edited | `.gitignore:84` ignores `/apps/cli/plugins` | `git check-ignore` | HIGH that it is generated/ignored; **MEDIUM** that Superskill specifically is its generator (inferred from the path, not asserted by a tracked script) |
+| V9 | The adjacent `SECRET_PATTERN` redactor misses the same quoted-key class | `packages/app/src/observability/agent-execution.ts:7` matches only `[:=]` after a bare key; `:339` applies it | source read | HIGH that the pattern misses quoted keys; **MEDIUM** that it is off the token-ledger path (inferred from the write path, not reproduced) |
+| V10 | The installed Claude path dispatches these hooks through `superskill hook run`, so the plugin source is not the deployed runner | `plugins/sp/hooks/hooks.json:22,33` (and the stop entry) | source read | HIGH for the routing; **MEDIUM** for superskill's internal ownerless pointer (cross-repo, not verifiable in this tree) |
+| V11 | Claude's hook payload `session_id` is the host's stable session identity | Verified only behaviorally, through this repo's adapter and its tests (V7) | no vendor spec is vendored in-tree | MEDIUM |
+
+**Not verified.** The *type declaration* for `import.meta.main` could not be confirmed in this worktree:
+`node_modules/@types/bun/index.d.ts` is a single `/// <reference types="bun-types" />` line and
+`bun-types` is not installed here, so only the runtime behavior (V2) is evidence-backed. No ADR, index
+row or corpus claim was altered on the strength of an unverified claim.
