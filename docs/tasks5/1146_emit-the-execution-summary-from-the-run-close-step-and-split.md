@@ -4,7 +4,7 @@ name: Emit the execution summary from the run close step and split time by actor
 status: done
 template: feature-impl
 created_at: 2026-10-09T17:29:05.417Z
-updated_at: "2026-10-10T05:23:08.457Z"
+updated_at: "2026-10-10T06:52:57.888Z"
 feature_id: E5
 
 ac_numbering: task-local
@@ -251,20 +251,20 @@ Tradeoff: the measurement moved from `plugins/sp/scripts/run-summary.ts` into `p
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `plugins/sp/lib/run-summary-core.ts:502` writes `.spur/run/<runId>-summary.{md,json}` and never throws; `packages/app/src/services/inline-run-setup.ts:1695` calls it inside the committed close and reports `summaryFile` on all three stdout shapes, with a failure logged and the key omitted. |
-| R2 | MET | `structured-trace-emission.md` and `inline-pipeline-driver.md` instruct printing `summaryFile` after `--close`; `execution-batch-report.md` names `run-summary --rollup`; `dev-operations.md` is reduced to the close-product pointer plus the column contract, and no execution-summary reference records `SINCE` or invokes `--since`. |
-| R3 | MET | `plugins/sp/lib/run-summary-core.ts:418` renders one row per run from that run's own Total, a bold batch total of the sums, and a wall-span line when windows overlap; invoked through `plugins/sp/scripts/run-summary.ts:44`. |
-| R4 | MET | `actorSplit` (`plugins/sp/lib/run-summary-core.ts:167`) partitions operator/model/shell/subagent/other/idle and sums exactly to the window; `gateFromReceipt` (`plugins/sp/lib/run-summary-core.ts:547`) sources gate time only from this run's receipt, else `n/a (<reason>)`. |
-| R5 | MET | Measurement reuses `plugins/sp/lib/transcript.ts` (`resolveTranscript` plus a new `isCompaction` at `:206` and the widened `Block`/`Row` types); no new transcript format, no pi session-resolution change, no new public `spur` noun/verb, and no `packages/app` import of plugin code (the app takes a `summarize` callback). |
+| R1 | MET | `writeCloseSummary` `plugins/sp/lib/run-summary-core.ts:502` writes `<runId>-summary.{md,json}` and never throws; close calls the summarizer after commit and reports `summaryFile` `packages/app/src/services/inline-run-setup.ts:1708-1725`; `--no-summary` guards `plugins/sp/scripts/inline-run-setup.ts:125` and `packages/app/src/services/inline-run-setup.ts:1248`; tests `plugins/sp/tests/run-summary.test.ts:325`, `plugins/sp/tests/run-summary.test.ts:351`, `plugins/sp/tests/inline-run-trace.test.ts:482` |
+| R2 | MET | Contract test `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:1175` (close docs carry `summaryFile`) and `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:1188` (no `SINCE=`/`--since "$SINCE"`); rg this pass finds no `SINCE=` under plugins/sp/skills |
+| R3 | MET | `renderRollupMarkdown` `plugins/sp/lib/run-summary-core.ts:418`; `--rollup` mode `plugins/sp/scripts/run-summary.ts:44`; tests `plugins/sp/tests/run-summary.test.ts:260`, `plugins/sp/tests/run-summary.test.ts:422` |
+| R4 | MET | `actorSplit` `plugins/sp/lib/run-summary-core.ts:167`; `gateFromReceipt` `plugins/sp/lib/run-summary-core.ts:547`; tests F17–F22 `plugins/sp/tests/run-summary.test.ts:169`, `plugins/sp/tests/run-summary.test.ts:240` |
+| R5 | MET | Reuses `resolveTranscript` `plugins/sp/lib/transcript.ts:244` plus `isCompaction` `plugins/sp/lib/transcript.ts:206`; app receives the summarizer as an injected callback (`packages/app/src/services/inline-run-setup.ts:1234`), no plugin import |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | unit | `writeCloseSummary` writes both files and returns the `.md` path; the app's close reports `summaryFile` and `inline-run-trace.test.ts` pins the key on the close stdout. |
-| AC2 | MET | unit | An unresolvable transcript leaves the `.md` holding exactly `Execution summary: n/a (<reason>)`, writes no `.json`, and never throws; the close's exit/`ok` are unchanged. |
-| AC3 | MET | unit | `--no-summary` suppresses both files and the key, and any mode other than `--close` returns 2 from both the glue guard and the mode dispatcher. |
-| AC4 | MET | unit | F17–F22: the partition sums exactly, the overlap counts once under subagent, the longest operator wait is reported, a six-minute gap is idle, compactions and subagent errors count in both shapes, and gate time is receipt-gated. |
-| AC5 | MET | unit | F23 plus the CLI test: two summary files render per-run rows and a batch total, overlapping windows add the wall span, and `--rollup` mixed with a measurement source exits 2. |
-| AC6 | MET | unit | The execution-batch contract test pins `summaryFile` in both close references, `--rollup` in the batch report, and the absence of `SINCE=`/`--since "$SINCE"` in every execution-summary reference. |
+| AC1 — A settled inline run writes its own summary at close (req: R1) | MET | test | `plugins/sp/tests/run-summary.test.ts:325`; `plugins/sp/tests/inline-run-trace.test.ts:469` pins `summaryFile` on the close stdout |
+| AC2 — A summary failure never changes the close verdict (req: R1) | MET | test | `plugins/sp/tests/run-summary.test.ts:351` |
+| AC3 — --no-summary suppresses the summary at close (req: R1) | MET | test | Added this pass: `plugins/sp/tests/inline-run-trace.test.ts:482` (no `summaryFile`, no summary files, `--node-enter --no-summary` exits 2); fails with both guards mutated out (Expected 2, Received 0), passes restored (17 pass / 0 fail) |
+| AC4 — The actor split partitions the window and never fakes a zero (req: R4, R5) | MET | test | `plugins/sp/tests/run-summary.test.ts:169`, `plugins/sp/tests/run-summary.test.ts:208`, `plugins/sp/tests/run-summary.test.ts:240` |
+| AC5 — Batch roll-up uses each run's own window (req: R3) | MET | test | `plugins/sp/tests/run-summary.test.ts:260`, `plugins/sp/tests/run-summary.test.ts:452` |
+| AC6 — The print obligation is carried by the close output, not a trailing step (req: R2) | MET | test | `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:1175`, `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:1188` |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

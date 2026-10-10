@@ -4,7 +4,7 @@ name: Feature status writes must not degrade to an unguarded mutation (feature-c
 status: done
 template: feature-impl
 created_at: 2026-10-09T05:34:58.340Z
-updated_at: "2026-10-10T04:12:38.645Z"
+updated_at: "2026-10-10T06:52:51.687Z"
 feature_id: F21
 
 ac_altitude: task-local
@@ -275,24 +275,24 @@ named: `feature check --fix` without a transition port, and the server's HTTP fe
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | The `else` raw `setFrontmatterField('status','active')` fallback is deleted; a port-less `--fix` now pushes the `feature-reopen-unavailable` error finding and applies no status write — `packages/app/src/services/feature-check.ts:281-306`; finding code registered `packages/config/src/finding-codes.ts:88,194`; test `packages/app/tests/services/feature-check-reopen-guard.test.ts:72-93` (byte-identical file + finding names the port and both recoveries; `result.pass === false`; no `feature-reopen` repair). |
-| R2 | MET | `transitionFeatureGuarded` in-process guard: project-first graph resolve, undeclared-edge refusal, `onEnter` refusal with CLI recovery, `kind: shell` check execution, commit via `FeatureService.transition` — `packages/app/src/services/feature-transition.ts:95-177`; exported `packages/app/src/index.ts:327-331`; HTTP handler routed `apps/server/src/modules/feature/handlers.ts:63-71`; reopen hook routed `apps/server/src/context.ts:518-524`; server wiring `apps/server/src/context.ts:577-596`. Tests: `apps/server/tests/modules/feature/transition-gate.test.ts:183-287`, `packages/app/tests/services/feature-transition.test.ts:146-201`. |
-| R3 | MET | Static pin walks `packages`, `apps`, `plugins`, `scripts` over `**/*.{ts,mjs}`, skips tests, asserts zero feature-domain raw status writers — `packages/app/tests/feature-status-writer-pin.test.ts:17-39` (passes, 0 violations). Independent grep this pass: 0 non-test `setFrontmatterField('status'…` hits across the four roots. |
-| R4 | MET | Missing graph throws `GuardDeniedError` naming `feature-lifecycle` and the probed roots; no `SchemaLifecyclePort` fallback anywhere in the module — `packages/app/src/services/feature-transition.ts:102-110`; test `packages/app/tests/services/feature-transition.test.ts:204-227`. |
-| R5 | MET | All six required tests present and green: R5(a)/(b) `packages/app/tests/services/feature-check-reopen-guard.test.ts:72,96`; R5(d) + AC3-app `packages/app/tests/services/feature-transition.test.ts:146,176`; R5(c)/(e) `apps/server/tests/modules/feature/transition-gate.test.ts:183,247`; R5(f) pin `packages/app/tests/feature-status-writer-pin.test.ts:17`; fail-first evidence recorded in the task Solution. |
-| R6 | MET | feature-check row + task→feature link row state the port requirement and the removed raw fallback — `docs/design/planning-record-contracts.md:39,110`; server satellite documents the in-process guard and 409 refusals incl. `→ verifying` — `docs/design/server-side-adjustment-design.md:275-286`. |
-| R7 | MET | Bundles rebuilt with the new finding code: `plugins/sp/lib/idea-handoff.generated.mjs`, `plugins/sp/lib/inline-run.generated.mjs`, `plugins/sp/lib/quality-gate.generated.mjs`, `plugins/sp/scripts/quality-gate.mjs` each carry `feature-reopen-unavailable` (grep count 1); `spur-check`/bundle gates captured in `.spur/run/1137-test-gate.log` (PASS). |
+| R1 | MET | Port-less `--fix` pushes a `FEATURE_REOPEN_UNAVAILABLE` error finding and writes nothing: `packages/app/src/services/feature-check.ts:280-307`; code `packages/config/src/finding-codes.ts:88`; test `packages/app/tests/services/feature-check-reopen-guard.test.ts:72` |
+| R2 | MET | `transitionFeatureGuarded` `packages/app/src/services/feature-transition.ts:95-177`; server handler `apps/server/src/modules/feature/handlers.ts:63-70`; reopen hook `apps/server/src/context.ts:516-525`; tests `apps/server/tests/modules/feature/transition-gate.test.ts:183` |
+| R3 | MET | Static pin `packages/app/tests/feature-status-writer-pin.test.ts:17`; independent rg this pass found 0 non-test `setFrontmatterField('status'` writers |
+| R4 | MET | Missing graph → `GuardDeniedError` naming `feature-lifecycle` and roots `packages/app/src/services/feature-transition.ts:95-177`; test `packages/app/tests/services/feature-transition.test.ts:204` |
+| R5 | MET | Required tests present and green this pass: `packages/app/tests/services/feature-check-reopen-guard.test.ts:72`, `packages/app/tests/services/feature-check-reopen-guard.test.ts:96`, `apps/server/tests/modules/feature/transition-gate.test.ts:194`, `apps/server/tests/modules/feature/transition-gate.test.ts:247` |
+| R6 | MET | `docs/design/planning-record-contracts.md:110` (feature check row) states the reopen requires the transition port and names `feature-reopen-unavailable` |
+| R7 | MET | Bundles carry the finding code (generated `plugins/sp/lib/*.generated.mjs`); plugins/sp suites import them green this pass |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — No port means no status write and an actionable finding (req: R1) | MET | test | `packages/app/tests/services/feature-check-reopen-guard.test.ts:72-93` — file byte-identical, `feature-reopen-unavailable` error finding naming CLI recovery, no `feature-reopen` repair (fresh run pass). |
-| AC2 — With a port the reopen still goes through the transition (req: R1) | MET | test | `packages/app/tests/services/feature-check-reopen-guard.test.ts:96-116` — feature is `active`, exactly one `verifying → active` History line, repair kind `feature-reopen`. |
-| AC3 — The server denies a guarded edge whose check fails (req: R2) | MET | test | `apps/server/tests/modules/feature/transition-gate.test.ts:183-192` (denial + file unchanged) with 409 mapping pinned at `apps/server/tests/middleware/error-handler.test.ts:70-80`; the check-findings denial path is exercised at the `verifying → done` shell edge `packages/app/tests/services/feature-transition.test.ts:176-189`. |
-| AC4 — The server refuses undeclared edges and onEnter targets (req: R2) | MET | test | `apps/server/tests/modules/feature/transition-gate.test.ts:194-217` — `undeclared edge backlog → done` named, and `→ verifying` refused with the exact CLI recovery message; 409 mapping `apps/server/tests/middleware/error-handler.test.ts:70-80`. |
-| AC5 — The server reopen keeps working (req: R2) | MET | test | `apps/server/tests/modules/feature/transition-gate.test.ts:247-263` — task create against a `verifying` feature leaves it `active` with exactly one `verifying → active` History line. |
-| AC6 — No second raw status writer exists (req: R3) | MET | test | `packages/app/tests/feature-status-writer-pin.test.ts:17-39` — scans the four roots, 0 violations; independent grep this pass agrees. |
-| AC7 — A missing lifecycle graph is a loud refusal (req: R4) | MET | test | `packages/app/tests/services/feature-transition.test.ts:204-227` — `GuardDeniedError` naming `feature-lifecycle` and the searched root; file unchanged. |
-| AC8 — Tests fail without their fixes and the gates pass (req: R5, R6, R7) | MET | command | `.spur/run/1137-test-gate.status` = PASS (log `10759 pass / 0 fail`, digest sha256:239179e0e09e…); fail-first evidence (pre-fix mutation, pin hit at `packages/app/src/services/feature-check.ts:281-306`, import errors, P2 receipt-hop resolved-instead-of-rejecting) recorded in the task Solution (manual review of recorded evidence — the reversion drill is not independently re-run in this observe-only pass). |
+| AC1 — No port means no status write and an actionable finding (req: R1) | MET | test | `packages/app/tests/services/feature-check-reopen-guard.test.ts:72` |
+| AC2 — With a port the reopen still goes through the transition (req: R1) | MET | test | `packages/app/tests/services/feature-check-reopen-guard.test.ts:96` |
+| AC3 — The server denies a guarded edge whose check fails (req: R2) | MET | test | `apps/server/tests/modules/feature/transition-gate.test.ts:183`; apps/server 42 pass / 0 fail this pass |
+| AC4 — The server refuses undeclared edges and onEnter targets (req: R2) | MET | test | `apps/server/tests/modules/feature/transition-gate.test.ts:194` |
+| AC5 — The server reopen keeps working (req: R2) | MET | test | `apps/server/tests/modules/feature/transition-gate.test.ts:247` |
+| AC6 — No second raw status writer exists (req: R3) | MET | test | `packages/app/tests/feature-status-writer-pin.test.ts:17` plus independent rg (0 hits) |
+| AC7 — A missing lifecycle graph is a loud refusal (req: R4) | MET | test | `packages/app/tests/services/feature-transition.test.ts:204` |
+| AC8 — Tests fail without their fixes and the gates pass (req: R5, R6, R7) | MET | test | Suites re-run green this pass (packages/app 196/0, apps/server 42/0); certified gate `.spur/run/1137-test-gate.status` PASS and recorded fail-first evidence from the run |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

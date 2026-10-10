@@ -4,7 +4,7 @@ name: Worktree batch transitions cannot land their task-lifecycle row when the i
 status: done
 template: issue
 created_at: 2026-10-09T23:39:39.295Z
-updated_at: "2026-10-10T00:04:22.510Z"
+updated_at: "2026-10-10T06:52:55.093Z"
 feature_id: E71
 
 ac_altitude: task-local
@@ -196,20 +196,20 @@ Tradeoff: Terminal duplicate lifecycle rows are skipped as `external-key-conflic
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/domain/src/dao/run-transfer.ts:145` grades terminal lifecycle duplicate rows as `external-key-conflict-bookkeeping`. |
-| R2 | MET | `packages/app/tests/services/inline-run-driver.test.ts:603` verifies `persist-out` exits 0 on terminal duplicate lifecycle rows. |
-| R3 | MET | `packages/app/src/services/inline-run-setup.ts:1960` automatically reconciles receiving lifecycle row during persist-out. |
-| R4 | MET | `packages/domain/tests/dao/run-transfer.test.ts:133` tests all target/source combinations and child row isolation. |
-| R5 | MET | `plugins/sp/skills/spur-dev/references/cross-cutting.md:312`, `plugins/sp/skills/spur-dev/references/execution-batch-report.md:130`, `plugins/sp/skills/spur-dev/references/execution-worktree-landing.md:94` updated. |
+| R1 | MET | `isLifecycleTerminal` (LIFECYCLE_WORKFLOWS && TERMINAL_STATUSES) and `isBookkeeping` in `packages/domain/src/dao/run-transfer.ts:133-161`; test `packages/domain/tests/dao/run-transfer.test.ts:145` |
+| R2 | MET | persist-out exits 0 with `external-key-conflict-bookkeeping` skip: `packages/app/tests/services/inline-run-driver.test.ts:606` green this pass |
+| R3 | MET | `reconcileExistingLifecycleRow` (import `packages/app/src/services/inline-run-setup.ts:84`) invoked for done/cancelled task files at `packages/app/src/services/inline-run-setup.ts:2136-2160`; receiving row reconciled to done in `packages/app/tests/services/inline-run-driver.test.ts:606` |
+| R4 | MET | `packages/domain/tests/dao/run-transfer.test.ts:115` (non-terminal fail-closed), `packages/domain/tests/dao/run-transfer.test.ts:145`, `packages/domain/tests/dao/run-transfer.test.ts:180` (terminal×terminal), `packages/domain/tests/dao/run-transfer.test.ts:203` (non-lifecycle); 8 pass / 0 fail this pass |
+| R5 | MET | `plugins/sp/skills/spur-dev/references/cross-cutting.md:314`, `plugins/sp/skills/spur-dev/references/execution-worktree-landing.md:93`, `plugins/sp/skills/spur-dev/references/execution-batch-report.md:128` |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | unit | `packages/domain/tests/dao/run-transfer.test.ts` AC1 case passes. |
-| AC2 | MET | unit | `packages/domain/tests/dao/run-transfer.test.ts` non-terminal duplicate case stays fail-closed. |
-| AC3 | MET | unit | `packages/domain/tests/dao/run-transfer.test.ts` non-lifecycle workflow stays fail-closed. |
-| AC4 | MET | unit | `packages/app/tests/services/inline-run-driver.test.ts:603` receiving row is reconciled to done. |
-| AC5 | MET | unit | run-transfer F1-F4 tests pass and verify invariants. |
-| AC6 | MET | unit | Doc references updated to state reconcile step. |
+| AC1 — A terminal lifecycle row no longer blocks the landing (req: R1, R2) | MET | test | `packages/domain/tests/dao/run-transfer.test.ts:145`; `packages/app/tests/services/inline-run-driver.test.ts:606` |
+| AC2 — A non-terminal duplicate still fails closed (req: R1) | MET | test | `packages/domain/tests/dao/run-transfer.test.ts:115` |
+| AC3 — Non-lifecycle provenance is unaffected (req: R1) | MET | test | `packages/domain/tests/dao/run-transfer.test.ts:203` |
+| AC4 — The receiving row is reconciled, not duplicated (req: R3) | MET | test | `packages/app/tests/services/inline-run-driver.test.ts:606` asserts status done, terminal_reason done, exactly 1 row |
+| AC5 — Each failure mode fails before its fix (req: R4) | MET | test | `packages/domain/tests/dao/run-transfer.test.ts:115`, `packages/domain/tests/dao/run-transfer.test.ts:180`, `packages/domain/tests/dao/run-transfer.test.ts:203` green this pass |
+| AC6 — The landing contract names the reconcile, not a manual delete (req: R5) | MET | test | Pin added this pass: `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:1206` (landing + batch-report name the reconcile, no `DELETE FROM`, cross-cutting states the --worktree interaction); green; `plugins/sp/skills/spur-dev/references/execution-worktree-landing.md:93` |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

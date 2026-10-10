@@ -4,7 +4,7 @@ name: "Worktree teardown bookkeeping: cited-scope persist-out-check, skipped-ite
 status: done
 template: feature-impl
 created_at: 2026-10-09T18:05:11.361Z
-updated_at: "2026-10-10T01:13:21.284Z"
+updated_at: "2026-10-10T06:52:56.555Z"
 feature_id: E71
 
 priority: P2
@@ -146,49 +146,18 @@ Tradeoff: the prefix is matched on the basename, so a file whose basename carrie
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `plugins/sp/scripts/persist-out-check.ts:65` compares only prefix-owned evidence under both planes; the whole-tree walk and its cap are gone, unowned is counted, and a run with no forwarded prefix exits 2. |
-| R2 | MET | `packages/app/src/services/inline-run-setup.ts:976` records `{id, reason: 'source-missing'}` when the run's source directory is absent; `plugins/sp/scripts/persist-out-check.ts:224` prints every skip and drops the `nothing abandoned` claim when any skip exists. |
-| R3 | MET | `packages/app/src/services/inline-run-setup.ts:1441` detects a linked worktree with no WT-3 marker at close done and writes `landing: required branch=… path=… base=…` into the owning tree's run record at `:1713`; the sweep is documented in the landing reference. |
-| R4 | MET | `persist-out-check.ts` header and `execution-worktree-landing.md` §WT-0 plus `docs/design/run-record-contract.md` §1.1a updated; `bun run build:scripts` and `bun run build:plugin-lib` regenerate clean; placement budget PASS. |
+| R1 | MET | `listObligations` filters by forwarded `<wbs>-`/`<runId>-` prefix and counts `unowned`: `plugins/sp/scripts/persist-out-check.ts:60-84`; no prefix → exit 2 `plugins/sp/scripts/persist-out-check.ts:164-169`; test `plugins/sp/tests/persist-out-check.test.ts:85` |
+| R2 | MET | `carryRunRecordDir` pushes `{id, reason:'source-missing'}` on ENOENT `packages/app/src/services/inline-run-setup.ts:990-994`; skips printed and `nothing abandoned` suppressed `plugins/sp/scripts/persist-out-check.ts:222-228`; tests `packages/app/tests/services/persist-worktree-runs.test.ts:268`, `plugins/sp/tests/persist-out-check.test.ts:115` |
+| R3 | MET | `detectMarkerlessWorktree` (filesystem-only; `.git` file + `commondir` resolve the owning tree) `packages/app/src/services/inline-run-setup.ts:1469-1500`; landing line appended once to the owning tree's run record at close done `packages/app/src/services/inline-run-setup.ts:1776-1797`; test `packages/app/tests/services/inline-run-setup.test.ts:1594` (real `git worktree add`) |
+| R4 | MET | `plugins/sp/scripts/persist-out-check.ts:3` header; sweep + rewrite rule `plugins/sp/skills/spur-dev/references/execution-worktree-landing.md:456-471`; `docs/design/run-record-contract.md:138-150` |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | unit | 367-file fixture with 13 owned files exits 0 reporting `unowned: 354`; a missing forwarded file blocks by name; no prefix exits 2; a `113-` prefix does not match `1130-verdict.json`. |
-| AC2 | MET | unit | An absent run-record directory yields `skipped[{id, reason:'source-missing'}]` and the ok line omits `nothing abandoned`. |
-| AC3 | MET | e2e | A real `git worktree add` run closed done with no marker writes `landing: required branch=sp/markerless path=<linked-wt>` to the owning tree's run record; a main-tree run writes no line. |
-| AC4 | MET | e2e | `bun run spur-check` exit 0 (10742 pass / 0 fail) and both bundle rebuilds regenerate clean. |
+| AC1 — A large worktree evidence tree does not block an owned-evidence check (req: R1) | MET | test | `plugins/sp/tests/persist-out-check.test.ts:85` (367-file fixture, 13 owned, unowned 354, missing blocks by name) and `plugins/sp/tests/persist-out-check.test.ts:158` (exit 2); green this pass |
+| AC2 — An absent run directory is reported as skipped (req: R2) | MET | test | `packages/app/tests/services/persist-worktree-runs.test.ts:268` and `plugins/sp/tests/persist-out-check.test.ts:115`; packages/app 78 pass / 0 fail this pass |
+| AC3 — A markerless worktree run leaves a durable landing record (req: R3) | MET | test | `packages/app/tests/services/inline-run-setup.test.ts:1594` writes `landing: required branch=sp/markerless path=<linked-wt>` in the owning tree; main-tree negative is static: `.git` not a file → `required:false` at `packages/app/src/services/inline-run-setup.ts:1477-1479`; sweep documented `docs/design/run-record-contract.md:150` |
+| AC4 — Docs and bundle reflect the scoped check (req: R4) | MET | command | Suites green this pass; `plugins/sp/skills/spur-dev/references/execution-worktree-landing.md:466` documents the `rg -l '^landing: required'` sweep |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-
-#### Verification
-
-| Check | Command | Result |
-| --- | --- | --- |
-| Full gate | `bun run spur-check` | **exit 0** — 51 pre-check rules, 10742 pass / 0 fail, 2 post-check rules |
-| `persist-out-check` suite | `bun test plugins/sp/tests/persist-out-check.test.ts` | 14 pass / 0 fail |
-| app driver + setup + persist suites | `bun test tests/services/inline-run-setup.test.ts tests/services/persist-worktree-runs.test.ts tests/services/inline-run-driver.test.ts` (in `packages/app`) | 102 pass / 0 fail |
-| Script placement budget | `bun scripts/commands/script-contract-check.ts --placement-only` | PASS (the script was 260 lines, over the 250 budget; compacted to 245) |
-| Generated parity | `bun run build:scripts`, `bun run build:plugin-lib` | both regenerate clean |
-
-#### Acceptance drill (Plan step 7)
-
-**A large evidence tree no longer blocks (AC1).** A fixture with 367 evidence files, 13 carrying the
-forwarded `1058-` prefix and all persisted, exits 0 reporting `13 evidence file(s) persisted,
-unowned: 354`; removing one forwarded file blocks by name; running with no forwarded prefix exits 2.
-A prefix collision (`113-` against `1130-verdict.json`) does not match.
-
-**A real linked worktree records its obligation (AC3).** `git init` + `git worktree add -b sp/markerless`
-in a temp repo, a run closed `done` from the linked tree with no WT-3 marker, and
-`.spur/memory/runs/run_markerless.md` in the **owning** tree contains
-`landing: required branch=sp/markerless path=<linked-wt>`.
-
-#### Notes from implementation
-
-- The first `source-missing` attempt fired on a missing *row* record too, pre-empting 0984 R5's
-  per-row `record-missing:<file>` and breaking three existing tests. Narrowed to the
-  missing-directory case (`rel === ''`), and the fixture corrected to a bookkeeping lifecycle row —
-  a `task-pipeline` row missing its record still fails closed (1043 R1).
-- `detectMarkerlessWorktree` initially failed silently because `dirname` was not imported in
-  `inline-run-setup.ts`; the catch swallowed the `ReferenceError`. Fixed by importing it.
 
 ### Review
 
