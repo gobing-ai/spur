@@ -4,7 +4,7 @@ name: Sanitize raw HTML across Board Markdown previews
 status: done
 template: feature-impl
 created_at: 2026-10-10T07:30:27.598Z
-updated_at: "2026-10-10T18:20:46.886Z"
+updated_at: "2026-10-10T22:31:08.634Z"
 feature_id: F7
 
 ac_altitude: task-local
@@ -93,7 +93,7 @@ Change map (paths repo-relative; one anchor per row):
 | Lockfile refreshed through Bun (the six workspace `0.4.0`→`0.4.1` lines are stale-lock reconciliation Bun performed, not a dependency change) | `bun.lock` |
 | Test-only happy-dom workarounds: restore `Node.prototype.nodeName` for element nodes and a spec-behaving `NodeIterator`, so DOMPurify walks the tree as it does in a browser instead of stopping after its first removal | `apps/web/tests/dompurify-happy-dom.ts:17` |
 | Module unit tests at the mirrored path (`require-corresponding-test`), deliberately DOM-free so they cannot mutate process-global DOM state: shared props append the sanitizer last, leave the caller list unmutated, return remark lists unchanged | `apps/web/tests/lib/markdown-safety.test.ts:10` |
-| Design-pinned AC entry — asserts the isolated real-render privacy probe ran every expected regression and that the probe produced real assertion volume | `apps/web/tests/modules/task-kanban/markdown-safety.test.tsx:54` |
+| Design-pinned AC entry — asserts the isolated real-render privacy probe ran every expected regression and that the probe produced real assertion volume | `apps/web/tests/modules/task-kanban/markdown-safety.test.tsx:56` |
 | AC1 real-renderer regressions (own Bun process): MarkdownBody, PlanMarkdownBody, DesignMarkdownBody, New Task read preview, real editor pane, FeatureDetail editor pane | `apps/web/tests/modules/task-kanban/markdown-safety-pipeline.tsx:126` |
 | AC2 real-renderer regressions: ordinary Markdown, safe/relative links, list/table/checkbox, fenced code with language class, plan+design heading anchors, Mermaid routing with `sanitizeMermaidSvg` | `apps/web/tests/modules/task-kanban/markdown-safety-pipeline.tsx:192` |
 | Plugin-level HAST sanitizer assertions (moved out of the DOM-free mirrored test): drops iframe/script/onerror/javascript:/style, keeps headings, safe links, code and checkbox inputs | `apps/web/tests/modules/task-kanban/markdown-safety-pipeline.tsx:242` |
@@ -159,7 +159,7 @@ Change map (paths repo-relative; one anchor per row):
 |-----|--------|----------|
 | R1 — final parsed tree sanitized with installed DOMPurify before React renders, all read + editor previews, Mermaid sanitizer preserved | MET | Sanitizer seam `apps/web/src/lib/markdown-safety.ts:14` (serialize → `DOMPurify(window).sanitize` with `USE_PROFILES:{html:true}`, `FORBID_TAGS:['style']`, `FORBID_ATTR:['style']`, default URI restrictions → `fromHtml(...,{fragment:true})` replaces `root.children`). Shared props + `pluginsFilter` append at `:30`. Reach audit: 7 call sites, all `MDEditor` renders in `apps/web/src` — `MarkdownBody.tsx:171` (WorkflowsView inherits via `WorkflowsView.tsx:420`), `PlanMarkdownBody.tsx:51`, `DesignMarkdownBody.tsx:51`, `NewTaskPanel.tsx:73`, `NewTaskPanel.tsx:82`, `TaskDetail.tsx:525`, `FeatureDetail.tsx:802`; `grep dangerouslySetInnerHTML apps/web/src` → none. Append-is-last confirmed against installed `@uiw/react-md-editor@4.1.1` dist: `pluginsFilter('rehype', rehypePlugins)` is invoked on the array after `rehypePlugins.push(rehypeRaw)`. Dedicated Mermaid path untouched: `MarkdownBody.tsx:22` → `:73` |
 | R2 — executable elements/attributes and unsafe URLs removed; ordinary Markdown, safe links, fenced code, anchors, sanitized Mermaid preserved | MET | Real-renderer positives `markdown-safety-pipeline.tsx:194` (headings, bold, `https://` + relative links, list, checkbox, table), `:205` (fenced `code.language-ts` keeps its class, literal `<script>` text inert), `:213` (plan/design `h1#overview` / `h2#overview-1`), `:224` (mermaid fence still routes to `MermaidBlock` and the mock's unsafe SVG comes out with no `onload`); plugin-level keeps `:261`. Deliberate narrowed compatibility (dropping unsafe HTML and all `style`) is recorded as a design decision, not a regression |
-| R3 — real pipeline + caller wiring proven by task-local DOM regressions incl. New Task | MET | Isolated real-renderer probe `markdown-safety-pipeline.tsx` (module mocks limited to mermaid generation and FeatureDetail's RPC layer) behind the orchestrator at `markdown-safety.test.tsx:54`, which pins exit code, exact probe names and an assertion floor so a non-rendering probe cannot pass vacuously; caller-wiring props asserted at `task-detail.test.tsx:197` and `new-task-panel.test.tsx:275`. See finding 1 for the one surface proven by composition rather than one end-to-end render |
+| R3 — real pipeline + caller wiring proven by task-local DOM regressions incl. New Task | MET | Isolated real-renderer probe `markdown-safety-pipeline.tsx` (module mocks limited to mermaid generation and FeatureDetail's RPC layer) behind the orchestrator at `markdown-safety.test.tsx:56`, which pins exit code, exact probe names and an assertion floor so a non-rendering probe cannot pass vacuously; caller-wiring props asserted at `task-detail.test.tsx:197` and `new-task-panel.test.tsx:275`. See finding 1 for the one surface proven by composition rather than one end-to-end render |
 
 **Fresh evidence run by this review (2026-10-10, this worktree)**
 
