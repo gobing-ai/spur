@@ -7,11 +7,11 @@
  * `precheck`, F96 R1) and the current working tree, then writes:
  *   `.spur/run/<wbs>-diffstat.json`  `{ files, insertions, deletions, paths[], sensitive }`
  *
- * Counts come from `git diff --numstat <base>` (tracked changes; binary rows count the
- * path but no lines) plus untracked files (`git ls-files --others --exclude-standard`,
- * newline-counted — # ponytail: untracked line counts are a newline scan, numstat-grade
- * binary detection is unnecessary for a lane heuristic; switch to `--numstat --no-index`
- * if a miscount ever flips a lane).
+ * Counts come from `git diff --numstat -z <base>` (tracked changes; binary rows count the path
+ * but no lines; NUL records carry RAW paths, so a non-ASCII or newline-bearing path reaches the
+ * sensitive matchers intact) plus untracked files (`git ls-files --others --exclude-standard -z`,
+ * newline-counted — # ponytail: untracked line counts are a newline scan, numstat-grade binary
+ * detection is unnecessary here; switch to `--numstat --no-index` if a miscount flips a lane).
  *
  * `sensitive` is true when ANY changed path matches the exported SENSITIVE list (0943 R2c);
  * the workflow's pre-decide guard maps sensitive (or >400 changed lines) to the safety lane
@@ -85,7 +85,7 @@ function globToRegex(glob: string): RegExp {
         .replaceAll('*', '[^/]*')
         .replaceAll('\u0000', '(?:.*/)?')
         .replaceAll('\u0001', '.*');
-    return new RegExp(`^${escaped}$`);
+    return new RegExp(`^${escaped}$`, 's');
 }
 
 const SENSITIVE_MATCHERS: Array<{ label: string; test: (path: string) => boolean }> = [
@@ -125,26 +125,10 @@ function countNewlines(path: string, cwd?: string): number {
     return lines;
 }
 
-/**
- * git renders renames in --numstat paths as `old => new` (full) or `head{old => new}tail`
- * (partial). The sensitive matchers anchor on single paths, so both rename halves must be
- * surfaced — otherwise a rename INTO a sensitive path (review 0943 P3#1) classified clean.
- */
-export function expandDiffPath(raw: string): string[] {
-    const arrow = raw.indexOf(' => ');
-    if (arrow === -1) return [raw];
-    const open = raw.indexOf('{');
-    const close = raw.lastIndexOf('}');
-    if (open !== -1 && close > open && open < arrow && arrow < close) {
-        const inner = raw.slice(open + 1, close);
-        const innerArrow = inner.indexOf(' => ');
-        if (innerArrow !== -1) {
-            const head = raw.slice(0, open);
-            const tail = raw.slice(close + 1);
-            return [head + inner.slice(0, innerArrow) + tail, head + inner.slice(innerArrow + 4) + tail];
-        }
-    }
-    return [raw.slice(0, arrow), raw.slice(arrow + 4)];
+function addCounts(add: string, del: string): [number, number] | null {
+    for (const count of [add, del]) if (count !== '-' && !/^\d+$/.test(count)) return null;
+    const [a, d] = [add === '-' ? 0 : Number(add), del === '-' ? 0 : Number(del)];
+    return Number.isSafeInteger(a) && Number.isSafeInteger(d) ? [a, d] : null;
 }
 
 /**
@@ -190,18 +174,34 @@ export function runDiffstat(
     }
     if (!/^[0-9a-f]{7,40}$/i.test(base)) return failSafe('run base .spur/run/<wbs>-base.sha missing or malformed');
 
-    const numstat = git(['diff', '--numstat', base]);
+    const numstat = git(['diff', '--numstat', '-z', base]);
     if (numstat.status !== 0) return failSafe(`git diff --numstat failed (status=${numstat.status})`);
+    if (numstat.stdout.length > 0 && !numstat.stdout.endsWith('\u0000'))
+        return failSafe('git diff --numstat -z output is not NUL-terminated (malformed framing)');
     const paths = new Set<string>();
     let insertions = 0;
     let deletions = 0;
-    for (const line of numstat.stdout.split('\n')) {
-        // Binary rows report `-` for both counts; the path still counts as changed.
-        const row = /^(\d+|-)\t(\d+|-)\t(.+)$/.exec(line);
-        if (!row) continue;
-        for (const p of expandDiffPath(row[3] ?? '')) paths.add(p);
-        if (row[1] !== '-') insertions += Number(row[1]);
-        if (row[2] !== '-') deletions += Number(row[2]);
+    const records = numstat.stdout.split('\u0000').slice(0, -1); // drop the terminating NUL tail
+    for (let i = 0; i < records.length; i++) {
+        const header = records[i] ?? '';
+        const first = header.indexOf('\t'); // first two tabs only
+        const second = header.indexOf('\t', first + 1); // a raw path may itself hold more tabs
+        if (first < 1 || second < first + 2) return failSafe('git diff --numstat -z record is missing counts or path');
+        const counts = addCounts(header.slice(0, first), header.slice(first + 1, second));
+        if (counts === null) return failSafe('git diff --numstat -z record has a malformed count');
+        insertions += counts[0];
+        deletions += counts[1]; // once per count header, never once per rename half
+        const path = header.slice(second + 1);
+        if (path !== '') {
+            paths.add(path);
+            continue;
+        }
+        // An empty path field is Git's rename/copy form: the next two records are old and new.
+        const oldPath = records[++i];
+        const newPath = records[++i];
+        if (!oldPath || !newPath) return failSafe('git diff --numstat -z rename record has incomplete paths');
+        paths.add(oldPath);
+        paths.add(newPath);
     }
     const others = git(['ls-files', '--others', '--exclude-standard', '-z']);
     if (others.status !== 0) return failSafe(`git ls-files failed (status=${others.status})`);

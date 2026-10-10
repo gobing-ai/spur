@@ -6,7 +6,6 @@ import { join } from 'node:path';
 import { getEnvVars } from '@gobing-ai/ts-utils';
 import {
     type Diffstat,
-    expandDiffPath,
     main,
     runDiffstat,
     sensitiveReasonForPath,
@@ -109,12 +108,6 @@ describe('task-diffstat (0943)', () => {
     });
 
     test('rename rows split into both halves, so a rename INTO a sensitive path fails safe (review P3#1)', () => {
-        expect(expandDiffPath('apps/cli/src/index.ts => drizzle/schema.sql')).toEqual([
-            'apps/cli/src/index.ts',
-            'drizzle/schema.sql',
-        ]);
-        expect(expandDiffPath('apps/cli/src{i.ts => /auth.ts}')).toEqual(['apps/cli/srci.ts', 'apps/cli/src/auth.ts']);
-        expect(expandDiffPath('apps/cli/src/index.ts')).toEqual(['apps/cli/src/index.ts']);
         const cwd = makeRepo();
         anchorBase(cwd);
         const mv = spawnSync('git', ['mv', 'apps/cli/src/index.ts', 'secret.env'], { cwd, encoding: 'utf8' });
@@ -123,6 +116,23 @@ describe('task-diffstat (0943)', () => {
         expect(result.sensitive).toBe(true);
         expect(result.paths).toContain('apps/cli/src/index.ts');
         expect(result.paths).toContain('secret.env');
+    });
+
+    test('a pure rename counts its line delta once, not once per half (1160 R2)', () => {
+        const cwd = makeRepo();
+        writeFileSync(join(cwd, 'apps/cli/src/other.ts'), 'export const other = 1;\n');
+        gitIn(cwd, ['add', '.']);
+        gitIn(cwd, ['commit', '-qm', 'add other']);
+        anchorBase(cwd);
+        // The only churn is the modified sibling; the rename pair contributes 0/0 exactly once.
+        writeFileSync(join(cwd, 'apps/cli/src/other.ts'), 'export const other = 1;\nexport const two = 2;\n');
+        gitIn(cwd, ['mv', 'apps/cli/src/index.ts', 'secret.env']);
+        const result = runDiffstat({ wbs: '0943' }, { cwd });
+        expect(result.paths.sort()).toEqual(['apps/cli/src/index.ts', 'apps/cli/src/other.ts', 'secret.env']);
+        expect(result.files).toBe(3);
+        expect(result.insertions).toBe(1);
+        expect(result.deletions).toBe(0);
+        expect(result.sensitive).toBe(true);
     });
 
     test('a large diff reports its size for the >400-changed-lines guard', () => {
@@ -389,6 +399,180 @@ describe('task-diffstat stdout-redirect guard (1067 R3)', () => {
         });
         expect(run.status).toBe(0);
         expect(run.stdout).toBe('');
+        rmSync(cwd, { recursive: true, force: true });
+    });
+});
+
+// ─── 1160: raw NUL numstat framing + raw-path sensitive matching ─────────────
+
+const gitIn = (cwd: string, args: string[]): void => {
+    const run = spawnSync('git', args, { cwd, encoding: 'utf8' });
+    if (run.status !== 0) throw new Error(`git ${args.join(' ')} failed: ${run.stderr}`);
+};
+
+describe('task-diffstat -z numstat parsing (1160)', () => {
+    const NUL = '\u0000';
+
+    test('tracked diff argv carries -z and raw NUL records survive intact', () => {
+        const cwd = makeRepo();
+        anchorBase(cwd);
+        const seen: string[][] = [];
+        const { result } = capturingStderr(() =>
+            runDiffstat({ wbs: '0943' }, { cwd }, (args) => {
+                seen.push(args);
+                if (args[0] === 'diff')
+                    return { status: 0, stdout: `3\t1\tplugins/sp/hooks/保護.ts${NUL}2\t0\tdrizzle/a.sql${NUL}` };
+                return { status: 0, stdout: '' };
+            }),
+        );
+        expect(seen[0]).toEqual(['diff', '--numstat', '-z', expect.any(String)]);
+        expect(result.paths).toEqual(['drizzle/a.sql', 'plugins/sp/hooks/保護.ts']);
+        expect(result.files).toBe(2);
+        expect(result.sensitive).toBe(true);
+        expect(result.insertions).toBe(5);
+        rmSync(cwd, { recursive: true, force: true });
+    });
+
+    test('a rename record contributes both raw paths and its counts exactly once', () => {
+        const cwd = makeRepo();
+        anchorBase(cwd);
+        const { result } = capturingStderr(() =>
+            runDiffstat({ wbs: '0943' }, { cwd }, (args) =>
+                args[0] === 'diff'
+                    ? {
+                          status: 0,
+                          stdout: `0\t0\t${NUL}apps/cli/src/index.ts${NUL}drizzle/renamed.sql${NUL}4\t2\thooks/x.ts${NUL}`,
+                      }
+                    : { status: 0, stdout: '' },
+            ),
+        );
+        expect(result.paths).toEqual(['apps/cli/src/index.ts', 'drizzle/renamed.sql', 'hooks/x.ts']);
+        expect(result.files).toBe(3);
+        // One count header → 4/2 once; the rename pair adds nothing.
+        expect(result.insertions).toBe(4);
+        expect(result.deletions).toBe(2);
+        expect(result.sensitive).toBe(true);
+        rmSync(cwd, { recursive: true, force: true });
+    });
+
+    test('paths containing tabs, newlines and literal arrows stay byte-exact', () => {
+        const cwd = makeRepo();
+        anchorBase(cwd);
+        const { result } = capturingStderr(() =>
+            runDiffstat({ wbs: '0943' }, { cwd }, (args) =>
+                args[0] === 'diff'
+                    ? {
+                          status: 0,
+                          stdout: `1\t0\tdir\twith-tab/x.sql${NUL}1\t0\tdir\nnewline/x.sql${NUL}1\t0\ta => b{c}.ts${NUL}`,
+                      }
+                    : { status: 0, stdout: '' },
+            ),
+        );
+        expect(result.paths).toEqual(['a => b{c}.ts', 'dir\twith-tab/x.sql', 'dir\nnewline/x.sql']);
+        // dotAll in globToRegex (R4): `**/*.sql` must span the newline-bearing directory.
+        expect(sensitiveReasonForPath('dir\nnewline/x.sql')).toBe('matches sensitive pattern **/*.sql');
+        expect(result.sensitive).toBe(true);
+        rmSync(cwd, { recursive: true, force: true });
+    });
+
+    test('binary and untracked rows keep working under -z', () => {
+        const cwd = makeRepo();
+        anchorBase(cwd);
+        const { result } = capturingStderr(() =>
+            runDiffstat({ wbs: '0943' }, { cwd }, (args) =>
+                args[0] === 'diff'
+                    ? { status: 0, stdout: `-\t-\tassets/logo.png${NUL}` }
+                    : { status: 0, stdout: `apps/cli/src/untracked.ts${NUL}` },
+            ),
+        );
+        expect(result.paths).toEqual(['apps/cli/src/untracked.ts', 'assets/logo.png']);
+        expect(result.files).toBe(2);
+        // `-` contributes no lines; the untracked file's newline count comes from disk (absent → 0).
+        expect(result.insertions).toBe(0);
+        expect(result.deletions).toBe(0);
+        expect(result.sensitive).toBe(false);
+        rmSync(cwd, { recursive: true, force: true });
+    });
+
+    test('empty output is an empty diff, not a framing error', () => {
+        const cwd = makeRepo();
+        anchorBase(cwd);
+        const { result, stderr } = capturingStderr(() =>
+            runDiffstat({ wbs: '0943' }, { cwd }, (_args) => ({ status: 0, stdout: '' })),
+        );
+        expect(stderr).toBe('');
+        expect(result).toMatchObject({ files: 0, insertions: 0, deletions: 0, sensitive: false });
+        rmSync(cwd, { recursive: true, force: true });
+    });
+
+    test.each([
+        ['an unterminated record', `1\t0\ta/x.ts`],
+        ['a record missing its path separator', `1\t0${NUL}`],
+        ['a non-numeric count', `x\t0\ta/x.ts${NUL}`],
+        ['a rename with one half', `0\t0\t${NUL}a/x.ts${NUL}`],
+        ['a rename with an empty half', `0\t0\t${NUL}${NUL}a/x.ts${NUL}`],
+    ])('%s fails safe with a named diagnostic', (_label, stdout) => {
+        const cwd = makeRepo();
+        anchorBase(cwd);
+        const { result, stderr } = capturingStderr(() =>
+            runDiffstat({ wbs: '0943' }, { cwd }, (args) =>
+                args[0] === 'diff' ? { status: 0, stdout } : { status: 0, stdout: '' },
+            ),
+        );
+        expect(stderr).toContain('git diff --numstat -z');
+        expect(result.exitCode).toBe(0);
+        expect(result).toMatchObject({ files: 0, sensitive: true });
+        rmSync(cwd, { recursive: true, force: true });
+    });
+
+    test('a C-quoted non-ASCII hook path is sensitive with core.quotepath=true (the a71c reproduction)', () => {
+        const cwd = makeRepo();
+        gitIn(cwd, ['config', 'core.quotepath', 'true']);
+        anchorBase(cwd);
+        mkdirSync(join(cwd, 'plugins/sp/hooks'), { recursive: true });
+        writeFileSync(join(cwd, 'plugins/sp/hooks/保護.ts'), 'export const hook = 1;\n');
+        const result = runDiffstat({ wbs: '0943' }, { cwd });
+        expect(result.paths).toEqual(['plugins/sp/hooks/保護.ts']);
+        expect(result.sensitive).toBe(true);
+        rmSync(cwd, { recursive: true, force: true });
+    });
+
+    test('a rename into and out of a sensitive directory classifies on both raw paths', () => {
+        const cwd = makeRepo();
+        const from = join(cwd, 'apps/cli/src/index.ts');
+        mkdirSync(join(cwd, 'drizzle'), { recursive: true });
+        gitIn(cwd, ['mv', 'apps/cli/src/index.ts', 'drizzle/moved.sql']);
+        spawnSync('git', ['add', '.'], { cwd });
+        spawnSync('git', ['commit', '-qm', 'move into drizzle'], { cwd });
+        anchorBase(cwd);
+        // Rename back OUT of the sensitive directory: the old path must still classify.
+        gitIn(cwd, ['mv', 'drizzle/moved.sql', 'apps/cli/src/index.ts']);
+        writeFileSync(from, 'export const start = 2;\n');
+        const result = runDiffstat({ wbs: '0943' }, { cwd });
+        expect(result.paths).toContain('drizzle/moved.sql');
+        expect(result.paths).toContain('apps/cli/src/index.ts');
+        expect(result.sensitive).toBe(true);
+        rmSync(cwd, { recursive: true, force: true });
+    });
+
+    test('the Node twin parses the same -z fixture identically', () => {
+        const cwd = makeRepo();
+        gitIn(cwd, ['config', 'core.quotepath', 'true']);
+        anchorBase(cwd);
+        mkdirSync(join(cwd, 'plugins/sp/hooks'), { recursive: true });
+        writeFileSync(join(cwd, 'plugins/sp/hooks/保護.ts'), 'export const hook = 1;\n');
+        const twin = spawnSync('node', [join(import.meta.dir, '../scripts/task-diffstat.mjs')], {
+            cwd,
+            encoding: 'utf8',
+            env: { ...getEnvVars(), wbs: '0943' },
+        });
+        expect(twin.status).toBe(0);
+        const source = runDiffstat({ wbs: '0943' }, { cwd });
+        expect(readRow(cwd)).toMatchObject({
+            paths: source.paths,
+            files: source.files,
+            sensitive: source.sensitive,
+        });
         rmSync(cwd, { recursive: true, force: true });
     });
 });
