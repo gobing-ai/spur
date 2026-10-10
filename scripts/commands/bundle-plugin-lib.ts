@@ -690,6 +690,10 @@ const INLINE_RUN_EXPORTS: readonly InlineRunExport[] = [
         'isInlineRunCloseStatus',
         'openInlineRunProjectDb',
         'persistWorktreeRuns',
+        // Task 1134 R1/R3: the driver's fail-fast hop and its pre-dispatch attribution call
+        // their app runners through this facade, so both twins must export them.
+        'recordInlineRunAttribution',
+        'runInlineRunDispatchFailure',
         // Task 1070: the installed-CLI inventory walk moved into the app service (ADR-130 glue
         // budget) — the facade calls it, so both twins must export it.
         'readInstalledInventory',

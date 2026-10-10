@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Executor fail-fast: a host-quota pre-dispatch failure must shift executors, not consume the host session"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-10-09T05:28:30.946Z
-updated_at: "2026-10-09T18:16:56.291Z"
+updated_at: "2026-10-10T00:27:20.332Z"
 feature_id: B6
 
 ac_altitude: task-local
@@ -12,6 +12,8 @@ ac_numbering: task-local
 priority: P1
 estimate_hours: 14
 dependencies: ["1143"]
+done_forced: "true"
+done_reason: "artifact self-inconsistency is structural, not a code defect: the verify shell writes the confidence check row as warn for any level below HIGH, and aggregateVerifyVerdict (packages/app/src/services/verify-verdict.ts:329) treats an untagged warn as major-blocking, so a MEDIUM certification can never reach done. Evidence is PASS: all 9 requirements MET and all 10 ACs MET with executable evidence, verdict artifact .spur/memory/evidence/1134-verdict.json (PASS, MEDIUM), proof digest sha256:3a3827a46dbe18ae31031d31104aa21d62437e7618357340afcbcdf818150b6d, task check --as done clean. Operator approved the override (2026-10-09)."
 ---
 
 ## 1134. Executor fail-fast: a host-quota pre-dispatch failure must shift executors, not consume the host session
@@ -46,37 +48,37 @@ The inline driver's fallback rule then fired — `~/.agents/skills/sp-spur-dev/r
 
 ### Requirements
 
-- [ ] R1. **Contingent fallback in the inline driver.** A pre-dispatch failure classified as *host capacity exhaustion* (quota or credits) must NOT fall back to another host-session attempt. The driver must do one of two things:
+- [x] R1. **Contingent fallback in the inline driver.** A pre-dispatch failure classified as *host capacity exhaustion* (quota or credits) must NOT fall back to another host-session attempt. The driver must do one of two things:
   - (a) hand the stage to the subprocess dispatch path, which resolves an executor independently; or
   - (b) when that path is unavailable, terminate the run at `failed` with `terminalReason: failed-agent`, naming the executor and the observed reset time when the record carries one.
 
   Capability-shaped pre-dispatch failures (permission, missing capability, non-dispatch-eligible prose, below-floor size) keep today's host-inline fallback unchanged.
-- [ ] R2. **Classification is upstream and deterministic.**
+- [x] R2. **Classification is upstream and deterministic.**
   - Upstream: `@gobing-ai/ts-ai-runner`'s `classifyQuotaErrorRecord` classifies the Z.ai allowance envelope (`{"code":"1310","message":...}` at top level, no `error` wrapper) as `{quota:true, reason:'usage_limit_reached'}`. This is an upstream release consumed through the existing catalog entry.
   - Spur side: a single helper `classifyDispatchFailure(text)` in `inline-run-setup.ts` wraps that classifier and writes `.spur/run/<run-id>-dispatch-fallback.json` = `{stage, class: 'capacity'|'capability', reason?, resetAt?, decision}`.
   - No provider-specific matching in Spur. No scanning of prompts or output for quota vocabulary.
-- [ ] R3. **Inline attribution.** An inline host-session dispatch records the executor identity it actually used (`agent`, `model?`) into the run record before the stage runs, so a later classified exhaustion can be attributed. When no named executor can be resolved, the driver records the classified no-op (the design's "observable but cannot write configuration"), never a silent drop.
-- [ ] R4. **Durable memory across runs.** An attributed exhaustion observation must reach the existing durable path, `agent_executor_updates` → `setExecutorAvailability` with `owner: quota` and `since`/`reason`. The NEXT dispatch then skips that rung **without any provider call**. An older or duplicate observation must not overwrite a newer one (the design's `(observedAt, observationId)` order).
-- [ ] R5. **Scheduled observation refresh, with zero provider calls.** `bootstrap.scheduler.jobs` gains a job that:
+- [x] R3. **Inline attribution.** An inline host-session dispatch records the executor identity it actually used (`agent`, `model?`) into the run record before the stage runs, so a later classified exhaustion can be attributed. When no named executor can be resolved, the driver records the classified no-op (the design's "observable but cannot write configuration"), never a silent drop.
+- [x] R4. **Durable memory across runs.** An attributed exhaustion observation must reach the existing durable path, `agent_executor_updates` → `setExecutorAvailability` with `owner: quota` and `since`/`reason`. The NEXT dispatch then skips that rung **without any provider call**. An older or duplicate observation must not overwrite a newer one (the design's `(observedAt, observationId)` order).
+- [x] R5. **Scheduled observation refresh, with zero provider calls.** `bootstrap.scheduler.jobs` gains a job that:
   - (a) drains pending `agent_executor_updates`;
   - (b) reports the age of the `~/.config/spur/agent-usage.json` snapshot;
   - (c) re-checks `owner: quota|probe` disables against their recorded TTL, re-enabling only through the ownership-scoped recovery path.
 
   It must make no provider request and must never auto-re-enable an `operator`-owned disable.
-- [ ] R6. **Make the gap observable.** `spur agent doctor --json` already renders `availability {disabled, owner, since, reason}` and the usage age. It must also report the refresh job's last-run status and a count of inline stages that ran without executor attribution, so the operator can see whether fail-fast is able to fire.
-- [ ] R7. **Explicitly out of scope (do not build).**
+- [x] R6. **Make the gap observable.** `spur agent doctor --json` already renders `availability {disabled, owner, since, reason}` and the usage age. It must also report the refresh job's last-run status and a count of inline stages that ran without executor attribution, so the operator can see whether fail-fast is able to fire.
+- [x] R7. **Explicitly out of scope (do not build).**
   - Per-provider health-check adapters inside Spur.
   - Probing entries that are already disabled (forbidden by `docs/design/executor-availability.md` §2).
   - A health probe per candidate executor at dispatch time.
   - Any serve-side poller or timer that writes configuration without a separate operator-consented ADR-121 amendment.
 
   R5's zero-call observation refresh needs no amendment. Anything that probes or writes config on a timer does.
-- [ ] R8. **Docs and bundle ship in the same change.**
+- [x] R8. **Docs and bundle ship in the same change.**
   - Update the driver reference (`plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md`, dispatch/fallback and trace sections).
   - Add a section to the executor-availability design satellite for inline attribution and the refresh job.
   - Update the run-record contract for the new status artifact.
   - Rebuild with `bun run --filter @gobing-ai/spur build:bundle` and `bun run build:scripts`.
-- [ ] R9. **A null or timed-out dispatch is a recorded failure, not a fallback trigger.** The dispatch bound stays the existing YAML `timeoutMs` (`implementTimeoutMs` / `stepTimeoutMs`), passed to the host dispatch as today. A dispatch that returns no result, or that hits that bound, records the stage as failed with `dispatch: null-result|timeout` and follows the stage's normal failure edge. It never triggers host-inline re-execution. Boundary: R1–R4 cover a pre-dispatch capacity refusal (the executor must shift); R9 covers the dispatched-but-unproductive case.
+- [x] R9. **A null or timed-out dispatch is a recorded failure, not a fallback trigger.** The dispatch bound stays the existing YAML `timeoutMs` (`implementTimeoutMs` / `stepTimeoutMs`), passed to the host dispatch as today. A dispatch that returns no result, or that hits that bound, records the stage as failed with `dispatch: null-result|timeout` and follows the stage's normal failure edge. It never triggers host-inline re-execution. Boundary: R1–R4 cover a pre-dispatch capacity refusal (the executor must shift); R9 covers the dispatched-but-unproductive case.
 
 ### Acceptance Criteria
 
@@ -225,15 +227,92 @@ Scenario: AC10 — A null or timed-out dispatch fails the stage without host-inl
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**Shape of the change.** A branch on the classified signal plus the attribution that lets the existing durable path act on it. No provider adapter, no probe, no new availability model, no second status channel: the classifier is upstream, the durable home is `agent_executor_updates` + config, and the driver reads one decision artifact instead of judging prose.
+
+| Change (`file:line`) | Why |
+| --- | --- |
+| `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:541` | R1/R2 — the contingent fallback: a capacity-shaped pre-dispatch failure escalates to the subprocess dispatch path or stops at `failed-agent` naming executor + reset time; capability-shaped keeps the single host-inline fallback |
+| `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:569` | R3 — attribution before dispatch, including the explicit no-attribution marker |
+| `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:729` | R9 — a null or timed-out dispatch is a recorded stage failure, never a host-inline re-run; the YAML bound is unchanged |
+| `packages/app/src/services/inline-run-setup.ts:1785-1793` | R2 — the single Spur classifier wrapper around the upstream `classifyQuotaErrorRecord`, plus the generic reset-instant extraction that runs only on a confirmed capacity record |
+| `packages/app/src/services/inline-run-setup.ts:1823` | R3 — the append-only attribution ledger and its writer |
+| `packages/app/src/services/inline-run-setup.ts:1838` | R6 — the unattributed-stage count the doctor surfaces |
+| `packages/app/src/services/inline-run-setup.ts:1916` | R1/R4 — the fail-fast runner: decision artifact, then the attributed observation onto the durable path |
+| `packages/app/src/services/agent-quota-refresh.ts:100-105` | R5 — the observation-refresh job: drain, snapshot age, TTL expiry through the ownership-scoped recovery path, zero provider requests |
+| `packages/app/src/services/agent-quota-refresh.ts:34` | R5 — the expiry policy and its documented alignment with the usage-snapshot staleness threshold |
+| `packages/app/src/services/agent-service.ts:853` | R6 — `inlineFailFast {refreshJob, unattributedStages}` in `spur agent doctor --json` |
+| `apps/server/src/serve.ts:143-145` | R5 — the in-process hourly `observation-refresh` scheduler registration and its `scheduler.job.executed` summary |
+| `plugins/sp/scripts/inline-run-dispatch.ts:2-6` | R1/R3 — the plugin facade for the two new driver calls (a separate script because ADR-130 budgets glue per script) |
+| `config/plugin-scripts.json:65-67` | R8 — the facade's registry + `.mjs` twin contract |
+| `scripts/commands/bundle-plugin-lib.ts:695` | R8 — the generated inline-run twin must export both app runners the facade calls |
+| `package.json:32` | R2 — the catalog floor moves to the release that carries the classifier change |
+| `docs/design/executor-availability.md:263` | R8 — the satellite section for inline attribution, the refresh job and the zero-call contract |
+| `docs/design/run-record-contract.md:58` | R8 — the two new run-scoped status artifacts and their classification |
+| `packages/app/tests/services/inline-dispatch-failure.test.ts:1` | AC1–AC5 — classification, attribution and the end-to-end durable disable |
+| `packages/app/tests/services/agent-quota-refresh.test.ts:98-114` | AC6 — TTL expiry, ownership scope, zero provider requests |
+| `apps/server/tests/serve.test.ts:1809` | AC6 — the scheduler entry's registration, drain and summary |
+| `plugins/sp/tests/inline-run-installed.test.ts:332` | R8 — twin-export parity now covers both inline facades |
+
+**Upstream prerequisite (R2).** `/Users/robin/xprojects/ts-libs/packages/ai-runner/src/quota.ts` gained a top-level `{code, message}` envelope form and a verified-provider-code map (`1310` → `usage_limit_reached`), covered by six new precision cases in that repo's `tests/quota.test.ts`; released as `@gobing-ai/ts-ai-runner@0.5.20` and consumed here through the catalog entry.
+
+**Deliberate non-goals.** No per-provider health-check adapter, no probe of a disabled entry, no dispatch-time health probe, and no config-writing timer — the latter still needs its own ADR-121 amendment. The refresh job touches observations only.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: MEDIUM
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:541 defines the contingent branch: capability-shaped keeps the one host-inline fallback, capacity-shaped escalates to the subprocess path or stops at failed-agent naming executor + resetAt; packages/app/src/services/inline-run-setup.ts:1916 implements the decision artifact the branch reads |
+| R2 | MET | @gobing-ai/ts-ai-runner 0.5.20 released and consumed (package.json catalog ^0.5.20, bun.lock, node_modules 0.5.20); upstream `classifyQuotaErrorRecord` accepts the top-level {code,message} envelope and maps provider code 1310 to usage_limit_reached (observed: incident -> {quota:true, reason:'usage_limit_reached'}); packages/app/src/services/inline-run-setup.ts:1792 is the single Spur helper; `rg '1310\|usage_limit_reached'` over Spur source finds no matching logic (only a config enum mirror and a doc comment) |
+| R3 | MET | packages/app/src/services/inline-run-setup.ts:1823 records {stage, executor, agent, model?, observedAt} to .spur/run/<run-id>-attribution.jsonl before the stage runs; executor:null is the explicit no-attribution marker (never omitted); :1838 counts them |
+| R4 | MET | packages/app/src/services/inline-run-setup.ts:1916 builds the observation and enters the existing durable path (recordAgentQuotaEvent -> agent_executor_updates -> drain -> setExecutorAvailability owner quota); end-to-end facade run reported applied:1 and wrote disabled {owner: quota, since, reason} into the project config; (observedAt, observationId) ordering is the pre-existing DAO contract |
+| R5 | MET | apps/server/src/serve.ts:440 registers the in-process hourly `observation-refresh` entry; packages/app/src/services/agent-quota-refresh.ts:105 drains, reports snapshot age and expires quota/probe-owned disables past QUOTA_DISABLE_TTL_MS (:34) through the ownership-scoped recovery path; the job holds no provider seam, so providerRequests is structurally 0 |
+| R6 | MET | packages/app/src/services/agent-service.ts:853 adds inlineFailFast {refreshJob, unattributedStages} to `spur agent doctor --json` beside the unchanged availability rows; live check: refreshJob null (never ran in that project) and unattributedStages 1 |
+| R7 | MET | no per-provider health-check adapter added; no probe of a disabled entry; the refresh job issues zero provider requests; docs/design/executor-availability.md section 8 states that a config-writing or probing timer needs its own ADR-121 amendment |
+| R8 | MET | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:541` (dispatch/fallback + attribution + R9), `docs/design/executor-availability.md:264` (section 8), `docs/design/run-record-contract.md:58` (1134 status artifacts); `bun run --filter @gobing-ai/spur build:bundle` and `bun run build:scripts` both exit 0 (generated twins regenerated) |
+| R9 | MET | plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:729 states a null or timed-out dispatch is a recorded stage failure (dispatch: null-result\|timeout) that follows the stage's normal failure edge and starts no host-inline attempt; the YAML timeoutMs bound is unchanged |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — A host-capacity pre-dispatch failure never becomes host-inline work (req: R1) | MET | command | `bun plugins/sp/scripts/inline-run-dispatch.ts --dispatch-failure --run-id verify-1134 --stage implement --decision escalate --executor zai-glm` -> {"class":"capacity","decision":"escalate","attribution":"recorded","applied":1}; the capacity branch reads that artifact and escalates to the subprocess path, or stops at failed-agent naming executor+resetAt, and never re-runs the stage in the host session: `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:541` |
+| AC2 — Capability-shaped failures keep the host-inline fallback (req: R1) | MET | test | inline-dispatch-failure.test.ts: generic 429, rate_limit_error, overloaded_error, authentication_error, timeout, free text and unverified provider code all classify `capability`, whose branch keeps the existing fallback |
+| AC3 — Classification is the upstream classifier, recorded per attempt (req: R2) | MET | test | inline-dispatch-failure.test.ts asserts the incident record -> {class:'capacity', reason:'usage_limit_reached', resetAt:'2026-10-13T01:47:29.000Z'} via the released classifier, and that the run-scoped artifact carries class/reason/executor/observedAt; the negative set stays negative |
+| AC4 — The inline dispatch records its executor identity or an observable no-op (req: R3) | MET | test | inline-dispatch-failure.test.ts writes one attributed line and one `executor: null` line and counts 1 unattributed; live doctor check reported inlineFailFast.unattributedStages 1 |
+| AC5 — An attributed exhaustion disables the rung for the next dispatch, with no provider call (req: R4) | MET | command | facade run: {"class":"capacity","executor":"zai-glm","recorded":"recorded","applied":1} then the project config carried `disabled: {owner: quota, since, reason}`; selection excludes disabled entries at the pre-existing cheapestEligibleExecutors funnel (no provider contacted) |
+| AC6 — The scheduled refresh performs no provider request and respects ownership (req: R5) | MET | test | agent-quota-refresh.test.ts: a TTL-ed quota disable is expired, a fresh quota disable and an operator-owned disable are untouched, snapshot age reported, providerRequests 0, scheduler.job.executed summary asserted in apps/server/tests/serve.test.ts |
+| AC7 — The operator can see whether fail-fast can fire (req: R6) | MET | command | live `spur agent doctor --json`: inlineFailFast {"refreshJob":null,"unattributedStages":1} alongside availability {disabled, owner:'quota', since, reason} for the disabled rung |
+| AC8 — Owning docs and bundle reflect the new behavior (req: R8) | MET | command | `bun run spur-check` exit 0 (10669 pass / 0 fail; lint+typecheck clean; coverage thresholds met; pre-check + post-check rules pass — rule layer scoped to the project per the operator decision on the concurrently-installed ADR-131 rule); both rebuilds exit 0; owning docs verified at `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:541`, `docs/design/executor-availability.md:264`, `docs/design/run-record-contract.md:58`, `package.json:32` |
+| AC9 — The rejected refresh/probe shapes are absent from the change (req: R7) | MET | test | `packages/app/tests/services/agent-quota-refresh.test.ts` asserts providerRequests 0 (the job holds no provider seam at all) and that an operator-owned disable is never auto-re-enabled; `rg -c 'probeExecutor\|healthProbe\|providerHealth' packages/app/src/services/agent-quota-refresh.ts plugins/sp/scripts/inline-run-dispatch.ts` -> no matches; the ADR-121 boundary is stated at `docs/design/executor-availability.md:308` |
+| AC10 — A null or timed-out dispatch fails the stage without host-inline re-execution (req: R9) | MET | command | `rg -n 'Null or timed-out dispatch \(task 1134 R9\)' plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md` -> `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:729`, which records the stage failed with `dispatch: null-result\|timeout`, follows the stage's normal failure edge, and starts no host-inline attempt; the YAML `timeoutMs` bound is unchanged |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**Disposition:** PASS — no P1 blocker; the P2 items are follow-ups, not correctness defects in the delivered behavior (details in the reviewer answer retained at `.spur/memory/evidence/`).
+
+**Dimensions reviewed.** Functional traceability across R1–R9 / AC1–AC10; SECUA; architectural depth. Scope: 23 files, +1584/−49.
+
+**What was verified by execution, not inspection.** The incident record classifies `capacity` with `reason=usage_limit_reached` and `resetAt=2026-10-13T01:47:29Z` through the released upstream classifier; generic 429 / rate-limit / overload / auth / prompt-echo stay `capability`; an attributed capacity failure reaches `agent_executor_updates` and disables the rung with `owner: quota` (`applied: 1`); the refresh job expires a TTL'd quota disable and never an operator-owned one; `doctor --json` reports `inlineFailFast` beside the unchanged `availability` rows.
+
+| # | P | Finding | Disposition |
+| --- | --- | --- | --- |
+| 1 | P2 | The installed plugin surfaces are not refreshed here: the driver reads the installed `inline-pipeline-driver.md`, so the new contingent fallback takes effect only after `superskill install sp` / a release. Source and `apps/cli/plugins` staging are correct. | Follow-up at release; installed-layout E2E unverified (residual, also stated in Testing). |
+| 2 | P2 | `@gobing-ai/ts-llm-jsonl-importer` floats to 0.5.20, raising `HISTORY_IMPORT_SCHEMA_VERSION` 0.5.19 → 0.5.20 with an unchanged schema SQL hash, so existing history DBs will report importer-schema drift. | Named as user-visible blast radius; no structural change. |
+| 3 | P2 | R6's `unattributedStages` is project-scoped (all `*.jsonl` attribution ledgers under `.spur/run`), not run-scoped. | Honest reading of the AC; documented in the satellite. |
+| 4 | P3 | `QUOTA_DISABLE_TTL_MS` (6 h) is a fixed policy constant, not configurable. | Documented limitation; configurable TTL is a follow-up. |
+| 5 | P3 | One `<run-id>-dispatch-fallback.json` per run, so a second failed stage overwrites the first decision artifact (each decision is still run-logged). | Accepted; per-stage artifact is a follow-up. |
+| 6 | P3 | Envelope-shaped capacity detection classifies a full provider envelope wherever it appears in the bounded evidence window (the `error.message` echo case is negative and tested). | Inherent to evidence-based classification; bounded by `MAX_QUOTA_EVIDENCE_BYTES`. |
+| 7 | P3 | `bun run spur-check` flaked twice on two different pre-existing near-timeout tests while a concurrent session's suite competed for CPU; both pass in isolation (286 ms / 4.99 s). | Environmental, not this diff; recorded so a later run does not misattribute it. |
+| 8 | P4 | `resolveAppEntry` is duplicated across the two plugin facades. | Deliberate: superskill inlines lib modules, so `import.meta.url` paths must be authored from the script directory. |
+| 9 | P4 | The attribution ledger is append-only and never compacted. | Bounded by stage count. |
+
+**Verify trap to watch.** The verify stage must judge R1–R4 (pre-dispatch capacity refusal) separately from R9 (dispatched-but-unproductive); they are different triggers and R9 adds no new bound.
+
+**Residual risk.** An installed-layout end-to-end run (install the staged bundle, then feed the incident record through the installed facade) was not performed in this run; source-path verification is complete.
 
 ### References
 
@@ -248,4 +327,7 @@ Scenario: AC10 — A null or timed-out dispatch fails the stage without host-inl
 ### History
 
 - 2026-10-09T05:30:21.971Z backlog → todo (system)
+- 2026-10-10T00:20:23.561Z todo → wip (system)
+- 2026-10-10T00:24:27.682Z wip → testing (system)
+- 2026-10-10T00:27:20.323Z testing → done (system)
 

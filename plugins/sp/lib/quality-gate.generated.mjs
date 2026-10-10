@@ -19,7 +19,7 @@ import {
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-// node_modules/.bun/@gobing-ai+ts-utils@0.5.18/node_modules/@gobing-ai/ts-utils/dist/env.js
+// node_modules/.bun/@gobing-ai+ts-utils@0.5.20/node_modules/@gobing-ai/ts-utils/dist/env.js
 function getEnvVar(name, fallback) {
   const raw = process.env[name];
   return raw === undefined ? fallback : raw;
