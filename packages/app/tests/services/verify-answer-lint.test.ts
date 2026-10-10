@@ -600,6 +600,7 @@ describe('evidence-hedged: uncertainty phrases in MET evidence are rejected', ()
         ['apparently', 'the bundle is apparently stale'],
         ['seems to', 'the guard seems to block the stale path'],
         ['appears to', 'the receipt appears to be written'],
+        ['it could', 'it could regress under load'],
     ])('%s in MET evidence is rejected, row-addressed', (phrase, evidence) => {
         const findings = lintVerifyAnswer(
             answer([`| R1 | MET | ${evidence} |`, '| R2 | MET | `src/log.ts:7` |'], CLEAN_ACS),
@@ -665,6 +666,38 @@ describe('evidence-hedged: uncertainty phrases in MET evidence are rejected', ()
             null,
         );
         expect(findings.some((f) => f.message.includes('PARTIAL'))).toBe(true);
+    });
+
+    // The bare modal stays excluded by design (remediation prose is full of it), so the
+    // phrase-level exception above cannot widen into "any sentence with 'could'".
+    test('a bare modal with no subject construction is NOT a hedge', () => {
+        for (const evidence of ['could regress under load', 'the guard could fail on the stale path']) {
+            const findings = lintVerifyAnswer(
+                answer([`| R1 | MET | ${evidence} |`, '| R2 | MET | `src/log.ts:7` |'], CLEAN_ACS),
+                TASK,
+                null,
+            );
+            expect(findings.filter((f) => f.rule === 'evidence-hedged')).toEqual([]);
+        }
+    });
+
+    test('the phrase survives case and citation-span stripping rules', () => {
+        const flagged = lintVerifyAnswer(
+            answer(['| R1 | MET | It Could regress under load |', '| R2 | MET | `src/log.ts:7` |'], CLEAN_ACS),
+            TASK,
+            null,
+        );
+        expect(flagged.some((f) => f.rule === 'evidence-hedged' && f.message.includes('it could'))).toBe(true);
+        // Inside a citation span it is a filename/quote, not an assertion.
+        const cited = lintVerifyAnswer(
+            answer(
+                ['| R1 | MET | rerun per `src/it-could.test.ts:9` passes |', '| R2 | MET | `src/log.ts:7` |'],
+                CLEAN_ACS,
+            ),
+            TASK,
+            null,
+        );
+        expect(cited.filter((f) => f.rule === 'evidence-hedged')).toEqual([]);
     });
 });
 
@@ -945,5 +978,29 @@ describe('lintVerifyAnswer confidence coherence (task 1133)', () => {
         );
         expect(findings.length).toBe(1);
         expect(findings[0]?.rule).toBe('confidence-value');
+    });
+
+    // The level and the uncertainty phrases are two halves of one assertion: the phrases decide
+    // whether the rows are actually proven, the level decides how strongly the verifier stands
+    // behind them. Cross them so neither half can drift — a hedge must always be visible as
+    // `evidence-hedged`, and it may only move the LEVEL verdict when the level was HIGH.
+    test('level × uncertainty-phrase matrix: a hedge lowers what HIGH may claim, never LOW/MEDIUM', () => {
+        const hedgedReqs = ['| R1 | MET | it could regress under load |', '| R2 | MET | `src/b.ts:2` |'];
+        const matrix: ReadonlyArray<readonly [string, string[], string, string, boolean]> = [
+            // level, reqs, verdict, expected coherence rule, expected
+            ['HIGH', ALL_MET_REQS, 'Verdict: PASS', 'none', false],
+            ['HIGH', hedgedReqs, 'Verdict: PASS', 'confidence-unwarranted', true],
+            ['MEDIUM', ALL_MET_REQS, 'Verdict: PASS', 'none', false],
+            ['MEDIUM', hedgedReqs, 'Verdict: PASS', 'none', false],
+            ['LOW', ALL_MET_REQS, 'Verdict: PASS', 'confidence-understated', true],
+            ['LOW', hedgedReqs, 'Verdict: PASS', 'none', false],
+        ];
+        for (const [level, reqs, verdict, rule, expected] of matrix) {
+            const score = answer(reqs, ALL_MET_ACS, verdict, `Confidence: ${level}`);
+            const rules = rulesOf(score);
+            const label = `${level}/${rule}`;
+            expect(rules.includes('evidence-hedged'), `evidence-hedged ${label}`).toBe(reqs === hedgedReqs);
+            expect(rules.includes(rule), `${label}`).toBe(expected);
+        }
     });
 });

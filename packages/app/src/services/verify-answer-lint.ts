@@ -269,10 +269,14 @@ function hasCitationForm(evidence: string): boolean {
 /**
  * Uncertainty phrases (closed set, word-anchored). A MET row asserts the
  * requirement is satisfied; hedged evidence contradicts the assertion the row
- * is making, the same way an uncited claim does. Deliberately excludes modal
- * verbs (might/may/could/should) — they appear constantly in remediation prose
- * and would drown the signal. Scanning skips citation spans so a filename or
- * test name containing a hedge word ("likely-match.test.ts") cannot fire.
+ * is making, the same way an uncited claim does. Deliberately excludes BARE
+ * modal verbs (might/may/could/should) — they appear constantly in remediation
+ * prose and would drown the signal. `it could` is the exception the operator
+ * named: a two-token construction that attributes a hypothetical to the subject
+ * rather than a bare modal, so it stays low-noise while still catching the
+ * "it could regress" shape of a hedge. Scanning skips citation spans so a
+ * filename or test name containing a hedge word ("likely-match.test.ts") cannot
+ * fire.
  */
 const HEDGED_PATTERNS: readonly RegExp[] = [
     /\b(?:un)?likely\b/i,
@@ -281,6 +285,7 @@ const HEDGED_PATTERNS: readonly RegExp[] = [
     /\bapparently\b/i,
     /\bseem(?:s|ing(?:ly)?)? to\b/i,
     /\bappears to\b/i,
+    /\bit could\b/i,
 ];
 
 /** Strip citation spans (backticked spans + bare path.ext:line) before hedge scanning. */
