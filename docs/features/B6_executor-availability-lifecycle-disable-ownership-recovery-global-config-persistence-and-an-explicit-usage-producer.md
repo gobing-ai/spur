@@ -2,11 +2,11 @@
 schema_version: 1
 id: "B6"
 name: "Executor availability lifecycle: disable ownership, recovery, global-config persistence, and an explicit usage producer"
-status: active
+status: verifying
 priority: P2
 tags: []
 created_at: "2026-09-17T23:02:01.980Z"
-updated_at: "2026-10-09T18:02:27.786Z"
+updated_at: "2026-10-10T00:28:09.531Z"
 ---
 
 # B6: Executor availability lifecycle: disable ownership, recovery, global-config persistence, and an explicit usage producer
@@ -118,6 +118,7 @@ Feature: Executor availability lifecycle
 | 0891 | Global-layer availability updater and quota recovery consumer: setExecutorAvailability targets the declaring config layer and agent.quota.recovered re-enables quota-owned executors | done |
 | 0892 | Add spur agent usage: run-once codexbar usage producer with snapshot file, provider-to-executor mapping, dry run, fail-closed exit, and the ADR-051 consent row | done |
 | 0893 | Doctor availability provenance: render owner, since, reason and usage-snapshot age, and mark stale snapshots | done |
+| 1134 | Executor fail-fast: a host-quota pre-dispatch failure must shift executors, not consume the host session | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -128,4 +129,5 @@ Feature: Executor availability lifecycle
 - 2026-09-18T06:22:50.114Z active → verifying (system)
 - 2026-09-18T06:33:17.238Z verifying → done (system)
 - 2026-10-09T18:02:27.786Z done → active (system)
+- 2026-10-10T00:28:09.531Z active → verifying (system)
 

@@ -5595,3 +5595,13 @@ Gotchas
 - Digest redaction is the substring rule pass on string leaves. A short secret sitting under a key such as `api_key` is not rewritten before hashing. `args_raw` still has its own `redactRecord` seam.
 - Re-import changes historical digests. Loop rows and any consumer that stored an old `args_digest` will not match until they are recomputed from the new rows.
 - A bare uuid that happens to be a prefix of several stems can suggest the wrong stem. Pass the full file stem when the session is known.
+
+## 2026-10-09 — Task 1134
+
+- **Convention discovered:** `spur rule run` layers the *global* rules dir (`~/.config/spur/rules`) over the project's `.spur/rules`, so a rule installed by a concurrent session changes another tree's pre-check outcome mid-run. Confirm a surprising gate failure with `ruleCount` before attributing it to the diff, and check `~/.config/spur/rules` mtimes.
+- **Error hit and resolved:** `SPUR_SKIP_GLOBAL_CONFIG=1` does NOT exclude the global rules layer, and `SPUR_GLOBAL_RULES_DIR=<empty>` silently disables the *bundled* preset layer as well (`includeBundled && !hasGlobalOverride`), breaking `rule run` in temp-cwd tests. A project-scoped rule gate therefore has to scope the rule steps only, not the whole `spur-check` chain.
+- **Pattern that worked:** the ADR-130 plugin glue budget (250 lines/script) is enforced per file — a new driver call belongs in a NEW plugin script (`inline-run-dispatch.ts`) rather than in an already-full facade, and the manifest + `build:scripts` conversion list must both be updated or the installed twin is missing.
+- **Pattern that worked:** the verify answer's requirement table must not be followed by AC rows whose cells contain the word `status`/`verdict` — the requirement parser re-opens on an id-like row (`(req: R…)` matches `includes('req')`) and swallows AC rows whose 4th cell normalizes as a status (`\bMET\b` inside prose). Phrase AC evidence to avoid those words.
+- **Gotcha:** the pipeline's `confidence` check row is written as `warn` for anything below HIGH, and `aggregateVerifyVerdict` major-blocks an untagged `warn`, so a MEDIUM certification makes the stored artifact self-inconsistent and `done` needs `--force-done` (operator-approved).
+- **Gotcha:** `superskill script convert` inlines `plugins/sp/lib/*` modules into the script bundle, so `import.meta.url`-relative paths inside a lib module would resolve from the *script* directory — keep entry resolvers local to each facade.
+- **Gotcha:** a fresh worktree needs `bun install --frozen-lockfile --ignore-scripts`; a later plain `bun install` re-runs `prepare` (`lefthook install`) against the shared `.git`, and a stale `bun` registry cache needs `bun pm cache rm` before a just-published `0.5.20` resolves.
