@@ -4,15 +4,15 @@ name: Wrapup write-scope guard and nested feature-transition verification
 status: done
 template: feature-impl
 created_at: 2026-10-09T18:05:11.090Z
-updated_at: "2026-10-10T06:54:49.425Z"
+updated_at: "2026-10-10T07:24:39.440Z"
 feature_id: H1
 
 priority: P2
 ac_numbering: task-local
 ac_altitude: task-local
 estimate_hours: 6
-done_forced: "true"
-done_reason: "Verdict artifact .spur/memory/evidence/1147-verdict.json: aggregate PASS, R1-R5 MET, AC1-AC5 MET, Confidence MEDIUM (verifier disclosed two caveats: AC4 equivalence observed at the child-env mechanism with a stub child, and no recorded fail-without-fix transcript for the new R1/R2 tests). The deny is a checker-policy conflict, not a content gap: task-pipeline.yaml's confidence row writes status=warn for any non-HIGH level and done-transition-guard maps warn->PARTIAL, so no MEDIUM verdict can clear this gate although both pipeline completion guards accept anything above LOW. Acknowledged under the --auto batch; inconsistency filed as task 1154."
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1147-verdict.json
 ---
 
 ## 1147. Wrapup write-scope guard and nested feature-transition verification
@@ -176,23 +176,23 @@ small-stderr case, and this change adds the byte-bound + redaction cases.
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
-- Confidence: MEDIUM
+- Confidence: HIGH
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Snapshot shell `config/workflows/wrapup-pipeline.yaml:255-262` runs before the agent.run at `config/workflows/wrapup-pipeline.yaml:265`; scope check `config/workflows/wrapup-pipeline.yaml:297-306`; `runDocSyncScope` `plugins/sp/scripts/wrapup-steps.ts:806-833` with `isDocSyncAllowedPath` `plugins/sp/scripts/wrapup-steps.ts:709-713` and `docSyncScopeViolations` `plugins/sp/scripts/wrapup-steps.ts:720-731`; test `plugins/sp/tests/wrapup-steps.test.ts:1125` green this run |
-| R2 | MET | `runDocSupersessionCheck` `plugins/sp/scripts/wrapup-steps.ts:847` re-runs `SUPERSESSION_PIN` `plugins/sp/scripts/wrapup-steps.ts:685`; wired at `config/workflows/wrapup-pipeline.yaml:311-320`; test `plugins/sp/tests/wrapup-steps.test.ts:1188` green |
-| R3 | MET | `ENTER_STDERR_TAIL_BYTES = 2048` `packages/app/src/workflow/lifecycle-adapter.ts:37`; redact-then-tail `packages/app/src/workflow/lifecycle-adapter.ts:349-360`; test `packages/app/tests/workflow/feature-lifecycle-adapter.test.ts:543` green |
-| R4 | MET | Nested caller clears the marker: `config/workflows/feature-lifecycle.yaml:60` (`env -u SPUR_WORKFLOW_RUN_ACTIVE`), rationale `config/workflows/feature-lifecycle.yaml:53-59`; test `plugins/sp/tests/feature-verification-scope.test.ts:143` green |
-| R5 | MET | Edge order pinned `config/workflows/wrapup-pipeline.yaml:583-630` by `packages/app/tests/workflow/wrapup-pipeline.test.ts:655-678`; prompt scope text `config/workflows/wrapup-pipeline.yaml:273-275` |
+| R1 | MET | Snapshot shell `config/workflows/wrapup-pipeline.yaml:258-266` runs before the agent.run at `config/workflows/wrapup-pipeline.yaml:269`; scope check `config/workflows/wrapup-pipeline.yaml:291-304`; `runDocSyncScope` `plugins/sp/scripts/wrapup-steps.ts:806` with `isDocSyncAllowedPath` `plugins/sp/scripts/wrapup-steps.ts:709` and `docSyncScopeViolations` `plugins/sp/scripts/wrapup-steps.ts:720-729`; test `plugins/sp/tests/wrapup-steps.test.ts:1125` green this run and fails with the scope filter removed |
+| R2 | MET | `runDocSupersessionCheck` `plugins/sp/scripts/wrapup-steps.ts:847-869` re-runs `SUPERSESSION_PIN` `plugins/sp/scripts/wrapup-steps.ts:685`; wired at `config/workflows/wrapup-pipeline.yaml:305-318`; test `plugins/sp/tests/wrapup-steps.test.ts:1188` green and fails when the pin result is forced to PASS |
+| R3 | MET | `ENTER_STDERR_TAIL_BYTES = 2048` `packages/app/src/workflow/lifecycle-adapter.ts:37`; redact-then-tail `packages/app/src/workflow/lifecycle-adapter.ts:351-360`; test `packages/app/tests/workflow/feature-lifecycle-adapter.test.ts:543` green and fails when the tail is dropped from the message |
+| R4 | MET | Nested caller clears the marker: `config/workflows/feature-lifecycle.yaml:60` (`env -u SPUR_WORKFLOW_RUN_ACTIVE`), rationale `config/workflows/feature-lifecycle.yaml:53-59`; test `plugins/sp/tests/feature-verification-scope.test.ts:143` green and fails when `env -u` is removed |
+| R5 | MET | Edge order (scope → supersession → repair → learnings-validate → executor-failure) `config/workflows/wrapup-pipeline.yaml:586-646` pinned by `packages/app/tests/workflow/wrapup-pipeline.test.ts:657-682`; prompt scope text `config/workflows/wrapup-pipeline.yaml:276-278`; bundled copy `apps/cli/config/workflows/wrapup-pipeline.yaml` byte-identical this run |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — A doc-sync edit outside docs fails the step naming the path (req: R1) | MET | test | `plugins/sp/tests/wrapup-steps.test.ts:1125` over a real temp git repo; plugins/sp run this pass green for wrapup-steps |
-| AC2 — A resurrected delinked row fails at doc-sync, not at doc-tripwire (req: R2) | MET | test | `plugins/sp/tests/wrapup-steps.test.ts:1188` drives the real pin; green this pass |
-| AC3 — A lifecycle onEnter failure shows the nested stderr (req: R3) | MET | test | `packages/app/tests/workflow/feature-lifecycle-adapter.test.ts:543`; packages/app 196 pass / 0 fail this pass |
-| AC4 — Nested and standalone feature verification agree (req: R4) | MET | test | `plugins/sp/tests/feature-verification-scope.test.ts:143` (mechanism-level: stub child, no real nested feature-verification transcript) |
-| AC5 — Workflow comments and bundle reflect the scope check (req: R5) | MET | test | `packages/app/tests/workflow/wrapup-pipeline.test.ts:655-678` pins the shipped edge order; certified gate receipt `.spur/run/1147-test-gate.log` from the run |
+| AC1 — A doc-sync edit outside docs fails the step naming the path (req: R1) | MET | test | `plugins/sp/tests/wrapup-steps.test.ts:1125` over a real temp git repo; green this run, fails without the `isDocSyncAllowedPath` filter (mutation run this pass) |
+| AC2 — A resurrected delinked row fails at doc-sync, not at doc-tripwire (req: R2) | MET | test | `plugins/sp/tests/wrapup-steps.test.ts:1188` drives the real pin; green this run, fails when the pin outcome is forced PASS |
+| AC3 — A lifecycle onEnter failure shows the nested stderr (req: R3) | MET | test | `packages/app/tests/workflow/feature-lifecycle-adapter.test.ts:543`; green this run, fails when the stderr tail is dropped |
+| AC4 — Nested and standalone feature verification agree (req: R4) | MET | test | `plugins/sp/tests/feature-verification-scope.test.ts:143`; green this run, fails when `env -u SPUR_WORKFLOW_RUN_ACTIVE` is removed from `config/workflows/feature-lifecycle.yaml:60` |
+| AC5 — Workflow comments and bundle reflect the scope check (req: R5) | MET | test | `packages/app/tests/workflow/wrapup-pipeline.test.ts:657` pins the shipped edge order; reordering repair ahead of the checks fails it (mutation this pass); comments `config/workflows/wrapup-pipeline.yaml:586-594`; bundle byte-identical |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -249,4 +249,7 @@ Independently re-verified (this review, fresh): 111 tests pass / 0 fail across t
 - 2026-10-10T05:10:57.285Z todo → wip (system)
 - 2026-10-10T05:39:15.999Z wip → testing (system)
 - 2026-10-10T05:40:22.160Z testing → done (system)
+- 2026-10-10T07:24:37.954Z done → wip (system)
+- 2026-10-10T07:24:38.635Z wip → testing (system)
+- 2026-10-10T07:24:39.327Z testing → done (system)
 

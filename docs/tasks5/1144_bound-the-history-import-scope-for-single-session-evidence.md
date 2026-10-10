@@ -4,7 +4,7 @@ name: Bound the history import scope for single-session evidence
 status: done
 template: standard
 created_at: 2026-10-09T16:51:45.834Z
-updated_at: "2026-10-10T06:54:48.749Z"
+updated_at: "2026-10-10T07:25:38.526Z"
 feature_id: E2
 
 ac_numbering: task-local
@@ -211,8 +211,8 @@ Measured (source-local CLI, `bun apps/cli/src/index.ts`, `--no-logo`; 2026-10-09
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `estimateImportScope` `packages/app/src/services/history-service.ts:578`; `formatImportScopeLine` `packages/app/src/services/history-service.ts:613-622`; pre-start emit `packages/app/src/services/history-service.ts:696-714`; scope on coverage entry `packages/app/src/services/history-service.ts:1359`; CLI stderr `apps/cli/src/commands/history.ts:298-301` |
-| R2 | MET | Shared `sourceTimeoutRemedy` `packages/app/src/services/history-service.ts:629-634` and `sourceTimeoutDetail` `packages/app/src/services/history-service.ts:640-646`, used at `packages/app/src/services/history-service.ts:1268`; real run this pass printed the remedy (`--file <path>`, `--root <dir>`, `--source-timeout none`) |
+| R1 | MET | `estimateImportScope` `packages/app/src/services/history-service.ts:571`; `formatImportScopeLine` `packages/app/src/services/history-service.ts:606-615`; pre-start emit `packages/app/src/services/history-service.ts:689-707`; scope on coverage entry `packages/app/src/services/history-service.ts:1352`; CLI stderr `apps/cli/src/commands/history.ts:298-301` |
+| R2 | MET | Shared `sourceTimeoutRemedy` `packages/app/src/services/history-service.ts:622-627` and `sourceTimeoutDetail` `packages/app/src/services/history-service.ts:633-639`, used at `packages/app/src/services/history-service.ts:1261`; real run this pass printed the remedy (`--file <path>`, `--root <dir>`, `--source-timeout none`) |
 | R3 | MET | Help sentence `apps/cli/src/commands/history.ts:146-151`; satellite `docs/design/history-cli-contracts.md:67-80`; test `apps/cli/tests/commands/history.test.ts:1436` |
 | R4 | MET | Diff additive; existing history suites green unmodified except the extended abort assertion `packages/app/tests/services/history-service.test.ts:1599` |
 | R5 | MET | Tests `apps/cli/tests/commands/history.test.ts:1355` block and `packages/app/tests/services/history-service.test.ts:1669` block; real-data comparison recorded in Solution and re-observed this pass (pi scope ≈ 4693 files, 2571.9 MB; abort at 2017ms naming the remedy) |

@@ -4,7 +4,7 @@ name: Worktree batch transitions cannot land their task-lifecycle row when the i
 status: done
 template: issue
 created_at: 2026-10-09T23:39:39.295Z
-updated_at: "2026-10-10T06:52:55.093Z"
+updated_at: "2026-10-10T07:25:35.550Z"
 feature_id: E71
 
 ac_altitude: task-local
@@ -198,7 +198,7 @@ Tradeoff: Terminal duplicate lifecycle rows are skipped as `external-key-conflic
 |-------------|--------|----------|
 | R1 | MET | `isLifecycleTerminal` (LIFECYCLE_WORKFLOWS && TERMINAL_STATUSES) and `isBookkeeping` in `packages/domain/src/dao/run-transfer.ts:133-161`; test `packages/domain/tests/dao/run-transfer.test.ts:145` |
 | R2 | MET | persist-out exits 0 with `external-key-conflict-bookkeeping` skip: `packages/app/tests/services/inline-run-driver.test.ts:606` green this pass |
-| R3 | MET | `reconcileExistingLifecycleRow` (import `packages/app/src/services/inline-run-setup.ts:84`) invoked for done/cancelled task files at `packages/app/src/services/inline-run-setup.ts:2136-2160`; receiving row reconciled to done in `packages/app/tests/services/inline-run-driver.test.ts:606` |
+| R3 | MET | `reconcileExistingLifecycleRow` (import `packages/app/src/services/inline-run-setup.ts:84`) invoked for done/cancelled task files at `packages/app/src/services/inline-run-setup.ts:2136-2176`; receiving row reconciled to done in `packages/app/tests/services/inline-run-driver.test.ts:606` |
 | R4 | MET | `packages/domain/tests/dao/run-transfer.test.ts:115` (non-terminal fail-closed), `packages/domain/tests/dao/run-transfer.test.ts:145`, `packages/domain/tests/dao/run-transfer.test.ts:180` (terminal×terminal), `packages/domain/tests/dao/run-transfer.test.ts:203` (non-lifecycle); 8 pass / 0 fail this pass |
 | R5 | MET | `plugins/sp/skills/spur-dev/references/cross-cutting.md:314`, `plugins/sp/skills/spur-dev/references/execution-worktree-landing.md:93`, `plugins/sp/skills/spur-dev/references/execution-batch-report.md:128` |
 

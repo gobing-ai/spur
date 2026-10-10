@@ -4,7 +4,7 @@ name: "Worktree teardown bookkeeping: cited-scope persist-out-check, skipped-ite
 status: done
 template: feature-impl
 created_at: 2026-10-09T18:05:11.361Z
-updated_at: "2026-10-10T06:52:56.555Z"
+updated_at: "2026-10-10T07:25:33.885Z"
 feature_id: E71
 
 priority: P2
@@ -128,11 +128,11 @@ Scenario: AC4 — Docs and bundle reflect the scoped check (req: R4)
 | Change | Location | Why |
 | --- | --- | --- |
 | Evidence assertion scoped to forwarded prefixes | `plugins/sp/scripts/persist-out-check.ts:65` | The whole-tree walk was a proxy for ownership and failed at volume (367 files vs a 256 cap); ownership is decidable by basename prefix |
-| Unowned evidence counted, not blocking | `plugins/sp/scripts/persist-out-check.ts:29` | Keeps the information without refusing removal; a run with 354 unowned files checks 13 owned ones and exits 0 |
-| `source-missing` skip for an absent run directory | `packages/app/src/services/inline-run-setup.ts:976` | "Nothing to carry" and "carried nothing" looked identical; the skip makes the absence data (R2) |
-| Skips printed and `nothing abandoned` suppressed when any skip exists | `plugins/sp/scripts/persist-out-check.ts:224` | R2 requires the ok line to be honest about skipped items |
-| Markerless worktree run records its landing obligation | `packages/app/src/services/inline-run-setup.ts:1441` | A hand-made worktree has no WT-3 marker, so a `done` branch could sit unlanded for hours (1133: 9 h 20 m) with nothing on disk naming it |
-| Detection is filesystem-only; landing line writes to the owning tree | `packages/app/src/services/inline-run-setup.ts:1713` | `.git` is a file whose `gitdir:` plus `commondir` resolve the owning tree; `node:child_process` is forbidden in app sources |
+| Unowned evidence counted, not blocking | `plugins/sp/scripts/persist-out-check.ts:27` | Keeps the information without refusing removal; a run with 354 unowned files checks 13 owned ones and exits 0 |
+| `source-missing` skip for an absent run directory | `packages/app/src/services/inline-run-setup.ts:994` | "Nothing to carry" and "carried nothing" looked identical; the skip makes the absence data (R2) |
+| Skips printed and `nothing abandoned` suppressed when any skip exists | `plugins/sp/scripts/persist-out-check.ts:222` | R2 requires the ok line to be honest about skipped items |
+| Markerless worktree run records its landing obligation | `packages/app/src/services/inline-run-setup.ts:1472` | A hand-made worktree has no WT-3 marker, so a `done` branch could sit unlanded for hours (1133: 9 h 20 m) with nothing on disk naming it |
+| Detection is filesystem-only; landing line writes to the owning tree | `packages/app/src/services/inline-run-setup.ts:1777` | `.git` is a file whose `gitdir:` plus `commondir` resolve the owning tree; `node:child_process` is forbidden in app sources |
 | Durable landing record and documented sweep | `docs/design/run-record-contract.md` | ADR-131 makes `.spur/run` disposable, so the obligation belongs in the canonical run record |
 
 Tradeoff: the prefix is matched on the basename, so a file whose basename carries the prefix counts as owned wherever it sits under the flat durable plane. Unowned files are reported as a count rather than by name.
@@ -148,7 +148,7 @@ Tradeoff: the prefix is matched on the basename, so a file whose basename carrie
 |-------------|--------|----------|
 | R1 | MET | `listObligations` filters by forwarded `<wbs>-`/`<runId>-` prefix and counts `unowned`: `plugins/sp/scripts/persist-out-check.ts:60-84`; no prefix → exit 2 `plugins/sp/scripts/persist-out-check.ts:164-169`; test `plugins/sp/tests/persist-out-check.test.ts:85` |
 | R2 | MET | `carryRunRecordDir` pushes `{id, reason:'source-missing'}` on ENOENT `packages/app/src/services/inline-run-setup.ts:990-994`; skips printed and `nothing abandoned` suppressed `plugins/sp/scripts/persist-out-check.ts:222-228`; tests `packages/app/tests/services/persist-worktree-runs.test.ts:268`, `plugins/sp/tests/persist-out-check.test.ts:115` |
-| R3 | MET | `detectMarkerlessWorktree` (filesystem-only; `.git` file + `commondir` resolve the owning tree) `packages/app/src/services/inline-run-setup.ts:1469-1500`; landing line appended once to the owning tree's run record at close done `packages/app/src/services/inline-run-setup.ts:1776-1797`; test `packages/app/tests/services/inline-run-setup.test.ts:1594` (real `git worktree add`) |
+| R3 | MET | `detectMarkerlessWorktree` (filesystem-only; `.git` file + `commondir` resolve the owning tree) `packages/app/src/services/inline-run-setup.ts:1469-1500`; landing line appended once to the owning tree's run record at close done `packages/app/src/services/inline-run-setup.ts:1776-1804`; test `packages/app/tests/services/inline-run-setup.test.ts:1594` (real `git worktree add`) |
 | R4 | MET | `plugins/sp/scripts/persist-out-check.ts:3` header; sweep + rewrite rule `plugins/sp/skills/spur-dev/references/execution-worktree-landing.md:456-471`; `docs/design/run-record-contract.md:138-150` |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |

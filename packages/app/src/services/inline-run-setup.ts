@@ -1794,7 +1794,14 @@ export async function runInlineRunTrace(input: InlineRunTraceInput): Promise<num
                     } else {
                         writeFileSync(recordPath, `# run ${input.runId}\n\n${line}`);
                     }
-                } catch {}
+                } catch (error) {
+                    // Non-fatal, but never silent: a lost landing line is an unlanded branch nobody sees.
+                    appendInlineRunLogLine(
+                        input.runId,
+                        `landing-record-failed run=${input.runId} path=${recordPath}: ${error instanceof Error ? error.message : String(error)}`,
+                        workdir,
+                    );
+                }
             }
         }
 
@@ -2152,12 +2159,21 @@ export async function runInlineRunPersistOut(input: InlineRunPersistOutInput): P
                                     status,
                                 );
                             }
-                        } catch {}
+                        } catch (error) {
+                            process.stderr.write(
+                                `persist-out: reconcile skipped for ${wbs}: ${error instanceof Error ? error.message : String(error)}\n`,
+                            );
+                        }
                     }
                 } finally {
                     targetDb.close();
                 }
-            } catch {}
+            } catch (error) {
+                // Best-effort (1149 R3): the persist already succeeded; name the miss so a stale row is visible.
+                process.stderr.write(
+                    `persist-out: lifecycle reconcile unavailable: ${error instanceof Error ? error.message : String(error)}\n`,
+                );
+            }
         }
         process.stdout.write(`${JSON.stringify(resultPayload)}\n`);
         return 0;

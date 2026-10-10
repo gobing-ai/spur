@@ -523,7 +523,7 @@ function usage() {
     "       bun plugins/sp/scripts/inline-run-setup.ts --action --run-id <id> --node <state> --kind <kind> --status <done|failed> --ok <true|false> [--duration-ms <n>] [--estimated] [--project-root <path>] [--spur-bin <path>]",
     "       bun plugins/sp/scripts/inline-run-setup.ts --node-enter --run-id <id> --node <state> [--project-root <path>] [--spur-bin <path>]  (1136 R4: stamps the node enter time)",
     "       bun plugins/sp/scripts/inline-run-setup.ts --actions-file <json-file> --run-id <id> [--project-root <path>] [--spur-bin <path>]  (1007 R5 batch trace emission)",
-    "       bun plugins/sp/scripts/inline-run-setup.ts --close --run-id <id> --status <done|failed|paused> [--reason <terminal-reason>] [--project-root <path>] [--spur-bin <path>]",
+    "       bun plugins/sp/scripts/inline-run-setup.ts --close --run-id <id> --status <done|failed|paused> [--reason <terminal-reason>] [--no-summary] [--project-root <path>] [--spur-bin <path>]",
     "       --project-root (1136 R1) names the tree that OWNS the run row; without it the run row is read from the cwd tree, and a miss exits 1 with RUN_NOT_FOUND",
     "       --duration-ms is optional on --action (1136 R4): omitted, the duration is measured from the calling --node-enter; supplied, it records provenance host-reported",
     "       bun plugins/sp/scripts/inline-run-setup.ts --persist-out --from <worktree-path> [--task-file <path>]... [--spur-bin <path>]",
