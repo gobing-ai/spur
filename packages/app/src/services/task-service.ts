@@ -1693,9 +1693,11 @@ export class TaskService {
             // the gap when the confidence row was dropped before record (measured: 0/50 durable
             // artifacts carried it). Inject only an earned `pass` row; a `warn` row would aggregate
             // to PARTIAL and could contradict a stored `pass`.
+            // `FileSystem.readFile` returns a string (not Buffer): the former `.toString('utf8')`
+            // was a no-op that failed typecheck (TS2554) on main; the text is passed through.
             await atomicWriteAsync(
                 durablePath,
-                injectEarnedConfidenceRow(bytes.toString('utf8')),
+                injectEarnedConfidenceRow(bytes),
                 wbs,
                 this.ctx.fs,
                 this.ctx.projectName ?? 'spur',
