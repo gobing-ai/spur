@@ -18,7 +18,8 @@ work time, operator wait, tool calls and tokens (total / non-cached) per stage, 
 `session-timeline.mjs` — with durations in `M:SS` or `H:MM:SS` form and `n/a` only when that
 measurement is unavailable. The transcript resolves from `--transcript`, else
 `CLAUDE_CODE_SESSION_ID`, else `PI_SESSION_FILE` (the pi host sets it and no Claude session id); a
-skill-injected `<skill name="…">` body counts as activity in `injectedPrompts`, never as a segment.
+pi `<skill name="…">` wrapper row is the operator's `/skill` invocation and opens a segment
+rendered `/<name> <args>` (or `/<name>` argument-less), never an injected body.
 
 ## Argument Flags
 

@@ -43,14 +43,10 @@ function promptText(row) {
   if (row.type === "message") {
     if (row.message?.role !== "user")
       return;
-    if (isInjectedPrompt(row))
+    const text = firstTextContent(row);
+    if (text === undefined)
       return;
-    const content2 = row.message.content;
-    if (typeof content2 === "string")
-      return content2;
-    if (!Array.isArray(content2))
-      return;
-    return content2.find((b) => b.type === "text")?.text;
+    return skillInvocationPrompt(text) ?? text;
   }
   if (row.type !== "user" || row.isMeta || row.isCompactSummary)
     return;
@@ -61,12 +57,21 @@ function promptText(row) {
     return;
   return content.find((b) => b.type === "text")?.text;
 }
-function isInjectedPrompt(row) {
-  if (row.type !== "message" || row.message?.role !== "user")
-    return false;
-  const content = row.message.content;
-  const text = typeof content === "string" ? content : Array.isArray(content) ? content.find((b) => b.type === "text")?.text : undefined;
-  return typeof text === "string" && text.replace(/^\s+/, "").startsWith('<skill name="');
+function firstTextContent(row) {
+  const content = row.message?.content;
+  if (typeof content === "string")
+    return content;
+  if (!Array.isArray(content))
+    return;
+  return content.find((b) => b.type === "text")?.text;
+}
+function skillInvocationPrompt(text) {
+  const name = /^\s*<skill name="([^"]+)"/.exec(text)?.[1];
+  if (name === undefined)
+    return;
+  const close = text.lastIndexOf("</skill>");
+  const args = close < 0 ? "" : text.slice(close + "</skill>".length).trim();
+  return args === "" ? `/${name}` : `/${name} ${args}`;
 }
 function sumTokens(all) {
   const total = zeroTokens();

@@ -16,7 +16,6 @@ import {
     accumulate,
     formatDuration,
     formatTokenSplit,
-    isInjectedPrompt,
     newAcc,
     parseRows,
     promptText,
@@ -40,8 +39,6 @@ export interface Timeline {
     stages?: Rendered<Span & { segments: string }>[];
     totals: Rendered<Span & { elapsedMs: number; elapsed: string; compactions?: number }>;
     skippedLines: number;
-    /** pi only (1138 R2): skill-injected user bodies counted as activity, never as segments. */
-    injectedPrompts?: number;
 }
 
 const PROMPT_EXCERPT = 80;
@@ -75,17 +72,8 @@ export function buildTimeline(lines: string[], group?: string): Timeline {
     const open: Open[] = [];
     const { rows, skippedLines, format } = parseRows(lines);
     const isPi = format === 'pi';
-    let injectedPrompts = 0;
 
     for (const [row, ts] of rows) {
-        // 1138 R2: an injected skill body is activity, not a prompt — accumulate it into the open
-        // segment (its tools and usage are real work) and count it, never open a segment.
-        if (isPi && isInjectedPrompt(row)) {
-            injectedPrompts++;
-            const injectedSeg = open.at(-1);
-            if (injectedSeg) accumulate(injectedSeg, row, ts);
-            continue;
-        }
         const prompt = promptText(row);
         if (prompt !== undefined) {
             open.push({ start: ts, prompt, ...newAcc(ts) });
@@ -124,8 +112,6 @@ export function buildTimeline(lines: string[], group?: string): Timeline {
             isPi ? { ...totals, compactions: segments.reduce((n, s) => n + (s.compactions ?? 0), 0) } : totals,
         ),
         skippedLines,
-        // Emitted only for pi, as `compactions` is, so Claude output is unchanged (1138 R2).
-        ...(isPi ? { injectedPrompts } : {}),
     };
     if (group) {
         timeline.stages = parseGroups(group, segments.length).map(([a, b]) =>
@@ -139,8 +125,9 @@ export const SESSION_TIMELINE_USAGE = 'usage: session-timeline [--transcript <pa
 
 /**
  * 1138 R3: a zero-segment result must say WHAT was detected, so an unparseable-but-recognised
- * transcript can never read as an authoritative all-zero timeline. A known format names the
- * row count and the injected count; an unknown one lists the top-5 row-type census.
+ * transcript can never read as an authoritative all-zero timeline. A known format names the row
+ * count; an unknown one lists the top-5 row-type census. (1151 R2 removed the pi-only injected
+ * count: pi injects no skill bodies, so a wrapper row is an operator prompt and the class is gone.)
  */
 export function zeroSegmentReason(rows: [Row, number][]): string {
     const format = sniffFormat(rows.map(([r]) => r));
@@ -157,8 +144,7 @@ export function zeroSegmentReason(rows: [Row, number][]): string {
             .join(', ');
         return `unrecognized transcript format (row types: ${census})`;
     }
-    const injected = rows.filter(([r]) => isInjectedPrompt(r)).length;
-    return `${format} transcript with no operator prompts (${rows.length} rows, ${injected} injected)`;
+    return `${format} transcript with no operator prompts (${rows.length} rows)`;
 }
 
 export function main(

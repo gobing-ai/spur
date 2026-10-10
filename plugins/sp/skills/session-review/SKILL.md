@@ -101,9 +101,11 @@ issues with its evidence. Notes stay report-only.
    refresh it with `superskill install sp` before reporting numbers; report `n/a` until then.
    The transcript resolves from `--transcript`, else `CLAUDE_CODE_SESSION_ID`, else `PI_SESSION_FILE`
    (the pi host sets it and no Claude session id); with none of them the measurement reports
-   `available:false` with a reason and the table renders `n/a` instead of guessing. A
-   skill-injected body (`<skill name="…">`) is counted as activity in `injectedPrompts`, never as a
-   segment — only the operator's own prompts segment the session.
+   `available:false` with a reason and the table renders `n/a` instead of guessing. A pi
+   `<skill name="…">` wrapper row is the OPERATOR'S own `/skill` invocation, not an injected body:
+   it opens a segment rendered `/<name> <args>` (or `/<name>` when no arguments follow the closing
+   tag), and the wrapper body never appears in the prompt excerpt. Only the operator's prompts
+   segment the session.
 2. **Inventory outcomes.** List requested outcomes and classify each as completed, partial, blocked,
    or not attempted. Collapse repeated attempts into one outcome.
 3. **Classify issues.** For every material issue, distinguish resolved, open, or attempted. Record

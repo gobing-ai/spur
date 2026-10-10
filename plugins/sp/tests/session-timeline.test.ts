@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { parseRows, promptText, skillInvocationPrompt } from '../lib/transcript';
 import {
     buildTimeline,
     formatDuration,
@@ -11,7 +12,19 @@ import {
     parseGroups,
     resolveTranscript,
     SESSION_TIMELINE_USAGE,
+    zeroSegmentReason,
 } from '../scripts/session-timeline';
+
+/** Concatenated source of every `.ts`/`.mjs` file under `plugins/sp/<dir>`, for the AC3 source pin. */
+function sourceText(dir: 'lib' | 'scripts'): string {
+    const root = join(import.meta.dir, '..', dir);
+    const read = (d: string): string =>
+        readdirSync(d, { withFileTypes: true })
+            .filter((e) => e.isDirectory() || /\.(ts|mjs)$/.test(e.name))
+            .map((e) => (e.isDirectory() ? read(join(d, e.name)) : readFileSync(join(d, e.name), 'utf8')))
+            .join('\n');
+    return read(root);
+}
 
 /**
  * session-timeline feeds the /sp:dev-review-session Time breakdown. Failure modes, written before
@@ -249,9 +262,9 @@ describe('pi transcripts (1130)', () => {
 
     test('AC1: a real pi transcript slice yields measured segments', () => {
         const tl = buildTimeline(piLines());
-        // Three operator prompts in the fixture (the fourth user-role row is an injected skill body
-        // and must not open a segment — R2/1138).
-        expect(tl.segments).toHaveLength(3);
+        // Five operator prompts in the fixture: three plain rows plus the two skill-invocation
+        // wrappers (1151 R1/R3 — a pi wrapper row is an operator prompt, never an injected body).
+        expect(tl.segments).toHaveLength(5);
         for (const seg of tl.segments) expect(seg.workMs).toBeGreaterThan(0);
         // Each toolCall block counted once, split across the prompt segments.
         expect(tl.segments.reduce((n, s) => n + s.toolCalls, 0)).toBe(fixtureToolCalls());
@@ -288,35 +301,69 @@ describe('pi transcripts (1130)', () => {
         const tl = buildTimeline(fixture());
         expect('compactions' in tl.totals).toBe(false);
         for (const seg of tl.segments) expect('compactions' in seg).toBe(false);
-        // 1138 R2: the injected-prompt counter is pi-only too, so Claude output is unchanged.
+        // 1138 R2: the injected-prompt counter is gone (1151 R2), so Claude output is unchanged.
         expect('injectedPrompts' in tl).toBe(false);
     });
 });
 
-describe('1138 — injected bodies, pi env resolution, detected-format reasons', () => {
+describe('1151 — pi skill invocations are operator prompts', () => {
     const fixturePath = join(import.meta.dir, 'fixtures', 'pi-session.jsonl');
     const piLines = (): string[] => readFileSync(fixturePath, 'utf8').split('\n');
+    const segmentAt = (start: string) => buildTimeline(piLines()).segments.find((s) => s.start === start);
 
-    test('AC2/R2: an injected skill body is counted, never segmented', () => {
-        const tl = buildTimeline(piLines());
-        // R4: the injected row does not change the segment count (3 operator prompts → 3 segments).
-        expect(tl.segments).toHaveLength(3);
-        expect(tl.injectedPrompts).toBe(1);
-        // The injected row's activity still lands in the open segment: segment 3's span reaches
-        // its timestamp even though that row opened nothing of its own.
-        expect(tl.segments[2]?.start).toBe('2026-10-08T18:50:00.000Z');
-        expect(tl.segments[2]?.workMs).toBe(20_000);
+    test('AC1/R1: an invocation with arguments opens a segment rendered "/<name> <args>"', () => {
+        const seg = segmentAt('2026-10-08T18:50:10.000Z');
+        expect(seg?.prompt).toBe('/sp-dev-run --triage');
+        expect(seg?.prompt).not.toContain('body');
+        expect(seg?.prompt).not.toContain('<skill');
     });
 
-    test('AC2/R2: an operator prompt containing "<skill" mid-text still opens a segment', () => {
+    test('AC2/R3: an argument-less wrapper is still an operator segment rendered "/<name>"', () => {
+        expect(segmentAt('2026-10-08T18:50:30.000Z')?.prompt).toBe('/rd3-anti-hallucination');
+    });
+
+    test('AC3/R2: the injected-body class is gone from the output, the reason and the sources', () => {
         const tl = buildTimeline(piLines());
-        const prompts = tl.segments.map((s) => s.prompt);
+        expect('injectedPrompts' in tl).toBe(false);
+        expect(zeroSegmentReason(parseRows(piLines()).rows)).not.toContain('injected');
+        expect(sourceText('lib')).not.toContain('isInjectedPrompt');
+        expect(sourceText('scripts')).not.toContain('isInjectedPrompt');
+    });
+
+    test('AC4/R4: plain operator text mentioning "<skill" is unaffected', () => {
+        const prompts = buildTimeline(piLines()).segments.map((s) => s.prompt);
         expect(prompts.some((p) => p.includes('operator note: the <skill name="x"> wrapper'))).toBe(true);
     });
 
-    test('AC2/R2: injectedPrompts is absent for a Claude transcript', () => {
-        const tl = buildTimeline(fixture());
-        expect('injectedPrompts' in tl).toBe(false);
+    test('R1 parser edges: whitespace, string content, missing/repeated/malformed wrapper forms', () => {
+        const pi = (text: unknown, role = 'user') => ({
+            type: 'message',
+            timestamp: at(0),
+            message: { role, content: text },
+        });
+        // Leading whitespace before the wrapper is tolerated; the body never reaches the prompt.
+        expect(promptText(pi([{ type: 'text', text: '  \n <skill name="a">\nbody\n</skill>\n\n--x' }]))).toBe('/a --x');
+        // String content (not a block array) takes the same path.
+        expect(promptText(pi('<skill name="b">\nbody\n</skill>'))).toBe('/b');
+        // No closing tag: render the name alone rather than dumping the body.
+        expect(promptText(pi([{ type: 'text', text: '<skill name="c">\nbody' }]))).toBe('/c');
+        // A repeated closing tag uses the LAST one (a body may quote the tag).
+        expect(promptText(pi([{ type: 'text', text: '<skill name="d">x</skill>\nmid</skill>\n\n--z' }]))).toBe(
+            '/d --z',
+        );
+        // Malformed name (no closing quote) is not a wrapper: plain text, body and all.
+        const malformed = '<skill name="e\nbody';
+        expect(promptText(pi([{ type: 'text', text: malformed }]))).toBe(malformed);
+        // A mid-body mention is plain text; a non-user role is never a prompt.
+        expect(promptText(pi([{ type: 'text', text: 'hello <skill name="f">' }]))).toBe('hello <skill name="f">');
+        expect(promptText(pi([{ type: 'text', text: '<skill name="g">' }], 'assistant'))).toBeUndefined();
+        // The Claude path never enters the pi branch, so its wrapper text stays verbatim.
+        expect(
+            promptText({ type: 'user', timestamp: at(0), message: { role: 'user', content: '<skill name="h"> body' } }),
+        ).toBe('<skill name="h"> body');
+        // Direct helper contract.
+        expect(skillInvocationPrompt('plain')).toBeUndefined();
+        expect(skillInvocationPrompt('<skill name="i">\nb\n</skill>')).toBe('/i');
     });
 
     test('AC1/R1: PI_SESSION_FILE resolves when no Claude session id is set', () => {
@@ -357,7 +404,7 @@ describe('1138 — injected bodies, pi env resolution, detected-format reasons',
         });
     });
 
-    test('AC3/R3: zero-segment pi output names the format, the row count and the injected count', () => {
+    test('AC3/R3: zero-segment pi output names the format and the row count, with no injected count', () => {
         const dir = mkdtempSync(join(tmpdir(), 'session-timeline-zero-'));
         const path = join(dir, 'pi-zero.jsonl');
         const rows = [
@@ -379,7 +426,7 @@ describe('1138 — injected bodies, pi env resolution, detected-format reasons',
         expect(main(['--transcript', path], {}, (s) => out.push(s), '/nope')).toBe(0);
         const parsed = JSON.parse(out.join(''));
         expect(parsed.available).toBe(false);
-        expect(parsed.reason).toBe('pi transcript with no operator prompts (2 rows, 0 injected)');
+        expect(parsed.reason).toBe('pi transcript with no operator prompts (2 rows)');
     });
 
     test('AC3/R3: an unknown format lists its row-type census', () => {

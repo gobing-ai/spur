@@ -60,10 +60,11 @@ The transcript is resolved from `--transcript`, else `CLAUDE_CODE_SESSION_ID`, e
 (the pi host exports `PI_SESSION_ID`/`PI_SESSION_FILE` and no Claude session id; the path is not
 derivable from the id, so the exact file variable is the lookup). With none of them the measurement
 reports `available:false` with a reason. A pi `role:"user"` row whose first text block opens with
-`<skill name="` is a skill-injected body: it is accumulated as activity and counted in the pi-only
-`injectedPrompts` field, but it opens no segment, so only the operator's prompts segment the session.
-A zero-segment result is always `available:false` naming what was detected — the format, row and
-injected counts for a recognised transcript, or a top-5 row-type census for an unrecognised one — so
+`<skill name="X"` is the OPERATOR'S own `/skill` invocation (pi injects no skill bodies as user
+rows), so it opens a segment rendered `/X` followed by the text after the closing `</skill>` — or
+`/X` alone when no arguments follow it. The wrapper body never appears in the prompt excerpt.
+A zero-segment result is always `available:false` naming what was detected — the format and row
+count for a recognised transcript, or a top-5 row-type census for an unrecognised one — so
 a transcript that parses to nothing can never render as an authoritative all-zero timeline.
 
 ## Boundaries
