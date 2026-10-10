@@ -139,4 +139,44 @@ describe('feature-verification scope split (task 0872)', () => {
         expect(caller).toContain('featureId\\":\\"$featureId');
         expect(caller).toContain('spurBin\\":\\"$spurBin');
     });
+
+    test('1147 AC4: the nested caller clears the marker that refuses nested runs, so nested == standalone', () => {
+        const wf = readWorkflow('feature-lifecycle.yaml');
+        const verifying = (
+            wf.states as Array<{ id: string; onEnter?: Array<{ options?: { command?: string } }> }>
+        ).find((s) => s.id === 'verifying');
+        const caller =
+            (verifying?.onEnter ?? [])
+                .map((a) => a.options?.command ?? '')
+                .find((c) => c.includes('workflow run feature-verification.yaml')) ?? '';
+        // A workflow-spawned `spur workflow run` inherits the outer run's
+        // SPUR_WORKFLOW_RUN_ACTIVE marker, and the CLI's nested-run refusal (0610 R4) turns that
+        // into `exit 1` with nothing else on stderr — the pass that succeeds standalone failed
+        // under a wrapup. The shared invocation path clears the marker for this bounded child.
+        expect(caller).toContain('env -u SPUR_WORKFLOW_RUN_ACTIVE');
+
+        const dir = mkdtempSync(join(tmpdir(), 'spur-1147-nested-marker-'));
+        try {
+            const stub = join(dir, 'stub-spur');
+            writeFileSync(
+                stub,
+                `#!/bin/sh\nprintf "%s" "\${SPUR_WORKFLOW_RUN_ACTIVE-unset}" > "$PWD/spur-bin-env.txt"\nexit 0\n`,
+            );
+            chmodSync(stub, 0o755);
+            const result = Bun.spawnSync(['sh', '-c', caller], {
+                cwd: dir,
+                env: {
+                    ...getEnvVars(),
+                    SPUR_WORKFLOW_RUN_ACTIVE: '1',
+                    spurBin: stub,
+                    featureId: 'H1',
+                },
+            });
+            expect(result.exitCode).toBe(0);
+            // The child invocation the lifecycle hands the nested pass sees no marker.
+            expect(readFileSync(join(dir, 'spur-bin-env.txt'), 'utf8')).toBe('unset');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
 });

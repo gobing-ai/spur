@@ -112,8 +112,10 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
         // 1037: doc-tripwire inserted between the doc-sync exits and metrics-record.
         // (0986: learnings-validate inserted between doc-sync and learnings-append.
         // 0944: task-resolve gained the drift-probe + mode projection actions and the
-        // route-reason writer moved behind the wrapup-steps locator (composition caps).)
-        expect(def.version).toBe('7');
+        // route-reason writer moved behind the wrapup-steps locator (composition caps).
+        // 1147: doc-sync gained the entry snapshot + write-scope check + supersession-pin
+        // re-run, with two named fail edges.)
+        expect(def.version).toBe('8');
     });
 
     test('default feature gate checks only the selected feature and permits explicit override', () => {
@@ -138,15 +140,17 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
     });
 
     test('0770 definitions are all explicitly versioned (identity tag, not absence)', () => {
-        // Exact per-definition pins: a silent version bump fails here. wrapup-pipeline is '7'
-        // since 1037 added the doc-tripwire hop ('6' since 0986 added the learnings shape gate,
-        // '5' since 0944 added the drift probe + mode projection and moved the route-reason
-        // writer behind the wrapup-steps locator; '4' since 0871's repair edge).
+        // Exact per-definition pins: a silent version bump fails here. wrapup-pipeline is '8'
+        // since 1147 added the doc-sync scope/supersession checks ('7' since 1037 added the
+        // doc-tripwire hop, '6' since 0986 added the learnings shape gate, '5' since 0944 added
+        // the drift probe + mode projection and moved the route-reason writer behind the
+        // wrapup-steps locator; '4' since 0871's repair edge). feature-lifecycle is '2' since
+        // 1147 cleared the inherited nested-run marker at its one nested invocation.
         // (feature-dev was pinned '3' until task 0866 retired the definition.)
         const expectedVersions: Record<string, string> = {
             'task-lifecycle': '1',
-            'feature-lifecycle': '1',
-            'wrapup-pipeline': '7',
+            'feature-lifecycle': '2',
+            'wrapup-pipeline': '8',
         };
         for (const [name, version] of Object.entries(expectedVersions)) {
             expect(loadDef(name).version).toBe(version);
@@ -568,12 +572,20 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
 
     describe('0824 wrapper fail-closed contract', () => {
         test('each wrap-up wrapper writes FAIL and exits 0 when neither the monorepo script nor the twin exists', () => {
-            const cases: Array<{ state: string; statusFile: string }> = [
+            const cases: Array<{ state: string; statusFile: string; marker?: string }> = [
                 { state: 'task-resolve', statusFile: 'wrapup-resolve.status' },
                 { state: 'metrics-record', statusFile: 'wrapup-metrics.status' },
                 { state: 'feature-transition', statusFile: 'wrapup-sync.status' },
+                // 1147: the two post-doc-sync checks name their own violation in the status file
+                // (the guard routes on the marker, not on the word FAIL).
+                {
+                    state: 'doc-sync',
+                    statusFile: 'wrapup-doc-sync-scope.status',
+                    marker: 'scope-violation: wrapup-steps script not found',
+                },
+                { state: 'doc-sync', statusFile: 'wrapup-doc-supersession.status', marker: 'supersession-pin-failed' },
             ];
-            for (const { state, statusFile } of cases) {
+            for (const [index, { state, statusFile, marker }] of cases.entries()) {
                 const cwd = mkdtempSync(join(tmpdir(), 'wrapup-failclosed-'));
                 try {
                     // Temp cwd has no plugins/ scaffold; a failing superskill stub keeps the
@@ -581,23 +593,27 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
                     const superskill = join(cwd, 'superskill');
                     writeFileSync(superskill, '#!/bin/sh\nexit 1\n');
                     chmodSync(superskill, 0o755);
-                    const result = spawnSync('sh', ['-c', String(shellOf(def, state, 0).options?.command ?? '')], {
-                        cwd,
-                        encoding: 'utf8',
-                        env: {
-                            ...getEnvVars(),
-                            __runId: `r-fc-${state}`,
-                            spurBin: 'true',
-                            featureGateCmd: '$spurBin feature check "$feature"',
-                            feature: 'D61',
-                            PATH: `${cwd}:${getEnvVar('PATH') ?? ''}`,
+                    const actionIndex = state === 'doc-sync' ? index - 2 : 0;
+                    const result = spawnSync(
+                        'sh',
+                        ['-c', String(shellOf(def, state, actionIndex).options?.command ?? '')],
+                        {
+                            cwd,
+                            encoding: 'utf8',
+                            env: {
+                                ...getEnvVars(),
+                                __runId: `r-fc-${state}`,
+                                spurBin: 'true',
+                                featureGateCmd: '$spurBin feature check "$feature"',
+                                feature: 'D61',
+                                PATH: `${cwd}:${getEnvVar('PATH') ?? ''}`,
+                            },
                         },
-                    });
+                    );
                     expect(result.status, state).toBe(0);
                     expect(result.stderr, state).toContain('failed closed');
-                    expect(readFileSync(join(cwd, `.spur/run/r-fc-${state}-${statusFile}`), 'utf8'), state).toContain(
-                        'FAIL',
-                    );
+                    const status = readFileSync(join(cwd, `.spur/run/r-fc-${state}-${statusFile}`), 'utf8');
+                    expect(status, state).toContain(marker ?? 'FAIL');
                 } finally {
                     cleanup(cwd);
                 }
@@ -617,18 +633,60 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
             const state = def.states.find((s) => s.id === 'doc-sync');
             const agent = state?.onEnter?.find((a) => a.kind === 'agent.run');
             expect(agent?.onError).toBe('continue');
-            expect((state?.onEnter ?? []).map((a) => a.kind)).toEqual(['agent.run']);
+            // 1147 R1: the entry snapshot runs BEFORE the model query, so only doc-sync's own
+            // writes are attributable; the two deterministic checks run AFTER it.
+            expect((state?.onEnter ?? []).map((a) => a.kind)).toEqual(['shell', 'agent.run', 'shell', 'shell']);
+            const shells = shellsOf(def, 'doc-sync');
+            expect(String(shells[0]?.options?.command ?? '')).toContain('doc-sync-snapshot');
+            expect(String(shells[1]?.options?.command ?? '')).toContain('doc-sync-scope');
+            expect(String(shells[2]?.options?.command ?? '')).toContain('doc-supersession');
+        });
+
+        test('1147 R1/R2: doc-sync states the write scope and the intentional delinked row in its prompt', () => {
+            const state = def.states.find((s) => s.id === 'doc-sync');
+            const input = String(
+                (state?.onEnter?.find((a) => a.kind === 'agent.run')?.options as Record<string, string> | undefined)
+                    ?.input ?? '',
+            );
+            expect(input).toContain('Write ONLY inside docs/');
+            expect(input).toContain('superseded satellite is intentional');
+        });
+
+        test('1147 R1/R2: the scope and supersession checks fail the step before doc-tripwire', () => {
+            const edges = def.transitions.filter((t: TransitionDef) => t.from === 'doc-sync');
+            // Declaration order is load-bearing: contract violation first, then the two
+            // deterministic post-doc-sync checks, then action-ok success, then always defense.
+            expect(edges.map((e) => [e.to, e.guard?.kind, e.trigger ?? null])).toEqual([
+                ['repair', 'contract-violation', 'contract-violation'],
+                ['failed', 'shell', null],
+                ['failed', 'shell', null],
+                ['learnings-validate', 'action-ok', null],
+                ['failed', 'always', 'executor-failure'],
+            ]);
+            const [scopeEdge, pinEdge] = edges.slice(1);
+            expect(String(scopeEdge?.guard?.options?.command ?? '')).toContain('wrapup-doc-sync-scope.status');
+            expect(String(scopeEdge?.guard?.options?.command ?? '')).toContain('scope-violation');
+            expect(String(pinEdge?.guard?.options?.command ?? '')).toContain('wrapup-doc-supersession.status');
+            expect(String(pinEdge?.guard?.options?.command ?? '')).toContain('supersession-pin-failed');
+            // Both failure edges declare a valid terminal reason (0937 R3) and the tripwire
+            // backstop is untouched: doc-tripwire still runs docTripwireCmd and routes FAIL.
+            expect(scopeEdge?.terminalReason).toBe('failed-check');
+            expect(pinEdge?.terminalReason).toBe('failed-check');
+            expect(def.transitions.filter((t: TransitionDef) => t.from === 'doc-tripwire').map((e) => e.to)).toEqual([
+                'failed',
+                'metrics-record',
+            ]);
         });
 
         test('doc-sync routes contract violation → repair, success → learnings-validate, failure → failed', () => {
             const edges = def.transitions.filter((t: TransitionDef) => t.from === 'doc-sync');
-            // Declaration order is load-bearing: the discriminating contract-violation
-            // edge is tried first, then action-ok success, then the always defense.
-            expect(edges.map((e) => [e.to, e.guard?.kind, e.trigger ?? null])).toEqual([
-                ['repair', 'contract-violation', 'contract-violation'],
-                ['learnings-validate', 'action-ok', null],
-                ['failed', 'always', 'executor-failure'],
-            ]);
+            expect(edges[0]?.to).toBe('repair');
+            expect(edges[0]?.trigger).toBe('contract-violation');
+            expect(edges.find((e) => e.to === 'learnings-validate')?.guard?.kind).toBe('action-ok');
+            const last = edges[edges.length - 1];
+            expect(last?.to).toBe('failed');
+            expect(last?.guard?.kind).toBe('always');
+            expect(last?.trigger).toBe('executor-failure');
         });
 
         test('repair is cheap (shell only) and never re-dispatches the agent', () => {

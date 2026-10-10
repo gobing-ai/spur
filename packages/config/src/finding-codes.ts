@@ -84,6 +84,8 @@ export const ALL_FINDING_CODES = [
     // Requirement-inventory ↔ AC coverage (1004 R1) — `feature check --inventory` only;
     // ported from the deleted idea-pipeline coverage-checker script (0887/1004 R1).
     'inventory-coverage',
+    // Feature-reopen without a transition port (1137 R1) — `feature check --fix` only.
+    'feature-reopen-unavailable',
 ] as const;
 
 /** Union type of all valid finding codes. */
@@ -186,4 +188,8 @@ export const FINDING_CODES = {
     // it gates the idea-pipeline ac-generate boundary exactly as the deleted plugin
     // pre-1004 coverage-checker script did.
     INVENTORY_COVERAGE: 'inventory-coverage',
+    // Reopen blocked for lack of a transition port (1137 R1): `feature check --fix` only;
+    // the raw frontmatter fallback was deleted, so a port-less caller gets this actionable
+    // error finding instead of an unguarded status mutation.
+    FEATURE_REOPEN_UNAVAILABLE: 'feature-reopen-unavailable',
 } as const satisfies Record<string, FindingCode>;

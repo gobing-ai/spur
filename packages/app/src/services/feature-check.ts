@@ -224,6 +224,9 @@ export class FeatureCheckService extends PlanningCheckService {
         const rawSource = await this.fs.readFile(filePath);
         let raw = rawSource;
         let repairs: StructuralRepair[] = [];
+        // Declared before the --fix block so the 1137 R1 no-port reopen refusal can
+        // report its error finding from inside the repair phase.
+        const findings: CheckFeatureFindings[] = [];
         if (options?.fix === true) {
             const probe = MarkdownDocument.parse(rawSource, 'feature');
             const probeFm = probe.frontmatterData ?? {};
@@ -278,23 +281,32 @@ export class FeatureCheckService extends PlanningCheckService {
                     if (options?.transitionPort !== undefined) {
                         await options.transitionPort(featureId, 'active');
                         raw = await this.fs.readFile(filePath);
+                        repairs.push({
+                            kind: 'feature-reopen',
+                            section: 'Frontmatter',
+                            detail: `reopened feature ${featureId} (${probeStatus} -> active) due to linked live task(s)`,
+                        });
                     } else {
-                        const docToReopen = MarkdownDocument.parse(raw, 'feature');
-                        docToReopen.setFrontmatterField('status', 'active');
-                        raw = docToReopen.serialize();
-                        await this.fs.writeFile(filePath, raw);
+                        // 1137 R1: a missing transition port must NOT degrade to a raw
+                        // frontmatter write — a lifecycle status change without the
+                        // guarded transition skips validation, the History entry and the
+                        // feature.transitioned event. Report an actionable error finding
+                        // and leave the file byte-identical instead.
+                        findings.push({
+                            layer: 'L4',
+                            code: FINDING_CODES.FEATURE_REOPEN_UNAVAILABLE,
+                            severity: 'error',
+                            section: 'Frontmatter',
+                            message:
+                                `Feature ${featureId} is ${probeStatus} with linked live task(s) and needs a reopen to active, ` +
+                                'but no transition port was supplied, so the status was left unchanged. ' +
+                                `Recovery: run \`spur feature check ${featureId} --fix\` from the CLI, ` +
+                                `or call \`spur feature update ${featureId} active\`.`,
+                        });
                     }
-                    repairs.push({
-                        kind: 'feature-reopen',
-                        section: 'Frontmatter',
-                        detail: `reopened feature ${featureId} (${probeStatus} -> active) due to linked live task(s)`,
-                    });
                 }
             }
         }
-        const findings: CheckFeatureFindings[] = [];
-
-        // ── L1: Schema validation (hard) ──
         const doc = this.runL1(raw, featureId, findings);
         if (doc === null) {
             return { id: featureId, ...this.summarizeWithStatus('', findings, strict, options?.severityOverrides) };

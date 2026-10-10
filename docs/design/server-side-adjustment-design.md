@@ -272,6 +272,21 @@ transition. Two choices are deliberate:
 Denials surface as `GuardDeniedError` → HTTP 409 `GUARD_DENIED` through the existing error mapping
 (§2.6); a same-status `done` returns 200 with the unchanged `{wbs, status}` payload.
 
+**Guarded feature transitions (task 1137).** The `feature.transition` handler and the task→feature
+reopen hook both route through `ctx.transitionFeature` → `transitionFeatureGuarded`
+(`packages/app/src/services/feature-transition.ts`) — the feature-side peer of the 0966 task gate.
+The server's `PlanningWriteService` has no lifecycle adapter, so before this gate the handler applied
+any requested status through the permissive `SchemaLifecyclePort` fallback. The guard resolves the
+`feature-lifecycle` state-machine project-first (a missing graph is a loud refusal naming the
+profile and searched roots — never a fallback), refuses edges the graph does not declare, runs each
+`kind: shell` edge guard in-process as the CLI would —
+`FeatureCheckService.check(id, { asStatus: to, strict, runDir, receiptRunPort })`, reading
+`--strict` off the edge's guard command and forwarding `runDir` + the run-store port
+(`createFeatureReceiptRunPort`) so the D63 completion receipt fires at `--as done` — and denies on
+error findings, and refuses targets with `onEnter` actions (today `→ verifying`, which spawns the
+nested feature-verification workflow) with the CLI recovery message (use `spur feature update <id> verifying` from the CLI). `always` edges — including the `verifying → active` reopen — pass
+unchanged. All refusals are `GuardDeniedError` → HTTP 409 `GUARD_DENIED` and write nothing.
+
 - **Post-commit reconciliation and close-audit reporting (tasks 1051, 1054).** Post-commit bookkeeping errors (`bookkeepingError`: task-lifecycle row reconciliation) and close audit errors (`closeAuditError`: done close-audit fields for unforced closes) are logged at error severity via `ctx.logger.error` with task WBS, target status, the error detail, and replay guidance (`spur task record <wbs> --transition <status>`). Both signals are log-and-continue: the committed task file write stands, and the transport DTO `{ ok: true, data: { wbs, status } }` remains unchanged.
 
 

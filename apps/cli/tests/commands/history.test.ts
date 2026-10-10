@@ -568,7 +568,9 @@ describe('history command', () => {
         const cwd = makeTmpCwd();
         const file = join(cwd, 'h.jsonl');
         writeFileSync(file, `${JSON.stringify({ id: 'm1', timestamp: '2026-05-30T00:00:00Z', content: 'x' })}\n`);
-        const { output, lines } = capturingOutput();
+        // Split streams: since 1144 the diagnostic scope line goes to stderr, so the JSON
+        // payload is stdout-only (this test pins that payload, not the merged text).
+        const { output, stdout } = capturingStreams();
 
         const exitCode = await main(['history', 'import', '--source', 'codex', '--file', file, '--json'], {
             output,
@@ -577,7 +579,7 @@ describe('history command', () => {
         });
 
         expect(exitCode).toBe(0);
-        const parsed = JSON.parse(lines.join('')) as {
+        const parsed = JSON.parse(stdout.join('')) as {
             entries: Array<{ source: string; status: string; messages: number }>;
             exitCode: number;
         };
@@ -590,7 +592,7 @@ describe('history command', () => {
         const cwd = makeTmpCwd();
         const file = join(cwd, 'h.jsonl');
         writeFileSync(file, `${JSON.stringify({ id: 'm1', timestamp: '2026-05-30T00:00:00Z', content: 'x' })}\n`);
-        const { output, lines } = capturingOutput();
+        const { output, stdout } = capturingStreams();
 
         // 0506 R2: a single-file full WRITE is rejected pre-DB; the sanctioned preview path
         // is `--dry-run`, which still exercises the reconciliation summary (0505 R1 contract).
@@ -604,7 +606,7 @@ describe('history command', () => {
         );
 
         expect(exitCode).toBe(0);
-        const parsed = JSON.parse(lines.join('')) as {
+        const parsed = JSON.parse(stdout.join('')) as {
             entries: Array<{ source: string; status: string; messages: number; reconciliation?: unknown }>;
         };
         const entry = parsed.entries[0];
@@ -618,7 +620,7 @@ describe('history command', () => {
         });
 
         // Incremental runs never carry the field.
-        const inc = capturingOutput();
+        const inc = capturingStreams();
         const incExit = await main(
             ['history', 'import', '--source', 'antigravity', '--file', file, '--mode', 'incremental', '--json'],
             {
@@ -628,7 +630,7 @@ describe('history command', () => {
             },
         );
         expect(incExit).toBe(0);
-        const incParsed = JSON.parse(inc.lines.join('')) as {
+        const incParsed = JSON.parse(inc.stdout.join('')) as {
             entries: Array<{ source: string; reconciliation?: unknown }>;
         };
         expect(incParsed.entries[0]?.reconciliation).toBeUndefined();
@@ -1340,5 +1342,106 @@ describe('history CLI usage-error coverage (0813 R3)', () => {
         const exitCode = await main(['history', 'report', join(cwd, 'missing.json')], { output, cwd });
         expect(exitCode).toBe(1);
         expect(lines.join('')).toContain('spur history report failed:');
+    });
+});
+
+/** Split stdout (result) from stderr (diagnostics) so scope lines can be pinned to the right stream. */
+function capturingStreams(): { output: CommandOutput; stdout: string[]; stderr: string[] } {
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+    return { stdout, stderr, output: { write: (s) => stdout.push(s), error: (s) => stderr.push(s) } };
+}
+
+describe('history import scope and budget remedy (task 1144)', () => {
+    const mb = (bytes: number): string => (bytes / (1024 * 1024)).toFixed(1);
+    const jsonl = (id: string, content: string): string =>
+        `${JSON.stringify({ id, timestamp: '2026-05-30T00:00:00Z', content })}\n`;
+
+    /** Three JSONL files (two nested) plus a non-JSONL file outside the estimate. */
+    function scopeFixture(): { cwd: string; root: string; bytes: number } {
+        const cwd = makeTmpCwd();
+        const root = join(cwd, 'codex-history');
+        mkdirSync(join(root, 'nested'), { recursive: true });
+        const bodyA = jsonl('a', 'a');
+        const bodyB = jsonl('b', 'bb');
+        const bodyC = jsonl('c', 'ccc');
+        writeFileSync(join(root, 'a.jsonl'), bodyA);
+        writeFileSync(join(root, 'nested', 'b.jsonl'), bodyB);
+        writeFileSync(join(root, 'nested', 'c.jsonl'), bodyC);
+        writeFileSync(join(root, 'notes.txt'), 'not counted');
+        return { cwd, root, bytes: Buffer.byteLength(bodyA) + Buffer.byteLength(bodyB) + Buffer.byteLength(bodyC) };
+    }
+
+    test('1144 R1/AC1 — import --root reports the scope on stderr before any result, and text output stays on stdout', async () => {
+        const { cwd, root, bytes } = scopeFixture();
+        const { output, stdout, stderr } = capturingStreams();
+
+        const exitCode = await main(
+            ['history', 'import', '--source', 'codex', '--root', root, '--mode', 'incremental'],
+            {
+                output,
+                cwd,
+                dbUrl: ':memory:',
+            },
+        );
+
+        expect(exitCode).toBe(0);
+        expect(stderr).toEqual([
+            `history import: codex scope ≈ 3 files, ${mb(bytes)} MB (mode incremental, budget 600000)`,
+        ]);
+        expect(stdout.join('')).toContain('history import (fan-out)');
+    });
+
+    test('1144 R1/AC1 — with --json the coverage entry carries scope and no scope line reaches stdout', async () => {
+        const { cwd, root, bytes } = scopeFixture();
+        const { output, stdout, stderr } = capturingStreams();
+
+        const exitCode = await main(
+            ['history', 'import', '--source', 'codex', '--root', root, '--mode', 'incremental', '--json'],
+            { output, cwd, dbUrl: ':memory:' },
+        );
+
+        expect(exitCode).toBe(0);
+        const parsed = JSON.parse(stdout.join('')) as {
+            entries: Array<{ source: string; scope?: { files: number; bytes: number } }>;
+        };
+        expect(parsed.entries[0]?.scope).toEqual({ files: 3, bytes });
+        expect(stdout.join('')).not.toContain('scope ≈');
+        expect(stderr.join('')).toContain('scope ≈');
+    });
+
+    test('1144 R2/AC2 — a source-timeout abort names the remedy and keeps exit code 1', async () => {
+        const cwd = makeTmpCwd();
+        const root = join(cwd, 'empty-history');
+        mkdirSync(root, { recursive: true });
+        const spy = spyOn(HistoryService.prototype, 'import').mockImplementation(() => new Promise<never>(() => {}));
+        try {
+            const { output, stderr } = capturingStreams();
+            const exitCode = await main(
+                ['history', 'import', '--source', 'antigravity', '--root', root, '--source-timeout', '20'],
+                { output, cwd, dbUrl: ':memory:' },
+            );
+            expect(exitCode).toBe(1);
+            const text = stderr.join('');
+            expect(text).toContain("source 'antigravity' exceeded its 20ms budget");
+            expect(text).toContain(
+                '; for one session use --source antigravity --file <path>; narrow with --root <dir>; ' +
+                    'for a deliberate full replay pass --source-timeout none',
+            );
+        } finally {
+            spy.mockRestore();
+        }
+    });
+
+    test('1144 R3/AC3 — import --help names --file for one session and the per-source budget risk', async () => {
+        const { output, stdout } = capturingStreams();
+
+        const exitCode = await main(['history', 'import', '--help'], { output, dbUrl: ':memory:' });
+
+        expect(exitCode).toBe(0);
+        const help = stdout.join('').replace(/\s+/g, ' ');
+        expect(help).toContain(
+            "For one session's evidence, use `--file`; a full replay can exceed the per-source budget.",
+        );
     });
 });

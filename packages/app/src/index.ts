@@ -306,6 +306,7 @@ export {
     verdictRowsMatchScenarios,
     verdictScenarioKeyGap,
 } from './services/feature-check';
+export { createFeatureReceiptRunPort } from './services/feature-receipt-run-port';
 export type {
     FeatureActionJob,
     FeatureActionName,
@@ -323,6 +324,11 @@ export {
     FeatureService,
     isFeatureActionName,
 } from './services/feature-service';
+export type {
+    GuardedFeatureTransitionDeps,
+    GuardedFeatureTransitionInput,
+} from './services/feature-transition';
+export { FEATURE_LIFECYCLE_WORKFLOW, transitionFeatureGuarded } from './services/feature-transition';
 export {
     ALL_FINDING_CODES,
     FINDING_CODES,

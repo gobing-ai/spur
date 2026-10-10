@@ -15,6 +15,7 @@ import {
     startFeatureVerificationReceipt,
 } from '../../src/workflow/feature-verification-receipt';
 import {
+    ENTER_STDERR_TAIL_BYTES,
     FEATURE_LIFECYCLE_PROFILE,
     LifecycleAdapter,
     type LifecycleAdapterOptions,
@@ -535,6 +536,83 @@ describe('FeatureLifecycleAdapter (engine integration)', () => {
         expect(result.allowed).toBe(false);
         expect(result.report ?? '').toContain('exit 9');
         expect(result.report ?? '').toContain('fail');
+        db.close();
+        rmSync(root, { recursive: true, force: true });
+    });
+
+    test('1147 AC3: the onEnter denial carries the last 2 KiB of the child stderr, redacted', async () => {
+        const root = mkdtempSync(join(tmpdir(), 'spur-1147-enter-tail-'));
+        const workflowPath = join(root, 'enter.yaml');
+        writeFileSync(
+            workflowPath,
+            [
+                '$schema: "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"',
+                'kind: state-machine',
+                'name: enter-probe-tail',
+                'version: "1"',
+                'description: 1147 onEnter stderr-tail probe',
+                'initialState: active',
+                'vars:',
+                '  spurBin: spur',
+                '  featureId: X',
+                'states:',
+                '  - id: active',
+                '    description: start',
+                '  - id: verifying',
+                '    description: caller fails loudly',
+                '    onEnter:',
+                '      - kind: shell',
+                '        options:',
+                // HEADMARK sits outside the bound (dropped); BOUNDMARK sits 2026 bytes from the
+                // end — inside 2 KiB, outside the former 2000-char slice; the configured secret
+                // and TAILEND ride the tail.
+                "          command: 'sh fail.sh'",
+                'transitions:',
+                '  - from: active',
+                '    to: verifying',
+                '    description: enter',
+                '    guard:',
+                '      kind: always',
+                '',
+            ].join('\n'),
+        );
+        writeFileSync(
+            join(root, 'fail.sh'),
+            [
+                '#!/bin/sh',
+                'printf HEADMARK >&2',
+                "printf '%4096s' '' | tr ' ' x >&2",
+                'printf BOUNDMARK >&2',
+                "printf '%2000s' '' | tr ' ' y >&2",
+                'printf hunter2-opensesame >&2',
+                'printf TAILEND >&2',
+                'exit 7',
+                '',
+            ].join('\n'),
+        );
+        const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(db);
+        const adapter = new LifecycleAdapter({
+            profile: FEATURE_LIFECYCLE_PROFILE,
+            getDb: async () => db,
+            taskRunLinkDao: (inner) => new TaskRunLinkDao(inner),
+            workflowPath,
+            cwd: root,
+            spurBin: 'spur',
+            secrets: ['hunter2-opensesame'],
+        });
+        const result = await adapter.requestTransition(makeRef('E10'), 'active', 'verifying');
+        expect(result.allowed).toBe(false);
+        const report = result.report ?? '';
+        expect(report).toContain('exit 7');
+        expect(report).toContain('TAILEND');
+        // Last 2 KiB by BYTES, not the former 2000-char slice.
+        expect(report).toContain('BOUNDMARK');
+        expect(report).not.toContain('HEADMARK');
+        // A configured secret in the tail is redacted, never quoted into the denial.
+        expect(report).toContain('[REDACTED]');
+        expect(report).not.toContain('hunter2-opensesame');
+        expect(report.length).toBeLessThan(ENTER_STDERR_TAIL_BYTES + 512);
         db.close();
         rmSync(root, { recursive: true, force: true });
     });

@@ -3,7 +3,7 @@ kind: design
 title: "History CLI and refresh contracts"
 status: implemented
 created_at: 2026-09-09
-updated_at: 2026-10-08
+updated_at: 2026-10-09
 related: []
 tags: [contract, history, cli]
 ---
@@ -63,6 +63,28 @@ bounded file-and-line samples stay in the artifact (overflow to the `.errors.jso
 entry carries the importer's optional `reconciliation` summary (`{ staleTargetRows,
 staleLedgerRows, staleCheckpointRows }`) — additive, absent on incremental runs — so a dry-run
 preview and its write can be compared count-for-count without manual SQL.
+
+**Pre-start scope line and budget remedy (task 1144 R1/R2).** The budget is a per-source timeout,
+not a scope limit, and the abort check only fires after the time is spent — a whole-corpus replay
+selected when one session was needed can therefore burn the full 600 s and produce no evidence. So
+`HistoryService.import` resolves the scope of the inputs it is about to import (`--file`, `--root`,
+or the discovered roots; for `opencode`, the source database's file size), and writes one line to
+**stderr** before the importer starts:
+
+`history import: <source> scope ≈ <n> files, <MB> MB (mode <mode>, budget <ms|none>)`
+
+`n` counts `**/*.jsonl` under the resolved inputs and the size is their summed byte size — labelled
+`≈` because the importer applies its own discovery filters on top of the O(stat) walk. The line is a
+diagnostic: in `--json` mode the same data is added to that source's coverage entry as
+`scope: { files, bytes }` — the payload gains a field and **stdout stays pure JSON**. A missing root
+reports a zero scope, never an error. `--dry-run` is not the scope preview: it parses the whole
+corpus (measured ≈ 41 s) and answers a different question.
+
+When a source does exceed its budget, both timeout texts — the per-source `source-timeout` warning
+detail and the fan-out abort that reuses it — append the proportionate forms:
+`; for one session use --source <source> --file <path>; narrow with --root <dir>; for a deliberate
+full replay pass --source-timeout none`. The abort stays a failure with the same exit code, and the
+warning keeps the `source-timeout` code; only the message grows.
 
 **Capability replay (E93 task 1030):** capability-extraction and rollup upgrades (E93 1028/1029)
 reprocess history through this command, never through manual SQL: dry-run the full replay first

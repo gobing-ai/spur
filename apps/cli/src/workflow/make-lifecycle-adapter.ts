@@ -1,4 +1,9 @@
-import { LifecycleAdapter, type LifecycleProfile, resolveWorkflowFile } from '@gobing-ai/spur-app';
+import {
+    configuredSecretValues,
+    LifecycleAdapter,
+    type LifecycleProfile,
+    resolveWorkflowFile,
+} from '@gobing-ai/spur-app';
 import { TaskRunLinkDao } from '@gobing-ai/spur-domain';
 import type { CliContext } from '../context.js';
 import { resolveSpurBin } from './resolve-spur-bin.js';
@@ -39,6 +44,9 @@ export function makeLifecycleAdapter(
         workflowPath,
         cwd: context.cwd,
         spurBin,
+        // 1147 R3: the onEnter denial quotes the child's stderr tail — hand it the same configured
+        // secrets the run's shell-output redactor uses, so the diagnostic cannot leak one.
+        secrets: configuredSecretValues(context.env ?? {}),
         ...(options.provenanceBypass === true ? { provenanceBypass: true } : {}),
     });
 }

@@ -58,6 +58,13 @@ describe('feature handlers', () => {
                 }),
                 updateField: async () => {},
             }),
+            // Guarded feature transition (task 1137 R2): the transition handler routes
+            // through this; the guard itself is covered in transition-gate.test.ts.
+            transitionFeature: async (input: { id: string; to: string }) => ({
+                ref: { id: input.id, filePath: `/test/${input.id}.md`, kind: 'feature' as const, folder: '.' },
+                fromStatus: 'backlog',
+                toStatus: input.to,
+            }),
             jobQueue: async () => ({ enqueue: async () => 'job-1' }),
         } as unknown as ServerContext;
     }

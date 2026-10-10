@@ -14,6 +14,9 @@
  *   - `.spur/memory/wrapup-metrics.jsonl` one row per task (metrics)
  *   - `<runId>-wrapup-metrics.status`   `PASS`/`FAIL` (metrics)
  *   - `<runId>-wrapup-sync.status`      `PASS`/`FAIL` (feature-transition)
+ *   - `<runId>-wrapup-doc-sync-snapshot.txt`  working listing at doc-sync entry (doc-sync-snapshot)
+ *   - `<runId>-wrapup-doc-sync-scope.status`  `PASS`/`scope-violation: <paths>` (doc-sync-scope)
+ *   - `<runId>-wrapup-doc-supersession.status` `PASS`/`supersession-pin-failed: <pin>` (doc-supersession)
  *
  * Environment comes from the workflow vars: `__runId`, `tasks`, `feature`, `featureGateCmd`
  * and `spurBin` (split on whitespace into a command plus prefix args, so
@@ -668,8 +671,204 @@ export function runFeatureTransition(env: WrapupStepsEnv, options: WrapupStepsOp
     return { status: syncStatus, statusFile: relStatusFile, exitCode: 0 };
 }
 
+/** Run-scoped snapshot of the working listing taken at doc-sync entry (1147 R1). */
+export const DOC_SYNC_SNAPSHOT_SUFFIX = 'wrapup-doc-sync-snapshot.txt';
+/** Run-scoped verdict of the post-doc-sync write-scope check (1147 R1). */
+export const DOC_SYNC_SCOPE_STATUS_SUFFIX = 'wrapup-doc-sync-scope.status';
+/** Run-scoped verdict of the post-doc-sync supersession-pin re-run (1147 R2). */
+export const DOC_SYNC_SUPERSESSION_STATUS_SUFFIX = 'wrapup-doc-supersession.status';
+/**
+ * The supersession pins doc-sync must not resurrect (1147 R2). Re-run right after doc-sync so a
+ * re-added delinked index row is attributed to doc-sync instead of to the later `doc-tripwire`
+ * backstop, which stays unchanged.
+ */
+export const SUPERSESSION_PIN = 'repo-wide-tests/adr-supersession.test.ts';
+/** Snapshot marker for "git could not list the tree" — the check then skips instead of guessing. */
+export const GIT_UNAVAILABLE_MARKER = '# git-unavailable:';
+
+/** Snapshot marker the scope check reports when doc-sync's entry snapshot is absent (fail closed). */
+export const SNAPSHOT_MISSING = 'snapshot-missing';
+
+/**
+ * One `git status --porcelain` line → the repo-relative path it names. A rename/copy line
+ * (`R  old -> new`) reports its target, and a quoted path is unquoted (1147 R1).
+ */
+export function porcelainPath(line: string): string {
+    const body = line.length >= 3 ? line.slice(3) : line;
+    const arrow = body.indexOf(' -> ');
+    const target = arrow >= 0 ? body.slice(arrow + 4) : body;
+    const trimmed = target.trim();
+    return trimmed.startsWith('"') && trimmed.endsWith('"') && trimmed.length >= 2 ? trimmed.slice(1, -1) : trimmed;
+}
+
+/**
+ * doc-sync's declared write scope (1147 R1): `docs/**` except the task/feature corpus, the
+ * learnings capture the step declares, and the guard's own snapshot/status bookkeeping (never
+ * doc-sync edits, and present in the listing on a repeated check).
+ */
+export function isDocSyncAllowedPath(path: string, allowedExtra: readonly string[]): boolean {
+    if (allowedExtra.includes(path)) return true;
+    if (!path.startsWith('docs/')) return false;
+    return !path.startsWith('docs/tasks') && !path.startsWith('docs/features');
+}
+
+/**
+ * Paths doc-sync newly dirtied: the current porcelain listing minus the entry snapshot's lines.
+ * A line present in both listings is pre-existing dirt (a sibling task's uncommitted work) and is
+ * never attributed to this pass (1147 R1).
+ */
+export function docSyncScopeViolations(snapshot: string, current: string, allowedExtra: readonly string[]): string[] {
+    const before = new Set(snapshot.split('\n').filter((line) => line.trim() !== ''));
+    const paths = new Set<string>();
+    for (const line of current.split('\n')) {
+        if (line.trim() === '' || before.has(line)) continue;
+        const path = porcelainPath(line);
+        if (!isDocSyncAllowedPath(path, allowedExtra)) paths.add(path);
+    }
+    return [...paths].sort();
+}
+
+/** `git status --porcelain -uall` — the listing both the snapshot and the scope check compare. */
+function gitPorcelain(cwd?: string): { ok: boolean; listing: string; detail: string } {
+    const result = spawnSync('git', ['status', '--porcelain', '-uall'], {
+        cwd,
+        encoding: 'utf8',
+    });
+    if (result.error !== undefined) return { ok: false, listing: '', detail: String(result.error) };
+    if (result.status !== 0) return { ok: false, listing: '', detail: (result.stderr ?? '').trim() };
+    return { ok: true, listing: result.stdout ?? '', detail: '' };
+}
+
+interface WrapupRunPaths {
+    rel: (suffix: string) => string;
+    abs: (suffix: string) => string;
+}
+
+function wrapupRunPaths(env: WrapupStepsEnv, cwd?: string): WrapupRunPaths {
+    const runId = env.__runId ?? '';
+    const rel = (suffix: string): string => join('.spur', 'run', `${runId}-${suffix}`);
+    return { rel, abs: (suffix: string) => (cwd ? join(cwd, rel(suffix)) : rel(suffix)) };
+}
+
+/** The four path shapes this check knows are not doc-sync edits (1147 R1). */
+function docSyncAllowedExtra(env: WrapupStepsEnv): string[] {
+    const runId = env.__runId ?? '';
+    return [
+        join('.spur', 'run', `${runId}-wrapup-learnings.md`),
+        join('.spur', 'run', `${runId}-${DOC_SYNC_SNAPSHOT_SUFFIX}`),
+        join('.spur', 'run', `${runId}-${DOC_SYNC_SCOPE_STATUS_SUFFIX}`),
+    ];
+}
+
+/** Outcome of `doc-sync-snapshot`: the recorded entry listing (or a git-unavailable marker). */
+export interface DocSyncSnapshotResult {
+    statusFile: string;
+    /** True when the listing was captured; false when git could not list the tree. */
+    captured: boolean;
+    exitCode: number;
+}
+
+/**
+ * `doc-sync-snapshot` — record the working listing at doc-sync entry (1147 R1), before the model
+ * query runs, so the post-doc-sync check can attribute only this step's writes. Never aborts: a
+ * git failure is recorded in the snapshot (the check then skips rather than guessing).
+ */
+export function runDocSyncSnapshot(env: WrapupStepsEnv, options: WrapupStepsOptions = {}): DocSyncSnapshotResult {
+    const cwd = options.cwd;
+    const paths = wrapupRunPaths(env, cwd);
+    mkdirSync(cwd ? join(cwd, '.spur', 'run') : join('.spur', 'run'), { recursive: true });
+    // Create the file BEFORE listing so it is present in both listings (never a false violation).
+    writeFileSync(paths.abs(DOC_SYNC_SNAPSHOT_SUFFIX), '');
+    const listing = gitPorcelain(cwd);
+    if (!listing.ok) {
+        writeFileSync(paths.abs(DOC_SYNC_SNAPSHOT_SUFFIX), `${GIT_UNAVAILABLE_MARKER} ${listing.detail}\n`);
+        process.stderr.write(`doc-sync-snapshot: git status unavailable — scope check skips (${listing.detail})\n`);
+        return { statusFile: paths.rel(DOC_SYNC_SNAPSHOT_SUFFIX), captured: false, exitCode: 0 };
+    }
+    writeFileSync(paths.abs(DOC_SYNC_SNAPSHOT_SUFFIX), listing.listing);
+    return { statusFile: paths.rel(DOC_SYNC_SNAPSHOT_SUFFIX), captured: true, exitCode: 0 };
+}
+
+/** Outcome of `doc-sync-scope`: the recorded verdict plus the offending paths it named. */
+export interface DocSyncScopeResult {
+    status: 'PASS' | 'scope-violation';
+    statusFile: string;
+    violations: string[];
+    exitCode: number;
+}
+
+/**
+ * `doc-sync-scope` — the deterministic write-scope guard (1147 R1): diff the working listing
+ * against the entry snapshot and fail the step on any path outside the declared scope. The
+ * violating edits are reported, never reverted (the operator decides); the verdict lives in the
+ * status file so the workflow guard routes on it.
+ */
+export function runDocSyncScope(env: WrapupStepsEnv, options: WrapupStepsOptions = {}): DocSyncScopeResult {
+    const cwd = options.cwd;
+    const paths = wrapupRunPaths(env, cwd);
+    mkdirSync(cwd ? join(cwd, '.spur', 'run') : join('.spur', 'run'), { recursive: true });
+    const statusFile = paths.rel(DOC_SYNC_SCOPE_STATUS_SUFFIX);
+    const write = (status: DocSyncScopeResult['status'], detail: string): DocSyncScopeResult => {
+        writeFileSync(paths.abs(DOC_SYNC_SCOPE_STATUS_SUFFIX), `${detail}\n`);
+        if (status !== 'PASS') process.stderr.write(`doc-sync-scope: ${detail}\n`);
+        return { status, statusFile, violations: status === 'PASS' ? [] : [detail], exitCode: 0 };
+    };
+
+    const snapshot = readFileSyncSafe(paths.abs(DOC_SYNC_SNAPSHOT_SUFFIX));
+    if (snapshot === null) {
+        return write('scope-violation', `scope-violation: ${SNAPSHOT_MISSING}`);
+    }
+    if (snapshot.startsWith(GIT_UNAVAILABLE_MARKER)) {
+        process.stderr.write('doc-sync-scope: entry snapshot recorded no git listing — scope check skipped\n');
+        return write('PASS', 'PASS');
+    }
+    const current = gitPorcelain(cwd);
+    if (!current.ok) {
+        return write('scope-violation', `scope-violation: git-unavailable (${current.detail})`);
+    }
+    const violations = docSyncScopeViolations(snapshot, current.listing, docSyncAllowedExtra(env));
+    if (violations.length === 0) return write('PASS', 'PASS');
+    return write('scope-violation', `scope-violation: ${violations.join(' ')}`);
+}
+
+/** Outcome of `doc-supersession`: the recorded verdict of the supersession-pin re-run. */
+export interface DocSupersessionResult {
+    status: 'PASS' | 'supersession-pin-failed';
+    statusFile: string;
+    exitCode: number;
+}
+
+/**
+ * `doc-supersession` — re-run the supersession pins right after doc-sync (1147 R2). A doc-sync
+ * that resurrects a deliberately delinked index row fails HERE, named with the pin, instead of at
+ * the later repo-wide `doc-tripwire` backstop (which is never weakened). A project without the pin
+ * skips: this check must stay inert outside the spur source repo.
+ */
+export function runDocSupersessionCheck(env: WrapupStepsEnv, options: WrapupStepsOptions = {}): DocSupersessionResult {
+    const cwd = options.cwd;
+    const paths = wrapupRunPaths(env, cwd);
+    mkdirSync(cwd ? join(cwd, '.spur', 'run') : join('.spur', 'run'), { recursive: true });
+    const statusFile = paths.rel(DOC_SYNC_SUPERSESSION_STATUS_SUFFIX);
+    const pinPath = cwd ? join(cwd, SUPERSESSION_PIN) : SUPERSESSION_PIN;
+    if (!existsSync(pinPath)) {
+        writeFileSync(paths.abs(DOC_SYNC_SUPERSESSION_STATUS_SUFFIX), 'PASS\n');
+        return { status: 'PASS', statusFile, exitCode: 0 };
+    }
+    const pin = spawnSync('bun', ['test', SUPERSESSION_PIN], { cwd, encoding: 'utf8' });
+    if (pin.status === 0) {
+        writeFileSync(paths.abs(DOC_SYNC_SUPERSESSION_STATUS_SUFFIX), 'PASS\n');
+        return { status: 'PASS', statusFile, exitCode: 0 };
+    }
+    writeFileSync(paths.abs(DOC_SYNC_SUPERSESSION_STATUS_SUFFIX), `supersession-pin-failed: ${SUPERSESSION_PIN}\n`);
+    const detail = `${pin.stdout ?? ''}${pin.stderr ?? ''}`.trim();
+    process.stderr.write(
+        `doc-supersession: ${SUPERSESSION_PIN} failed (exit ${String(pin.status ?? 1)}) — the doc-sync step introduced or kept superseded index content:\n${detail.slice(-2000)}\n`,
+    );
+    return { status: 'supersession-pin-failed', statusFile, exitCode: 0 };
+}
+
 export const WRAPUP_STEPS_USAGE =
-    'usage: wrapup-steps.ts <resolve|route-reason|metrics|feature-transition>  (env: __runId, tasks, mode, feature, featureGateCmd, spurBin)';
+    'usage: wrapup-steps.ts <resolve|route-reason|metrics|feature-transition|doc-sync-snapshot|doc-sync-scope|doc-supersession>  (env: __runId, tasks, mode, feature, featureGateCmd, spurBin)';
 
 export function main(argv: string[], env: WrapupStepsEnv = getEnvVars(), options: WrapupStepsOptions = {}): number {
     const sub = argv[0];
@@ -680,6 +879,9 @@ export function main(argv: string[], env: WrapupStepsEnv = getEnvVars(), options
         return 0;
     }
     if (sub === 'feature-transition') return runFeatureTransition(env, options).exitCode;
+    if (sub === 'doc-sync-snapshot') return runDocSyncSnapshot(env, options).exitCode;
+    if (sub === 'doc-sync-scope') return runDocSyncScope(env, options).exitCode;
+    if (sub === 'doc-supersession') return runDocSupersessionCheck(env, options).exitCode;
     process.stderr.write(`${WRAPUP_STEPS_USAGE}\n`);
     return 2;
 }

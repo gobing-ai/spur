@@ -2,9 +2,9 @@
 doc: 00_ADR
 owns: WHY — lasting architectural choices, context and tradeoffs
 authority: authoritative
-version: 1.66.0
+version: 1.67.0
 owner: Robin Min
-updated_at: 2026-10-07
+updated_at: 2026-10-10
 read_before: any structural change; before diverging from a decision
 edit_rules: 99 §6.1
 sync: [T1, T2]
@@ -2217,3 +2217,27 @@ owner split this entry established.
 - **Retains:** ADR-113 (layered resolution), ADR-125 (non-pausing, default-on-degrade decide and its
   `workflow.decideDecisionMaker` switch, unchanged until P1), ADR-117 (inline/subprocess parity).
 - **Detail:** [decision catalog](design/decision-catalog.md).
+
+## ADR-135: A Lifecycle Status Write Is Validated by the Graph or Refused
+
+- **Status:** Accepted · **Date:** 2026-10-10 · **Extends:** ADR-021/022
+- **Decision:** A task/feature `status` frontmatter write has exactly one writer — the `packages/app`
+  write service — and every caller must prove the transition against the owning lifecycle graph. The
+  CLI injects the spawning `spur workflow` lifecycle adapter; a transport that cannot spawn (server,
+  Workers, in-process callers) runs the same graph check in-process: resolve project-first, refuse an
+  undeclared edge, execute every `kind: shell` guard as its owning service call, and refuse a target
+  whose `onEnter` spawns work (feature `verifying`) with the CLI recovery message. A missing graph, an
+  undeclared edge and a guard error finding are refusals that write nothing; an unsupplied lifecycle
+  port is never a permissive default. Alternatives rejected: keep the enum-only fallback when no port
+  is supplied (produces a lifecycle state with no gate, history line or event — the defect class this
+  decision closes); port the CLI's spawning adapter to the server (it needs `CliContext`, shell
+  resolution and the nested-run marker); refuse every HTTP transition (removes a working surface for
+  no trust gain).
+- **Why:** the trust boundary is the transport, so graph validity must hold on every transport rather
+  than only where the CLI happens to be the caller.
+- **Consequence:** a new transport either wires a guarded path or gets `409 GUARD_DENIED`; a service
+  that wants lifecycle validity supplies the port and one that does not fails loudly.
+- **Retains:** ADR-021 (one write funnel), ADR-022 (lifecycles are workflow definitions), ADR-096
+  (deterministic fail-closed guards).
+- **Detail:** `03 §12.2`; [planning records](design/planning-record-contracts.md);
+  [server-side adjustment](design/server-side-adjustment-design.md).

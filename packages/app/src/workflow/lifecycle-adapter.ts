@@ -22,11 +22,19 @@ import {
     type TransitionDenied,
 } from '@gobing-ai/ts-dual-workflow-engine';
 import { createNodeFileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
+import { redactAndBound } from '../observability/agent-execution';
 import type { EntityRef, LifecyclePort, TransitionResult } from '../services/planning-write-service';
 import { extractReviewSectionBody, hasPopulatedPriorityTable } from '../services/task-check';
 import { createRunLogTraceFailureRecorder, withActionTrace } from './action-trace';
-import { StreamingShellActionRunner } from './actions/shell';
+import { StreamingShellActionRunner, utf8SafeByteTail } from './actions/shell';
 import { EnvShellGuardRunner } from './guards/shell';
+
+/**
+ * stderr bytes retained from a failed `onEnter` shell in the denial report (1147 R3). The tail is
+ * what carries a child's own diagnosis — e.g. a nested `workflow run` refused before it printed
+ * anything else — and it is bounded so one failure cannot flood the run log.
+ */
+export const ENTER_STDERR_TAIL_BYTES = 2048;
 
 /**
  * The per-lifecycle configuration that distinguishes task from feature runs.
@@ -131,6 +139,12 @@ export interface LifecycleAdapterOptions {
      * set false so they do not start the repo-wide pass.
      */
     runEnterActions?: boolean;
+    /**
+     * Configured secret values redacted from the `onEnter` shell stderr tail the denial report
+     * quotes (1147 R3). The tail is diagnostic text a child process wrote; without the redaction
+     * a secret echoed by a nested run would land in the run log and the operator's error output.
+     */
+    secrets?: readonly string[];
 }
 
 /**
@@ -333,8 +347,13 @@ export class LifecycleAdapter implements LifecyclePort {
                 },
             );
             if (!result.ok) {
-                const stderr = typeof result.data?.stderr === 'string' ? result.data.stderr.trim() : '';
-                const tail = stderr.length > 2000 ? stderr.slice(-2000) : stderr;
+                const stderr = typeof result.data?.stderr === 'string' ? result.data.stderr : '';
+                // 1147 R3: redact first, then take the LAST 2 KiB by bytes — never chars — so a
+                // truncated multi-byte character cannot corrupt the message and a secret split
+                // across the bound is still redacted. The tail carries the child's own error
+                // (e.g. the nested-run refusal), which is the whole point of the report.
+                const redacted = redactAndBound(stderr, this.opts.secrets ?? [], Number.MAX_SAFE_INTEGER);
+                const tail = utf8SafeByteTail(redacted, ENTER_STDERR_TAIL_BYTES).tail.trim();
                 const exitCode = result.data?.exitCode ?? 'unknown';
                 return [`State "${to}" onEnter shell failed (exit ${String(exitCode)}).`, result.error ?? '', tail]
                     .filter((part) => part !== '')

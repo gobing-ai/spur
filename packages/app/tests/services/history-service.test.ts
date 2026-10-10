@@ -1596,6 +1596,11 @@ describe('importAll per-source timeout containment (task 0806 R2)', () => {
         // The whole import aborts (the hung writer may still hold the lock), not just the source.
         expect(err.message).toContain("source 'antigravity' exceeded its 20ms budget");
         expect(err.message).toContain('remaining sources not started');
+        // 1144 R2: the abort now names the proportionate forms as well as the budget.
+        expect(err.message).toContain(
+            '; for one session use --source antigravity --file <path>; narrow with --root <dir>; ' +
+                'for a deliberate full replay pass --source-timeout none',
+        );
         expect(svc.attempted).toEqual(['antigravity']);
     });
 
@@ -1658,5 +1663,188 @@ describe('importAll rollup-refresh failure surfacing (task 0807 R1)', () => {
         expect(warning?.detail).toContain('board rollup refresh failed after import');
         // The import itself still succeeded — the fan-out entries stay data-plane truth.
         expect(result.entries.map((e) => e.source)).toEqual(['claude']);
+    });
+});
+
+describe('import scope reporting (task 1144 R1/R2)', () => {
+    /** A source that never settles, so a tiny injected budget fires the caller-side deadline. */
+    class HangingScopeService extends HistoryService {
+        override async import(
+            _source: string,
+            _opts: { file?: string; root?: string; mode?: string; dryRun?: boolean } = {},
+        ): Promise<Awaited<ReturnType<HistoryService['import']>>> {
+            return new Promise(() => {});
+        }
+    }
+
+    const mb = (bytes: number): string => (bytes / (1024 * 1024)).toFixed(1);
+    const jsonl = (id: string, content: string): string =>
+        `${JSON.stringify({ id, timestamp: '2026-05-30T00:00:00.000Z', content })}\n`;
+
+    test('R1/AC1 — --file reports one file and its byte size before the import, and the coverage entry carries the same scope', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-hist-scope-file-'));
+        const file = join(dir, 'session.jsonl');
+        const body = jsonl('m1', 'hello');
+        writeFileSync(file, body);
+        const bytes = Buffer.byteLength(body);
+        const lines: string[] = [];
+        const svc = new HistoryService(makeCtx());
+        try {
+            const result = await svc.importAll({
+                sources: ['codex'],
+                file,
+                mode: 'force-file',
+                sourceTimeout: 4321,
+                onScope: (line) => lines.push(line),
+            });
+            expect(lines).toEqual([
+                `history import: codex scope ≈ 1 files, ${mb(bytes)} MB (mode force-file, budget 4321)`,
+            ]);
+            expect(result.entries.find((e) => e.source === 'codex')?.scope).toEqual({ files: 1, bytes });
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('R1/AC1 — --root counts every **/*.jsonl under the root and sums their bytes, ignoring other files', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-hist-scope-root-'));
+        mkdirSync(join(dir, 'nested'), { recursive: true });
+        const bodyA = jsonl('a', 'a');
+        const bodyB = jsonl('b', 'bb');
+        const bodyC = jsonl('c', 'ccc');
+        writeFileSync(join(dir, 'a.jsonl'), bodyA);
+        writeFileSync(join(dir, 'nested', 'b.jsonl'), bodyB);
+        writeFileSync(join(dir, 'nested', 'c.jsonl'), bodyC);
+        writeFileSync(join(dir, 'notes.txt'), 'not part of the scope walk');
+        const bytes = Buffer.byteLength(bodyA) + Buffer.byteLength(bodyB) + Buffer.byteLength(bodyC);
+        const lines: string[] = [];
+        const svc = new HistoryService(makeCtx());
+        try {
+            const result = await svc.importAll({
+                sources: ['codex'],
+                root: dir,
+                mode: 'incremental',
+                onScope: (line) => lines.push(line),
+            });
+            expect(lines).toEqual([
+                `history import: codex scope ≈ 3 files, ${mb(bytes)} MB (mode incremental, budget 600000)`,
+            ]);
+            expect(result.entries.find((e) => e.source === 'codex')?.scope).toEqual({ files: 3, bytes });
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('R1 — with neither --file nor --root the scope covers the discovered run-session root', async () => {
+        const home = mkdtempSync(join(tmpdir(), 'spur-hist-scope-home-'));
+        const cwd = mkdtempSync(join(tmpdir(), 'spur-hist-scope-cwd-'));
+        const agentDir = join(cwd, '.spur', 'run', 'run-1144', 'agent-sessions', 'claude');
+        mkdirSync(agentDir, { recursive: true });
+        const body = jsonl('m1', 'discovered');
+        writeFileSync(join(agentDir, 'sess.jsonl'), body);
+        const bytes = Buffer.byteLength(body);
+        const lines: string[] = [];
+        const svc = new HistoryService({ ...makeCtx(), historyHome: home, cwd });
+        try {
+            const result = await svc.importAll({
+                sources: ['claude'],
+                mode: 'incremental',
+                onScope: (line) => lines.push(line),
+            });
+            expect(lines).toEqual([
+                `history import: claude scope ≈ 1 files, ${mb(bytes)} MB (mode incremental, budget 600000)`,
+            ]);
+            expect(result.entries.find((e) => e.source === 'claude')?.scope).toEqual({ files: 1, bytes });
+        } finally {
+            rmSync(home, { recursive: true, force: true });
+            rmSync(cwd, { recursive: true, force: true });
+        }
+    });
+
+    test('R1 — a missing root reports a zero scope instead of failing the walk', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-hist-scope-missing-'));
+        const lines: string[] = [];
+        const svc = new HistoryService(makeCtx());
+        try {
+            const result = await svc.importAll({
+                sources: ['pi'],
+                root: join(dir, 'does-not-exist'),
+                mode: 'incremental',
+                onScope: (line) => lines.push(line),
+            });
+            expect(lines).toEqual(['history import: pi scope ≈ 0 files, 0.0 MB (mode incremental, budget 600000)']);
+            expect(result.entries.find((e) => e.source === 'pi')?.scope).toEqual({ files: 0, bytes: 0 });
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('R1 — opencode scope is the size of the source database file', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-hist-scope-opencode-'));
+        const sourceDatabase = join(dir, 'opencode.db');
+        writeFileSync(sourceDatabase, 'x'.repeat(2048));
+        const lines: string[] = [];
+        const svc = new HistoryService({ ...makeCtx(), openCodeSourceDatabase: sourceDatabase });
+        try {
+            // The bogus database fails the import itself; the scope line is emitted before it runs.
+            await svc
+                .importAll({ sources: ['opencode'], mode: 'incremental', onScope: (line) => lines.push(line) })
+                .catch(() => {});
+            expect(lines).toEqual([
+                `history import: opencode scope ≈ 1 files, ${mb(2048)} MB (mode incremental, budget 600000)`,
+            ]);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('R2 — the per-source source-timeout warning keeps its code and carries the remedy', async () => {
+        const svc = new HangingScopeService(makeCtx());
+        const isolated = svc as unknown as {
+            importOneIsolated(
+                source: string,
+                opts: unknown,
+                timeoutMs: number,
+                runStartedAt: string,
+            ): Promise<{ sourceWarnings: Array<{ code: string; detail?: string }> }>;
+        };
+        const { sourceWarnings } = await isolated.importOneIsolated(
+            'antigravity',
+            { mode: 'incremental', root: emptyRoot() },
+            20,
+            new Date().toISOString(),
+        );
+        const warning = sourceWarnings.find((w) => w.code === 'source-timeout');
+        expect(warning?.code).toBe('source-timeout');
+        expect(warning?.detail).toContain(
+            '; for one session use --source antigravity --file <path>; narrow with --root <dir>; ' +
+                'for a deliberate full replay pass --source-timeout none',
+        );
+    });
+
+    test('R1 — the O(stat) walk over 5000 jsonl files stays cheap and the count is exact', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-hist-scope-bulk-'));
+        const count = 5000;
+        for (let i = 0; i < count; i++) writeFileSync(join(dir, `f${i}.jsonl`), '');
+        const lines: string[] = [];
+        const svc = new HistoryService(makeCtx());
+        try {
+            const startedAt = Date.now();
+            const result = await svc.importAll({
+                sources: ['claude'],
+                root: dir,
+                mode: 'incremental',
+                sourceTimeout: null,
+                onScope: (line) => lines.push(line),
+            });
+            const elapsedMs = Date.now() - startedAt;
+            expect(lines[0]).toContain(`history import: claude scope ≈ ${count} files, 0.0 MB`);
+            expect(result.entries.find((e) => e.source === 'claude')?.scope?.files).toBe(count);
+            // The design's failure inventory: the walk must not dominate the import. The
+            // whole no-op import (walk + 5000 empty-file scans) stays well under this bound.
+            expect(elapsedMs).toBeLessThan(5000);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
     });
 });
