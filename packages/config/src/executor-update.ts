@@ -8,7 +8,7 @@
  * wins); project writes stay project-scoped.
  */
 
-import { chmod, lstat, open, readFile, rename, stat, unlink } from 'node:fs/promises';
+import { chmod, lstat, open, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { isAlias, isMap, isScalar, isSeq, parseDocument, type YAMLMap } from 'yaml';
 import { invalidateSpurConfig, resolveConfigLayers } from './loader';
@@ -147,7 +147,8 @@ export async function declaresExecutor(configPath: string, executorName: string)
  * Shared write core for both layers: mutate ONLY the existing
  * `agent.executors[<name>]` entry via the yaml document model (comments, ordering,
  * unrelated values and file mode survive), under a per-path lock with external-edit
- * conflict detection, committed by atomic rename, then cache-invalidated.
+ * conflict detection, backed up to `<path>.bak`, committed by atomic rename, then
+ * cache-invalidated.
  *
  * Errors: `INVALID_CONFIG` (malformed / ambiguous YAML, symlinked config, bad
  * arguments), `CONFIG_CONFLICT` (the file changed underneath the read-modify-write),
@@ -247,6 +248,11 @@ async function applyExecutorAvailabilityAtPath(
                     `config changed on disk while the update was prepared — re-run to reapply: ${configPath}`,
                 );
             }
+            // B6 R4: keep the pre-write bytes beside the config. One rolling backup —
+            // quota churn rewrites often, so timestamped copies would pile up.
+            const backupPath = `${configPath}.bak`;
+            await writeFile(backupPath, content, { mode: original.mode & 0o777 });
+            await chmod(backupPath, original.mode & 0o777);
             const tmp = await open(tmpPath, 'wx', original.mode & 0o777);
             try {
                 await tmp.writeFile(serialized, 'utf8');

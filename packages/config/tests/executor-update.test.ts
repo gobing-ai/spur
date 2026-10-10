@@ -112,6 +112,7 @@ describe('setExecutorAvailability project writes (0797)', () => {
         });
         expect(result).toEqual({ status: 'unchanged', reason: 'already-set' });
         expect(readFileSync(path, 'utf8')).toBe(PROJECT_YAML);
+        expect(existsSync(`${path}.bak`)).toBe(false); // no write, no backup
     });
 
     test('R1: a valid name-only project fragment is updated in place', async () => {
@@ -141,6 +142,9 @@ describe('setExecutorAvailability project writes (0797)', () => {
         // Unchanged bytes outside the mutated entry: everything up to alpha's body.
         expect(text.startsWith(before.slice(0, before.indexOf('- name: alpha')))).toBe(true);
         expect(statSync(path).mode & 0o777).toBe(0o640);
+        // B6 R4: the pre-write bytes are kept in a sibling backup with the same mode.
+        expect(readFileSync(`${path}.bak`, 'utf8')).toBe(before);
+        expect(statSync(`${path}.bak`).mode & 0o777).toBe(0o640);
     });
 
     test('R2: missing file is a structured no-op that creates nothing', async () => {
@@ -574,6 +578,8 @@ describe('setExecutorAvailability global writes (0891 R2/R3, subprocess fake HOM
                 tree.home,
             );
             expect(JSON.parse(out.trim())).toEqual({ status: 'updated' });
+            // B6 R4: the global rewrite keeps the pre-write bytes in a sibling backup.
+            expect(readFileSync(`${tree.globalPath}.bak`, 'utf8')).toBe(GLOBAL_YAML);
             const parsed = parseYaml(readFileSync(tree.globalPath, 'utf8')) as {
                 agent: { executors: Array<Record<string, unknown>> };
             };

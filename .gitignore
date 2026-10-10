@@ -132,6 +132,7 @@ spur.js
 /plugins/**/.spur/
 /.spur/run
 /.spur/backups/
+/.spur/config.yaml.bak
 # Team-generated specs are runtime scratch materialized by `spur team up` (ADR-086);
 # the committed source of truth is the agent.team roster in .spur/config.yaml.
 # ponytail: gitignore cannot inspect the spur:generated YAML tag; hand-authored
