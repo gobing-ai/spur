@@ -4,7 +4,7 @@ name: Session-timeline must segment operator skill invocations on pi, not count 
 status: todo
 template: issue
 created_at: 2026-10-10T02:49:17.069Z
-updated_at: "2026-10-10T03:31:47.929Z"
+updated_at: "2026-10-10T16:25:09.681Z"
 feature_id: E5
 
 ac_altitude: task-local
@@ -72,6 +72,12 @@ true positives on pi. Every `<skill name=` user row is an operator prompt.
 `plugins/sp/scripts/run-summary.ts:130` (excludes prompt rows from a run window's accumulation), so the
 change reaches both scripts and both committed `.mjs` twins.
 
+**Refine corrections (2026-10-10)**
+- Shared predicate/promptText still discard pi wrapper rows (now transcript.ts:92/116); current callers are session-timeline.ts and lib/run-summary-core.ts:323, not a direct run-summary.ts:130 call. Update the actual shared consumer and regenerate its script bundle.
+- Historic census is reported evidence, not proof about every future pi version. The task freezes the current protocol rule: pi user wrappers are operator invocations; Claude isMeta handling remains separate.
+- Named local transcript exists but has grown to 15 user rows (four wrapper-containing rows in a coarse count), so the fixed twelve-segment AC is stale. Replace it with a timestamped eligible-user-row oracle and committed deterministic fixtures.
+- run-summary token accounting should remain unchanged, but prompt reclassification can affect span endpoints; test both window boundary and token behavior rather than assuming the entire sibling output is unchanged.
+
 ### Requirements
 
 - [ ] R1. **Every pi skill invocation opens a segment.** A pi `role:"user"` row whose first text block,
@@ -94,8 +100,7 @@ change reaches both scripts and both committed `.mjs` twins.
 - [ ] R5. **Prose owners follow.** Update the injected-body sentences in
   `plugins/sp/skills/session-review/SKILL.md:105`, `plugins/sp/commands/dev-review-session.md:21`, and
   `docs/design/session-review.md:62-66` to the invocation rule.
-- [ ] R6. **Sibling consumer and twins.** `run-summary` tests stay green unchanged (a user row carries no
-  usage, so reclassifying it as a prompt does not move tokens); regenerate both twins with
+- [ ] R6. **Sibling consumer and twins.** `run-summary` tests preserve token totals and correctly exclude user prompts from accumulation; add a window-boundary regression if existing coverage does not observe it; regenerate both twins with
   `superskill script convert sp session-timeline.ts` and `superskill script convert sp run-summary.ts`.
 
 ### Acceptance Criteria
@@ -135,7 +140,9 @@ Scenario: AC4 — Plain operator text mentioning <skill is unaffected (req: R4)
 Scenario: AC5 — Real transcript attributes every prompt (req: R1)
   Given ~/.pi/agent/sessions/--Users-robin-xprojects-spur-new--/2026-10-09T18-40-54-199Z_01a121f7-dbb6-763c-bb33-714a4899f716.jsonl
   When "bun plugins/sp/scripts/session-timeline.ts --transcript <that file>" runs
-  Then it reports 12 segments: one prompt starting "/sp-dev-run " and two starting "/sp-dev-runall --tasks"
+  Then the segment count equals the independently counted timestamped pi user rows with a first text block or string content in that captured input
+  And every well-formed wrapper row has a /<name> prompt, with no body excerpt
+  And the captured input hash and observation time are recorded without persisting private transcript content
 ```
 
 ```gherkin
@@ -169,6 +176,22 @@ Scenario: AC7 — Prose owners describe the invocation rule (req: R5)
 - **Q: Why `/X` and not the raw trailing text?** A: The skill name is the stage label the review
   groups by (`--group`); arguments alone ("--triage") lose which command ran.
 
+#### Q&A entry — 2026-10-10T16:25:08.901Z
+
+#### Q&A entry — 2026-10-10T03:31:28.408Z
+
+- **Q: Argument-less wrapper — injected or invocation?** A: Invocation. 2,452/2,452 observed wrapper
+  rows are operator-typed; the 2 argument-less ones are answered as "the user has triggered the
+  skill". Rendered `/X` so the excerpt is readable and distinct.
+- **Q: Keep `injectedPrompts` as an always-0 field for compatibility?** A: No — delete. It is a
+  pi-only field added two days ago by 1138, read by no code (only prose in R5's three owners), and a
+  field that can never be non-zero is misleading evidence. If a future pi version injects bodies, the
+  marker will be a record field, not text, and gets its own task.
+- **Q: Why `/X` and not the raw trailing text?** A: The skill name is the stage label the review
+  groups by (`--group`); arguments alone ("--triage") lose which command ran.
+- Closed in this review: twelve is a stale real-data count; use an independently counted hashed capture and deterministic committed fixture.
+- Closed: run-summary-core is the current caller; preserve token totals and test prompt/window timing semantics explicitly. No new command or public flag is needed.
+
 ### Design
 
 - **Shape of the change.** In `promptText` (`plugins/sp/lib/transcript.ts:77`), the pi branch replaces
@@ -184,17 +207,25 @@ Scenario: AC7 — Prose owners describe the invocation rule (req: R5)
   Claude row containing `<skill name=` → never enters the pi branch; plain operator text that merely
   mentions `<skill` later → plain text (fixture row `new00001`).
 
+**Frozen parser details / callers.** Normalize only pi type:message + role:user. Support string content and first type:text array block; inspect text.trimStart() for the anchored complete quoted name. Use the last closing tag only if its index is nonnegative; if absent return /<name> alone. Empty/whitespace suffix yields /<name>; malformed name stays plain text. Preserve existing excerpt truncation after normalization. Test leading whitespace, strings/blocks, argument-less, missing close, malformed quote, repeated close and mid-body mention explicitly. Do not inspect Claude wrappers through the pi path.
+
+**Scope and observability.** The shared promptText has two current consumers: session-timeline.ts and lib/run-summary-core.ts (imported by run-summary.ts). Remove injectedPrompts from type, serialization and unavailable reason; update the pi fixture and downstream hardcoded segment/work/wait assertions based on timestamps, and assert total tool/token accounting remains conserved. For run-summary, assert a wrapper at the end of a selected window is treated like other user prompts: excluded from accumulate, with unchanged token totals. Update only the three named prose owners via the docs owner process; do not modify broader governance.
+
+**Real-data acceptance.** AC5 uses an independent count of parseable timestamped user rows with string/first text content, not a constant or the implementation predicate itself. Snapshot metadata/hash only; never commit a private full transcript. If the file is unavailable at implementation, record that limitation and use the committed fixture as the required reproducible gate; do not fabricate a twelve-row result. For this refinement the file exists.
+
+**Generated surfaces.** Use superskill script convert sp session-timeline.ts --json and superskill script convert sp run-summary.ts --json from this checkout, verify outputs land under plugins/sp/scripts, run script-contract and standalone smoke checks. Do not manually patch generated .mjs. No new API or CLI flags; the removal of the internal pi-only injectedPrompts output property is intentional, all current code/prose consumers identified. No logical sibling dependency; 1159 owns unrelated ledger session cleanup.
+
 ### Plan
 
 1. Fixture first: edit `plugins/sp/tests/fixtures/pi-session.jsonl` (R4) and rewrite the 1138
    injected-body tests in `plugins/sp/tests/session-timeline.test.ts` (~lines 252, 291-320) to AC1-AC4.
-   Run `(cd plugins/sp && bun test tests/session-timeline.test.ts)` → red.
+   Run `(cd plugins/sp && bun test tests/session-timeline.test.ts)` → red; include the parser edge cases and conserved token/tool totals listed in Design.
 2. Implement the Design change in `plugins/sp/lib/transcript.ts` and `plugins/sp/scripts/session-timeline.ts`.
-   Re-run → green; run `(cd plugins/sp && bun test tests/run-summary.test.ts)` unchanged-green.
+   Re-run → green; run `(cd plugins/sp && bun test tests/run-summary.test.ts)` with a prompt-window boundary pin and unchanged token assertions.
 3. Update the three prose owners (R5).
 4. Regenerate twins: `superskill script convert sp session-timeline.ts && superskill script convert sp run-summary.ts`;
    `git diff --stat plugins/sp/scripts/*.mjs` shows only those two.
-5. AC5 manual measurement against the named transcript; record segment count in `## Testing`.
+5. AC5 manual measurement against a hashed capture of the named transcript; compare to the independent eligible-user oracle and record segment count in `## Testing`.
 6. `bun run spur-check` once; commit `fix(sp): segment pi skill invocations as operator prompts (1151)`.
 
 ### Root Cause
@@ -220,5 +251,21 @@ therefore discards exactly the prompts that start each batch.
 ### References
 
 <!-- Links to failing logs, related issues, tasks, docs, or external references. -->
+
+#### Readiness review (2026-10-10)
+
+Outcome: refined; depth: ready; status: todo → todo; corrections: 4.
+
+| id | pass | evidence |
+| --- | --- | --- |
+| requirements | true | Current-tree audit; observable R-items and explicit scope below. |
+| design | true | Chosen seams, fixtures, edge behavior and non-goals frozen in Design. |
+| plan | true | Ordered implementation and test plan linked to R-items. |
+| ac | true | Task-local scenarios and req links; task check --as todo PASS, no errors. |
+| decisions | true | Closed decisions in Q&A; no unresolved implementation decision. |
+| dependencies | true | Prerequisite and sibling ownership recorded in Design; declared edges where needed. |
+| premises | true | Source/callers/tests inspected; verified facts and corrected hypotheses recorded in Background. |
+
+Planning-only receipt: no implementation pipeline or behavior-change verification PASS is claimed. Recheck source and ownership before implementation; batch began on main at 13da1554f with one worktree, no WIP tasks and a clean tree. Runtime Bun 1.3.14; no dependency install needed for refinement.
 
 ### History

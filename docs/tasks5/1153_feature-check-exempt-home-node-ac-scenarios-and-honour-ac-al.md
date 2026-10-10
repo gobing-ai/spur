@@ -4,7 +4,7 @@ name: "Feature check: exempt home-node AC scenarios and honour ac_altitude in th
 status: todo
 template: issue
 created_at: 2026-10-10T05:04:30.044Z
-updated_at: "2026-10-10T05:41:37.992Z"
+updated_at: "2026-10-10T16:26:07.271Z"
 feature_id: F91
 
 ac_altitude: task-local
@@ -45,6 +45,11 @@ Second, sharper defect in the same path: the documented `ac_altitude: task-local
 - R4 "G7 reaches `done` once the marker is declared" vs Design "no corpus change in knowledge-kit" → contradictory. `../knowledge-kit` also has uncommitted work from another session. → R4 runs on a scratch copy; tagging the real G7 and syncing it is the knowledge-kit operator's follow-up and is out of scope here.
 - AC3 named no test → the two-sided ratchet cases are `packages/app/tests/services/task-check.test.ts:3385-3434` (task 0582, done).
 
+**Refine corrections (2026-10-10)**
+- Current sweep is feature-check.ts:751–755; coverage.ts:106 still early-returns for task-local, and all five call sites were checked. The feature sweep does not pass altitude, so R2 is defensive domain correctness, not the live G7 root cause.
+- parseForCoverage accepts bare Scenario blocks by synthesizing Feature:; the proposed direct parseFeature(acBody) exemption did not. Normalize the exemption parse input the same way, retaining tags, and add a headerless control.
+- Previous concurrency and 114x worktree statements are stale: kickoff has one clean main worktree and no WIP tasks. Knowledge-kit G7's named file exists; no fresh external verdict was fabricated.
+
 ### Requirements
 
 - [ ] R1. A feature scenario tagged `@home-node` (scenario-level gherkin tag in the feature's Acceptance Criteria) is excluded from the feature-side DD-09 orphan sweep (`packages/app/src/services/feature-check.ts:739-754`). The exemption is by tag only, never by matching wording, and only scenario-level tags count (a `Feature:`-level tag does not exempt every scenario). It removes the scenario from the sweep's initial orphan set only. `checkScenarioSatisfaction` (0340), verdict-row matching, and the warning ratchet (0582) are not changed. A tagged scenario that a task does cover is still classified by 0340 as before.
@@ -83,6 +88,20 @@ Refine (depth ready), closed decisions:
 - R4 runs on a scratch copy of knowledge-kit. Tagging the real G7 and syncing it to `done` is the knowledge-kit operator's follow-up.
 - Added R5 (document the tag in `ac-style-guide.md`), because that file owns gherkin tag conventions.
 
+#### Q&A entry — 2026-10-10T16:26:06.571Z
+
+#### Q&A entry — 2026-10-10T05:40:43.017Z
+
+Refine (depth ready), closed decisions:
+
+- R2 is a latent-trap fix, not a live feature-side defect: no caller passes `task-local` and reads `orphans` today. Compute-then-relax was chosen over deleting the altitude parameter, so `task-service.ts:1561` keeps its subset carve-out.
+- The marker is frozen as the scenario-level `@home-node` tag, read in the sweep via `parseFeature`; no domain parse change.
+- R4 runs on a scratch copy of knowledge-kit. Tagging the real G7 and syncing it to `done` is the knowledge-kit operator's follow-up.
+- Added R5 (document the tag in `ac-style-guide.md`), because that file owns gherkin tag conventions.
+- Closed: add a Feature wrapper only for headerless Gherkin before reading scenario tags, matching existing coverage parsing.
+- Closed: feature-level tags and no-linked-task findings remain nonexempt; actual covered home-node scenarios still undergo satisfaction checks.
+- Closed: external reproduction operates in a unique sanitized scratch project, with CLI-gated corpus writes and actual residual findings retained.
+
 ### Design
 
 **Seam.** R1 lives entirely in `packages/app/src/services/feature-check.ts` at the DD-09 sweep (:739-754). R2 lives entirely in `packages/domain/src/bdd/coverage.ts` `checkAcCoverage` (:106-124). Neither changes a public API, a CLI flag, or a finding code.
@@ -91,7 +110,7 @@ Refine (depth ready), closed decisions:
 
 ```ts
 const exempt = new Set(
-    (parseFeature(acBody)?.scenarios ?? []).filter((s) => s.tags?.includes(HOME_NODE_TAG)).map((s) => s.name),
+    (parseFeature(acBody.includes('Feature:') ? acBody : `Feature: acceptance\n${acBody}`)?.scenarios ?? []).filter((s) => s.tags?.includes(HOME_NODE_TAG)).map((s) => s.name),
 );
 let stillOrphan = new Set(checkAcCoverage(acBody, '').orphans.filter((o) => !exempt.has(o)));
 ```
@@ -123,14 +142,18 @@ Subset-violation issues are exactly the `error` entries; orphan issues are `warn
 
 **Blast radius.** Two source files, their two test suites, one plugin reference doc. The domain change can only add `orphans` entries for `task-local` callers, and no such caller reads `orphans` today.
 
-**Dependencies / concurrency.** No `dependencies[]`. F91 is `active`; its file has an uncommitted 6-line edit in this tree from another session, so leave it alone. The `main` tree also has uncommitted edits to `packages/app/src/services/inline-run-setup.ts`, a disjoint file; start from a tree clean of other tasks' changes (AGENTS.md commit-per-task).
+**Dependencies / concurrency.** No new dependency is required; historical 0584/0582/0340 mechanisms are already present. F91 is the feature owner. At batch kickoff only one clean main worktree exists and no WIP tasks were reported; recheck before source edits. No feature record edit is required by this task.
+
+**Extra falsification cases.** Test both Feature-header and bare Scenario bodies with scenario-level @home-node, feature-level-only @home-node (must not exempt), mixed tagged/untagged and zero-linked-task cases. Use parseFeature on a synthesized Feature wrapper only when absent; do not change the domain parser or normalize orphan titles differently. The orphan-set exemption does not bypass satisfaction for any actually covered scenario; pin the covered-but-unverified tagged case. For task-local domain calls keep warning orphan issues, suppress only subset errors, and preserve graduating/default output including broken aliases.
+
+**Scratch reproduction.** Use a unique mkdtemp root, copy the relevant G7 feature, linked task corpus/config and required durable evidence into that isolated project; exclude secrets and live runtime state. Tag through the feature CLI section-write route, not a raw corpus edit. Run the source-local CLI from that scratch cwd, refresh the receipt there through its existing verification workflow, and check --as done. Record all residual findings without suppressing them; only the uncovered-home-node finding is expected to disappear. The real ../knowledge-kit stays read-only. No new API, flag, baseline exemption or feature-wide pass claim.
 
 ### Plan
 
 1. R2 first (domain, smallest): in `coverage.test.ts` change the :173 expectation to the computed orphans, add the `covers:` alias case under `task-local`, and watch both fail. Then edit `checkAcCoverage` per Design and replace the CAUTION comment. Run `(cd packages/domain && bun test tests/bdd/coverage.test.ts)`.
-2. R1: add the AC1 cases to `packages/app/tests/services/feature-check.test.ts` (tagged + done boundary, untagged control at error severity, mixed), and watch the tagged case fail. Add `HOME_NODE_TAG` and the exempt filter at the sweep. Run `(cd packages/app && bun test tests/services/feature-check.test.ts tests/services/task-check.test.ts)`.
+2. R1: add the AC1 cases to `packages/app/tests/services/feature-check.test.ts` (tagged + done boundary, untagged control at error severity, mixed, headerless scenario, feature-level tag negative, zero-linked-task and tagged-but-covered-unverified cases), and watch the tagged case fail. Add `HOME_NODE_TAG` and the exempt filter at the sweep. Run `(cd packages/app && bun test tests/services/feature-check.test.ts tests/services/task-check.test.ts)`.
 3. R5: add the `@home-node` subsection to `ac-style-guide.md`.
-4. R4: copy `../knowledge-kit` (including `.spur/`) to `$TMPDIR/kk-1153`; tag G7 R1 `@home-node`; run G7's feature-verification pass with `bun <spur-new>/apps/cli/src/index.ts`; then `feature check G7 --as done --json`. Record commands and output in `## Testing`.
+4. R4: create a unique sanitized scratch project from the G7 corpus/config/evidence as specified in Design; tag G7 R1 `@home-node` via the feature CLI; run G7's feature-verification pass with `bun <spur-new>/apps/cli/src/index.ts`; then `feature check G7 --as done --json`. Record commands and output in `## Testing`.
 5. `bun run spur-check`; record the tail in `## Testing`.
 
 ### Root Cause
@@ -164,5 +187,21 @@ The sweep has no first-class way to say "no task is expected to cover this scena
 - Tests: `packages/domain/tests/bdd/coverage.test.ts:161-190`, `packages/app/tests/services/feature-check.test.ts:2532-2610`, `packages/app/tests/services/task-check.test.ts:3385-3434`.
 - `plugins/sp/skills/spur-dev/references/ac-style-guide.md:70-90` — tag conventions.
 - Reproduction: `../knowledge-kit/docs/features/G7_kk-workflow-run-ledger.md` (status `verifying`, `@core` R1 home-node scenario); 2026-10-09 read-only `feature check G7 --as done` → `L4.feature-receipt-stale`, `L4.uncovered-feature-scenario`.
+
+#### Readiness review (2026-10-10)
+
+Outcome: refined; depth: ready; status: todo → todo; corrections: 3.
+
+| id | pass | evidence |
+| --- | --- | --- |
+| requirements | true | Current-tree audit; observable R-items and explicit scope below. |
+| design | true | Chosen seams, fixtures, edge behavior and non-goals frozen in Design. |
+| plan | true | Ordered implementation and test plan linked to R-items. |
+| ac | true | Task-local scenarios and req links; task check --as todo PASS, no errors. |
+| decisions | true | Closed decisions in Q&A; no unresolved implementation decision. |
+| dependencies | true | Prerequisite and sibling ownership recorded in Design; declared edges where needed. |
+| premises | true | Source/callers/tests inspected; verified facts and corrected hypotheses recorded in Background. |
+
+Planning-only receipt: no implementation pipeline or behavior-change verification PASS is claimed. Recheck source and ownership before implementation; batch began on main at 13da1554f with one worktree, no WIP tasks and a clean tree. Runtime Bun 1.3.14; no dependency install needed for refinement.
 
 ### History

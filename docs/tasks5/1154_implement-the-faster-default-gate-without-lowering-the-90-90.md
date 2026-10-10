@@ -4,7 +4,7 @@ name: Implement the faster default gate without lowering the 90/90 coverage floo
 status: todo
 template: feature-impl
 created_at: 2026-10-10T05:19:45.655Z
-updated_at: "2026-10-10T05:36:17.700Z"
+updated_at: "2026-10-10T16:26:50.585Z"
 feature_id: H16
 
 ac_altitude: task-local
@@ -50,9 +50,16 @@ A partial `bun test` overwrites `.coverage/lcov.info` and then fails the per-fil
 - Script consumers the implementer must keep green: `plugins/sp/tests/feature-verification-scope.test.ts:55` pins `spur-check-new === spur-check`; `scripts/commands/gate-lock.test.ts` drives the wrapper; `packages/app/tests/services/quality-gate.test.ts` and `plugins/sp/tests/quality-gate-lock.test.ts` assert 1127's lock behavior through `runQualityGate`.
 - Only one heavy lane consumer was named (`bun run check`) → heavy proofs would then run only in CI. → `spur-check-feature` (ADR-119 feature-scoped pass) and `spur-check:full` also run the heavy lane.
 
+**Refine corrections (2026-10-10)**
+- Old worktree/dependency claims are stale: 1146/1148/1149 have landed, kickoff is main 13da1554f with one worktree and no WIP tasks. The historical 75% run-summary capture remains historical, not a current measured failure.
+- runInlineRunSetup/Fingerprint and writeInlineRunOutcome read cwd and do not all accept projectRoot. Conversion must preserve caller cwd/env via a serial try/finally fixture, not invent an input field. Exported app runners already exist.
+- The proposed narrowed gate omitted existing check:full and can make source modules disappear from the default coverage inventory. Wire all explicit full checks and retain fast default coverage for the baseline module set, beyond merely checking the remaining measured rows.
+- Typecheck project-reference fallback was an unbounded architectural alternative. Freeze incremental/noEmit caching first; reject an ineffective cache with measurements rather than silently authoring project references in this task.
+- lock ownership must remain host-wide around test:heavy before Bun's preload creates private test state; pin cross-process serialization and retain existing transient-SQLite retry semantics in runQualityGate.
+
 ### Requirements
 
-- [ ] R1. **Suggestion 1 — heavy proofs leave the default `bun test` path.** The default script that `bun run gate` and `bun run spur-check` run (`package.json` `test`; `test:coverage` and `test:full` share its globs) must not execute the proofs below. They run from one new script, `test:heavy`. `bun run check` (CI's entry), `bun run spur-check-feature`, and `bun run spur-check:full` invoke `test:heavy`. Do not edit `.github/workflows/`.
+- [ ] R1. **Suggestion 1 — heavy proofs leave the default `bun test` path.** The default script that `bun run gate` and `bun run spur-check` run (`package.json` `test`; `test:coverage` and `test:full` share its globs) must not execute the proofs below. They run from one new script, `test:heavy`. `bun run check` (CI's entry), `bun run spur-check-feature`, `bun run check:full`, `bun run spur-check:full`, and `bun run spur-check-new:full` invoke `test:heavy`. Do not edit `.github/workflows/`.
 
   Move off the default path (each lands as a `*.heavy.test.ts` file; see Design):
 
@@ -68,7 +75,7 @@ A partial `bun test` overwrites `.coverage/lcov.info` and then fails the per-fil
 
 - [ ] R2. **Suggestion 2 — call the logic in-process unless the process is the subject.** `apps/cli/tests/helpers.ts:61` already says to prefer in-process `main()` and use `runCli()` only when the process boundary is under test. Apply it to the hot files only.
 
-  - `plugins/sp/tests/inline-run-setup.test.ts`, `inline-run-trace.test.ts`, `inline-run-close-reason.test.ts`: each `spawnSync('bun', [SCRIPT, …])` where SCRIPT is `plugins/sp/scripts/inline-run-setup.ts`. Replace per-assertion spawns with direct calls to the `packages/app/src/services/inline-run-setup.ts` exports the script dispatches to (`runInlineRunTraceMode`, `runInlineRunSetup`, `runInlineRunFingerprint`, `writeInlineRunOutcome`), passing `projectRoot` explicitly instead of a child `cwd`. Keep at most one spawn per file as the glue smoke (flag parsing and exit code of the real script).
+  - `plugins/sp/tests/inline-run-setup.test.ts`, `inline-run-trace.test.ts`, `inline-run-close-reason.test.ts`: each `spawnSync('bun', [SCRIPT, …])` where SCRIPT is `plugins/sp/scripts/inline-run-setup.ts`. Replace per-assertion spawns with direct calls to the `packages/app/src/services/inline-run-setup.ts` exports the script dispatches to (`runInlineRunTraceMode`, `runInlineRunSetup`, `runInlineRunFingerprint`, `writeInlineRunOutcome`), passing `projectRoot` where supported and using serial try/finally cwd/env restoration for cwd-based runners. Keep at most one spawn per file as the glue smoke (flag parsing and exit code of the real script).
   - `apps/cli/tests/commands/workflow-run-from.test.ts`: use the in-process `main()` helper where the assertion is about command output or state, not the child.
 
   Do not import `plugins/sp/scripts/inline-run-setup.ts` into a test (its top-level `main()` calls `process.exit`), and do not add an exported entry to it (ADR-130 glue budget). Where a child process is the behavior (lock suite, dev supervisor, installed `.mjs`, real workflow child), keep the spawn. Do not change 1150's timeout budgets; if 1150 or 1146 has landed a change to `inline-run-trace.test.ts`, rebase onto it and keep its numbers.
@@ -79,7 +86,7 @@ A partial `bun test` overwrites `.coverage/lcov.info` and then fails the per-fil
 
 - [ ] R4. **Suggestion 5 — Biome once on the gate path, and a typecheck cache.** Today `gate` runs `format` (`biome check . --write`) and then `spur-check` → `lint` (`biome check . --error-on-warnings`), so Biome runs twice. After this task `bun run gate` runs exactly one `biome check . --write --error-on-warnings`. Standalone `bun run lint` still runs `biome check . --error-on-warnings` and typecheck; standalone `bun run spur-check` still runs `lint` and so still rejects a dirty tree; `bun run format` is unchanged.
 
-  `typecheck` runs `tsc --noEmit` in 8 workspaces plus `scripts/tsconfig.json` and `plugins/sp/tsconfig.json`; none sets `incremental` or `composite`, and `packages/app` / `packages/domain` export `./src/*.ts`, so `skipLibCheck` does not skip them. Add `"incremental": true` to each of those tsconfigs (build info lands in gitignored `*.tsbuildinfo`). A second `bun run typecheck` on an unchanged tree must be cheaper than the cold run, and a type error in an imported workspace `.ts` file must still fail. If incremental does not cache `--noEmit` on TS 6.0.3, use project references instead; do not land a config that does not speed the repeat check. Record cold and repeat wall/CPU.
+  `typecheck` runs `tsc --noEmit` in 8 workspaces plus `scripts/tsconfig.json` and `plugins/sp/tsconfig.json`; none sets `incremental` or `composite`, and `packages/app` / `packages/domain` export `./src/*.ts`, so `skipLibCheck` does not skip them. Add `"incremental": true` to each of those tsconfigs (build info lands in gitignored `*.tsbuildinfo`). A second `bun run typecheck` on an unchanged tree must be cheaper than the cold run, and a type error in an imported workspace `.ts` file must still fail. If incremental does not speed the measured unchanged repeat, report the unmet R4 and retain the prior configs; project references are a separate architectural decision. Record cold and repeat wall/CPU.
 
 - [ ] R5. **Suggestion 6 — the host lock does not wrap the in-process suite.** Two sites hold `acquireGateLock` (`packages/app/src/services/quality-gate.ts:845`) around the whole default suite today:
 
@@ -95,6 +102,8 @@ A partial `bun test` overwrites `.coverage/lcov.info` and then fails the per-fil
   Moving a test off the default path must not leave a measured file under either floor. If a moved test was the only coverage for a function, keep or add a fast in-process case on the default path. `plugins/sp/scripts/run-summary.ts` is at 96.15 / 94.52 on `main`; if 1146 lands first, its gate must already hold that file at the floor — this task does not take over 1146's file.
 
   Out of scope (suggestion 3): coverage-instrumentation cost, `createMigratedDb`, the 53 CLI migrations.
+
+- [ ] R6. inventory safeguard: retain a pre-change list of production source files measured by the default coverage report. After heavy moves, every member still has default in-process coverage at 90/90, or an explicit already-covered equivalent fixture observation explaining the path move. Moving a file entirely out of measurement is not evidence that its floor was preserved. Preserve the original lcov report for comparison; focused/heavy runs cannot replace the final default coverage receipt.
 
 ### Acceptance Criteria
 
@@ -168,6 +177,28 @@ Refine (depth ready), closed decisions:
 - `run-summary.ts`: 96.15/94.52 on `main`; the 75 percent gap belongs to 1146's unlanded branch. Removed from this task's work.
 - R3 guard lives in `feature-verification-scope.test.ts` (default path), not `repo-wide-tests` (feature-scoped only).
 
+#### Q&A entry — 2026-10-10T16:26:49.610Z
+
+#### Q&A entry — 2026-10-10
+
+Operator: file one task that gets the gate-performance suggestions done, except suggestion 3. Per-file line coverage and function coverage must both stay at or above 90 percent.
+
+Chosen: one task under new feature H16. Scenario titles match H16 R1–R6. The AC writer recorded `ac_altitude: task-local`. Suggestion 3 is an exclusion inside R6, not work. The 75 percent function gap on `run-summary.ts` is in R6 so the floor is met by tests, not by lowering `coverageThreshold`.
+
+#### Q&A entry — 2026-10-10T05:36:17.699Z
+
+Refine (depth ready), closed decisions:
+
+- Lock site: `runQualityGate` stops calling `acquireGateLock`, not only `gate-lock.ts`. Reason: the observed 521s queue wait was the pipeline path; narrowing only the manual wrapper would leave AC5 false for pipeline worktrees. The lock moves to `test:heavy`. 1127's tests are rewritten to that contract.
+- Heavy lane mechanism: `*.heavy.test.ts` + `bunfig.heavy.toml` (coverage off) run via `bun --config`. Probed on 1.3.14; a heavy-only run under the root bunfig fails the per-file threshold.
+- Heavy lane consumers: `check` (CI), `spur-check-feature`, `spur-check:full`, `spur-check-new:full`. Not the per-task gate.
+- `run-summary.ts`: 96.15/94.52 on `main`; the 75 percent gap belongs to 1146's unlanded branch. Removed from this task's work.
+- R3 guard lives in `feature-verification-scope.test.ts` (default path), not `repo-wide-tests` (feature-scoped only).
+- Closed on 2026-10-10: historical worktrees are landed, cwd-based runners need serial scoped cwd fixtures, and check:full participates in the heavy lane.
+- Closed: preserve the baseline measured production-module inventory at 90/90; coverage invisibility is not a speedup.
+- Closed: incremental caching is the selected design; project references require separate scope if measurements fail.
+- Closed: retain transient-SQLite retry and receipt behavior while moving host exclusivity to the heavy command.
+
 ### Design
 
 One task, because the moves interact. A spawn-heavy file is either converted (R2) or moved (R1), and either choice changes which files the default coverage trace measures (R6). Splitting them would let one land and drop a file under 90 percent.
@@ -183,7 +214,7 @@ One task, because the moves interact. A spawn-heavy file is either converted (R2
 | `spur-check:tests` | package script | `bun run test-pre-check && bun run test && bun run test-post-check` |
 | `spur-check`, `spur-check-new` | package script | `bun run lint && bun run spur-check:tests` (identical; `feature-verification-scope.test.ts:55` pins that) |
 | `gate` | package script | `biome check . --write --error-on-warnings && bun run typecheck && bun run spur-check:tests` |
-| `check` | package script | `bun run lint && bun run test:coverage && bun run test:heavy` |
+| `check`, `check:full` | package script | `bun run lint && bun run test:coverage && bun run test:heavy` |
 | `spur-check-feature`, `spur-check:full`, `spur-check-new:full` | package script | append `&& bun run test:heavy` |
 | new heavy files | tests | `apps/cli/tests/commands/rule-busy.heavy.test.ts`, `packages/domain/tests/db-contention.heavy.test.ts`, `apps/cli/tests/release-ops.heavy.test.ts`, optional `apps/cli/tests/commands/workflow-run-from.heavy.test.ts`; renamed: `quality-gate-lock.heavy.test.ts`, `board-runtime-browser.heavy.test.ts`, `dev-all.heavy.test.ts`, `inline-run-installed.heavy.test.ts` |
 | R3 guard | test | `repo-wide-tests` is feature-scoped, so put it on the default path: extend `plugins/sp/tests/feature-verification-scope.test.ts` (it already reads `package.json` scripts) with the no-`--parallel` assertion and the upgrade-bar comment |
@@ -208,7 +239,7 @@ The guard is a negative: the default scripts stay serial, and a test fails if `-
 
 `gate` inlines the one Biome call that both writes and fails on warnings, then `typecheck`, then the shared `spur-check:tests`. That is why `spur-check:tests` exists: `gate` and `spur-check` share one tail and cannot drift. Standalone `lint`, `format`, and `spur-check` keep their current Biome behavior.
 
-Typecheck: `"incremental": true` per tsconfig first; project references only if the measured repeat run is not faster. Do not point `exports` at emitted `.js`.
+Typecheck: `"incremental": true` in the ten existing gate tsconfigs, with a distinct gitignored build-info output per config. Do not introduce project references; if repeat timing does not improve, report R4 unmet instead of shipping an ineffective cache. Do not point `exports` at emitted `.js`.
 
 #### Lock scope
 
@@ -233,23 +264,30 @@ Update the sentences that this changes: `AGENTS.md` build section (`spur-check` 
 
 #### Dependencies and concurrent work
 
-No `dependencies[]`. Worktree `spur-new-runall-1149-1148-1146-9e41` (tasks 1146/1148/1149, all `todo` on `main`) edits `plugins/sp/tests/inline-run-trace.test.ts` and `plugins/sp/scripts/run-summary.ts`. Implement after that branch lands, or rebase onto it before the R2 conversion. Worktree `spur-new-runall-1137-1144-1147-33f9` does not touch these files. Task 1150 (`todo`) owns timeout budgets in `inline-run-trace.test.ts`; keep whatever it lands.
+Historical 1146/1148/1149 changes are now landed; no waiting worktree remains. 1150 owns measured timeout work, 1160 owns sensitive-path parsing, and 1151 owns transcript prompt behavior. They share some test files but are not logical prerequisites. Implement sequentially in one clean writer tree, retain their accepted behavior and remeasure at final gate topology. No undeclared upstream work is required.
 
 #### Out of scope
 
 Suggestion 3. H15 `deferQualityGate`. H52's twice-per-task bound. 1150's load fixture. A Bun upgrade. Workflow-file edits. `runCli` sites outside the named hot files.
 
+#### Implementation freeze additions
+- Transfer behavior assertions from plugin spawn suites into existing/new packages/app/tests/services inline-run cases where source app functions are directly available; leave at most one argv/exit glue smoke in each plugin file. Reuse existing equivalent app assertions when identical, and record an old-test→new-test assertion map so no boundary behavior silently disappears. Cross-workspace value imports use @gobing-ai/*; do not add deep source imports or production exports.
+- runQualityGate removes only its outer acquire/release and token setup. Keep MAX_GATE_ATTEMPTS, isTransientLock, delay/backoff, attempt logs, receipt reuse/freshness, status tiers and gateRuntimeMs semantics unchanged; queueWaitMs stays numeric zero. Keep acquireGateLock and gate-lock.ts themselves.
+- test:heavy's gate-lock.ts process acquires host exclusivity before starting Bun test/preload. Existing caller-supplied private lock dirs remain valid. Prove two wrappers serialize using bounded dummy children, not two whole gates; in-process runQualityGate must complete against an unrelated held lock without waiting.
+- Keep root per-file coverage enabled. Before/after lcov inventories, counts of moved proofs and an assertion migration map are required receipts. Heavy lane coverage=false does not justify deleting default coverage for its production subjects. test:heavy selection must show a sentinel heavy test executes while the same suffix is absent from default discovery.
+- Update owning docs only (AGENTS build, 03 mechanism and any actual satellite lock-scope statement) using doc-evolve; no governance edit. Run generated plugin build/smoke after changing the app quality gate and source-local CLI relink/bundle if CLI sources change. No .github/workflows edits, threshold reductions, new ignore entries for production coverage, Bun upgrade or new public API.
+
 ### Plan
 
-- [ ] Step 0 — preconditions. Confirm `bun --version` is 1.3.14 and re-read `bun test --help`. Check whether worktree `spur-new-runall-1149-1148-1146-9e41` has landed on `main`; if not, wait or plan to rebase before touching `inline-run-trace.test.ts`. Do not start a full gate while another holds the host lock.
-- [ ] Baseline (quiet machine): wall time of `bun run test` and of a cold `bun run typecheck` (wall + CPU via `/usr/bin/time -l`). Label the 520.34s capture as a loaded host.
+- [ ] Step 0 — preconditions. Confirm `bun --version` is 1.3.14 and re-read `bun test --help`. 1146/1148/1149 are already landed; recheck current source and serialize with 1150/1151/1160. Do not start a full gate while another holds the host lock.
+- [ ] Baseline (quiet machine): wall time, measured source inventory and lcov receipt of `bun run test` and of a cold `bun run typecheck` (wall + CPU via `/usr/bin/time -l`). Label the 520.34s capture as a loaded host.
 - [ ] R1: add `bunfig.heavy.toml`, the `**/*.heavy.test.ts` entry in root `pathIgnorePatterns`, and `test:heavy`. Rename/split the R1 files to the frozen names. Run `bun run test:heavy` once and confirm every moved proof executes.
-- [ ] R2: convert the three inline-run files to app-service calls (one glue spawn each kept) and `workflow-run-from.test.ts` to in-process `main()`; move any remaining child-workflow cases to `workflow-run-from.heavy.test.ts`.
+- [ ] R2: migrate the three inline-run files’ behavior assertions into app-service tests with an assertion map and scoped cwd/env restoration (one glue spawn each kept) and `workflow-run-from.test.ts` to in-process `main()`; move any remaining child-workflow cases to `workflow-run-from.heavy.test.ts`.
 - [ ] R6 check after R1/R2: full default `bun run test`; no measured file under 90 lines or functions. Add fast in-process cases where a move dropped coverage.
 - [ ] R5: remove `acquireGateLock` from `runQualityGate` (report `queueWaitMs: 0`), drop the `gate-lock.ts` hop from `spur-check`/`spur-check-new`, wrap `test:heavy` in it. Update 1127's tests to the new contract. Regenerate `plugins/sp/lib/quality-gate.generated.*`.
 - [ ] R4: add `spur-check:tests`, rewrite `gate`, `spur-check`, `spur-check-new` per Design. Confirm `biome check . --write --error-on-warnings` writes fixes and still exits non-zero on an unfixable warning (scratch file). Add `"incremental": true` to the ten tsconfigs; measure a repeat `bun run typecheck`; inject a type error in a `packages/domain/src` export consumed by `packages/app` and confirm the repeat run fails, then revert it.
 - [ ] R3: extend `plugins/sp/tests/feature-verification-scope.test.ts` with the no-`--parallel` assertion over `test`, `test:coverage`, `test:full`, and the upgrade-bar comment.
-- [ ] Wire `test:heavy` into `check`, `spur-check-feature`, `spur-check:full`, `spur-check-new:full`. Leave `.github/workflows/` alone.
+- [ ] Wire `test:heavy` into `check`, `check:full`, `spur-check-feature`, `spur-check:full`, `spur-check-new:full`. Leave `.github/workflows/` alone.
 - [ ] Docs: update `AGENTS.md` build section, `docs/03_ARCHITECTURE.md` gate-scope lines, and any design satellite naming the old lock region.
 - [ ] After numbers (quiet machine): default `bun run test` wall, repeat `bun run typecheck`, coverage table with no measured file under 90/90, and one `bun run test:heavy` pass. Then `bun run spur-check` and `bun run gate` end to end.
 
@@ -284,6 +322,22 @@ Suggestion 3. H15 `deferQualityGate`. H52's twice-per-task bound. 1150's load fi
 - `apps/cli/tests/helpers.ts:61` `runCli` vs in-process `main()`.
 - `config/rules/recommended-post-check.yaml`, `config/rules/quality/coverage-gate.yaml`.
 - `.github/workflows/ci.yml` runs `bun run check`. Do not edit it.
+
+#### Readiness review (2026-10-10)
+
+Outcome: refined; depth: ready; status: todo → todo; corrections: 5.
+
+| id | pass | evidence |
+| --- | --- | --- |
+| requirements | true | Current-tree audit; observable R-items and explicit scope below. |
+| design | true | Chosen seams, fixtures, edge behavior and non-goals frozen in Design. |
+| plan | true | Ordered implementation and test plan linked to R-items. |
+| ac | true | Task-local scenarios and req links; task check --as todo PASS, no errors. |
+| decisions | true | Closed decisions in Q&A; no unresolved implementation decision. |
+| dependencies | true | Prerequisite and sibling ownership recorded in Design; declared edges where needed. |
+| premises | true | Source/callers/tests inspected; verified facts and corrected hypotheses recorded in Background. |
+
+Planning-only receipt: no implementation pipeline or behavior-change verification PASS is claimed. Recheck source and ownership before implementation; batch began on main at 13da1554f with one worktree, no WIP tasks and a clean tree. Runtime Bun 1.3.14; no dependency install needed for refinement.
 
 ### History
 
