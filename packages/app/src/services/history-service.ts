@@ -97,13 +97,6 @@ import { deriveVerifiedOutcome } from './verified-outcome';
 export type { DatabaseMaintenanceOptions, DatabaseMaintenanceResult } from '@gobing-ai/spur-domain';
 
 /**
- * Result of a history import operation — the importer result extended additively
- * with the bounded task-attribution outcome (task 0722 R6). `attribution` is null
- * when the pass was skipped (no task locator in the service context); it is
- * present (with preview counts) in dry-run mode too. `attributionError` is set
- * only when the attribution pass failed — reported per source, never a failed import.
- */
-/**
  * Pre-start scope estimate for one source's resolved import inputs (task 1144 R1):
  * the ≈ jsonl file count and their summed byte size. Labelled approximate
  * because the importer applies its own discovery filters on top of the walk.
