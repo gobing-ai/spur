@@ -88,6 +88,33 @@ DD-06 permissive start: treat only the core tier as must-ship initially; promote
 prove important in a later iteration. (When tiered gating lands in `spur feature check`, these tags
 become the gate input — the CLI stays the validator; this guide stays the convention.)
 
+### Home-node tier (structural, exempt from the orphan sweep)
+
+A **home node** carries one structural or placement scenario that states *where the work lives*
+(e.g. "work on the kk workflow-run ledger has a home node"). No task can cover that statement — it
+describes planning placement, not behaviour — so tag it `@home-node` to remove it from the
+feature-side DD-09 orphan sweep (`L4.uncovered-feature-scenario`):
+
+```gherkin
+@home-node
+Scenario: R1 — Work on the kk workflow run ledger has a home node
+  Given a change that targets the kk workflow run ledger workflow
+  When the change is planned as a feature
+  Then it is feature G7 or a child feature of G7
+```
+
+Rules:
+
+- **Scenario-level tag only.** A `Feature:`-level `@home-node` exempts nothing; the tag is read per
+  scenario.
+- **Exempts the orphan sweep only.** Scenario satisfaction (0340), verdict-row matching, and the
+  known-issues ratchet are unchanged — a tagged scenario a task actually covers is classified
+  exactly as before.
+- **Never a hiding place.** Use it only for a scenario no task can own. A deliberately uncoverable
+  *capability* scenario belongs to `@core`/`@edge` and must stay in the sweep: tagging it
+  `@home-node` hides a real gap. Wording is never the signal.
+- A feature with **no linked task** is still flagged as `L4.orphan-scenarios`, tagged or not.
+
 ## Scenario-title stability
 
 The scenario title is the **identity key** for traceability. When a task references a

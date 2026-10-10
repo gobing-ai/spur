@@ -60,6 +60,12 @@ export type FeatureSectionMatrix = SectionMatrix;
 /** Per-status matrix entry defining required/optional/forbidden feature sections. */
 export type FeatureMatrixEntry = MatrixEntry;
 
+/**
+ * 1153 R1: scenario-level gherkin tag marking a structural/placement scenario no task can own.
+ * Only scenario-level tags exempt; a `Feature:`-level tag does not. Read via `parseFeature`.
+ */
+const HOME_NODE_TAG = '@home-node';
+
 /** Result of a `spur feature check` validation run. */
 export interface CheckFeatureResult {
     id: string;
@@ -748,7 +754,16 @@ export class FeatureCheckService extends PlanningCheckService {
             // blocks would only parse the first, so check per-task.)
             // Start with all feature scenarios as orphans, then remove any covered
             // by at least one task (set difference accumulated across tasks).
-            let stillOrphan = new Set(checkAcCoverage(acBody, '').orphans);
+            // 1153 R1: a scenario-level `@home-node` tag removes the scenario from the initial
+            // orphan set — it describes planning placement, not behaviour, so no task can cover it.
+            // Only the sweep changes: satisfaction (0340), verdict-row matching and the ratchet
+            // are untouched, so a tagged scenario a task does cover is classified as before.
+            const homeNodeScenarios = new Set(
+                (parseFeature(acBody.includes('Feature:') ? acBody : `Feature: acceptance\n${acBody}`)?.scenarios ?? [])
+                    .filter((s) => s.tags?.includes(HOME_NODE_TAG))
+                    .map((s) => s.name),
+            );
+            let stillOrphan = new Set(checkAcCoverage(acBody, '').orphans.filter((o) => !homeNodeScenarios.has(o)));
             for (const taskAc of linkedTaskAc) {
                 if (stillOrphan.size === 0) break;
                 const orphanedByThisTask = new Set(checkAcCoverage(acBody, taskAc, parseChecklist(taskAc)).orphans);

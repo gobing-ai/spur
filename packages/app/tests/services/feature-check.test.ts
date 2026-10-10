@@ -4019,3 +4019,186 @@ describe('verdictScenarioKeyGap (0958 R2)', () => {
         rmSync(dir, { recursive: true, force: true });
     });
 });
+
+describe('1153 — @home-node scenarios are exempt from the DD-09 orphan sweep', () => {
+    const fence = (lines: string[]) => ['```gherkin', ...lines, '```'];
+
+    /** Seed one feature + one linked done task + its PASS verdict; returns the corpus dirs. */
+    function seedHomeNodeCorpus(
+        dir: string,
+        featureAc: string[],
+        opts: { taskAc?: string[]; verdict?: unknown; linked?: boolean; taskStatus?: string } = {},
+    ) {
+        const featuresDir = join(dir, 'features');
+        const tasksDir = join(dir, 'tasks');
+        const runDir = join(dir, 'run');
+        for (const d of [featuresDir, tasksDir, runDir]) mkdirSync(d, { recursive: true });
+        writeFileSync(
+            join(featuresDir, 'A_home.md'),
+            [
+                '---',
+                'schema_version: 1',
+                'id: "A"',
+                'name: "home node"',
+                'status: verifying',
+                'created_at: 2026-06-14T00:00:00.000Z',
+                'updated_at: 2026-06-14T00:00:00.000Z',
+                '---',
+                '',
+                '## Scope',
+                '',
+                'In scope: x',
+                '',
+                '## Acceptance Criteria',
+                '',
+                ...fence(featureAc),
+            ].join('\n'),
+        );
+        if (opts.linked !== false) {
+            writeFileSync(
+                join(tasksDir, '0001_a.md'),
+                [
+                    '---',
+                    'schema_version: 1',
+                    'name: "covers alpha"',
+                    `status: ${opts.taskStatus ?? 'done'}`,
+                    'feature_id: A',
+                    'created_at: 2026-06-14T00:00:00.000Z',
+                    'updated_at: 2026-06-14T00:00:00.000Z',
+                    '---',
+                    '',
+                    '## 0001. covers alpha',
+                    '',
+                    '### Acceptance Criteria',
+                    '',
+                    ...fence(opts.taskAc ?? ['Feature: T', '', '  Scenario: alpha', '    Given x']),
+                ].join('\n'),
+            );
+            writeFileSync(
+                join(runDir, '0001-verdict.json'),
+                JSON.stringify(
+                    opts.verdict ?? {
+                        verdict: 'PASS',
+                        requirements: [{ id: 'alpha', status: 'MET', evidence: 'tests/x.test.ts:1' }],
+                    },
+                ),
+            );
+        }
+        return { featuresDir, tasksDir, runDir };
+    }
+
+    const uncovered = (r: CheckFeatureResult) => r.findings.filter((f) => f.code === 'L4.uncovered-feature-scenario');
+    const run = (
+        corpus: { featuresDir: string; tasksDir: string; runDir: string },
+        asStatus: string,
+    ): Promise<CheckFeatureResult> =>
+        new FeatureCheckService(createNodeFileSystem()).check(join(corpus.featuresDir, 'A_home.md'), 'A', {
+            featuresDir: corpus.featuresDir,
+            tasksDir: corpus.tasksDir,
+            runDir: corpus.runDir,
+            asStatus,
+        });
+
+    test('AC1/R3a: a tagged structural scenario is exempt, including at the done boundary', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-fc-1153-'));
+        const corpus = seedHomeNodeCorpus(dir, [
+            'Feature: A',
+            '',
+            '  @home-node',
+            '  Scenario: Work has a home node',
+            '    Given a change that targets a workflow',
+            '    Then it is feature A',
+            '',
+            '  Scenario: alpha',
+            '    Given x',
+        ]);
+        const atDone = await run(corpus, 'done');
+        expect(uncovered(atDone).map((f) => f.message)).toEqual([]);
+        // The tag removes only the orphan class: the untagged scenario is still covered.
+        expect(uncovered(atDone)).toEqual([]);
+        expect(atDone.findings.filter((f) => f.code === 'L4.scenario-unverified')).toEqual([]);
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('AC1/R3b: the same scenario without the tag is still reported, at error severity at done', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-fc-1153-control-'));
+        const corpus = seedHomeNodeCorpus(dir, [
+            'Feature: A',
+            '',
+            '  Scenario: Work has a home node',
+            '    Given a change that targets a workflow',
+            '    Then it is feature A',
+            '',
+            '  Scenario: alpha',
+            '    Given x',
+        ]);
+        const found = uncovered(await run(corpus, 'done'));
+        expect(found).toHaveLength(1);
+        expect(found[0]?.message).toContain('Work has a home node');
+        expect(found[0]?.severity).toBe('error');
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('AC1/R3d: a mixed feature reports only the untagged uncovered scenario', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-fc-1153-mixed-'));
+        const corpus = seedHomeNodeCorpus(dir, [
+            'Feature: A',
+            '',
+            '  @home-node',
+            '  Scenario: Work has a home node',
+            '    Given a change that targets a workflow',
+            '    Then it is feature A',
+            '',
+            '  Scenario: beta',
+            '    Given y',
+        ]);
+        const found = uncovered(await run(corpus, 'done'));
+        expect(found.map((f) => f.message)).toEqual([
+            'Feature scenario "beta" is not covered by any linked task (DD-09)',
+        ]);
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('R1: only scenario-level tags exempt — a Feature-level tag does not', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-fc-1153-flevel-'));
+        const corpus = seedHomeNodeCorpus(dir, ['@home-node', 'Feature: A', '', '  Scenario: beta', '    Given y']);
+        expect(uncovered(await run(corpus, 'done'))).toHaveLength(1);
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('R1: a headerless scenario body still honours the scenario-level tag', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-fc-1153-headerless-'));
+        const corpus = seedHomeNodeCorpus(dir, [
+            '  @home-node',
+            '  Scenario: Work has a home node',
+            '    Given a change that targets a workflow',
+            '    Then it is feature A',
+        ]);
+        expect(uncovered(await run(corpus, 'done'))).toEqual([]);
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('R1: a feature with no linked task is still an orphan-scenarios finding, tag or not', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-fc-1153-nolinked-'));
+        const corpus = seedHomeNodeCorpus(
+            dir,
+            ['Feature: A', '', '  @home-node', '  Scenario: Work has a home node', '    Given x'],
+            { linked: false },
+        );
+        const result = await run(corpus, 'done');
+        expect(result.findings.filter((f) => f.code === 'L4.orphan-scenarios')).toHaveLength(1);
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('R1: a tagged scenario that IS covered still goes through satisfaction (0340)', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-fc-1153-satisfied-'));
+        const corpus = seedHomeNodeCorpus(dir, ['Feature: A', '', '  @home-node', '  Scenario: alpha', '    Given x'], {
+            taskAc: ['Feature: T', '', '  Scenario: alpha', '    Given x'],
+            verdict: { verdict: 'PARTIAL' },
+        });
+        const result = await run(corpus, 'done');
+        expect(uncovered(result)).toEqual([]);
+        expect(result.findings.filter((f) => f.code === 'L4.scenario-unverified')).toHaveLength(1);
+        rmSync(dir, { recursive: true, force: true });
+    });
+});

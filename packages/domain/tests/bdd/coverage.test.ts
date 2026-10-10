@@ -169,8 +169,23 @@ Scenario: User can log in
         const result = checkAcCoverage(featureAc, taskAc, undefined, 'task-local');
         expect(result.covered).toBe(true);
         expect(result.uncovered).toHaveLength(0);
-        expect(result.orphans).toHaveLength(0);
-        expect(result.issues).toHaveLength(0);
+        expect(result.orphans).toEqual(['User can log in', 'User can reset password']);
+        // Orphans are computed, not short-circuited (1153 R2); only the subset `error` issues are relaxed.
+        expect(result.issues).toHaveLength(2);
+        expect(result.issues.every((i) => i.severity === 'warning')).toBe(true);
+    });
+
+    test('task-local orphans shrink by a covers: alias (1153 R3c)', () => {
+        const taskAc = `Feature: User Management
+  Scenario: Fix duplicate login error flash on slow network
+    Given a deliberately slow connection
+    When login fails with a timeout
+    Then exactly one error flash is shown`;
+        const checklist = parseChecklist('- [x] login is resilient (covers: User can log in)');
+        const result = checkAcCoverage(featureAc, taskAc, checklist, 'task-local');
+        expect(result.covered).toBe(true);
+        expect(result.uncovered).toHaveLength(0);
+        expect(result.orphans).toEqual(['User can reset password']);
     });
 
     test('altitude is field-only: Gherkin notation does not change behavior (0584 R4)', () => {
