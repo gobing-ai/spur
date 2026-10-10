@@ -2,11 +2,11 @@
 schema_version: 1
 id: "H21"
 name: "Cross-platform hook core: one ledger and session implementation for Claude Code and Pi"
-status: active
+status: verifying
 priority: P2
 tags: []
 created_at: "2026-09-26T06:12:07.748Z"
-updated_at: "2026-10-10T07:29:39.184Z"
+updated_at: "2026-10-10T22:56:09.851Z"
 ---
 
 # H21: Cross-platform hook core: one ledger and session implementation for Claude Code and Pi
@@ -57,6 +57,8 @@ Feature: Cross-platform hook core: one ledger and session implementation for Cla
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 0969 | Route Pi ledger and session events through the shared Claude hook cores | done |
+| 1158 | Redact quoted JSON credentials before persisting tool summaries | done |
+| 1159 | Preserve parent ledger ownership when nested sessions end | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -69,4 +71,5 @@ Feature: Cross-platform hook core: one ledger and session implementation for Cla
 - 2026-10-07T00:12:13.067Z backlog → active (system)
 - 2026-10-07T00:12:19.643Z active → verifying (system)
 - 2026-10-10T07:29:39.184Z verifying → active (system)
+- 2026-10-10T22:56:09.851Z active → verifying (system)
 
