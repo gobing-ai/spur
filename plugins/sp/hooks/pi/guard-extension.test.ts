@@ -28,17 +28,23 @@ interface FakeCtx {
     notes: Array<{ msg: string; level: string }>;
     confirms: string[];
     confirmResult: boolean;
+    sessionManager: { getSessionId: () => string };
     ui: {
         notify: (msg: string, level: string) => void;
         confirm: (title: string, msg: string) => Promise<boolean>;
     };
 }
 
-function makeCtx(confirmResult = true): FakeCtx {
+/**
+ * Fake extension context. `sessionId` defaults to one stable id so repeated `makeCtx()` calls in a
+ * test describe the same Pi session (task 1159 ties shutdown to that identity).
+ */
+function makeCtx(confirmResult = true, sessionId = 'pi-session-A'): FakeCtx {
     const ctx: FakeCtx = {
         notes: [],
         confirms: [],
         confirmResult,
+        sessionManager: { getSessionId: () => sessionId },
         ui: {
             notify(msg, level) {
                 ctx.notes.push({ msg, level });
@@ -649,5 +655,74 @@ describe('Pi session shutdown rollup (0969 R3)', () => {
         expect(typeof end?.session).toBe('string');
         expect(typeof end?.totals).toBe('object');
         expect(existsSync(join(dir, '.spur', 'context', '.session.json'))).toBe(false);
+    });
+});
+
+// ─── Session ownership (task 1159) ───────────────────────────────────────
+
+describe('Pi session ownership and teardown (task 1159)', () => {
+    const pointerPath = (dir: string) => join(dir, '.spur', 'context', '.session.json');
+    const readPointer = (dir: string) => JSON.parse(readFileSync(pointerPath(dir), 'utf-8')) as Record<string, unknown>;
+
+    test('a nested Pi child reuses the parent ledger, cannot finalize it, and the parent closes once', async () => {
+        const dir = makeTempDir('spur-pi-own-');
+        const parent = makeCtx(true, 'pi-parent');
+        const child = makeCtx(true, 'pi-child');
+
+        await handlers.session_start?.({}, parent);
+        const ledgerId = readPointer(dir).session as string;
+        expect(readPointer(dir).owner).toEqual({ host: 'pi', sessionId: 'pi-parent' });
+
+        // Nested child start carries SPUR_RUN_ID and its own native id: reuse, no ownership transfer.
+        setEnvVar('SPUR_RUN_ID', 'run-pi-1');
+        try {
+            await handlers.session_start?.({}, child);
+        } finally {
+            removeEnvVar('SPUR_RUN_ID');
+        }
+        expect(readPointer(dir).session).toBe(ledgerId);
+        expect(readPointer(dir).owner).toEqual({ host: 'pi', sessionId: 'pi-parent' });
+
+        // Child shutdown is a no-op — no end row, pointer intact.
+        await handlers.session_shutdown?.({}, child);
+        expect(readLedger(dir).filter((e) => e.type === 'session_end')).toHaveLength(0);
+        expect(existsSync(pointerPath(dir))).toBe(true);
+
+        // The next real tool event still lands on the parent's ledger.
+        await handlers.tool_result?.({ toolName: 'read', input: { path: '/a.ts' } }, parent);
+        expect(readLedger(dir).find((e) => e.type === 'read')?.session).toBe(ledgerId);
+
+        // Parent shutdown finalizes exactly once; a repeat is a no-op.
+        await handlers.session_shutdown?.({}, parent);
+        expect(readLedger(dir).filter((e) => e.type === 'session_end')).toHaveLength(1);
+        expect(existsSync(pointerPath(dir))).toBe(false);
+        await handlers.session_shutdown?.({}, parent);
+        expect(readLedger(dir).filter((e) => e.type === 'session_end')).toHaveLength(1);
+    });
+
+    test('a mismatched host cannot finalize a Claude-owned pointer', async () => {
+        const dir = makeTempDir('spur-pi-own-host-');
+        const ctx = join(dir, '.spur', 'context');
+        mkdirSync(ctx, { recursive: true });
+        writeFileSync(
+            pointerPath(dir),
+            JSON.stringify({
+                session: 'claude-led',
+                started: new Date().toISOString(),
+                owner: { host: 'claude', sessionId: 'pi-parent' },
+            }),
+        );
+        await handlers.session_shutdown?.({}, makeCtx(true, 'pi-parent'));
+        expect(readLedger(dir).filter((e) => e.type === 'session_end')).toHaveLength(0);
+        expect(existsSync(pointerPath(dir))).toBe(true);
+    });
+
+    test('a legacy ownerless pointer is never finalized', async () => {
+        const dir = makeTempDir('spur-pi-own-legacy-');
+        mkdirSync(join(dir, '.spur', 'context'), { recursive: true });
+        writeFileSync(pointerPath(dir), JSON.stringify({ session: 'legacy', started: new Date().toISOString() }));
+        await handlers.session_shutdown?.({}, makeCtx(true, 'legacy'));
+        expect(readLedger(dir).filter((e) => e.type === 'session_end')).toHaveLength(0);
+        expect(existsSync(pointerPath(dir))).toBe(true);
     });
 });

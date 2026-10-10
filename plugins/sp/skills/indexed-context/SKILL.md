@@ -144,6 +144,13 @@ an explicit allowlist entry.
 env dumps. Token estimates for Bash/Grep/Glob use response size **after a 4 KiB cap** and secret
 scrub; omit `tokens` when unknown (never `0`).
 
+**Session lifecycle:** `.spur/context/.session.json` is a private pointer to the in-flight session.
+It records the creating host's owner identity (`{host, sessionId}` — Claude's hook `session_id`, Pi's
+session-manager id) and only that owner's `SessionEnd` / `session_shutdown` may write the rollup and
+remove the pointer. A nested run reuses the parent's ledger for tool recording but cannot finalize
+or delete it; an ownerless (legacy) pointer is never finalized and expires under the existing
+idle-start window instead.
+
 ```jsonl
 {"ts":"2026-07-09T14:23:01Z","session":"session-2026-07-09-1423","type":"session_start"}
 {"ts":"2026-07-09T14:23:15Z","session":"session-2026-07-09-1423","type":"read","file":"src/dao.ts","tokens":648}

@@ -26,11 +26,11 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
-import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
+import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
 import { getEnvVar, getEnvVars } from '../../lib/env';
 import { reportLifecycleHook } from '../agent-lifecycle';
 import { recordToolUseEvent, type ToolPayload } from '../context-post-tool';
-import { recordSessionStart } from '../context-session-start';
+import { recordSessionStart, type SessionOwner } from '../context-session-start';
 import { recordSessionEnd } from '../context-session-stop';
 import { classifyCommand } from '../destructive-policy';
 import { couldBeTaskFile } from '../task-file-policy';
@@ -43,6 +43,16 @@ import { couldBeTaskFile } from '../task-file-policy';
 const spurContextDir = (): string => join(process.cwd(), '.spur', 'context');
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
+
+/**
+ * Pi session owner identity (task 1159): the extension's own session-manager id, stable for the
+ * life of the Pi session and distinct from any nested child session. Read here — not from a PID or
+ * `SPUR_RUN_ID` — so a nested child's `session_shutdown` cannot claim the parent's pointer.
+ */
+function piSessionOwner(ctx: ExtensionContext): SessionOwner | null {
+    const sessionId = ctx.sessionManager.getSessionId().trim();
+    return sessionId.length > 0 ? { host: 'pi', sessionId } : null;
+}
 
 type TaskOwnership = 'owned' | 'unowned' | 'unknown';
 
@@ -252,18 +262,18 @@ export default function (pi: ExtensionAPI): void {
     });
 
     // ── context-session-start: shared recordSessionStart (R2) ────────
-    pi.on('session_start', async () => {
+    pi.on('session_start', async (_event, ctx) => {
         try {
-            recordSessionStart(spurContextDir(), getEnvVars(), undefined, 'pi');
+            recordSessionStart(spurContextDir(), getEnvVars(), undefined, 'pi', piSessionOwner(ctx) ?? undefined);
         } catch {
             // fail-open
         }
     });
 
     // ── context-session-stop: shared recordSessionEnd (R3) ──────────
-    pi.on('session_shutdown', async () => {
+    pi.on('session_shutdown', async (_event, ctx) => {
         try {
-            recordSessionEnd(spurContextDir());
+            recordSessionEnd(spurContextDir(), undefined, piSessionOwner(ctx) ?? undefined);
         } catch {
             // fail-open
         }

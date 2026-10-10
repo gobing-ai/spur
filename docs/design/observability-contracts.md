@@ -71,6 +71,13 @@ fans out appends to SSE subscribers. The Node-only watcher loads only when a loc
 watcher subscription, so an immediate append cannot race initialization. Hooks stay file-append only
 with privacy default **summary over body**.
 
+**Session teardown ownership (task 1159):** the private `.session.json` pointer records the creating
+host's `{host, sessionId}` owner, and only that owner's `SessionEnd` / `session_shutdown` may append
+the `session_end` rollup and remove the pointer. A nested run reuses the parent's ledger for tool
+recording but its shutdown is a no-op, so the parent's later events keep the same session id.
+Ownerless legacy pointers are never finalized (existing idle-start expiry retires them), and a
+repeated owning end never emits a second `session_end`.
+
 <a id="78c-observability-summary-aggregations"></a>
 
 ### 7.8c Observability Summary aggregations

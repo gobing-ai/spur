@@ -4,8 +4,10 @@
  * context-session-start — SessionStart hook for indexed-context.
  *
  * Generates a session ID, writes `.spur/context/.session.json` (tracking the current session
- * for PostToolUse and Stop hooks), and appends a `session_start` event to
- * `token-ledger.jsonl`. Task 0246: best-effort agent/model hints on session file + event.
+ * for PostToolUse and Stop hooks), and appends a `session_start` event to `token-ledger.jsonl`.
+ * Task 0246: best-effort agent/model hints on session file + event. Task 1159: the pointer records
+ * the host-native {@link SessionOwner} that created it, so a nested child can reuse the ledger for
+ * tool recording without being able to tear it down.
  *
  * **Fail-open contract:** every error path exits 0 with no output.
  *
@@ -17,9 +19,14 @@ import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path';
 import { getEnvVar, getEnvVars } from '../lib/env';
 import { resolveAgentHint, resolveModelHint } from './agent-hint';
+import { claudeHookOwnerFromPayloadText, type SessionOwner } from './context-owner';
 import { checkContextFreshness } from './context-post-tool';
 
 export { resolveAgentHint, resolveModelHint } from './agent-hint';
+export type { SessionOwner } from './context-owner';
+// Owner identity + Claude payload derivation live in ./context-owner (pure, unit-testable);
+// re-exported here because this module stays the hook surface consumers reach for.
+export { claudeHookOwnerFromPayloadText, claudeSessionOwner } from './context-owner';
 
 /**
  * Ancestor-run marker exported by `@gobing-ai/ts-ai-runner` ≥ 0.4.15 (`AGENT_RUN_ID_ENV`).
@@ -70,32 +77,22 @@ interface SessionFileBody {
  * stream. The H6 corpus shows the signature: 332 `session_start` against 157 `session_end` over
  * 18 days, 298 distinct ids, 39 starts in a 2-day window that held a handful of real sessions.
  *
- * **Two signals, in precedence order.**
- *
- * 1. {@link AGENT_RUN_ID_ENV} present → this process is a descendant of an agent run, definitively.
- *    Reuse the recorded session with no time bound: a pipeline step legitimately runs for the full
- *    `implementTimeoutMs` (45 min) and longer batches run for hours, so any wall-clock window would
- *    eventually split a run that is demonstrably still in flight.
- * 2. No marker → fall back to the {@link SESSION_REUSE_IDLE_MS} window on the `started` stamp, for
- *    hosts that nest without propagating a correlation.
- *
- * A crashed session leaves a stale `.session.json`; on path 2 the idle window retires it. On path 1
- * a stale file is only reachable from inside a live agent run, where reusing it is the correct
- * answer anyway.
+ * **Two signals, in precedence order.** (1) {@link AGENT_RUN_ID_ENV} present → definitively a
+ * descendant of an agent run: reuse the recorded session with no time bound, because a pipeline step
+ * legitimately runs for the full `implementTimeoutMs` (45 min) and longer batches for hours, so any
+ * wall-clock window would eventually split a run that is still in flight. (2) No marker → fall back
+ * to the {@link SESSION_REUSE_IDLE_MS} window on the `started` stamp, for hosts that nest without
+ * propagating a correlation. A crashed session leaves a stale `.session.json`: on (2) the idle window
+ * retires it, on (1) a stale file is only reachable from inside a live agent run, where reusing it is
+ * the correct answer anyway.
  */
 export function resolveActiveSession(dir: string, now: Date, env: NodeJS.ProcessEnv = getEnvVars()): string | null {
-    let raw: string;
-    try {
-        raw = readFileSync(join(dir, '.session.json'), 'utf-8');
-    } catch {
-        return null; // no in-flight session (or unreadable) → mint a new one
-    }
-
     let body: SessionFileBody;
     try {
-        body = JSON.parse(raw) as SessionFileBody;
+        // No in-flight session, unreadable file or corrupt pointer → mint a new one.
+        body = JSON.parse(readFileSync(join(dir, '.session.json'), 'utf-8')) as SessionFileBody;
     } catch {
-        return null; // corrupt pointer → mint a new one
+        return null;
     }
 
     if (typeof body.session !== 'string' || body.session.length === 0) return null;
@@ -121,12 +118,17 @@ export function resolveActiveSession(dir: string, now: Date, env: NodeJS.Process
  *
  * Idempotent per in-flight session (0398 R3): when `resolveActiveSession` finds one, this returns
  * that id and writes nothing — no ledger row, no pointer rewrite.
+ *
+ * Ownership (task 1159): a **new** pointer records a valid `owner` only; a reused start never
+ * rewrites the pointer, so a nested child cannot take ownership from the parent that opened it,
+ * and only the recorded owner's shutdown can finalize the ledger.
  */
 export function recordSessionStart(
     dir: string,
     env: NodeJS.ProcessEnv = getEnvVars(),
     now: () => Date = () => new Date(),
     agentFallback?: string,
+    owner?: SessionOwner,
 ): string | null {
     try {
         mkdirSync(dir, { recursive: true });
@@ -153,6 +155,9 @@ export function recordSessionStart(
     };
     if (agent) sessionBody.agent = agent;
     if (model) sessionBody.model = model;
+    const ownerId = typeof owner?.sessionId === 'string' ? owner.sessionId.trim() : '';
+    const host = owner?.host;
+    if (ownerId !== '' && (host === 'claude' || host === 'pi')) sessionBody.owner = { host, sessionId: ownerId };
 
     const sessionFile = join(dir, '.session.json');
     try {
@@ -194,10 +199,21 @@ export function recordSessionStart(
     return sessionId;
 }
 
-// Entrypoint — kept minimal so unit coverage focuses on pure helpers above.
+/**
+ * Open (or reuse) the session for a raw Claude stdin payload (task 1159, testable half).
+ *
+ * Malformed/absent text still opens the session ownerless (legacy policy); the dir resolution lives
+ * here rather than in the entrypoint so the untestable subprocess body stays a few lines.
+ */
+export function recordSessionStartFromPayloadText(text: string, env: NodeJS.ProcessEnv = getEnvVars()): string | null {
+    const dir = join(getEnvVar('CLAUDE_PROJECT_DIR') ?? process.cwd(), '.spur', 'context');
+    return recordSessionStart(dir, env, undefined, undefined, claudeHookOwnerFromPayloadText(text, env) ?? undefined);
+}
+
+// Entrypoint — thin stdin adapter; logic lives in the exported helpers above (task 1159 coverage).
 if (import.meta.main) {
     try {
-        recordSessionStart(join(getEnvVar('CLAUDE_PROJECT_DIR') ?? process.cwd(), '.spur', 'context'));
+        recordSessionStartFromPayloadText(await Bun.stdin.text());
     } catch {
         /* fail-open */
     }
