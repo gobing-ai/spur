@@ -1,12 +1,44 @@
 registerHappyDom();
 
-import { afterAll, afterEach, describe, expect, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { resetFetchForTesting, setFetchForTesting } from '../../../src/lib/rpc-client';
 import ProcessesView, { buildWatchRows, filterWatchRows } from '../../../src/modules/projects/ProcessesView';
+import { ProjectContext, type ProjectFleetSnapshot } from '../../../src/modules/projects/useProjectContext';
 import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
 
 afterAll(teardownHappyDom);
+
+// ── Controllable EventSource for the detail-selection regressions (1163) ─────
+// happy-dom has no EventSource; the opened detail's terminal needs one whose
+// stream we can hold and close, so selecting another row can be proven to close
+// the old identity's stream and start a fresh cursor.
+interface ViewStream {
+    url: string;
+    closed: boolean;
+    onmessage: ((event: { data: string }) => void) | null;
+    onerror: (() => void) | null;
+}
+
+let viewStreams: ViewStream[] = [];
+const OriginalEventSource = (globalThis as Record<string, unknown>).EventSource;
+
+beforeAll(() => {
+    Object.defineProperty(globalThis, 'EventSource', {
+        value: function ControlledEventSource(url: string): ViewStream & { close: () => void } {
+            const stream = { url, closed: false, onmessage: null, onerror: null } as ViewStream & {
+                close: () => void;
+            };
+            stream.close = () => {
+                stream.closed = true;
+            };
+            viewStreams.push(stream);
+            return stream;
+        },
+        writable: true,
+        configurable: true,
+    });
+});
 
 function jsonResponse(body: unknown): Response {
     return new Response(JSON.stringify(body), {
@@ -18,6 +50,15 @@ function jsonResponse(body: unknown): Response {
 afterEach(() => {
     cleanup();
     resetFetchForTesting();
+    viewStreams = [];
+});
+
+afterAll(() => {
+    Object.defineProperty(globalThis, 'EventSource', {
+        value: OriginalEventSource,
+        writable: true,
+        configurable: true,
+    });
 });
 
 // ── R5: the three supervised-row cases (0262 AC + 0264), ported from the retired teams suite ──
@@ -437,5 +478,73 @@ describe('ProcessesView filter bar (0852 R3 / 0267)', () => {
         // Filter controls stay visible so the user can widen the view.
         expect(container.querySelector('[data-processes-filters]')).not.toBeNull();
         expect(container.querySelector('[data-processes-tab-filtered-empty]')).not.toBeNull();
+    });
+});
+
+// ── 1163 R1: selecting another row remounts the shared detail's terminal ─────
+
+describe('ProcessesView detail selection (1163 R1)', () => {
+    const snapshot: ProjectFleetSnapshot = {
+        path: '/work/project',
+        enabled: true,
+        strategy: null,
+        orchestrator: { state: 'missing' },
+        members: [],
+        capacity: { total: 0, enabled: 0, writeCapable: 0, missing: [] },
+    };
+
+    test("opening beta after alpha closes alpha's stream and starts a fresh cursor", async () => {
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
+            if (url.includes('/processes')) {
+                return jsonResponse({
+                    processes: [
+                        { agentId: 'alpha', pid: 11, status: 'running', startedAt: 'x', exitCode: null },
+                        { agentId: 'beta', pid: 12, status: 'running', startedAt: 'x', exitCode: null },
+                    ],
+                    count: 2,
+                    executions: [],
+                    executionsCount: 0,
+                });
+            }
+            return jsonResponse({ ok: true });
+        }) as unknown as typeof fetch);
+
+        const view = render(
+            <ProjectContext.Provider
+                value={{ path: '/work/project', name: 'project', fleet: snapshot, state: 'ready' }}
+            >
+                <ProcessesView />
+            </ProjectContext.Provider>,
+        );
+        const alphaRow = await waitFor(() => {
+            const row = view.container.querySelector('[data-processes-row="sup:alpha"]') as HTMLElement;
+            expect(row).not.toBeNull();
+            return row;
+        });
+
+        act(() => fireEvent.click(alphaRow));
+        await waitFor(() => expect(view.container.querySelector('[data-member-terminal="alpha"]')).not.toBeNull());
+        const alphaStream = viewStreams[0] as ViewStream;
+        expect(alphaStream.url).toContain('/processes/alpha/stream');
+        act(() => {
+            alphaStream.onmessage?.({
+                data: JSON.stringify({ stream: 'stdout', ts: 'x', line: 'alpha-line', seq: 100 }),
+            });
+        });
+        await waitFor(() => expect(view.container.textContent).toContain('alpha-line'));
+
+        const betaRow = view.container.querySelector('[data-processes-row="sup:beta"]') as HTMLElement;
+        act(() => fireEvent.click(betaRow));
+        await waitFor(() => expect(view.container.querySelector('[data-member-terminal="beta"]')).not.toBeNull());
+
+        // The shared keyed terminal: alpha's stream is closed, beta starts fresh
+        // (a carried cursor would resume beta at sinceSeq=100 and drop its replay).
+        expect(alphaStream.closed).toBe(true);
+        expect(view.container.querySelector('[data-member-terminal="alpha"]')).toBeNull();
+        const betaStream = viewStreams[1] as ViewStream;
+        expect(betaStream.url).toContain('/processes/beta/stream');
+        expect(betaStream.url).not.toContain('sinceSeq');
+        expect(view.container.textContent).not.toContain('alpha-line');
     });
 });

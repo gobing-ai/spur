@@ -383,7 +383,14 @@ export default function MemberDetail({
                         </div>
                     </div>
                     <div className="flex-1 min-h-0">
-                        <MemberTerminal agentId={entry.instanceId} sessionId={activeSession?.id} />
+                        {/* Keyed by the stream identity: selecting another agent remounts the
+                            terminal (frames, input, status, seq cursor) and its cleanup closes
+                            the old stream + reconnect timer. sessionId only labels the stream. */}
+                        <MemberTerminal
+                            key={entry.instanceId}
+                            agentId={entry.instanceId}
+                            sessionId={activeSession?.id}
+                        />
                     </div>
                 </div>
             )}

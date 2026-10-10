@@ -68,6 +68,77 @@ function resetMockSources(): void {
 }
 
 /**
+ * Scoped fake `setTimeout`/`clearTimeout` (1163): the reconnect backoff is a real
+ * 1000 ms wall-clock sleep otherwise. Only the window between scheduling and
+ * advancing is faked, so `waitFor` and the status poll — which run on real timers —
+ * are unaffected; `restore()` puts both globals back and belongs in a `finally`.
+ */
+interface ScopedTimers {
+    handles: number[];
+    delays: number[];
+    cleared: number[];
+    advanceByDelay: (delay: number) => void;
+    restore: () => void;
+}
+
+function scopedFakeTimeouts(): ScopedTimers {
+    const realSetTimeout = globalThis.setTimeout;
+    const realClearTimeout = globalThis.clearTimeout;
+    const pending = new Map<number, () => void>();
+    const timers: ScopedTimers = {
+        handles: [],
+        delays: [],
+        cleared: [],
+        advanceByDelay(delay) {
+            for (const [id, fn] of [...pending]) {
+                const index = timers.handles.indexOf(id);
+                if (timers.delays[index] === delay) {
+                    pending.delete(id);
+                    fn();
+                }
+            }
+        },
+        restore() {
+            Object.defineProperty(globalThis, 'setTimeout', {
+                value: realSetTimeout,
+                writable: true,
+                configurable: true,
+            });
+            Object.defineProperty(globalThis, 'clearTimeout', {
+                value: realClearTimeout,
+                writable: true,
+                configurable: true,
+            });
+        },
+    };
+    let next = 1;
+    Object.defineProperty(globalThis, 'setTimeout', {
+        value: (fn: () => void, delay?: number) => {
+            const id = next++;
+            pending.set(id, fn);
+            timers.handles.push(id);
+            timers.delays.push(delay ?? 0);
+            return id;
+        },
+        writable: true,
+        configurable: true,
+    });
+    Object.defineProperty(globalThis, 'clearTimeout', {
+        value: (id: number) => {
+            timers.cleared.push(id);
+            pending.delete(id);
+        },
+        writable: true,
+        configurable: true,
+    });
+    return timers;
+}
+
+/** The keyed caller under test: the identity key MemberDetail puts on the terminal (1163 R1). */
+const KeyedTerminal = ({ agentId, sessionId }: { agentId: string; sessionId: string }) =>
+    React.createElement(MemberTerminal, { key: agentId, agentId, sessionId });
+
+/**
  * Read a node's React fiber props (`onChange`, `onKeyDown`, …) and invoke the
  * handler directly. happy-dom + React 19 do not deliver `fireEvent.change` to a
  * controlled input's onChange (capricorn86/happy-dom#856), so — matching the
@@ -539,6 +610,176 @@ describe('MemberTerminal (component)', () => {
         expect(lines[0]?.textContent).toBe('first');
         expect(lines[1]?.textContent).toBe('second');
         expect(lines[2]?.textContent).toBe('third');
+
+        resetFetchForTesting();
+        restoreEventSource();
+        resetMockSources();
+    });
+    test('1163 R2: same-agent reconnect resumes sinceSeq=100 and dedup survives it', async () => {
+        installMockEventSource();
+        resetMockSources();
+        setFetchForTesting(mockFetch(async () => new Response(JSON.stringify({ processes: [] }), { status: 200 })));
+
+        const { container } = render(React.createElement(MemberTerminal, { agentId: 'resume-agent' }));
+
+        await waitFor(() => expect(mockSources.length).toBe(1));
+        const first = mockSources[0] as MockEventSource;
+        act(() => {
+            first._push({ stream: 'stdout', ts: 'x', line: 'before', seq: 100 });
+        });
+        await waitFor(() => expect(findByText(container, 'before')).not.toBeNull());
+
+        const timers = scopedFakeTimeouts();
+        try {
+            act(() => {
+                first._error();
+            });
+            expect(timers.delays).toEqual([1000]); // nextBackoff(0) — advanced, not slept
+            act(() => {
+                timers.advanceByDelay(1000);
+            });
+        } finally {
+            timers.restore();
+        }
+
+        await waitFor(() => expect(mockSources.length).toBe(2));
+        const second = mockSources[1] as MockEventSource;
+        // Same agent: the cursor is resumed, not restarted.
+        expect(second.url).toContain('/processes/resume-agent/stream?sinceSeq=100');
+
+        act(() => {
+            second._push({ stream: 'stdout', ts: 'x', line: 'duplicate', seq: 100 });
+            second._push({ stream: 'stdout', ts: 'x', line: 'after', seq: 101 });
+        });
+        await waitFor(() => expect(findByText(container, 'after')).not.toBeNull());
+        expect(findByText(container, 'duplicate')).toBeNull();
+
+        resetFetchForTesting();
+        restoreEventSource();
+        resetMockSources();
+    });
+
+    test('1163 R2: the keyed caller keeps the stream and cursor when only sessionId changes', async () => {
+        installMockEventSource();
+        resetMockSources();
+        setFetchForTesting(mockFetch(async () => new Response(JSON.stringify({ processes: [] }), { status: 200 })));
+
+        const view = render(React.createElement(KeyedTerminal, { agentId: 'stable-agent', sessionId: 'sess-one-1' }));
+
+        await waitFor(() => expect(mockSources.length).toBe(1));
+        const es = mockSources[0] as MockEventSource;
+        act(() => {
+            es._push({ stream: 'stdout', ts: 'x', line: 'kept', seq: 100 });
+        });
+        await waitFor(() => expect(findByText(view.container, 'kept')).not.toBeNull());
+
+        // Display metadata only — same agentId, so the same key: no remount, no reset.
+        view.rerender(React.createElement(KeyedTerminal, { agentId: 'stable-agent', sessionId: 'sess-two-2' }));
+
+        await waitFor(() =>
+            expect(view.container.querySelector('[data-terminal-session]')?.textContent).toContain('sess:sess-two'),
+        );
+        expect(mockSources.length).toBe(1);
+        expect(es._closed).toBe(false);
+        expect(findByText(view.container, 'kept')).not.toBeNull();
+
+        // The cursor still dedups — a replayed 100 does not reappear.
+        act(() => {
+            es._push({ stream: 'stdout', ts: 'x', line: 'kept', seq: 100 });
+        });
+        const lines = view.container.querySelectorAll('[data-terminal-output] [data-stream]');
+        expect(lines.length).toBe(1);
+
+        view.unmount();
+        resetFetchForTesting();
+        restoreEventSource();
+        resetMockSources();
+    });
+
+    test('1163 R2: a pending reconnect is cancelled when the keyed caller switches agent', async () => {
+        installMockEventSource();
+        resetMockSources();
+        setFetchForTesting(mockFetch(async () => new Response(JSON.stringify({ processes: [] }), { status: 200 })));
+
+        const view = render(React.createElement(KeyedTerminal, { agentId: 'alpha-key', sessionId: 's1' }));
+
+        await waitFor(() => expect(mockSources.length).toBe(1));
+        const alphaEs = mockSources[0] as MockEventSource;
+
+        const timers = scopedFakeTimeouts();
+        try {
+            act(() => {
+                alphaEs._error();
+            });
+            expect(timers.delays).toEqual([1000]);
+
+            act(() => {
+                view.rerender(React.createElement(KeyedTerminal, { agentId: 'beta-key', sessionId: 's1' }));
+            });
+            // The keyed remount cleared alpha's pending reconnect timer.
+            const alphaTimer = timers.handles[0];
+            expect(alphaTimer).toBeDefined();
+            expect(alphaTimer !== undefined && timers.cleared.includes(alphaTimer)).toBe(true);
+            expect(alphaEs._closed).toBe(true);
+
+            const streamsAfterSwitch = mockSources.length;
+            act(() => {
+                timers.advanceByDelay(1000);
+            });
+            expect(mockSources.length).toBe(streamsAfterSwitch); // no new alpha stream
+            expect(mockSources.some((s) => s.url.includes('alpha-key') && !s._closed)).toBe(false);
+        } finally {
+            timers.restore();
+        }
+
+        view.unmount();
+        resetFetchForTesting();
+        restoreEventSource();
+        resetMockSources();
+    });
+
+    test('1163 R2: unmount clears the status interval and aborts the in-flight poll', async () => {
+        installMockEventSource();
+        resetMockSources();
+        let pendingPoll: Request | undefined;
+        let polls = 0;
+        setFetchForTesting(
+            mockFetch(async (req: Request) => {
+                if (req.method === 'GET' && polls++ === 0) {
+                    pendingPoll = req;
+                    return new Promise<Response>(() => {});
+                }
+                return new Response(JSON.stringify({ processes: [] }), { status: 200 });
+            }),
+        );
+
+        const { unmount } = render(React.createElement(MemberTerminal, { agentId: 'unmount-agent' }));
+        await waitFor(() => expect(mockSources.length).toBe(1));
+        expect(pendingPoll?.signal.aborted).toBe(false);
+
+        const cleared: unknown[] = [];
+        const realClearInterval = globalThis.clearInterval;
+        Object.defineProperty(globalThis, 'clearInterval', {
+            value: (handle: unknown) => {
+                cleared.push(handle);
+                (realClearInterval as (h: unknown) => void)(handle);
+            },
+            writable: true,
+            configurable: true,
+        });
+        try {
+            unmount();
+        } finally {
+            Object.defineProperty(globalThis, 'clearInterval', {
+                value: realClearInterval,
+                writable: true,
+                configurable: true,
+            });
+        }
+
+        expect(cleared.length).toBe(1); // STATUS_POLL_MS interval
+        expect(pendingPoll?.signal.aborted).toBe(true);
+        expect((mockSources[0] as MockEventSource)._closed).toBe(true);
 
         resetFetchForTesting();
         restoreEventSource();
