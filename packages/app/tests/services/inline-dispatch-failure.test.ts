@@ -8,7 +8,7 @@
  * project YAML, so the NEXT dispatch skips the rung with no provider call (AC5).
  */
 
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -29,8 +29,11 @@ const INCIDENT =
 const RUN_ID = 'run-1134-test';
 
 let root: string;
+// runInlineRunDispatchFailure reports its JSON outcome on stdout; keep it out of the test reporter.
+let outSpy: ReturnType<typeof spyOn>;
 
 beforeEach(() => {
+    outSpy = spyOn(process.stdout, 'write').mockImplementation(() => true);
     root = mkdtempSync(join(tmpdir(), 'inline-dispatch-failure-'));
     mkdirSync(join(root, '.spur', 'run'), { recursive: true });
     mkdirSync(join(root, '.spur', 'memory', 'runs'), { recursive: true });
@@ -42,6 +45,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+    outSpy.mockRestore();
     removeEnvVar('SPUR_SKIP_GLOBAL_CONFIG');
     rmSync(root, { recursive: true, force: true });
 });
