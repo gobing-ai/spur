@@ -4360,6 +4360,165 @@ describe('spur task CLI — verdict scenario-key gate (0958)', () => {
 // ── parent-status link guard under raw --json (task 1132 R2, review residual v) ──
 // `task create` already emitted the structured `ok:false` payload; `task update --feature` wrote
 // prose to stderr with empty stdout, which automation reading stdout cannot parse.
+describe('spur task CLI — verdict answer lint gate (confidence level × uncertainty phrases)', () => {
+    // End-to-end cover for the two rules the pipeline's verify step depends on, exercised through
+    // the real command rather than the pure lint: the answer's `Confidence:` level and the
+    // uncertainty phrases in its MET evidence. `spur task verdict` refuses the answer before any
+    // artifact write when either is wrong, so a bad answer can never certify a verdict.
+    const WBS = '9077';
+    const SCENARIO = 'AC1 — The receipt is written on every run (req: R1)';
+    const TASK_FILE = [
+        '---',
+        'schema_version: 1',
+        `name: "Confidence gate fixture"`,
+        'status: wip',
+        'priority: P2',
+        'created_at: 2026-10-09T00:00:00.000Z',
+        'updated_at: 2026-10-09T00:00:00.000Z',
+        '---',
+        '',
+        `## ${WBS}. Confidence gate fixture`,
+        '',
+        '### Requirements',
+        '',
+        '- [ ] **R1. Receipt.** The widget writes its receipt on every run.',
+        '',
+        '### Acceptance Criteria',
+        '',
+        '```gherkin',
+        `Scenario: ${SCENARIO}`,
+        '  Given a configured widget',
+        '  When the widget runs',
+        '  Then a receipt exists',
+        '```',
+        '',
+    ].join('\n');
+
+    /** The artifact the command writes: process-cwd relative (mirrors the 0958 suite). */
+    const artifactPath = (): string => join(process.cwd(), '.spur', 'run', `${WBS}-verdict.json`);
+
+    async function seedCwd(): Promise<string> {
+        const isoCwd = join(import.meta.dir, '..', `.tmp-task-lint-${Date.now()}`);
+        await mkdir(join(isoCwd, 'docs', 'tasks'), { recursive: true });
+        await writeFile(join(isoCwd, 'docs', 'tasks', `${WBS}_confidence-gate-fixture.md`), TASK_FILE);
+        return isoCwd;
+    }
+
+    /** One verify answer: `level` as the Confidence line, `status`/`evidence` for the only row. */
+    function answer(level: string, status: string, evidence: string): string {
+        return [
+            `Verdict: ${status === 'MET' ? 'PASS' : 'PARTIAL'}`,
+            `Confidence: ${level}`,
+            '',
+            '| Req | Status | Evidence |',
+            '| --- | --- | --- |',
+            `| R1 | ${status} | ${evidence} |`,
+            '',
+            '| AC | Status | Evidence Type | Evidence |',
+            '| --- | --- | --- | --- |',
+            `| ${SCENARIO} | MET | test | \`docs/tasks/${WBS}_confidence-gate-fixture.md:1\` |`,
+        ].join('\n');
+    }
+
+    const CLEAN_EVIDENCE = `\`docs/tasks/${WBS}_confidence-gate-fixture.md:1\` records it`;
+    const HEDGED_EVIDENCE = 'it could regress under load, so the receipt is written';
+
+    interface VerdictRun {
+        exitCode: number;
+        lintRules: string[];
+        artifact: { confidence?: string; verdict?: string } | null;
+    }
+
+    async function runVerdict(isoCwd: string, name: string, body: string): Promise<VerdictRun> {
+        rmSync(artifactPath(), { force: true });
+        const answerPath = join(isoCwd, `${name}-verify-answer.txt`);
+        await writeFile(answerPath, body);
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'verdict', WBS, '--from-answer', answerPath, '--json'], {
+            cwd: isoCwd,
+            output,
+        });
+        const message = output.messages.at(-1) ?? '';
+        const parsed = JSON.parse(message) as { lintFindings?: { rule: string; message: string }[] };
+        const artifact = existsSync(artifactPath())
+            ? (JSON.parse(await readFile(artifactPath(), 'utf-8')) as { confidence?: string; verdict?: string })
+            : null;
+        return { exitCode, lintRules: (parsed.lintFindings ?? []).map((f) => f.rule), artifact };
+    }
+
+    test('the matrix: clean levels certify, hedged or mis-levelled answers are refused unwritten', async () => {
+        const isoCwd = await seedCwd();
+        try {
+            // Accepted: each level certifies when its rows earn it. LOW is only warranted by an
+            // unproven row, so its case is PARTIAL (the CLI exits 1 on a non-PASS *verdict* by
+            // design, which is why the artifact — not the exit code — carries the assertion).
+            const high = await runVerdict(isoCwd, 'high', answer('HIGH', 'MET', CLEAN_EVIDENCE));
+            expect({ exit: high.exitCode, conf: high.artifact?.confidence, rules: high.lintRules }).toEqual({
+                exit: 0,
+                conf: 'HIGH',
+                rules: [],
+            });
+            const medium = await runVerdict(isoCwd, 'medium', answer('MEDIUM', 'MET', CLEAN_EVIDENCE));
+            expect({ exit: medium.exitCode, conf: medium.artifact?.confidence, rules: medium.lintRules }).toEqual({
+                exit: 0,
+                conf: 'MEDIUM',
+                rules: [],
+            });
+            const low = await runVerdict(isoCwd, 'low', answer('LOW', 'PARTIAL', CLEAN_EVIDENCE));
+            expect({ conf: low.artifact?.confidence, verdict: low.artifact?.verdict, rules: low.lintRules }).toEqual({
+                conf: 'LOW',
+                verdict: 'PARTIAL',
+                rules: [],
+            });
+
+            // Refused: the phrase fires at every level, the level rule only when the level is HIGH.
+            const hedgedHigh = await runVerdict(isoCwd, 'hedged-high', answer('HIGH', 'MET', HEDGED_EVIDENCE));
+            expect(hedgedHigh.artifact).toBeNull();
+            expect(hedgedHigh.exitCode).toBe(1);
+            expect(hedgedHigh.lintRules).toContain('evidence-hedged');
+            expect(hedgedHigh.lintRules).toContain('confidence-unwarranted');
+
+            const hedgedMedium = await runVerdict(isoCwd, 'hedged-medium', answer('MEDIUM', 'MET', HEDGED_EVIDENCE));
+            expect(hedgedMedium.artifact).toBeNull();
+            expect(hedgedMedium.exitCode).toBe(1);
+            expect(hedgedMedium.lintRules).toContain('evidence-hedged');
+            expect(hedgedMedium.lintRules).not.toContain('confidence-unwarranted');
+
+            const hedgedLow = await runVerdict(isoCwd, 'hedged-low', answer('LOW', 'MET', HEDGED_EVIDENCE));
+            expect(hedgedLow.artifact).toBeNull();
+            expect(hedgedLow.exitCode).toBe(1);
+            expect(hedgedLow.lintRules).toContain('evidence-hedged');
+
+            const understated = await runVerdict(isoCwd, 'low-proven', answer('LOW', 'MET', CLEAN_EVIDENCE));
+            expect(understated.artifact).toBeNull();
+            expect(understated.exitCode).toBe(1);
+            expect(understated.lintRules).toContain('confidence-understated');
+            expect(understated.lintRules).not.toContain('evidence-hedged');
+        } finally {
+            rmSync(artifactPath(), { force: true });
+            rmSync(isoCwd, { recursive: true, force: true });
+        }
+    });
+
+    test('the hedge alone flips the outcome — same fixture, only the phrase differs', async () => {
+        const isoCwd = await seedCwd();
+        try {
+            const clean = await runVerdict(isoCwd, 'control-clean', answer('MEDIUM', 'MET', CLEAN_EVIDENCE));
+            const hedged = await runVerdict(isoCwd, 'control-hedged', answer('MEDIUM', 'MET', HEDGED_EVIDENCE));
+            expect(clean.lintRules).toEqual([]);
+            expect(clean.exitCode).toBe(0);
+            expect(clean.artifact?.confidence).toBe('MEDIUM');
+            // The only difference is the phrase: exactly one rule, and no artifact.
+            expect(hedged.lintRules).toEqual(['evidence-hedged']);
+            expect(hedged.exitCode).toBe(1);
+            expect(hedged.artifact).toBeNull();
+        } finally {
+            rmSync(artifactPath(), { force: true });
+            rmSync(isoCwd, { recursive: true, force: true });
+        }
+    });
+});
+
 describe('spur task CLI — parent-feature-status JSON error (1132)', () => {
     test('create and update --feature on a done parent emit the same ok:false payload on stdout', async () => {
         const isoCwd = join(import.meta.dir, '..', `.tmp-task-parent-${Date.now()}`);
