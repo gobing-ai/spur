@@ -622,7 +622,6 @@ describe('task-pipeline confidence gate (session finding after 1088)', () => {
             [undefined, '', false],
             [undefined, 'true', true],
         ];
-        const row = renderConfidenceRow('__ack__');
         for (const [confidence, ack, admitted] of matrix) {
             const dir = mkdtempSync(join(tmpdir(), 'spur-conf-row-'));
             try {
@@ -630,11 +629,12 @@ describe('task-pipeline confidence gate (session finding after 1088)', () => {
                 const label = `${confidence ?? 'absent'}/ack=${ack === '' ? 'no' : 'yes'}`;
                 // The graph guard's decision is the contract the row must agree with.
                 expect(runSh(renderVerifyGuard(dir, ack), dir).code === 0, `guard ${label}`).toBe(admitted);
-                expect(runSh(row.replace('__ack__', ack), dir).code, `row ${label}`).toBe(0);
+                const row = renderConfidenceRow(ack);
+                expect(runSh(row, dir).code, `row ${label}`).toBe(0);
                 const artifact = JSON.parse(readFileSync(join(dir, '.spur', 'run', 't9002-verdict.json'), 'utf8')) as {
                     requirements: unknown[];
                     acceptanceCriteria: unknown[];
-                    checks: unknown[];
+                    checks: Array<{ name?: string; status?: string; evidence?: string }>;
                 };
                 expect(
                     aggregateVerifyVerdict({

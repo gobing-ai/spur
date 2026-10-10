@@ -30459,10 +30459,12 @@ function acquireGateLock(env2, logLine = () => {}) {
     }
     if (dirIno !== null) {
       let currentIno = null;
+      let entries = [];
       try {
         currentIno = statSync(dir).ino;
+        entries = readdirSync(dir);
       } catch {}
-      if (currentIno !== dirIno) {
+      if (currentIno !== dirIno || entries.length !== 1 || entries[0] !== marker) {
         try {
           unlinkSync(join(dir, marker));
         } catch {}

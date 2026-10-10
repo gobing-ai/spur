@@ -904,12 +904,14 @@ export function acquireGateLock(env: QualityGateEnv, logLine: (line: string) => 
             // (Inode numbers are not recycled inside that microsecond window on the supported local
             // filesystems; the cited project-server-owner.ts pattern relies on the same mkdir claim.)
             let currentIno: number | null = null;
+            let entries: string[] = [];
             try {
                 currentIno = statSync(dir).ino;
+                entries = readdirSync(dir);
             } catch {
                 // Reclaimed before we looked — same lost race as above.
             }
-            if (currentIno !== dirIno) {
+            if (currentIno !== dirIno || entries.length !== 1 || entries[0] !== marker) {
                 try {
                     unlinkSync(join(dir, marker));
                 } catch {
