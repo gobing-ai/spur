@@ -429,6 +429,19 @@ Action semantics come from the YAML and the workflow action contract:
 
 - `shell` — run the expanded command in the project working tree with resolved vars exported as
   environment variables. A non-zero result follows the action's existing failure policy.
+  **Long commands must not hold the host call (session finding 2026-10-09).** A `shell` action whose
+  command can outlive the host's per-call limit — the full quality gate, a repo-wide suite, any
+  `bun run spur-check`-class gate — is started **detached and polled**, never held in one foreground
+  call: redirect to a run-scoped file and disown it
+  (`nohup <cmd> > .spur/run/<wbs>-gate.out 2>&1 < /dev/null & disown`), then observe it in bounded
+  calls (`pgrep`, the declared `.status` file, the log tail). A call killed at the cap leaves the
+  substrate's own FAIL receipt — for the quality gate, `.spur/run/<wbs>-check-receipt.json` — and the
+  recheck's `no-progress` guard honours it, so a cap-kill reads as a red gate the next time. Preserve
+  the signal-induced receipt under a distinct name (`<wbs>-check-receipt.false-fail-<signal>.json`)
+  and say so in the run log before re-running: never delete it silently, and never report a
+  cap-killed attempt as a genuine gate failure. Measured this session: one foreground gate call
+  (25.6 min host-wide lock wait + 7.4 min runtime) was SIGTERM-killed at the host cap and produced
+  exactly that false FAIL receipt.
 - `note` — append the expanded message to the inline run log.
 - `doctor.probe` — run the declared Spur doctor once, persist its status file, and apply any
   `setVars` result (including a resolved executor) before the next action or state.
@@ -660,6 +673,13 @@ carried by the slash command remains the task handoff.
 execution tree, and an ad-hoc git worktree created for a comparison is removed before the stage
 reports. The G65 batch's implement dispatches left an 867 MB worktree plus a trail of `/tmp` scratch
 files that outlived the run (2026-09-15).
+
+**Delegate search discipline.** A delegate searches with bounded scope: `rg -g '!node_modules' …`
+(or an explicit narrow path), never `grep -r .` / `grep -rn --include=*` from a repository root —
+those walk `node_modules` and `.git` and can burn many minutes at full CPU in the wrong tree
+(measured 2026-10-09: a delegate's `grep -rn --include=* .` from the invoking tree root ran 4+ min
+before the orchestrator killed it). The dispatch payload's execution-tree cwd is the only tree a
+delegate searches or edits; a search it cannot bound is a search it should not run.
 
 **Driver scratch lives with the run (task 1136 R6).** Every driver scratch file — action-batch
 JSON, captured stage output, temporary status/answer files — lives under `.spur/run/<run-id>/`,
