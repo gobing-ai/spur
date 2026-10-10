@@ -24,7 +24,10 @@
 #        doc-sync routes a contract violation to `repair` (cheap, no
 #        re-dispatch — ADR-118 pilot) and an executor failure to `failed`;
 #        1147 adds two deterministic post-doc-sync checks that fail the step
-#        BEFORE the tripwire backstop and name doc-sync: the write-scope check
+#        BEFORE the tripwire backstop and name doc-sync. Those edges are
+#        declared before the contract-violation edge, so a doc-sync that both
+#        misses its learnings post-condition and trips a deterministic check
+#        fails the step instead of taking repair. The checks are: the write-scope check
 #        (the entry snapshot diffed against the working listing; allowed paths
 #        are docs/** minus docs/tasks*/docs/features* plus the declared learnings
 #        capture — a violation writes scope-violation: <paths> and is reported,
@@ -95,7 +98,7 @@
 "$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
 kind: state-machine
 name: wrapup-pipeline
-version: "8"
+version: "9"
 description: "Post-execution wrap-up: doc-sync (doc drift + learning capture), metrics, feature-transition, branch-cleanup"
 iterationBound: 10
 initialState: start
@@ -580,21 +583,15 @@ transitions:
     guard:
       kind: always
 
-  # ── doc-sync: contract-first routing (ADR-118 pilot, 0871; 1147 R1/R2 checks) ──
-  # Declaration order matters: the contract-violation edge is tried first, then the
-  # two deterministic post-doc-sync checks (write scope, supersession pins) so a
-  # violation they recorded can never be absorbed by the success edge, then success
-  # (action-ok), then the executor-failure defense (always) — a failed agent.run
-  # reaches these guards because doc-sync's agent.run declares onError: continue.
-  - from: doc-sync
-    to: repair
-    description: >
-      Contract violation (ADR-118): the agent exited 0 but missed its declared
-      post-condition. Route to the cheap repair edge — never re-dispatch the
-      full agent.run on this attempt.
-    trigger: contract-violation
-    guard:
-      kind: contract-violation
+  # ── doc-sync: deterministic checks, then contract repair (ADR-118; 1147 R1/R2) ──
+  # Declaration order matters. The engine takes the first passing guard. The two
+  # deterministic post-doc-sync checks (write scope, supersession pins) are tried
+  # first, so a doc-sync that both misses its learnings post-condition and writes
+  # out of scope (or resurrects a delinked row) fails the step. A violation they
+  # recorded can never be absorbed by repair or by the success edge. Contract
+  # violation is next (repair only when neither deterministic check fired), then
+  # success (action-ok), then the executor-failure defense (always). A failed
+  # agent.run reaches these guards because doc-sync's agent.run declares onError: continue.
   - from: doc-sync
     to: failed
     terminalReason: failed-check
@@ -603,7 +600,7 @@ transitions:
       outside docs/** minus the task/feature corpus (and the declared learnings
       capture) — the status file names the paths and the failing step is doc-sync
       itself. The edits are reported, never auto-reverted; already-written artifacts
-      stay on disk.
+      stay on disk. Declared before contract-violation so a compound miss fails here.
     guard:
       kind: shell
       options:
@@ -615,11 +612,21 @@ transitions:
       Supersession drift (1147 R2): the post-doc-sync re-run of
       repo-wide-tests/adr-supersession.test.ts failed — doc-sync re-added a
       deliberately delinked index row. Attributed here (named with the pin) rather
-      than at the later doc-tripwire backstop, which stays unchanged.
+      than at the later doc-tripwire backstop, which stays unchanged. Declared
+      before contract-violation so a compound miss fails here.
     guard:
       kind: shell
       options:
         command: 'grep -q "^supersession-pin-failed:" .spur/run/$__runId-wrapup-doc-supersession.status 2>/dev/null'
+  - from: doc-sync
+    to: repair
+    description: >
+      Contract violation (ADR-118): the agent exited 0 but missed its declared
+      post-condition, and neither deterministic check fired. Route to the cheap
+      repair edge — never re-dispatch the full agent.run on this attempt.
+    trigger: contract-violation
+    guard:
+      kind: contract-violation
   - from: doc-sync
     to: learnings-validate
     description: Doc drift repair + learning capture succeeded — validate the capture's shape before appending.
@@ -630,8 +637,9 @@ transitions:
     terminalReason: failed-check
     description: >
       Executor failure (non-zero exit, signal, or dispatch error) — keep the
-      existing fail semantics; a contract violation never falls through here
-      because the contract-violation edge is declared first.
+      existing fail semantics. A scope or supersession violation is declared
+      earlier and fails the step; a contract violation never falls through here
+      because its edge is declared before this defense.
     trigger: executor-failure
     guard:
       kind: always

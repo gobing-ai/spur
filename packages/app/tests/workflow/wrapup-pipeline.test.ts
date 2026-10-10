@@ -114,8 +114,9 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
         // 0944: task-resolve gained the drift-probe + mode projection actions and the
         // route-reason writer moved behind the wrapup-steps locator (composition caps).
         // 1147: doc-sync gained the entry snapshot + write-scope check + supersession-pin
-        // re-run, with two named fail edges.)
-        expect(def.version).toBe('8');
+        // re-run, with two named fail edges. v9 declares those fail edges before the
+        // contract-violation edge, so a compound miss fails the step.)
+        expect(def.version).toBe('9');
     });
 
     test('default feature gate checks only the selected feature and permits explicit override', () => {
@@ -140,8 +141,9 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
     });
 
     test('0770 definitions are all explicitly versioned (identity tag, not absence)', () => {
-        // Exact per-definition pins: a silent version bump fails here. wrapup-pipeline is '8'
-        // since 1147 added the doc-sync scope/supersession checks ('7' since 1037 added the
+        // Exact per-definition pins: a silent version bump fails here. wrapup-pipeline is '9'
+        // since the doc-sync scope/supersession edges moved ahead of contract-violation
+        // ('8' since 1147 added those checks, '7' since 1037 added the
         // doc-tripwire hop, '6' since 0986 added the learnings shape gate, '5' since 0944 added
         // the drift probe + mode projection and moved the route-reason writer behind the
         // wrapup-steps locator; '4' since 0871's repair edge). feature-lifecycle is '2' since
@@ -150,7 +152,7 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
         const expectedVersions: Record<string, string> = {
             'task-lifecycle': '1',
             'feature-lifecycle': '2',
-            'wrapup-pipeline': '8',
+            'wrapup-pipeline': '9',
         };
         for (const [name, version] of Object.entries(expectedVersions)) {
             expect(loadDef(name).version).toBe(version);
@@ -654,16 +656,17 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
 
         test('1147 R1/R2: the scope and supersession checks fail the step before doc-tripwire', () => {
             const edges = def.transitions.filter((t: TransitionDef) => t.from === 'doc-sync');
-            // Declaration order is load-bearing: contract violation first, then the two
-            // deterministic post-doc-sync checks, then action-ok success, then always defense.
+            // Declaration order is load-bearing: the two deterministic post-doc-sync
+            // checks first (a compound miss fails the step), then contract violation,
+            // then action-ok success, then always defense.
             expect(edges.map((e) => [e.to, e.guard?.kind, e.trigger ?? null])).toEqual([
+                ['failed', 'shell', null],
+                ['failed', 'shell', null],
                 ['repair', 'contract-violation', 'contract-violation'],
-                ['failed', 'shell', null],
-                ['failed', 'shell', null],
                 ['learnings-validate', 'action-ok', null],
                 ['failed', 'always', 'executor-failure'],
             ]);
-            const [scopeEdge, pinEdge] = edges.slice(1);
+            const [scopeEdge, pinEdge] = edges;
             expect(String(scopeEdge?.guard?.options?.command ?? '')).toContain('wrapup-doc-sync-scope.status');
             expect(String(scopeEdge?.guard?.options?.command ?? '')).toContain('scope-violation');
             expect(String(pinEdge?.guard?.options?.command ?? '')).toContain('wrapup-doc-supersession.status');
@@ -680,8 +683,9 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
 
         test('doc-sync routes contract violation → repair, success → learnings-validate, failure → failed', () => {
             const edges = def.transitions.filter((t: TransitionDef) => t.from === 'doc-sync');
-            expect(edges[0]?.to).toBe('repair');
-            expect(edges[0]?.trigger).toBe('contract-violation');
+            const repair = edges.find((e) => e.trigger === 'contract-violation');
+            expect(repair?.to).toBe('repair');
+            expect(edges.indexOf(repair as TransitionDef)).toBeGreaterThan(1);
             expect(edges.find((e) => e.to === 'learnings-validate')?.guard?.kind).toBe('action-ok');
             const last = edges[edges.length - 1];
             expect(last?.to).toBe('failed');

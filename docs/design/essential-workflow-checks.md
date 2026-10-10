@@ -171,15 +171,17 @@ unapplied no-op requires observed `from == to`; the affected-feature gate is dia
 cannot rescue a failed sync. Dead raw-input re-parsing, the `RUN_ID="wrapup"` fallback, and
 soft-success comments are removed; route reason strings stay byte-identical.
 
-**Implemented (task 1147, 2026-10-09):** `wrapup-pipeline.yaml` v8 bounds doc-sync's writes
-deterministically. The `doc-sync` state takes a `git status --porcelain -uall` snapshot BEFORE its
+**Implemented (task 1147, 2026-10-09; edge order corrected 2026-10-10):** `wrapup-pipeline.yaml` v9
+bounds doc-sync's writes deterministically. The `doc-sync` state takes a `git status --porcelain -uall` snapshot BEFORE its
 `agent.run` and runs two checks after it, each writing a run-scoped status the state's guards read
 (the actions always exit 0, so status truth lives in the file — 0783 R4). `doc-sync-scope` diffs
 the working listing against the entry snapshot: allowed writes are `docs/**` except
 `docs/tasks*`/`docs/features*` plus the declared learnings capture (pre-existing dirt, e.g. a
 sibling task's uncommitted work, is never attributed to doc-sync), and any other newly changed path
-records `scope-violation: <paths>` and routes the run to `failed` naming the paths. Violating edits
-are reported, never auto-reverted — a revert hides what the model did, and the operator decides. A
+records `scope-violation: <paths>` and routes the run to `failed` naming the paths. The scope and
+supersession edges are declared before the contract-violation edge, so a doc-sync that both misses
+its learnings post-condition and trips either check fails the step instead of taking repair.
+Violating edits are reported, never auto-reverted — a revert hides what the model did, and the operator decides. A
 missing snapshot fails the check closed. `doc-supersession` re-runs the supersession pins
 (`repo-wide-tests/adr-supersession.test.ts`) so a resurrected delinked index row is attributed to
 doc-sync (`supersession-pin-failed: <pin>`) instead of surfacing late at `doc-tripwire`, which
