@@ -1,7 +1,8 @@
 import { expect, spyOn, test } from 'bun:test';
+import { spawnSync } from 'node:child_process';
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { getEnvVar, getEnvVars, setEnvVar } from '@gobing-ai/ts-utils';
 import {
     main,
@@ -1095,6 +1096,124 @@ test('1033 R2 (f): unparsable sync or check output fails closed', () => {
         );
     } finally {
         cleanup(cwd2);
+    }
+});
+
+/** Committed git repo holding `files` at repo-relative paths — the scope check diffs against it. */
+function initGitRepo(files: Record<string, string>): string {
+    const cwd = mkdtempSync(join(tmpdir(), 'wrapup-doc-sync-scope-'));
+    for (const [rel, body] of Object.entries(files)) {
+        mkdirSync(dirname(join(cwd, rel)), { recursive: true });
+        writeFileSync(join(cwd, rel), body);
+    }
+    spawnSync('git', ['init', '-q'], { cwd });
+    spawnSync('git', ['-c', 'user.email=t@example.com', '-c', 'user.name=t', 'add', '-A'], { cwd });
+    spawnSync('git', ['-c', 'user.email=t@example.com', '-c', 'user.name=t', 'commit', '-qm', 'init'], { cwd });
+    return cwd;
+}
+
+function readStatus(cwd: string, runId: string, suffix: string): string {
+    return readFileSync(join(cwd, '.spur', 'run', `${runId}-${suffix}`), 'utf8');
+}
+
+/**
+ * 1147 R1/R2: the doc-sync write-scope guard is deterministic, not prompt wording. The
+ * snapshot is taken at doc-sync entry; the post-doc-sync check diffs the working listing
+ * against it and fails the step (status file) on any path outside `docs/**` minus the
+ * task/feature corpus, plus the declared learnings capture.
+ */
+test('1147 AC1: an in-scope docs edit passes; out-of-scope, corpus and untracked paths fail naming the path', () => {
+    const runId = 'r1147-scope';
+    const cwd = initGitRepo({
+        'docs/design/keep.md': 'a\n',
+        'docs/tasks5/1147_probe.md': 'a\n',
+        'docs/features/H1_probe.md': 'a\n',
+        'apps/app/tests/decision/decision-log-query.test.ts': 'a\n',
+    });
+    try {
+        expect(runSteps(['doc-sync-snapshot'], { __runId: runId }, cwd).code).toBe(0);
+        // In scope: the prompt's own declared surface.
+        writeFileSync(join(cwd, 'docs/design/keep.md'), 'edited in scope\n');
+        expect(runSteps(['doc-sync-scope'], { __runId: runId }, cwd).code).toBe(0);
+        expect(readStatus(cwd, runId, 'wrapup-doc-sync-scope.status')).toBe('PASS\n');
+
+        // Out of scope: an unrelated test edit (the 1132 defect) fails naming the path.
+        writeFileSync(join(cwd, 'apps/app/tests/decision/decision-log-query.test.ts'), 'edited out of scope\n');
+        expect(runSteps(['doc-sync-scope'], { __runId: runId }, cwd).code).toBe(0);
+        const outOfScope = readStatus(cwd, runId, 'wrapup-doc-sync-scope.status');
+        expect(outOfScope).toContain('scope-violation: apps/app/tests/decision/decision-log-query.test.ts');
+
+        // The corpus is never doc-sync's to write; an untracked out-of-scope file is caught
+        // too (an untracked path git reports individually, not just a tracked modification).
+        writeFileSync(join(cwd, 'docs/tasks5/1147_probe.md'), 'edited corpus\n');
+        writeFileSync(join(cwd, 'docs/features/H1_probe.md'), 'edited corpus\n');
+        writeFileSync(join(cwd, 'apps/app/tests/decision/untracked-probe.test.ts'), 'brand new\n');
+        expect(runSteps(['doc-sync-scope'], { __runId: runId }, cwd).code).toBe(0);
+        const corpus = readStatus(cwd, runId, 'wrapup-doc-sync-scope.status');
+        expect(corpus).toContain('docs/tasks5/1147_probe.md');
+        expect(corpus).toContain('docs/features/H1_probe.md');
+        expect(corpus).toContain('apps/app/tests/decision/untracked-probe.test.ts');
+        expect(corpus).toContain('apps/app/tests/decision/decision-log-query.test.ts');
+    } finally {
+        cleanup(cwd);
+    }
+});
+
+test('1147 AC1: the declared learnings capture is allowed and pre-existing dirt is never attributed', () => {
+    const runId = 'r1147-allow';
+    const cwd = initGitRepo({ 'apps/cli/src/commands/feature.ts': 'a\n', 'docs/design/keep.md': 'a\n' });
+    try {
+        // Dirt that predates doc-sync (a sibling task's uncommitted work) is in the snapshot.
+        writeFileSync(join(cwd, 'apps/cli/src/commands/feature.ts'), 'sibling task work\n');
+        expect(runSteps(['doc-sync-snapshot'], { __runId: runId }, cwd).code).toBe(0);
+        writeFileSync(join(cwd, '.spur', 'run', `${runId}-wrapup-learnings.md`), '- 1147: captured\n');
+        expect(runSteps(['doc-sync-scope'], { __runId: runId }, cwd).code).toBe(0);
+        expect(readStatus(cwd, runId, 'wrapup-doc-sync-scope.status')).toBe('PASS\n');
+    } finally {
+        cleanup(cwd);
+    }
+});
+
+test('1147 AC1: a missing entry snapshot fails the check closed instead of passing it', () => {
+    const runId = 'r1147-nosnap';
+    const cwd = initGitRepo({ 'docs/design/keep.md': 'a\n' });
+    try {
+        expect(runSteps(['doc-sync-scope'], { __runId: runId }, cwd).code).toBe(0);
+        expect(readStatus(cwd, runId, 'wrapup-doc-sync-scope.status')).toContain('scope-violation: snapshot-missing');
+    } finally {
+        cleanup(cwd);
+    }
+});
+
+test('1147 AC2: the supersession pin runs after doc-sync and fails the check naming the pin', () => {
+    const runId = 'r1147-pins';
+    const cwd = initGitRepo({ 'docs/design/keep.md': 'a\n' });
+    const pinDir = join(cwd, 'repo-wide-tests');
+    try {
+        // No pin in this project: the check skips (PASS), never failing a consumer.
+        expect(runSteps(['doc-supersession'], { __runId: runId }, cwd).code).toBe(0);
+        expect(readStatus(cwd, runId, 'wrapup-doc-supersession.status')).toBe('PASS\n');
+
+        // A genuine drift (a re-added delinked row) fails the pin and is attributed here.
+        mkdirSync(pinDir, { recursive: true });
+        writeFileSync(
+            join(pinDir, 'adr-supersession.test.ts'),
+            "import { expect, test } from 'bun:test';\ntest('g2 delinked row', () => { expect('re-added').toBe('absent'); });\n",
+        );
+        expect(runSteps(['doc-supersession'], { __runId: runId }, cwd).code).toBe(0);
+        expect(readStatus(cwd, runId, 'wrapup-doc-supersession.status')).toContain(
+            'supersession-pin-failed: repo-wide-tests/adr-supersession.test.ts',
+        );
+
+        // A clean pin records PASS.
+        writeFileSync(
+            join(pinDir, 'adr-supersession.test.ts'),
+            "import { expect, test } from 'bun:test';\ntest('g2 delinked row', () => { expect('absent').toBe('absent'); });\n",
+        );
+        expect(runSteps(['doc-supersession'], { __runId: runId }, cwd).code).toBe(0);
+        expect(readStatus(cwd, runId, 'wrapup-doc-supersession.status')).toBe('PASS\n');
+    } finally {
+        cleanup(cwd);
     }
 });
 

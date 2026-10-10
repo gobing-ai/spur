@@ -4,7 +4,7 @@ title: "Essential workflow checks and observable execution"
 status: implemented
 created_at: 2026-09-04
 updated_at: 2026-09-17
-related: [D61, "0765", "0766", "0767", "0768", "0769", "0770"]
+related: [D61, "0765", "0766", "0767", "0768", "0769", "0770", "1147"]
 tags: [contract, D61, workflow]
 ---
 
@@ -170,6 +170,23 @@ results record FAIL; an applied sync must be freshly observed at the proposal ta
 unapplied no-op requires observed `from == to`; the affected-feature gate is diagnostic-only and
 cannot rescue a failed sync. Dead raw-input re-parsing, the `RUN_ID="wrapup"` fallback, and
 soft-success comments are removed; route reason strings stay byte-identical.
+
+**Implemented (task 1147, 2026-10-09):** `wrapup-pipeline.yaml` v8 bounds doc-sync's writes
+deterministically. The `doc-sync` state takes a `git status --porcelain -uall` snapshot BEFORE its
+`agent.run` and runs two checks after it, each writing a run-scoped status the state's guards read
+(the actions always exit 0, so status truth lives in the file — 0783 R4). `doc-sync-scope` diffs
+the working listing against the entry snapshot: allowed writes are `docs/**` except
+`docs/tasks*`/`docs/features*` plus the declared learnings capture (pre-existing dirt, e.g. a
+sibling task's uncommitted work, is never attributed to doc-sync), and any other newly changed path
+records `scope-violation: <paths>` and routes the run to `failed` naming the paths. Violating edits
+are reported, never auto-reverted — a revert hides what the model did, and the operator decides. A
+missing snapshot fails the check closed. `doc-supersession` re-runs the supersession pins
+(`repo-wide-tests/adr-supersession.test.ts`) so a resurrected delinked index row is attributed to
+doc-sync (`supersession-pin-failed: <pin>`) instead of surfacing late at `doc-tripwire`, which
+stays the unchanged repo-wide backstop and is never weakened. The doc-sync prompt names both the
+write scope and the intentional absence of a delinked row; the checks, not the prompt, are the
+guard. The lifecycle side of the same run is in
+[planning-workflow-contracts](planning-workflow-contracts.md) §7.5 (onEnter error contract).
 
 Use the actual batch schema's Design/Plan/AC fields, retain exact feature scenario titles, and apply
 dependency ordering through CLI writes. Current YAML prose incorrectly excludes these schema fields;

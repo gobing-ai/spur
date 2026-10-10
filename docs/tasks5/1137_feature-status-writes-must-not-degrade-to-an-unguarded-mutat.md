@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: Feature status writes must not degrade to an unguarded mutation (feature-check fallback and the lifecycle-less server write service)
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-10-09T05:34:58.340Z
-updated_at: "2026-10-09T18:11:04.203Z"
+updated_at: "2026-10-10T04:12:38.645Z"
 feature_id: F21
 
 ac_altitude: task-local
 ac_numbering: task-local
 priority: P2
 estimate_hours: 8
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1137-verdict.json
 ---
 
 ## 1137. Feature status writes must not degrade to an unguarded mutation (feature-check fallback and the lifecycle-less server write service)
@@ -48,27 +50,27 @@ The `else` branch is the contract violation: it changes a feature's lifecycle st
 
 ### Requirements
 
-- [ ] R1. **`feature check --fix` performs no raw status write.** Delete the `else` branch at `packages/app/src/services/feature-check.ts:281-286`. With no `transitionPort`, the reopen is not applied. The check reports an error finding `feature-reopen-unavailable`, which names the missing port and gives the recovery ("run `spur feature check <id> --fix` from the CLI, or call `spur feature update <id> active`"). The feature file stays byte-identical, and no `feature-reopen` repair entry is reported. Structural repairs (headings, R-item checkboxes) still apply.
-- [ ] R2. **The server validates feature transitions in-process.** Add `transitionFeatureGuarded` in `packages/app/src/services/feature-transition.ts`, mirroring `transitionTaskGuarded`, and route `apps/server/src/modules/feature/handlers.ts:63-67` and the reopen hook at `apps/server/src/context.ts:500-503` through it. It:
+- [x] R1. **`feature check --fix` performs no raw status write.** Delete the `else` branch at `packages/app/src/services/feature-check.ts:281-286`. With no `transitionPort`, the reopen is not applied. The check reports an error finding `feature-reopen-unavailable`, which names the missing port and gives the recovery ("run `spur feature check <id> --fix` from the CLI, or call `spur feature update <id> active`"). The feature file stays byte-identical, and no `feature-reopen` repair entry is reported. Structural repairs (headings, R-item checkboxes) still apply.
+- [x] R2. **The server validates feature transitions in-process.** Add `transitionFeatureGuarded` in `packages/app/src/services/feature-transition.ts`, mirroring `transitionTaskGuarded`, and route `apps/server/src/modules/feature/handlers.ts:63-67` and the reopen hook at `apps/server/src/context.ts:500-503` through it. It:
   - (a) loads the `feature-lifecycle` graph with the existing `loadWorkflowDef`/`resolveWorkflowFile` (no spawn), and refuses an edge that is not declared;
   - (b) runs the in-process `FeatureCheckService.check(id, { as: to })` for every edge whose YAML guard is `kind: shell`, and denies on error findings;
   - (c) refuses a target state that declares `onEnter` actions (today: `verifying`), with the message "entering `verifying` runs feature verification; use `spur feature update <id> verifying` from the CLI";
   - (d) throws `GuardDeniedError` for every refusal, which the handler already maps to HTTP 409 `GUARD_DENIED`.
 
   `always` edges, including the `verifying → active` reopen, pass unchanged.
-- [ ] R3. **One raw status writer is not reintroduced.** Add a static pin test that fails when a non-test file under `packages/`, `apps/`, `plugins/` or `scripts/` calls `setFrontmatterField('status'` on a feature document. The only status writer is `PlanningWriteServiceImpl.transition`.
-- [ ] R4. **A missing graph fails loudly.** If `resolveWorkflowFile` cannot find `feature-lifecycle.yaml`, `transitionFeatureGuarded` throws `GuardDeniedError` naming the profile (`feature-lifecycle`) and the searched roots. It never falls back to `SchemaLifecyclePort`.
-- [ ] R5. **Tests (written first, each shown to fail without its fix).**
+- [x] R3. **One raw status writer is not reintroduced.** Add a static pin test that fails when a non-test file under `packages/`, `apps/`, `plugins/` or `scripts/` calls `setFrontmatterField('status'` on a feature document. The only status writer is `PlanningWriteServiceImpl.transition`.
+- [x] R4. **A missing graph fails loudly.** If `resolveWorkflowFile` cannot find `feature-lifecycle.yaml`, `transitionFeatureGuarded` throws `GuardDeniedError` naming the profile (`feature-lifecycle`) and the searched roots. It never falls back to `SchemaLifecyclePort`.
+- [x] R5. **Tests (written first, each shown to fail without its fix).**
   - (a) A no-port `feature check --fix` on a `verifying` feature with a live linked task leaves the file byte-identical and returns the `feature-reopen-unavailable` error.
   - (b) The with-port reopen still yields `active` plus a History line.
   - (c) A server-context `feature.transition` `active → verifying` on a feature whose check has error findings is denied with 409, and the file is unchanged.
   - (d) An undeclared edge is denied.
   - (e) The server reopen hook still reopens `verifying → active` with a History line.
   - (f) The R3 pin.
-- [ ] R6. **Docs.**
+- [x] R6. **Docs.**
   - `docs/design/planning-record-contracts.md` (feature-check row and the task→feature link section) states that the reopen requires a port and that the raw fallback was removed.
   - The server surface satellite that documents `feature.transition` states the in-process guard and the 409 refusals, including `→ verifying`.
-- [ ] R7. **Same-change bundle.** Run `bun run --filter @gobing-ai/spur build:bundle`. No plugin script is touched, so `build:scripts` is not required.
+- [x] R7. **Same-change bundle.** Run `bun run --filter @gobing-ai/spur build:bundle`. No plugin script is touched, so `build:scripts` is not required.
 
 ### Acceptance Criteria
 
@@ -200,15 +202,148 @@ Scenario: AC8 — Tests fail without their fixes and the gates pass (req: R5, R6
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Feature status writes can no longer degrade to an unguarded mutation on either surface this task
+named: `feature check --fix` without a transition port, and the server's HTTP feature write path.
+
+#### Change map
+
+| Change | Anchor |
+| --- | --- |
+| R1 — deleted the raw `setFrontmatterField('status', 'active')` fallback in the `--fix` reopen; a port-less caller now gets the error finding `feature-reopen-unavailable` (naming the missing port and both CLI recoveries), no `feature-reopen` repair is reported, and the feature file stays byte-identical | `packages/app/src/services/feature-check.ts:281-306` |
+| R1 — `findings` hoisted above the `--fix` block so the refusal finding is emitted from the repair phase | `packages/app/src/services/feature-check.ts:227` |
+| R1 — new finding code `feature-reopen-unavailable` registered | `packages/config/src/finding-codes.ts:88`, `packages/config/src/finding-codes.ts:194` |
+| R2/R4 — new in-process guard `transitionFeatureGuarded`: resolves `feature-lifecycle` project-first via `resolveWorkflowFile` (missing graph → `GuardDeniedError` naming the profile and probed roots, never the permissive port), refuses undeclared edges, refuses `onEnter` targets (`verifying`) with the CLI recovery message, runs `kind: shell` edge guards as the CLI would — YAML `--strict` read off the guard command and `runDir` + the run-store port forwarded so the D63 completion receipt fires at `--as done` — denying on error findings, then commits through `FeatureService.transition` (History + event unchanged) | `packages/app/src/services/feature-transition.ts:95-177` |
+| R2 — public export from the app package | `packages/app/src/index.ts:327-331` |
+| R2 — `ServerContext.transitionFeature(input)` added (contract) | `apps/server/src/context.ts:212` |
+| R2 — server wiring: lazy `FeatureCheckService`, task folders threaded to the check, guard invoked | `apps/server/src/context.ts:577-596` |
+| R2 — the 1132 task→feature reopen hook now routes through the guard (`verifying → active` is an `always` edge, so it passes unchanged) | `apps/server/src/context.ts:521-524` |
+| R2 — the HTTP `feature.transition` handler calls `ctx.transitionFeature` instead of the unguarded `featureService().transition` | `apps/server/src/modules/feature/handlers.ts:63-71` |
+| P2 — shell-guard edge execution mirrors the CLI wiring: the guard command's `--strict` becomes `strict: true` (only where declared), and `runDir` + the run-store port are forwarded so the digest-chained verification-receipt gate fires over HTTP | `packages/app/src/services/feature-transition.ts:63-70`, `packages/app/src/services/feature-transition.ts:145-168` |
+| P2 — shared DB-backed `createFeatureReceiptRunPort` factory (`RunDao`/`ArtifactDao` read-only port) reused by both surfaces — no second receipt mechanism | `packages/app/src/services/feature-receipt-run-port.ts:22-56` |
+| P2 — CLI `makeReceiptRunPort` now delegates to the shared factory | `apps/cli/src/commands/feature.ts:614-615` |
+| P2 — server `transitionFeature` wires `runDir` + the run-store port so the completion receipt is enforced on the HTTP path | `apps/server/src/context.ts:577-596` |
+| R3 — static pin: no non-test source under packages/apps/plugins/scripts may call `setFrontmatterField('status', …)` in a feature-domain file | `packages/app/tests/feature-status-writer-pin.test.ts:17` |
+| R5(a)/(b) — no-port refusal (byte-identical + finding) and with-port reopen (History line + repair) | `packages/app/tests/services/feature-check-reopen-guard.test.ts:72`, `packages/app/tests/services/feature-check-reopen-guard.test.ts:96` |
+| R5(d), AC3/AC4 app-layer, AC7, project-tier precedence (failure inventory) | `packages/app/tests/services/feature-transition.test.ts:145-314` |
+| P2 — guard wiring + receipt-gate assertions (strict/runDir/receiptRunPort forwarded; receipt-less denial; valid-receipt pass) | `packages/app/tests/services/feature-transition.test.ts:228-285` |
+| R5(c)/(d)/(e) over the server context + handler routing pin | `apps/server/tests/modules/feature/transition-gate.test.ts:182-287` |
+| P2 — server-path receipt-gate assertions (receipt-less denial; recorded-receipt pass through the wired run-store port) | `apps/server/tests/modules/feature/transition-gate.test.ts:219-249` |
+| Handler mock updated for the new `transitionFeature` context member | `apps/server/tests/modules/feature/handlers.test.ts:61-67` |
+| R6 — feature-check row + task→feature link row state the port requirement and the removed raw fallback | `docs/design/planning-record-contracts.md:110`, `docs/design/planning-record-contracts.md:39` |
+| R6 — server surface satellite documents the in-process guard and the 409 refusals (incl. `→ verifying`) | `docs/design/server-side-adjustment-design.md:275-286` |
+| R7 — bundle rebuilt (regenerated plugin bundles carry the new finding code) | `plugins/sp/lib/idea-handoff.generated.mjs`, `plugins/sp/lib/inline-run.generated.mjs`, `plugins/sp/lib/quality-gate.generated.mjs` |
+
+#### Decisions within the approved design
+
+- **Guard order follows the frozen Design steps:** declared-edge check → `onEnter` refusal →
+  shell-guard check. For `active → verifying` the `onEnter` refusal fires before the check runs, so
+  AC3's denial is the `GuardDeniedError` → 409 either way and AC4's CLI recovery message is exact.
+- **`resolveFile` test seam** on `GuardedFeatureTransitionDeps` (defaults to `resolveWorkflowFile`):
+  the bundled tier always finds `feature-lifecycle.yaml` in a dev checkout, so AC7's missing-graph
+  refusal is exercised through this injection point rather than by monkey-patching module state.
+- **Missing feature** surfaces the write service's own not-found error (the guard does not invent a
+  denial for an entity it cannot read), mirroring the 0966 task-gate Q&A.
+- Server check invocations thread `featuresDir` + all registered task folders so the in-process
+  `--as <to>` check evaluates the same L3/L4 corpus rules as the CLI shell guard.
+- **P2 remediation — receipt gate parity:** the HTTP shell guard must not be weaker than the CLI
+  shell guard. `strict` is read from the YAML guard command (`feature check $featureId --strict --as
+  done`) rather than passed unconditionally, so warning-only edges are not over-denied; `runDir` and
+  the run-store port are wired so the D63 digest-chained completion receipt (`FeatureCheckService`
+  `--as done` block) fires over oRPC exactly as it does from the CLI. `runDir` is a required member
+  of `GuardedFeatureTransitionDeps` (mirroring the task-side `GuardedTransitionDeps`), making a
+  future caller that forgets it a compile error instead of a silent bypass.
+
+#### Fail-first evidence (R5)
+
+- `feature-check-reopen-guard.test.ts` AC1/R5(a): pre-fix the file was mutated (`status: verifying → active`)
+  with no finding — failed as `expect(after).toBe(before)`; passes post-fix.
+- `feature-status-writer-pin.test.ts`: pre-fix flagged `packages/app/src/services/feature-check.ts:283`; passes post-fix.
+- `feature-transition.test.ts`: pre-fix the module did not exist (import error); all pass post-fix.
+- `transition-gate.test.ts` (server): pre-fix `ctx.transitionFeature is not a function` and the handler used
+  the unguarded path (4 failures); all pass post-fix.
+- P2 remediation: reverting the guard's `strict`/`runDir`/`receiptRunPort` forwarding fails the app
+  wiring test (`strict` was `undefined`) and the app/server receipt-less denials (the hop resolved
+  instead of rejecting); restoring the wiring makes all pass.
+- Regression pins that passed before and after (behavior preserved): R5(b) with-port reopen, AC5 server reopen.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | The `else` raw `setFrontmatterField('status','active')` fallback is deleted; a port-less `--fix` now pushes the `feature-reopen-unavailable` error finding and applies no status write — `packages/app/src/services/feature-check.ts:281-306`; finding code registered `packages/config/src/finding-codes.ts:88,194`; test `packages/app/tests/services/feature-check-reopen-guard.test.ts:72-93` (byte-identical file + finding names the port and both recoveries; `result.pass === false`; no `feature-reopen` repair). |
+| R2 | MET | `transitionFeatureGuarded` in-process guard: project-first graph resolve, undeclared-edge refusal, `onEnter` refusal with CLI recovery, `kind: shell` check execution, commit via `FeatureService.transition` — `packages/app/src/services/feature-transition.ts:95-177`; exported `packages/app/src/index.ts:327-331`; HTTP handler routed `apps/server/src/modules/feature/handlers.ts:63-71`; reopen hook routed `apps/server/src/context.ts:518-524`; server wiring `apps/server/src/context.ts:577-596`. Tests: `apps/server/tests/modules/feature/transition-gate.test.ts:183-287`, `packages/app/tests/services/feature-transition.test.ts:146-201`. |
+| R3 | MET | Static pin walks `packages`, `apps`, `plugins`, `scripts` over `**/*.{ts,mjs}`, skips tests, asserts zero feature-domain raw status writers — `packages/app/tests/feature-status-writer-pin.test.ts:17-39` (passes, 0 violations). Independent grep this pass: 0 non-test `setFrontmatterField('status'…` hits across the four roots. |
+| R4 | MET | Missing graph throws `GuardDeniedError` naming `feature-lifecycle` and the probed roots; no `SchemaLifecyclePort` fallback anywhere in the module — `packages/app/src/services/feature-transition.ts:102-110`; test `packages/app/tests/services/feature-transition.test.ts:204-227`. |
+| R5 | MET | All six required tests present and green: R5(a)/(b) `packages/app/tests/services/feature-check-reopen-guard.test.ts:72,96`; R5(d) + AC3-app `packages/app/tests/services/feature-transition.test.ts:146,176`; R5(c)/(e) `apps/server/tests/modules/feature/transition-gate.test.ts:183,247`; R5(f) pin `packages/app/tests/feature-status-writer-pin.test.ts:17`; fail-first evidence recorded in the task Solution. |
+| R6 | MET | feature-check row + task→feature link row state the port requirement and the removed raw fallback — `docs/design/planning-record-contracts.md:39,110`; server satellite documents the in-process guard and 409 refusals incl. `→ verifying` — `docs/design/server-side-adjustment-design.md:275-286`. |
+| R7 | MET | Bundles rebuilt with the new finding code: `plugins/sp/lib/idea-handoff.generated.mjs`, `plugins/sp/lib/inline-run.generated.mjs`, `plugins/sp/lib/quality-gate.generated.mjs`, `plugins/sp/scripts/quality-gate.mjs` each carry `feature-reopen-unavailable` (grep count 1); `spur-check`/bundle gates captured in `.spur/run/1137-test-gate.log` (PASS). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — No port means no status write and an actionable finding (req: R1) | MET | test | `packages/app/tests/services/feature-check-reopen-guard.test.ts:72-93` — file byte-identical, `feature-reopen-unavailable` error finding naming CLI recovery, no `feature-reopen` repair (fresh run pass). |
+| AC2 — With a port the reopen still goes through the transition (req: R1) | MET | test | `packages/app/tests/services/feature-check-reopen-guard.test.ts:96-116` — feature is `active`, exactly one `verifying → active` History line, repair kind `feature-reopen`. |
+| AC3 — The server denies a guarded edge whose check fails (req: R2) | MET | test | `apps/server/tests/modules/feature/transition-gate.test.ts:183-192` (denial + file unchanged) with 409 mapping pinned at `apps/server/tests/middleware/error-handler.test.ts:70-80`; the check-findings denial path is exercised at the `verifying → done` shell edge `packages/app/tests/services/feature-transition.test.ts:176-189`. |
+| AC4 — The server refuses undeclared edges and onEnter targets (req: R2) | MET | test | `apps/server/tests/modules/feature/transition-gate.test.ts:194-217` — `undeclared edge backlog → done` named, and `→ verifying` refused with the exact CLI recovery message; 409 mapping `apps/server/tests/middleware/error-handler.test.ts:70-80`. |
+| AC5 — The server reopen keeps working (req: R2) | MET | test | `apps/server/tests/modules/feature/transition-gate.test.ts:247-263` — task create against a `verifying` feature leaves it `active` with exactly one `verifying → active` History line. |
+| AC6 — No second raw status writer exists (req: R3) | MET | test | `packages/app/tests/feature-status-writer-pin.test.ts:17-39` — scans the four roots, 0 violations; independent grep this pass agrees. |
+| AC7 — A missing lifecycle graph is a loud refusal (req: R4) | MET | test | `packages/app/tests/services/feature-transition.test.ts:204-227` — `GuardDeniedError` naming `feature-lifecycle` and the searched root; file unchanged. |
+| AC8 — Tests fail without their fixes and the gates pass (req: R5, R6, R7) | MET | command | `.spur/run/1137-test-gate.status` = PASS (log `10759 pass / 0 fail`, digest sha256:239179e0e09e…); fail-first evidence (pre-fix mutation, pin hit at `packages/app/src/services/feature-check.ts:281-306`, import errors, P2 receipt-hop resolved-instead-of-rejecting) recorded in the task Solution (manual review of recorded evidence — the reversion drill is not independently re-run in this observe-only pass). |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+Verdict: PASS
+
+#### Review Report — 1137 (re-review after P2 remediation)
+**Scope:** working-tree diff — 8 modified + 6 new files (new `feature-transition` guard + shared `feature-receipt-run-port`, `feature-check` raw-fallback deletion, server context/handler routing, pin test, 4 test files, 2 design docs, regenerated bundles)
+**Dimensions:** functional traceability, security, efficiency, correctness, usability, architecture
+**Verdict:** PASS — prior P2 genuinely closed, R1–R7 / AC1–AC8 still met, no open P1–P3 findings. Fresh focused suites re-run this pass: 17 pass / 0 fail (packages/app, 4 files), 24 pass / 0 fail (apps/server, 2 files); certified gate `.spur/run/1137-test-gate.status` = PASS (10759 tests / 634 files, digest sha256:239179e0e09e…).
+
+##### Prior review disposition
+
+- **Prior P2 (receipt-less HTTP `verifying → done`) — CLOSED.** `transitionFeatureGuarded` now reads `--strict` off the edge's YAML guard command and forwards `runDir` + `receiptRunPort` (`packages/app/src/services/feature-transition.ts:153,159,160`); `runDir` is a required `GuardedFeatureTransitionDeps` member (`:63-70`); the server wires both (`apps/server/src/context.ts:586-595`; port factory `packages/app/src/services/feature-receipt-run-port.ts:22-56`). The receipt gate fires at `asStatus === 'done'` (`packages/app/src/services/feature-check.ts:349-356`) and every rejection is an error finding, which the guard denies on (`feature-transition.ts:164-172`). Fresh evidence: a strict-clean receipt-less `verifying → done` over the server path is denied `completion evidence rejected (missing)` (`apps/server/tests/modules/feature/transition-gate.test.ts:219-233`); a current PASS receipt (run row + registered artifact) commits to `done` (`:235-245`); the app wiring test asserts `strict===true`, `asStatus==='done'`, `runDir` and `receiptRunPort` are forwarded (`packages/app/tests/services/feature-transition.test.ts:228-262`); the same denial is pinned at the app layer (`:263-272`). No receipt-less `verifying → done` can pass over the server path.
+- **Strict elevation is scoped correctly — no over-denial.** `strict` is derived from the guard command (`/(^|\s)--strict(\s|$)/`, `feature-transition.ts:153`) rather than passed unconditionally. In the live graph only `verifying → done` declares `--strict` (`config/workflows/feature-lifecycle.yaml`); the other shell edge (`active → verifying`) is refused at Step 3 (`onEnter`) before the check runs, so no warning-only edge is over-elevated. Project/CLI tier YAMLs are byte-identical (`diff` clean).
+- **Prior P3 (change-map citation drift) — RESOLVED.** The Solution table now cites `apps/server/tests/modules/feature/transition-gate.test.ts` (`docs/tasks5/1137_feature-status-writes-must-not-degrade-to-an-unguarded-mutat.md:227-228`).
+- **Prior P4s (pin `.mjs` coverage; doc `as`→`asStatus` drift) — RESOLVED.** The pin now scans `**/*.{ts,mjs}` (`packages/app/tests/feature-status-writer-pin.test.ts:21`); the `ServerContext.transitionFeature` docblock and the server satellite now say `asStatus` (`apps/server/src/context.ts:209`, `docs/design/server-side-adjustment-design.md:281-283`).
+
+##### Findings (ranked)
+
+| # | Priority | Dimension | Finding | Location | Disposition |
+|---|----------|-----------|---------|----------|-------------|
+| 1 | P4 (advisory) | correctness/testing | Receipt-gate parity is now equivalent across surfaces, but both share a residual weakness: `createFeatureReceiptRunPort.readRunRow` always returns `varsJson: null`, so the run-integrity cross-check of the recorded effective `verificationCmd` is vacuously skipped (the CLI's former inline port did the same — pre-existing, not a remediation regression; the digest + artifact-registration checks still enforce). | `packages/app/src/services/feature-receipt-run-port.ts:33-44`; consumer `packages/app/src/workflow/feature-verification-receipt.ts:423-431` | ACCEPTED |
+| 2 | P4 (advisory) | efficiency | `ServerContext.transitionFeature` caches `FeatureCheckService` but rebuilds the `RunDao`/`ArtifactDao` receipt port on every call (`createFeatureReceiptRunPort(await this.getDb(), fs)`); a transition is rare, so the cost is negligible. | `apps/server/src/context.ts:584,594` | ACCEPTED |
+| 3 | P4 (advisory) | usability/docs | AC3's server denial (`active → verifying`) is produced by the Step-3 `onEnter` refusal, which fires before the shell check — outcome-equal (409 GUARD_DENIED) and a documented Design decision, but causally different from the AC's "check has error findings" Given. The `→ verifying` refusal is unconditional. | `packages/app/src/services/feature-transition.ts:136-144`; task Decisions ("Guard order follows the frozen Design steps") | ACCEPTED |
+
+##### Functional Traceability
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | raw `else` fallback deleted; port-less reopen emits error finding `feature-reopen-unavailable` (names the port + both CLI recoveries), no `feature-reopen` repair, file byte-identical — `packages/app/src/services/feature-check.ts:284-306`; code registered `packages/config/src/finding-codes.ts:88,194`; test `packages/app/tests/services/feature-check-reopen-guard.test.ts:72-93` (passes) |
+| R2 | MET | `transitionFeatureGuarded` resolves the graph project-first, refuses undeclared edges (`:125-134`), refuses `onEnter` targets with the exact CLI recovery (`:136-144`), runs `kind: shell` edges in-process with `--strict`/`runDir`/`receiptRunPort` (`:146-174`), commits via `FeatureService.transition` (`:176`); handler + reopen hook routed — `apps/server/src/modules/feature/handlers.ts:63-71`, `apps/server/src/context.ts:518-524,577-595` |
+| R3 | MET | pin walks packages/apps/plugins/scripts, skips tests, scans `**/*.{ts,mjs}`, asserts zero feature-domain raw status writers — `packages/app/tests/feature-status-writer-pin.test.ts:17-39` (0 violations; pre-fix flagged `feature-check.ts:283`) |
+| R4 | MET | missing graph → `GuardDeniedError` naming `feature-lifecycle` + probed roots, no permissive-port fallback anywhere in the module — `packages/app/src/services/feature-transition.ts:102-110`; test `packages/app/tests/services/feature-transition.test.ts:169-192` |
+| R5 | MET | all six tests present and green: app 17 pass / 0 fail, server 24 pass / 0 fail (fresh runs this pass); fail-first evidence recorded in the task Solution (pre-fix mutation, pin hit at `:283`, import errors, P2 receipt-hop resolved instead of rejecting) |
+| R6 | MET | feature-check row + task→feature link row state the port requirement and the removed fallback — `docs/design/planning-record-contracts.md:39,110`; server satellite documents the guard and 409 refusals incl. `→ verifying` — `docs/design/server-side-adjustment-design.md:275-286` |
+| R7 | MET | bundles regenerated: `feature-reopen-unavailable` present in all 3 `plugins/sp/lib/*.generated.mjs` + `plugins/sp/scripts/quality-gate.mjs`; 0 raw `setFrontmatterField('status'` hits in non-test `packages/apps/plugins/scripts` |
+| AC1, AC2 | MET | `packages/app/tests/services/feature-check-reopen-guard.test.ts:72-93` (byte-identical + finding), `:96-116` (active + one History line + repair) |
+| AC3, AC4 | MET | `apps/server/tests/modules/feature/transition-gate.test.ts:183-192` (409-mapped denial, file unchanged), `:194-217` (undeclared edge named; `→ verifying` CLI recovery) |
+| AC5 | MET | `apps/server/tests/modules/feature/transition-gate.test.ts:247-263` (reopen via task create: `verifying → active`, exactly one History line) |
+| AC6 | MET | pin test (above), 0 violations |
+| AC7 | MET | `packages/app/tests/services/feature-transition.test.ts:169-192` (missing graph refusal names profile + searched root) |
+| AC8 | MET | four new suites fail-first evidence in the task Solution; gate `.spur/run/1137-test-gate.status` = PASS (10759 tests / 634 files; proof-digest sha256:239179e0e09e…); bundle rebuild included |
+
+**Re-check for regressions introduced by the remediation:** none found. The shared `createFeatureReceiptRunPort` factory is byte-equivalent to the CLI's former inline port (`apps/cli/src/commands/feature.ts:608-615` delegates); the `resolveFile` seam is unchanged; `always` edges (`verifying → active` reopen, `done → active`, blocked↔active, `→ cancelled`) still pass with exactly one History line; no other server call site reaches `featureService().transition` directly (grep clean).
+
+**Gate evidence:** `.spur/run/1137-test-gate.log` tail — "10759 pass / 0 fail, Ran 10759 tests across 634 files", post-check 2/2 rules passed, proof-digest sha256:239179e09e54ac432ea140cee2a1964c7d3e3d96816a36b101f97060389d5076, status file PASS. The preserved FAIL receipt `.spur/run/1137-check-receipt.false-fail-sigterm.json` shares the same `inputDigest`; it was an external-SIGTERM-induced failure (not a check failure) and is superseded by the certified PASS.
+
+**Architecture:** the guard remains a deep module — one function hides graph resolution, edge validation, `onEnter` policy and shell-guard execution behind a narrow deps interface with a `resolveFile` test seam; it mirrors the 0966 `transitionTaskGuarded` precedent rather than inventing a second pattern; the new `createFeatureReceiptRunPort` removes the CLI/server port duplication (single receipt mechanism). Export surface stays minimal (`packages/app/src/index.ts:309,326-331`). No shallow pass-throughs introduced.
+
+**Next:** none blocking — record this PASS and close; the three P4 advisories are accepted (varsJson parity, per-call port construction, AC3 causal note).
 
 ### References
 
@@ -228,4 +363,7 @@ Scenario: AC8 — Tests fail without their fixes and the gates pass (req: R5, R6
 ### History
 
 - 2026-10-09T05:36:13.165Z backlog → todo (system)
+- 2026-10-10T01:34:16.087Z todo → wip (system)
+- 2026-10-10T04:11:56.042Z wip → testing (system)
+- 2026-10-10T04:12:38.639Z testing → done (system)
 

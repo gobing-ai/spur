@@ -9,7 +9,7 @@
 "$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
 kind: state-machine
 name: feature-lifecycle
-version: "1"
+version: "2"
 description: >
   Feature lifecycle FSM (design §2.3, §5.1, DD-13). States are the canonical
   FeatureStatus vocabulary; transitions encode the §2.3 graph including the
@@ -50,7 +50,14 @@ states:
           # applied as a replacement, so the inner run lost spurBin and loadModule
           # fell into source mode (0948 R1). The nested JSON is shell-expanded:
           # $spurBin inside the double quotes keeps a multi-word invocation intact.
-          command: '$spurBin workflow run feature-verification.yaml --vars "{\"featureId\":\"$featureId\",\"spurBin\":\"$spurBin\"}"'
+          # 1147 R4: clear the inherited nested-run marker for this ONE child. The
+          # bounded, definition-pinned feature-verification pass (no agent.run, no
+          # further nested run) is a legitimate child, but the outer run's
+          # SPUR_WORKFLOW_RUN_ACTIVE marker rides every child env — so the CLI's
+          # nested-run refusal (0610 R4) rejected it and the same pass that passes
+          # standalone failed here with a bare exit 1. The recursion guard stays
+          # binding for every other nested invocation.
+          command: 'env -u SPUR_WORKFLOW_RUN_ACTIVE $spurBin workflow run feature-verification.yaml --vars "{\"featureId\":\"$featureId\",\"spurBin\":\"$spurBin\"}"'
   - id: blocked
     description: Impediment; work suspended.
   - id: done

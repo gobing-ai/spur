@@ -4,7 +4,7 @@ title: "Planning workflow and operation contracts"
 status: implemented
 created_at: 2026-09-09
 updated_at: 2026-10-10
-related: ["0889", "0898", "0949", "0976", "0958", "1090", "1111"]
+related: ["0889", "0898", "0949", "0976", "0958", "1090", "1111", "1147"]
 tags: [contract, planning, workflow]
 ---
 
@@ -52,6 +52,24 @@ task. See `packages/app/src/services/planning-write-service.ts:326,367`.
 **Drift prevention:** `packages/domain/tests/planning/lifecycle-drift.test.ts` parses both YAMLs
 and asserts state sets == the `TASK_STATUSES` / `FEATURE_STATUSES` unions from `schema.ts`. The
 YAML files and the 0041 enums can never drift silently.
+
+**onEnter error contract (1147 R3/R4).** The feature lifecycle's `verifying` entry is the one
+lifecycle transition whose `onEnter` spawns another workflow (`$spurBin workflow run
+feature-verification.yaml`). Two contracts govern it:
+
+- **Diagnosis.** A failing `onEnter` shell denies the hop with a report carrying the shell's exit
+  code, its error line, and the **last 2 KiB of the child's stderr** — byte-bounded
+  (`utf8SafeByteTail`, `ENTER_STDERR_TAIL_BYTES`) and redacted with the same configured secrets the
+  run's shell-output redactor uses. A nested child that refuses itself prints its reason on stderr,
+  so the tail is what makes the denial self-explaining instead of a bare `exit 1`
+  (`packages/app/src/workflow/lifecycle-adapter.ts`).
+- **Nested invocation.** `spur workflow run` refuses to start while `SPUR_WORKFLOW_RUN_ACTIVE=1` is
+  in the environment (nested-run guard, 0610 R4), and a workflow shell action's env inherits that
+  marker from the running parent. The lifecycle caller therefore clears the marker for this one
+  child (`env -u SPUR_WORKFLOW_RUN_ACTIVE …`): the feature-verification pass is a bounded,
+  definition-pinned run (shell-only, no `agent.run`, no further nesting), so nested and standalone
+  runs return the same verdict — while the recursion guard stays binding for every other nested
+  invocation. Without it the pass that passes standalone fails under a wrapup with `exit 1`.
 
 Validate: `spur workflow validate config/workflows/task-lifecycle.yaml` — full JSON-Schema
 validation resolves the `@gobing-ai/spur` workspace package and passes (no `--no-schema`

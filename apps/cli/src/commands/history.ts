@@ -147,7 +147,8 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
         .description(
             'Import agent conversation JSONL. `--source all` fans out across all sources with ' +
                 'per-source failure isolation (task 0470). A single source is the n=1 case of ' +
-                'the same contract — never two import paths.',
+                "the same contract — never two import paths. For one session's evidence, use " +
+                '`--file`; a full replay can exceed the per-source budget.',
         )
         .option(...SHARED_OPTIONS.sourceHistory, 'all')
         .option(...SHARED_OPTIONS.fileHistoryJsonl)
@@ -294,6 +295,10 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
                     mode: mode,
                     dryRun: options.dryRun === true,
                     sourceTimeout,
+                    // Task 1144 R1: the pre-start scope line is a diagnostic — stderr only,
+                    // and it precedes the import so a disproportionate replay is visible
+                    // before the budget is spent. `--json` stdout stays pure JSON.
+                    onScope: (line) => context.output.error(line),
                 });
             } catch (e) {
                 // 0726 R1: the provenance guard rejects full pi imports on a known-destructive

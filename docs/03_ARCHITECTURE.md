@@ -258,7 +258,10 @@ pipeline can pause mid-step on an operator question (0933): an `agent.run` decla
 `escalationFile` succeeds with `data.escalated = true` when the agent left a non-empty question
 file, routes to the pipeline's `escalate` `hitl.input` gate, and resumes through
 `spur workflow continue --answer-text <text>` — bounded by the pipeline's `maxEscalations` var. The
-question file is deleted before dispatch, so a stale question can never pause a later run. Exact
+question file is deleted before dispatch, so a stale question can never pause a later run. A nested
+`spur workflow run` is refused while it inherits `SPUR_WORKFLOW_RUN_ACTIVE=1` from the running
+parent; the feature lifecycle's `onEnter` clears the marker for its one bounded, definition-pinned
+child (feature verification), and every other nested invocation stays refused. Exact
 variable and resume contracts:
 [planning workflows](design/planning-workflow-contracts.md) and
 [workflow commands](design/cli-contracts.md).
@@ -288,6 +291,11 @@ The importer owns source-independent ingestion:
 discover → checkpoint resume → read → split/map/transform
   → validate → redact → deduplicate → ETL load → checkpoint
 ~~~
+
+Before a source's importer starts, the service reports the scope it resolved from `--file`,
+`--root` or discovery (files and bytes, `≈` because the importer applies its own filters), and a
+budget abort names the narrower single-source forms. Contract:
+[history CLI contracts](design/history-cli-contracts.md).
 
 Raw agent JSONL is the history source of truth; normalized rows, checkpoints, ledgers and
 rollups are derived. A source extends SourceDefinition rather than the control flow. Full
@@ -443,6 +451,18 @@ Invariants:
 4. Customization attaches via the engine's EventBus pub/sub seam (`on_transition`,
    `on_guard_fail`, `on_complete`), not engine forks; SSE/board and (later) the scheduler are
    subscribers on the same seam.
+5. **Lifecycle validity is proved, never assumed.** The write service is the only raw status writer,
+   and every caller proves the transition against the owning lifecycle graph. The CLI injects the
+   spawning `spur workflow` adapter; transports that cannot spawn (server, Workers, in-process
+   callers) run the same check in-process through `transitionTaskGuarded` /
+   `transitionFeatureGuarded` — project-first graph resolution, undeclared edges refused, each
+   `kind: shell` guard executed as its owning service call, and a target whose `onEnter` spawns work
+   (feature `verifying`) refused with the CLI recovery message. A missing graph is a refusal, not a
+   default: `SchemaLifecyclePort` is an enum stub, and an unsupplied lifecycle port may never become a
+   silent bypass (ADR-135).
+
+Enforcement surfaces: [planning records](design/planning-record-contracts.md),
+[server-side adjustment](design/server-side-adjustment-design.md).
 
 ### 12.3 BDD traceability chain
 

@@ -62,7 +62,10 @@ export function createFeatureHandlers(ctx: ServerContext) {
 
         transition: os.feature.transition.handler(async ({ input }) => {
             // Guard denials throw GuardDeniedError → 409 GUARD_DENIED via instanceof.
-            await ctx.featureService().transition(input.id, input.toStatus, input.actor);
+            // 1137 R2: route through the in-process guard — the server's feature
+            // service has no lifecycle adapter, so calling it directly would apply
+            // any status through the permissive fallback port.
+            await ctx.transitionFeature({ id: input.id, to: input.toStatus, actor: input.actor });
             return { ok: true as const, data: { id: input.id, status: input.toStatus } };
         }),
 

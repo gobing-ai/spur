@@ -24513,7 +24513,8 @@ var ALL_FINDING_CODES = [
   "L4.feature-receipt-contract",
   "precheck-size",
   "precheck-evidence",
-  "inventory-coverage"
+  "inventory-coverage",
+  "feature-reopen-unavailable"
 ];
 function isFindingCode(code) {
   return ALL_FINDING_CODES.includes(code);

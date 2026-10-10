@@ -7,8 +7,8 @@
             "reason": "Keep, sp-owned git/gh loop; cited exemption (plan \u00a72)"
         },
         "plugins/sp/scripts/wrapup-steps.ts": {
-            "kinds": ["budget"],
-            "reason": "Keep (budget exemption), W2 (plan \u00a72)",
+            "kinds": ["budget", "corpus-parse"],
+            "reason": "Keep (budget exemption), W2 (plan \u00a72). corpus-parse: the 1147 R1 doc-sync write-scope guard excludes the task/feature corpus by path prefix -- a scope exclusion, not corpus parsing (same class as wrapup-drift-probe.ts).",
             "exempt": true
         },
         "plugins/sp/scripts/batch-preflight.ts": {

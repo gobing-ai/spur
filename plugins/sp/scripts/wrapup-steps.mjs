@@ -443,7 +443,137 @@ function runFeatureTransition(env, options = {}) {
 `);
   return { status: syncStatus, statusFile: relStatusFile, exitCode: 0 };
 }
-var WRAPUP_STEPS_USAGE = "usage: wrapup-steps.ts <resolve|route-reason|metrics|feature-transition>  (env: __runId, tasks, mode, feature, featureGateCmd, spurBin)";
+var DOC_SYNC_SNAPSHOT_SUFFIX = "wrapup-doc-sync-snapshot.txt";
+var DOC_SYNC_SCOPE_STATUS_SUFFIX = "wrapup-doc-sync-scope.status";
+var DOC_SYNC_SUPERSESSION_STATUS_SUFFIX = "wrapup-doc-supersession.status";
+var SUPERSESSION_PIN = "repo-wide-tests/adr-supersession.test.ts";
+var GIT_UNAVAILABLE_MARKER = "# git-unavailable:";
+var SNAPSHOT_MISSING = "snapshot-missing";
+function porcelainPath(line) {
+  const body = line.length >= 3 ? line.slice(3) : line;
+  const arrow = body.indexOf(" -> ");
+  const target = arrow >= 0 ? body.slice(arrow + 4) : body;
+  const trimmed = target.trim();
+  return trimmed.startsWith('"') && trimmed.endsWith('"') && trimmed.length >= 2 ? trimmed.slice(1, -1) : trimmed;
+}
+function isDocSyncAllowedPath(path, allowedExtra) {
+  if (allowedExtra.includes(path))
+    return true;
+  if (!path.startsWith("docs/"))
+    return false;
+  return !path.startsWith("docs/tasks") && !path.startsWith("docs/features");
+}
+function docSyncScopeViolations(snapshot, current, allowedExtra) {
+  const before = new Set(snapshot.split(`
+`).filter((line) => line.trim() !== ""));
+  const paths = new Set;
+  for (const line of current.split(`
+`)) {
+    if (line.trim() === "" || before.has(line))
+      continue;
+    const path = porcelainPath(line);
+    if (!isDocSyncAllowedPath(path, allowedExtra))
+      paths.add(path);
+  }
+  return [...paths].sort();
+}
+function gitPorcelain(cwd) {
+  const result = spawnSync("git", ["status", "--porcelain", "-uall"], {
+    cwd,
+    encoding: "utf8"
+  });
+  if (result.error !== undefined)
+    return { ok: false, listing: "", detail: String(result.error) };
+  if (result.status !== 0)
+    return { ok: false, listing: "", detail: (result.stderr ?? "").trim() };
+  return { ok: true, listing: result.stdout ?? "", detail: "" };
+}
+function wrapupRunPaths(env, cwd) {
+  const runId = env.__runId ?? "";
+  const rel = (suffix) => join(".spur", "run", `${runId}-${suffix}`);
+  return { rel, abs: (suffix) => cwd ? join(cwd, rel(suffix)) : rel(suffix) };
+}
+function docSyncAllowedExtra(env) {
+  const runId = env.__runId ?? "";
+  return [
+    join(".spur", "run", `${runId}-wrapup-learnings.md`),
+    join(".spur", "run", `${runId}-${DOC_SYNC_SNAPSHOT_SUFFIX}`),
+    join(".spur", "run", `${runId}-${DOC_SYNC_SCOPE_STATUS_SUFFIX}`)
+  ];
+}
+function runDocSyncSnapshot(env, options = {}) {
+  const cwd = options.cwd;
+  const paths = wrapupRunPaths(env, cwd);
+  mkdirSync(cwd ? join(cwd, ".spur", "run") : join(".spur", "run"), { recursive: true });
+  writeFileSync(paths.abs(DOC_SYNC_SNAPSHOT_SUFFIX), "");
+  const listing = gitPorcelain(cwd);
+  if (!listing.ok) {
+    writeFileSync(paths.abs(DOC_SYNC_SNAPSHOT_SUFFIX), `${GIT_UNAVAILABLE_MARKER} ${listing.detail}
+`);
+    process.stderr.write(`doc-sync-snapshot: git status unavailable \u2014 scope check skips (${listing.detail})
+`);
+    return { statusFile: paths.rel(DOC_SYNC_SNAPSHOT_SUFFIX), captured: false, exitCode: 0 };
+  }
+  writeFileSync(paths.abs(DOC_SYNC_SNAPSHOT_SUFFIX), listing.listing);
+  return { statusFile: paths.rel(DOC_SYNC_SNAPSHOT_SUFFIX), captured: true, exitCode: 0 };
+}
+function runDocSyncScope(env, options = {}) {
+  const cwd = options.cwd;
+  const paths = wrapupRunPaths(env, cwd);
+  mkdirSync(cwd ? join(cwd, ".spur", "run") : join(".spur", "run"), { recursive: true });
+  const statusFile = paths.rel(DOC_SYNC_SCOPE_STATUS_SUFFIX);
+  const write = (status, detail) => {
+    writeFileSync(paths.abs(DOC_SYNC_SCOPE_STATUS_SUFFIX), `${detail}
+`);
+    if (status !== "PASS")
+      process.stderr.write(`doc-sync-scope: ${detail}
+`);
+    return { status, statusFile, violations: status === "PASS" ? [] : [detail], exitCode: 0 };
+  };
+  const snapshot = readFileSyncSafe(paths.abs(DOC_SYNC_SNAPSHOT_SUFFIX));
+  if (snapshot === null) {
+    return write("scope-violation", `scope-violation: ${SNAPSHOT_MISSING}`);
+  }
+  if (snapshot.startsWith(GIT_UNAVAILABLE_MARKER)) {
+    process.stderr.write(`doc-sync-scope: entry snapshot recorded no git listing \u2014 scope check skipped
+`);
+    return write("PASS", "PASS");
+  }
+  const current = gitPorcelain(cwd);
+  if (!current.ok) {
+    return write("scope-violation", `scope-violation: git-unavailable (${current.detail})`);
+  }
+  const violations = docSyncScopeViolations(snapshot, current.listing, docSyncAllowedExtra(env));
+  if (violations.length === 0)
+    return write("PASS", "PASS");
+  return write("scope-violation", `scope-violation: ${violations.join(" ")}`);
+}
+function runDocSupersessionCheck(env, options = {}) {
+  const cwd = options.cwd;
+  const paths = wrapupRunPaths(env, cwd);
+  mkdirSync(cwd ? join(cwd, ".spur", "run") : join(".spur", "run"), { recursive: true });
+  const statusFile = paths.rel(DOC_SYNC_SUPERSESSION_STATUS_SUFFIX);
+  const pinPath = cwd ? join(cwd, SUPERSESSION_PIN) : SUPERSESSION_PIN;
+  if (!existsSync(pinPath)) {
+    writeFileSync(paths.abs(DOC_SYNC_SUPERSESSION_STATUS_SUFFIX), `PASS
+`);
+    return { status: "PASS", statusFile, exitCode: 0 };
+  }
+  const pin = spawnSync("bun", ["test", SUPERSESSION_PIN], { cwd, encoding: "utf8" });
+  if (pin.status === 0) {
+    writeFileSync(paths.abs(DOC_SYNC_SUPERSESSION_STATUS_SUFFIX), `PASS
+`);
+    return { status: "PASS", statusFile, exitCode: 0 };
+  }
+  writeFileSync(paths.abs(DOC_SYNC_SUPERSESSION_STATUS_SUFFIX), `supersession-pin-failed: ${SUPERSESSION_PIN}
+`);
+  const detail = `${pin.stdout ?? ""}${pin.stderr ?? ""}`.trim();
+  process.stderr.write(`doc-supersession: ${SUPERSESSION_PIN} failed (exit ${String(pin.status ?? 1)}) \u2014 the doc-sync step introduced or kept superseded index content:
+${detail.slice(-2000)}
+`);
+  return { status: "supersession-pin-failed", statusFile, exitCode: 0 };
+}
+var WRAPUP_STEPS_USAGE = "usage: wrapup-steps.ts <resolve|route-reason|metrics|feature-transition|doc-sync-snapshot|doc-sync-scope|doc-supersession>  (env: __runId, tasks, mode, feature, featureGateCmd, spurBin)";
 function main(argv, env = getEnvVars(), options = {}) {
   const sub = argv[0];
   if (sub === "resolve")
@@ -456,6 +586,12 @@ function main(argv, env = getEnvVars(), options = {}) {
   }
   if (sub === "feature-transition")
     return runFeatureTransition(env, options).exitCode;
+  if (sub === "doc-sync-snapshot")
+    return runDocSyncSnapshot(env, options).exitCode;
+  if (sub === "doc-sync-scope")
+    return runDocSyncScope(env, options).exitCode;
+  if (sub === "doc-supersession")
+    return runDocSupersessionCheck(env, options).exitCode;
   process.stderr.write(`${WRAPUP_STEPS_USAGE}
 `);
   return 2;
@@ -469,11 +605,23 @@ export {
   taskStatusOf,
   runMetrics,
   runFeatureTransition,
+  runDocSyncSnapshot,
+  runDocSyncScope,
+  runDocSupersessionCheck,
   resolveTasks,
   preflightFeature,
+  porcelainPath,
   main,
   jqPick,
+  isDocSyncAllowedPath,
+  docSyncScopeViolations,
   classifySync,
   WRAPUP_STEPS_USAGE,
-  WBS_PATTERN
+  WBS_PATTERN,
+  SUPERSESSION_PIN,
+  SNAPSHOT_MISSING,
+  GIT_UNAVAILABLE_MARKER,
+  DOC_SYNC_SUPERSESSION_STATUS_SUFFIX,
+  DOC_SYNC_SNAPSHOT_SUFFIX,
+  DOC_SYNC_SCOPE_STATUS_SUFFIX
 };

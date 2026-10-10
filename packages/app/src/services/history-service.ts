@@ -103,9 +103,31 @@ export type { DatabaseMaintenanceOptions, DatabaseMaintenanceResult } from '@gob
  * present (with preview counts) in dry-run mode too. `attributionError` is set
  * only when the attribution pass failed — reported per source, never a failed import.
  */
+/**
+ * Pre-start scope estimate for one source's resolved import inputs (task 1144 R1):
+ * the ≈ jsonl file count and their summed byte size. Labelled approximate
+ * because the importer applies its own discovery filters on top of the walk.
+ */
+export interface ImportScopeEstimate {
+    files: number;
+    bytes: number;
+}
+
+/**
+ * Result of a history import operation — the importer result extended additively
+ * with the bounded task-attribution outcome (task 0722 R6). `attribution` is null
+ * when the pass was skipped (no task locator in the service context); it is
+ * present (with preview counts) in dry-run mode too. `attributionError` is set
+ * only when the attribution pass failed — reported per source, never a failed import.
+ */
 export type HistoryImportResult = ImportResult & {
     attribution?: TaskAttributionSummary | null;
     attributionError?: string;
+    /**
+     * Scope of the inputs this source was about to import, resolved before the importer
+     * ran (task 1144 R1, additive). Absent when the attempt failed before returning.
+     */
+    scope?: ImportScopeEstimate;
 };
 
 /** Result of a history analyze operation — the versioned JSON artifact (0464 R2). */
@@ -179,6 +201,12 @@ export interface ImportAllOptions {
     sourceTimeout?: TimeoutPolicyMs;
     /** Skip incremental rollup refresh at the end of import (testing / batch callers). */
     skipRollupRefresh?: boolean;
+    /**
+     * Pre-start scope sink (task 1144 R1): receives one rendered line per source before
+     * that source's import starts. The CLI routes it to stderr, so `--json` stdout stays
+     * pure JSON and the line precedes any import progress.
+     */
+    onScope?: (line: string) => void;
 }
 
 /** Options for {@link HistoryService.daily}. */
@@ -541,6 +569,82 @@ async function runSessionAugmentedRoots(
     return { roots, runRoots };
 }
 
+/**
+ * Task 1144 R1: pre-start scope estimate over the resolved inputs — the `--file` path,
+ * the `--root`, or the discovered roots (for opencode, the source database file).
+ * `Bun.Glob` does not follow symlinked directories, so a symlink loop cannot make the
+ * walk diverge. Missing inputs count as 0 rather than failing the import.
+ */
+async function estimateImportScope(input: { file?: string; roots: readonly string[] }): Promise<ImportScopeEstimate> {
+    if (input.file !== undefined && input.file.length > 0) {
+        const bytes = await fileSizeBytes(input.file);
+        return bytes === null ? { files: 0, bytes: 0 } : { files: 1, bytes };
+    }
+    let files = 0;
+    let bytes = 0;
+    const glob = new Bun.Glob('**/*.jsonl');
+    for (const root of input.roots) {
+        if (!existsSync(root)) continue;
+        for await (const path of glob.scan({ cwd: root, absolute: true })) {
+            const size = await fileSizeBytes(path);
+            if (size === null) continue;
+            files += 1;
+            bytes += size;
+        }
+    }
+    return { files, bytes };
+}
+
+/** `Bun.file` size, or null when the path is absent/unreadable (counts as 0, never fails the walk). */
+async function fileSizeBytes(path: string): Promise<number | null> {
+    if (!existsSync(path)) return null;
+    try {
+        return await Bun.file(path).size;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Task 1144 R1: one rendered scope line, `history import: <source> scope ≈ <n> files,
+ * <MB> MB (mode <mode>, budget <ms|none>)`. Shared by the service (which knows the
+ * inputs and the budget) and its tests; the CLI only chooses the stream.
+ */
+function formatImportScopeLine(input: {
+    source: string;
+    mode: string;
+    budgetMs: number | null;
+    scope: ImportScopeEstimate;
+}): string {
+    const mb = (input.scope.bytes / (1024 * 1024)).toFixed(1);
+    const budget = input.budgetMs === null ? 'none' : String(input.budgetMs);
+    return `history import: ${input.source} scope ≈ ${input.scope.files} files, ${mb} MB (mode ${input.mode}, budget ${budget})`;
+}
+
+/**
+ * Task 1144 R2: the single shared remedy appended to a per-source budget-abort text.
+ * `--file` is the proportionate form for one session's evidence, `--root` narrows a
+ * corpus scan, and `--source-timeout none` opts into a deliberate full replay.
+ */
+function sourceTimeoutRemedy(source: string): string {
+    return (
+        `; for one session use --source ${source} --file <path>; narrow with --root <dir>; ` +
+        'for a deliberate full replay pass --source-timeout none'
+    );
+}
+
+/**
+ * Task 1144 R2: the per-source budget-abort detail, shared by the `source-timeout`
+ * warning and the fan-out abort so the remedy is appended once and both texts carry it.
+ */
+function sourceTimeoutDetail(source: string, timeoutMs: number, elapsedMs: number): string {
+    return (
+        `source '${source}' exceeded its ${timeoutMs}ms budget ` +
+        `(elapsed ${elapsedMs}ms); import attempt was abandoned mid-flight and may still hold the write lock until the process exits` +
+        sourceTimeoutRemedy(source)
+    );
+}
+
 // ---------------------------------------------------------------------------
 // HistoryService
 // ---------------------------------------------------------------------------
@@ -556,7 +660,15 @@ export class HistoryService {
     /** Import JSONL history from a source into the database. */
     async import(
         source: string,
-        opts: { file?: string; root?: string; mode?: string; dryRun?: boolean } = {},
+        opts: {
+            file?: string;
+            root?: string;
+            mode?: string;
+            dryRun?: boolean;
+            onScope?: (line: string) => void;
+            /** Per-source budget in ms, or null for explicit unlimited (`--source-timeout none`). */
+            budgetMs?: number | null;
+        } = {},
     ): Promise<HistoryImportResult> {
         const parsedSource = parseSource(source);
         const mode = parseMode(opts.mode ?? (opts.file !== undefined ? 'force-file' : 'incremental'));
@@ -576,6 +688,30 @@ export class HistoryService {
                       dao,
                   )
                 : undefined;
+
+        // Task 1144 R1: report the scope of the resolved inputs BEFORE the importer runs
+        // (the budget check only fires after the time is spent). For opencode the source
+        // is a database file, so its size is the scope; otherwise the `--file` path,
+        // the `--root`, or the discovered roots.
+        const scope = await estimateImportScope(
+            parsedSource === 'opencode' && opts.file === undefined && opts.root === undefined
+                ? {
+                      file:
+                          this.ctx.openCodeSourceDatabase ??
+                          join(this.ctx.historyHome ?? homedir(), '.local/share/opencode/opencode.db'),
+                      roots: [],
+                  }
+                : {
+                      ...(opts.file !== undefined && opts.file.length > 0 ? { file: opts.file } : {}),
+                      roots:
+                          opts.file !== undefined && opts.file.length > 0
+                              ? []
+                              : opts.root !== undefined && opts.root.length > 0
+                                ? [opts.root]
+                                : (discovery?.roots ?? []),
+                  },
+        );
+        opts.onScope?.(formatImportScopeLine({ source: parsedSource, mode, budgetMs: opts.budgetMs ?? null, scope }));
 
         const result =
             parsedSource === 'opencode' && opts.file === undefined && opts.root === undefined
@@ -644,6 +780,7 @@ export class HistoryService {
             ...result,
             attribution: attribution.summary,
             ...(attribution.error !== null ? { attributionError: attribution.error } : {}),
+            scope,
         };
     }
 
@@ -959,11 +1096,13 @@ export class HistoryService {
             // code (distinguishable from generic `source-failed`) and stop before the next
             // source starts — the queue run fails and the next scheduled run resumes from
             // the checkpoint (R7).
-            if (sourceWarnings.some((w) => w.code === 'source-timeout')) {
-                throw new Error(
-                    `history import aborted: source '${source}' exceeded its ${timeoutMs}ms budget ` +
-                        `(elapsed ${timedEntry.durationMs ?? 'unknown'}ms); remaining sources not started`,
-                );
+            const timeoutWarning = sourceWarnings.find((w) => w.code === 'source-timeout');
+            if (timeoutWarning !== undefined) {
+                // Task 1144 R2: reuse the per-source detail (which already carries the
+                // remedy) instead of re-deriving the text, so both the `source-timeout`
+                // warning and the abort name the budget, the elapsed time and the
+                // proportionate forms exactly once.
+                throw new Error(`history import aborted: ${timeoutWarning.detail}; remaining sources not started`);
             }
             // Task 0803 R3: bounded BUSY tolerance. Two consecutive busy-classified failures
             // mean a live writer holds the WAL write lock — continuing only queues more 30s
@@ -1104,6 +1243,10 @@ export class HistoryService {
                 root: opts.root,
                 mode: opts.mode ?? (opts.file !== undefined && opts.file.length > 0 ? 'force-file' : 'incremental'),
                 dryRun: opts.dryRun,
+                // Task 1144 R1/R2: the scope line is rendered inside `import` (which owns
+                // the resolved inputs) and the budget is known only here at the fan-out.
+                ...(opts.onScope ? { onScope: opts.onScope } : {}),
+                budgetMs: timeoutMs,
             });
 
             let result: HistoryImportResult;
@@ -1122,9 +1265,7 @@ export class HistoryService {
                 // rows are checkpointed and a later run resumes safely (R7).
                 if ((await raceSourceImport(importPromise, source, timeoutMs)) === 'timeout') {
                     const elapsedMs = Date.now() - attemptStartedAt;
-                    const detail =
-                        `source '${source}' exceeded its ${timeoutMs}ms budget ` +
-                        `(elapsed ${elapsedMs}ms); import attempt was abandoned mid-flight and may still hold the write lock until the process exits`;
+                    const detail = sourceTimeoutDetail(source, timeoutMs, elapsedMs);
                     sourceWarnings.push({ code: 'source-timeout', source, detail });
                     return {
                         coverageEntry: {
@@ -1213,6 +1354,9 @@ export class HistoryService {
                 // 0505 R1: preserve the importer's full-mode reconciliation summary so
                 // `history import --json` can report stale-row preview/applied counts.
                 ...(result.reconciliation ? { reconciliation: result.reconciliation } : {}),
+                // 1144 R1: the pre-start scope estimate travels with the coverage entry so
+                // `--json` consumers see the same data as the stderr scope line.
+                ...(result.scope !== undefined ? { scope: result.scope } : {}),
                 durationMs: Date.now() - attemptStartedAt,
             };
 

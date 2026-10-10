@@ -1,5 +1,6 @@
 import type { Command } from '@commander-js/extra-typings';
 import {
+    createFeatureReceiptRunPort,
     FEATURE_LIFECYCLE_PROFILE,
     FeatureCheckService,
     type FeatureReceiptRunPort,
@@ -9,7 +10,7 @@ import {
     resolvePlanningFolders,
     type WriteResult,
 } from '@gobing-ai/spur-app';
-import { ArtifactDao, normalizeFeatureStatus, RunDao } from '@gobing-ai/spur-domain';
+import { normalizeFeatureStatus } from '@gobing-ai/spur-domain';
 import type { CliContext } from '../context';
 import { toEnvelopeJson, writeJsonError } from '../output';
 import { makePlanningEmitter } from '../planning-emitter';
@@ -607,44 +608,11 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
  * terminal status, its persisted definition digest (resume digest wins) and
  * artifact registration. The project DB opens lazily; a missing row or absent
  * registration surfaces as a fail-closed `run` rejection at the completion
- * boundary.
+ * boundary. Shared with the server's guarded `feature.transition`
+ * ({@link createFeatureReceiptRunPort}) so both surfaces validate identically.
  */
 async function makeReceiptRunPort(context: CliContext): Promise<FeatureReceiptRunPort> {
-    const db = await context.getDb();
-    const runs = new RunDao(db);
-    const artifacts = new ArtifactDao(db);
-    return {
-        readRunRow: async (runId) => {
-            const row = await runs.traceRowById(runId);
-            if (!row) return undefined;
-            let meta: Record<string, unknown> = {};
-            try {
-                meta = JSON.parse(row.metadata_json) as Record<string, unknown>;
-            } catch {
-                meta = {};
-            }
-            const digest =
-                typeof meta.resumeDefinitionDigest === 'string'
-                    ? meta.resumeDefinitionDigest
-                    : typeof meta.definitionDigest === 'string'
-                      ? meta.definitionDigest
-                      : null;
-            return { status: row.status, definitionDigest: digest, varsJson: null };
-        },
-        hasArtifact: async (runId, path) => {
-            const rows = await artifacts.artifactsByRunId(runId);
-            // Paths may differ by symlink resolution (e.g. /tmp vs /private/tmp), so
-            // fall back to realpath comparison before rejecting a registered artifact.
-            const real = (p: string): string => {
-                try {
-                    return context.fs.realPath?.(p) ?? p;
-                } catch {
-                    return p;
-                }
-            };
-            return rows.some((row) => row.path === path || real(row.path) === real(path));
-        },
-    };
+    return createFeatureReceiptRunPort(await context.getDb(), context.fs);
 }
 
 async function makeService(context: CliContext, folderOverride?: string): Promise<FeatureService> {

@@ -22,10 +22,13 @@ import {
     bridgeEventBus,
     AgentCoordinationService as CoordinationServiceImpl,
     configuredSecretValues,
+    createFeatureReceiptRunPort,
     createPsProcessInspector,
     type EventEmitter,
     enqueueHistoryRefresh,
+    FeatureCheckService,
     FeatureService as FeatureServiceImpl,
+    type GuardedFeatureTransitionInput,
     type GuardedTransitionInput,
     type GuardedTransitionResult,
     hitlConfirmDefault,
@@ -44,8 +47,10 @@ import {
     TaskLocator,
     TaskService as TaskServiceImpl,
     TokenLedgerService as TokenLedgerServiceImpl,
+    transitionFeatureGuarded,
     transitionTaskGuarded,
     WorkflowAppService as WorkflowAppServiceImpl,
+    type WriteResult,
 } from '@gobing-ai/spur-app';
 // CF-safe core import: DEFAULT_* are plain string constants in the dependency-free core
 // entry of @gobing-ai/spur-config (no `yaml`/`node:fs`). This narrows the former inline-
@@ -193,6 +198,19 @@ export interface ServerContext {
      * `GuardDeniedError`, which the error handler maps to HTTP 409 GUARD_DENIED.
      */
     transitionTask(input: GuardedTransitionInput): Promise<GuardedTransitionResult>;
+
+    /**
+     * One guarded feature-status transition (task 1137 R2) — the server-side peer of
+     * the CLI's lifecycle-guarded `spur feature update`. The server's
+     * PlanningWriteService has no lifecycle adapter, so without this gate the HTTP
+     * `feature.transition` handler applied any status through the permissive
+     * fallback. The guard validates the edge against the `feature-lifecycle` graph
+     * in-process (no spawn), runs the `kind: shell` guards as the CLI would
+     * (`FeatureCheckService.check(id, { asStatus: to, strict, runDir, receiptRunPort })`),
+     * and refuses `onEnter` targets (today `verifying`) with the CLI recovery message.
+     * Denials throw `GuardDeniedError`, mapped to HTTP 409 GUARD_DENIED by the error handler.
+     */
+    transitionFeature(input: GuardedFeatureTransitionInput): Promise<WriteResult>;
 
     /**
      * Reload the merged Spur config for this project (0840). Composition-root
@@ -407,6 +425,7 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
     let closeDbPromise: Promise<void> | undefined;
     let taskSvc: TaskService | undefined;
     let checkSvc: TaskCheckService | undefined;
+    let featureCheckSvc: FeatureCheckService | undefined;
     let featureSvc: FeatureService | undefined;
     let historyBoardSvc: HistoryBoardService | undefined;
     let coordinationSvc: AgentCoordinationService | undefined;
@@ -497,8 +516,11 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
                     // 1132 R2: reopen through the FEATURE lifecycle profile via this context's own
                     // feature service — the task write service carries the task profile, whose FSM
                     // has no `verifying` state, so reusing it fails the reopen.
+                    // 1137 R2: the reopen is routed through the in-process guard (the verifying →
+                    // active edge is `always`), so the hook gets the same graph validation as the
+                    // HTTP feature.transition handler.
                     featureTransition: async (id: string, to: string) => {
-                        const wr = await this.featureService().transition(id, to);
+                        const wr = await this.transitionFeature({ id, to });
                         return { fromStatus: wr.fromStatus, toStatus: wr.toStatus };
                     },
                     foldersConfig: folders.foldersConfig,
@@ -547,6 +569,29 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
                               },
                           }
                         : {}),
+                },
+                input,
+            );
+        },
+
+        async transitionFeature(input: GuardedFeatureTransitionInput): Promise<WriteResult> {
+            // In-process check service for the graph's `kind: shell` guards (1137 R2).
+            // The server has no spawning LifecycleAdapter, so the shell command
+            // (`spur feature check <id> [--strict] --as <to>`) runs as FeatureCheckService
+            // directly. 1137 P2: wire the same `runDir` + run-store port the CLI's
+            // shell guards pass, or the D63 completion receipt never fires over HTTP
+            // and a receipt-less feature could reach `done`.
+            featureCheckSvc ??= new FeatureCheckService(fs);
+            const tasksDirs = [...new Set([folders.tasksDir, ...Object.keys(folders.foldersConfig.folders)])];
+            return transitionFeatureGuarded(
+                {
+                    features: this.featureService(),
+                    check: featureCheckSvc,
+                    cwd,
+                    featuresDir: folders.featuresDir,
+                    tasksDirs,
+                    runDir: this.runDir,
+                    receiptRunPort: createFeatureReceiptRunPort(await this.getDb(), fs),
                 },
                 input,
             );

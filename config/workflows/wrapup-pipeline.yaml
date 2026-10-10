@@ -23,6 +23,15 @@
 #          -> done
 #        doc-sync routes a contract violation to `repair` (cheap, no
 #        re-dispatch — ADR-118 pilot) and an executor failure to `failed`;
+#        1147 adds two deterministic post-doc-sync checks that fail the step
+#        BEFORE the tripwire backstop and name doc-sync: the write-scope check
+#        (the entry snapshot diffed against the working listing; allowed paths
+#        are docs/** minus docs/tasks*/docs/features* plus the declared learnings
+#        capture — a violation writes scope-violation: <paths> and is reported,
+#        never auto-reverted) and the supersession-pin re-run
+#        (repo-wide-tests/adr-supersession.test.ts), so a resurrected delinked
+#        index row is attributable to doc-sync; doc-tripwire stays the full
+#        backstop and is never weakened;
 #        learnings-validate (0986) rejects a nonempty narration-only capture to
 #        the same `repair` edge with a distinct invalid-learnings-shape status —
 #        expectFile proves existence, never shape — while empty/missing captures
@@ -86,7 +95,7 @@
 "$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
 kind: state-machine
 name: wrapup-pipeline
-version: "7"
+version: "8"
 description: "Post-execution wrap-up: doc-sync (doc drift + learning capture), metrics, feature-transition, branch-cleanup"
 iterationBound: 10
 initialState: start
@@ -232,8 +241,26 @@ states:
       (a clean exit that missed its declared answerFile/expectFile post-condition)
       routes to the cheap `repair` edge instead of a full re-dispatch (ADR-118
       pilot, 0871) — `onError: continue` lets the transition guards read the
-      agent's result instead of halting the run.
+      agent's result instead of halting the run. 1147 R1/R2 wrap it with a
+      deterministic write-scope guard (entry snapshot before the query, diff after
+      it; a violation writes scope-violation: <paths> and routes to `failed`, the
+      edits are reported and never auto-reverted) and a supersession-pin re-run, so
+      an out-of-scope or delinked-row write is attributed here instead of surfacing
+      late at doc-tripwire.
     onEnter:
+      # (1147 R1) entry snapshot: the working listing is recorded BEFORE the model
+      # query so the post-doc-sync check can attribute only this step's writes. Never
+      # aborts; a git failure or a missing script leaves the snapshot absent and the
+      # check fails closed rather than guessing.
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run &&
+            eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/wrapup-steps.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/wrapup-steps.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; if [ -f "$S" ]; then
+              "$RUNNER" "$S" doc-sync-snapshot;
+            else
+              echo "wrapup-steps failed closed — script not found — run 'superskill install sp --marketplace gobing-ai/spur'" >&2;
+            fi
       # (warn) free-form prompt: no /sp:doc-evolve command surface yet (ADR-043
       # residual, 0607 R2 one-query merge); capture is bounded by expectFile.
       - kind: agent.run
@@ -243,7 +270,10 @@ states:
           input: >-
             First run Skill(skill="sp:doc-evolve", args="wrapup") to repair drift in
             docs/00_ADR.md, docs/03_ARCHITECTURE.md, docs/04_DESIGN.md, docs/design/* per constitution edit
-            rules; do not write task/feature corpus. The batch task list is the normalized, validated
+            rules; do not write task/feature corpus. Write ONLY inside docs/ (never docs/tasks* or
+            docs/features*) — any other changed path fails the wrap step with a scope violation. A row
+            absent from docs/04_DESIGN.md for a superseded satellite is intentional: do NOT re-add it.
+            The batch task list is the normalized, validated
             capture at .spur/run/${vars.__runId}-wrapup-tasks.json — read it for the WBS ids; never
             re-parse raw input. THEN extract working learnings from those tasks —
             conventions, errors fixed, patterns, gotchas, grouped by date and task WBS — as raw markdown
@@ -255,6 +285,34 @@ states:
           answerFile: .spur/run/${vars.__runId}-wrapup-learnings.md
           expectFile: .spur/run/${vars.__runId}-wrapup-learnings.md
           timeoutMs: ${vars.stepTimeoutMs}
+      # (1147 R1) post-doc-sync write-scope guard: the script diffs the working listing
+      # against the entry snapshot and writes PASS or `scope-violation: <paths>` — the
+      # action always exits 0 so status truth lives in the file (0783 R4) and the
+      # declared guard routes. Violating edits are reported, never reverted.
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run &&
+            eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/wrapup-steps.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/wrapup-steps.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; if [ -f "$S" ]; then
+              "$RUNNER" "$S" doc-sync-scope;
+            else
+              echo "wrapup-steps failed closed — script not found — run 'superskill install sp --marketplace gobing-ai/spur'" >&2;
+              printf 'scope-violation: wrapup-steps script not found\n' > ".spur/run/$__runId-wrapup-doc-sync-scope.status";
+            fi
+      # (1147 R2) supersession pins re-run: a doc-sync that resurrects a deliberately
+      # delinked index row (`repo-wide-tests/adr-supersession.test.ts`, g2) fails HERE,
+      # named with the pin, instead of being attributed to the later doc-tripwire
+      # backstop. Skips in a project without the pin; always exits 0 (0783 R4).
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run &&
+            eval "$(jq -r 'if .mode=="source-repo" then "S="+@sh"\(.dir)/wrapup-steps.ts"+" RUNNER=bun" elif .mode=="installed" then "S="+@sh"\(.dir)/wrapup-steps.mjs"+" RUNNER=node" else empty end' ".spur/run/$__runId-script-root.json" 2>/dev/null)"; if [ -f "$S" ]; then
+              "$RUNNER" "$S" doc-supersession;
+            else
+              echo "wrapup-steps failed closed — script not found — run 'superskill install sp --marketplace gobing-ai/spur'" >&2;
+              printf 'supersession-pin-failed: wrapup-steps script not found\n' > ".spur/run/$__runId-wrapup-doc-supersession.status";
+            fi
 
   - id: learnings-validate
     description: >
@@ -463,7 +521,8 @@ states:
     description: >
       Terminal — wrap-up failed (0770): invalid wrap input, an unresolved or
       non-completed task, a failed metrics capture, a failed required sync, a
-      failed repo-wide tripwire (1037), or a failed feature gate.
+      failed repo-wide tripwire (1037), a failed feature gate, or one of the
+      deterministic post-doc-sync checks (1147: write scope, supersession pins).
       Already-written artifacts (learnings, metrics rows, route reason) are
       preserved; nothing is rolled back.
 
@@ -521,11 +580,12 @@ transitions:
     guard:
       kind: always
 
-  # ── doc-sync: contract-first routing (ADR-118 pilot, 0871) ──
-  # Declaration order matters: the contract-violation edge is tried first, then
-  # success (action-ok), then the executor-failure defense (always) — a failed
-  # agent.run reaches these guards because doc-sync's agent.run declares
-  # onError: continue.
+  # ── doc-sync: contract-first routing (ADR-118 pilot, 0871; 1147 R1/R2 checks) ──
+  # Declaration order matters: the contract-violation edge is tried first, then the
+  # two deterministic post-doc-sync checks (write scope, supersession pins) so a
+  # violation they recorded can never be absorbed by the success edge, then success
+  # (action-ok), then the executor-failure defense (always) — a failed agent.run
+  # reaches these guards because doc-sync's agent.run declares onError: continue.
   - from: doc-sync
     to: repair
     description: >
@@ -535,6 +595,31 @@ transitions:
     trigger: contract-violation
     guard:
       kind: contract-violation
+  - from: doc-sync
+    to: failed
+    terminalReason: failed-check
+    description: >
+      Write-scope violation (1147 R1): the post-doc-sync check found a changed path
+      outside docs/** minus the task/feature corpus (and the declared learnings
+      capture) — the status file names the paths and the failing step is doc-sync
+      itself. The edits are reported, never auto-reverted; already-written artifacts
+      stay on disk.
+    guard:
+      kind: shell
+      options:
+        command: 'grep -q "^scope-violation:" .spur/run/$__runId-wrapup-doc-sync-scope.status 2>/dev/null'
+  - from: doc-sync
+    to: failed
+    terminalReason: failed-check
+    description: >
+      Supersession drift (1147 R2): the post-doc-sync re-run of
+      repo-wide-tests/adr-supersession.test.ts failed — doc-sync re-added a
+      deliberately delinked index row. Attributed here (named with the pin) rather
+      than at the later doc-tripwire backstop, which stays unchanged.
+    guard:
+      kind: shell
+      options:
+        command: 'grep -q "^supersession-pin-failed:" .spur/run/$__runId-wrapup-doc-supersession.status 2>/dev/null'
   - from: doc-sync
     to: learnings-validate
     description: Doc drift repair + learning capture succeeded — validate the capture's shape before appending.

@@ -74,6 +74,12 @@ export interface CoverageEntry {
      * attempts that died before measurement (spawn failure) may omit it.
      */
     durationMs?: number;
+    /**
+     * Pre-start import scope (task 1144 R1, additive): the ≈ jsonl file count and
+     * summed byte size of this source's resolved inputs, resolved before the importer ran.
+     * Carries the same data as the stderr scope line; absent on failed/timeout entries.
+     */
+    scope?: { files: number; bytes: number };
 }
 
 /**
