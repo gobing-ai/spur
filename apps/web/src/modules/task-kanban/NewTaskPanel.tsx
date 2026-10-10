@@ -2,6 +2,7 @@ import { TASK_VARIANTS, type TaskVariant } from '@gobing-ai/spur-domain/schema';
 import { useEffect, useState } from 'react';
 import { Button, Input, MDEditor, Select } from '@/ui';
 import ResizeHandle from '../../components/ResizeHandle';
+import { markdownPreviewSafety } from '../../lib/markdown-safety';
 import { api } from '../../lib/rpc-client';
 
 const PANEL_WIDTH_KEY = 'spur:new-task-panel-width';
@@ -69,6 +70,7 @@ function MarkdownField({ id, label, placeholder, value, mode, onChange, onModeCh
                         height={160}
                         textareaProps={{ id, placeholder, disabled, 'aria-label': label }}
                         data-color-mode="dark"
+                        previewOptions={markdownPreviewSafety}
                     />
                 </div>
             ) : (
@@ -77,7 +79,7 @@ function MarkdownField({ id, label, placeholder, value, mode, onChange, onModeCh
                     data-testid={`${id}-preview`}
                 >
                     {value.trim() ? (
-                        <MDEditor.Markdown source={value} data-color-mode="dark" />
+                        <MDEditor.Markdown source={value} data-color-mode="dark" {...markdownPreviewSafety} />
                     ) : (
                         <p className="text-xs text-spur-text-muted">{placeholder}</p>
                     )}

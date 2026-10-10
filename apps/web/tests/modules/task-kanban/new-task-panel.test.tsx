@@ -18,15 +18,20 @@ interface MockEditorProps {
         disabled?: boolean;
         'aria-label'?: string;
     };
+    previewOptions?: { pluginsFilter?: unknown };
 }
+
+let editorPreviewOptions: MockEditorProps['previewOptions'];
+let markdownPreviewProps: Record<string, unknown> | null = null;
 
 const editorOnChangeById = new Map<string, (val?: string) => void>();
 
 const MockMDEditor = Object.assign(
-    function MockEditor({ value, onChange, textareaProps }: MockEditorProps) {
+    function MockEditor({ value, onChange, textareaProps, previewOptions }: MockEditorProps) {
         if (textareaProps?.id && onChange) {
             editorOnChangeById.set(textareaProps.id, onChange);
         }
+        editorPreviewOptions = previewOptions;
         return (
             <textarea
                 id={textareaProps?.id}
@@ -39,8 +44,9 @@ const MockMDEditor = Object.assign(
         );
     } as ComponentType<MockEditorProps>,
     {
-        Markdown: function MockMarkdown({ source }: { source?: string }) {
-            return <div data-testid="markdown-preview">{source}</div>;
+        Markdown: function MockMarkdown(props: Record<string, unknown>) {
+            markdownPreviewProps = props;
+            return <div data-testid="markdown-preview">{String(props.source ?? '')}</div>;
         },
     },
 );
@@ -125,6 +131,8 @@ beforeEach(() => {
     createCalls.length = 0;
     bodyCalls.length = 0;
     editorOnChangeById.clear();
+    editorPreviewOptions = undefined;
+    markdownPreviewProps = null;
     inputOnChangeById.clear();
     createImpl = async () => ({ data: { wbs: '0009', filePath: 'a.md' } });
     bodyImpl = async () => ({ data: { wbs: '0009', filePath: 'a.md' } });
@@ -262,6 +270,20 @@ describe('NewTaskPanel', () => {
 
         expect(getByTestId('new-task-background-preview')).toBeDefined();
         expect(getByTestId('markdown-preview').textContent).toBe('**context**');
+    });
+
+    test('R1 — the editor and read previews receive the shared markdown safety props', () => {
+        const { getAllByRole } = renderPanel();
+
+        // Editor pane: safety props flow through previewOptions.
+        expect(typeof editorPreviewOptions?.pluginsFilter).toBe('function');
+
+        // Read pane: same props are spread onto the direct preview.
+        act(() => {
+            editorOnChangeById.get('new-task-background')?.('**context**');
+        });
+        fireEvent.click(getAllByRole('button', { name: 'Preview' })[0] as HTMLElement);
+        expect(typeof markdownPreviewProps?.pluginsFilter).toBe('function');
     });
 
     test('R1 — includes a manual resize handle on the panel edge', () => {

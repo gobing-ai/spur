@@ -14,6 +14,7 @@ import {
 } from '../../lib/feature-client';
 import type { FeatureShowData, FeatureSummary, SyncDirection } from '../../lib/feature-types';
 import { stripFrontmatter } from '../../lib/frontmatter';
+import { markdownPreviewSafety } from '../../lib/markdown-safety';
 import MarkdownBody from '../task-kanban/MarkdownBody';
 import NewTaskPanel from '../task-kanban/NewTaskPanel';
 import type { TaskSummary } from '../task-kanban/types';
@@ -798,6 +799,7 @@ export default function FeatureDetail({
                             onChange={(val) => setDraftBody(val ?? '')}
                             height="100%"
                             data-color-mode="light"
+                            previewOptions={markdownPreviewSafety}
                         />
                     </div>
                 ) : (

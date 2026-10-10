@@ -1,6 +1,7 @@
 import DOMPurify from 'dompurify';
 import { useEffect, useId, useRef, useState } from 'react';
 import { MDEditor } from '@/ui';
+import { markdownPreviewSafety } from '../../lib/markdown-safety';
 
 /**
  * Renders a fenced ```mermaid block as an SVG diagram.
@@ -167,6 +168,7 @@ export default function MarkdownBody({ source, className, style }: MarkdownBodyP
             className={className}
             style={style}
             wrapperElement={{ 'data-color-mode': 'light' }}
+            {...markdownPreviewSafety}
             components={{
                 code: renderCodeBlock,
             }}

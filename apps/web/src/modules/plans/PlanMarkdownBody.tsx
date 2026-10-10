@@ -1,5 +1,6 @@
 import { MDEditor } from '@/ui';
 import { stripFrontmatter } from '../../lib/frontmatter';
+import { markdownPreviewSafety } from '../../lib/markdown-safety';
 import { nodeText, renderCodeBlock } from '../task-kanban/MarkdownBody';
 import { createSlugTracker } from './PlanToc';
 
@@ -47,6 +48,7 @@ export default function PlanMarkdownBody({ source, className }: PlanMarkdownBody
             <MDEditor.Markdown
                 source={cleanSource}
                 wrapperElement={{ 'data-color-mode': 'light' }}
+                {...markdownPreviewSafety}
                 components={components}
             />
         </div>

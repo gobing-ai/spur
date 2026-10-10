@@ -16,11 +16,15 @@ interface MockEditorProps {
     value?: string;
     onChange?: (val?: string) => void;
     height?: number;
+    previewOptions?: { pluginsFilter?: unknown };
 }
 
+let editorPreviewOptions: MockEditorProps['previewOptions'];
+
 const MockMDEditor = Object.assign(
-    function MockEditor({ value, onChange }: MockEditorProps) {
+    function MockEditor({ value, onChange, previewOptions }: MockEditorProps) {
         editorOnChange = onChange ?? null;
+        editorPreviewOptions = previewOptions;
         return <textarea value={value} readOnly aria-label="markdown editor" />;
     } as ComponentType<MockEditorProps>,
     {
@@ -188,6 +192,15 @@ describe('TaskDetail — body rendering and inline editing', () => {
         expect(errorEvents).toContain('409 lock denied');
 
         window.removeEventListener('api-error', handler);
+    });
+
+    test('R1 — the body editor preview receives the shared markdown safety props', async () => {
+        const { getByText, getByLabelText } = renderDetail();
+        await waitFor(() => expect(getByText('## Original body')).toBeDefined());
+
+        fireEvent.click(getByLabelText('Edit body'));
+
+        expect(typeof editorPreviewOptions?.pluginsFilter).toBe('function');
     });
 
     test('R4 — an open editor is not clobbered by a poll-induced re-render', async () => {

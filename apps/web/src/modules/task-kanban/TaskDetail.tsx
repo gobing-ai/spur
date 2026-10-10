@@ -1,6 +1,7 @@
 import { taskStatusIcon } from '@gobing-ai/spur-domain/schema';
 import { useEffect, useState } from 'react';
 import { Badge, Button, Checkbox, Loading, MDEditor, Select } from '@/ui';
+import { markdownPreviewSafety } from '../../lib/markdown-safety';
 import { api } from '../../lib/rpc-client';
 import MarkdownBody from './MarkdownBody';
 import type { TaskSummary } from './types';
@@ -521,6 +522,7 @@ export default function TaskDetail({ task, onTransition, onClose }: Props) {
                             onChange={(val) => setDraftBody(val ?? '')}
                             height="100%"
                             data-color-mode="light"
+                            previewOptions={markdownPreviewSafety}
                         />
                     </div>
                 ) : (

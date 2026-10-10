@@ -78,7 +78,12 @@ async function agentList(enveloped?: boolean): Promise<string> {
 
 async function agentDoctor(enveloped?: boolean): Promise<string> {
     const out = capture();
-    const svc = new AgentService({ cwd: process.cwd(), env: {}, output: out });
+    // WHY: doctor's inline-run audit scans `<cwd>/.spur/run/*-attribution.jsonl`, so
+    // passing process.cwd() made the emitted envelope depend on whatever inline-run
+    // scratch the live tree happened to hold (the frozen json-raw-baseline fixture
+    // expects an empty attribution set). A fresh temp cwd — same pattern as
+    // ruleProject() — carries no scratch, so the bytes are tree-independent.
+    const svc = new AgentService({ cwd: await mkdtemp(join(tmpdir(), 'spur-0697-doctor-')), env: {}, output: out });
     await svc.doctor({ json: true, ...(enveloped === undefined ? {} : { enveloped }) }, {
         doctorRunner: { runAll: async () => DOCTOR_RESULTS },
         fileSystem: createNodeFileSystem(await mkdtemp(join(tmpdir(), 'spur-0697-'))),

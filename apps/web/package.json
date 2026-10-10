@@ -23,6 +23,8 @@
         "astro": "6.4.2",
         "daisyui": "5.0.29",
         "dompurify": "3.4.11",
+        "hast-util-from-html": "2.0.3",
+        "hast-util-to-html": "9.0.5",
         "lucide-react": "1.52.0",
         "mermaid": "11.15.0",
         "react": "19.2.1",
