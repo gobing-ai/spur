@@ -86,7 +86,9 @@ fallback) — labels are display addresses only, never an execution key.
 1. Resolve the command inputs, `--auto`, and any explicit `--vars` — **without reading the selected
    YAML yet**. An explicit non-inline executor selection chooses the subprocess workflow path.
 2. Allocate a collision-resistant inline run id (`uuidgen`, with a timestamp/pid fallback), create
-   `.spur/run/` for attempt staging and `.spur/memory/runs/` for retained records, and use the two-file run record (task 0927) — append lines to
+   `.spur/run/` and the run's scratch subdirectory `.spur/run/<run-id>/` for attempt staging (action
+   batches, captured stage output, temporary status/answer files) plus `.spur/memory/runs/` for
+   retained records, and use the two-file run record (task 0927) — append lines to
    `.spur/memory/runs/<run-id>.md` and read machine state from `.spur/memory/runs/<run-id>.state.json`.
    The run id lives in those two files and the persisted run row — never stage it in an ad-hoc
    `*.env` file: the `no-env-files` gate rule flags any `.env` name, so run-scoped staging files
