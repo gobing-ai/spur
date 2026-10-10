@@ -906,6 +906,12 @@ verdict artifact exists (tasks 0617, 0619 — the clobbering spiral).
    git commit -m "<type>(<scope>): <wbs> <summary>"
    ```
 
+5. **Print the run's execution summary (1146).** The terminal `--close` returns `summaryFile`; print
+   that file's contents verbatim under an `### Execution summary` heading, and pass `--no-summary`
+   through to `--close` when the operator asked for it. The window is the run row's `started_at` →
+   close time — the driver records no `SINCE` and assembles no measurement of its own
+   (structured-trace-emission.md § the close step owns the contract).
+
 ## Runtime interface contracts (from run evidence)
 
 Each item below cost a driver cycle to discover. They are contracts, not tips.

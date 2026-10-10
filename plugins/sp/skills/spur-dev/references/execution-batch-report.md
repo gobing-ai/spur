@@ -135,6 +135,17 @@ routes to **WT-5** — worktree and branch retained — the same copy-out-first 
 verdict persistence above. After a green persist-out, `spur workflow progress --json` in the
 invoking tree shows the merged run `done` with its per-action rows.
 
+**Batch roll-up (1146 R3).** After the last run closes, print one `### Execution summary` block per run
+(each from that run's own `summaryFile`, so each window is its own `runs.started_at` → close time), then
+the batch roll-up built from the per-run files:
+
+```bash
+node "$(superskill script path sp run-summary.mjs)" --rollup <runId>-summary.json --rollup <runId2>-summary.json
+```
+
+One row per run carrying that run's own Total, a bold total of the sums, and — when run windows overlap —
+a wall-span line from the first start to the last end. No run block reuses a batch-wide window.
+
 ## Step 6 — Batch wrap (`--wrap` / `--next`) (F96 task 0952 R1)
 
 Run **once for the batch**, after the Step 5 report — never per task (dev-operations.md §runall

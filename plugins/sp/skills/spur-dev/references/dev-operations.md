@@ -166,18 +166,29 @@ must not be changed without updating the backing skill.
 
 #### Execution summary
 
-Default on for full-mode `dev-run` and `dev-runall`; `--no-summary` skips it. At command start record
-`SINCE=$(date -u +%Y-%m-%dT%H:%M:%SZ)`. When the run settles (done, failed or paused), write each run's
-`spur workflow progress <run-id> --json` to `$TMPDIR/<run-id>-progress.json` and print, verbatim under an
-`### Execution summary` heading:
-`node "$(superskill script path sp run-summary.mjs)" --since "$SINCE" --progress <file> --markdown`
-(`dev-runall`: one `--progress <wbs>=<file>` per attempted run). One file renders one row per state visit;
-several render one row per run; a `driver overhead` row carries host work outside every stage window so rows
-sum to `Total` (omitted when parallel runs overlap). Columns: Stage | Status | Time | Wait | Tool calls |
-Token (total / non-cached) — total counts every input class plus output; non-cached drops cache reads.
-Stage windows with no host transcript record (subprocess executors) render `n/a`, never 0. The summary is
-reporting only: a failure prints `Execution summary: n/a (<reason>)` and never changes the run's outcome.
-Not printed for `--mode implement` (no workflow run).
+Produced by the run's own close (1146 R1), not by a trailing step: `inline-run-setup --close` writes
+`.spur/run/<runId>-summary.md` + `.json` and reports `summaryFile` in its stdout JSON. The driver's only
+job is to print that file's contents under an `### Execution summary` heading, and to pass `--no-summary`
+through to `--close`. `--no-summary` is a `--close` flag: anywhere else it is a usage error.
+
+`/sp:dev-runall` shows one summary per run — each produced by that run's own close, so each window is its own
+`runs.started_at` → close time and no block reuses a batch-wide window — plus one batch roll-up:
+
+```
+node "$(superskill script path sp run-summary.mjs)" --rollup <runId>-summary.json --rollup <runId2>-summary.json
+```
+
+which renders one row per run (that run's own Total) and a bold total of the sums; when run windows overlap it
+also states the wall span from the first start to the last end.
+
+Columns: Stage | Status | Time | Wait | Tool calls | Token (total / non-cached) — total counts every input
+class plus output; non-cached drops cache reads. The actor split under the table partitions the same window —
+operator wait (with its longest single wait), model, shell, subagent, other tools and idle — and those rows sum
+exactly to the window; gate time is shown as an informational `of which gate` row sourced only from this run's
+check receipt (`receipt.runId === runId`), otherwise `n/a (<reason>)`. Any value with no source renders
+`n/a (<reason>)`, never 0. The summary is reporting only: a failure prints
+`Execution summary: n/a (<reason>)` and never changes the run's outcome. Not printed for `--mode implement`
+(no workflow run).
 
 ### 5. refine
 

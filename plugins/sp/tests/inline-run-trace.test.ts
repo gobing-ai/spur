@@ -466,7 +466,14 @@ test('0975 AC4: --close --status done with at least one action row exits 0 repor
         const close = runScript(p.workdir, ['--close', '--run-id', runId, '--status', 'done']);
         expect(close.status, close.stderr).toBe(0);
         // 1136 R5: the close JSON also reports the visited nodes that never emitted a row.
-        expect(JSON.parse(close.stdout)).toEqual({ ok: true, runId, actionRows: 1, missingNodes: [] });
+        // 1146 R1: the close also reports the execution-summary file it produced.
+        expect(JSON.parse(close.stdout)).toEqual({
+            ok: true,
+            runId,
+            actionRows: 1,
+            missingNodes: [],
+            summaryFile: `.spur/run/${runId}-summary.md`,
+        });
     } finally {
         p.cleanup();
     }
@@ -491,7 +498,13 @@ test('0975 AC4: --close --status failed with zero action rows stays a clean clos
             'failed-check',
         ]);
         expect(close.status, close.stderr).toBe(0);
-        expect(JSON.parse(close.stdout)).toEqual({ ok: true, runId, actionRows: 0, missingNodes: [] });
+        expect(JSON.parse(close.stdout)).toEqual({
+            ok: true,
+            runId,
+            actionRows: 0,
+            missingNodes: [],
+            summaryFile: `.spur/run/${runId}-summary.md`,
+        });
 
         const db = new Database(join(p.workdir, '.spur', 'spur.db'), { readonly: true });
         try {

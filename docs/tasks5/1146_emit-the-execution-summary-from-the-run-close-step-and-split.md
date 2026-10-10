@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Emit the execution summary from the run close step and split time by actor
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-10-09T17:29:05.417Z
-updated_at: "2026-10-09T18:16:44.568Z"
+updated_at: "2026-10-10T05:23:08.457Z"
 feature_id: E5
 
 ac_numbering: task-local
@@ -12,6 +12,8 @@ ac_altitude: task-local
 priority: P2
 estimate_hours: 6
 dependencies: ["1136", "1138"]
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1146-verdict.json
 ---
 
 ## 1146. Emit the execution summary from the run close step and split time by actor
@@ -37,11 +39,11 @@ Operator-supplied manual breakdowns (4 sessions) show the columns that actually 
 
 ### Requirements
 
-- [ ] R1. The inline-run `--close` step generates the execution summary deterministically when the run settles (any close status: `done`, `failed`, `paused`), windowed `[runs.started_at, close time]` — no agent-recorded `SINCE`. It writes `.spur/run/<runId>-summary.md` (markdown) and `.spur/run/<runId>-summary.json` (the `RunSummary` object plus `runId`, `startedAt`, `completedAt`) and adds `summaryFile` (the `.md` path) to the close stdout JSON; `--no-summary` on `--close` suppresses both files and the key. Summary failure (unresolved transcript, no timed attempts, any thrown error) never changes the close's exit code or JSON verdict; the `.md` then contains exactly `Execution summary: n/a (<reason>)`.
-- [ ] R2. The print obligation lives where the driver reads it at the moment it matters: `structured-trace-emission.md` (the `--close` step) and `inline-pipeline-driver.md` (one line at the terminal step) instruct the driver to print the `summaryFile` contents under `### Execution summary` and to pass `--no-summary` through to `--close`; `execution-batch-report.md` Step 5 prints the batch roll-up (R3). `dev-operations.md` § Execution summary is reduced to a pointer plus the column contract; the `SINCE` recording and the hand-assembled `run-summary.mjs --since` invocation are removed from every doc.
-- [ ] R3. Batch mode (`/sp:dev-runall`) shows one summary per run (each produced by that run's own close, so each window is its own `runs.started_at` → close time) plus one batch roll-up produced by `run-summary.mjs --rollup <runId>-summary.json …`: one row per run (its Total) and a batch Total row (sums of the per-run Totals; when run windows overlap, the row also states the wall span first start → last end). No run block reuses a batch-wide window.
-- [ ] R4. Each summary adds an actor split of the total window: operator wait (total and longest single wait), model, shell (gate time from this run's check receipt shown as an informational sub-row, not part of the partition), subagent, other tools, and idle/unattributed — partition rows sum exactly to the window — plus compaction count and subagent error count. Any value with no source renders `n/a (<reason>)`, never 0.
-- [ ] R5. Measurement reuses `plugins/sp/lib/transcript.ts` (Claude + the 1130 pi row parser) and its `resolveTranscript`; this task adds no transcript format, no pi session resolution (1138 R8), no new public `spur` noun/verb, and no `packages/app` import of plugin code.
+- [x] R1. The inline-run `--close` step generates the execution summary deterministically when the run settles (any close status: `done`, `failed`, `paused`), windowed `[runs.started_at, close time]` — no agent-recorded `SINCE`. It writes `.spur/run/<runId>-summary.md` (markdown) and `.spur/run/<runId>-summary.json` (the `RunSummary` object plus `runId`, `startedAt`, `completedAt`) and adds `summaryFile` (the `.md` path) to the close stdout JSON; `--no-summary` on `--close` suppresses both files and the key. Summary failure (unresolved transcript, no timed attempts, any thrown error) never changes the close's exit code or JSON verdict; the `.md` then contains exactly `Execution summary: n/a (<reason>)`.
+- [x] R2. The print obligation lives where the driver reads it at the moment it matters: `structured-trace-emission.md` (the `--close` step) and `inline-pipeline-driver.md` (one line at the terminal step) instruct the driver to print the `summaryFile` contents under `### Execution summary` and to pass `--no-summary` through to `--close`; `execution-batch-report.md` Step 5 prints the batch roll-up (R3). `dev-operations.md` § Execution summary is reduced to a pointer plus the column contract; the `SINCE` recording and the hand-assembled `run-summary.mjs --since` invocation are removed from every doc.
+- [x] R3. Batch mode (`/sp:dev-runall`) shows one summary per run (each produced by that run's own close, so each window is its own `runs.started_at` → close time) plus one batch roll-up produced by `run-summary.mjs --rollup <runId>-summary.json …`: one row per run (its Total) and a batch Total row (sums of the per-run Totals; when run windows overlap, the row also states the wall span first start → last end). No run block reuses a batch-wide window.
+- [x] R4. Each summary adds an actor split of the total window: operator wait (total and longest single wait), model, shell (gate time from this run's check receipt shown as an informational sub-row, not part of the partition), subagent, other tools, and idle/unattributed — partition rows sum exactly to the window — plus compaction count and subagent error count. Any value with no source renders `n/a (<reason>)`, never 0.
+- [x] R5. Measurement reuses `plugins/sp/lib/transcript.ts` (Claude + the 1130 pi row parser) and its `resolveTranscript`; this task adds no transcript format, no pi session resolution (1138 R8), no new public `spur` noun/verb, and no `packages/app` import of plugin code.
 
 **Out of scope / non-goals:** `PI_SESSION_FILE` resolution and skill-injected-prompt classification (1138 R3/R8); engine-measured node timings (1136 R9/R10 — stage rows keep using recorded attempts); subprocess-executor (`spur workflow run`) summaries — their runs are not closed through `inline-run-setup --close` and keep the existing `n/a` behaviour; changing the existing stage table columns; `session-timeline.ts`.
 
@@ -225,15 +227,74 @@ Scenario: AC6 — The print obligation is carried by the close output, not a tra
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| Change | Location | Why |
+| --- | --- | --- |
+| `actorSplit` — the window partitioned by actor | `plugins/sp/lib/run-summary-core.ts:167` | R4's partition: tool calls pair with their results in either host shape, overlaps resolve by subagent > shell > other and count once, gaps ≥5 min are idle, and model absorbs the remainder so the rows sum exactly to the window |
+| Actor table plus `Compactions · Subagent errors` under the stage table | `plugins/sp/lib/run-summary-core.ts:376` | Makes the split readable; the gate row is informational and outside the partition |
+| `--rollup` batch table | `plugins/sp/lib/run-summary-core.ts:418`, wired at `plugins/sp/scripts/run-summary.ts:44` | R3: one row per run from that run's own Total, a batch total of the sums, and a wall-span line when windows overlap — no batch-wide window reuse |
+| `gateFromReceipt` | `plugins/sp/lib/run-summary-core.ts:547` | R4: gate time only from this run's check receipt; a foreign or unreadable receipt renders `n/a (<reason>)`, never 0 |
+| `writeCloseSummary` | `plugins/sp/lib/run-summary-core.ts:502` | R1: the close's own deterministic product — `.spur/run/<runId>-summary.{md,json}`, windowed `started_at → completedAt`, never throws |
+| `buildRunSummary(..., until?)` and `actors`/`gate` on `RunSummary` | `plugins/sp/lib/run-summary-core.ts:288` | The close caps the window exactly at its own completion instant instead of the last transcript row |
+| `isCompaction` for both host shapes; `Block` as an explicit interface with `is_error` | `plugins/sp/lib/transcript.ts:206`, `:15` | R4: a compaction is a pi `compaction` row or a Claude `system`/`compact_boundary`; a failed subagent call is countable in both |
+| App `summarize` hook + `InlineRunCloseSummaryInput`, `summaryFile` on all three close stdout shapes | `packages/app/src/services/inline-run-setup.ts:1517`, `:1695` | R1: the summary is produced inside the committed close path, and a summarizer failure is logged and the key omitted — never a verdict change |
+| `--no-summary` glue flag, refused outside `--close` | `plugins/sp/scripts/inline-run-setup.ts:101`, `:125` | AC3: the flag is a close-step product; anywhere else is a usage error |
+| Docs: close-step print obligation, batch roll-up, actor columns | `structured-trace-emission.md`, `inline-pipeline-driver.md`, `execution-batch-report.md`, `dev-operations.md` | R2: the print obligation lives where the driver reads it at the moment it matters; the `SINCE` contract and the hand-assembled `--since` invocation are gone |
+
+Tradeoff: the measurement moved from `plugins/sp/scripts/run-summary.ts` into `plugins/sp/lib/run-summary-core.ts` to stay inside the ADR-130 250-line glue budget; the script re-exports the whole surface so consumers keep one import path. `Progress` remains a narrow structural view of the app projection, so `writeCloseSummary` narrows once at its boundary.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `plugins/sp/lib/run-summary-core.ts:502` writes `.spur/run/<runId>-summary.{md,json}` and never throws; `packages/app/src/services/inline-run-setup.ts:1695` calls it inside the committed close and reports `summaryFile` on all three stdout shapes, with a failure logged and the key omitted. |
+| R2 | MET | `structured-trace-emission.md` and `inline-pipeline-driver.md` instruct printing `summaryFile` after `--close`; `execution-batch-report.md` names `run-summary --rollup`; `dev-operations.md` is reduced to the close-product pointer plus the column contract, and no execution-summary reference records `SINCE` or invokes `--since`. |
+| R3 | MET | `plugins/sp/lib/run-summary-core.ts:418` renders one row per run from that run's own Total, a bold batch total of the sums, and a wall-span line when windows overlap; invoked through `plugins/sp/scripts/run-summary.ts:44`. |
+| R4 | MET | `actorSplit` (`plugins/sp/lib/run-summary-core.ts:167`) partitions operator/model/shell/subagent/other/idle and sums exactly to the window; `gateFromReceipt` (`plugins/sp/lib/run-summary-core.ts:547`) sources gate time only from this run's receipt, else `n/a (<reason>)`. |
+| R5 | MET | Measurement reuses `plugins/sp/lib/transcript.ts` (`resolveTranscript` plus a new `isCompaction` at `:206` and the widened `Block`/`Row` types); no new transcript format, no pi session-resolution change, no new public `spur` noun/verb, and no `packages/app` import of plugin code (the app takes a `summarize` callback). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | unit | `writeCloseSummary` writes both files and returns the `.md` path; the app's close reports `summaryFile` and `inline-run-trace.test.ts` pins the key on the close stdout. |
+| AC2 | MET | unit | An unresolvable transcript leaves the `.md` holding exactly `Execution summary: n/a (<reason>)`, writes no `.json`, and never throws; the close's exit/`ok` are unchanged. |
+| AC3 | MET | unit | `--no-summary` suppresses both files and the key, and any mode other than `--close` returns 2 from both the glue guard and the mode dispatcher. |
+| AC4 | MET | unit | F17–F22: the partition sums exactly, the overlap counts once under subagent, the longest operator wait is reported, a six-minute gap is idle, compactions and subagent errors count in both shapes, and gate time is receipt-gated. |
+| AC5 | MET | unit | F23 plus the CLI test: two summary files render per-run rows and a batch total, overlapping windows add the wall span, and `--rollup` mixed with a measurement source exits 2. |
+| AC6 | MET | unit | The execution-batch contract test pins `summaryFile` in both close references, `--rollup` in the batch report, and the absence of `SINCE=`/`--since "$SINCE"` in every execution-summary reference. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P4 | — | — | No findings (verify verdict PASS) |
+
+Residual risk:
+
+- **`model` is the partition's remainder.** Whatever the window holds that is not a resolved tool
+  span or an idle gap is attributed to model time. That guarantees the rows sum exactly to the window
+  (AC4), but a long assistant turn with no tool call is indistinguishable from a turn whose tool
+  result never arrived — both read as model time. The spec fixed that tradeoff by requiring an exact
+  partition.
+- **Idle is a fixed 5-minute gap**, per the closed Q&A decision; no flag. A misclassification would
+  be revisited only with evidence.
+- **Gate time is informational and single-sourced.** It reads `<runId>-check-receipt.json` from the
+  CLI's cwd; a receipt written elsewhere in the same tree (or a run closed from another directory)
+  renders `n/a (no matching check receipt)` rather than being discovered. That is the ADR-131
+  cross-run-read rule, not an oversight.
+- **The roll-up is a sum, not a re-measure.** Overlapping windows therefore double-count in the batch
+  total; the wall-span line is what discloses the overlap.
+- **`--rollup` reads whatever JSON it is given.** A hand-written file with a malformed `total` would
+  fail in the renderer rather than being schema-validated; the flag is driver-facing, and the writer
+  is `writeCloseSummary`.
+
+Untested paths: the `--no-summary` flag is asserted through the mode dispatcher and the glue's usage
+guard, not by spawning the installed `.mjs` twin; the pi half of F21 exercises `toolName`/`isError`
+from the fixture shape rather than a live pi transcript (1138's drill covers live pi measurement).
 
 ### References
 
@@ -245,4 +306,7 @@ Scenario: AC6 — The print obligation is carried by the close output, not a tra
 ### History
 
 - 2026-10-09T17:50:59.663Z backlog → todo (system)
+- 2026-10-10T01:13:38.334Z todo → wip (system)
+- 2026-10-10T05:23:06.978Z wip → testing (system)
+- 2026-10-10T05:23:08.431Z testing → done (system)
 

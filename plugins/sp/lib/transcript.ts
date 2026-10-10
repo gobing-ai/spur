@@ -16,10 +16,20 @@ export interface Span {
     tokens: Tokens;
 }
 
-type Block = Partial<Record<'type' | 'id' | 'name' | 'text' | 'tool_use_id', string>>;
+export interface Block {
+    type?: string;
+    id?: string;
+    name?: string;
+    text?: string;
+    tool_use_id?: string;
+    /** Claude tool_result error flag (1146 R4): a failed subagent call is counted. */
+    is_error?: boolean;
+}
 
 export interface Row {
     type?: string;
+    /** Claude `system` rows carry the compaction subtype (1146 R4). */
+    subtype?: string;
     timestamp?: string;
     isMeta?: boolean;
     isCompactSummary?: boolean;
@@ -30,6 +40,10 @@ export interface Row {
         content?: unknown;
         usage?: Record<string, number | undefined>;
         toolCallId?: string;
+        /** pi toolResult rows name their tool here (1146 R4). */
+        toolName?: string;
+        /** pi toolResult error flag (1146 R4). */
+        isError?: boolean;
     };
 }
 
@@ -183,6 +197,14 @@ export function accumulate(acc: Acc, row: Row, ts: number): void {
             output: u.output_tokens ?? 0,
         });
     }
+}
+
+/**
+ * 1146 R4: a compaction boundary in either host shape — pi writes a `compaction` row, Claude a
+ * `system` row with `subtype:"compact_boundary"`.
+ */
+export function isCompaction(row: Row): boolean {
+    return row.type === 'compaction' || (row.type === 'system' && row.subtype === 'compact_boundary');
 }
 
 /** First row matching a known shape decides: `type:"message"` with a pi role → pi, else Claude. */

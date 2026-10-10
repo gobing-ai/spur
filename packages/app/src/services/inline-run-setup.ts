@@ -40,7 +40,6 @@ const {
     openSync,
     readdirSync,
     readFileSync,
-    readdirSync,
     renameSync,
     unlinkSync,
     writeFileSync,
@@ -84,6 +83,7 @@ import { resolveDurableArtifactPath } from '../workflow/actions/run-path';
 import { parseFeatureVerificationReceipt } from '../workflow/feature-verification-receipt';
 import { reconcileExistingLifecycleRow, TASK_LIFECYCLE_PROFILE } from '../workflow/lifecycle-adapter';
 import type { WorkflowObservabilityBus } from '../workflow/observability';
+import { projectWorkflowProgress, type WorkflowProgressProjection } from '../workflow/progress-projection';
 import { computeProofInputFingerprint, readProofInputContents } from '../workflow/proof-input-fingerprint';
 import { asLiteralRunFileName, RUN_CITATION_RE, SAFE_RUN_ID_RE } from '../workflow/run-citation';
 import { loadRunCorrelation } from '../workflow/run-correlation';
@@ -1228,6 +1228,10 @@ export interface InlineRunTraceModeInput {
     readonly actionsFile: string;
     readonly projectRoot: string;
     readonly estimated: boolean;
+    /** 1146 AC3: `--no-summary` is valid only with `--close`; any other mode returns 2. */
+    readonly noSummary?: boolean;
+    /** 1146 R1: injected by the plugin glue so the app never imports plugin code. */
+    readonly summarize?: (run: InlineRunCloseSummaryInput) => Promise<string>;
 }
 
 /**
@@ -1240,6 +1244,8 @@ export interface InlineRunTraceModeInput {
  */
 export async function runInlineRunTraceMode(input: InlineRunTraceModeInput): Promise<number> {
     if (input.estimated && input.mode !== 'action') return 2;
+    // 1146 AC3: the summary is a close-step product only.
+    if (input.noSummary === true && input.mode !== 'close') return 2;
     const projectRoot = input.projectRoot.trim() === '' ? {} : { projectRoot: input.projectRoot };
     if (input.mode === 'node-enter') {
         if (input.node.trim() === '' || input.status !== '' || input.kind !== '') return 2;
@@ -1265,6 +1271,7 @@ export async function runInlineRunTraceMode(input: InlineRunTraceModeInput): Pro
             ok: true,
             durationMs: 0,
             ...(input.reason.trim() === '' ? {} : { reason: input.reason }),
+            ...(input.noSummary === true ? {} : input.summarize === undefined ? {} : { summarize: input.summarize }),
             ...projectRoot,
         });
     }
@@ -1325,6 +1332,12 @@ export interface InlineRunTraceInput {
      * stays best-effort exactly like `--action`'s emission failure policy.
      */
     readonly requireRunRow?: boolean;
+    /**
+     * Task 1146 R1: generate the execution summary as part of THIS close. Supplied by the plugin
+     * glue (the only place that may import `run-summary.ts`); absent means no summary is written
+     * and no `summaryFile` key is emitted. A failure here never changes the close's exit or verdict.
+     */
+    readonly summarize?: (run: InlineRunCloseSummaryInput) => Promise<string>;
 }
 
 /** Input for `runInlineRunNodeEnter` (`--node-enter`, task 1136 R4). */
@@ -1515,6 +1528,17 @@ function detectMarkerlessWorktree(
 }
 
 /**
+ * 1146 R1: what the close hands the summarizer. A structural copy lives plugin-side, because the
+ * summary producer is plugin glue (ADR-130) and the app must not import plugin code.
+ */
+export interface InlineRunCloseSummaryInput {
+    readonly runId: string;
+    readonly startedAt: string | undefined;
+    readonly completedAt: string;
+    readonly progress: WorkflowProgressProjection;
+}
+
+/**
  * Emit one trace write through the SHARED `WorkflowActionTraceWriter` (task 0868 R5/R7).
  * `--action` is best-effort: an emission failure is recorded to the run log and reported
  * on stdout as `{"ok":false}`, and the caller exits 0 so the run still reaches its declared
@@ -1682,6 +1706,33 @@ export async function runInlineRunTrace(input: InlineRunTraceInput): Promise<num
                   workdir,
               })
             : undefined;
+        // 1146 R1: produce the summary after the close committed and before any of the three
+        // stdout shapes below, so each can carry `summaryFile`. Never fatal: a failure is logged
+        // and the key is omitted, leaving the exit code and `ok` untouched (AC2).
+        let summaryFile: string | undefined;
+        if (input.close && input.summarize !== undefined) {
+            try {
+                const completedAt = new Date().toISOString();
+                const progress = await projectWorkflowProgress(input.runId, {
+                    db: projectDb.adapter,
+                    projectRoot: process.cwd(),
+                });
+                summaryFile = await input.summarize({
+                    runId: input.runId,
+                    startedAt: typeof result.startedAt === 'string' ? result.startedAt : undefined,
+                    completedAt,
+                    progress,
+                });
+            } catch (error) {
+                appendInlineRunLogLine(
+                    input.runId,
+                    `summary-failed run=${input.runId}: ${error instanceof Error ? error.message : String(error)}`,
+                    workdir,
+                );
+            }
+        }
+        const summaryKey = summaryFile === undefined ? {} : { summaryFile };
+
         if (input.close && input.status === 'done' && result.actionRows === 0) {
             // A run finalized `done` with ZERO recorded action rows is a bookkeeping defect
             // (task 0975 R2): the row is already terminal — closeRun ran above — but the
@@ -1692,7 +1743,7 @@ export async function runInlineRunTrace(input: InlineRunTraceInput): Promise<num
             }`;
             appendInlineRunLogLine(input.runId, `trace-close-failed run=${input.runId}: ${error}`, workdir);
             process.stdout.write(
-                `${JSON.stringify({ ok: false, runId: input.runId, error, code: 'NO_ACTION_ROWS', actionRows: 0 })}\n`,
+                `${JSON.stringify({ ok: false, runId: input.runId, error, code: 'NO_ACTION_ROWS', actionRows: 0, ...summaryKey })}\n`,
             );
             return 1;
         }
@@ -1701,7 +1752,7 @@ export async function runInlineRunTrace(input: InlineRunTraceInput): Promise<num
             // with a named code — replaying the same close repairs the sidecar (AC2).
             appendInlineRunLogLine(input.runId, `trace-close-failed run=${input.runId}: ${stateError}`, workdir);
             process.stdout.write(
-                `${JSON.stringify({ ok: false, runId: input.runId, error: stateError, code: 'RUN_RECORD_STATE_FAILED' })}\n`,
+                `${JSON.stringify({ ok: false, runId: input.runId, error: stateError, code: 'RUN_RECORD_STATE_FAILED', ...summaryKey })}\n`,
             );
             return 1;
         }
@@ -1752,7 +1803,7 @@ export async function runInlineRunTrace(input: InlineRunTraceInput): Promise<num
         // field — strip it before reporting.
         const { startedAt: _threaded, ...stdoutResult } = result;
         process.stdout.write(
-            `${JSON.stringify({ ...stdoutResult, runId: input.runId, ...(missingNodes !== undefined ? { missingNodes } : {}) })}\n`,
+            `${JSON.stringify({ ...stdoutResult, runId: input.runId, ...(missingNodes !== undefined ? { missingNodes } : {}), ...summaryKey })}\n`,
         );
         return 0;
     } catch (error) {

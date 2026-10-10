@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSy
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { getEnvVars } from '@gobing-ai/ts-utils';
-import { readRunbook } from '../helpers/runbook-parts';
+import { readRunbook, referencePath } from '../helpers/runbook-parts';
 
 const SPEC = readRunbook('execution-batch');
 
@@ -1161,5 +1161,40 @@ describe('execution-batch spec contract (task 1132 R4/R5 — auto-fix-first gate
         expect(SPEC).toContain('unchanged halt behavior');
         // The driver loop carries the same branch, so the prose is not merely descriptive.
         expect(SPEC).toContain('/sp:dev-refineall --auto pass');
+    });
+});
+
+/**
+ * 1146 AC6 — the print obligation is carried by the CLOSE OUTPUT, not a trailing step. These pins
+ * fail if a driver re-acquires the job of measuring its own run (the 1130/1131 failure: an
+ * agent-recorded SINCE plus a compacted-away step).
+ */
+describe('1146 — execution summary is a close product (AC6)', () => {
+    const ref = (name: string): string => readFileSync(referencePath(name), 'utf8');
+
+    test('the close docs hand the driver summaryFile to print', () => {
+        expect(ref('structured-trace-emission.md')).toContain('summaryFile');
+        expect(ref('inline-pipeline-driver.md')).toContain('summaryFile');
+        expect(ref('inline-pipeline-driver.md')).toContain('### Execution summary');
+    });
+
+    test('the batch report names the roll-up built from per-run files', () => {
+        const report = ref('execution-batch-report.md');
+        expect(report).toContain('run-summary.mjs');
+        expect(report).toContain('--rollup');
+        expect(report).toContain('wall-span');
+    });
+
+    test('no execution-summary reference records SINCE or measures with --since', () => {
+        for (const name of [
+            'dev-operations.md',
+            'execution-batch-report.md',
+            'inline-pipeline-driver.md',
+            'structured-trace-emission.md',
+        ]) {
+            const body = ref(name);
+            expect(body).not.toContain('SINCE=');
+            expect(body).not.toContain('--since "$SINCE"');
+        }
     });
 });

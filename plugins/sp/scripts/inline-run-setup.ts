@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import type * as spurApp from '@gobing-ai/spur-app';
 import { getEnvVar } from '../lib/env';
 import { loadInlineApp } from '../lib/inline-run-app';
+import { writeCloseSummary } from './run-summary';
 
 // EMBEDDED_SPUR_SCHEMAS: declared by the bundle twin, never exported by the barrel — optional
 // intersection member, exactly what the previous structural cast expressed.
@@ -83,7 +84,8 @@ async function main(): Promise<void> {
         decide = false,
         persistOut = false,
         nodeEnter = false,
-        estimated = false;
+        estimated = false,
+        noSummary = false;
     const taskFiles: string[] = [];
     let spurBin = getEnvVar('SPUR_BIN') ?? '';
     const argv = process.argv.slice(2);
@@ -96,6 +98,7 @@ async function main(): Promise<void> {
         else if (flag === '--node-enter') nodeEnter = true;
         else if (flag === '--persist-out') persistOut = true;
         else if (flag === '--estimated') estimated = true;
+        else if (flag === '--no-summary') noSummary = true;
         else if (flag === '--task-file') taskFiles.push(argv[++i] ?? '');
         else if (flag === '--spur-bin') spurBin = argv[++i] ?? spurBin;
         else if (flag !== undefined) flags.set(flag, argv[++i] ?? '');
@@ -118,6 +121,8 @@ async function main(): Promise<void> {
     // `--estimated` labels a host-reported duration the driver did NOT time around the action
     // (1070 R2). Only `--action` carries one: every other mode is refused here, before any write.
     if (estimated && !action) usage();
+    // 1146 AC3: `--no-summary` belongs to the close step; any other mode is a usage error.
+    if (noSummary && !close) usage();
 
     if (fingerprint) {
         if (runId !== '' || file !== '' || taskFiles.length !== 1 || (taskFiles[0] ?? '').trim() === '') usage();
@@ -173,6 +178,8 @@ async function main(): Promise<void> {
             actionsFile,
             projectRoot,
             estimated,
+            noSummary,
+            ...(noSummary ? {} : { summarize: async (run) => writeCloseSummary(run) }),
         });
         if (code === 2) usage();
         process.exit(code);

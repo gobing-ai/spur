@@ -124,6 +124,13 @@ to exactly that redirect. Capture the output or let it stream; a failure must be
   bun "$SETUP_SCRIPT" --close --run-id "$RUN_ID" --status <done|failed|paused> --project-root "$OWNING_TREE"
   ```
 
+  The close also produces the execution summary (1146 R1): its stdout carries
+  **`summaryFile`** (`.spur/run/<runId>-summary.md`) unless `--no-summary` was passed. Print that
+  file's contents verbatim under an `### Execution summary` heading — the driver generates nothing
+  itself, and the window is the run row's `started_at` → close time, so no `SINCE` is recorded. A
+  summary failure never changes the close verdict: the file then holds exactly
+  `Execution summary: n/a (<reason>)`.
+
   `--status` is the declared terminal state's verdict, not a guess: a run that reached a terminal
   state is `done`; a run halted by a failing action under its error policy is `failed`. On success
   the close reports the recorded evidence: `{"ok":true,"runId":…,"actionRows":<n>}` plus
