@@ -27688,6 +27688,9 @@ var phaseRunsTable = defineTable("phase_runs", {
   ...standardColumns
 });
 var phaseRuns = phaseRunsTable.table;
+// packages/domain/src/dao/run-transfer.ts
+var LIFECYCLE_WORKFLOWS = new Set(["task-lifecycle", "feature-lifecycle"]);
+var TERMINAL_STATUSES = new Set(["done", "failed", "cancelled"]);
 // packages/domain/src/schema/transition-runs.ts
 init_schema();
 var transitionRunsTable = defineTable("transition_runs", {

@@ -19,14 +19,16 @@ import type { DbAdapter } from '@gobing-ai/ts-db';
  * invoking-tree row count unchanged (idempotent).
  *
  * `external-key-conflict` is graded by what the refused source run actually owns (1090
- * follow-up). The identity belongs to the TARGET's row either way, so a source row with no
- * child rows has nothing to orphan — it is a bare bookkeeping row the worktree created for
- * itself (the pipeline precheck's auto-profile feature reopen runs in the execution tree, so
- * a `feature-lifecycle`/`feature:<id>` row is created in a throwaway DB while the invoking
- * tree already owns that key). That case reports
- * `reason:'external-key-conflict-bookkeeping'` and does NOT fail the pass. A source run that
- * owns action/phase/transition/state/artifact/link rows keeps the fail-closed
- * `external-key-conflict`: refusing teardown is what stops that provenance being lost.
+ * follow-up, extended by 1149 R1). The identity belongs to the TARGET's row either way, so a
+ * source row with no child rows has nothing to orphan — it is a bare bookkeeping row the worktree
+ * created for itself (the pipeline precheck's auto-profile feature reopen runs in the execution tree,
+ * so a `feature-lifecycle`/`feature:<id>` row is created in a throwaway DB while the invoking tree
+ * already owns that key). That case reports `reason:'external-key-conflict-bookkeeping'` and does NOT
+ * fail the pass. Task 1149 R1 extends this to any TERMINAL lifecycle row (`task-lifecycle` or
+ * `feature-lifecycle` with status `done`/`failed`/`cancelled`): the batch's outcome reaches the
+ * receiving row via the terminal reconcile (1047 R1), so the worktree-created lifecycle row does not
+ * orphan provenance and refusing teardown is avoided. A non-terminal duplicate lifecycle row and any
+ * non-lifecycle run (`task-pipeline`) keep the fail-closed `external-key-conflict`.
  *
  * Evidence for the grading (run `ada5a36c`, task 1090): the refused `feature:H1` row owned 0
  * child rows in every child table, against 48 `action_runs` for that run's task-pipeline run
@@ -64,6 +66,9 @@ const CHILD_TABLES = [
     'artifacts',
     'task_run_links',
 ] as const;
+
+const LIFECYCLE_WORKFLOWS = new Set(['task-lifecycle', 'feature-lifecycle']);
+const TERMINAL_STATUSES = new Set(['done', 'failed', 'cancelled']);
 
 /** Row shape as `SELECT *` returns it — column names come from the migrated schema. */
 type RawRow = { readonly [column: string]: unknown };
@@ -147,9 +152,12 @@ export async function transferRunTables(from: DbAdapter, to: DbAdapter): Promise
                         break;
                     }
                 }
+                const isLifecycleTerminal =
+                    LIFECYCLE_WORKFLOWS.has(String(row.workflow_name)) && TERMINAL_STATUSES.has(String(row.status));
+                const isBookkeeping = !ownsChildren || isLifecycleTerminal;
                 skipped.push({
                     id,
-                    reason: ownsChildren ? 'external-key-conflict' : 'external-key-conflict-bookkeeping',
+                    reason: isBookkeeping ? 'external-key-conflict-bookkeeping' : 'external-key-conflict',
                 });
                 continue;
             }

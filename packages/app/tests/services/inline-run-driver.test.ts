@@ -603,6 +603,81 @@ describe('runInlineRunSetup + runInlineRunTrace (moved driver bodies, 1006 R3)',
         }
     });
 
+    test('1149 R2/R3: persist-out allows terminal lifecycle duplicate and reconciles receiving row (AC1, AC4)', async () => {
+        const from = makeProject('persist-xk3-from');
+        const to = makeProject('persist-xk3-to');
+        const seed = async (dir: string, id: string, status: string): Promise<void> => {
+            const db = await openInlineRunProjectDb(dir);
+            try {
+                await db.adapter.run(
+                    `INSERT INTO runs (id, workflow_name, mode, status, agent, external_key, started_at, completed_at,
+                                       metadata_json, created_at, updated_at)
+                     VALUES (?, 'task-lifecycle', 'state-machine', ?, NULL, 'task:1138', '2026-10-09T05:36:13.642Z', NULL, '{}', 1, 1)`,
+                    id,
+                    status,
+                );
+            } finally {
+                db.close();
+            }
+        };
+        // Invoking tree holds a stale interrupted row
+        await seed(to.dir, 'run_interrupted_inv', 'interrupted');
+        // Worktree holds a done row with transition children
+        await seed(from.dir, 'run_done_wt', 'done');
+        const sourceDb = await openInlineRunProjectDb(from.dir);
+        try {
+            await sourceDb.adapter.run(
+                `INSERT INTO transition_runs (id, run_id, from_state, to_state, status, created_at, updated_at)
+                 VALUES ('tr_1149', 'run_done_wt', 'testing', 'done', 'done', 1, 1)`,
+            );
+        } finally {
+            sourceDb.close();
+        }
+
+        // Add the forwarded task file in to.dir with status done
+        const taskDir = join(to.dir, 'docs/tasks5');
+        mkdirSync(taskDir, { recursive: true });
+        const taskPath = join(taskDir, '1138_test.md');
+        writeFileSync(taskPath, '---\nstatus: done\n---\n# 1138\n');
+
+        try {
+            await inDir(to.dir, async () => {
+                const pass = await captureAsync(() =>
+                    runInlineRunPersistOut({ from: from.dir, taskFiles: ['docs/tasks5/1138_test.md'] }),
+                );
+                expect(pass.value).toBe(0);
+                const payload = JSON.parse(pass.out.trimEnd()) as { ok: boolean; skipped: unknown[] };
+                expect(payload.ok).toBe(true);
+                expect(payload.skipped).toContainEqual({
+                    id: 'run_done_wt',
+                    reason: 'external-key-conflict-bookkeeping',
+                });
+
+                // Target DB: receiving row was reconciled to done with terminal reason!
+                const target = await openInlineRunProjectDb(to.dir);
+                try {
+                    const row = await target.adapter.queryFirst<{
+                        id: string;
+                        status: string;
+                        terminal_reason: string;
+                    }>('SELECT id, status, terminal_reason FROM runs WHERE external_key = ?', 'task:1138');
+                    expect(row?.id).toBe('run_interrupted_inv');
+                    expect(row?.status).toBe('done');
+                    expect(row?.terminal_reason).toBe('done');
+                    // Exactly 1 row in target DB
+                    expect(await target.adapter.queryFirst<{ n: number }>('SELECT COUNT(*) AS n FROM runs')).toEqual({
+                        n: 1,
+                    });
+                } finally {
+                    target.close();
+                }
+            });
+        } finally {
+            from.cleanup();
+            to.cleanup();
+        }
+    });
+
     test('persist-out reports the copy result and fails closed when the source is unusable', async () => {
         const p = makeProject('persist');
         try {

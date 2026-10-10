@@ -311,6 +311,12 @@ keeps a malformed task out of `testing`/`done`.
 lifecycle-*run* creation because it is already a run and a nested one would orphan. The structural
 gate still runs — `→ testing` and `→ done` invoke `spur task check` regardless of the flag.
 
+**Worktree interaction (1149 R1/R3).** When an interactive `--next` chain runs inside an isolated
+git worktree (`--worktree`), the un-suppressed transitions create a `task-lifecycle` row in the
+worktree DB. When persist-out runs at landing, the terminal row is classified as non-fatal
+bookkeeping (`external-key-conflict-bookkeeping`) so it does not block teardown, and the receiving
+lifecycle row in the invoking tree is automatically reconciled to `done`.
+
 > **Behavior corrected 2026-08-07.** `--no-lifecycle` previously suppressed enforcement as a side
 > effect of suppressing the run record, because the FSM guards live inside the lifecycle workflow.
 > Combined with `--force-done` (which waives the verify **verdict** only) it left nothing: a task

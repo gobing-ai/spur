@@ -54,6 +54,7 @@ import {
     ActionRunDao,
     createMigratedDb,
     listRunIdRows,
+    MarkdownDocument,
     normalizePersistedWorkflowLayer,
     RunDao,
     redirectRunStorageReferences,
@@ -79,6 +80,7 @@ import { createWorkflowActionTraceWriter, RunRowNotFoundError } from '../workflo
 import { DecideActionRunner, DecideOptionsSchema } from '../workflow/actions/decide';
 import { resolveDurableArtifactPath } from '../workflow/actions/run-path';
 import { parseFeatureVerificationReceipt } from '../workflow/feature-verification-receipt';
+import { reconcileExistingLifecycleRow, TASK_LIFECYCLE_PROFILE } from '../workflow/lifecycle-adapter';
 import type { WorkflowObservabilityBus } from '../workflow/observability';
 import { computeProofInputFingerprint, readProofInputContents } from '../workflow/proof-input-fingerprint';
 import { asLiteralRunFileName, RUN_CITATION_RE, SAFE_RUN_ID_RE } from '../workflow/run-citation';
@@ -1984,6 +1986,32 @@ export async function runInlineRunPersistOut(input: InlineRunPersistOutInput): P
             mkdirSync(toRunDir, { recursive: true });
             writeFileSync(join(toRunDir, 'persist-out.json'), JSON.stringify(resultPayload, null, 2));
         } catch {}
+        // 1149 R3: reconcile the receiving lifecycle row for each forwarded task whose file is terminal
+        if (input.taskFiles.length > 0) {
+            try {
+                const targetDb = await openInlineRunProjectDb(process.cwd());
+                try {
+                    for (const taskFile of input.taskFiles) {
+                        const wbs = /^(\d{4})_/.exec(basename(taskFile))?.[1];
+                        if (!wbs) continue;
+                        try {
+                            const raw = readFileSync(resolve(process.cwd(), taskFile), 'utf8');
+                            const status = MarkdownDocument.parse(raw, 'task').frontmatterData?.status;
+                            if (typeof status === 'string' && (status === 'done' || status === 'cancelled')) {
+                                await reconcileExistingLifecycleRow(
+                                    async () => targetDb.adapter,
+                                    TASK_LIFECYCLE_PROFILE,
+                                    wbs,
+                                    status,
+                                );
+                            }
+                        } catch {}
+                    }
+                } finally {
+                    targetDb.close();
+                }
+            } catch {}
+        }
         process.stdout.write(`${JSON.stringify(resultPayload)}\n`);
         return 0;
     } catch (error) {

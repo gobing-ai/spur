@@ -1,15 +1,17 @@
 ---
 schema_version: 1
 name: Worktree batch transitions cannot land their task-lifecycle row when the invoking tree owns the identity
-status: todo
+status: done
 template: issue
 created_at: 2026-10-09T23:39:39.295Z
-updated_at: "2026-10-09T23:40:34.174Z"
+updated_at: "2026-10-10T00:04:22.510Z"
 feature_id: E71
 
 ac_altitude: task-local
 ac_numbering: task-local
 priority: P1
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1149-verdict.json
 ---
 
 ## 1149. Worktree batch transitions cannot land their task-lifecycle row when the invoking tree owns the identity
@@ -41,11 +43,11 @@ The **invoking tree** already owned that identity: `run_a5d563e7-f9eb-4d1f-96e9-
 
 ### Requirements
 
-- [ ] R1. `transferRunTables` grades a **terminal** source lifecycle row whose `(workflow_name, external_key)` the target already owns as `external-key-conflict-bookkeeping` (non-fatal) instead of `external-key-conflict`. Scope is exactly `workflow_name IN ('task-lifecycle','feature-lifecycle')`. The target row is never read, written, or merged; the source row and its children are simply not copied.
-- [ ] R2. With R1, `persist-out` exits 0 for a `--worktree` batch that drove guarded transitions, and the automatic teardown (worktree + branch removal) can proceed without any manual row edit. The invoking tree's row stays the sole owner of the identity.
-- [ ] R3. The batch's terminal outcome still reaches the receiving row: the landing path (or the driver's terminal step) invokes the existing terminal reconcile from task 1047 so an `interrupted` receiving row is finalized rather than left stale. A receiving row that is already terminal is untouched (idempotent).
-- [ ] R4. Tests: (a) target live × source terminal → non-fatal bookkeeping; (b) target terminal × source terminal → non-fatal bookkeeping; (c) target live × source **non-terminal** → still fail-closed `external-key-conflict`; (d) a non-lifecycle `workflow_name` (e.g. `task-pipeline`) keeps the existing fail-closed grading in every combination; (e) the source row's children never land and the target's row and children are byte-unchanged.
-- [ ] R5. Docs: `execution-worktree-landing.md` (WT-4a) and `execution-batch-report.md` name the reconcile step and stop presenting a manual `DELETE` as the only exit; the `--next` × `--worktree` tension is stated where the `--next` chain contract is documented.
+- [x] R1. `transferRunTables` grades a **terminal** source lifecycle row whose `(workflow_name, external_key)` the target already owns as `external-key-conflict-bookkeeping` (non-fatal) instead of `external-key-conflict`. Scope is exactly `workflow_name IN ('task-lifecycle','feature-lifecycle')`. The target row is never read, written, or merged; the source row and its children are simply not copied.
+- [x] R2. With R1, `persist-out` exits 0 for a `--worktree` batch that drove guarded transitions, and the automatic teardown (worktree + branch removal) can proceed without any manual row edit. The invoking tree's row stays the sole owner of the identity.
+- [x] R3. The batch's terminal outcome still reaches the receiving row: the landing path (or the driver's terminal step) invokes the existing terminal reconcile from task 1047 so an `interrupted` receiving row is finalized rather than left stale. A receiving row that is already terminal is untouched (idempotent).
+- [x] R4. Tests: (a) target live × source terminal → non-fatal bookkeeping; (b) target terminal × source terminal → non-fatal bookkeeping; (c) target live × source **non-terminal** → still fail-closed `external-key-conflict`; (d) a non-lifecycle `workflow_name` (e.g. `task-pipeline`) keeps the existing fail-closed grading in every combination; (e) the source row's children never land and the target's row and children are byte-unchanged.
+- [x] R5. Docs: `execution-worktree-landing.md` (WT-4a) and `execution-batch-report.md` name the reconcile step and stop presenting a manual `DELETE` as the only exit; the `--next` × `--worktree` tension is stated where the `--next` chain contract is documented.
 
 ### Acceptance Criteria
 
@@ -173,18 +175,59 @@ So the landing needs one added step: after a successful persist-out, run the ter
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| Change | Location | Why |
+| --- | --- | --- |
+| Widened grading for terminal lifecycle duplicate rows | `packages/domain/src/dao/run-transfer.ts:145` | Terminal `task-lifecycle` and `feature-lifecycle` rows are bookkeeping when target owns key (R1) |
+| Reconcile receiving row for terminal forwarded tasks at persist-out | `packages/app/src/services/inline-run-setup.ts:1960` | Finalizes any stale in-flight or interrupted receiving lifecycle row without manual SQL (R3) |
+| Tests for widened grading & invariants (AC1-AC3) | `packages/domain/tests/dao/run-transfer.test.ts:133` | Covers live/terminal target x terminal/non-terminal source and non-lifecycle workflows (R4) |
+| Tests for persist-out non-fatal duplicate & reconcile (AC1, AC4) | `packages/app/tests/services/inline-run-driver.test.ts:603` | Verifies end-to-end persist-out exit 0 and receiving row reconcile (R2, R3) |
+| Document worktree interaction with FSM transitions | `plugins/sp/skills/spur-dev/references/cross-cutting.md:312` | Explains how `--next` guarded transitions land cleanly without manual delete (R5) |
+| Document receiving row reconcile at landing | `plugins/sp/skills/spur-dev/references/execution-worktree-landing.md:94` | WT-4a landing automatically finalizes receiving row (R5) |
+| Document non-fatal lifecycle bookkeeping in batch report | `plugins/sp/skills/spur-dev/references/execution-batch-report.md:130` | Details the non-fatal grading contract (R5) |
+
+Tradeoff: Terminal duplicate lifecycle rows are skipped as `external-key-conflict-bookkeeping` rather than failing closed; the entity's canonical lifecycle lives on the receiving row.
 
 ### Testing
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/domain/src/dao/run-transfer.ts:145` grades terminal lifecycle duplicate rows as `external-key-conflict-bookkeeping`. |
+| R2 | MET | `packages/app/tests/services/inline-run-driver.test.ts:603` verifies `persist-out` exits 0 on terminal duplicate lifecycle rows. |
+| R3 | MET | `packages/app/src/services/inline-run-setup.ts:1960` automatically reconciles receiving lifecycle row during persist-out. |
+| R4 | MET | `packages/domain/tests/dao/run-transfer.test.ts:133` tests all target/source combinations and child row isolation. |
+| R5 | MET | `plugins/sp/skills/spur-dev/references/cross-cutting.md:312`, `plugins/sp/skills/spur-dev/references/execution-batch-report.md:130`, `plugins/sp/skills/spur-dev/references/execution-worktree-landing.md:94` updated. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | unit | `packages/domain/tests/dao/run-transfer.test.ts` AC1 case passes. |
+| AC2 | MET | unit | `packages/domain/tests/dao/run-transfer.test.ts` non-terminal duplicate case stays fail-closed. |
+| AC3 | MET | unit | `packages/domain/tests/dao/run-transfer.test.ts` non-lifecycle workflow stays fail-closed. |
+| AC4 | MET | unit | `packages/app/tests/services/inline-run-driver.test.ts:603` receiving row is reconciled to done. |
+| AC5 | MET | unit | run-transfer F1-F4 tests pass and verify invariants. |
+| AC6 | MET | unit | Doc references updated to state reconcile step. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P4 | — | — | No findings (verify verdict PASS) |
+
+Residual risk:
+- None identified; the non-fatal grading is strictly scoped to `task-lifecycle` and `feature-lifecycle` in terminal states (`done`/`failed`/`cancelled`). Non-lifecycle workflows remain strictly fail-closed.
 
 ### References
 
 <!-- Links to failing logs, related issues, tasks, docs, or external references. -->
 
 ### History
+
+- 2026-10-09T23:52:26.467Z todo → wip (system)
+- 2026-10-10T00:03:56.073Z wip → testing (system)
+- 2026-10-10T00:04:22.497Z testing → done (system)
+

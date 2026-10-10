@@ -90,7 +90,10 @@ WT_PATH="$(cd "../<worktree-dir>" && pwd)"   # hoisted: needed by WT-4a AND WT-4
 #   build TASK_FILE_ARGS=(--task-file "$TASK_FILE")                # one flag each
 # Idempotent; conflicts are reported, never overwritten. A non-zero exit —
 # including an unresolved or divergent citation, or a half-readable worktree — must
-# NOT proceed to WT-4b removal:
+# NOT proceed to WT-4b removal. 1149 R3: after a successful persist-out, the runner
+# automatically reconciles each forwarded terminal task's receiving lifecycle row in
+# the invoking tree (finalizing any stale in-flight or interrupted row left from the
+# task's creation), so a manual DB edit is never required:
 SETUP_SCRIPT=plugins/sp/scripts/inline-run-setup.ts; [ -f config/plugin-scripts.json -a -f "$SETUP_SCRIPT" ] || SETUP_SCRIPT="$(superskill script path sp inline-run-setup.mjs 2>/dev/null)"
 bun "$SETUP_SCRIPT" --persist-out --from "$WT_PATH" "${TASK_FILE_ARGS[@]}" \
   || { echo "halt: worktree run-record persist-out failed - worktree retained (WT-5)" >&2; write_marker retained; exit 1; }

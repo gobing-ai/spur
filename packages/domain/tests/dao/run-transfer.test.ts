@@ -112,12 +112,16 @@ describe('transferRunTables (task 0975 R1)', () => {
         target.close();
     });
 
-    test('external-key-conflict: same (workflow_name, external_key) under a different id is skipped', async () => {
+    test('external-key-conflict: non-terminal source lifecycle run with child rows stays fail-closed', async () => {
         const source = await setup();
         const target = await setup();
-        await insertRun(source, 'run_new', { workflowName: 'task-lifecycle', externalKey: 'task-0975' });
-        // The source run OWNS provenance, so refusing teardown is the point of this case
-        // (1090 follow-up: the grading keys on child rows, so the fixture must have one).
+        await insertRun(source, 'run_new', {
+            workflowName: 'task-lifecycle',
+            externalKey: 'task-0975',
+            status: 'running',
+        });
+        // The source run OWNS provenance, and is non-terminal, so refusing teardown is required
+        // (1090 follow-up + 1149 R1: a non-terminal duplicate stays fail-closed).
         await insertChild(source, 'action_runs', 'act_0975', 'run_new', 'm');
         await insertRun(target, 'run_old', {
             workflowName: 'task-lifecycle',
@@ -134,6 +138,87 @@ describe('transferRunTables (task 0975 R1)', () => {
             'task-0975',
         );
         expect(row).toEqual({ id: 'run_old', status: 'failed' });
+        source.close();
+        target.close();
+    });
+
+    test('1149 R1: terminal source lifecycle row with child rows is graded as bookkeeping (AC1)', async () => {
+        const source = await setup();
+        const target = await setup();
+        await insertRun(source, 'run_wt', {
+            workflowName: 'task-lifecycle',
+            externalKey: 'task:1138',
+            status: 'done',
+        });
+        await insertChild(source, 'transition_runs', 'tr_1', 'run_wt', 'done');
+        await insertChild(source, 'workflow_states', 'ws_1', 'run_wt', 'done');
+
+        // Target holds an interrupted lifecycle row for the same task
+        await insertRun(target, 'run_inv', {
+            workflowName: 'task-lifecycle',
+            externalKey: 'task:1138',
+            status: 'interrupted',
+        });
+
+        const result = await transferRunTables(source, target);
+        expect(result.persistedIds).toEqual([]);
+        expect(result.skipped).toEqual([{ id: 'run_wt', reason: 'external-key-conflict-bookkeeping' }]);
+
+        // Target row is untouched; child rows were not copied
+        expect(await count(target, 'runs')).toBe(1);
+        expect(await count(target, 'transition_runs')).toBe(0);
+        expect(await count(target, 'workflow_states')).toBe(0);
+        const row = await target.queryFirst<{ id: string; status: string }>(
+            'SELECT id, status FROM runs WHERE external_key = ?',
+            'task:1138',
+        );
+        expect(row).toEqual({ id: 'run_inv', status: 'interrupted' });
+        source.close();
+        target.close();
+    });
+
+    test('1149 R1: terminal target x terminal source lifecycle row is graded as bookkeeping', async () => {
+        const source = await setup();
+        const target = await setup();
+        await insertRun(source, 'run_wt', {
+            workflowName: 'feature-lifecycle',
+            externalKey: 'feature:E71',
+            status: 'done',
+        });
+        await insertChild(source, 'transition_runs', 'tr_2', 'run_wt', 'done');
+        await insertRun(target, 'run_inv', {
+            workflowName: 'feature-lifecycle',
+            externalKey: 'feature:E71',
+            status: 'failed',
+        });
+
+        const result = await transferRunTables(source, target);
+        expect(result.skipped).toEqual([{ id: 'run_wt', reason: 'external-key-conflict-bookkeeping' }]);
+        expect(await count(target, 'runs')).toBe(1);
+        expect(await count(target, 'transition_runs')).toBe(0);
+        source.close();
+        target.close();
+    });
+
+    test('1149 R1: non-lifecycle workflow name with child rows keeps fail-closed external-key-conflict (AC3)', async () => {
+        const source = await setup();
+        const target = await setup();
+        await insertRun(source, 'run_wt_pipeline', {
+            workflowName: 'task-pipeline',
+            externalKey: 'task-1138-pipe',
+            status: 'done',
+        });
+        await insertChild(source, 'action_runs', 'act_pipe', 'run_wt_pipeline', 'implement');
+        await insertRun(target, 'run_inv_pipeline', {
+            workflowName: 'task-pipeline',
+            externalKey: 'task-1138-pipe',
+            status: 'interrupted',
+        });
+
+        const result = await transferRunTables(source, target);
+        expect(result.skipped).toEqual([{ id: 'run_wt_pipeline', reason: 'external-key-conflict' }]);
+        expect(await count(target, 'runs')).toBe(1);
+        expect(await count(target, 'action_runs')).toBe(0);
         source.close();
         target.close();
     });
