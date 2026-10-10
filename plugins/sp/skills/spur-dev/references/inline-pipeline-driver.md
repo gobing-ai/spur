@@ -912,6 +912,24 @@ verdict artifact exists (tasks 0617, 0619 — the clobbering spiral).
    close time — the driver records no `SINCE` and assembles no measurement of its own
    (structured-trace-emission.md § the close step owns the contract).
 
+## Running the full gate (task 0872 / 1127 R7)
+
+The full gate serializes behind a host-wide lock and legitimately runs 10-25 minutes. Two rules keep
+it from becoming a hazard (both violated once on 2026-10-10, blocking every other session for ~11
+minutes and aborting the run's own verification):
+
+- **Never wrap it in an external `timeout`, and never treat its runtime as a hang.** An outer bound
+  that fires mid-suite leaves the holder alive holding the lock while the caller believes it is gone.
+- **Run it detached and poll the log**, so losing the foreground call cannot lose the holder:
+
+  ```bash
+  nohup bash -c 'bun run spur-check > /tmp/gate.log 2>&1; echo "EXIT=$?" >> /tmp/gate.log' &
+  ```
+
+- **Never kill a gate holder whose pid is alive.** The waiter line `waiting for holder (… held Nms)`
+  is printed only after `isProcessAlive(held.claim.pid)` succeeded, so a printed holder is a live one
+  by construction; only the lock's own dead-pid reclaim is authorised to clear a claim.
+
 ## Runtime interface contracts (from run evidence)
 
 Each item below cost a driver cycle to discover. They are contracts, not tips.

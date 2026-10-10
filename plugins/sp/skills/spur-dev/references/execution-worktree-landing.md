@@ -295,6 +295,28 @@ merge. One contract, no alternatives:
 This is a deliberate choice over auto-migrating DB state: the committed corpus files are the durable
 record and the persisted run artifacts are the evidence record.
 
+### WT-4r — rebasing a retained branch in a linked worktree
+
+When a pre-merge halt is resolved by rebasing the retained branch (rather than landing as-is), two
+things differ from rebasing in the main tree. Getting them wrong silently leaves a **detached HEAD
+holding verified work while the branch ref still points at the old tip** (observed 2026-10-10):
+
+- **The rebase state lives under the worktree's metadata, not `.git/`.** In a linked worktree the
+  in-progress directories are `.git/worktrees/<worktree-name>/rebase-merge` (or `rebase-apply`);
+  `ls .git/rebase-merge` reports nothing even mid-rebase, so its absence is not evidence that none is
+  running.
+- **HEAD is the authority, not a directory probe.** Confirm both before continuing or amending:
+
+  ```bash
+  git symbolic-ref -q HEAD || echo DETACHED      # a live rebase has a detached HEAD
+  git rev-parse HEAD; git rev-parse "$BRANCH"    # finished-but-unfinalized replay: the refs disagree
+  ```
+
+  When the replay finished but was never finalized, `git rebase --continue` is the repair — it
+  advances the branch to the verified commit and clears the state. `git commit --amend` at that
+  moment amends the **detached** commit and leaves the branch behind: the amend looks successful and
+  the work looks landed when it is not.
+
 ### WT-5 — Failure path: retain and report (R5)
 
 On any per-task failure, batch halt, HITL pause that ends the run, or a WT-4 halt, the
