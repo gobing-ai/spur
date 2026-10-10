@@ -97,3 +97,43 @@ describe('implement-probe and post-gate freeze contract (task 1135)', () => {
         }
     });
 });
+
+/** 1142 R3: workers iterate on the changed-path matrix, then the light tier; the full gate stays at test hops. */
+describe('worker iteration order (task 1142 R3)', () => {
+    const docs = {
+        driver: readFileSync(join(ROOT, 'plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md'), 'utf8'),
+        skill: readFileSync(join(ROOT, 'plugins/sp/skills/code-implementation/SKILL.md'), 'utf8'),
+    };
+
+    for (const [name, doc] of Object.entries(docs)) {
+        test(`${name}: the matrix precedes the light tier, and the full gate is named only for test/test-recheck`, () => {
+            const order = doc.indexOf('task 1142 R3');
+            const matrix = doc.indexOf('1. ', order);
+            const light = doc.indexOf('2. the resolved `quality-gate` script in `light` mode', order);
+            expect(order).toBeGreaterThanOrEqual(0);
+            expect(doc.slice(matrix, light)).toContain('changed-path matrix');
+            expect(light).toBeGreaterThan(matrix);
+            expect(doc.slice(light)).toMatch(
+                /full gate[^.]*`test` and `test-recheck` hops|`test` and `test-recheck` hops remain the only full gate/,
+            );
+            expect(doc.slice(light)).toContain('Neither step takes the');
+        });
+    }
+});
+
+/** 1134 R9: a null or timed-out dispatch is a recorded stage failure, never a host-inline re-run. */
+describe('null or timed-out dispatch (task 1134 R9)', () => {
+    test('the driver records the failure, follows the failure edge, and starts no host-inline attempt', () => {
+        const driver = readFileSync(
+            join(ROOT, 'plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md'),
+            'utf8',
+        );
+        const start = driver.indexOf('**Null or timed-out dispatch (task 1134 R9).**');
+        expect(start).toBeGreaterThanOrEqual(0);
+        const rule = driver.slice(start, driver.indexOf('\n\n', start));
+        expect(rule).toContain('`dispatch: null-result|timeout`');
+        expect(rule).toContain('normal failure edge');
+        expect(rule).toContain('**no** host-inline attempt');
+        expect(rule).toContain('R9 adds\nno new bound');
+    });
+});

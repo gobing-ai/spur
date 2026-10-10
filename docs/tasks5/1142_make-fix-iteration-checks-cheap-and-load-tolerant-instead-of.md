@@ -4,7 +4,7 @@ name: Make fix-iteration checks cheap and load-tolerant instead of re-running th
 status: done
 template: standard
 created_at: 2026-10-09T16:51:44.722Z
-updated_at: "2026-10-10T00:16:35.183Z"
+updated_at: "2026-10-10T02:51:54.037Z"
 
 ac_numbering: task-local
 ac_altitude: task-local
@@ -186,23 +186,23 @@ Rationale: repeating full gates for cheap failures wastes hours of developer and
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
-- Confidence: HIGH
+- Confidence: MEDIUM
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/quality-gate.ts` `planLightChecks` appends `rules:pre` and `rules:post` after `format-lint:changed`. Unit tests in `plugins/sp/tests/quality-gate-receipt.test.ts` verify plan order and execution. Full-tier receipt is preserved. |
-| R2 | MET | `packages/app/src/services/quality-gate.ts` `lightScope` maps `plugins/sp` prose to `skill-structure.test.ts`, commands to `flag-contract-parity.test.ts`, and scripts to their test files. Verified in `plugins/sp/tests/quality-gate-receipt.test.ts`. |
-| R3 | MET | Worker iteration check order documented in `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md` and `plugins/sp/skills/code-implementation/SKILL.md`. Neither takes the full-gate lock. |
-| R4 | MET | Light tier finishes in under 60s (53s recorded on 9 changed files) and catches biome diffs (tested in `plugins/sp/tests/quality-gate-receipt.test.ts`). |
-| R5 | MET | `apps/cli/tests/commands/status.test.ts` uses an isolated temp directory with minimal `.spur/config.yaml`, finishing in <30ms without scanning the repository. |
+| R1 | MET | `packages/app/src/services/quality-gate.ts:514` planLightChecks pushes rules:pre and rules:post after format-lint:changed at `:523-524`; asserted by `plugins/sp/tests/quality-gate-receipt.test.ts:247`; full-tier receipt preserved per `plugins/sp/tests/quality-gate-receipt.test.ts:517` |
+| R2 | MET | `packages/app/src/services/quality-gate.ts:429-461` maps plugins/sp prose to skill-structure.test.ts, commands to flag-contract-parity.test.ts, scripts to their tests; alias at `:479`; asserted by `plugins/sp/tests/quality-gate-receipt.test.ts:223` |
+| R3 | MET | worker iteration order at `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:744-752` and `plugins/sp/skills/code-implementation/SKILL.md:155-168`; pinned this run by `plugins/sp/tests/dogfood-testing/tree-freeze-contract.test.ts:109` (verify fix pass: the prior Testing cited skill-structure.test.ts doc assertions that do not exist) |
+| R4 | MET | Drill this run on a detached scratch worktree of HEAD seeded with a biome diff plus undocumented export (packages/app/src/seeded-drill.ts) and a 600-line padded code-verification SKILL.md: quality-gate.ts light reported FAIL in 16 s wall; format-lint:changed FAIL, rules:post FAIL (every-export-has-tsdoc), test:plugins/sp FAIL (R44 skill BODY budgets); worktree removed after the run |
+| R5 | MET | `apps/cli/tests/commands/status.test.ts:13-16` uses a mkdtemp cwd with minimal .spur/config.yaml; junit timing this run: 0.090 s unloaded, 0.166 s under four concurrent apps/cli bun run test (load average 22.4); 5000 ms bound kept |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — The light tier runs the rule presets (req: R1) | MET | test | `plugins/sp/tests/quality-gate-receipt.test.ts` "planLightChecks: frozen ids and workspace-relative test commands, in run order" |
-| AC2 — Plugin prose changes select their structure tests (req: R2) | MET | test | `plugins/sp/tests/quality-gate-receipt.test.ts` "AC2/R2: plugin prose and script changes map to their structure tests" |
-| AC3 — The light tier catches the three cheap classes quickly (req: R4) | MET | test | `plugins/sp/tests/quality-gate-receipt.test.ts` "AC3/R4: light tier catches format-lint failure on an unformatted file" |
-| AC4 — Worker docs state the iteration order (req: R3) | MET | test | doc assertions in `plugins/sp/tests/skill-structure.test.ts` |
-| AC5 — The status smoke test no longer reads the live repository (req: R5) | MET | test | `apps/cli/tests/commands/status.test.ts` "reports project status" |
+| AC1 — The light tier runs the rule presets (req: R1) | MET | test | `plugins/sp/tests/quality-gate-receipt.test.ts:247` run-order case and `:517` full-tier receipt case; 43 pass 0 fail this run |
+| AC2 — Plugin prose changes select their structure tests (req: R2) | MET | test | `plugins/sp/tests/quality-gate-receipt.test.ts:223` prose and script mapping case |
+| AC3 — The light tier catches the three cheap classes quickly (req: R4) | MET | command | bun plugins/sp/scripts/quality-gate.ts light on the seeded scratch worktree: status FAIL, 16 s wall (< 30 s); receipt rows format-lint:changed FAIL, rules:pre FAIL, rules:post FAIL naming every-export-has-tsdoc, test:plugins/sp FAIL naming R44 skill BODY budgets; unit backstop `plugins/sp/tests/quality-gate-receipt.test.ts:502` |
+| AC4 — Worker docs state the iteration order (req: R3) | MET | test | `plugins/sp/tests/dogfood-testing/tree-freeze-contract.test.ts:109` asserts matrix before light tier and the full gate named only for test/test-recheck in both docs; 9 pass 0 fail |
+| AC5 — The status smoke test no longer reads the live repository (req: R5) | MET | test | `apps/cli/tests/commands/status.test.ts:13` reports project status: 0.090 s unloaded, 0.166 s under four concurrent test runs, 4 pass 0 fail |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
