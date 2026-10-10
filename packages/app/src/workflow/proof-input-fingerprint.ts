@@ -231,6 +231,12 @@ export async function readProofInputContents(
  * they must be excluded here and folded in separately as normalized spec content — otherwise every
  * pipeline section write would change the digest.
  *
+ * Untracked-file behavior (task 1135 R5): git alternate-tree capture runs `git add -A -- .`, which
+ * stages all untracked files outside these exclusions. An untracked file outside `docs/tasks*` /
+ * `docs/features*` is therefore part of the certified proof set — any stray file added after the
+ * quality gate captures proofDigest changes the git-tree component and fails subsequent compare
+ * steps (review, verify, record).
+ *
  * `.spur/run*`, `.spur/memory*`, and `.spur/context*` were removed (task 0612): they live under
  * `/.spur/…`, which `.gitignore` already excludes, so naming them added nothing — and it actively
  * broke the tree hash. Naming an ignored path in a pathspec makes `git add` report
@@ -238,7 +244,7 @@ export async function readProofInputContents(
  * `createGitAlternateTree` treated as fatal and answered with `''`. The git-tree component was
  * therefore empty on every call since task 0603, leaving the digest sensitive only to spec content.
  */
-const DEFAULT_EXCLUDE_GLOBS = ['docs/tasks*', 'docs/features*'];
+export const DEFAULT_EXCLUDE_GLOBS = ['docs/tasks*', 'docs/features*'];
 
 /**
  * Computes an isolated git tree hash for the working tree excluding corpus/ephemeral directories.

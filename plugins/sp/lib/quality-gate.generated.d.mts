@@ -116,6 +116,7 @@ export declare interface LightScope {
     tests: string[];
 }
 export declare function lightScope(changedFiles: string[], exists?: (p: string) => boolean): LightScope;
+export declare const scopeFromFiles: typeof lightScope;
 export declare function shQuote(arg: string): string;
 export declare interface LightCheckPlan {
     id: string;

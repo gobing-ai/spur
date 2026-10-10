@@ -132,13 +132,16 @@ vars:
     # default; set by `spur workflow continue --answer-text` after the pause and read
     # by the escalate→implement / escalate→failed guards. Non-empty = answered.
     __hitlInput: ""
-    # Proof-state bracket (task 0612, ADR-071; restructured by task 0703). `proofDigest` is the
-    # canonical capture taken at quality-gate ENTRY — immediately before the evidence-producing
-    # final chain (quality → review → verify) — and re-captured at `test-recheck` when bounded
-    # remediation mutated the tree, so every evidence stage names one fresh digest (R2/R4).
-    # `proofDigestNow` is the live re-capture compared against `proofDigest` at verify entry and
-    # immediately before `record`; a mismatch means a proof input changed after evidence was
-    # established, so the run routes to `failed` instead of crossing the completion boundary (R5).
+    # Proof-state bracket (task 0612, ADR-071; restructured by task 0703; review joins by task 1135).
+    # `proofDigest` is the canonical capture taken at quality-gate ENTRY — immediately before the
+    # evidence-producing final chain (quality → review → verify) — and re-captured at `test-recheck`
+    # when bounded remediation mutated the tree, so every evidence stage names one fresh digest
+    # (R2/R4). `proofDigestNow` is the live re-capture compared against `proofDigest` at review,
+    # verify and record entry; a mismatch means a proof input changed after evidence was established,
+    # so the run routes to `failed` instead of spending a review dispatch or crossing the completion
+    # boundary (R5). Task 1135 adds the review-entry compare and the gate-entry tree snapshot
+    # (`.spur/run/<run-id>-gate-paths.txt`, same exclusions as the git-tree half) so a mismatch also
+    # names the drifted paths.
     # `taskSpecPath` carries the task file path because `docs/tasks*` is excluded from the digest's
     # git-tree half — spec content is folded in explicitly or a task-file edit would go undetected.
     # The fingerprint scopes task content to the proof-input sections only (Background, Requirements,
@@ -489,6 +492,12 @@ states:
           # R2 (0703, ADR-071): THE canonical proof capture. Placement is load-bearing: immediately before
           # the final evidence chain, after every implement mutation (including the post-implement format).
           # Capture-only here; `record` compares. A remediation pass re-captures at `test-recheck` (R4).
+          # 1135 R5: snapshot the non-corpus tree state FIRST, so a later proof mismatch names the
+          # drifted paths (not only the D1/D2 pair). Same exclusions as the digest's git-tree half.
+          - kind: shell
+            options:
+                command: >-
+                    mkdir -p .spur/run; { git status --porcelain=v1 -uall -- . ':(exclude)docs/tasks*' ':(exclude)docs/features*'; git diff --name-only HEAD -- . ':(exclude)docs/tasks*' ':(exclude)docs/features*'; } > ".spur/run/$__runId-gate-paths.txt" 2>/dev/null; exit 0
           - kind: proof.fingerprint
             options:
                 var: proofDigest
@@ -583,6 +592,12 @@ states:
           # R4 (0703, ADR-071): bounded remediation mutated the tree by design, so the fresh evidence
           # chain (recheck gate → review → verify) must start from a NEWLY captured digest. Capture-only;
           # the guards and `record` compare against this value.
+          # 1135 R5: re-snapshot the tree state after the remediation, so the refresh does not compare
+          # against a pre-remediation snapshot (a legitimate test-fix edit must not read as drift).
+          - kind: shell
+            options:
+                command: >-
+                    mkdir -p .spur/run; { git status --porcelain=v1 -uall -- . ':(exclude)docs/tasks*' ':(exclude)docs/features*'; git diff --name-only HEAD -- . ':(exclude)docs/tasks*' ':(exclude)docs/features*'; } > ".spur/run/$__runId-gate-paths.txt" 2>/dev/null; exit 0
           - kind: proof.fingerprint
             options:
                 var: proofDigest
@@ -709,6 +724,15 @@ states:
           quality → review → verify on a fresh digest; only P4 rows and DEFER-ed P3 rows are wrap
           residuals.
       onEnter:
+          # 1135 R4: review joins the proof bracket. A pre-review compare refuses to spend a review
+          # dispatch on a state that has drifted from the certified digest; the mismatch routes
+          # through the existing tripwire to `failed` (no new re-certify path).
+          - kind: proof.fingerprint
+            options:
+                var: proofDigestNow
+                taskFile: ${vars.taskSpecPath}
+                featureFile: ${vars.featureSpecPath}
+                expect: ${vars.proofDigest}
           - kind: agent.run
             options:
                 # 0710 R2: review always runs on a fresh session — no implementation-session

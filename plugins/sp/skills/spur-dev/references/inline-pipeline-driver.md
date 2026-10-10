@@ -583,13 +583,30 @@ boundary, and a delegate left to re-derive them re-derives them against its own 
    **owning stage's artifact contract** — for a verify stage, the compact contract below.
 6. **The implement-stage acceptance-evidence requirement** — for the implement stage and any stage
    whose YAML action declares `requireDiff`. A `requireDiff` stage is the one whose delegate writes
-   the deliverable, so its handoff carries three components:
+   the deliverable, so its handoff carries four components:
    (a) **the task's AC identities verbatim** — the exact `Scenario:` titles / checklist text read by
    the driver from the task file, never paraphrased;
    (b) **required evidence** — the pasted output of the narrow targeted tests the delegate ran, and
    a `file:line` change map written into the task's `## Solution` section;
    (c) the reminder that **a delegate success message is not evidence** — post-join validation reads
-   the artifacts and the diff, not the delegate's claims.
+   the artifacts and the diff, not the delegate's claims;
+   (d) **the public-surface probe requirement (task 1135 R1/R2/R6).** Before the stage reports done
+   it runs at least one end-to-end probe of each new or changed **public surface** — a CLI
+   verb/flag, an HTTP route, or a plugin script entry — against a throwaway project root (never the
+   repo corpus, never the execution tree's tracked files), and reports the exact command plus its
+   observed output as acceptance evidence. A service-layer test suite is **not** a substitute. The
+   probe is bounded: 120 s per invocation, output capped at 8 KiB, no network beyond the CLI under
+   test, and a probe failure is evidence, never a corpus mutation.
+   A stage that changed no public surface returns instead the single line
+   `probe: not-applicable (no public surface changed)`.
+   The stage's own changed-path static self-check (task 1135 R8) also runs here: `spur rule run`
+   with the configured pre-check preset over the changed paths, `bun run script-contract-check`
+   when a plugin script was touched, and the paired-script parity test when `package.json` changed —
+   so an env-var-hygiene violation, a stale generated twin, or a half-updated paired chain is
+   named by the stage rather than discovered by the pipeline `test` hop.
+   **A stage that returns neither probe evidence nor the not-applicable line is not silently
+   complete (task 1135 R2): the driver records the stage `done` with a `probe-missing` marker in
+   the run log and carries the same marker into that task's batch-report row.**
    Component (a) is read from the task by the driver; this extends the payload contract and is NOT a
    new YAML key.
 
@@ -681,14 +698,15 @@ grading its own work defeats the stage. A continuation stage also dispatches fre
 same-task subagent exists (the earlier stage ran host-inline or below the dispatch floor), when a
 host-owned gate sat between the stages, or when the platform cannot address completed subagents.
 
-**Implement and test-fix workers never run the full gate (task 1127 R8).** Since 1127 the full gate
+**Implement and test-fix workers never run the full gate (task 1127 R8 / task 1142 R3).** Since 1127 the full gate
 takes a host-wide lock (`SPUR_GATE_LOCK_DIR`, default `~/.config/spur/run/full-gate.lock`):
 concurrent full-gate runs serialize, and a manual `spur-check` (wrapped via
 `scripts/commands/gate-lock.ts`) holds the same lock. A dispatched **implement** or `test-fix` child
 that re-ran the full gate would queue behind every other gate on the host and burn its dispatch
-timeout waiting instead of working. Both therefore run only the **changed-path matrix**
-(`code-implementation/SKILL.md` § Changed-path targeted checks) over the paths they touched —
-the matrix, not a hand-picked "targeted tests and a lint pass" — and return. Carry
+timeout waiting instead of working. Workers use the light tier as their iteration check (task 1142 R3) in exact order:
+1. the **changed-path matrix** (`code-implementation/SKILL.md` § Changed-path targeted checks) over the paths they touched;
+2. the resolved `quality-gate` script in `light` mode (source-repo probe, else the installed twin) (biome, per-workspace typecheck, rule presets, related tests).
+Neither step takes the full-gate lock. The pipeline's `test` and `test-recheck` hops remain the only full gate. Carry
 `--gate-log <path>` through to the child **verbatim**: never paraphrase it into "re-run the named
 gate command". That paraphrase is not cosmetic — it dropped this rule in the H15 run (task
 Background, seq 232) and sent a worker into the locked gate. The pipeline's next `test` (recheck)
@@ -735,6 +753,31 @@ in one file and makes the run unauditable (task 0726).
 
 Read [structured-trace-emission.md](structured-trace-emission.md) when the first trace event is
 emitted — the action vocabulary, the emit shape and the parse/close contract.
+
+## Post-gate tree freeze (task 1135 R3/R4/R5)
+
+The quality gate's `proofDigest` certifies a specific tree. Two rules protect it, and both are
+**ordering plus early detection** — a host session cannot intercept a file write, so the contract is:
+
+1. **Every tree edit belongs to `implement`, or to the bounded `test-fix` remediation hop** — stray-file
+   cleanup, anchor qualification, contract pins, doc edits, and task-section writes other than the
+   pipeline-owned `## Testing`/`## Review`/`## Solution`. After `test` captures `proofDigest`, no
+   other state edits the tree. A genuine later correction goes through `test-fix → test-recheck`,
+   which re-captures the digest and re-snapshots the tree state.
+2. **Review joins the proof bracket.** The pipeline now compares `proofDigestNow` against
+   `proofDigest` at **review** entry as well as verify and record, so a drifted tree stops the run
+   before a review dispatch is spent. The mismatch routes through the existing tripwire to `failed`;
+   there is no new re-certify path.
+
+**A mismatch names the drifted paths (R5).** At gate entry the pipeline snapshots the non-corpus tree
+state (`git status --porcelain=v1 -uall` plus `git diff --name-only HEAD`, excluding
+`docs/tasks*` / `docs/features*`) into `.spur/run/<run-id>-gate-paths.txt`. On a mismatch the
+`proof.fingerprint` action diffs the current state against that file and reports the changed paths in
+both the tripwire event and the run log (`proof-compare-failed … drifted paths: …`), so the operator
+reads *which file* moved, not only the `D1`/`D2` pair. An **untracked** file outside those exclusions
+is part of the certified set: the digest's git-tree half stages everything outside the excluded
+globs, so a stray file added after the gate is real drift and must be named (the behaviour is
+documented beside `DEFAULT_EXCLUDE_GLOBS` in `proof-input-fingerprint.ts`).
 
 ## Record & done sequencing
 

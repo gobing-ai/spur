@@ -1,7 +1,13 @@
+import { join } from 'node:path';
 import type { ActionResult, ActionRunContext, ActionRunner } from '@gobing-ai/ts-dual-workflow-engine';
-import type { FileSystem, ProcessExecutor } from '@gobing-ai/ts-runtime';
+import { type FileSystem, NodeProcessExecutor, type ProcessExecutor } from '@gobing-ai/ts-runtime';
+import { appendInlineRunLogLine } from '../../services/inline-run-setup';
 import type { WorkflowObservabilityBus, WorkflowTripwireFiredEvent } from '../observability';
-import { computeProofInputFingerprint, readProofInputContents } from '../proof-input-fingerprint';
+import {
+    computeProofInputFingerprint,
+    DEFAULT_EXCLUDE_GLOBS,
+    readProofInputContents,
+} from '../proof-input-fingerprint';
 import { evaluateTripWires } from '../tripwire';
 
 const KIND = 'proof.fingerprint';
@@ -46,6 +52,93 @@ const ACCEPTED_OPTION_KEYS = ['expect', 'featureFile', 'taskFile', 'var'] as con
  * Bracket placement is load-bearing: capture at verify-exit (after the verdict artifact exists), not
  * before `verify`. `/sp:dev-verify --fix all` writes to the tree by design when it repairs a row, so a
  * capture taken earlier would fire on verify's own legitimate repairs instead of on a violation.
+ */
+/**
+ * Task 1135 R5: Diff the current non-corpus tree state against the gate snapshot
+ * (`.spur/run/<run-id>-gate-paths.txt`) to name the drifted paths on a digest mismatch.
+ */
+async function computeDriftedPaths(
+    workdir: string,
+    runId: string,
+    fileSystem: FileSystem,
+    processExecutor?: ProcessExecutor,
+): Promise<string[]> {
+    const snapshotFile = join(workdir, '.spur', 'run', `${runId}-gate-paths.txt`);
+    if (!(await fileSystem.exists(snapshotFile))) return [];
+    let snapshotContent = '';
+    try {
+        snapshotContent = await fileSystem.readFile(snapshotFile);
+    } catch {
+        return [];
+    }
+    const snapshotLines = new Set(
+        snapshotContent
+            .split('\n')
+            .map((l) => l.trim())
+            .filter(Boolean),
+    );
+
+    const executor = processExecutor ?? new NodeProcessExecutor();
+    const excludes = DEFAULT_EXCLUDE_GLOBS.map((g) => `:(exclude)${g}`);
+    const currentLines = new Set<string>();
+
+    try {
+        const statusRes = await executor.run({
+            command: 'git',
+            args: ['status', '--porcelain=v1', '-uall', ...excludes],
+            cwd: workdir,
+            forceBuffered: true,
+            rejectOnError: false,
+        });
+        if (statusRes.exitCode === 0 && statusRes.stdout) {
+            for (const line of statusRes.stdout.split('\n')) {
+                const trimmed = line.trim();
+                if (trimmed) currentLines.add(trimmed);
+            }
+        }
+        const diffRes = await executor.run({
+            command: 'git',
+            args: ['diff', '--name-only', 'HEAD', ...excludes],
+            cwd: workdir,
+            forceBuffered: true,
+            rejectOnError: false,
+        });
+        if (diffRes.exitCode === 0 && diffRes.stdout) {
+            for (const line of diffRes.stdout.split('\n')) {
+                const trimmed = line.trim();
+                if (trimmed) currentLines.add(trimmed);
+            }
+        }
+
+        const extractPath = (line: string): string => {
+            const m = line.match(/^(?:[?!MADRCU\s]{1,3})\s+(.+)$/);
+            const captured = m?.[1];
+            return captured === undefined ? line : captured.trim();
+        };
+
+        const drifted: string[] = [];
+        for (const line of currentLines) {
+            if (!snapshotLines.has(line)) {
+                const p = extractPath(line);
+                if (!drifted.includes(p)) drifted.push(p);
+            }
+        }
+        for (const line of snapshotLines) {
+            if (!currentLines.has(line)) {
+                const p = extractPath(line);
+                if (!drifted.includes(p)) drifted.push(p);
+            }
+        }
+        return drifted;
+    } catch {
+        return [];
+    }
+}
+
+/**
+ * `proof.fingerprint` — capture the proof-input digest into a workflow var, optionally asserting it
+ * is unchanged (see the option contract above). On a mismatch it names the drifted paths (task 1135
+ * R5), emits the canonical `workflow.tripwire.fired` event and fails the action.
  */
 export class ProofFingerprintActionRunner implements ActionRunner {
     readonly kind = KIND;
@@ -114,14 +207,23 @@ export class ProofFingerprintActionRunner implements ActionRunner {
 
         const expected = typeof options.expect === 'string' ? options.expect.trim() : '';
         if (expected !== '' && expected !== digest) {
+            const workdir = context.workdir ?? '.';
+            const driftedPaths = await computeDriftedPaths(
+                workdir,
+                context.runId,
+                this.fileSystem,
+                this.processExecutor,
+            );
+            const pathInfo = driftedPaths.length > 0 ? `; drifted paths: ${driftedPaths.join(', ')}` : '';
             // 0708 R2/R4: proof-state invalidation is a closed-catalog trip
             // wire — emit the bounded canonical event, then fail through the
             // existing action-failure semantics (the mismatch return below).
             const taskWbs = String(context.vars.wbs ?? '');
+            const observedText = `proof inputs changed after the verdict was established: expected ${expected}, got ${digest}${pathInfo}`;
             const tripwire = evaluateTripWires([
                 {
                     policy: 'proof-invalidated',
-                    observed: `proof inputs changed after the verdict was established: expected ${expected}, got ${digest}`,
+                    observed: observedText,
                     threshold: `expected ${expected}`,
                     evidenceRef: `proof.fingerprint var=${varName}`,
                 },
@@ -146,13 +248,24 @@ export class ProofFingerprintActionRunner implements ActionRunner {
                 };
                 void this.observabilityBus.emit('workflow.tripwire.fired', tripwireEvent);
             }
+            appendInlineRunLogLine(
+                context.runId,
+                `proof-compare-failed node=${context.stateOrNodeId} expected=${expected} actual=${digest}${pathInfo}`,
+                workdir,
+            );
             return {
                 ok: false,
                 error:
                     `${KIND}: proof inputs changed after the verdict was established — ` +
-                    `expected ${expected}, got ${digest}. A tree or spec mutation between verify and record ` +
+                    `expected ${expected}, got ${digest}${pathInfo}. A tree or spec mutation between verify and record ` +
                     `invalidates the proof the verdict certifies (ADR-071).`,
-                data: { var: varName, expected, actual: digest, matched: false },
+                data: {
+                    var: varName,
+                    expected,
+                    actual: digest,
+                    matched: false,
+                    ...(driftedPaths.length > 0 ? { driftedPaths } : {}),
+                },
             };
         }
 

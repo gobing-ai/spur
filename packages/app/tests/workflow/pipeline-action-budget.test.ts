@@ -25,7 +25,10 @@ const IDEA_ACTION_BUDGET = 33;
 // (`task migrate-anchors --wbs $wbs`), placed after format and before the `test` proof capture
 // so a rewrite can never invalidate the digest. Named in the commit; raising the ratchet here
 // is the change record.
-const TASK_ACTION_BUDGET = 52;
+// 55 at 1135: review joins the proof bracket (one `proof.fingerprint` compare before its agent),
+// and `test`/`test-recheck` each gain one gate-entry tree-state snapshot shell so a digest
+// mismatch names the drifted paths. Named in the commit; raising the ratchet here is the record.
+const TASK_ACTION_BUDGET = 55;
 
 const WORKFLOWS_DIR = join(import.meta.dir, '../../../../config', 'workflows');
 

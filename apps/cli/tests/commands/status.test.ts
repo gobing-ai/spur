@@ -11,8 +11,16 @@ function nullOutput(): CommandOutput {
 
 describe('status command', () => {
     test('reports project status', async () => {
-        const exitCode = await main(['status'], { output: nullOutput(), dbUrl: ':memory:' });
-        expect(typeof exitCode).toBe('number');
+        const cwd = await mkdtemp(join(tmpdir(), 'spur-status-smoke-'));
+        try {
+            const spurDir = join(cwd, '.spur');
+            await mkdir(spurDir, { recursive: true });
+            await writeFile(join(spurDir, 'config.yaml'), 'project: test\n');
+            const exitCode = await main(['status'], { cwd, output: nullOutput(), dbUrl: ':memory:' });
+            expect(exitCode).toBe(0);
+        } finally {
+            await rm(cwd, { recursive: true, force: true });
+        }
     });
 
     test('reports agent specs found in .spur/agents/', async () => {

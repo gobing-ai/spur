@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Implement-stage acceptance probe and the post-gate tree-freeze boundary
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-10-09T05:28:31.520Z
-updated_at: "2026-10-09T18:16:44.781Z"
+updated_at: "2026-10-10T01:26:55.646Z"
 feature_id: H1
 
 ac_altitude: task-local
@@ -12,6 +12,8 @@ ac_numbering: task-local
 priority: P2
 estimate_hours: 10
 dependencies: ["1136"]
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1135-verdict.json
 ---
 
 ## 1135. Implement-stage acceptance probe and the post-gate tree-freeze boundary
@@ -51,40 +53,40 @@ Each mutation invalidated the certified input set and forced gate + review + ver
 
 ### Requirements
 
-- [ ] R1. **Implement-stage surface probe.**
+- [x] R1. **Implement-stage surface probe.**
   - Before an `implement` stage reports done, it runs at least one end-to-end probe of each new or changed **public surface**: CLI verb/flag, HTTP route, or plugin script entry.
   - The probe runs against a throwaway project root, never the repo corpus.
   - The stage records the exact command and its observed output as acceptance evidence.
   - A stage that changed no public surface records `probe: not-applicable (no public surface changed)` instead.
   - A service-only test suite does not satisfy R1.
-- [ ] R2. **Probe evidence travels in the dispatch payload and the stage result.**
+- [x] R2. **Probe evidence travels in the dispatch payload and the stage result.**
   - Payload field 6 (`inline-pipeline-driver.md:584`) names the probe requirement.
   - The stage report carries probe command and output, or the not-applicable line.
   - A stage that returns neither is recorded `done` with a `probe-missing` marker in the run log and the batch report. It is never silently treated as complete.
-- [ ] R3. **Hygiene and authoring precede the gate.**
+- [x] R3. **Hygiene and authoring precede the gate.**
   - All tree edits belong to `implement`, or to the bounded `test-fix` remediation hop that already re-captures the digest at `test-recheck`. This covers stray-file cleanup, anchor qualification, contract pins, doc edits, and task-section writes other than the pipeline-owned `## Testing`/`## Review`/`## Solution`.
   - No other state edits the tree after the quality gate captures `proofDigest`.
   - The rule is stated in the driver reference and the code-implementation skill. R4 enforces it by detection.
-- [ ] R4. **Review-entry digest compare.**
+- [x] R4. **Review-entry digest compare.**
   - `review` gets the same `proof.fingerprint` compare that verify and record already have: `var: proofDigestNow`, `expect: ${vars.proofDigest}`.
   - A mismatch stops before the review dispatch is spent. It never reaches a review whose proof stage is later marked `skipped`.
   - The existing tripwire/failed routing is reused. No new re-certify path is added; legitimate mid-run edits go through `test-fix → test-recheck`.
-- [ ] R5. **A digest mismatch names the drifted paths.**
+- [x] R5. **A digest mismatch names the drifted paths.**
   - At quality-gate entry, the driver snapshots the non-corpus tree state: `git status --porcelain=v1 -uall` plus `git diff --name-only HEAD`, excluding `DEFAULT_EXCLUDE_GLOBS`, written to `.spur/run/<run-id>-gate-paths.txt`.
   - A `proof.fingerprint` mismatch at review, verify or record diffs the current state against that snapshot. The tripwire event and run log name the changed paths, not only the D1/D2 pair.
   - The fingerprint's untracked-file behavior is documented beside `DEFAULT_EXCLUDE_GLOBS` (`proof-input-fingerprint.ts:241`): an untracked file outside `docs/tasks*`/`docs/features*` is part of the certified set.
-- [ ] R6. **The probe is cheap and safe.**
+- [x] R6. **The probe is cheap and safe.**
   - It runs under a temp project root and leaves no tracked change.
   - It needs no network beyond the CLI under test.
   - It is bounded: a 120 s timeout per invocation and output capped at 8 KiB.
   - A probe failure is probe evidence, never a corpus mutation.
-- [ ] R7. **Docs and bundle ship in the same change.** Update:
+- [x] R7. **Docs and bundle ship in the same change.** Update:
   - the driver reference: payload field 6, the R3 ordering rule, the R5 path-naming line;
   - `plugins/sp/skills/code-implementation/SKILL.md` § implement scope: where the probe sits in the stage;
   - the YAML header comment at `task-pipeline.yaml:135-146`: review joins the bracket.
 
   Then run `bun run --filter @gobing-ai/spur build:bundle`.
-- [ ] R8. **The probe also covers the repo's static gate invariants, scoped to changed paths.**
+- [x] R8. **The probe also covers the repo's static gate invariants, scoped to changed paths.**
   - The H1 batch (2026-10-08) spent full-gate runs on three defects a stage-time self-check would have caught:
     - direct environment reads (`env-var-hygiene` rule);
     - a plugin script whose generated `.mjs` twin was stale (`script-contract-check`);
@@ -221,15 +223,73 @@ Scenario: AC8 — A static-invariant defect is caught at stage time (req: R8)
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change map (worktree `spur-new-runall-1135-1142-42b58deb`):
+
+| File | Change |
+| --- | --- |
+| `config/workflows/task-pipeline.yaml:494` | `test` entry snapshots the non-corpus tree state (`git status --porcelain=v1 -uall` + `git diff --name-only HEAD`, both excluding `docs/tasks*`/`docs/features*`) into `.spur/run/<run-id>-gate-paths.txt` immediately before the `proofDigest` capture (R5). |
+| `config/workflows/task-pipeline.yaml:594` | `test-recheck` entry re-snapshots after the bounded remediation, so a legitimate `test-fix` edit is not read as drift (R5). |
+| `config/workflows/task-pipeline.yaml:717` | `review` entry gains the `proof.fingerprint` compare (`var: proofDigestNow`, `expect: ${vars.proofDigest}`) ahead of its `agent.run`, joining the bracket verify/record already had (R4). |
+| `config/workflows/task-pipeline.yaml:135` | Header comment records that review joins the bracket and that a mismatch names the drifted paths (R7). |
+| `packages/app/src/workflow/actions/proof-fingerprint.ts:63` | `computeDriftedPaths` diffs the current tree state against the gate snapshot, then a mismatch reports the paths in the error, the `data.driftedPaths` payload, the tripwire event and the run log (`proof-compare-failed … drifted paths: …`) (R5). |
+| `packages/app/src/workflow/proof-input-fingerprint.ts:241` | `DEFAULT_EXCLUDE_GLOBS` is exported and documents the untracked-file behaviour: an untracked file outside the corpus exclusions is part of the certified set (R5). |
+| `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:584` | Payload field 6 gains the public-surface probe contract (temp root, one invocation per changed surface, exact command + observed output, bounded 120 s / 8 KiB, `probe: not-applicable …`, `probe-missing` marker in run log and batch report) plus the R8 changed-path static self-check (R1/R2/R6/R8). |
+| `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:757` | New § Post-gate tree freeze: the ordering rule (every tree edit in `implement` or `test-fix`), the review compare, and the path-naming guarantee (R3/R4/R5). |
+| `plugins/sp/skills/code-implementation/SKILL.md:127` | § Public-surface probe: where the probe sits in the stage, its bounds, the not-applicable line, and the changed-path static self-check (R1/R6/R8). |
+| `plugins/sp/tests/dogfood-testing/tree-freeze-contract.test.ts` | Static pins over the driver reference, the skill and the YAML (review compare position, snapshot-before-capture order in `test`/`test-recheck`, exclusion globs, untracked-file doc) (R1–R8). |
+| `packages/app/tests/workflow/actions/proof-fingerprint.test.ts` | Drift case: a snapshot plus an untracked file added afterwards makes the compare fail and name `apps/server/docs/stray.md` (AC5). |
+| `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts`, `packages/app/tests/workflow/pipeline-action-budget.test.ts`, `plugins/sp/tests/task-pipeline-resilience.test.ts` | Updated to the new review action order, the raised action ratchet (52 → 55, the change record) and a locate-by-content gate-shell lookup instead of a positional index. |
+
+Rationale: the review lane paid three times for defects a surface probe would have caught in minutes (task 1135 Background), and a post-gate edit invalidated the certified digest without naming the file that moved. The probe is a contract on the stage that owns the change — not a new state or gate — and the freeze is ordering plus early detection, since a host session cannot intercept a file write.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md` payload field 6 states the public-surface probe: one end-to-end invocation per changed CLI verb/flag, HTTP route or plugin entry, against a throwaway project root, with the exact command and observed output; `plugins/sp/skills/code-implementation/SKILL.md` § Public-surface probe places it in the stage; both pinned in `plugins/sp/tests/dogfood-testing/tree-freeze-contract.test.ts`. |
+| R2 | MET | Field 6 carries the `probe: not-applicable (no public surface changed)` line and the `probe-missing` marker rule ("recorded `done` with a marker in the run log and the batch-report row"); pinned in the same contract test. |
+| R3 | MET | The driver reference § Post-gate tree freeze states that every tree edit belongs to `implement` or `test-fix`, that no other state edits the tree after `test` captures `proofDigest`, and that the skill carries the same rule. |
+| R4 | MET | `config/workflows/task-pipeline.yaml` `review` entry has one `proof.fingerprint` (`proofDigestNow`, `expect: ${vars.proofDigest}`) as its first action, before `agent.run`; asserted by `tree-freeze-contract.test.ts` and by `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts`. |
+| R5 | MET | `test` and `test-recheck` snapshot `.spur/run/<run-id>-gate-paths.txt` before the digest capture (asserted in the contract test); `computeDriftedPaths` in `packages/app/src/workflow/actions/proof-fingerprint.ts` names the drifted paths in the error, the `data.driftedPaths` payload, the tripwire event and the run log; `DEFAULT_EXCLUDE_GLOBS` documents the untracked-file behaviour. |
+| R6 | MET | Field 6 and the skill state the bounds (120 s per invocation, 8 KiB output cap, no network beyond the CLI under test, temp root only, failure is evidence not mutation). |
+| R7 | MET | The owning docs shipped in this change (`plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md`, `plugins/sp/skills/code-implementation/SKILL.md`, `config/workflows/task-pipeline.yaml`); `bun run --filter @gobing-ai/spur build:bundle` (`apps/cli/package.json:52`) ran; the driver reference, the skill and the YAML header comment were updated in the same change; `bun run spur-check` (pre-check, full suite 10744 pass / 0 fail, post-check) is green. |
+| R8 | MET | The skill's "Changed-path static self-check" names the pre-check preset run, the `script-contract-check` trigger and the paired-script parity trigger over changed paths; pinned by the contract test. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — A changed CLI surface is probed before the stage reports done (req: R1) | MET | test | contract pins in `plugins/sp/tests/dogfood-testing/tree-freeze-contract.test.ts` (payload field 6 + skill § Public-surface probe) |
+| AC2 — A missing probe is visible before the review lane pays for it (req: R2) | MET | test | contract pin "R2: a missing probe is a probe-missing marker in the run log and the batch-report row" |
+| AC3 — A post-gate edit is detected before review is spent (req: R3, R4) | MET | test | `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts` asserts the review compare precedes the dispatch; the drift mechanism is exercised by `packages/app/tests/workflow/actions/proof-fingerprint.test.ts` |
+| AC4 — Pipeline-owned section writes never trip the compare (req: R4) | MET | test | the fingerprint scopes task content to the planning sections only (`packages/app/src/workflow/proof-input-fingerprint.ts`), unchanged by this task and covered by its existing suites |
+| AC5 — Drift reporting names the path, not just the digest (req: R5) | MET | test | `packages/app/tests/workflow/actions/proof-fingerprint.test.ts` "AC5/R5: a digest mismatch names drifted paths when snapshot file exists" |
+| AC6 — The probe is bounded and non-polluting (req: R6) | MET | test | the bounds are pinned in `tree-freeze-contract.test.ts`; the probe is a stage contract, so no probe process runs in this repo's tests |
+| AC7 — Owning docs and bundle reflect the probe and freeze rules (req: R7) | MET | command | `bun run spur-check` green (10744 pass / 0 fail) and `build:bundle` executed in this change |
+| AC8 — A static-invariant defect is caught at stage time (req: R8) | MET | test | contract pin for the changed-path static self-check in the skill |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+Self-review over the full diff. No P1/P2 findings; disposition PASS.
+
+| Sev | Finding | Disposition |
+| --- | --- | --- |
+| P1 | — | none found |
+| P2 | — | none found |
+| P3 | The probe and the `probe-missing` marker are enforced by the driver contract (a model-followed reference) rather than by interposing code, so a driver that ignores the contract degrades to the old behaviour. | Accepted and explicit in the task's Design: "the driver cannot refuse a post-gate write", and the same is true of a stage that omits its probe — the reference plus pins are the enforcement the harness actually has. The alternative (gating every stage on a machine-checked probe artifact) is a new gate, which the Q&A closed against. |
+| P3 | The gate-entry snapshot adds two git invocations to `test` and `test-recheck`. | Accepted: sub-second, and paid once per gate entry. It is the only way a mismatch can name the path rather than the digest pair. |
+| P3 | The task-pipeline action ratchet rises 52 → 55. | Recorded in `pipeline-action-budget.test.ts` as the change record, per that test's own convention; the three actions are the review compare and the two snapshots. |
+| P4 | `computeDriftedPaths` reports both new and vanished lines from the snapshot, and extracts a path from a porcelain line heuristically. | Accepted: the snapshot stores raw `git status`/`git diff` lines, so the comparison is text-exact and conservative — a path that cannot be extracted is reported verbatim rather than dropped. Verified by the AC5 test on an untracked file. |
+| P4 | The snapshot is a shell action inside the YAML, so its exclusion globs must stay in lockstep with `DEFAULT_EXCLUDE_GLOBS`. | Accepted with a pin: `tree-freeze-contract.test.ts` asserts the exclusions on the snapshot command, and the fingerprint comment documents the same set. |
+
+Residual risk: the review-entry compare is a new failure mode on a path that previously always
+reached review — a tree edited between the gate and review now fails the run. That is the intended
+behaviour (task 1135 R4) and the declared recovery is `test-fix → test-recheck`; the snapshot refresh
+at `test-recheck` is what keeps a legitimate remediation from tripping it.
 
 ### References
 
@@ -243,4 +303,7 @@ Scenario: AC8 — A static-invariant defect is caught at stage time (req: R8)
 ### History
 
 - 2026-10-09T05:30:22.368Z backlog → todo (system)
+- 2026-10-10T01:26:49.282Z todo → wip (system)
+- 2026-10-10T01:26:52.469Z wip → testing (system)
+- 2026-10-10T01:26:55.634Z testing → done (system)
 

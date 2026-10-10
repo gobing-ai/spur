@@ -124,7 +124,35 @@ only burns wall clock and context budget.
 - If a targeted probe reveals a failure you cannot fix within implement scope, note it in
   `## Solution` and let the `test` hop's fixall handle it — do not pre-empt the gate.
 
-## Changed-path targeted checks (dependency-aware verification, task 0510 R3)
+### Public-surface probe (task 1135 R1/R6/R8)
+
+Narrow unit tests prove the seam you refactored, not the surface a user calls. Before this stage
+reports done it runs **one end-to-end probe per new or changed public surface** — a CLI verb/flag,
+an HTTP route, or a plugin script entry:
+
+- against a **throwaway project root** (a temp dir), never the repo corpus or the execution tree's
+tracked files;
+- bounded: 120 s per invocation, output capped at 8 KiB, no network beyond the CLI under test;
+- recorded as acceptance evidence: the **exact command** and its **observed output**;
+- a failing probe is evidence, never a reason to mutate the corpus.
+
+A service-layer test suite does **not** satisfy this. The gap it closes is measured: 19 service tests
+green while `task create --feature <verifying>` failed end-to-end (task 1135 Background). If the stage
+changed no public surface, report the single line
+`probe: not-applicable (no public surface changed)` instead.
+
+**Changed-path static self-check (R8)** — over the changed paths only, before reporting done:
+
+- `spur rule run` with the configured pre-check preset (catches a direct `process.env` read, the
+  `env-var-hygiene` rule, and its siblings);
+- `bun run script-contract-check` when a plugin script was touched (a stale generated `.mjs` twin);
+- the paired-script parity test when `package.json` changed (a half-updated `spur-check` /
+  `spur-check-new` chain).
+
+The single full project check stays the pipeline `test` hop's job (see the section above); these are
+changed-path checks, not that gate.
+
+## Changed-path targeted checks (dependency-aware verification, task 0510 R3 / task 1142 R3)
 
 "Run the narrow test first" needs a second half: *which* narrow tests, when a change to a shared
 surface can break a downstream consumer. The matrix below is dependency-aware — domain → app →
@@ -132,6 +160,12 @@ CLI — so a shared change verifies its consumers without recreating the full pr
 implement. **It augments narrow behavior tests; it never authorizes `bun run spur-check`,
 `bun run test`, or another full project check inside implement** — the pipeline's `test` hop owns
 that single full gate.
+
+**Worker iteration check order (task 1142 R3):**
+1. The **changed-path matrix** below (narrow behavior tests + affected consumers);
+2. the resolved `quality-gate` script in `light` mode (source-repo probe, else the installed twin) (biome on changed files, per-workspace typecheck, rule presets `rules:pre`/`rules:post`, related tests).
+
+Neither step takes the host-wide full-gate lock. The full gate is named only for the pipeline's `test` and `test-recheck` hops.
 
 | Changed surface | Required targeted tests | Required typechecks |
 | --- | --- | --- |

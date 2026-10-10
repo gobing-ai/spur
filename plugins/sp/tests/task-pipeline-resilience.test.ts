@@ -250,11 +250,26 @@ esac`,
     // findings cap, bounded summary and status artifact (behavioral coverage lives in
     // plugins/sp/tests/quality-gate.test.ts). Here: resolution order and fail-closed shape.
     test('gate shells resolve quality-gate through the script-root probe and fail closed (0823 d, 1007 R4)', () => {
-        for (const [stateId, shellIndex, mode] of [
-            ['test', 2, 'run'],
-            ['test-recheck', 0, 'recheck'],
+        // 1135 R5 inserted the gate-paths snapshot shell ahead of the digest capture in both
+        // states, so the gate resolver's index moved with it.
+        const gateShellIndex = (stateId: 'test' | 'test-recheck'): number => {
+            const shells = (PIPELINE.states.find((s) => s.id === stateId)?.onEnter ?? [])
+                .filter((action) => action.kind === 'shell')
+                .map((action) => action.options?.command ?? '');
+            const matches = shells
+                .map((command, index) => ({ command, index }))
+                .filter(({ command }) => command.includes('quality-gate'));
+            const only = matches[0]?.index;
+            if (only === undefined || matches.length !== 1) {
+                throw new Error(`expected exactly one quality-gate shell in ${stateId}, found ${matches.length}`);
+            }
+            return only;
+        };
+        for (const [stateId, mode] of [
+            ['test', 'run'],
+            ['test-recheck', 'recheck'],
         ] as const) {
-            const command = commandFor(stateId, shellIndex);
+            const command = commandFor(stateId, gateShellIndex(stateId));
             expect(command).toContain('@sh"\\(.dir)/quality-gate.ts"+" RUNNER=bun"');
             expect(command).toContain('@sh"\\(.dir)/quality-gate.mjs"+" RUNNER=node"');
             // 1111: the mode is selected through `M` so `--defer-gate` can swap the tier without

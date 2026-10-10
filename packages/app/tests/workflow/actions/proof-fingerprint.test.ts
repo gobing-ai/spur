@@ -208,4 +208,37 @@ describe('proof.fingerprint action', () => {
             await rm(dir, { recursive: true, force: true });
         }
     });
+
+    test('AC5/R5: a digest mismatch names drifted paths when snapshot file exists', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'proof-drift-'));
+        try {
+            const { execSync } = require('node:child_process') as typeof import('node:child_process');
+            const { writeFileSync, mkdirSync } = require('node:fs') as typeof import('node:fs');
+            writeFileSync(join(dir, '.gitignore'), '.spur/\n');
+            writeFileSync(join(dir, 'tracked.txt'), 'base\n');
+            execSync(
+                'git init -q && git config user.email t@example.com && git config user.name t && git add -A && git commit -qm init',
+                { cwd: dir },
+            );
+            const runId = 'drift-run-1135';
+            const runDir = join(dir, '.spur', 'run');
+            mkdirSync(runDir, { recursive: true });
+            const snapshotFile = join(runDir, `${runId}-gate-paths.txt`);
+            writeFileSync(snapshotFile, '');
+
+            const dirCtx: ActionRunContext = { ...ctx, workdir: dir, runId };
+            const initial = await runner.execute({ var: 'd' }, dirCtx);
+            const initialDigest = digestFor(initial, 'd');
+
+            mkdirSync(join(dir, 'apps', 'server', 'docs'), { recursive: true });
+            writeFileSync(join(dir, 'apps', 'server', 'docs', 'stray.md'), 'stray\n');
+
+            const failed = await runner.execute({ var: 'dNow', expect: initialDigest }, dirCtx);
+            expect(failed.ok).toBeFalse();
+            expect(failed.error).toContain('apps/server/docs/stray.md');
+            expect(failed.data?.driftedPaths).toContain('apps/server/docs/stray.md');
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
 });

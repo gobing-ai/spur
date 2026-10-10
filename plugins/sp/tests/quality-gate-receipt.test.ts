@@ -219,6 +219,28 @@ describe('lightScope', () => {
     test('no changed files → empty scope', () => {
         expect(lightScope([], existsFrom(repoPaths))).toEqual({ files: [], workspaces: [], tests: [] });
     });
+
+    test('AC2/R2: plugin prose and script changes map to their structure tests', () => {
+        const pluginPaths = [
+            'plugins/sp/tests/skill-structure.test.ts',
+            'plugins/sp/tests/flag-contract-parity.test.ts',
+            'plugins/sp/tests/z.test.ts',
+        ];
+        const scope = lightScope(
+            [
+                'plugins/sp/skills/x/SKILL.md',
+                'plugins/sp/commands/y.md',
+                'plugins/sp/scripts/z.ts',
+                'plugins/sp/scripts/no-test.ts',
+            ],
+            existsFrom(pluginPaths),
+        );
+        expect(scope.workspaces).toContain('plugins/sp');
+        expect(scope.tests).toContain('plugins/sp/tests/skill-structure.test.ts');
+        expect(scope.tests).toContain('plugins/sp/tests/flag-contract-parity.test.ts');
+        expect(scope.tests).toContain('plugins/sp/tests/z.test.ts');
+        expect(scope.tests).not.toContain('plugins/sp/tests/no-test.test.ts');
+    });
 });
 
 describe('planLightChecks', () => {
@@ -231,6 +253,8 @@ describe('planLightChecks', () => {
         const plans = planLightChecks(scope, (ws) => ws === 'packages/domain');
         expect(plans.map((p) => p.id)).toEqual([
             'format-lint:changed',
+            'rules:pre',
+            'rules:post',
             'typecheck:packages/domain',
             'test:apps/cli',
             'test:packages/domain',
@@ -239,10 +263,12 @@ describe('planLightChecks', () => {
             id: 'format-lint:changed',
             cmd: 'bunx biome check apps/cli/src/a.ts packages/domain/src/b.ts',
         });
-        expect(plans[1]).toEqual({ id: 'typecheck:packages/domain', cmd: 'cd packages/domain && bun run typecheck' });
+        expect(plans[1]).toEqual({ id: 'rules:pre', cmd: 'bun run test-pre-check' });
+        expect(plans[2]).toEqual({ id: 'rules:post', cmd: 'bun run test-post-check' });
+        expect(plans[3]).toEqual({ id: 'typecheck:packages/domain', cmd: 'cd packages/domain && bun run typecheck' });
         // Every test command cd's into its workspace; paths are workspace-relative.
-        expect(plans[2]).toEqual({ id: 'test:apps/cli', cmd: 'cd apps/cli && bun test tests/a.test.ts' });
-        expect(plans[3]).toEqual({ id: 'test:packages/domain', cmd: 'cd packages/domain && bun test tests/b.test.ts' });
+        expect(plans[4]).toEqual({ id: 'test:apps/cli', cmd: 'cd apps/cli && bun test tests/a.test.ts' });
+        expect(plans[5]).toEqual({ id: 'test:packages/domain', cmd: 'cd packages/domain && bun test tests/b.test.ts' });
     });
 
     test('hostile or spaced file names reach sh as one literal argument each', () => {
@@ -294,6 +320,10 @@ describe('runDeferredGate (1111 R1/R2)', () => {
         git('config user.email fixture@spur.dev');
         git('config user.name fixture');
         writeFileSync(join(dir, '.gitignore'), 'node_modules\n.spur/\n');
+        writeFileSync(
+            join(dir, 'package.json'),
+            `${JSON.stringify({ name: 'fixture-root', scripts: { 'test-pre-check': 'exit 0', 'test-post-check': 'exit 0' } }, null, 4)}\n`,
+        );
         mkdirSync(join(dir, 'pkg-a/src'), { recursive: true });
         mkdirSync(join(dir, 'pkg-a/tests'), { recursive: true });
         writeFileSync(
@@ -360,6 +390,10 @@ describe('runLightGate (temp git repo)', () => {
         // Mirror the repo: the light log/receipt and the repo-root node_modules link are not
         // changed scope.
         writeFileSync(join(dir, '.gitignore'), 'node_modules\n.spur/\n');
+        writeFileSync(
+            join(dir, 'package.json'),
+            `${JSON.stringify({ name: 'fixture-root', scripts: { 'test-pre-check': 'exit 0', 'test-post-check': 'exit 0' } }, null, 4)}\n`,
+        );
         mkdirSync(join(dir, 'pkg-a/src'), { recursive: true });
         mkdirSync(join(dir, 'pkg-a/tests'), { recursive: true });
         // Pin the formatter so the fixture verdict does not depend on bunx biome defaults.
@@ -406,7 +440,13 @@ describe('runLightGate (temp git repo)', () => {
             expect(result.scope.files.sort()).toEqual(['pkg-a/src/extra.ts', 'pkg-a/src/m.ts']);
             expect(result.scope.workspaces).toEqual(['pkg-a']);
             expect(result.scope.tests).toEqual(['pkg-a/tests/m.test.ts']);
-            expect(result.checks.map((c) => c.id)).toEqual(['format-lint:changed', 'typecheck:pkg-a', 'test:pkg-a']);
+            expect(result.checks.map((c) => c.id)).toEqual([
+                'format-lint:changed',
+                'rules:pre',
+                'rules:post',
+                'typecheck:pkg-a',
+                'test:pkg-a',
+            ]);
             for (const row of result.checks) {
                 expect(row.status).toBe('PASS');
                 expect(row.durationMs).toBeGreaterThanOrEqual(0);
@@ -454,6 +494,21 @@ describe('runLightGate (temp git repo)', () => {
             expect(byId.get('test:pkg-a')?.status).toBe('FAIL');
             expect(byId.get('typecheck:pkg-a')?.status).toBe('PASS');
             expect(byId.get('format-lint:changed')?.status).toBe('PASS');
+        } finally {
+            cleanup();
+        }
+    });
+
+    test('AC3/R4: light tier catches format-lint failure on an unformatted file', () => {
+        const { dir, cleanup } = gitRepoFixture();
+        try {
+            runShellCommand(`ln -s ${process.cwd()}/node_modules ${dir}/node_modules`, undefined);
+            // Seed a biome diff (unformatted file with extra semicolons and irregular spacing)
+            writeFileSync(join(dir, 'pkg-a/src/extra.ts'), 'export const  badFormat  =   "double-quotes";;;;\n');
+            const result = light(dir, 'digest-C', PASSING_TEST);
+            expect(result.status).toBe('FAIL');
+            const byId = new Map(result.checks.map((c) => [c.id, c]));
+            expect(byId.get('format-lint:changed')?.status).toBe('FAIL');
         } finally {
             cleanup();
         }

@@ -3,7 +3,7 @@ kind: design
 title: "Planning workflow and operation contracts"
 status: implemented
 created_at: 2026-09-09
-updated_at: 2026-10-07
+updated_at: 2026-10-10
 related: ["0889", "0898", "0949", "0976", "0958", "1090", "1111"]
 tags: [contract, planning, workflow]
 ---
@@ -361,7 +361,13 @@ steering boundary's timeout default is fail-closed: once the retry policy is exh
 attempt failed, a steering timeout resolves `abort` with a `retry-exhausted` reason instead of
 continue (R3). `proof.fingerprint` participates when composed with the observability bus: an
 `expect` mismatch emits the `proof-invalidated` wire before failing through its existing mismatch
-semantics. Deterministic fail-closed evaluation means an unknown signal id fails the evaluation
+semantics. When the gate entry has written the run-scoped snapshot
+`.spur/run/<runId>-gate-paths.txt` (`git status --porcelain=v1 -uall` plus
+`git diff --name-only HEAD`, carrying the same `docs/tasks*` / `docs/features*` exclusions as
+`DEFAULT_EXCLUDE_GLOBS`), the mismatch additionally names the drifted paths in the error message, the
+wire's `data.driftedPaths`, and the run log. That snapshot path is conventional — derived from the run
+id rather than passed as an action option, so `ACCEPTED_OPTION_KEYS` is unchanged — and its absence is
+non-fatal: the compare still fails on the digest pair alone. Deterministic fail-closed evaluation means an unknown signal id fails the evaluation
 rather than silently passing, and drift between emitters and the catalog is caught by unit tests
 pinning the closed catalog and the event map (R8).
 

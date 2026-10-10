@@ -421,6 +421,46 @@ export function lightScope(changedFiles: string[], exists: (p: string) => boolea
     const tests = new Set<string>();
     for (const file of changedFiles) {
         files.push(file);
+        // Task 1142 R2: Plugin prose changes map to their structure tests.
+        // A changed path under plugins/sp/{skills,commands,agents,references}/** adds
+        // plugins/sp/tests/skill-structure.test.ts to the plugins/sp workspace's tests.
+        // Under plugins/sp/commands/** it also adds plugins/sp/tests/flag-contract-parity.test.ts.
+        // A changed plugins/sp/scripts/<x>.ts maps to plugins/sp/tests/<x>.test.ts when that file exists.
+        if (file.startsWith('plugins/sp/')) {
+            const rest = file.slice('plugins/sp/'.length);
+            let matched = false;
+            if (
+                rest.startsWith('skills/') ||
+                rest.startsWith('commands/') ||
+                rest.startsWith('agents/') ||
+                rest.startsWith('references/')
+            ) {
+                const structTest = 'plugins/sp/tests/skill-structure.test.ts';
+                if (exists(structTest)) {
+                    tests.add(structTest);
+                    matched = true;
+                }
+                if (rest.startsWith('commands/')) {
+                    const flagTest = 'plugins/sp/tests/flag-contract-parity.test.ts';
+                    if (exists(flagTest)) {
+                        tests.add(flagTest);
+                        matched = true;
+                    }
+                }
+            } else if (rest.startsWith('scripts/')) {
+                const scriptBase = rest.slice('scripts/'.length).replace(/\.tsx?$/, '');
+                const candidate = `plugins/sp/tests/${scriptBase}.test.ts`;
+                if (exists(candidate)) {
+                    tests.add(candidate);
+                    matched = true;
+                }
+            } else if (rest.startsWith('tests/') && TEST_FILE_PATTERN.test(rest)) {
+                tests.add(file);
+                matched = true;
+            }
+            if (matched) workspaces.add('plugins/sp');
+            continue;
+        }
         const workspace = workspaceOf(file, exists);
         if (workspace === null) continue;
         workspaces.add(workspace);
@@ -434,6 +474,9 @@ export function lightScope(changedFiles: string[], exists: (p: string) => boolea
     }
     return { files, workspaces: [...workspaces].sort(), tests: [...tests].sort() };
 }
+
+/** Task 1142: alias for lightScope. */
+export const scopeFromFiles = lightScope;
 
 /**
  * Quote one argument for `sh -c`. Changed-file names come from the working tree (untracked files
@@ -475,6 +518,10 @@ export function planLightChecks(
     const plans: LightCheckPlan[] = [];
     if (scope.files.length > 0) {
         plans.push({ id: 'format-lint:changed', cmd: `bunx biome check ${scope.files.map(shQuote).join(' ')}` });
+        // Task 1142 R1: The light tier covers the cheap failure classes.
+        // Appends rules:pre and rules:post after the biome step whenever scope is non-empty.
+        plans.push({ id: 'rules:pre', cmd: 'bun run test-pre-check' });
+        plans.push({ id: 'rules:post', cmd: 'bun run test-post-check' });
     }
     for (const workspace of scope.workspaces) {
         if (hasTypecheck(workspace)) {

@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.70.0
+version: 1.71.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-10-07
+updated_at: 2026-10-10
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -942,8 +942,11 @@ verified(D) + confined evidence write tagged D      → verified(D)
 any state write|may-write or current digest != D    → invalidated
 ```
 
-The task pipeline now implements this flow (task 0703): `verify.onEnter:0` is the midpoint
-`proof.fingerprint` compare (`expect: ${vars.proofDigest}`), the agent action is
+The task pipeline now implements this flow (task 0703): `D` is captured at `test` entry, and that same
+`proof.fingerprint` compare (`expect: ${vars.proofDigest}`) brackets the `review`, `verify` and
+`record` entries, so a state that drifted from the certified digest fails before its dispatch rather
+than after — no review or verify budget is spent on a tree the gate never certified. `verify.onEnter:0`
+is the midpoint compare, the agent action is
 `/sp:dev-verify ... --fix none` (`stateEffect: read`), a repairable non-PASS routes once through
 the bounded `verify → test-fix` hop (budget shared with the quality gate), and `test-recheck`
 re-captures the digest so the re-entered chain certifies a fresh state. The verdict artifact

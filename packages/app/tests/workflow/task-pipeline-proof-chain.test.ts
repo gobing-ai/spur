@@ -331,7 +331,9 @@ describe('task-pipeline proof-input completeness and honest review evidence (tas
     test('the review stage writes a run-scoped completion marker after its agent (R4)', () => {
         const review = DEF.states.find((s) => s.id === 'review');
         const kinds = (review?.onEnter ?? []).map((a) => a.kind);
-        expect(kinds).toEqual(['agent.run', 'shell']);
+        // 1135 R4: the review-entry digest compare precedes the dispatch, then the agent, then
+        // the completion marker — the marker still follows the agent it certifies.
+        expect(kinds).toEqual(['proof.fingerprint', 'agent.run', 'shell']);
         const marker = shellCommandsOf('review').find((c) => c.includes('-review-proof.digest'));
         expect(marker).toBeDefined();
         expect(marker).toContain('$__runId-review-proof.digest');

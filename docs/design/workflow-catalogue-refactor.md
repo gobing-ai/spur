@@ -3,7 +3,7 @@ kind: design
 title: "Workflow catalogue refactor — measured, decision-explicit, check-deduplicated, fleet-optional"
 status: implemented
 created_at: 2026-09-23
-updated_at: 2026-10-07
+updated_at: 2026-10-10
 related: [D64, "0937", "0938", "0939", "0940", "0941", "0942", "0943", "0944", "0945", "0946", "0976", "1111"]
 tags: [system, D64, workflow]
 ---
@@ -71,7 +71,7 @@ One check primitive with two tiers, replacing ad-hoc gate invocations across sta
 
 | Tier | When | Scope | Reuse |
 | --- | --- | --- | --- |
-| `light` (accumulative) | after each implement/fix edit | changed files: format, lint, typecheck of touched workspaces, related tests | skip any sub-check whose receipt fingerprint matches |
+| `light` (accumulative) | after each implement/fix edit | changed files: format, lint, typecheck of touched workspaces, related tests, plus the `test-pre-check` and `test-post-check` rule presets | skip any sub-check whose receipt fingerprint matches |
 | `full` (comprehensive) | once at the task quality boundary (`test`) | task-local chain = today's `bun run spur-check` | review/verify/record read the receipt; never re-run |
 
 **Receipt.** `.spur/run/<wbs>-check-receipt.json`, schema `check-receipt/v1`:

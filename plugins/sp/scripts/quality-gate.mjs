@@ -30141,6 +30141,37 @@ function lightScope(changedFiles, exists = existsSync) {
   const tests = new Set;
   for (const file2 of changedFiles) {
     files.push(file2);
+    if (file2.startsWith("plugins/sp/")) {
+      const rest2 = file2.slice("plugins/sp/".length);
+      let matched = false;
+      if (rest2.startsWith("skills/") || rest2.startsWith("commands/") || rest2.startsWith("agents/") || rest2.startsWith("references/")) {
+        const structTest = "plugins/sp/tests/skill-structure.test.ts";
+        if (exists(structTest)) {
+          tests.add(structTest);
+          matched = true;
+        }
+        if (rest2.startsWith("commands/")) {
+          const flagTest = "plugins/sp/tests/flag-contract-parity.test.ts";
+          if (exists(flagTest)) {
+            tests.add(flagTest);
+            matched = true;
+          }
+        }
+      } else if (rest2.startsWith("scripts/")) {
+        const scriptBase = rest2.slice("scripts/".length).replace(/\.tsx?$/, "");
+        const candidate = `plugins/sp/tests/${scriptBase}.test.ts`;
+        if (exists(candidate)) {
+          tests.add(candidate);
+          matched = true;
+        }
+      } else if (rest2.startsWith("tests/") && TEST_FILE_PATTERN.test(rest2)) {
+        tests.add(file2);
+        matched = true;
+      }
+      if (matched)
+        workspaces2.add("plugins/sp");
+      continue;
+    }
     const workspace = workspaceOf(file2, exists);
     if (workspace === null)
       continue;
@@ -30156,6 +30187,7 @@ function lightScope(changedFiles, exists = existsSync) {
   }
   return { files, workspaces: [...workspaces2].sort(), tests: [...tests].sort() };
 }
+var scopeFromFiles = lightScope;
 function shQuote(arg) {
   return /^[\w./@+-]+$/.test(arg) ? arg : `'${arg.replace(/'/g, `'\\''`)}'`;
 }
@@ -30171,6 +30203,8 @@ function planLightChecks(scope, hasTypecheck = workspaceHasTypecheck) {
   const plans = [];
   if (scope.files.length > 0) {
     plans.push({ id: "format-lint:changed", cmd: `bunx biome check ${scope.files.map(shQuote).join(" ")}` });
+    plans.push({ id: "rules:pre", cmd: "bun run test-pre-check" });
+    plans.push({ id: "rules:post", cmd: "bun run test-post-check" });
   }
   for (const workspace of scope.workspaces) {
     if (hasTypecheck(workspace)) {
@@ -30754,6 +30788,7 @@ export {
   workspaceHasTypecheck,
   tailLines,
   shQuote,
+  scopeFromFiles,
   scanCoverageShortfalls,
   runShellCommand,
   runQualityGate,
