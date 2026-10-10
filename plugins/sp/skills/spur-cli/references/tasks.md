@@ -23,7 +23,7 @@ does what*, this skill.
 Start from the WBS, not the corpus layout:
 
 ```bash
-spur task show <wbs> --json  # metadata + full content + filePath
+spur task show <wbs> --json  # {wbs, name, status, frontmatter, content, filePath}; priority etc. under .frontmatter
 spur task get  <wbs> --json  # alias of `show` — same output, no separate code path
 spur task path <wbs> --json  # absolute path only
 ```
@@ -276,7 +276,7 @@ corpus, or with a WBS for one task:
 
 ```bash
 spur task check --json              # whole corpus
-spur task check 0040 --json         # one task
+spur task check 0040 --json         # one task; output is an array — read .[0].pass
 spur task check --strict --json     # elevate ALL warnings to failures
 spur task check 0040 --as done        # evaluate as the done row (lifecycle target, F92 R2)
 spur task check 0040 --strict-core    # compatibility alias; not the done gate (use --as done)
