@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import { aggregateBatchVerdicts, classifyTaskOutcome, deriveVerdict } from '../../src/services/task-verdict';
+import {
+    aggregateBatchVerdicts,
+    classifyTaskOutcome,
+    deriveVerdict,
+    injectEarnedConfidenceRow,
+} from '../../src/services/task-verdict';
 
 const MET_ANSWER = [
     '| Req | Status | Evidence |',
@@ -141,7 +146,9 @@ describe('deriveVerdict', () => {
     test('a heading closes the checks table — SECUA rows never become checks (1003)', () => {
         const answer = `${MET_ANSWER}\n### Checks\n| Check | Status | Evidence |\n| --- | --- | --- |\n| regression | pass | bun test exited 0 |\n### SECUA Review\n| Priority | Dimension | Location | Finding |\n| --- | --- | --- | --- |\n| P2 | Correctness | service.ts:1 | Fixed |`;
         const result = deriveVerdict(answer, true);
-        expect(result.checks.filter((check) => check.name !== 'spur task check')).toEqual([
+        expect(
+            result.checks.filter((check) => check.name !== 'spur task check' && check.name !== 'confidence'),
+        ).toEqual([
             { name: 'lint', status: 'pass', evidence: 'biome clean' },
             { name: 'regression', status: 'pass', evidence: 'bun test exited 0' },
         ]);
@@ -682,5 +689,93 @@ describe('hollow MET evidence (0721)', () => {
         expect(result.acceptanceCriteria).toHaveLength(1);
         expect(result.checks.find((c) => c.name === 'ac-row-dropped')).toBeUndefined();
         expect(result.verdict).toBe('PASS');
+    });
+});
+
+describe('confidence check row (1156)', () => {
+    test('derivation carries a pass row for an earned HIGH level', () => {
+        const result = deriveVerdict(`Confidence: HIGH\n${MET_ANSWER}`, true);
+        const row = result.checks.find((c) => c.name === 'confidence');
+        expect(row?.status).toBe('pass');
+        expect(row?.evidence).toContain('HIGH');
+        expect(row?.evidence).toContain('2/2 rows MET');
+    });
+
+    test('warn when the level is absent or LOW — the same policy the completion guards refuse', () => {
+        expect(deriveVerdict(MET_ANSWER, true).checks.find((c) => c.name === 'confidence')?.status).toBe('warn');
+        expect(
+            deriveVerdict(`Confidence: LOW\n${MET_ANSWER}`, true).checks.find((c) => c.name === 'confidence')?.status,
+        ).toBe('warn');
+    });
+
+    test('warn when a MET row hedges its evidence, even at HIGH', () => {
+        const hedged = [
+            'Confidence: HIGH',
+            '| Req | Status | Evidence |',
+            '| --- | --- | --- |',
+            '| R1 | MET | `src/foo.ts:1` probably fine |',
+        ].join('\n');
+        const row = deriveVerdict(hedged, true).checks.find((c) => c.name === 'confidence');
+        expect(row?.status).toBe('warn');
+        expect(row?.evidence).toContain('hedged');
+    });
+
+    test('warn when a row is not MET', () => {
+        const row = deriveVerdict(`Confidence: HIGH\n${PARTIAL_ANSWER}`, true).checks.find(
+            (c) => c.name === 'confidence',
+        );
+        expect(row?.status).toBe('warn');
+        expect(row?.evidence).toContain('not MET: R2');
+    });
+
+    test('the row is never duplicated when a derivation runs twice', () => {
+        const twice = deriveVerdict(`Confidence: HIGH\n${MET_ANSWER}`, true);
+        const rows = twice.checks.filter((c) => c.name === 'confidence');
+        expect(rows.length).toBe(1);
+    });
+
+    test('injectEarnedConfidenceRow adds an earned pass row and preserves the rest', () => {
+        const earned = JSON.stringify({
+            wbs: '0001',
+            verdict: 'PASS',
+            confidence: 'MEDIUM',
+            requirements: [{ id: 'R1', status: 'MET', evidence: 'verified' }],
+            checks: [{ name: 'Security', status: 'P4', evidence: 'clean' }],
+        });
+        const injected = JSON.parse(injectEarnedConfidenceRow(earned)) as {
+            verdict: string;
+            checks: Array<{ name: string; status: string; evidence: string }>;
+        };
+        expect(injected.verdict).toBe('PASS');
+        expect(injected.checks.find((c) => c.name === 'Security')).toBeDefined();
+        expect(injected.checks.find((c) => c.name === 'confidence')?.status).toBe('pass');
+    });
+
+    test('injectEarnedConfidenceRow leaves the bytes identical when it cannot earn a pass', () => {
+        const unparseable = 'not json at all';
+        expect(injectEarnedConfidenceRow(unparseable)).toBe(unparseable);
+
+        const low = JSON.stringify({
+            verdict: 'PARTIAL',
+            confidence: 'LOW',
+            requirements: [{ id: 'R1', status: 'MET', evidence: 'x' }],
+        });
+        expect(injectEarnedConfidenceRow(low)).toBe(low);
+
+        const already = JSON.stringify({
+            confidence: 'HIGH',
+            requirements: [{ id: 'R1', status: 'MET', evidence: 'x' }],
+            checks: [{ name: 'confidence', status: 'warn', evidence: 'kept' }],
+        });
+        expect(injectEarnedConfidenceRow(already)).toBe(already);
+
+        const notMet = JSON.stringify({
+            confidence: 'HIGH',
+            requirements: [{ id: 'R1', status: 'UNMET', evidence: 'x' }],
+        });
+        expect(injectEarnedConfidenceRow(notMet)).toBe(notMet);
+
+        expect(injectEarnedConfidenceRow('42')).toBe('42');
+        expect(injectEarnedConfidenceRow('[1,2]')).toBe('[1,2]');
     });
 });

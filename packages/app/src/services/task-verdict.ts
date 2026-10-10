@@ -7,7 +7,7 @@
 
 import type { TaskStatus } from '@gobing-ai/spur-domain/schema';
 import type { VerdictCheck, VerdictRequirement, VerifyVerdict } from './task-record';
-import { extractAnswerConfidence, type VerdictConfidence } from './verify-answer-lint';
+import { extractAnswerConfidence, firstHedgedPhrase, type VerdictConfidence } from './verify-answer-lint';
 import { aggregateVerifyVerdict } from './verify-verdict';
 
 // ─── Types ──────────────────────────────────────────────────────────────
@@ -36,6 +36,73 @@ export interface VerdictAcceptanceCriteria {
 // ─── Derivation ─────────────────────────────────────────────────────────
 
 /**
+ * 1156: the confidence row belongs to the DERIVATION, not to a pipeline shell that runs after it.
+ * Until now the row was added by that shell (task-pipeline v6) and by hand on the inline path, so
+ * any re-derivation — or any later rewrite of the run artifact — silently dropped it, and the
+ * durable plane (a byte copy of the run artifact at record time) recorded the level with no way to
+ * re-check it. Measured 2026-10-10: 0 of 50 durable verdict artifacts carried the row.
+ *
+ * Status mirrors the v6 policy exactly, so an artifact can never disagree with the completion
+ * guards: `pass` only when the level is HIGH/MEDIUM *and* the rows earn it (every row MET/N-A, no
+ * hedged MET cell); `warn` otherwise. A `warn` row aggregates to PARTIAL in the done guard — which
+ * is what those guards already refuse — and the pipeline's ack-aware shell replaces the row with
+ * `pass` when the operator acknowledged a LOW level.
+ */
+export function confidenceCheckRow(
+    confidence: VerdictConfidence | undefined,
+    requirements: VerdictRequirement[],
+    acceptanceCriteria: VerdictAcceptanceCriteria[] | undefined,
+): VerdictCheck {
+    const rows: Array<{ id: string; status: string; evidence?: string }> = [
+        ...requirements,
+        ...(acceptanceCriteria ?? []),
+    ];
+    const notMet = rows.filter((r) => r.status !== 'MET' && r.status !== 'N/A');
+    const hedged = rows
+        .filter((r) => r.status === 'MET')
+        .map((r) => firstHedgedPhrase(r.evidence ?? ''))
+        .find((phrase) => phrase !== null);
+    const level = confidence ?? 'LOW';
+    const earned = confidence !== undefined && level !== 'LOW' && notMet.length === 0 && hedged === undefined;
+    const basis =
+        `${confidence === undefined ? 'LOW (absent from the answer)' : level} — ${rows.length - notMet.length}/${rows.length} rows MET` +
+        (notMet.length > 0 ? ` (not MET: ${notMet.map((r) => r.id).join(', ')})` : '') +
+        (hedged !== undefined ? `; hedged MET evidence: "${hedged}"` : '');
+    return { name: 'confidence', status: earned ? 'pass' : 'warn', evidence: basis };
+}
+
+/**
+ * 1156: the durable plane must carry the verification of the level, not only the level. The mirror
+ * is a byte copy, so an artifact whose row was dropped before record keeps the gap forever.
+ *
+ * Injects ONLY an earned `pass` row: a `warn` row would aggregate to PARTIAL and could contradict a
+ * stored `pass`, and a LOW/absent level is the completion guards' decision (plus the operator's ack)
+ * rather than something retention may restate. Anything else — unparseable bytes, an existing row,
+ * a level retention cannot earn — is returned byte-identical.
+ */
+export function injectEarnedConfidenceRow(text: string): string {
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(text);
+    } catch {
+        return text;
+    }
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return text;
+    const artifact = parsed as {
+        confidence?: unknown;
+        checks?: unknown;
+        requirements?: VerdictRequirement[];
+        acceptanceCriteria?: VerdictAcceptanceCriteria[];
+    };
+    const checks = Array.isArray(artifact.checks) ? (artifact.checks as VerdictCheck[]) : [];
+    if (checks.some((c) => c !== null && typeof c === 'object' && c.name === 'confidence')) return text;
+    const level = typeof artifact.confidence === 'string' ? (artifact.confidence as VerdictConfidence) : undefined;
+    const row = confidenceCheckRow(level, artifact.requirements ?? [], artifact.acceptanceCriteria);
+    if (row.status !== 'pass') return text;
+    return `${JSON.stringify({ ...artifact, checks: [...checks, row] }, null, 4)}\n`;
+}
+
+/**
  * Derive a verdict from verify answer text and `spur task check` exit status.
  *
  * Priority order:
@@ -50,6 +117,11 @@ export function deriveVerdict(answerText: AnswerText, taskCheckPassed: boolean):
     const acceptanceCriteria = applyAcceptanceCriteriaEvidenceRule(parsedAc.rows);
     const checks = extractChecks(answerText, taskCheckPassed, requirements, acceptanceCriteria, parsedAc.dropped);
     const confidence = extractAnswerConfidence(answerText);
+    // 1156: the row travels with the derivation (see {@link confidenceCheckRow}).
+    const checksWithConfidence = [
+        ...checks.filter((c) => c.name !== 'confidence'),
+        confidenceCheckRow(confidence, requirements, acceptanceCriteria),
+    ];
 
     // If we couldn't parse any requirements, the answer is unparseable.
     if (requirements.length === 0) {
@@ -58,7 +130,7 @@ export function deriveVerdict(answerText: AnswerText, taskCheckPassed: boolean):
             ...(confidence !== undefined ? { confidence } : {}),
             requirements,
             acceptanceCriteria,
-            checks,
+            checks: checksWithConfidence,
         };
     }
 
@@ -79,7 +151,7 @@ export function deriveVerdict(answerText: AnswerText, taskCheckPassed: boolean):
         ...(confidence !== undefined ? { confidence } : {}),
         requirements,
         acceptanceCriteria,
-        checks,
+        checks: checksWithConfidence,
     };
 }
 
