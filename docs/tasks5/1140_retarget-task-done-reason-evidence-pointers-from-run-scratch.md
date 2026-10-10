@@ -4,7 +4,7 @@ name: Retarget task done_reason evidence pointers from run scratch to durable ev
 status: done
 template: standard
 created_at: 2026-10-09T16:43:56.946Z
-updated_at: "2026-10-09T23:09:43.641Z"
+updated_at: "2026-10-09T23:59:16.068Z"
 
 ac_numbering: task-local
 ac_altitude: task-local
@@ -177,20 +177,20 @@ Rationale: ADR-131 makes `.spur/run/` disposable, so a `done_reason` pointer mus
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/anchor-qualifier.ts:212` retargets the flat and subpath pointer to `.spur/memory/evidence/<wbs>-verdict.json` when the copy exists; only the matched substring changes. Corpus: the 17 durable rows in `docs/tasks5/*.md`; CLI e2e `apps/cli/tests/commands/task.test.ts:3714`. |
-| R2 | MET | `packages/app/src/services/anchor-qualifier.ts:212` falls back to `tracked Testing section (scratch verdict not retained)` (`:175`) when no durable copy exists and Testing is non-empty, and otherwise returns the value byte-identical with `unresolved` set; the corpus shows 3 tracked-testing rows (0494, 0497, 0562) and 0 unresolved. |
-| R3 | MET | The row carries `kind` (`packages/app/src/services/anchor-qualifier.ts:163`) and the file report carries `doneReasonUnresolved` (`:467`); `apps/cli/src/commands/task.ts:1090` surfaces both in JSON and human output. `--dry-run` wrote nothing (dry-run counts before apply), `--wbs` scoped every applied call, and no noun/verb/flag was added. |
-| R4 | MET | Absolute normalization runs first (`normalizeDoneReason` then the retarget in one write, `packages/app/src/services/anchor-qualifier.ts:504`); the second dry run after apply reports 0 `doneReasons` rows and 0 unresolved. |
-| R5 | MET | Only `done_reason` changed semantically; sections, History and every other frontmatter field are byte-identical, and 0490/0491 prose pointers were never touched. The sanctioned `updateFrontmatter` write pipeline stamps `updated_at` at its write step for every corpus write — see the named deviation in Testing. |
-| R6 | MET | The pass ran over this repository: `git diff --stat -- docs/` = 20 files, one `done_reason` line each, 0 unresolved, committed with this task. |
+| R1 | MET | `packages/app/src/services/anchor-qualifier.ts:212` retargets flat and subpath pointers (`:172` pattern) to `.spur/memory/evidence/<wbs>-verdict.json` via substring replace; `packages/app/tests/services/anchor-qualifier.test.ts:266` (36 pass this run) |
+| R2 | MET | `packages/app/src/services/anchor-qualifier.ts:224` falls back to `TRACKED_TESTING_POINTER` (`:175`), else leaves value and sets `unresolved`; `apps/cli/tests/commands/task.test.ts:3714` (5 migrate-anchors tests pass this run) |
+| R3 | MET | `DoneReasonKind` at `packages/app/src/services/anchor-qualifier.ts:163`, `doneReasonUnresolved` at `packages/app/src/services/anchor-qualifier.ts:467`; CLI JSON/human at `apps/cli/src/commands/task.ts:1090`; no new noun/verb/flag |
+| R4 | MET | repo dry run this run: `spur task migrate-anchors --dry-run --json` → 0 done_reason rows, 0 unresolved (post-apply idempotency) |
+| R5 | MET | `rg '^done_reason:.*\.spur/run/' docs/tasks*` this run → only 0490/0491 spike-dir prose remains, untouched |
+| R6 | MET | commit d4bf507ce rewrote 20 task files' done_reason; repo-wide dry run now 0 rows / 0 unresolved |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — a scratch verdict pointer is retargeted to durable evidence (req: R1, R5) | MET | test | `packages/app/tests/services/anchor-qualifier.test.ts:266`; `apps/cli/tests/commands/task.test.ts:3714`; corpus diff for 1046 |
-| AC2 — a subpath verdict pointer is normalized (req: R1) | MET | test | unit case for `.spur/run/1086/verdict.json` in `packages/app/tests/services/anchor-qualifier.test.ts:266`; corpus row 1086 |
-| AC3 — a pointer with no durable copy falls back to tracked Testing (req: R2) | MET | test | pass-level case in `packages/app/tests/services/anchor-qualifier.test.ts:487`; corpus rows 0494/0497/0562 |
-| AC4 — a pointer with neither owner is reported, not rewritten (req: R2, R3) | MET | test | `apps/cli/tests/commands/task.test.ts:3714` asserts `unresolvedReasons` and byte-identical bytes |
-| AC5 — dry-run, idempotency and prose safety on this repository (req: R3, R4, R5, R6) | MET | command | pre-apply dry run: 20 rows / 0 unresolved; post-apply dry run: 0 rows; 0490/0491 byte-identical |
+| AC1 — a scratch verdict pointer is retargeted to durable evidence (req: R1, R5) | MET | test | `packages/app/tests/services/anchor-qualifier.test.ts:266`; `apps/cli/tests/commands/task.test.ts:3714` |
+| AC2 — a subpath verdict pointer is normalized (req: R1) | MET | test | `packages/app/tests/services/anchor-qualifier.test.ts:266` |
+| AC3 — a pointer with no durable copy falls back to tracked Testing (req: R2) | MET | test | `packages/app/tests/services/anchor-qualifier.test.ts:487` |
+| AC4 — a pointer with neither owner is reported, not rewritten (req: R2, R3) | MET | test | `apps/cli/tests/commands/task.test.ts:3714` |
+| AC5 — dry-run, idempotency and prose safety on this repository (req: R3, R4, R5, R6) | MET | command | `spur task migrate-anchors --dry-run --json` → 0 rows / 0 unresolved; 0490/0491 unchanged |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
