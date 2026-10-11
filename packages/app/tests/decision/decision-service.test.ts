@@ -2,6 +2,7 @@ import { afterAll, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { getEnvVar, removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
 
 import { getDecisionService } from '../../src/decision/decision-service';
 
@@ -90,5 +91,74 @@ describe('DecisionService (task 1092, design §3.3/§3.6)', () => {
         expect(status.ok).toBe(false);
         expect(status.errors.join(' ')).toContain('nope-missing');
         await expect(service.decide('scoped-maker', { x: 1 }, { maker: 'nope-missing' })).rejects.toThrow();
+    });
+});
+
+/** A catalog naming the hosted maker, so hub load itself gates on registration. */
+const CLEF_CATALOG = `
+version: 1
+decisions:
+    hosted-pick:
+        type: choice
+        maker: clef
+        criteria:
+            fast: go fast
+            slow: go slow
+        fallback: slow
+`;
+
+/** Set env vars for one test body, restoring the process environment afterwards. */
+const withEnv = async (vars: Record<string, string>, run: () => Promise<void>): Promise<void> => {
+    const previous = Object.fromEntries(Object.keys(vars).map((key) => [key, getEnvVar(key)]));
+    for (const [key, value] of Object.entries(vars)) setEnvVar(key, value);
+    try {
+        await run();
+    } finally {
+        for (const [key, value] of Object.entries(previous)) {
+            if (value === undefined) removeEnvVar(key);
+            else setEnvVar(key, value);
+        }
+    }
+};
+
+describe('DecisionService — hosted clef maker (design §3.6)', () => {
+    test('without Cloudflare credentials the maker is unregistered and a catalog naming it fails closed', async () => {
+        await withEnv({}, async () => {
+            removeEnvVar('CLOUDFLARE_ACCOUNT_ID');
+            removeEnvVar('CLOUDFLARE_AUTH_TOKEN');
+            const root = await newRoot();
+            roots.push(root);
+            await writeCatalog(root, 'clef.yaml', CLEF_CATALOG);
+            const service = await getDecisionService(null as never, root, join(root, 'shared'));
+            const status = service.status();
+            expect(status.registeredMakers).not.toContain('clef');
+            // A missing backend is reported, never served as a silent fallback.
+            expect(status.ok).toBe(false);
+            expect(status.errors.join(' ')).toContain("maker 'clef' that is not registered");
+            await expect(service.decide('hosted-pick', {})).rejects.toThrow(/hosted-pick/);
+        });
+    });
+
+    test('credentials register the maker, load the catalog, and a driver failure falls back to the declared value', async () => {
+        // A non-hex account id makes createClefDriver reject at construction: the
+        // fallback path is exercised with no socket, proving env -> driver -> hub wiring.
+        await withEnv({ CLOUDFLARE_ACCOUNT_ID: 'not-a-hex-account', CLOUDFLARE_AUTH_TOKEN: 'cf-token' }, async () => {
+            const root = await newRoot();
+            roots.push(root);
+            await writeCatalog(root, 'clef.yaml', CLEF_CATALOG);
+            const service = await getDecisionService(null as never, root, join(root, 'shared'));
+            expect(service.status().registeredMakers).toContain('clef');
+            expect(service.status().ok).toBe(true);
+            expect(service.describe('hosted-pick').effectiveMaker).toEqual({
+                name: 'clef',
+                source: 'catalog-decision',
+            });
+            await expect(service.decide('hosted-pick', {})).resolves.toMatchObject({
+                value: 'slow',
+                source: 'default',
+                reason: 'no-backend',
+                maker: 'clef',
+            });
+        });
     });
 });

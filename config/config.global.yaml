@@ -157,8 +157,10 @@ workflows:
 # project-relative); the first layer wins per file basename (ADR-113 style).
 # `maker` selects the default DecisionMaker for every decision point, and
 # `makers` overrides it per decision id. Built-in makers: typesafe, fm-local,
-# laya-local (laya-local needs Apple Silicon). An unregistered name is a config
-# error, never a silent fallback. Inspect the effective choice with
+# laya-local (laya-local needs Apple Silicon) and clef (hosted Cloudflare
+# Workers AI, registered only when CLOUDFLARE_ACCOUNT_ID and
+# CLOUDFLARE_AUTH_TOKEN are both set). An unregistered name is a config error,
+# never a silent fallback. Inspect the effective choice with
 # `spur decision status`. `init` never overwrites this file — until you add the
 # keys, the shipped catalog's maker applies (see `status`).
 decisions:

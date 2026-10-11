@@ -3,7 +3,7 @@ kind: design
 title: Decision catalogs and the `spur decision` noun
 status: proposed
 created_at: 2026-10-06
-updated_at: 2026-10-06
+updated_at: 2026-10-11
 related: [ADR-134, ADR-125, ADR-113, feature P, feature P1, workflow-catalogue-refactor.md]
 tags: [decision, workflow, cli, config]
 ---
@@ -209,6 +209,27 @@ The effective maker is resolved per call. The first source that is set wins:
 - **Existing configs:** `init` never overwrites an existing global config. Operators add the keys
   by hand, and until then the catalog maker applies, which `status` shows as `catalog-*`.
 
+### 3.7 Registered makers
+
+The registry holds the three upstream built-ins plus Spur's own `clef` maker: the hosted
+Cloudflare Workers AI backend from `@gobing-ai/ts-decision-clef`, wrapped as
+`createDecisionMaker({ driver: createClefDriver(creds) })`.
+
+- **Credentials are environment-only:** `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_AUTH_TOKEN`. The
+  driver itself never reads the environment; `DecisionService` passes the values explicitly.
+- **Registration is gated on both variables being set** (non-empty). Unlike `laya-local`, which
+  registers unconditionally because the registry cannot detect Apple Silicon, the environment can
+  answer whether this backend exists on the machine. An ungated maker would report itself in
+  `status.registeredMakers` while failing every call, so a `decisions.maker: clef` typo on a
+  machine without credentials would degrade every decision to a silent `no-backend` fallback that
+  `status` reads as healthy. Gated, it is a loud config error: `status` exits 1, and `run --maker
+  clef` exits 1 before any backend call (§3.6).
+- **Model:** the driver defaults to `clef-flash`; a catalog `model` (or an `ask({ model })` call)
+  selects `clef` instead. Per-decision model selection in config stays out of scope (§1).
+- **Failure taxonomy:** a malformed account id or an unreachable host is a driver error, so the
+  hub maps it to the declared fallback with `reason: no-backend` (construction) or per the error
+  taxonomy (transport). It never throws and never escapes the fallback contract.
+
 ## 4. Contract and compatibility
 
 - **Workflows:** no shipped workflow or `decide` behavior changes in P (feature P R10).
@@ -219,8 +240,9 @@ The effective maker is resolved per call. The first source that is set wins:
 - **Config:** the whole `decisions` section is optional and additive, and an absent section is
   valid. The shipped `config/config.global.yaml` documents it.
   Operators may delete the absolute `workflows.paths` entry, since the shared layer covers it.
-- **Dependency:** `@gobing-ai/ts-ai-decision` is added to `packages/app` through `catalog:`. It
-  transitively brings `ts-decision-fm` and `ts-laya-mlx`.
+- **Dependency:** `@gobing-ai/ts-ai-decision` and `@gobing-ai/ts-decision-clef` are added to
+  `packages/app` through `catalog:`. `ts-ai-decision` transitively brings `ts-decision-fm` and
+  `ts-laya-mlx`.
 - **Plugin standalone rule:** `plugins/sp` scripts must not value-import the package. The inline
   driver reaches it through the app service only, as `--decide` does today.
 

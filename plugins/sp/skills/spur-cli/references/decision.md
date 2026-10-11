@@ -1,6 +1,6 @@
 ---
 name: spur-cli-decision
-description: "spur-cli noun reference: operate `spur decision` as the read/serve surface over the decision catalog - list registered decisions, show one served contract (parameters, criteria vocabulary, effective maker), run a decision to a served outcome (never writes a workflow resultFile), and status the catalog layers. Backed by @gobing-ai/ts-ai-decision 0.5.16 hub; offline by default via the built-in `typesafe` maker. Introduced by task 1093."
+description: "spur-cli noun reference: operate `spur decision` as the read/serve surface over the decision catalog - list registered decisions, show one served contract (parameters, criteria vocabulary, effective maker), run a decision to a served outcome (never writes a workflow resultFile), and status the catalog layers. Backed by @gobing-ai/ts-ai-decision 0.5.22 hub; offline by default via the built-in `typesafe` maker. Introduced by task 1093."
 see_also:
   - spur-cli
 ---
@@ -79,6 +79,13 @@ exist there). The final `catalog-default` maker is the hub built-in `typesafe` �
 without a configured backend still produce deterministic closed-vocabulary outcomes, which is why
 `run` is usable in tests and scripts with no model access.
 
+**Available makers:** the three upstream built-ins (`typesafe`, `fm-local`, `laya-local`) plus
+Spur's hosted `clef` (Cloudflare Workers AI via `@gobing-ai/ts-decision-clef`). `clef` registers
+only when both `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_AUTH_TOKEN` are set in the environment;
+without them it is absent from `registeredMakers`, so naming it in config or `--maker` is a config
+error, never a silent fallback. Its model defaults to `clef-flash` (a catalog `model` selects
+`clef`).
+
 ## Examples
 
 ```bash
@@ -93,6 +100,6 @@ spur decision status --json | jq '.loadErrors'      # audit catalog health
 ## References
 
 - Design: `docs/design/decision-catalog.md` (§2 catalog authoring, §3.4 CLI surface)
-- Hub: `@gobing-ai/ts-ai-decision` 0.5.16 (`DecisionService`, catalog schema, maker registry)
+- Hub: `@gobing-ai/ts-ai-decision` 0.5.22 (`DecisionService`, catalog schema, maker registry)
 - App service: `packages/app/src/decision/decision-service.ts`
 - Shipped catalogs: `config/decisions/*.yaml`

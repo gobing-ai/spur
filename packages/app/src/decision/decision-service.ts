@@ -11,6 +11,8 @@ import {
     UnknownDecisionError,
     UnknownDecisionMakerError,
 } from '@gobing-ai/ts-ai-decision';
+import { createDecisionMaker } from '@gobing-ai/ts-ai-runner';
+import { type ClefDriverOptions, createClefDriver } from '@gobing-ai/ts-decision-clef';
 import { redactAndBound } from '../observability/agent-execution';
 import type { SystemEventBus } from '../services/system-event-tap';
 import {
@@ -122,7 +124,8 @@ export type ServedDecision = DecisionResult & { makerSource: DecisionMakerSource
 /**
  * One decision service over one cached hub (design §3.3). The service resolves
  * catalogs, builds `createDecisionHub`-equivalent state with the default maker
- * registry and caches the result per process. `list`/`describe`/`status` never
+ * registry plus the environment-gated `clef` maker (§3.6) and caches the result
+ * per process. `list`/`describe`/`status` never
  * construct a maker; makers are built lazily by the registry on first
  * `decide`. The service never reads `workflows.decideDecisionMaker` — that
  * switch governs only the workflow decide action, while `spur decision run`
@@ -150,6 +153,10 @@ export class DecisionService {
                 },
             },
         });
+        const clef = clefCredentials(env);
+        if (clef !== undefined) {
+            this.registry.register('clef', () => createDecisionMaker({ driver: createClefDriver(clef) }));
+        }
         this.hub = new DecisionHub({ registry: this.registry });
         // Feed the hub one catalog at a time, in layer order. An id declared by
         // an earlier winning file is stripped from every LATER file before load
@@ -466,6 +473,19 @@ export class DecisionService {
 
 /** Per-process cache of DecisionService instances, keyed by cwd + shared root (design §3.3). */
 const serviceCache = new Map<string, Promise<DecisionService>>();
+
+/**
+ * Cloudflare credentials for the hosted `clef` maker (design §3.6), read from
+ * the environment only. `undefined` — an absent or empty variable — means the
+ * maker is not registered at all: a machine without creds must report `clef` as
+ * unregistered (a loud config error), never serve a silent per-call
+ * `no-backend` fallback that `status` reads as healthy.
+ */
+function clefCredentials(env: Record<string, string | undefined>): ClefDriverOptions | undefined {
+    const { CLOUDFLARE_ACCOUNT_ID: accountId, CLOUDFLARE_AUTH_TOKEN: apiToken } = env;
+    if (accountId === undefined || accountId === '' || apiToken === undefined || apiToken === '') return undefined;
+    return { accountId, apiToken };
+}
 
 /**
  * Task 1113 R5 digest source: the implicit `instructions` channel when it is a
