@@ -154,6 +154,10 @@ transitions:
 `;
 
 describe('spur workflow run --from / --from-run (task 1072)', () => {
+    // Per-test headroom only (cross-cutting.md § Isolation rerun for load-flakes): this case spawns
+    // the real source CLI three times (cold `bun` starts) and hit bun's 5s default in one aggregate
+    // run under concurrent fleet load (5001.57ms, empty stdout), while passing green alone 3/3.
+    // Load flake, not a regression; assertions unchanged.
     test('AC1/AC6: a state-machine run starts at the chosen state and trace reports the lineage', async () => {
         const fixture = writeFixture('sm.yaml', SM_FIXTURE);
 
@@ -176,7 +180,7 @@ describe('spur workflow run --from / --from-run (task 1072)', () => {
 
         const list = await runCli(['workflow', 'trace', '--json'], project);
         expect(list.stdout).toMatch(/"startState":\s*"s2"/);
-    });
+    }, 20000);
 
     test('AC1: a transition-flow run starts at the chosen node', async () => {
         const fixture = writeFixture('tf.yaml', TF_FIXTURE);
