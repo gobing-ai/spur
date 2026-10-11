@@ -53,7 +53,7 @@ import {
 } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { getEnvVar, getEnvVars, setEnvVar } from '@gobing-ai/ts-utils';
+import { getEnvVar, getEnvVars } from '@gobing-ai/ts-utils';
 import { canonicalJsonStringify } from '../workflow/composition-baseline';
 import { extractFeatureProofData, extractTaskProofData } from '../workflow/proof-input-fingerprint';
 
@@ -1163,44 +1163,26 @@ export function runQualityGate(
         rmSync(abs(`${logFile}.probe`), { force: true });
     }
 
-    // 1127 R1/R4: the host-wide lock wraps only the full-gate attempt loop — reuse, the
-    // no-progress skip, the probe, and the light/deferred/status tiers stay lockless.
-    let queueWaitMs = 0;
+    // 1154 R5: the host-wide lock moves to test:heavy (through gate-lock.ts) —
+    // runQualityGate and the in-process suite run lockless. queueWaitMs is reported 0.
+    const queueWaitMs = 0;
     let gateRuntimeMs = 0;
     if (gateRc === 0) {
         const delayMs = retryDelayMs(env);
-        const lockLine = (line: string): void => {
+        const gateRuntimeStartMs = Date.now();
+        for (gateAttempt = 1; gateAttempt <= MAX_GATE_ATTEMPTS; gateAttempt++) {
+            const attemptLogPath = `${logFile}.attempt-${gateAttempt}`;
+            const attempt = runShellCommand(env.qualityGateCmd ?? '', cwd);
+            writeFileSync(abs(attemptLogPath), attempt.output);
+            const locked = isTransientLock(attempt.output);
+            appendFileSync(abs(logFile), attempt.output);
+            rmSync(abs(attemptLogPath), { force: true });
+            gateRc = attempt.code;
+            if (gateRc === 0 || !locked || gateAttempt >= MAX_GATE_ATTEMPTS) break;
+            const line = retryMessage(gateAttempt);
             process.stdout.write(line); // tee: stdout and the log
             appendFileSync(abs(logFile), line);
-        };
-        const lock = acquireGateLock(env, lockLine);
-        queueWaitMs = lock.queueWaitMs;
-        lockLine(`quality gate lock: queueWaitMs=${queueWaitMs}\n`);
-        const gateRuntimeStartMs = Date.now();
-        const previousToken = getEnvVar(GATE_LOCK_TOKEN_ENV);
-        if (lock.token.length > 0) setEnvVar(GATE_LOCK_TOKEN_ENV, lock.token); // R6: child re-enters
-        try {
-            for (gateAttempt = 1; gateAttempt <= MAX_GATE_ATTEMPTS; gateAttempt++) {
-                const attemptLogPath = `${logFile}.attempt-${gateAttempt}`;
-                const attempt = runShellCommand(
-                    env.qualityGateCmd ?? '',
-                    cwd,
-                    lock.token.length > 0 ? { [GATE_LOCK_TOKEN_ENV]: lock.token } : undefined,
-                );
-                writeFileSync(abs(attemptLogPath), attempt.output);
-                const locked = isTransientLock(attempt.output);
-                appendFileSync(abs(logFile), attempt.output);
-                rmSync(abs(attemptLogPath), { force: true });
-                gateRc = attempt.code;
-                if (gateRc === 0 || !locked || gateAttempt >= MAX_GATE_ATTEMPTS) break;
-                const line = retryMessage(gateAttempt);
-                process.stdout.write(line); // tee: stdout and the log
-                appendFileSync(abs(logFile), line);
-                gateSleep(delayMs);
-            }
-        } finally {
-            setEnvVar(GATE_LOCK_TOKEN_ENV, previousToken); // undefined deletes: absence restored exactly
-            lock.release();
+            gateSleep(delayMs);
         }
         gateRuntimeMs = Date.now() - gateRuntimeStartMs;
         appendFileSync(abs(logFile), `quality gate lock: queueWaitMs=${queueWaitMs} gateRuntimeMs=${gateRuntimeMs}\n`);

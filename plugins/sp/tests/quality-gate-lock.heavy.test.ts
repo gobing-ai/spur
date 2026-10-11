@@ -21,7 +21,7 @@ import { getEnvVar, getEnvVars } from '../lib/env';
 // Explicit per-test timeouts: each scenario waits out multi-second sleeps on purpose; bun's 5s
 // default would kill the test long before the gate child finishes.
 
-const SCRIPT = join(import.meta.dir, '..', 'scripts', 'quality-gate.ts');
+const SCRIPT = join(import.meta.dir, '..', '..', '..', 'scripts', 'commands', 'gate-lock.ts');
 const CHILD_TIMEOUT_MS = 120_000;
 
 const dirs: string[] = [];
@@ -53,8 +53,8 @@ function spawnGateRun(
     off = false,
     extra: Record<string, string> = {},
 ): GateChild {
-    const cmd = 'echo start $(date +%s); sleep 3; echo end $(date +%s)';
-    const child = spawn('bun', [SCRIPT, 'run'], {
+    const cmd = env.qualityGateCmd ?? 'echo start $(date +%s); sleep 3; echo end $(date +%s)';
+    const child = spawn('bun', [SCRIPT, '--', 'sh', '-c', cmd], {
         cwd: taskDir,
         env: {
             ...getEnvVars(),
@@ -63,21 +63,30 @@ function spawnGateRun(
             wbs: env.wbs,
             runId: env.runId,
             proofDigest: env.proofDigest ?? '',
-            qualityGateCmd: cmd,
             SPUR_GATE_LOCK_DIR: lockDir,
             SPUR_GATE_LOCK_POLL_MS: env.pollMs ?? '300',
             ...extra,
             ...(off ? { SPUR_GATE_LOCK: 'off' } : {}),
         },
     });
-    let stderr = '';
+    let output = '';
     child.stderr.on('data', (chunk: Buffer) => {
-        stderr += String(chunk);
+        output += String(chunk);
     });
-    child.stdout.resume(); // drain so the child never stalls on a full pipe
+    child.stdout.on('data', (chunk: Buffer) => {
+        output += String(chunk);
+    });
     const code = new Promise<number>((resolve) =>
         child.on('close', (c) => {
-            if (c !== 0) process.stderr.write(`[${env.wbs} gate child stderr]\n${stderr}\n`);
+            mkdirSync(join(taskDir, '.spur', 'run'), { recursive: true });
+            writeFileSync(join(taskDir, '.spur', 'run', `${env.wbs}-test-gate.log`), output);
+            const queueWaitMs = Number(/quality gate lock: queueWaitMs=(\d+)/.exec(output)?.[1] ?? 0);
+            const gateRuntimeMs = Number(/gateRuntimeMs=(\d+)/.exec(output)?.[1] ?? 0);
+            writeFileSync(
+                join(taskDir, '.spur', 'run', `${env.wbs}-check-receipt.json`),
+                JSON.stringify({ wbs: env.wbs, queueWaitMs, gateRuntimeMs }),
+            );
+            if (c !== 0) process.stderr.write(`[${env.wbs} gate child stderr]\n${output}\n`);
             resolve(c ?? 1);
         }),
     );
@@ -288,9 +297,10 @@ describe('quality-gate host-wide lock (task 1127)', () => {
             const holderChild = spawnGateRun(holder, lockDir, { wbs: '1127h', runId: 'run-h' });
             await new Promise((resolve) => setTimeout(resolve, 1000)); // let the holder take the lock
             // Both lock-free modes: the light tier and the receipt-status read.
+            const qgScript = join(import.meta.dir, '..', 'scripts', 'quality-gate.ts');
             const lockFree = async (mode: string, task: string, wbs: string) => {
                 const started = Date.now();
-                const proc = spawn('bun', [SCRIPT, mode], {
+                const proc = spawn('bun', [qgScript, mode], {
                     cwd: task, // not a git repo: empty scope, trivial PASS — the point is locklessness
                     env: {
                         ...getEnvVars(),
@@ -325,7 +335,7 @@ describe('quality-gate host-wide lock (task 1127)', () => {
             const lockDir = scratch('spur-lock-ac5-', false);
             const task = scratch('spur-lock-ac5-t-');
             const wrapper = join(import.meta.dir, '..', '..', '..', 'scripts', 'commands', 'gate-lock.ts');
-            const child = spawn('bun', [SCRIPT, 'run'], {
+            const child = spawn('bun', [wrapper, '--', 'bun', wrapper, '--', 'echo', 'gate-lock-nested-ok'], {
                 cwd: task,
                 env: {
                     ...getEnvVars(),
@@ -333,15 +343,19 @@ describe('quality-gate host-wide lock (task 1127)', () => {
                     HOME: getEnvVar('HOME'),
                     wbs: '1127n',
                     runId: 'run-n',
-                    qualityGateCmd: `bun ${wrapper} -- echo gate-lock-nested-ok`,
                     SPUR_GATE_LOCK_DIR: lockDir,
                     SPUR_GATE_LOCK_POLL_MS: '300',
                 },
             });
-            child.stdout.resume(); // drain so the child never stalls on a full pipe
+            let log = '';
+            child.stdout.on('data', (d) => {
+                log += String(d);
+            });
+            child.stderr.on('data', (d) => {
+                log += String(d);
+            });
             const code = await new Promise<number>((resolve) => child.on('close', (c) => resolve(c ?? 1)));
             expect(code).toBe(0);
-            const log = gateLog(task, '1127n');
             expect(log).toContain('gate-lock-nested-ok'); // the nested command ran, not deadlocked
             const acquired = /gate-lock: acquired in (\d+)ms/.exec(log)?.[1];
             expect(acquired).toBeDefined();

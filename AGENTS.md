@@ -159,7 +159,8 @@ Architecture depth: `docs/03_ARCHITECTURE.md`. Concrete surfaces: `docs/04_DESIG
 
 ```bash
 bun run spur-check          # task-local: lint/typecheck, tests, pre/post rules
-bun run spur-check-feature  # repo-wide: contract/drift/freeze checks + repo-wide tests (per feature, ADR-119)
+bun run spur-check-feature  # repo-wide: contract/drift/freeze checks + repo-wide tests + test:heavy (per feature, ADR-119)
+bun run test:heavy          # heavy timing/browser/isolated process proofs
 bun run test-cf
 bun run build
 git status --short

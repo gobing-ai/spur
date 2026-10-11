@@ -1,0 +1,4 @@
+[test]
+coverage = false
+preload = ["./tests/setup.ts"]
+pathIgnorePatterns = ["vendors/**", "drizzle/**"]

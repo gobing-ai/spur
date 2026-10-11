@@ -268,7 +268,7 @@ test('--ok is required and exact; --duration-ms is optional but malformed values
     } finally {
         p.cleanup();
     }
-});
+}, 60_000); // 1150 R3: 4 spawns measured at 1043ms isolated, 5243ms under load; aligns with file 60_000 budget
 
 test('1136 R4: --node-enter makes the duration optional — the emitter measures it and stamps provenance measured', () => {
     const p = makeProject();
@@ -400,7 +400,7 @@ test('a malformed invocation is a usage error (exit 2), never a silent emission'
     } finally {
         p.cleanup();
     }
-});
+}, 60_000); // 1150 R3: 4 spawns measured at 651ms isolated, 4120ms under load; aligns with file 60_000 budget
 
 // ── Task 0975 R2: a `done` close with zero action rows is a named failure ────────
 

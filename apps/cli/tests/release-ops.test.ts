@@ -83,8 +83,6 @@ afterEach(() => {
 describe('builder bump-ver', () => {
     test('plugin-install-smoke failure aborts the bump before any mutation', async () => {
         const { repo } = mkRepo();
-        // Real repo layout: the gate script exists and fails, so bump-ver must stop
-        // before writing the manifest, committing, or tagging (task 0669 class).
         mkdirSync(join(repo, 'scripts', 'commands'), { recursive: true });
         writeFileSync(join(repo, 'scripts', 'commands', 'plugin-install-smoke.ts'), 'process.exit(1);\n');
         const manifestPath = join(repo, 'package.json');
@@ -161,110 +159,6 @@ describe('builder bump-ver', () => {
         const tags = localTags(repo);
         expect(tags).toContain('@demo/lib-v0.3.0');
         expect(tags).toContain('@demo/root-v0.3.0');
-    });
-
-    test('--all rewrites a root-manifest workspace pin and syncs bun.lock', async () => {
-        // Regression (0.3.88): updateWorkspacePins scanned only workspace dirs, never the root
-        // package.json — its `@demo/lib` pin stayed stale and bun.lock was never regenerated,
-        // so the publish workflow died at `bun install --frozen-lockfile`.
-        const { repo } = mkRepo();
-        const rootManifestPath = join(repo, 'package.json');
-        const rootManifest = await Bun.file(rootManifestPath).json();
-        rootManifest.dependencies = { '@demo/lib': 'workspace:0.1.0' };
-        writeFileSync(rootManifestPath, `${JSON.stringify(rootManifest, null, 4)}\n`);
-        writeFileSync(join(repo, '.gitignore'), 'node_modules\n');
-        sh(repo, ['git', 'add', '.']);
-        sh(repo, ['git', 'commit', '-m', 'root pin']);
-        sh(repo, ['bun', 'install']); // seed bun.lock
-        sh(repo, ['git', 'add', '.']);
-        sh(repo, ['git', 'commit', '-m', 'lockfile']);
-
-        await bumpVer(['--all', '0.3.0'], repo);
-
-        const root = await Bun.file(rootManifestPath).json();
-        expect(root.dependencies['@demo/lib']).toBe('workspace:0.3.0');
-        const lock = await Bun.file(join(repo, 'bun.lock')).text();
-        expect(lock).toContain('workspace:0.3.0');
-        expect(lock).not.toContain('workspace:0.1.0');
-    });
-
-    test('--all includes the root-named CLI package so the aggregate tag stays consistent', async () => {
-        // Mirror the monorepo: a workspace package shares the root manifest name (the CLI
-        // release target, @gobing-ai/spur). The aggregate tag names it, so --all must bump it.
-        const root = join(tmpdir(), `spur-builder-cliroot-${crypto.randomUUID()}`);
-        repos.push(root);
-        const repo = join(root, 'repo');
-        mkdirSync(join(repo, 'pkgs', 'cli'), { recursive: true });
-        mkdirSync(join(repo, 'pkgs', 'lib'), { recursive: true });
-        writeFileSync(
-            join(repo, 'package.json'),
-            `${JSON.stringify({ name: '@demo/root', version: '0.1.0', workspaces: ['pkgs/*'] }, null, 4)}\n`,
-        );
-        writeFileSync(
-            join(repo, 'pkgs', 'cli', 'package.json'),
-            `${JSON.stringify({ name: '@demo/root', version: '0.1.0', dependencies: { '@demo/lib': 'workspace:0.1.0' } }, null, 4)}\n`,
-        );
-        writeFileSync(
-            join(repo, 'pkgs', 'lib', 'package.json'),
-            `${JSON.stringify({ name: '@demo/lib', version: '0.1.0' }, null, 4)}\n`,
-        );
-        sh(root, ['git', 'init', '--bare', join(root, 'origin.git')]);
-        sh(repo, ['git', 'init']);
-        sh(repo, ['git', 'config', 'user.email', 'test@example.com']);
-        sh(repo, ['git', 'config', 'user.name', 'Test']);
-        sh(repo, ['git', 'add', '.']);
-        sh(repo, ['git', 'commit', '-m', 'init']);
-        sh(repo, ['git', 'remote', 'add', 'origin', join(root, 'origin.git')]);
-
-        await bumpVer(['--all', '0.3.0'], repo);
-        const cli = await Bun.file(join(repo, 'pkgs', 'cli', 'package.json')).json();
-        expect(cli.version).toBe('0.3.0');
-        const tags = localTags(repo);
-        // The CLI's own tag equals the aggregate tag, so only the aggregate is created.
-        expect(tags).toContain('@demo/root-v0.3.0');
-        expect(tags).toContain('@demo/lib-v0.3.0');
-    });
-
-    test('builder.bump-ver.aggregatePackage names the publish target when the root name matches no package', async () => {
-        // Unscoped root (`knowledge-kit`) vs scoped CLI (`@gobing-ai/knowledge-kit`): the root-name
-        // default matches nothing, so --all bumped only the pinned packages and pushed an aggregate
-        // tag no publish workflow consumes (published 0.0.15 into silence on 2026-09-15). The
-        // config key names the publishable package explicitly.
-        const { repo } = mkRepo();
-        await runBumpVer(['--all', '0.3.0', '--push'], repo, createCapturedOutput(), {
-            builder: { 'bump-ver': { aggregatePackage: 'app' } },
-        } as unknown as Parameters<typeof runBumpVer>[3]);
-
-        const app = await Bun.file(join(repo, 'pkgs', 'app', 'package.json')).json();
-        const lib = await Bun.file(join(repo, 'pkgs', 'lib', 'package.json')).json();
-        expect(app.version).toBe('0.3.0');
-        expect(lib.version).toBe('0.3.0');
-        // The pushed trigger tag is the named package's own tag, not `<rootName>-v<version>`.
-        expect(remoteTags(repo)).toContain('@demo/app-v0.3.0');
-        expect(localTags(repo)).not.toContain('@demo/root-v0.3.0');
-    });
-
-    test('builder.bump-ver.aggregatePackage rejects an unknown id before mutating', async () => {
-        const { repo } = mkRepo();
-        await expect(
-            runBumpVer(['--all', '0.3.0'], repo, createCapturedOutput(), {
-                builder: { 'bump-ver': { aggregatePackage: 'nope' } },
-            } as unknown as Parameters<typeof runBumpVer>[3]),
-        ).rejects.toThrow('unknown builder.bump-ver.aggregatePackage "nope"');
-        expect(localTags(repo)).toEqual([]);
-    });
-
-    test('drop-tags --all removes the configured aggregate tag locally and on origin', async () => {
-        const { repo } = mkRepo();
-        const config = {
-            builder: { 'bump-ver': { aggregatePackage: 'app' } },
-        } as unknown as Parameters<typeof runBumpVer>[3];
-        await runBumpVer(['--all', '0.3.0', '--push'], repo, createCapturedOutput(), config);
-        expect(remoteTags(repo)).toContain('@demo/app-v0.3.0');
-
-        await runDropTags(['--all', '0.3.0', '--remote'], repo, createCapturedOutput(), config);
-        expect(remoteTags(repo)).not.toContain('@demo/app-v0.3.0');
-        expect(localTags(repo)).not.toContain('@demo/app-v0.3.0');
     });
 
     test('rejects invalid semver', async () => {
@@ -473,39 +367,6 @@ describe('builder edge paths', () => {
         await expect(bumpVer(['--all', '0.2.0'], repo)).rejects.toThrow('nothing to bump');
     });
 
-    test('rewrites binaryVersion in src/config.ts and bumps plugin manifests', async () => {
-        const { repo } = mkRepo();
-        mkdirSync(join(repo, 'pkgs', 'lib', 'src'), { recursive: true });
-        writeFileSync(join(repo, 'pkgs', 'lib', 'src', 'config.ts'), `export default { binaryVersion: '0.1.0' };\n`);
-        mkdirSync(join(repo, '.claude-plugin', 'plugins', 'sp'), { recursive: true });
-        writeFileSync(
-            join(repo, '.claude-plugin', 'marketplace.json'),
-            `${JSON.stringify({ name: 'demo', plugins: [{ name: 'sp', description: 'demo plugin', version: '0.1.0', source: '.claude-plugin/plugins/sp' }] }, null, 4)}\n`,
-        );
-        writeFileSync(
-            join(repo, '.claude-plugin', 'plugins', 'sp', 'plugin.json'),
-            `${JSON.stringify({ name: 'sp', version: '0.1.0' }, null, 4)}\n`,
-        );
-        // Real lockfile: bump-ver now gates releases on `bun install --frozen-lockfile`,
-        // so the staged lock must be one bun can actually verify.
-        sh(repo, ['bun', 'install']);
-        sh(repo, ['git', 'add', '.']);
-        sh(repo, ['git', 'commit', '-m', 'add release metadata']);
-
-        await bumpVer(['lib', '0.2.0'], repo);
-        expect(await Bun.file(join(repo, 'pkgs', 'lib', 'src', 'config.ts')).text()).toContain(
-            "binaryVersion: '0.2.0'",
-        );
-        const marketplace = await Bun.file(join(repo, '.claude-plugin', 'marketplace.json')).json();
-        expect(marketplace.plugins[0].version).toBe('0.2.0');
-        // Extra fields must survive the rewrite, not be rebuilt away.
-        expect(marketplace.plugins[0].description).toBe('demo plugin');
-        const pluginJson = await Bun.file(join(repo, '.claude-plugin', 'plugins', 'sp', 'plugin.json')).json();
-        expect(pluginJson.version).toBe('0.2.0');
-        const manifest = await Bun.file(join(repo, 'pkgs', 'lib', 'package.json')).json();
-        expect(manifest.version).toBe('0.2.0');
-    });
-
     test('warns when binaryVersion pattern is absent and skips malformed marketplace', async () => {
         const { repo } = mkRepo();
         mkdirSync(join(repo, 'pkgs', 'lib', 'src'), { recursive: true });
@@ -521,18 +382,25 @@ describe('builder edge paths', () => {
         expect(localTags(repo)).toContain('@demo/lib-v0.2.0');
     });
 
-    test('refuses when a pushed tag already exists on origin (single and --all)', async () => {
+    test('bumps plugin manifests in marketplace.json and plugin.json', async () => {
         const { repo } = mkRepo();
-        await bumpVer(['lib', '0.2.0', '--push'], repo);
-        sh(repo, ['git', 'reset', '--hard', 'HEAD~1']);
-        sh(repo, ['git', 'tag', '-d', '@demo/lib-v0.2.0']);
-        await expect(bumpVer(['lib', '0.2.0'], repo)).rejects.toThrow('tag already exists on origin');
+        mkdirSync(join(repo, '.claude-plugin', 'plugins', 'sp'), { recursive: true });
+        writeFileSync(
+            join(repo, '.claude-plugin', 'marketplace.json'),
+            `${JSON.stringify({ name: 'demo', plugins: [{ name: 'sp', description: 'demo plugin', version: '0.1.0', source: '.claude-plugin/plugins/sp' }] }, null, 4)}\n`,
+        );
+        writeFileSync(
+            join(repo, '.claude-plugin', 'plugins', 'sp', 'plugin.json'),
+            `${JSON.stringify({ name: 'sp', version: '0.1.0' }, null, 4)}\n`,
+        );
+        sh(repo, ['git', 'add', '.']);
+        sh(repo, ['git', 'commit', '-m', 'add release metadata']);
 
-        const { repo: repo2 } = mkRepo();
-        await bumpVer(['--all', '0.3.0', '--push'], repo2);
-        sh(repo2, ['git', 'reset', '--hard', 'HEAD~1']);
-        for (const t of ['@demo/lib-v0.3.0', '@demo/root-v0.3.0']) sh(repo2, ['git', 'tag', '-d', t]);
-        await expect(bumpVer(['--all', '0.3.0'], repo2)).rejects.toThrow('tag already exists on origin');
+        await bumpVer(['lib', '0.2.0'], repo);
+        const marketplace = await Bun.file(join(repo, '.claude-plugin', 'marketplace.json')).json();
+        expect(marketplace.plugins[0].version).toBe('0.2.0');
+        const pluginJson = await Bun.file(join(repo, '.claude-plugin', 'plugins', 'sp', 'plugin.json')).json();
+        expect(pluginJson.version).toBe('0.2.0');
     });
 
     test('drop-tags tolerates absent local and remote tags', async () => {

@@ -70,6 +70,17 @@ describe('feature-verification scope split (task 0872)', () => {
         expect(scripts['test-repo-wide']).toContain('repo-wide-tests');
     });
 
+    test('1154 R3: default test scripts do not pass --parallel on Bun 1.3.14', () => {
+        // Upgrade bar: Bun 1.3.14 does not honor --no-isolate under --parallel, causing workers
+        // to wedge under full-suite concurrency. An upgrade requires a Bun version whose help
+        // lists --no-isolate and whose workers are not started with --isolate, plus a quiet-machine
+        // run that finishes faster than serial baseline, maintains the 90/90 floor, and never wedges.
+        const scripts = readScripts();
+        for (const key of ['test', 'test:coverage', 'test:full']) {
+            expect(scripts[key], `${key} must not pass --parallel on Bun 1.3.14`).not.toContain('--parallel');
+        }
+    });
+
     test('R3: feature-verification is a shell-only pass with no agent.run nodes', () => {
         const wf = readWorkflow('feature-verification.yaml');
         expect(wf.name).toBe('feature-verification');
