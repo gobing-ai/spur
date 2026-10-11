@@ -6,7 +6,7 @@ status: verifying
 priority: P2
 tags: []
 created_at: "2026-09-26T06:12:07.748Z"
-updated_at: "2026-10-10T22:56:09.851Z"
+updated_at: "2026-10-11T00:34:15.061Z"
 ---
 
 # H21: Cross-platform hook core: one ledger and session implementation for Claude Code and Pi
@@ -28,7 +28,8 @@ Feature: Cross-platform hook core: one ledger and session implementation for Cla
   Scenario: R1 — Pi tool rows match Claude tool rows
     Given the same Read, Write, Edit, Bash, Grep and Glob events delivered once via the Claude hook payload and once via the Pi tool_result event
     When each is recorded to token-ledger.jsonl
-    Then the two rows are equal on ts-independent fields (session, type, file, summary, tokens, action, agent, model)
+    Then the two rows are equal on host-independent fields (type, file, summary, tokens, action, agent, model)
+    And each row carries its spur session and its host-native sessionId
 
   Scenario: R2 — Pi session file uses the Claude schema
     Given a Pi session_start event with no .session.json present

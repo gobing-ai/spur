@@ -27922,6 +27922,9 @@ var INBOX_MESSAGES_REQUEST_KEY_SCHEMA_SQL = `
 ALTER TABLE inbox_messages ADD COLUMN request_key TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_inbox_messages_request_key ON inbox_messages (request_key) WHERE request_key IS NOT NULL;
 `;
+var INBOX_MESSAGES_READ_AT_SCHEMA_SQL = `
+ALTER TABLE inbox_messages ADD COLUMN read_at INTEGER;
+`;
 var QUEUE_JOBS_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS queue_jobs (
     id TEXT PRIMARY KEY,
@@ -28934,6 +28937,11 @@ var CLI_MIGRATIONS = [
   {
     id: "0052_spur_cli_decision_logs",
     sql: DECISION_LOGS_SCHEMA_SQL
+  },
+  {
+    id: "0053_spur_cli_inbox_messages_read_at",
+    sql: INBOX_MESSAGES_READ_AT_SCHEMA_SQL,
+    addColumnIfMissing: { table: "inbox_messages", column: "read_at" }
   }
 ];
 // packages/domain/src/envelope/schema.ts

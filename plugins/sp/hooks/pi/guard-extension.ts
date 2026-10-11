@@ -248,14 +248,17 @@ export default function (pi: ExtensionAPI): void {
     });
 
     // ── context-post-tool: shared recordToolUseEvent (task 0969 R1) ──
-    pi.on('tool_result', async (event) => {
+    pi.on('tool_result', async (event, ctx) => {
         try {
             const payload = normalizePiToolEvent(
                 event.toolName,
                 event.input as Record<string, unknown> | undefined,
                 (event as { content?: unknown }).content,
             );
-            if (payload) recordToolUseEvent(spurContextDir(), payload);
+            // Host-native session id, as Claude's payload carries (H21 parity).
+            const sessionId = piSessionOwner(ctx)?.sessionId;
+            if (payload)
+                recordToolUseEvent(spurContextDir(), sessionId ? { ...payload, session_id: sessionId } : payload);
         } catch {
             // fail-open
         }

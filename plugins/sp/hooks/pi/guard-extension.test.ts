@@ -569,7 +569,9 @@ describe('Pi/Claude ledger parity (0969 R1)', () => {
             const bCtx = join(dirB, '.spur', 'context');
             mkdirSync(bCtx, { recursive: true });
             writeFileSync(join(bCtx, '.session.json'), readFileSync(join(dirA, '.spur', 'context', '.session.json')));
+            // Real Claude hooks always carry the host-native session id; Pi must record its own.
             recordToolUseEvent(bCtx, {
+                session_id: 'pi-session-A',
                 tool_name: c.claude,
                 tool_input: c.claudeInput,
                 ...(c.claudeResponse ? { tool_response: c.claudeResponse } : {}),
