@@ -115,6 +115,23 @@ describe('runDecide acceptance', () => {
         expect(result.evidenceDigest).toMatch(/^sha256:/);
     });
 
+    test('a MEDIUM-confidence accept still carries its derived level on the receipt', async () => {
+        // HIGH (above) and LOW (below) are pinned elsewhere; MEDIUM is the level a bare
+        // "accepted" assertion would not have covered, and the receipt is one of the two surfaces
+        // the design says exposes `confidenceLevel`.
+        const result = await runDecide(
+            { ...baseOptions, minConfidence: 0.5 },
+            makeDeps({
+                decisionMaker: () => Promise.resolve(fakeMaker({ choice: { label: 'retry', confidence: 0.6 } })),
+            }),
+        );
+        expect(result.degraded).toBe(false);
+        expect(result.reason).toBe('accepted');
+        expect(result.value).toBe('retry');
+        expect(result.confidence).toBe(0.6);
+        expect(result.confidenceLevel).toBe('MEDIUM');
+    });
+
     test('noul maps probability >= 0.5 to yes and below to no (0941 Q&A threshold)', async () => {
         const yes = await runDecide(
             { ...baseOptions, method: 'noul', choices: undefined, minConfidence: NOUL_YES_THRESHOLD },

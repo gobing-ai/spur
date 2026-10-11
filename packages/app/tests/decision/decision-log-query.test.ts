@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test';
+import { decisionLogRowSchema } from '@gobing-ai/spur-contracts';
 import { applyCliMigrations, DecisionLogDao } from '@gobing-ai/spur-domain';
 import { createDbAdapter, type DbAdapter } from '@gobing-ai/ts-db';
+import { confidenceLevel } from '../../src/decision/confidence-level';
 import type { DecisionLogRecord } from '../../src/decision/decision-log';
 import { buildDecisionLogRow } from '../../src/decision/decision-log';
 import { DecisionLogQueryService, decisionLogP95 } from '../../src/decision/decision-log-query';
@@ -95,6 +97,72 @@ describe('DecisionLogQueryService.list', () => {
         expect(page.summary).toEqual({ count: 0, acceptedRate: 0, fallbackRate: 0, p95DurationMs: null });
         expect(page.facets).toEqual({ decisionIds: [], makers: [] });
         expect(page.nextCursor).toBeNull();
+        adapter.close();
+    });
+});
+
+/**
+ * The derived confidence level (HIGH/MEDIUM/LOW) is declared twice — the derivation's
+ * `ConfidenceLevel` union and the contract's `decisionLogRowSchema` enum — with no executable tie
+ * between them, while the design claims verification "at the transport boundary by the
+ * `decisionLogRowSchema` enum" (decision-observability-and-adoption.md §3.5). A drift is silent: a
+ * level renamed or case-changed in one place makes the Board reject or mis-render a row the
+ * service produced. These tests seed real rows, read them back through the service, and parse
+ * every produced row against the contract.
+ */
+describe('confidence level (HIGH/MEDIUM/LOW) — derivation, read path, transport boundary', () => {
+    /** Seed one row per level boundary and an absent one, read each back, then cross the contract. */
+    test.each([
+        [0.99, 'HIGH'],
+        [0.8, 'HIGH'],
+        [0.79, 'MEDIUM'],
+        [0.5, 'MEDIUM'],
+        [0.49, 'LOW'],
+        [0, 'LOW'],
+        [null, 'LOW'],
+    ] as const)('confidence %p reads as %s and satisfies the contract row', async (confidence, level) => {
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(adapter);
+        const dao = new DecisionLogDao(adapter);
+        await dao.insert(buildDecisionLogRow({ dao, secrets: [], mode: 'full' }, record({ confidence })));
+        const page = await new DecisionLogQueryService(dao).list({});
+        const row = page.rows[0];
+        expect(row?.confidenceLevel).toBe(level);
+        // The Board parses every list row with this schema: a level the enum does not carry is a
+        // 500 at the transport boundary, not a cosmetic mismatch.
+        const parsed = decisionLogRowSchema.safeParse(row);
+        expect(parsed.success ? parsed.data.confidenceLevel : parsed.error.issues.map((i) => i.path.join('.'))).toBe(
+            level,
+        );
+        adapter.close();
+    });
+
+    test('the derivation vocabulary and the contract enum are the same set', () => {
+        // Hunt the numeric domain plus values outside it: whatever the derivation can emit must be
+        // exactly what the contract accepts, so a rename on either side fails here by name.
+        const emitted = new Set<string>();
+        for (const value of [-1, 0, 0.49, 0.5, 0.79, 0.8, 1, 1.1, Number.NaN, null, undefined]) {
+            emitted.add(confidenceLevel(value));
+        }
+        expect([...emitted].sort()).toEqual([...decisionLogRowSchema.shape.confidenceLevel.options].sort());
+    });
+
+    test('the boundary refuses off-taxonomy levels and is case-sensitive', async () => {
+        // The derivation normalizes to the uppercase enum values; the boundary does not, so a
+        // lowercase level is a contract error, never a silently-accepted alias.
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(adapter);
+        const dao = new DecisionLogDao(adapter);
+        await dao.insert(buildDecisionLogRow({ dao, secrets: [], mode: 'full' }, record({ confidence: 0.9 })));
+        const row = (await new DecisionLogQueryService(dao).list({})).rows[0];
+        expect(row?.confidenceLevel).toBe('HIGH');
+        expect(decisionLogRowSchema.safeParse(row).success).toBe(true);
+        for (const offTaxonomy of ['high', 'SURE', 'HIGH ', '', 'VERY_HIGH']) {
+            const parsed = decisionLogRowSchema.safeParse({ ...row, confidenceLevel: offTaxonomy });
+            expect(parsed.success ? `accepted ${offTaxonomy}` : parsed.error.issues[0]?.path.join('.')).toBe(
+                'confidenceLevel',
+            );
+        }
         adapter.close();
     });
 });
