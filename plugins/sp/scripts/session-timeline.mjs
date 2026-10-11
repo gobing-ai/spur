@@ -36,6 +36,12 @@ function formatTokenSplit(t) {
   return `${formatTokens(nonCached + t.cacheRead)} / ${formatTokens(nonCached)}`;
 }
 function promptText(row) {
+  if (row.type === "custom_message") {
+    if (row.display === false)
+      return;
+    const text = typeof row.content === "string" ? row.content.trim() : "";
+    return text === "" ? undefined : text;
+  }
   if (row.type === "message") {
     if (row.message?.role !== "user")
       return;
