@@ -216,6 +216,30 @@ describe('spur decision run (AC3)', () => {
         expect(await Array.fromAsync(new Bun.Glob('**/*.decision').scan({ cwd: CLEAN }))).toEqual([]);
     });
 
+    test('exposes the derived confidenceLevel next to the raw confidence (design §3.5)', async () => {
+        const result = await main(
+            ['decision', 'run', 'triage-test', '--param', 'wbs=1093', '--json', '--json-envelope'],
+            CLEAN,
+        );
+        expect(result.code).toBe(0);
+        const parsed = JSON.parse(result.out) as {
+            ok: boolean;
+            data: { confidence: number | null; confidenceLevel: string };
+        };
+        // The level is a receipt field of its own, in the closed vocabulary — not something the
+        // caller has to re-derive from `confidence`.
+        expect(['HIGH', 'MEDIUM', 'LOW']).toContain(parsed.data.confidenceLevel);
+        // Thresholds are written out here rather than imported, so this checks the boundary against
+        // the documented contract instead of replaying the implementation's own helper.
+        const observed = parsed.data.confidence;
+        const expected = observed === null ? 'LOW' : observed >= 0.8 ? 'HIGH' : observed >= 0.5 ? 'MEDIUM' : 'LOW';
+        expect(parsed.data.confidenceLevel).toBe(expected);
+        // No key in this environment → the hub answers with the declared fallback, so the level must
+        // read fail-conservative: an absent confidence can never present as HIGH or MEDIUM.
+        expect(observed).toBeNull();
+        expect(parsed.data.confidenceLevel).toBe('LOW');
+    });
+
     test('attaches redacted, bounded evidence and coerces declared types', async () => {
         writeFileSync(join(CLEAN, 'ev.txt'), 'diff ok SECRET_TOKEN=abc123 inside\n');
         const result = await main(

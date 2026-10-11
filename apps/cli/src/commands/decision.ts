@@ -1,6 +1,7 @@
 import { resolve } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
 import {
+    confidenceLevel,
     DecisionInputError,
     type DecisionStatus,
     decisionCorrelationFromVars,
@@ -212,7 +213,14 @@ export function registerDecisionCommand(program: Command, context: CliContext): 
                     ...(sink !== undefined && prelude !== undefined ? { decisionLog: { sink, prelude } } : {}),
                 });
                 if (options.json === true) {
-                    context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope === true }));
+                    // Design §3.5: a decide receipt exposes the derived level next to the raw
+                    // confidence (the hub result carries only the number). Derived here, never stored.
+                    context.output.write(
+                        toEnvelopeJson(
+                            { ...result, confidenceLevel: confidenceLevel(result.confidence) },
+                            { enveloped: options.jsonEnvelope === true },
+                        ),
+                    );
                 } else {
                     context.output.write(
                         `${result.id}: ${toJson(result.value)} (reason ${result.reason}, confidence ${result.confidence ?? 'n/a'},` +

@@ -12,6 +12,9 @@ export {
 export { DecisionInputError } from '@gobing-ai/ts-ai-decision';
 export type { PlanningFolders } from './config/planning-folders';
 export { resolvePlanningFolders } from './config/planning-folders';
+// Derived confidence level (design §3.5): receipts expose it next to the raw confidence, so the
+// CLI derives it at its own boundary through this facade rather than reimplementing the thresholds.
+export { type ConfidenceLevel, confidenceLevel } from './decision/confidence-level';
 // Decision lifecycle events (task 1095): payload-owned emitter surface.
 export {
     beginDecisionInvocation,
