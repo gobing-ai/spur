@@ -147,6 +147,27 @@ describe('DecideActionRunner', () => {
         expect(row.confidenceLevel).toBe('HIGH');
     });
 
+    test('a below-floor answer still reports its own MEDIUM level, not the gate decision', async () => {
+        // The level is derived from the confidence that was OBSERVED, orthogonal to whether the gate
+        // accepted it (design §3.5): the same 0.6 answer is `low-confidence` AND `MEDIUM` — never
+        // `LOW`, which is what a gate-shaped reading would report.
+        const { fs, writes } = fakeFs();
+        const runner = new DecideActionRunner(fs, {
+            enabled: true,
+            decisionMaker: fakeMaker({ label: 'retry', confidence: 0.6 }),
+        });
+        const result = await runner.execute(validOptions, makeContext('.'));
+        expect(result.ok).toBe(true);
+        expect(result.data?.value).toBe('stop'); // the declared default, not the below-floor answer
+        const decision = result.data?.decision as { degraded: boolean; reason: string; confidenceLevel: string };
+        expect(decision.degraded).toBe(true);
+        expect(decision.reason).toBe('low-confidence');
+        expect(decision.confidenceLevel).toBe('MEDIUM');
+        const row = JSON.parse(writes['.spur/run/x-recovery.decision.json'] ?? '{}') as Record<string, unknown>;
+        expect(row.confidence).toBe(0.6);
+        expect(row.confidenceLevel).toBe('MEDIUM');
+    });
+
     test('degraded decision still ok:true with value=default — the run continues (0941 R3/R4)', async () => {
         const { fs, writes } = fakeFs();
         // Switch off (R4 default): no backend configured anywhere.
