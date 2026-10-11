@@ -1,4 +1,13 @@
-import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import {
+    existsSync,
+    mkdirSync,
+    readFileSync,
+    realpathSync,
+    renameSync,
+    rmdirSync,
+    unlinkSync,
+    writeFileSync,
+} from 'node:fs';
 import { connect, createServer } from 'node:net';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -297,6 +306,7 @@ export class ProjectRegistry {
 
         const maxTries = 50;
         let acquired = false;
+        let markerPath: string | undefined;
 
         for (let i = 0; i < maxTries; i++) {
             try {
@@ -318,29 +328,44 @@ export class ProjectRegistry {
                             'The process is not permitted to write there — this is not lock contention.',
                     );
                 }
+                if (code !== 'EEXIST') {
+                    throw err;
+                }
                 await new Promise((r) => setTimeout(r, 50));
             }
         }
 
         if (!acquired) {
-            // Force break stale lock if it's held too long
+            // shortcut: abandoned registry claims need manual cleanup, add proven-dead owner recovery only when operational evidence requires it.
+            throw new Error(`Failed to acquire lock for project registry: ${this.lockDir}`);
+        }
+
+        const marker = `${process.pid}-${crypto.randomUUID()}`;
+        markerPath = join(this.lockDir, marker);
+        try {
+            writeFileSync(markerPath, '', { flag: 'wx' });
+        } catch (err) {
             try {
-                rmSync(this.lockDir, { recursive: true, force: true });
-                mkdirSync(this.lockDir);
-                acquired = true;
+                rmdirSync(this.lockDir);
             } catch {
-                throw new Error(`Failed to acquire lock for project registry: ${this.lockDir}`);
+                // Best-effort cleanup of owned empty directory
             }
+            throw err;
         }
 
         try {
             return await fn();
         } finally {
-            if (acquired) {
+            if (markerPath) {
                 try {
-                    rmSync(this.lockDir, { recursive: true, force: true });
+                    unlinkSync(markerPath);
+                    try {
+                        rmdirSync(this.lockDir);
+                    } catch {
+                        // Directory removal is best-effort (e.g. ENOENT or ENOTEMPTY)
+                    }
                 } catch {
-                    // Ignore unlock failure
+                    // If own marker is missing, leave the directory alone
                 }
             }
         }

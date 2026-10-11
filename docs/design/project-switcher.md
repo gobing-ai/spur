@@ -68,8 +68,10 @@ interface ProjectEntry {
    process death cleanup on next discovery when the claimed port is not live).
 3. **Stale reclaim** — when listing, if `port > 0` but nothing answers health on that port, treat as
    stopped and rewrite `port: 0`.
-4. **Concurrency** — advisory lock around read-modify-write of `projects.json` (mkdir-lock or
-   exclusive create of sibling `.lock` dir under `~/.config/spur/`).
+4. **Concurrency** — advisory lock around read-modify-write of `projects.json` (mkdir-lock with a
+   unique owner marker inside `~/.config/spur/projects.json.lock`; retry contention waits up to
+   2.5s with no timeout takeover, release unlinks only its own marker before non-recursive
+   directory removal, and unknown or abandoned claims are retained until manual cleanup).
 
 Path matching: expand `~`, resolve realpath when the directory exists; identity key is normalized
 absolute path (name is display-only, unique by convention).
