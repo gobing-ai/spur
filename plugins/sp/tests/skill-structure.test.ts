@@ -1554,6 +1554,33 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         }
     });
 
+    test('the HIGH/MEDIUM/LOW claim contract the docs rules delegate is pinned in its owning skill', () => {
+        // `cited-version-strings` advertises "Confidence level (HIGH/MEDIUM/LOW) is part of the claim
+        // contract" and delegates the semantic half to this skill, so the vocabulary must not drift
+        // out from under that pointer — nothing else reads the skill's close-out line.
+        const source = readFileSync(join(SKILLS_DIR, 'source-driven-development', 'SKILL.md'), 'utf8');
+        const rule = readFileSync(join(REPO_ROOT, 'config', 'rules', 'docs', 'sourced-api-claims.yaml'), 'utf8');
+
+        // The close-out line the contract promises, verbatim.
+        expect(source).toContain('Verification: HIGH|MEDIUM|LOW');
+
+        // Exactly three levels at both definition sites: a fourth level would appear as another
+        // bold level label here rather than silently widening the vocabulary the rule points at.
+        const honest = source.split('\n').find((line) => line.includes('**Honest confidence**')) ?? '';
+        expect(honest).toContain('HIGH/MEDIUM/LOW');
+        const definitions = source.split('\n').find((line) => line.includes('all three checks pass')) ?? '';
+        const levelLabels = [...definitions.matchAll(/\*\*([A-Z]+)\*\*/g)].map((match) => match[1]).sort();
+        expect(levelLabels).toEqual(['HIGH', 'LOW', 'MEDIUM']);
+
+        // The checklist item the operator is held to.
+        expect(source).toContain('Confidence is stated honestly (HIGH/MEDIUM/LOW)');
+
+        // The advertising rule still names its owner, and the owner still claims the job.
+        expect(rule).toContain('Confidence level (HIGH/MEDIUM/LOW)');
+        expect(rule).toContain('sp-source-driven-development');
+        expect(source).toContain('single sp owner');
+    });
+
     test('R49 — Wave 3 enrichment landed (0214 R7/R8/R9)', () => {
         // R7: sys-debugging hardening — untrusted error output, non-reproducible decision tree,
         // instrumentation keep/remove — with the feedback-loop-first Phase 1 unchanged.
