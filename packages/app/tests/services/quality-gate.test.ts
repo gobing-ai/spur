@@ -659,4 +659,33 @@ describe('gate lock — unreadable claim (1127 review P4)', () => {
             cleanup();
         }
     });
+
+    test('1154 R5: runQualityGate does not wait on a held lock and reports queueWaitMs: 0', () => {
+        const { dir, cleanup } = scratch('spur-lock-held-');
+        const lockDir = join(dir, 'full-gate.lock');
+        const saved = [getEnvVar(GATE_LOCK_DIR_ENV)] as const;
+        mkdirSync(lockDir, { recursive: true });
+        writeFileSync(join(lockDir, `${process.pid}-claim`), JSON.stringify({ pid: process.pid, wbs: 'other' }));
+        setEnvVar(GATE_LOCK_DIR_ENV, lockDir);
+        try {
+            const taskDir = join(dir, 'task');
+            mkdirSync(join(taskDir, '.spur', 'run'), { recursive: true });
+            const res = runQualityGate(
+                'run',
+                {
+                    wbs: '1154',
+                    runId: 'r1154',
+                    qualityGateCmd: 'echo gate-ok',
+                },
+                { cwd: taskDir },
+            );
+            expect(res.status).toBe('PASS');
+            const log = readFileSync(join(taskDir, res.logFile), 'utf8');
+            expect(log).toContain('queueWaitMs=0');
+            expect(log).not.toContain('waiting for holder');
+        } finally {
+            setEnvVar(GATE_LOCK_DIR_ENV, saved[0]);
+            cleanup();
+        }
+    });
 });

@@ -1165,8 +1165,9 @@ workflow machine time). Four invariants now bind every execution surface:
   first attempt (piloted on `wrapup-pipeline`).
 - **Gate scope (ADR-119).** Task-local checks stay in the per-task pipeline; repo-wide checks
   (corpus consistency, traceability, contract baselines, doc sync, catalogue-level rule sweeps)
-  run once per feature in the feature-scoped verification pass (`bun run spur-check-feature`). A
-  per-task pipeline may not host a check that can fail for a reason the current task did not cause.
+  and heavy process proofs (`bun run test:heavy`) run once per feature in the feature-scoped
+  verification pass (`bun run spur-check-feature`). A per-task pipeline may not host a check that
+  can fail for a reason the current task did not cause.
 - **Promotion gate (ADR-076 amendment).** A candidate graph change is shadow-run against recorded
   real-run inputs and promoted or deleted by a named deadline; no standing second YAML.
 

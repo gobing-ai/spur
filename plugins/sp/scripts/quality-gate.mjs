@@ -89,12 +89,6 @@ function getEnvVar(name, fallback) {
 function getEnvVars2() {
   return process.env;
 }
-function setEnvVar(name, value) {
-  if (value === undefined)
-    delete process.env[name];
-  else
-    process.env[name] = value;
-}
 var init_event_severity = () => {};
 var init_dist = __esm(() => {
   init_api_response();
@@ -30643,41 +30637,25 @@ function runQualityGate(mode, env2, options = {}) {
     appendFileSync(abs(logFile), probe.output);
     rmSync(abs(`${logFile}.probe`), { force: true });
   }
-  let queueWaitMs = 0;
+  const queueWaitMs = 0;
   let gateRuntimeMs = 0;
   if (gateRc === 0) {
     const delayMs = retryDelayMs(env2);
-    const lockLine = (line) => {
+    const gateRuntimeStartMs = Date.now();
+    for (gateAttempt = 1;gateAttempt <= MAX_GATE_ATTEMPTS; gateAttempt++) {
+      const attemptLogPath = `${logFile}.attempt-${gateAttempt}`;
+      const attempt = runShellCommand(env2.qualityGateCmd ?? "", cwd);
+      writeFileSync(abs(attemptLogPath), attempt.output);
+      const locked = isTransientLock(attempt.output);
+      appendFileSync(abs(logFile), attempt.output);
+      rmSync(abs(attemptLogPath), { force: true });
+      gateRc = attempt.code;
+      if (gateRc === 0 || !locked || gateAttempt >= MAX_GATE_ATTEMPTS)
+        break;
+      const line = retryMessage(gateAttempt);
       process.stdout.write(line);
       appendFileSync(abs(logFile), line);
-    };
-    const lock = acquireGateLock(env2, lockLine);
-    queueWaitMs = lock.queueWaitMs;
-    lockLine(`quality gate lock: queueWaitMs=${queueWaitMs}
-`);
-    const gateRuntimeStartMs = Date.now();
-    const previousToken = getEnvVar(GATE_LOCK_TOKEN_ENV);
-    if (lock.token.length > 0)
-      setEnvVar(GATE_LOCK_TOKEN_ENV, lock.token);
-    try {
-      for (gateAttempt = 1;gateAttempt <= MAX_GATE_ATTEMPTS; gateAttempt++) {
-        const attemptLogPath = `${logFile}.attempt-${gateAttempt}`;
-        const attempt = runShellCommand(env2.qualityGateCmd ?? "", cwd, lock.token.length > 0 ? { [GATE_LOCK_TOKEN_ENV]: lock.token } : undefined);
-        writeFileSync(abs(attemptLogPath), attempt.output);
-        const locked = isTransientLock(attempt.output);
-        appendFileSync(abs(logFile), attempt.output);
-        rmSync(abs(attemptLogPath), { force: true });
-        gateRc = attempt.code;
-        if (gateRc === 0 || !locked || gateAttempt >= MAX_GATE_ATTEMPTS)
-          break;
-        const line = retryMessage(gateAttempt);
-        process.stdout.write(line);
-        appendFileSync(abs(logFile), line);
-        gateSleep(delayMs);
-      }
-    } finally {
-      setEnvVar(GATE_LOCK_TOKEN_ENV, previousToken);
-      lock.release();
+      gateSleep(delayMs);
     }
     gateRuntimeMs = Date.now() - gateRuntimeStartMs;
     appendFileSync(abs(logFile), `quality gate lock: queueWaitMs=${queueWaitMs} gateRuntimeMs=${gateRuntimeMs}

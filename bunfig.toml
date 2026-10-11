@@ -15,7 +15,7 @@ coverageDir = ".coverage"
 coverageThreshold = { lines = 0.9, functions = 0.9 }
 passWithNoTests = true
 preload = ["./tests/setup.ts"]
-pathIgnorePatterns = ["vendors/**", "drizzle/**"]
+pathIgnorePatterns = ["vendors/**", "drizzle/**", "**/*.heavy.test.ts"]
 # React .tsx components are exercised via happy-dom integration tests, not
 # unit tests — exclude them from the per-file coverage gate so DOM branches
 # (onChange/onSubmit handlers) don't drag the 90/90 threshold.
