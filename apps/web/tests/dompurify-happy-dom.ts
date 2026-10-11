@@ -11,13 +11,18 @@
  *
  * Call this once per test file that exercises the real sanitizer for real; without
  * it DOMPurify removes the wrong nodes and any assertion passes or fails by accident.
+ * The returned function puts both globals back, so a suite that shares its process
+ * with other files (the aggregate run) can exercise the sanitizer without leaving
+ * its removal behaviour changed behind it.
  */
 let installed = false;
 
-export function installDompurifyShims(): void {
-    if (installed) return;
+/** Install the shims, returning the restore function that undoes them. */
+export function installDompurifyShims(): () => void {
+    if (installed) return () => {};
     installed = true;
     const nodeNameDescriptor = Object.getOwnPropertyDescriptor(Node.prototype, 'nodeName');
+    const originalCreateNodeIterator = document.createNodeIterator;
     if (nodeNameDescriptor?.get) {
         const originalNodeNameGet = nodeNameDescriptor.get;
         Object.defineProperty(Node.prototype, 'nodeName', {
@@ -60,4 +65,10 @@ export function installDompurifyShims(): void {
             previousNode: (): Node | null => null,
         };
     }) as unknown as Document['createNodeIterator'];
+
+    return () => {
+        installed = false;
+        if (nodeNameDescriptor) Object.defineProperty(Node.prototype, 'nodeName', nodeNameDescriptor);
+        document.createNodeIterator = originalCreateNodeIterator;
+    };
 }
