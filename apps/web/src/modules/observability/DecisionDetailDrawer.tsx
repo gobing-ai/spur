@@ -44,6 +44,17 @@ function formatPretty(value: string | null): string {
 }
 
 /**
+ * DESIGN.md § Product UI — Decisions: the Confidence field leads with the derived level
+ * (HIGH/MEDIUM/LOW), so a row whose maker never answered reads `LOW` instead of an empty `—`,
+ * then the raw confidence and the catalog bar it had to clear.
+ */
+function formatConfidence(row: Pick<DecisionLogRow, 'confidence' | 'confidenceLevel' | 'minConfidence'>): string {
+    if (row.confidence === null) return row.confidenceLevel;
+    const bar = row.minConfidence !== null ? ` (min ${row.minConfidence})` : '';
+    return `${row.confidenceLevel} · ${row.confidence}${bar}`;
+}
+
+/**
  * Detail drawer for one decision invocation (task 1100 §3.6): fetches the full
  * row (redacted input, question, phase timings) by id on open and degrades
  * gracefully to the list row when the fetch fails.
@@ -109,10 +120,7 @@ export default function DecisionDetailDrawer({ row, onClose, onNavigate }: Decis
         { label: 'Reason', value: view.reason ?? '—' },
         {
             label: 'Confidence',
-            value:
-                view.confidence === null
-                    ? '—'
-                    : `${view.confidence}${view.minConfidence !== null ? ` (min ${view.minConfidence})` : ''}`,
+            value: formatConfidence(view),
         },
         { label: 'Catalog layer', value: view.catalogLayer ?? '—' },
         { label: 'Catalog source', value: view.catalogSource ?? '—' },

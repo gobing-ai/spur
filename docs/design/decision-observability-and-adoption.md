@@ -180,7 +180,9 @@ Indexes: `(started_at)`, `(decision_id, started_at)`, `(maker_name, started_at)`
 catalog's strictest `minConfidence` bar — `review-failure-class`), `MEDIUM` (≥ 0.5), `LOW` below. The
 derivation is computed at read/receipt time from `confidence` and never stored; absent, NaN or
 out-of-[0,1] values fail conservative to `LOW`, so a broken maker value cannot present as HIGH.
-Verified at the transport boundary by the `decisionLogRowSchema` enum.
+Verified at the transport boundary by the `decisionLogRowSchema` enum; the Board's Decisions
+Detail drawer renders the level beside the raw value (`HIGH · 0.9 (min 0.8)`, root `DESIGN.md`
+§ Product UI — Decisions).
 
 **Write seam.**
 - The §3.3 emitter module builds the row and inserts it once, at `end` (or at `rejected`), through

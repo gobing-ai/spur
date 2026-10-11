@@ -480,7 +480,8 @@ new component library.
 - **Detail drawer.** Row activation (click or Enter) opens a drawer, modelled on `JobDetailDrawer`.
   It has these sections:
   - Summary: decision, caller, maker and source, catalog layer and file, and min confidence.
-  - Result: value, fallback, source, reason, confidence, and error.
+  - Result: value, fallback, source, reason, confidence with its derived level
+    (`HIGH`/`MEDIUM`/`LOW`, always present — a row with no maker confidence reads `LOW`), and error.
   - Timeline: one horizontal bar per phase, scaled to total duration, with ms labels.
   - Input: pretty-printed mono JSON with a Copy action. When input capture was off, it shows
     "Input not recorded (decisions.log: metadata)". When the input was cut, it shows a truncated notice.

@@ -27,6 +27,7 @@ mock.module('@/ui', () => ({ ...RealUI, Input: MockInput }));
 
 // Dynamic import so the @/ui mock intercepts before the real module loads.
 const { default: DecisionsTab } = await import('../../../src/modules/observability/DecisionsTab');
+const { default: DecisionDetailDrawer } = await import('../../../src/modules/observability/DecisionDetailDrawer');
 
 /** Drive a controlled @/ui Input by invoking its captured onChange (happy-dom input events are broken). */
 function setInputValue(label: string, value: string) {
@@ -86,7 +87,10 @@ const mockListResponse: DecisionLogListResponse = {
 };
 
 const mockDetails = new Map<string, DecisionLogDetail>([
-    ['row-1', { ...rowWithRun, question: 'Which backend?', inputJson: '{"goal":"deploy"}', phases: [] }],
+    [
+        'row-1',
+        { ...rowWithRun, minConfidence: 0.8, question: 'Which backend?', inputJson: '{"goal":"deploy"}', phases: [] },
+    ],
     ['row-2', { ...rowWithoutRun, question: null, inputJson: null, phases: [] }],
 ]);
 
@@ -158,6 +162,36 @@ describe('DecisionsTab (task 1100 remediation)', () => {
             expect(getByTestId('decision-detail-drawer')).toBeDefined();
         });
         expect(queryByTestId('navigate-decision-run-events-btn')).toBeNull();
+    });
+
+    test('drawer Confidence field leads with the derived level (DESIGN.md Decisions: Result)', async () => {
+        installFetchMock();
+        const { getByTestId, getAllByTestId, getByText } = render(<DecisionsTab timeRange="4h" />);
+        await waitFor(() => {
+            expect(getByTestId('decisions-table')).toBeDefined();
+        });
+        fireEvent.click(getAllByTestId('decision-row')[0] as HTMLElement);
+        await waitFor(() => {
+            expect(getByTestId('decision-detail-drawer')).toBeDefined();
+        });
+        // Level first, then the raw maker confidence and the bar it had to clear.
+        await waitFor(() => {
+            expect(getByText('HIGH · 0.9 (min 0.8)')).toBeDefined();
+        });
+
+        // A row whose maker never answered still reports its level (fail-conservative LOW),
+        // never the empty placeholder it used to show. The unknown id 404s, so what renders is the
+        // list-row floor — wait for the failed fetch so its state lands inside `act`.
+        const fallback = render(
+            <DecisionDetailDrawer
+                row={row({ id: 'row-low', confidence: null, confidenceLevel: 'LOW', minConfidence: 0.8 })}
+                onClose={() => {}}
+            />,
+        );
+        await waitFor(() => {
+            expect(fallback.getByText(/Detail fetch failed/)).toBeDefined();
+        });
+        expect(fallback.getByText('LOW')).toBeDefined();
     });
 
     test('a11y: Enter opens the drawer and closing returns focus to the activating row (DESIGN.md:480,493)', async () => {
