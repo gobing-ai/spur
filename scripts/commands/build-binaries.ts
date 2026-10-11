@@ -11,7 +11,7 @@
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { patchTsRuntimeImport } from './build-cli';
+import { patchTsRuntimeImport, UNUSED_LAYA_PEER } from './build-cli';
 
 const CLI_ENTRY = fileURLToPath(new URL('../../apps/cli/src/index.ts', import.meta.url));
 const OUT_DIR = fileURLToPath(new URL('../../dist/cli', import.meta.url));
@@ -56,7 +56,17 @@ export async function buildBinaries(): Promise<void> {
             const outfile = `${OUT_DIR}/${binaryAssetName(suffix)}`;
             console.log(`Compiling ${target} -> ${outfile}`);
             const result = Bun.spawnSync(
-                ['bun', 'build', CLI_ENTRY, '--compile', `--target=${target}`, '--outfile', outfile],
+                [
+                    'bun',
+                    'build',
+                    CLI_ENTRY,
+                    '--compile',
+                    `--target=${target}`,
+                    '--external',
+                    UNUSED_LAYA_PEER,
+                    '--outfile',
+                    outfile,
+                ],
                 { stdio: ['ignore', 'inherit', 'inherit'] },
             );
             if (result.exitCode !== 0) {

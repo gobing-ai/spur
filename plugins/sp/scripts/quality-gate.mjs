@@ -24901,7 +24901,7 @@ var POST_WATERMARK_TABLES = [
   "history_daily_stats",
   "history_board_source_daily"
 ];
-var HISTORY_IMPORT_SCHEMA_VERSION = "0.5.21";
+var HISTORY_IMPORT_SCHEMA_VERSION = "0.5.22";
 var HISTORY_IMPORT_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS history_import_checkpoint (
     source TEXT NOT NULL,

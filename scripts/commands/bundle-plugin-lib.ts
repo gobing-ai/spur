@@ -40,6 +40,28 @@ function normalizeBundleComments(mjsPath: string): void {
 
 const OUT_DIR = join(REPO_ROOT, 'plugins/sp/lib');
 
+/**
+ * `@johnhenry/laya` (pulled in by `ts-laya-mlx` 0.5.22+) imports its optional GPU peer from
+ * `io-node.js`. A Node-target single-file bundle resolves dynamic imports eagerly, so an
+ * uninstalled peer fails the whole build. Spur only ever asks laya for backend `mlx` (the
+ * `ts-laya-mlx` native client hardcodes it), so the webgpu entry point is stubbed to an
+ * unreachable throw rather than shipping GPU code nothing selects.
+ */
+const UNUSED_LAYA_PEER_STUB: Bun.BunPlugin = {
+    name: 'stub-unused-laya-peers',
+    setup(build) {
+        build.onResolve({ filter: /^@johnhenry\/backend-webgpu$/ }, () => ({
+            path: '@johnhenry/backend-webgpu',
+            namespace: 'laya-unused-peer',
+        }));
+        build.onLoad({ filter: /.*/, namespace: 'laya-unused-peer' }, () => ({
+            contents:
+                "export async function createWebGpuBackend() { throw new Error('the webgpu laya backend is not bundled'); }",
+            loader: 'js',
+        }));
+    },
+};
+
 // ponytail: the .d.mts mirrors each app module's full export surface; widen here (not by hand
 // in the lib files) if the scripts ever import more.
 const STEP_PROFILE_DECLS = `/**
@@ -821,6 +843,7 @@ export async function bundleInlineRunLib(outDir: string = OUT_DIR): Promise<{ mj
             format: 'esm',
             minify: { whitespace: true, syntax: true, identifiers: false },
             external: ['bun:sqlite'],
+            plugins: [UNUSED_LAYA_PEER_STUB],
             define: { 'import.meta.main': 'false' },
             naming: 'inline-run.generated.mjs',
             outdir: outDir,

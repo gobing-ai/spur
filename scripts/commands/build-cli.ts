@@ -22,6 +22,16 @@ const CLI_ENTRY = fileURLToPath(new URL('../../apps/cli/src/index.ts', import.me
 const CLI_DIR = fileURLToPath(new URL('../../apps/cli', import.meta.url));
 const OUT_FILE = fileURLToPath(new URL('../../dist/cli/spur', import.meta.url));
 
+/**
+ * Left external because `@johnhenry/laya` (via `ts-laya-mlx` 0.5.22+) imports this optional
+ * GPU peer from `io-node.js`, and a single-file bundle fails resolving an uninstalled package.
+ * Spur only ever asks laya for backend `mlx` (the `ts-laya-mlx` native client hardcodes it), so
+ * the import stays for the runtime and is never executed. `--compile` accepts no Bun.build
+ * plugins, which is why the compiled and CLI bundles pass this flag while
+ * `bundle-plugin-lib.ts` stubs the same peer.
+ */
+export const UNUSED_LAYA_PEER = '@johnhenry/backend-webgpu';
+
 /** Resolve the ts-runtime dist file through the CLI's module resolution. */
 function resolveTsRuntimeDist(): string {
     const req = createRequire(resolve(CLI_DIR, 'package.json'));
@@ -98,9 +108,12 @@ export function patchTsRuntimeImport(): () => void {
 export async function buildCompiledBinary(entry: string, outfile: string): Promise<void> {
     const restore = patchTsRuntimeImport();
     try {
-        const result = Bun.spawnSync(['bun', 'build', entry, '--compile', '--outfile', outfile], {
-            stdio: ['ignore', 'inherit', 'inherit'],
-        });
+        const result = Bun.spawnSync(
+            ['bun', 'build', entry, '--compile', '--external', UNUSED_LAYA_PEER, '--outfile', outfile],
+            {
+                stdio: ['ignore', 'inherit', 'inherit'],
+            },
+        );
         if (result.exitCode !== 0) throw new Error(`bun build failed with exit code ${result.exitCode}`);
     } finally {
         restore();

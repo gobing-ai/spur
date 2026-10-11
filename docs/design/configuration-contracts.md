@@ -168,6 +168,13 @@ same generator exported to the deterministic bundle tests, before staging the pl
 application source therefore refreshes the committed plugin libraries and their packaged copies
 through one owner; callers do not need a separate regeneration pass.
 
+Every Spur bundle inlines `packages/app`, which reaches `@johnhenry/laya` through
+`ts-laya-mlx` 0.5.22+. Laya imports its optional GPU peer from `io-node.js`, so bundlers fail on
+the uninstalled package; Spur never selects that backend, so `bundle-plugin-lib.ts` stubs the
+peer and the CLI/compiled builds (`apps/cli` `build:bundle`, `build-cli`, `build-binaries`, and
+`build-server` through `buildCompiledBinary`) pass `--external @johnhenry/backend-webgpu` —
+`--compile` accepts no Bun.build plugins.
+
 | Stage                      | Action                                                                                                                                                                                                                                                                                                                                                |
 | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Build (`build:bundle`)     | Copy repo-root `./config` → package-root `apps/cli/config` via `bundle-config`; copy repo-root `plugins/` + `.claude-plugin/` → package-root `apps/cli/plugins` + `apps/cli/.claude-plugin` via `bundle-plugins`; both shipped via the package `files` array as top-level `config/`, `plugins/`, `.claude-plugin/`.                                                                                                                                                                                                         |
