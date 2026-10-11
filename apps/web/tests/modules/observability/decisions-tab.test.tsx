@@ -27,7 +27,9 @@ mock.module('@/ui', () => ({ ...RealUI, Input: MockInput }));
 
 // Dynamic import so the @/ui mock intercepts before the real module loads.
 const { default: DecisionsTab } = await import('../../../src/modules/observability/DecisionsTab');
-const { default: DecisionDetailDrawer } = await import('../../../src/modules/observability/DecisionDetailDrawer');
+const { default: DecisionDetailDrawer, formatConfidence } = await import(
+    '../../../src/modules/observability/DecisionDetailDrawer'
+);
 
 /** Drive a controlled @/ui Input by invoking its captured onChange (happy-dom input events are broken). */
 function setInputValue(label: string, value: string) {
@@ -192,6 +194,25 @@ describe('DecisionsTab (task 1100 remediation)', () => {
             expect(fallback.getByText(/Detail fetch failed/)).toBeDefined();
         });
         expect(fallback.getByText('LOW')).toBeDefined();
+    });
+
+    test('Confidence field: level leads for every level, bar only when the catalog declared one', () => {
+        // `formatConfidence` is the drawer's own field renderer, called for HIGH/MEDIUM/LOW and for a
+        // row whose maker never answered. Asserted as a pure function because extra mounts in this
+        // file slow the shared happy-dom timeline enough to trip the next test's 1 s waitFor budget
+        // (measured: 2/3 runs failed with two further drawers mounted in the case above).
+        expect(formatConfidence({ confidence: 0.9, confidenceLevel: 'HIGH', minConfidence: 0.8 })).toBe(
+            'HIGH · 0.9 (min 0.8)',
+        );
+        expect(formatConfidence({ confidence: 0.6, confidenceLevel: 'MEDIUM', minConfidence: 0.5 })).toBe(
+            'MEDIUM · 0.6 (min 0.5)',
+        );
+        // No declared floor: the bar must not appear at all (no phantom `(min …)`).
+        expect(formatConfidence({ confidence: 0.6, confidenceLevel: 'MEDIUM', minConfidence: null })).toBe(
+            'MEDIUM · 0.6',
+        );
+        // Fail-conservative: an absent confidence still reads as its level, never an empty placeholder.
+        expect(formatConfidence({ confidence: null, confidenceLevel: 'LOW', minConfidence: 0.8 })).toBe('LOW');
     });
 
     test('a11y: Enter opens the drawer and closing returns focus to the activating row (DESIGN.md:480,493)', async () => {

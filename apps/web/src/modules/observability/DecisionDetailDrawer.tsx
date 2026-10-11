@@ -48,7 +48,9 @@ function formatPretty(value: string | null): string {
  * (HIGH/MEDIUM/LOW), so a row whose maker never answered reads `LOW` instead of an empty `—`,
  * then the raw confidence and the catalog bar it had to clear.
  */
-function formatConfidence(row: Pick<DecisionLogRow, 'confidence' | 'confidenceLevel' | 'minConfidence'>): string {
+export function formatConfidence(
+    row: Pick<DecisionLogRow, 'confidence' | 'confidenceLevel' | 'minConfidence'>,
+): string {
     if (row.confidence === null) return row.confidenceLevel;
     const bar = row.minConfidence !== null ? ` (min ${row.minConfidence})` : '';
     return `${row.confidenceLevel} · ${row.confidence}${bar}`;
