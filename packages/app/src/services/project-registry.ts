@@ -69,15 +69,48 @@ export function setProcessHelpersForTests(
     testProcessKiller = helpers?.processKiller;
 }
 
-/** Discover the PID listening on a local TCP port, filtering out self and parent PID. */
+/**
+ * Discover the PID listening on a local TCP port, filtering out self and parent PID.
+ *
+ * Windows has neither `lsof` nor `fuser`, so win32 reads the owner-PID column of
+ * `netstat -ano` instead. Without that branch every stop on Windows fails closed
+ * with "no listening PID found" (test-win/windows-serve-smoke).
+ */
 export async function findListeningPid(
     port: number,
     executor: ProcessExecutor = new NodeProcessExecutor(),
+    platform: NodeJS.Platform = process.platform,
 ): Promise<number | undefined> {
     if (testPidFinder) {
         return testPidFinder(port);
     }
     if (port <= 0 || port > 65535) return undefined;
+
+    if (platform === 'win32') {
+        try {
+            const res = await executor.run({
+                command: 'netstat',
+                args: ['-ano'],
+                forceBuffered: true,
+                rejectOnError: false,
+            });
+            if (res.exitCode === 0 && res.stdout) {
+                // Rows: `Proto  Local Address  Foreign Address  State  PID`, with IPv6
+                // locals bracketed (`[::]:3001`). UDP rows carry no State column.
+                for (const line of res.stdout.split(/\r?\n/)) {
+                    const [proto, local, , state, pidRaw] = line.trim().split(/\s+/);
+                    if (proto !== 'TCP' || state !== 'LISTENING' || !local?.endsWith(`:${port}`)) continue;
+                    const pid = parseInt(pidRaw ?? '', 10);
+                    if (!Number.isNaN(pid) && pid > 0 && pid !== process.pid && pid !== process.ppid) {
+                        return pid;
+                    }
+                }
+            }
+        } catch {
+            // netstat unavailable — no further fallback on Windows
+        }
+        return undefined;
+    }
 
     try {
         const res = await executor.run({

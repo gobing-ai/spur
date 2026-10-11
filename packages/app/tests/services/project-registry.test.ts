@@ -847,7 +847,6 @@ describe('ProjectRegistry', () => {
         });
 
         it('findListeningPid safely ignores self and parent PID', async () => {
-            // Under mock pid finder returning self or parent
             setProcessHelpersForTests({
                 pidFinder: () => process.pid,
             });
@@ -867,8 +866,30 @@ describe('ProjectRegistry', () => {
                     stderr: '',
                 }),
             };
-            const foundPid = await findListeningPid(3000, mockExecutor as never);
+            const foundPid = await findListeningPid(3000, mockExecutor as never, 'darwin');
             expect(foundPid).toBe(12345);
+        });
+
+        it('findListeningPid reads the owning PID from netstat on win32', async () => {
+            const netstatStdout = [
+                '  Proto  Local Address          Foreign Address        State           PID',
+                '  TCP    0.0.0.0:135            0.0.0.0:0              LISTENING       900',
+                '  UDP    0.0.0.0:500            *:*                                    900',
+                `  TCP    127.0.0.1:3001         0.0.0.0:0              LISTENING       ${process.pid}`,
+                `  TCP    127.0.0.1:3001         0.0.0.0:0              LISTENING       ${process.ppid}`,
+                '  TCP    127.0.0.1:3001         0.0.0.0:0              LISTENING       4242',
+                '  TCP    127.0.0.1:3001         127.0.0.1:52000        ESTABLISHED     555',
+                '  TCP    [::]:30010             [::]:0                 LISTENING       7777',
+            ].join('\r\n');
+            const netstatExecutor = {
+                run: async () => ({ exitCode: 0, stdout: netstatStdout, stderr: '' }),
+            };
+            expect(await findListeningPid(3001, netstatExecutor as never, 'win32')).toBe(4242);
+
+            const failingExecutor = {
+                run: async () => ({ exitCode: 1, stdout: '', stderr: 'netstat not found' }),
+            };
+            expect(await findListeningPid(3001, failingExecutor as never, 'win32')).toBeUndefined();
         });
     });
 });
