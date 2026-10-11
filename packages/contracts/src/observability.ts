@@ -37,6 +37,26 @@ export const observabilityVolumeBucketSchema = z.object({
 export type ObservabilityVolumeBucket = z.infer<typeof observabilityVolumeBucketSchema>;
 
 /**
+ * Single time-bucketed decision volume distribution schema.
+ */
+export const observabilityDecisionVolumeBucketSchema = z.object({
+    timestamp: z.string(),
+    total: z.number(),
+    byDecision: z.record(z.string(), z.number()),
+    byOutcome: z
+        .object({
+            accepted: z.number(),
+            fallback: z.number(),
+            rejected: z.number(),
+        })
+        .optional(),
+});
+/**
+ * Single time-bucketed decision volume distribution.
+ */
+export type ObservabilityDecisionVolumeBucket = z.infer<typeof observabilityDecisionVolumeBucketSchema>;
+
+/**
  * Top occurring event type aggregated by name schema.
  */
 export const observabilityTopEventTypeSchema = z.object({
@@ -81,6 +101,7 @@ export const observabilitySummaryResponseSchema = z.object({
     }),
     kpis: observabilitySummaryKpisSchema,
     eventVolumeBuckets: z.array(observabilityVolumeBucketSchema),
+    decisionVolumeBuckets: z.array(observabilityDecisionVolumeBucketSchema).default([]),
     topEventTypes: z.array(observabilityTopEventTypeSchema),
     recentErrors: z.array(observabilityRecentErrorSchema),
 });

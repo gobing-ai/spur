@@ -212,4 +212,65 @@ describe('DecisionLogDao', () => {
         expect(await dao.get(`dcl_${String(total - 1).padStart(4, '0')}`)).not.toBeNull();
         adapter.close();
     });
+
+    test('volumeBuckets aggregates dense buckets by decision and outcome', async () => {
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(adapter);
+        const dao = new DecisionLogDao(adapter);
+
+        const since = '2026-07-04T00:00:00.000Z';
+        const until = '2026-07-04T01:00:00.000Z';
+        const sinceMs = Date.parse(since);
+
+        // Insert rows into specific 15-minute buckets (bucketMs = 900_000)
+        // Bucket 0 (0-15m)
+        await dao.insert(
+            row({
+                id: 'dcl_b0_1',
+                decision_id: 'publish.pr',
+                outcome: 'accepted',
+                started_at: new Date(sinceMs + 60_000).toISOString(),
+            }),
+        );
+        await dao.insert(
+            row({
+                id: 'dcl_b0_2',
+                decision_id: 'task.triage',
+                outcome: 'fallback',
+                started_at: new Date(sinceMs + 120_000).toISOString(),
+            }),
+        );
+        // Bucket 2 (30-45m)
+        await dao.insert(
+            row({
+                id: 'dcl_b2_1',
+                decision_id: 'publish.pr',
+                outcome: 'rejected',
+                started_at: new Date(sinceMs + 32 * 60_000).toISOString(),
+            }),
+        );
+
+        const buckets = await dao.volumeBuckets({ since, until, bucketMs: 900_000 });
+        expect(buckets).toHaveLength(4);
+
+        // Bucket 0
+        expect(buckets[0]?.total).toBe(2);
+        expect(buckets[0]?.byDecision).toEqual({ 'publish.pr': 1, 'task.triage': 1 });
+        expect(buckets[0]?.byOutcome).toEqual({ accepted: 1, fallback: 1, rejected: 0 });
+
+        // Bucket 1 (empty)
+        expect(buckets[1]?.total).toBe(0);
+        expect(buckets[1]?.byDecision).toEqual({});
+        expect(buckets[1]?.byOutcome).toEqual({ accepted: 0, fallback: 0, rejected: 0 });
+
+        // Bucket 2
+        expect(buckets[2]?.total).toBe(1);
+        expect(buckets[2]?.byDecision).toEqual({ 'publish.pr': 1 });
+        expect(buckets[2]?.byOutcome).toEqual({ accepted: 0, fallback: 0, rejected: 1 });
+
+        // Empty on invalid range
+        expect(await dao.volumeBuckets({ since: until, until: since })).toEqual([]);
+
+        adapter.close();
+    });
 });

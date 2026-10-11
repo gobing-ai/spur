@@ -29,6 +29,7 @@ export {
     type DecisionLogRow,
     type DecisionLogSummaryCounts,
     type DecisionLogSummaryRow,
+    type DecisionSummaryVolumeBucket,
 } from './decision-log-dao';
 export { type InboxReadReceipt, InboxRecentDao, type InboxRecentRow } from './inbox-recent-dao';
 export { InboxUnfinishedDao, type InboxUnfinishedRow } from './inbox-unfinished-dao';

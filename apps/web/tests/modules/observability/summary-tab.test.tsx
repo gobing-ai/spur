@@ -42,6 +42,20 @@ const mockSummary: ObservabilitySummaryResponse = {
             bySeverity: { info: 85, warning: 5, error: 2, unknown: 8 },
         },
     ],
+    decisionVolumeBuckets: [
+        {
+            timestamp: '2026-09-06T08:00:00.000Z',
+            total: 25,
+            byDecision: { 'idea-recommendation': 15, 'needs-design': 10 },
+            byOutcome: { accepted: 20, fallback: 5, rejected: 0 },
+        },
+        {
+            timestamp: '2026-09-06T09:00:00.000Z',
+            total: 30,
+            byDecision: { 'idea-recommendation': 20, 'publish.pr': 10 },
+            byOutcome: { accepted: 25, fallback: 5, rejected: 0 },
+        },
+    ],
     topEventTypes: [
         {
             name: 'task.created',
@@ -116,6 +130,7 @@ const emptySummary: ObservabilitySummaryResponse = {
         warningEventCount: 0,
     },
     eventVolumeBuckets: [],
+    decisionVolumeBuckets: [],
     topEventTypes: [],
     recentErrors: [],
 };
@@ -193,7 +208,23 @@ describe('SummaryTab (task 0791)', () => {
 
         await waitFor(() => {
             expect(getByTestId('stacked-event-volume-chart')).toBeDefined();
+            expect(getByTestId('stacked-decision-volume-chart')).toBeDefined();
         });
+
+        // Decision volume chart has success rate legend and secondary axis rate scale
+        expect(getByTestId('decision-success-rate-legend')).toBeDefined();
+        expect(getByTestId('decision-success-rate-legend').textContent).toContain('Success Rate (%)');
+        const decisionSvg = getByTestId('stacked-decision-volume-chart').querySelector('svg');
+        expect(decisionSvg).not.toBeNull();
+        expect(decisionSvg?.textContent).toContain('100%');
+        expect(decisionSvg?.textContent).toContain('0%');
+
+        // Severity breakdown and bar inside Total Events KPI card
+        expect(getByTestId('severity-breakdown')).toBeDefined();
+        expect(getByTestId('severity-breakdown').textContent).toContain('Info: 125');
+        expect(getByTestId('severity-breakdown').textContent).toContain('Warning: 10');
+        expect(getByTestId('severity-breakdown').textContent).toContain('Error: 5');
+        expect(getByTestId('severity-breakdown').textContent).toContain('Unknown: 10');
 
         // Severity bar has info, warning, error, unknown segments
         expect(getByTestId('severity-bar-info')).toBeDefined();
@@ -265,6 +296,7 @@ describe('SummaryTab (task 0791)', () => {
 
         expect(getByTestId('kpi-card-success-rate').textContent).toContain('0%');
         expect(getByTestId('empty-chart-fallback')).toBeDefined();
+        expect(getByTestId('empty-decision-chart-fallback')).toBeDefined();
         expect(getByText('No recent failures in this time range.')).toBeDefined();
     });
 

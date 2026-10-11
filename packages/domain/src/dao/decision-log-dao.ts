@@ -99,6 +99,18 @@ export interface DecisionLogFacets {
     makers: string[];
 }
 
+/** Dense time-bucketed decision volume distribution across [since, until). */
+export interface DecisionSummaryVolumeBucket {
+    timestamp: string;
+    total: number;
+    byDecision: Record<string, number>;
+    byOutcome: {
+        accepted: number;
+        fallback: number;
+        rejected: number;
+    };
+}
+
 const SUMMARY_COLUMNS = [
     'id',
     'decision_id',
@@ -309,6 +321,94 @@ export class DecisionLogDao {
             };
         } catch (error) {
             if (error instanceof Error && error.message.includes('no such table: decision_logs')) return empty;
+            throw error;
+        }
+    }
+
+    /** Dense time-bucketed decision volume distribution across [since, until). */
+    async volumeBuckets(spec: {
+        since: string;
+        until?: string;
+        bucketMs?: number;
+    }): Promise<DecisionSummaryVolumeBucket[]> {
+        const until = spec.until ?? new Date().toISOString();
+        const since = spec.since;
+        const sinceMs = Date.parse(since);
+        const untilMs = Date.parse(until);
+
+        if (Number.isNaN(sinceMs) || Number.isNaN(untilMs) || untilMs <= sinceMs) {
+            return [];
+        }
+
+        const width = untilMs - sinceMs;
+        let bucketMs =
+            spec.bucketMs && spec.bucketMs > 0
+                ? spec.bucketMs
+                : width <= 3_600_000
+                  ? 60_000
+                  : width <= 21_600_000
+                    ? 300_000
+                    : width <= 86_400_000
+                      ? 900_000
+                      : width <= 604_800_000
+                        ? 3_600_000
+                        : 86_400_000;
+
+        while (Math.ceil((untilMs - sinceMs) / bucketMs) > 240) {
+            bucketMs *= 2;
+        }
+
+        const bucketCount = Math.max(1, Math.ceil((untilMs - sinceMs) / bucketMs));
+        const buckets: DecisionSummaryVolumeBucket[] = [];
+        for (let i = 0; i < bucketCount; i++) {
+            buckets.push({
+                timestamp: new Date(sinceMs + i * bucketMs).toISOString(),
+                total: 0,
+                byDecision: {},
+                byOutcome: { accepted: 0, fallback: 0, rejected: 0 },
+            });
+        }
+
+        try {
+            const bucketRows = await this.adapter.queryAll<{
+                bucket_idx: number;
+                decision_id: string;
+                outcome: string;
+                cnt: number;
+            }>(
+                `SELECT
+                    CAST((strftime('%s', started_at) * 1000 - ?1) / ?2 AS INTEGER) AS bucket_idx,
+                    decision_id,
+                    outcome,
+                    COUNT(*) AS cnt
+                FROM decision_logs
+                WHERE started_at >= ?3 AND started_at < ?4
+                GROUP BY bucket_idx, decision_id, outcome`,
+                sinceMs,
+                bucketMs,
+                since,
+                until,
+            );
+
+            for (const row of bucketRows) {
+                const idx = Number(row.bucket_idx);
+                if (idx >= 0 && idx < buckets.length) {
+                    const b = buckets[idx];
+                    if (b !== undefined) {
+                        const cnt = Number(row.cnt);
+                        b.total += cnt;
+                        b.byDecision[row.decision_id] = (b.byDecision[row.decision_id] ?? 0) + cnt;
+                        if (row.outcome === 'accepted' || row.outcome === 'fallback' || row.outcome === 'rejected') {
+                            b.byOutcome[row.outcome] += cnt;
+                        }
+                    }
+                }
+            }
+            return buckets;
+        } catch (error) {
+            if (error instanceof Error && error.message.includes('no such table: decision_logs')) {
+                return buckets;
+            }
             throw error;
         }
     }

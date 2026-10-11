@@ -502,10 +502,12 @@ describe('observability routing-summary (task 0552)', () => {
             const body = (await res.json()) as {
                 kpis: { totalEvents: number; errorEventCount: number };
                 recentErrors: unknown[];
+                decisionVolumeBuckets: unknown[];
             };
             expect(body.kpis.totalEvents).toBe(10);
             expect(body.kpis.errorEventCount).toBe(2);
             expect(body.recentErrors).toHaveLength(1);
+            expect(body.decisionVolumeBuckets).toBeDefined();
         });
 
         test('rejects malformed since or until with 400', async () => {

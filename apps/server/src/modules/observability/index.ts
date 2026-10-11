@@ -359,10 +359,12 @@ function handleObservabilitySummary(ctx: ServerContext) {
 
             const dao = await ctx.systemEventDao();
             const db = await ctx.getDb();
+            const decisionDao = new DecisionLogDao(db);
 
-            const [eventSummary, jobKpis] = await Promise.all([
+            const [eventSummary, jobKpis, decisionBuckets] = await Promise.all([
                 dao.eventSummary({ since, until, bucketMs }),
                 queueJobKpis(db, sinceMs, untilMs),
+                decisionDao.volumeBuckets({ since, until, bucketMs }).catch(() => []),
             ]);
 
             const combinedErrors = [
@@ -401,6 +403,7 @@ function handleObservabilitySummary(ctx: ServerContext) {
                     warningEventCount: eventSummary.warningEventCount,
                 },
                 eventVolumeBuckets: eventSummary.eventVolumeBuckets,
+                decisionVolumeBuckets: decisionBuckets,
                 topEventTypes: eventSummary.topEventTypes,
                 recentErrors: combinedErrors,
             };

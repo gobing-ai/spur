@@ -198,48 +198,55 @@ export const StackedColumnsChart: React.FC<{
         const iw = Math.max(60, W - PL - PR);
         const ih = height - PT - PB;
 
-        const { totals, ticks, top, band, bw, labelEvery, linePath, secondLinePath } = useMemo(() => {
-            const t = buckets.map((b) => series.reduce((a, s) => a + (b.v[s.id] || 0), 0));
-            const m = Math.max(1, ...t);
-            const tk = niceTicks(m, 4);
-            const tp = tk[tk.length - 1] || m;
-            const bnd = iw / Math.max(1, buckets.length);
-            const bWidth = Math.max(2, bnd * 0.85);
-            const mLbls = Math.max(2, Math.floor(iw / 70));
-            const lblEvery = Math.max(1, Math.ceil(buckets.length / mLbls));
+        const { totals, ticks, top, band, bw, labelEvery, linePath, secondLinePath, linePoints, secondLinePoints } =
+            useMemo(() => {
+                const t = buckets.map((b) => series.reduce((a, s) => a + (b.v[s.id] || 0), 0));
+                const m = Math.max(1, ...t);
+                const tk = niceTicks(m, 4);
+                const tp = tk[tk.length - 1] || m;
+                const bnd = iw / Math.max(1, buckets.length);
+                const bWidth = Math.max(2, bnd * 0.85);
+                const mLbls = Math.max(2, Math.floor(iw / 70));
+                const lblEvery = Math.max(1, Math.ceil(buckets.length / mLbls));
 
-            const yP = (v: number) => PT + ih - (Math.max(0, Math.min(100, v)) / 100) * ih;
-            const lPts = buckets
-                .map((b, i) => (b.lineValue !== undefined ? { x: PL + i * bnd + bnd / 2, y: yP(b.lineValue) } : null))
-                .filter((p): p is { x: number; y: number } => p !== null);
+                const yP = (v: number) => PT + ih - (Math.max(0, Math.min(100, v)) / 100) * ih;
+                const lPts = buckets
+                    .map((b, i) =>
+                        b.lineValue !== undefined ? { x: PL + i * bnd + bnd / 2, y: yP(b.lineValue) } : null,
+                    )
+                    .filter((p): p is { x: number; y: number } => p !== null);
 
-            const lPath =
-                lPts.length > 1
-                    ? lPts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
-                    : '';
+                const lPath =
+                    lPts.length > 1
+                        ? lPts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
+                        : '';
 
-            const l2Pts = buckets
-                .map((b, i) =>
-                    b.secondLineValue !== undefined ? { x: PL + i * bnd + bnd / 2, y: yP(b.secondLineValue) } : null,
-                )
-                .filter((p): p is { x: number; y: number } => p !== null);
+                const l2Pts = buckets
+                    .map((b, i) =>
+                        b.secondLineValue !== undefined
+                            ? { x: PL + i * bnd + bnd / 2, y: yP(b.secondLineValue) }
+                            : null,
+                    )
+                    .filter((p): p is { x: number; y: number } => p !== null);
 
-            const l2Path =
-                l2Pts.length > 1
-                    ? l2Pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
-                    : '';
+                const l2Path =
+                    l2Pts.length > 1
+                        ? l2Pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
+                        : '';
 
-            return {
-                totals: t,
-                ticks: tk,
-                top: tp,
-                band: bnd,
-                bw: bWidth,
-                labelEvery: lblEvery,
-                linePath: lPath,
-                secondLinePath: l2Path,
-            };
-        }, [buckets, series, iw, ih]);
+                return {
+                    totals: t,
+                    ticks: tk,
+                    top: tp,
+                    band: bnd,
+                    bw: bWidth,
+                    labelEvery: lblEvery,
+                    linePath: lPath,
+                    secondLinePath: l2Path,
+                    linePoints: lPts,
+                    secondLinePoints: l2Pts,
+                };
+            }, [buckets, series, iw, ih]);
 
         const y = (v: number) => PT + ih - (v / top) * ih;
         const yPct = (v: number) => PT + ih - (Math.max(0, Math.min(100, v)) / 100) * ih;
@@ -358,8 +365,8 @@ export const StackedColumnsChart: React.FC<{
                         );
                     })}
 
-                    {/* Secondary Rate Line (Cache Hit Ratio) */}
-                    {linePath && (
+                    {/* Secondary Rate Line */}
+                    {linePath ? (
                         <>
                             <path
                                 d={linePath}
@@ -379,10 +386,19 @@ export const StackedColumnsChart: React.FC<{
                                 strokeLinejoin="round"
                             />
                         </>
-                    )}
+                    ) : linePoints.length === 1 && linePoints[0] ? (
+                        <circle
+                            cx={linePoints[0].x}
+                            cy={linePoints[0].y}
+                            r={3.5}
+                            fill={lineColor}
+                            stroke="#ffffff"
+                            strokeWidth={1.5}
+                        />
+                    ) : null}
 
-                    {/* Third Rate Line (Gain Ratio) */}
-                    {secondLinePath && (
+                    {/* Third Rate Line */}
+                    {secondLinePath ? (
                         <>
                             <path
                                 d={secondLinePath}
@@ -402,7 +418,16 @@ export const StackedColumnsChart: React.FC<{
                                 strokeLinejoin="round"
                             />
                         </>
-                    )}
+                    ) : secondLinePoints.length === 1 && secondLinePoints[0] ? (
+                        <circle
+                            cx={secondLinePoints[0].x}
+                            cy={secondLinePoints[0].y}
+                            r={3.5}
+                            fill={secondLineColor}
+                            stroke="#ffffff"
+                            strokeWidth={1.5}
+                        />
+                    ) : null}
 
                     {/* Active Hover Dots on Lines */}
                     {hoverIdx !== null && buckets[hoverIdx]?.lineValue !== undefined && (

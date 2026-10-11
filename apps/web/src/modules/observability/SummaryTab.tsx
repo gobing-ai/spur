@@ -92,10 +92,12 @@ export const KpiCard: FC<{
     previous: number | undefined;
     invert?: boolean;
     testId?: string;
-}> = memo(({ label, value, sub, trend, trendColor = '#38bdf8', current, previous, invert, testId }) => (
+    extra?: React.ReactNode;
+}> = memo(({ label, value, sub, trend, trendColor = '#38bdf8', current, previous, invert, testId, extra }) => (
     <div className="bg-base-200 rounded-xl shadow-xs border border-base-content/10 p-4" data-testid={testId}>
-        <div className="flex justify-between items-center">
+        <div className="flex justify-between items-start gap-2">
             <span className="text-xs font-semibold uppercase tracking-wider text-base-content/60">{label}</span>
+            {extra}
         </div>
         <div className="flex items-end justify-between gap-2 mt-1">
             <div>
@@ -223,6 +225,37 @@ export default function SummaryTab(props: ObservabilityTabProps) {
         return { series: s, chartBuckets: cb };
     }, [data?.eventVolumeBuckets]);
 
+    // Stacked decision chart series & buckets derivation
+    const { decisionSeries, decisionChartBuckets } = useMemo(() => {
+        const buckets = data?.decisionVolumeBuckets ?? [];
+        const decisionTotals: Record<string, number> = {};
+        for (const b of buckets) {
+            for (const [d, count] of Object.entries(b.byDecision)) {
+                decisionTotals[d] = (decisionTotals[d] ?? 0) + count;
+            }
+        }
+        const sortedDecisions = Object.keys(decisionTotals).sort(
+            (a, b) => (decisionTotals[b] ?? 0) - (decisionTotals[a] ?? 0),
+        );
+        const s: ChartSeries[] = sortedDecisions.map((decision) => ({
+            id: decision,
+            label: decision,
+            color: getPrefixColor(decision),
+        }));
+        const cb: StackedColumnBucket[] = buckets.map((b) => {
+            const total = b.total;
+            const accepted = b.byOutcome?.accepted ?? 0;
+            const lineValue = total > 0 ? (accepted / total) * 100 : undefined;
+            return {
+                id: b.timestamp,
+                label: fmtBucketLabel(b.timestamp),
+                v: b.byDecision,
+                lineValue,
+            };
+        });
+        return { decisionSeries: s, decisionChartBuckets: cb };
+    }, [data?.decisionVolumeBuckets]);
+
     // Severity distribution aggregates
     const totalSeverity = useMemo(() => {
         const counts = { info: 0, warning: 0, error: 0, unknown: 0 };
@@ -247,6 +280,7 @@ export default function SummaryTab(props: ObservabilityTabProps) {
                         <div key={i} className="h-24 bg-base-200/60 rounded-xl" />
                     ))}
                 </div>
+                <div className="h-64 bg-base-200/60 rounded-xl" />
                 <div className="h-64 bg-base-200/60 rounded-xl" />
             </div>
         );
@@ -303,6 +337,88 @@ export default function SummaryTab(props: ObservabilityTabProps) {
                     current={kpis.totalEvents}
                     previous={prevKpis?.totalEvents}
                     testId="kpi-card-total-events"
+                    extra={
+                        <div className="flex flex-col items-end gap-1" data-testid="severity-breakdown">
+                            <div className="flex flex-wrap items-center justify-end gap-x-2 text-[10px] text-base-content/70 font-mono">
+                                <span className="flex items-center gap-1" title={`Info: ${totalSeverity.counts.info}`}>
+                                    <span className="w-1.5 h-1.5 rounded-full bg-info inline-block" /> Info:{' '}
+                                    {totalSeverity.counts.info.toLocaleString()}
+                                </span>
+                                <span
+                                    className="flex items-center gap-1"
+                                    title={`Warning: ${totalSeverity.counts.warning}`}
+                                >
+                                    <span className="w-1.5 h-1.5 rounded-full bg-warning inline-block" /> Warning:{' '}
+                                    {totalSeverity.counts.warning.toLocaleString()}
+                                </span>
+                                <span
+                                    className="flex items-center gap-1"
+                                    title={`Error: ${totalSeverity.counts.error}`}
+                                >
+                                    <span className="w-1.5 h-1.5 rounded-full bg-error inline-block" /> Error:{' '}
+                                    {totalSeverity.counts.error.toLocaleString()}
+                                </span>
+                                <span
+                                    className="flex items-center gap-1"
+                                    title={`Unknown: ${totalSeverity.counts.unknown}`}
+                                >
+                                    <span className="w-1.5 h-1.5 rounded-full bg-base-content/30 inline-block" />{' '}
+                                    Unknown: {totalSeverity.counts.unknown.toLocaleString()}
+                                </span>
+                            </div>
+                            <div
+                                className="w-36 h-1.5 rounded-full bg-base-300 overflow-hidden flex"
+                                data-testid="severity-distribution-bar"
+                            >
+                                {totalSeverity.sum > 0 ? (
+                                    <>
+                                        {totalSeverity.counts.info > 0 && (
+                                            <div
+                                                style={{
+                                                    width: `${(totalSeverity.counts.info / totalSeverity.sum) * 100}%`,
+                                                }}
+                                                className="bg-info h-full"
+                                                title={`Info: ${totalSeverity.counts.info}`}
+                                                data-testid="severity-bar-info"
+                                            />
+                                        )}
+                                        {totalSeverity.counts.warning > 0 && (
+                                            <div
+                                                style={{
+                                                    width: `${(totalSeverity.counts.warning / totalSeverity.sum) * 100}%`,
+                                                }}
+                                                className="bg-warning h-full"
+                                                title={`Warning: ${totalSeverity.counts.warning}`}
+                                                data-testid="severity-bar-warning"
+                                            />
+                                        )}
+                                        {totalSeverity.counts.error > 0 && (
+                                            <div
+                                                style={{
+                                                    width: `${(totalSeverity.counts.error / totalSeverity.sum) * 100}%`,
+                                                }}
+                                                className="bg-error h-full"
+                                                title={`Error: ${totalSeverity.counts.error}`}
+                                                data-testid="severity-bar-error"
+                                            />
+                                        )}
+                                        {totalSeverity.counts.unknown > 0 && (
+                                            <div
+                                                style={{
+                                                    width: `${(totalSeverity.counts.unknown / totalSeverity.sum) * 100}%`,
+                                                }}
+                                                className="bg-base-content/20 h-full"
+                                                title={`Unknown: ${totalSeverity.counts.unknown}`}
+                                                data-testid="severity-bar-unknown"
+                                            />
+                                        )}
+                                    </>
+                                ) : (
+                                    <div className="w-full h-full bg-base-content/10" />
+                                )}
+                            </div>
+                        </div>
+                    }
                 />
                 <KpiCard
                     label="Active In-Flight Jobs"
@@ -354,73 +470,42 @@ export default function SummaryTab(props: ObservabilityTabProps) {
                 )}
             </div>
 
-            {/* Severity Distribution Bar */}
-            <div className="bg-base-200 rounded-xl border border-base-content/10 p-4 flex flex-col gap-2">
-                <div className="flex justify-between items-center text-xs font-semibold uppercase tracking-wider text-base-content/60">
-                    <span>Severity Distribution</span>
-                    <span>{totalSeverity.sum.toLocaleString()} classified events</span>
+            {/* Decision Volume Trend Stacked Column Chart */}
+            <div className="bg-base-200 rounded-xl border border-base-content/10 p-4 flex flex-col gap-3">
+                <div className="flex justify-between items-center">
+                    <div>
+                        <h3 className="text-xs font-semibold uppercase tracking-wider text-base-content/60">
+                            Decision Volume Over Time
+                        </h3>
+                        <p className="text-xs text-base-content/60 mt-0.5">
+                            Distribution stacked by decision with success rate overlay
+                        </p>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs" data-testid="decision-success-rate-legend">
+                        <span className="flex items-center gap-1.5 text-success font-medium">
+                            <span className="w-2.5 h-0.5 bg-success inline-block rounded-full" />
+                            Success Rate (%)
+                        </span>
+                    </div>
                 </div>
-                <div
-                    className="w-full h-3 rounded-full bg-base-300 overflow-hidden flex"
-                    data-testid="severity-distribution-bar"
-                >
-                    {totalSeverity.sum > 0 ? (
-                        <>
-                            {totalSeverity.counts.info > 0 && (
-                                <div
-                                    style={{ width: `${(totalSeverity.counts.info / totalSeverity.sum) * 100}%` }}
-                                    className="bg-info h-full"
-                                    title={`Info: ${totalSeverity.counts.info}`}
-                                    data-testid="severity-bar-info"
-                                />
-                            )}
-                            {totalSeverity.counts.warning > 0 && (
-                                <div
-                                    style={{ width: `${(totalSeverity.counts.warning / totalSeverity.sum) * 100}%` }}
-                                    className="bg-warning h-full"
-                                    title={`Warning: ${totalSeverity.counts.warning}`}
-                                    data-testid="severity-bar-warning"
-                                />
-                            )}
-                            {totalSeverity.counts.error > 0 && (
-                                <div
-                                    style={{ width: `${(totalSeverity.counts.error / totalSeverity.sum) * 100}%` }}
-                                    className="bg-error h-full"
-                                    title={`Error: ${totalSeverity.counts.error}`}
-                                    data-testid="severity-bar-error"
-                                />
-                            )}
-                            {totalSeverity.counts.unknown > 0 && (
-                                <div
-                                    style={{ width: `${(totalSeverity.counts.unknown / totalSeverity.sum) * 100}%` }}
-                                    className="bg-base-content/20 h-full"
-                                    title={`Unknown: ${totalSeverity.counts.unknown}`}
-                                    data-testid="severity-bar-unknown"
-                                />
-                            )}
-                        </>
-                    ) : (
-                        <div className="w-full h-full bg-base-content/10" />
-                    )}
-                </div>
-                <div className="flex flex-wrap gap-4 text-xs text-base-content/70 mt-1">
-                    <span className="flex items-center gap-1.5">
-                        <span className="w-2.5 h-2.5 rounded-full bg-info inline-block" /> Info:{' '}
-                        {totalSeverity.counts.info.toLocaleString()}
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                        <span className="w-2.5 h-2.5 rounded-full bg-warning inline-block" /> Warning:{' '}
-                        {totalSeverity.counts.warning.toLocaleString()}
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                        <span className="w-2.5 h-2.5 rounded-full bg-error inline-block" /> Error:{' '}
-                        {totalSeverity.counts.error.toLocaleString()}
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                        <span className="w-2.5 h-2.5 rounded-full bg-base-content/20 inline-block" /> Unknown:{' '}
-                        {totalSeverity.counts.unknown.toLocaleString()}
-                    </span>
-                </div>
+                {decisionChartBuckets.length > 0 && decisionSeries.length > 0 ? (
+                    <div className="mt-2" data-testid="stacked-decision-volume-chart">
+                        <StackedColumnsChart
+                            buckets={decisionChartBuckets}
+                            series={decisionSeries}
+                            lineColor="#10b981"
+                            lineLabel="Success Rate"
+                            height={240}
+                        />
+                    </div>
+                ) : (
+                    <div
+                        className="p-8 text-center text-xs text-base-content/50"
+                        data-testid="empty-decision-chart-fallback"
+                    >
+                        No decision activity recorded in this time range.
+                    </div>
+                )}
             </div>
 
             {/* Hotspots: Top Event Types & Recent Failures */}

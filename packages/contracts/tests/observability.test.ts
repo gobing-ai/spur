@@ -33,6 +33,14 @@ describe('observability contracts', () => {
                     bySeverity: { info: 4, warning: 1, error: 0, unknown: 0 },
                 },
             ],
+            decisionVolumeBuckets: [
+                {
+                    timestamp: '2026-09-06T12:00:00.000Z',
+                    total: 2,
+                    byDecision: { 'publish.pr': 2 },
+                    byOutcome: { accepted: 2, fallback: 0, rejected: 0 },
+                },
+            ],
             topEventTypes: [
                 {
                     name: 'task.created',
