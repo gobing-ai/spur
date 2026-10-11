@@ -168,6 +168,9 @@ describe('DecideActionRunner catalog path (task 1094 R4)', () => {
             method: 'choice',
             backend: 'fake-maker',
             confidence: 0.91,
+            // 0.91 crosses the HIGH bar on the decision-log read path too; the receipt is the
+            // second surface the design names for `confidenceLevel` (0.8/0.5 boundaries).
+            confidenceLevel: 'HIGH',
             degraded: false,
             reason: 'accepted',
             source: 'model',
@@ -203,7 +206,17 @@ describe('DecideActionRunner catalog path (task 1094 R4)', () => {
         expect(result.ok).toBe(true);
         expect(result.data?.value).toBe('slow');
         const row = JSON.parse(writes['out/lane.decision.json'] ?? '{}') as Record<string, unknown>;
-        expect(row).toMatchObject({ value: 'slow', degraded: true, reason: 'error', source: 'default', durationMs: 0 });
+        expect(row).toMatchObject({
+            value: 'slow',
+            degraded: true,
+            reason: 'error',
+            source: 'default',
+            // A fallback row carries no confidence; the level must fail conservative to LOW
+            // rather than present a broken maker value as HIGH.
+            confidence: null,
+            confidenceLevel: 'LOW',
+            durationMs: 0,
+        });
         expect(rejected).toHaveLength(1);
         expect(String(rejected[0]?.message)).toContain('is unreadable');
     });

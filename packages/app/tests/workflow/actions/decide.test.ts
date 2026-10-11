@@ -142,6 +142,9 @@ describe('DecideActionRunner', () => {
         expect(row.value).toBe('retry');
         expect(row.reason).toBe('accepted');
         expect(row.schemaVersion).toBe(1);
+        // The action writes the receipt verbatim: the derived level travels with it.
+        expect(row.confidence).toBe(0.91);
+        expect(row.confidenceLevel).toBe('HIGH');
     });
 
     test('degraded decision still ok:true with value=default — the run continues (0941 R3/R4)', async () => {
@@ -155,7 +158,10 @@ describe('DecideActionRunner', () => {
         expect(decision.degraded).toBe(true);
         expect(decision.reason).toBe('disabled');
         const degradedRowText = writes['.spur/run/x-recovery.decision.json'] ?? '{}';
-        expect((JSON.parse(degradedRowText) as Record<string, unknown>).reason).toBe('disabled');
+        const degradedRow = JSON.parse(degradedRowText) as Record<string, unknown>;
+        expect(degradedRow.reason).toBe('disabled');
+        // No backend answered, so the level must not read as confident.
+        expect(degradedRow.confidenceLevel).toBe('LOW');
     });
 });
 
