@@ -2,7 +2,7 @@
 kind: design
 title: "Project switcher — system design (feature K1)"
 created_at: 2026-07-29
-updated_at: 2026-10-05
+updated_at: 2026-10-10
 related: [K1]
 tags: [system, K1, web, server]
 doc: design/project-switcher
