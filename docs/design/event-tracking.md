@@ -134,6 +134,7 @@ Scores are family-uniform **by construction** — the defect from §2.1 means pr
 | 78 | `decision.failure` *(added 1095)* | `decision-events.ts:231` (`invocation.fail` ← `decision-service.ts`) | ~ | P | P | ~ | P | – |
 | 79 | `decision.end` *(added 1095)* | `decision-events.ts:238` (`invocation.end` ← `decision-service.ts` `finally`) | ~ | ~ | P | ~ | ~ | P |
 | 80 | `decision.rejected` *(added 1095)* | `decision-events.ts:156` (`decision-service.ts:236,243,262,279,285` / `commands/decision.ts:173,197,205`) | – | ~ | P | ~ | P | – |
+| 81 | `message.read` *(added 0204)* | `agent-coordination-service.ts:299` (first read only) | ~ | ~ | P | ~ | – | – |
 
 **Tally:** Who — present `0`, partial `54`, absent `25`. What — present `6`, partial `73`, absent `0`. When — present `75`, partial `4`, absent `0`. Where — present `29`, partial `46`, absent `4`. Why — present `22`, partial `13`, absent `44`. How — present `36`, partial `36`, absent `7`.
 
@@ -298,6 +299,7 @@ The following matrix fixes summary behavior, retained facts, and outcome support
 | `scheduler.job.executed` | `name`, `durationMs`, `error` | `[scheduler] {name}` | `error` when present; otherwise `completed` |
 | `message.sent` | `msgId`, `fromId`, `toId`, `threadId`, `createdAt` | `[message] {fromId} -> {toId}` | — |
 | `message.replied` | `msgId`, `fromId`, `toId`, `threadId`, `createdAt` | `[message] {fromId} replied in {threadId}` | — |
+| `message.read` | `msgId`, `fromId`, `toId` (reader), `threadId`, `createdAt` (read time) | `[message] {toId} read {msgId}` | — |
 | `process.spawned` | `label`, `pid`, `agentId` | `[process] {label | pid} spawned` | — |
 | `process.exited` | `label`, `pid`, `exitCode`, `signal`, `durationMs`, `reason`, `error` | `[process] {label | pid} exited` | `exitCode` / `signal` / `reason` |
 | `process.stopped` | `label`, `pid`, `signal`, `reason` | `[process] {label | pid} stopped` | `reason` |

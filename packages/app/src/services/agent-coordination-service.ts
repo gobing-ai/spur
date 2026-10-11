@@ -82,7 +82,8 @@ export interface AgentCoordinationServiceContext {
 }
 
 /**
- * Metadata-only payload for `message.sent|replied` events. The body is NEVER
+ * Metadata-only payload for `message.sent|replied|read` events. For `message.read`,
+ * `toId` is the reader and `createdAt` the read time. The body is NEVER
  * included — events are observable metadata; bodies stay in the store.
  */
 export interface MessageEventPayload {
@@ -113,15 +114,19 @@ export interface TaskAssignedEventPayload {
 
 /** Bus shape for message lifecycle events (legacy alias of {@link CoordinationEventBus}). */
 export type MessageEventBus = EventBus<
-    Record<'message.sent' | 'message.replied', (event: MessageEventPayload) => void>
+    Record<'message.sent' | 'message.replied' | 'message.read', (event: MessageEventPayload) => void>
 >;
 
 /** Bus shape consumed by AgentCoordinationService — message + assignment event names. */
 export type CoordinationEventBus = EventBus<{
     'message.sent': (event: MessageEventPayload) => void;
     'message.replied': (event: MessageEventPayload) => void;
+    'message.read': (event: MessageEventPayload) => void;
     'task.assigned': (event: TaskAssignedEventPayload) => void;
 }>;
+
+/** No message with that id is addressed to the reader (unknown id and wrong reader look alike). */
+export class MessageNotFoundError extends Error {}
 
 /** Result of enqueuing or threading a message. */
 export interface SendResult {
@@ -278,6 +283,28 @@ export class AgentCoordinationService {
         return keyed === null
             ? { msgId, toId, status: 'queued', injected: false }
             : { msgId, toId, status: 'queued', injected: false, replayed: keyed.replayed, requestKey };
+    }
+
+    /**
+     * Mark a message read by its recipient (0204 P2). Idempotent: only the first mark
+     * emits `message.read`; repeats return the original stamp. A non-recipient or unknown
+     * id is "not found" — the same answer, so ids cannot be probed across recipients.
+     */
+    async markMessageRead(msgId: string, readerId: string): Promise<{ readAt: string; transitioned: boolean }> {
+        validateAgentId(readerId);
+        const receipt = await (await this.inboxRecentDao()).markRead(msgId, readerId);
+        if (receipt === null) throw new MessageNotFoundError(`message ${msgId} not found for ${readerId}`);
+        const readAt = new Date(receipt.readAt).toISOString();
+        if (receipt.transitioned) {
+            await this.emitMessageEvent('message.read', {
+                msgId,
+                fromId: receipt.fromId,
+                toId: readerId,
+                threadId: receipt.inReplyTo,
+                createdAt: readAt,
+            });
+        }
+        return { readAt, transitioned: receipt.transitioned };
     }
 
     /** List the pending + delivered messages addressed to an agent. */
@@ -601,7 +628,7 @@ export class AgentCoordinationService {
      * senders. The inbox row is already durable; an event failure cannot undo it.
      */
     private async emitMessageEvent(
-        name: 'message.sent' | 'message.replied',
+        name: 'message.sent' | 'message.replied' | 'message.read',
         payload: MessageEventPayload,
     ): Promise<void> {
         const bus = this.ctx.eventBus;
@@ -613,7 +640,8 @@ export class AgentCoordinationService {
                     id: crypto.randomUUID(),
                     event_name: name,
                     occurred_at: payload.createdAt,
-                    actor: payload.fromId ?? 'operator',
+                    // A read is acted by its reader; sends by their sender.
+                    actor: (name === 'message.read' ? payload.toId : payload.fromId) ?? 'operator',
                     payload_json: JSON.stringify(payload),
                 });
             }

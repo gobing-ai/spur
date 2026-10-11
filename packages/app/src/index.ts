@@ -122,7 +122,7 @@ export type {
     SendResult,
     TaskAssignedEventPayload,
 } from './services/agent-coordination-service';
-export { AgentCoordinationService } from './services/agent-coordination-service';
+export { AgentCoordinationService, MessageNotFoundError } from './services/agent-coordination-service';
 export {
     type AgentLoopDeps,
     type AgentLoopRunInput,

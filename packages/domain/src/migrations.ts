@@ -70,6 +70,17 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_inbox_messages_request_key ON inbox_messag
 `;
 
 /**
+ * 0204 P2: Spur-local `read_at` read receipt on `inbox_messages` (ms epoch, NULL = unread).
+ * Deliberately NOT in {@link INBOX_MESSAGES_SCHEMA_SQL}: that DDL mirrors the ts-db table
+ * byte-for-byte, and ts-db does not model read state. Fresh and legacy DBs both gain the
+ * column here (`addColumnIfMissing` guards with `read_at`). Mirrored in
+ * `drizzle/0053_spur_cli_inbox_messages_read_at.sql`.
+ */
+export const INBOX_MESSAGES_READ_AT_SCHEMA_SQL = `
+ALTER TABLE inbox_messages ADD COLUMN read_at INTEGER;
+`;
+
+/**
  * DDL for the `queue_jobs` table owned by `@gobing-ai/ts-db` (`QueueJobDao`, backing
  * `@gobing-ai/ts-infra` `DBJobQueue`/`DBQueueConsumer`). ts-db ships the Drizzle table +
  * embedded migrations but no SQL constant, so the DDL is mirrored here and kept
@@ -1644,6 +1655,13 @@ export const CLI_MIGRATIONS: CliMigration[] = [
         id: '0052_spur_cli_decision_logs',
         sql: DECISION_LOGS_SCHEMA_SQL,
     },
+    {
+        // 0204 P2: read receipt column behind `message.read`. addColumnIfMissing guards with
+        // `read_at`; fresh DBs execute it too (the ts-db mirror DDL omits the column).
+        id: '0053_spur_cli_inbox_messages_read_at',
+        sql: INBOX_MESSAGES_READ_AT_SCHEMA_SQL,
+        addColumnIfMissing: { table: 'inbox_messages', column: 'read_at' },
+    },
 ];
 
 /** Filename marker for regenerated CLI-owned migrations. */
@@ -1885,9 +1903,10 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
             migration.id === '0050_spur_cli_history_board_skill_5m_capability_grain' &&
             !(await tableExists(adapter, 'history_board_skill_5m'));
 
-        // 0043 ALTERs inbox_messages — same table-absence shape as 0041/0027.
-        const inboxRequestKeySkip =
-            migration.id === '0043_spur_cli_inbox_messages_request_key' &&
+        // 0043 and 0053 ALTER inbox_messages — same table-absence shape as 0041/0027.
+        const inboxColumnSkip =
+            (migration.id === '0043_spur_cli_inbox_messages_request_key' ||
+                migration.id === '0053_spur_cli_inbox_messages_read_at') &&
             !(await tableExists(adapter, 'inbox_messages'));
 
         // 0044 ALTERs coordination_runs — same table-absence shape as 0041/0043
@@ -1948,7 +1967,7 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
             !queueJobsDeadlineLeaseSkip &&
             !runsTerminalReasonSkip &&
             !skillCapabilityGrainSkip &&
-            !inboxRequestKeySkip &&
+            !inboxColumnSkip &&
             !coordinationReceiptColumnsSkip &&
             !historyToolIdentitySkip &&
             !historyMeasureVectorSkip &&

@@ -1,4 +1,4 @@
-import { normalizeProjectPath } from '@gobing-ai/spur-app';
+import { MessageNotFoundError, normalizeProjectPath } from '@gobing-ai/spur-app';
 import type { Context, Hono } from 'hono';
 import type { ServerContext } from '../../context';
 import type { ServerModule } from '../types';
@@ -12,6 +12,8 @@ import type { ServerModule } from '../types';
  *   - POST /api/messages                              — send a message (body, to, optional from,
  *     optional projectPath — 0844 R4 project-scoped requests)
  *   - POST /api/messages/:id/reply                    — reply to a message (body)
+ *   - POST /api/messages/:id/read                     — recipient marks a message read (reader);
+ *     idempotent, emits `message.read` on the first mark only (0204 P2)
  *
  * Gated by ServerContext: on Bun the routes are active; on Cloudflare Workers
  * (ctx undefined) the module is a no-op (the inbox table is Bun-only — D1 has no
@@ -105,6 +107,22 @@ export const messagesModule: ServerModule = {
                 return c.json({ error: errMsg(err) }, 400);
             }
         });
+
+        // POST /api/messages/:id/read — the recipient marks a message read. Body: { reader }.
+        // 404 when no such message is addressed to the reader.
+        app.post('/api/messages/:id/read', async (c) => {
+            const id = c.req.param('id');
+            const parsed = await parseJsonBody(c);
+            if ('error' in parsed) return c.json({ error: parsed.error }, 400);
+            const { reader } = parsed;
+            if (typeof reader !== 'string' || reader.length === 0)
+                return c.json({ error: 'field "reader" is required' }, 400);
+            try {
+                return c.json(await ctx.coordination().markMessageRead(id, reader));
+            } catch (err) {
+                return c.json({ error: errMsg(err) }, err instanceof MessageNotFoundError ? 404 : 400);
+            }
+        });
     },
 };
 
@@ -112,7 +130,8 @@ export const messagesModule: ServerModule = {
 async function parseJsonBody(
     c: Context,
 ): Promise<
-    { to?: unknown; body?: unknown; from?: unknown; requestKey?: unknown; projectPath?: unknown } | { error: string }
+    | { to?: unknown; body?: unknown; from?: unknown; requestKey?: unknown; projectPath?: unknown; reader?: unknown }
+    | { error: string }
 > {
     let json: unknown;
     try {

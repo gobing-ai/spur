@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'bun:test';
-import type { AgentCoordinationService, InboxResult, RecentMessagesResult, SendResult } from '@gobing-ai/spur-app';
+import {
+    type AgentCoordinationService,
+    type InboxResult,
+    MessageNotFoundError,
+    type RecentMessagesResult,
+    type SendResult,
+} from '@gobing-ai/spur-app';
 import { Hono } from 'hono';
 import type { ServerContext } from '../../../src/context';
 import { messagesModule } from '../../../src/modules/messages';
@@ -20,6 +26,8 @@ function ctxWithStubs(
         replyThrows?: Error;
         /** Served project cwd (0844 projectPath guard). */
         cwd?: string;
+        /** When set, markMessageRead throws this Error (not found / invalid reader). */
+        readThrows?: Error;
     } = {},
 ): {
     ctx: ServerContext;
@@ -28,6 +36,7 @@ function ctxWithStubs(
         recent: Array<{ limit?: number }>;
         send: Array<{ from: string | null; to: string; body: string; requestKey?: string }>;
         reply: Array<{ id: string; body: string }>;
+        read: Array<{ id: string; reader: string }>;
     };
 } {
     const calls = {
@@ -35,6 +44,7 @@ function ctxWithStubs(
         recent: [] as Array<{ limit?: number }>,
         send: [] as Array<{ from: string | null; to: string; body: string; requestKey?: string }>,
         reply: [] as Array<{ id: string; body: string }>,
+        read: [] as Array<{ id: string; reader: string }>,
     };
     const coordination = {
         getInbox: async (agent: string, limit?: number, offset?: number) => {
@@ -60,6 +70,11 @@ function ctxWithStubs(
             calls.reply.push({ id, body });
             if (opts.replyThrows) throw opts.replyThrows;
             return { msgId: `reply-${calls.reply.length}`, toId: 'sender', status: 'queued', injected: false };
+        },
+        markMessageRead: async (id: string, reader: string) => {
+            calls.read.push({ id, reader });
+            if (opts.readThrows) throw opts.readThrows;
+            return { readAt: '2026-10-10T00:00:00.000Z', transitioned: calls.read.length === 1 };
         },
     } as unknown as AgentCoordinationService;
     const ctx = { cwd: opts.cwd ?? '/repo/wt', coordination: () => coordination } as unknown as ServerContext;
@@ -301,6 +316,49 @@ describe('messages module', () => {
             expect(res.status).toBe(400);
             const body = (await res.json()) as { error: string };
             expect(body.error).toContain('No message found');
+        });
+    });
+
+    describe('POST /api/messages/:id/read (0204 P2)', () => {
+        const post = (app: Hono, id: string, body: unknown) =>
+            app.request(`/api/messages/${id}/read`, {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: typeof body === 'string' ? body : JSON.stringify(body),
+            });
+
+        test('forwards id + reader and returns the receipt with 200', async () => {
+            const { ctx, calls } = ctxWithStubs();
+            const app = new Hono();
+            messagesModule.mount(app, ctx);
+            const res = await post(app, 'msg-1', { reader: 'planner' });
+            expect(res.status).toBe(200);
+            expect(await res.json()).toEqual({ readAt: '2026-10-10T00:00:00.000Z', transitioned: true });
+            expect(calls.read).toEqual([{ id: 'msg-1', reader: 'planner' }]);
+        });
+
+        test('rejects a missing/empty/non-string reader and malformed JSON with 400 before the service', async () => {
+            const { ctx, calls } = ctxWithStubs();
+            const app = new Hono();
+            messagesModule.mount(app, ctx);
+            for (const body of [{}, { reader: '' }, { reader: 7 }, 'not json']) {
+                expect((await post(app, 'msg-1', body)).status).toBe(400);
+            }
+            expect(calls.read).toEqual([]);
+        });
+
+        test('maps not-found to 404 and other service errors to 400', async () => {
+            for (const [error, status] of [
+                [new MessageNotFoundError('message x not found for planner'), 404],
+                [new Error('Invalid agent id "../x"'), 400],
+            ] as const) {
+                const { ctx } = ctxWithStubs({ readThrows: error });
+                const app = new Hono();
+                messagesModule.mount(app, ctx);
+                const res = await post(app, 'x', { reader: 'planner' });
+                expect(res.status).toBe(status);
+                expect(((await res.json()) as { error: string }).error).toBe(error.message);
+            }
         });
     });
 

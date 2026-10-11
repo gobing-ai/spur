@@ -23,6 +23,7 @@ import {
     type CoordinationEventBus,
     type MessageEventBus,
     type MessageEventPayload,
+    MessageNotFoundError,
     type TaskAssignedEventPayload,
 } from '../../src/index';
 import { resolveMemberExecutor } from '../../src/services/fleet-service';
@@ -109,13 +110,17 @@ class FakeTeamAgentProcess extends TeamAgentProcess {
 
 /** Build a fresh EventBus and capture every emitted payload by event name. */
 function makeCapturingBus(): { bus: MessageEventBus; events: Map<string, MessageEventPayload[]> } {
-    const bus = new EventBus<Record<'message.sent' | 'message.replied', (event: MessageEventPayload) => void>>();
+    const bus = new EventBus<
+        Record<'message.sent' | 'message.replied' | 'message.read', (event: MessageEventPayload) => void>
+    >();
     const events = new Map<string, MessageEventPayload[]>([
         ['message.sent', []],
         ['message.replied', []],
+        ['message.read', []],
     ]);
     bus.on('message.sent', (e) => events.get('message.sent')?.push(e));
     bus.on('message.replied', (e) => events.get('message.replied')?.push(e));
+    bus.on('message.read', (e) => events.get('message.read')?.push(e));
     return { bus, events };
 }
 
@@ -226,6 +231,30 @@ describe('AgentCoordinationService messaging', () => {
             expect(replied?.length).toBe(1);
             expect(replied?.[0]?.threadId).toBe(sent.msgId);
             expect(replied?.[0]?.toId).toBe('coder'); // reply addresses the original sender
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('markMessageRead emits message.read once, metadata only, recipient-checked (0204 P2)', async () => {
+        const { bus, events } = makeCapturingBus();
+        const { svc, cleanup } = await makeService(bus);
+        try {
+            const sent = await svc.sendMessage('coder', 'planner', 'secret body');
+            const first = await svc.markMessageRead(sent.msgId, 'planner');
+            expect(first.transitioned).toBe(true);
+            expect(first.readAt).toBeTruthy();
+            const again = await svc.markMessageRead(sent.msgId, 'planner');
+            expect(again).toEqual({ ...first, transitioned: false });
+            const read = events.get('message.read');
+            expect(read?.length).toBe(1);
+            expect(read?.[0]).toMatchObject({ msgId: sent.msgId, fromId: 'coder', toId: 'planner', threadId: null });
+            expect(JSON.stringify(read?.[0])).not.toContain('secret body');
+            // Only the recipient may mark it read; unknown ids are not found either way.
+            await expect(svc.markMessageRead(sent.msgId, 'coder')).rejects.toBeInstanceOf(MessageNotFoundError);
+            await expect(svc.markMessageRead('missing', 'planner')).rejects.toThrow(/not found/);
+            await expect(svc.markMessageRead(sent.msgId, '../bad')).rejects.toThrow();
+            expect(events.get('message.read')?.length).toBe(1);
         } finally {
             await cleanup();
         }

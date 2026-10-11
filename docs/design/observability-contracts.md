@@ -403,6 +403,7 @@ can't express). Web consumes via `fetchWithTimeout` + `resolveApiUrl` and native
 | GET    | `/api/messages`           | `?limit=<n>`                         | `{ messages: [...], count }`                                              | Global message feed (all agents). |
 | POST   | `/api/messages`           | `{ to, body, from?, requestKey?, projectPath? }` | `{ msgId, toId, status: 'queued', injected, replayed?, requestKey? }` (201) | Enqueue a message; a mismatched `projectPath` returns 409 before writing. |
 | POST   | `/api/messages/:id/reply` | `{ body }`                   | `{ msgId, toId, status: 'queued', injected }` (201)                                 | Reply to the original sender as the original recipient. |
+| POST   | `/api/messages/:id/read`  | `{ reader }`                 | `{ readAt, transitioned }` (200)                                                    | Recipient marks the message read (`inbox_messages.read_at`, migration 0053). Idempotent: only the first mark emits the metadata-only `message.read`; 404 when no such message is addressed to `reader`. |
 
 **Convention:** response envelopes use `{ data…, count }` for lists and `{ ok, ... }` for mutations,
 matching the existing board routes. Error shape: `{ error: string }` with the appropriate HTTP status.

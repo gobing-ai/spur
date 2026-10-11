@@ -30,7 +30,7 @@ export {
     type DecisionLogSummaryCounts,
     type DecisionLogSummaryRow,
 } from './decision-log-dao';
-export { InboxRecentDao, type InboxRecentRow } from './inbox-recent-dao';
+export { type InboxReadReceipt, InboxRecentDao, type InboxRecentRow } from './inbox-recent-dao';
 export { InboxUnfinishedDao, type InboxUnfinishedRow } from './inbox-unfinished-dao';
 export {
     AGENT_LIFECYCLE_EVENT,

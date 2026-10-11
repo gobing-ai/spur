@@ -16,6 +16,7 @@ import {
     DECISION_LOGS_SCHEMA_SQL,
     HISTORY_BOARD_SKILL_5M_CAPABILITY_GRAIN_SCHEMA_SQL,
     HISTORY_PERFORMANCE_INDEXES_SCHEMA_SQL,
+    INBOX_MESSAGES_READ_AT_SCHEMA_SQL,
     loadSqlMigrations,
     PROJECT_CLAIMS_SCHEMA_SQL,
     PROJECT_STRATEGY_SCHEMA_SQL,
@@ -129,7 +130,7 @@ describe('db migrations', () => {
         });
 
         test('has foundation through History Board indexes, rollups, checkpoint identity, the history-refresh single-flight index, the 0722 task↔session attribution table, the 0817 queue-jobs deadline/lease columns, the 0832 inbox request key, the 0833 coordination-runs receipt columns, the 0836 project_claims table, the 0838 project_strategy table, the 0863 scheduler-custom single-flight index, and the 0890 executor-update owner columns', () => {
-            expect(CLI_MIGRATIONS).toHaveLength(53);
+            expect(CLI_MIGRATIONS).toHaveLength(54);
             expect(CLI_MIGRATIONS[0]?.id).toBe('0000_spur_cli_foundation');
             expect(CLI_MIGRATIONS[1]?.id).toBe('0001_spur_cli_team_inbox');
             expect(CLI_MIGRATIONS[2]?.id).toBe('0002_spur_cli_rule_history');
@@ -252,6 +253,24 @@ describe('db migrations', () => {
             );
         });
 
+        test('inbox read-receipt migration adds read_at behind a column guard (0204 P2)', () => {
+            expect(CLI_MIGRATIONS[53]?.id).toBe('0053_spur_cli_inbox_messages_read_at');
+            expect(CLI_MIGRATIONS[53]?.sql).toBe(INBOX_MESSAGES_READ_AT_SCHEMA_SQL);
+            expect(CLI_MIGRATIONS[53]?.addColumnIfMissing).toEqual({ table: 'inbox_messages', column: 'read_at' });
+            expect(INBOX_MESSAGES_READ_AT_SCHEMA_SQL).toContain(
+                'ALTER TABLE inbox_messages ADD COLUMN read_at INTEGER',
+            );
+        });
+
+        test('fresh and legacy inbox tables both gain read_at exactly once (0204 P2)', async () => {
+            const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+            await applyCliMigrations(adapter);
+            const cols = await adapter.queryAll<{ name: string }>('PRAGMA table_info(inbox_messages)');
+            expect(cols.filter((c) => c.name === 'read_at')).toHaveLength(1);
+            expect(await applyCliMigrations(adapter)).toBe(0);
+            adapter.close();
+        });
+
         test('decision-logs migration creates the decision_logs table (1100)', () => {
             expect(CLI_MIGRATIONS[52]?.id).toBe('0052_spur_cli_decision_logs');
             expect(CLI_MIGRATIONS[52]?.sql).toBe(DECISION_LOGS_SCHEMA_SQL);
@@ -362,7 +381,7 @@ describe('db migrations', () => {
             // 0041 precedent).
             const applied = await applyCliMigrations(adapter);
             // 0052 journals + applies: standalone CREATE TABLE IF NOT EXISTS (0046 precedent).
-            expect(applied).toBe(49);
+            expect(applied).toBe(50);
             // 0005 and 0007 backfilled columns on the legacy runs table.
             const cols = await adapter.queryAll<{ name: string }>('PRAGMA table_info(runs)');
             expect(cols.some((c) => c.name === 'pid')).toBe(true);
@@ -416,7 +435,7 @@ describe('db migrations', () => {
             // 0044 likewise: CLI_SCHEMA_SQL already ships the receipt columns.
             // 0046 likewise: CLI_SCHEMA_SQL already ships project_strategy (journal counts).
             // 0048 likewise: CLI_SCHEMA_SQL already ships the owner columns (journal counts).
-            expect(applied).toBe(52);
+            expect(applied).toBe(53);
             await adapter.run(
                 'INSERT INTO inbox_messages (id, to_id, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
                 'm1',
@@ -675,7 +694,8 @@ describe('db migrations', () => {
             // the 0041 precedent).
             // + 0049 runs terminal_reason (journaled but skipped: no runs table here —
             // the 0041 table-absence precedent).
-            expect(await applyCliMigrations(adapter)).toBe(44);
+            // + 0053 inbox read_at (journaled but skipped: no inbox_messages here — 0043 precedent).
+            expect(await applyCliMigrations(adapter)).toBe(45);
             const columns = await adapter.queryAll<{ name: string }>(
                 'PRAGMA index_info(idx_history_message_provenance_run)',
             );
@@ -732,10 +752,10 @@ describe('db migrations', () => {
             adapter.close();
         });
 
-        test('upgraded DB journaled through 0021 receives 0022-0052 and converges with a fresh DB', async () => {
+        test('upgraded DB journaled through 0021 receives 0022-0053 and converges with a fresh DB', async () => {
             const upgraded = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
             await applyCliMigrations(upgraded, CLI_MIGRATIONS.slice(0, 22));
-            expect(await applyCliMigrations(upgraded)).toBe(31);
+            expect(await applyCliMigrations(upgraded)).toBe(32);
 
             const fresh = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
             await applyCliMigrations(fresh);
@@ -999,6 +1019,19 @@ describe('db migrations', () => {
                     .join('\n')
                     .trim();
             expect(stripComments(decisionLogs?.sql ?? '')).toBe(stripComments(DECISION_LOGS_SCHEMA_SQL));
+        });
+
+        test('repo drizzle folder includes the 0053 inbox read_at column (0204 folder-load)', async () => {
+            const migrations = await loadSqlMigrations(join(import.meta.dir, '../../../../drizzle'));
+            const readAt = migrations.find((m) => m.id === '0053_spur_cli_inbox_messages_read_at');
+            expect(readAt).toBeDefined();
+            const stripComments = (sql: string): string =>
+                sql
+                    .split('\n')
+                    .filter((line) => !line.trimStart().startsWith('--'))
+                    .join('\n')
+                    .trim();
+            expect(stripComments(readAt?.sql ?? '')).toBe(stripComments(INBOX_MESSAGES_READ_AT_SCHEMA_SQL));
         });
 
         test('repo drizzle folder includes the 0046 project_strategy table (0838 folder-load)', async () => {

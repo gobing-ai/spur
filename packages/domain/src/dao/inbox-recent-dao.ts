@@ -11,6 +11,27 @@ export interface InboxRecentRow {
     in_reply_to: string | null;
 }
 
+/** Outcome of {@link InboxRecentDao.markRead}; `transitioned` is false on a repeat mark. */
+export interface InboxReadReceipt {
+    readAt: number;
+    transitioned: boolean;
+    fromId: string | null;
+    inReplyTo: string | null;
+}
+
+interface ReadRow {
+    read_at: number | null;
+    from_id: string | null;
+    in_reply_to: string | null;
+}
+
+const toReceipt = (row: ReadRow, transitioned: boolean): InboxReadReceipt => ({
+    readAt: row.read_at ?? 0,
+    transitioned,
+    fromId: row.from_id,
+    inReplyTo: row.in_reply_to,
+});
+
 /**
  * Read-side DAO over the `inbox_messages` table for cross-recipient recent
  * queries (read-only team message board, task 0189 wave A / 0198). Extends the
@@ -72,5 +93,35 @@ export class InboxRecentDao {
             throw error;
         }
         return result;
+    }
+
+    /**
+     * Stamp `read_at` on a message addressed to `readerId` (0204 P2). Only the first mark
+     * transitions; later marks return the original stamp. Returns null when the id is unknown,
+     * the reader is not the recipient, or the table is absent.
+     */
+    async markRead(id: string, readerId: string, nowMs = Date.now()): Promise<InboxReadReceipt | null> {
+        try {
+            const [stamped] = await this.db.queryAll<ReadRow>(
+                `UPDATE inbox_messages SET read_at = ?3
+                 WHERE id = ?1 AND to_id = ?2 AND read_at IS NULL
+                 RETURNING read_at, from_id, in_reply_to`,
+                id,
+                readerId,
+                nowMs,
+            );
+            if (stamped) return toReceipt(stamped, true);
+            const [existing] = await this.db.queryAll<ReadRow>(
+                'SELECT read_at, from_id, in_reply_to FROM inbox_messages WHERE id = ?1 AND to_id = ?2',
+                id,
+                readerId,
+            );
+            return existing?.read_at == null ? null : toReceipt(existing, false);
+        } catch (error) {
+            if (error instanceof Error && error.message.includes('no such table: inbox_messages')) {
+                return null;
+            }
+            throw error;
+        }
     }
 }

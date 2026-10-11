@@ -50,6 +50,7 @@ describe('SYSTEM_EVENT_CATALOG', () => {
         // SSE stream (live board) — one source for both consumers.
         expect(SYSTEM_EVENT_NAMES).toContain('message.sent');
         expect(SYSTEM_EVENT_NAMES).toContain('message.replied');
+        expect(SYSTEM_EVENT_NAMES).toContain('message.read');
     });
 
     test('includes workflow and HITL lifecycle events', () => {

@@ -273,6 +273,7 @@ const BASE_CATALOG = [
     // Message events are metadata-only. Message bodies stay in inbox storage.
     baseEvent('message.sent', 'message', 'message'),
     baseEvent('message.replied', 'message', 'message'),
+    baseEvent('message.read', 'message', 'message'),
 
     baseEvent('process.spawned', 'process', 'process'),
     baseEvent('process.exited', 'process', 'process'),
@@ -658,6 +659,21 @@ export const SYSTEM_EVENT_PRESENTERS: Record<SystemEventName, SystemEventPresent
             return from !== undefined && thread !== undefined
                 ? `[message] ${from} replied in ${thread}`
                 : '[message] replied';
+        },
+        outcome: unsupported,
+    },
+    'message.read': {
+        description: 'The recipient marked a message read (first read only).',
+        fields: [
+            field('msgId', 'Message'),
+            field('fromId', 'From'),
+            field('toId', 'Reader'),
+            field('threadId', 'Thread'),
+        ],
+        summary: ({ data }) => {
+            const reader = s(data, 'toId');
+            const msg = s(data, 'msgId');
+            return reader !== undefined && msg !== undefined ? `[message] ${reader} read ${msg}` : '[message] read';
         },
         outcome: unsupported,
     },

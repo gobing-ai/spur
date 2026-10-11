@@ -130,4 +130,41 @@ describe('InboxRecentDao', () => {
 
         adapter.close();
     });
+
+    test('markRead stamps read_at once for the recipient and is idempotent after (0204 P2)', async () => {
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(adapter);
+        const dao = new InboxRecentDao(adapter);
+        await insertInbox(adapter, 'alice', 'bob', 'hi', 1000);
+        const [row] = await dao.listRecent(1);
+        const id = row?.id ?? '';
+
+        const first = await dao.markRead(id, 'bob', 5000);
+        expect(first).toEqual({ readAt: 5000, transitioned: true, fromId: 'alice', inReplyTo: null });
+        // Second mark keeps the original stamp and reports no transition.
+        const second = await dao.markRead(id, 'bob', 9000);
+        expect(second).toEqual({ readAt: 5000, transitioned: false, fromId: 'alice', inReplyTo: null });
+    });
+
+    test('markRead refuses a non-recipient and an unknown id without stamping (0204 P2)', async () => {
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(adapter);
+        const dao = new InboxRecentDao(adapter);
+        await insertInbox(adapter, 'alice', 'bob', 'hi', 1000);
+        const [row] = await dao.listRecent(1);
+        const id = row?.id ?? '';
+
+        expect(await dao.markRead(id, 'alice', 5000)).toBeNull();
+        expect(await dao.markRead('missing', 'bob', 5000)).toBeNull();
+        const [stamp] = await adapter.queryAll<{ read_at: number | null }>(
+            'SELECT read_at FROM inbox_messages WHERE id = ?1',
+            id,
+        );
+        expect(stamp?.read_at).toBeNull();
+    });
+
+    test('markRead returns null when the table is absent', async () => {
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        expect(await new InboxRecentDao(adapter).markRead('x', 'bob', 1)).toBeNull();
+    });
 });
