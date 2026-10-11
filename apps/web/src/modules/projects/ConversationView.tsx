@@ -17,17 +17,23 @@ function inboxUrl(agent: string): string {
 }
 
 const messagesUrl = () => `${resolveApiUrl()}/messages?limit=100`;
+const sseUrl = () => `${resolveApiUrl()}/events/planning`;
+/** Poll cadence for cross-process sends (a CLI `spur message send` fires on its own bus, never the server SSE). */
+const CONVERSATION_POLL_MS = 5_000;
 
 /**
  * Conversation tab: shows the inter-agent and operator conversation thread
- * for the served project, rehydrated on mount from the message store.
+ * for the served project, rehydrated on mount from the message store and
+ * refetched whenever a `message.*` event arrives on the planning stream or the
+ * poll interval elapses (G1).
  */
-export default function ConversationView() {
+export default function ConversationView({ pollMs = CONVERSATION_POLL_MS }: { pollMs?: number } = {}) {
     const project = useProjectContext();
     const [entries, setEntries] = useState<ConversationEntry[] | null>(null);
     const [failed, setFailed] = useState(false);
     const [agentFilter, setAgentFilter] = useState<string>('all');
     const [searchFilter, setSearchFilter] = useState<string>('');
+    const [liveTick, setLiveTick] = useState(0);
 
     const instanceId = project.fleet?.orchestrator.instanceId ?? null;
     const { requests, failed: requestsFailed } = useProjectRequests(instanceId);
@@ -40,7 +46,29 @@ export default function ConversationView() {
             return receipt === undefined ? entry : { ...entry, requestKey: receipt.requestKey ?? undefined, receipt };
         }) ?? null;
 
+    // Live tail: bump the refetch key on message.* frames (payloads are metadata-only, so refetch)
+    // and on a poll for sends from other processes.
     useEffect(() => {
+        if (project.path === null) return;
+        const timer = setInterval(() => setLiveTick((n) => n + 1), pollMs);
+        if (typeof EventSource === 'undefined') return () => clearInterval(timer);
+        const es = new EventSource(sseUrl());
+        es.onmessage = (msg) => {
+            try {
+                const name = (JSON.parse(msg.data) as { eventName?: unknown }).eventName;
+                if (typeof name === 'string' && name.startsWith('message.')) setLiveTick((n) => n + 1);
+            } catch {
+                // malformed frame — ignore
+            }
+        };
+        return () => {
+            clearInterval(timer);
+            es.close();
+        };
+    }, [project.path, pollMs]);
+
+    useEffect(() => {
+        void liveTick; // refetch trigger, bumped by the live-tail effect above
         if (project.path === null) return;
         const controller = new AbortController();
         let cancelled = false;
@@ -99,7 +127,7 @@ export default function ConversationView() {
             cancelled = true;
             controller.abort();
         };
-    }, [project.path, instanceId]);
+    }, [project.path, instanceId, liveTick]);
 
     const availableAgents = useMemo(() => {
         const seen = new Set<string>();

@@ -213,3 +213,88 @@ describe('ConversationView rehydration (0841 R4/R6)', () => {
         }
     });
 });
+
+// ── G1 "The board inbox view updates live": message.* SSE frames refetch the thread ──
+
+class FakeEventSource {
+    static instances: FakeEventSource[] = [];
+    onmessage: ((event: MessageEvent) => void) | null = null;
+    closed = false;
+    constructor(readonly url: string) {
+        FakeEventSource.instances.push(this);
+    }
+    close(): void {
+        this.closed = true;
+    }
+    emit(eventName: string): void {
+        this.onmessage?.(new MessageEvent('message', { data: JSON.stringify({ eventName }) }));
+    }
+}
+
+describe('ConversationView live tail (G1 / 0206 regression after 0849)', () => {
+    test('a message.sent frame on the planning stream shows the new message without remount', async () => {
+        const original = globalThis.EventSource;
+        FakeEventSource.instances = [];
+        Object.defineProperty(globalThis, 'EventSource', { configurable: true, value: FakeEventSource });
+        try {
+            const rows: unknown[] = [];
+            setFetchForTesting(inboxByAgent({ 'board-operator': rows }));
+            const view = harness(ctx());
+            await act(async () => {});
+            expect(view.container.querySelectorAll('[data-conversation-entry]')).toHaveLength(0);
+            const es = FakeEventSource.instances[0];
+            expect(es?.url).toEndWith('/events/planning');
+
+            rows.push({
+                id: 'm1',
+                fromId: 'lead',
+                toId: 'board-operator',
+                body: 'live message',
+                status: 'queued',
+                createdAt: '2026-09-12T12:00:00.000Z',
+                inReplyTo: null,
+            });
+            // Non-message frames do not refetch.
+            await act(async () => es?.emit('task.updated'));
+            expect(view.container.querySelectorAll('[data-conversation-entry]')).toHaveLength(0);
+            await act(async () => es?.emit('message.sent'));
+            const entries = view.container.querySelectorAll('[data-conversation-entry]');
+            expect(entries).toHaveLength(1);
+            expect(entries[0]?.textContent).toContain('live message');
+
+            view.unmount();
+            expect(es?.closed).toBe(true);
+        } finally {
+            Object.defineProperty(globalThis, 'EventSource', { configurable: true, value: original });
+        }
+    });
+});
+
+describe('ConversationView poll tail (G1: cross-process CLI sends emit no server SSE)', () => {
+    test('a message persisted by another process appears on the next poll without remount', async () => {
+        const rows: unknown[] = [];
+        setFetchForTesting(inboxByAgent({ 'board-operator': rows }));
+        const view = render(
+            <ProjectContext.Provider value={ctx() as never}>
+                <ConversationDraftProvider>
+                    <ConversationView pollMs={20} />
+                </ConversationDraftProvider>
+            </ProjectContext.Provider>,
+        );
+        await act(async () => {});
+        expect(view.container.querySelectorAll('[data-conversation-entry]')).toHaveLength(0);
+        rows.push({
+            id: 'c1',
+            fromId: 'lead',
+            toId: 'board-operator',
+            body: 'sent from the cli',
+            status: 'queued',
+            createdAt: '2026-09-12T12:00:00.000Z',
+            inReplyTo: null,
+        });
+        await act(async () => {
+            await new Promise((r) => setTimeout(r, 80));
+        });
+        expect(view.container.querySelector('[data-conversation-entry]')?.textContent).toContain('sent from the cli');
+    });
+});
