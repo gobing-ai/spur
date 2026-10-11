@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Residuals from 1156
-status: backlog
+status: cancelled
 template: standard
 created_at: 2026-10-10T23:25:59.184Z
-updated_at: "2026-10-10T23:25:59.527Z"
+updated_at: "2026-10-11T03:04:23.355Z"
 
 ---
 
@@ -40,7 +40,9 @@ Source task: 1156 (feature K3) — deferred residuals filed by residual-scan set
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Resolved inline (operator directive: no deferral to new task files), then cancelled.
+
+- review-finding:399e6c8b (lock held across probes/kills): packages/app/src/services/project-registry.ts:626 `refreshProjects` restructured — the registry lock now covers only the purge decision and the write; ownership-verified HTTP probes (4×requestTimeoutMs) and kill waits (2×killTimeoutMs) per stale entry run unlocked, so list()/board callers no longer block behind stale-entry teardown. `stopRegisteredProject` is fail-closed (returns refusals, never throws), so an unlocked stop cannot strand the purge. Regression test "persists the purge before probing or stopping the stale listener" at packages/app/tests/services/project-registry.test.ts:723 (fails pre-fix: the probe fired before the write).
 
 ### Testing
 
@@ -55,3 +57,6 @@ Source task: 1156 (feature K3) — deferred residuals filed by residual-scan set
 <!-- Links to features, docs, ADRs, related tasks, or external references. -->
 
 ### History
+
+- 2026-10-11T03:04:23.355Z backlog → cancelled (system)
+

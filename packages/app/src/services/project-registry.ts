@@ -607,6 +607,13 @@ export class ProjectRegistry {
      * the shared ownership-verified stop (1156): only a proven Spur server serving
      * this exact project path is signaled, and a terminated record is reported
      * only after the original listener is observed gone.
+     *
+     * Lock scope (1167): the registry lock covers only the purge decision and the
+     * write. HTTP identity probes (up to 4×requestTimeoutMs) and kill waits
+     * (2×killTimeoutMs) per stale entry run unlocked below — they operate on the
+     * port/process, not the registry — so list()/board callers are not blocked
+     * behind stale-entry teardown. stopRegisteredProject is fail-closed (returns
+     * refusals, never throws), so an unlocked stop cannot strand the purge.
      */
     async refreshProjects(options?: RefreshProjectsOptions): Promise<RefreshProjectsResult> {
         const terminate = options?.terminateProcesses ?? true;
@@ -616,43 +623,38 @@ export class ProjectRegistry {
         // static import would create a cycle. Resolved once per refresh, cached after.
         const { stopRegisteredProject } = await import('./project-stop');
 
-        return this.withLock(async () => {
+        const removed = await this.withLock(async () => {
             const data = this.readRaw();
-            const kept: ProjectEntry[] = [];
-            const removed: ProjectEntry[] = [];
-            const terminated: TerminatedProcessInfo[] = [];
+            const purged = data.projects.filter((p) => !existsSync(normalizeProjectPath(p.path)));
+            if (purged.length > 0) {
+                data.projects = data.projects.filter((p) => existsSync(normalizeProjectPath(p.path)));
+                this.writeRaw(data);
+            }
+            return purged;
+        });
 
-            for (const project of data.projects) {
-                const normalizedPath = normalizeProjectPath(project.path);
-                if (existsSync(normalizedPath)) {
-                    kept.push(project);
-                } else {
-                    removed.push(project);
-                    if (terminate && project.port > 0) {
-                        const stop = await stopRegisteredProject(project, {
-                            processExecutor: executor,
-                            killTimeoutMs,
-                            fetchImpl: options?.fetchImpl,
-                            requestTimeoutMs: options?.requestTimeoutMs,
-                        });
-                        if (stop.stopped && stop.terminated) {
-                            terminated.push(stop.terminated);
-                        }
+        const terminated: TerminatedProcessInfo[] = [];
+        if (terminate) {
+            for (const project of removed) {
+                if (project.port > 0) {
+                    const stop = await stopRegisteredProject(project, {
+                        processExecutor: executor,
+                        killTimeoutMs,
+                        fetchImpl: options?.fetchImpl,
+                        requestTimeoutMs: options?.requestTimeoutMs,
+                    });
+                    if (stop.stopped && stop.terminated) {
+                        terminated.push(stop.terminated);
                     }
                 }
             }
+        }
 
-            if (removed.length > 0) {
-                data.projects = kept;
-                this.writeRaw(data);
-            }
-
-            return {
-                removed,
-                terminated,
-                purgedProjects: removed,
-                terminatedProcesses: terminated,
-            };
-        });
+        return {
+            removed,
+            terminated,
+            purgedProjects: removed,
+            terminatedProcesses: terminated,
+        };
     }
 }

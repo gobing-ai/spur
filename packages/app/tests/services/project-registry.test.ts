@@ -719,6 +719,40 @@ describe('ProjectRegistry', () => {
             expect(remaining).toHaveLength(0);
         });
 
+        // 1167 regression: HTTP probes and kill waits must run outside the registry lock,
+        // so the purge must already be persisted when the ownership probe fires.
+        it('persists the purge before probing or stopping the stale listener', async () => {
+            const missingDir = join(tempDir, 'deleted-purge-order');
+            await registry.upsert({ name: 'Purge Order', path: missingDir, port: 3458 });
+
+            setPortProbeForTests(async (port) => (port === 3458 ? 'in-use' : 'available'));
+            setProcessHelpersForTests({
+                pidFinder: (port) => (port === 3458 ? 99998 : undefined),
+                processKiller: () => true,
+            });
+
+            let purgedAtProbeTime = false;
+            const probeFetch = (async (input: string | URL) => {
+                const url = new URL(String(input));
+                if (url.pathname === '/api/health') {
+                    purgedAtProbeTime = registry.readRaw().projects.every((p) => p.name !== 'Purge Order');
+                    return {
+                        ok: true,
+                        status: 200,
+                        json: async () => ({ status: 'ok', service: 'spur' }),
+                    } as unknown as Response;
+                }
+                return {
+                    ok: true,
+                    status: 200,
+                    json: async () => ({ name: 'Purge Order', path: normalizeProjectPath(missingDir) }),
+                } as unknown as Response;
+            }) as unknown as typeof fetch;
+
+            await registry.refreshProjects({ killTimeoutMs: 200, fetchImpl: probeFetch });
+            expect(purgedAtProbeTime).toBe(true);
+        });
+
         // 1156 AC1 regression: before ownership verification, refresh SIGTERMed whatever
         // PID owned the stale port — including a foreign service (proven in review a71c).
         it('purges the deleted registration but never signals a foreign listener', async () => {
