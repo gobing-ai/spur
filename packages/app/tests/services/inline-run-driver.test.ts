@@ -1245,6 +1245,11 @@ describe('1165 — persist-out names its reconcile failures', () => {
         try {
             terminalTask(to.dir);
             await seedStaleLifecycleRow(to.dir, 'run_1165_outer');
+            // The setup's own `openInlineRunProjectDb(to.dir)` is the same URL as the transfer's when
+            // tmpdir is already physical (Linux `/tmp`; macOS `/var` is a symlink, so it never matched).
+            // Counting from zero here keeps open #1 = the transfer and #2 = the reconcile attempt on
+            // every platform — otherwise the injected failure lands in the transfer and the run exits 1.
+            targetOpens = 0;
             await inDir(to.dir, async () => {
                 const pass = await captureStderrAsync(() =>
                     captureAsync(() =>
