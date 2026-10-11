@@ -3,12 +3,8 @@ import { spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { getEnvVar, setEnvVar } from '@gobing-ai/ts-utils';
 import {
-    acquireGateLock,
     extractFindings,
-    GATE_LOCK_DIR_ENV,
-    GATE_LOCK_POLL_MS_ENV,
     isTransientLock,
     MAX_FINDINGS,
     parseCoverageThreshold,
@@ -632,59 +628,6 @@ describe('gate receipt reuse identity (task 1136 R3)', () => {
                 'check.reuse-refused — supplied digest-1 != current digest-2',
             );
         } finally {
-            cleanup();
-        }
-    });
-});
-
-describe('gate lock — unreadable claim (1127 review P4)', () => {
-    test('a dead creator’s torn marker is reclaimed by its name pid, not waited on forever', () => {
-        const { dir, cleanup } = scratch('spur-lock-torn-');
-        const lockDir = join(dir, 'full-gate.lock');
-        const saved = [getEnvVar(GATE_LOCK_DIR_ENV), getEnvVar(GATE_LOCK_POLL_MS_ENV)] as const;
-        // A real pid that has already exited: the shell prints its own pid, then exits.
-        const deadPid = Number(String(spawnSync('sh', ['-c', 'echo $$']).stdout).trim());
-        mkdirSync(lockDir);
-        writeFileSync(join(lockDir, `${deadPid}-torn`), '{"pid":'); // crashed mid-write
-        setEnvVar(GATE_LOCK_DIR_ENV, lockDir);
-        setEnvVar(GATE_LOCK_POLL_MS_ENV, '10');
-        try {
-            const log: string[] = [];
-            const lock = acquireGateLock({ wbs: '1127' }, (line) => log.push(line));
-            lock.release();
-            expect(log.join('')).toContain(`reclaimed stale claim (pid ${deadPid})`);
-        } finally {
-            setEnvVar(GATE_LOCK_DIR_ENV, saved[0]);
-            setEnvVar(GATE_LOCK_POLL_MS_ENV, saved[1]);
-            cleanup();
-        }
-    });
-
-    test('1154 R5: runQualityGate does not wait on a held lock and reports queueWaitMs: 0', () => {
-        const { dir, cleanup } = scratch('spur-lock-held-');
-        const lockDir = join(dir, 'full-gate.lock');
-        const saved = [getEnvVar(GATE_LOCK_DIR_ENV)] as const;
-        mkdirSync(lockDir, { recursive: true });
-        writeFileSync(join(lockDir, `${process.pid}-claim`), JSON.stringify({ pid: process.pid, wbs: 'other' }));
-        setEnvVar(GATE_LOCK_DIR_ENV, lockDir);
-        try {
-            const taskDir = join(dir, 'task');
-            mkdirSync(join(taskDir, '.spur', 'run'), { recursive: true });
-            const res = runQualityGate(
-                'run',
-                {
-                    wbs: '1154',
-                    runId: 'r1154',
-                    qualityGateCmd: 'echo gate-ok',
-                },
-                { cwd: taskDir },
-            );
-            expect(res.status).toBe('PASS');
-            const log = readFileSync(join(taskDir, res.logFile), 'utf8');
-            expect(log).toContain('queueWaitMs=0');
-            expect(log).not.toContain('waiting for holder');
-        } finally {
-            setEnvVar(GATE_LOCK_DIR_ENV, saved[0]);
             cleanup();
         }
     });

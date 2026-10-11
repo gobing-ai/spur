@@ -763,21 +763,14 @@ grading its own work defeats the stage. A continuation stage also dispatches fre
 same-task subagent exists (the earlier stage ran host-inline or below the dispatch floor), when a
 host-owned gate sat between the stages, or when the platform cannot address completed subagents.
 
-**Implement and test-fix workers never run the full gate (task 1127 R8 / task 1142 R3).** Since 1127 the full gate
-takes a host-wide lock (`SPUR_GATE_LOCK_DIR`, default `~/.config/spur/run/full-gate.lock`):
-concurrent full-gate runs serialize, and a manual `spur-check` (wrapped via
-`scripts/commands/gate-lock.ts`) holds the same lock. A dispatched **implement** or `test-fix` child
-that re-ran the full gate would queue behind every other gate on the host and burn its dispatch
-timeout waiting instead of working. Workers use the light tier as their iteration check (task 1142 R3) in exact order:
+**Implement and test-fix workers never run the full gate (task 1142 R3).** Workers use the light tier as their iteration check (task 1142 R3) in exact order:
 1. the **changed-path matrix** (`code-implementation/SKILL.md` § Changed-path targeted checks) over the paths they touched;
 2. the resolved `quality-gate` script in `light` mode (source-repo probe, else the installed twin) (biome, per-workspace typecheck, rule presets, related tests).
 Neither step takes the full-gate lock. The pipeline's `test` and `test-recheck` hops remain the only full gate. Carry
 `--gate-log <path>` through to the child **verbatim**: never paraphrase it into "re-run the named
-gate command". That paraphrase is not cosmetic — it dropped this rule in the H15 run (task
-Background, seq 232) and sent a worker into the locked gate. The pipeline's next `test` (recheck)
-stage re-acquires the lock and delivers the deciding verdict; that deciding run may wait for a live
-holder, so a queued worker's effective budget is dispatch timeout minus observed lock queue wait,
-not the timeout alone.
+gate command". That paraphrase is not cosmetic — it sent a worker into a full gate run instead of
+targeted iteration checks. The pipeline's next `test` (recheck)
+stage delivers the deciding verdict.
 
 **Null or timed-out dispatch (task 1134 R9).** The dispatch bound stays the existing YAML
 `timeoutMs` (`implementTimeoutMs` / `stepTimeoutMs`), passed to the host dispatch as today — R9 adds

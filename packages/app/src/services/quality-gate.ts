@@ -43,17 +43,15 @@ import {
     mkdirSync,
     mkdtempSync,
     openSync,
-    readdirSync,
     readFileSync,
-    rmdirSync,
     rmSync,
     statSync,
     unlinkSync,
     writeFileSync,
 } from 'node:fs';
-import { homedir, tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
-import { getEnvVar, getEnvVars } from '@gobing-ai/ts-utils';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { getEnvVars } from '@gobing-ai/ts-utils';
 import { canonicalJsonStringify } from '../workflow/composition-baseline';
 import { extractFeatureProofData, extractTaskProofData } from '../workflow/proof-input-fingerprint';
 
@@ -740,251 +738,6 @@ export function runShellCommand(
     }
 }
 
-// ─── Host-wide full-gate lock (task 1127) ───
-
-/** Lock-dir override for tests and shared-home operators (tests/setup.ts preloads a per-process one). */
-export const GATE_LOCK_DIR_ENV = 'SPUR_GATE_LOCK_DIR';
-/** Holder-poll override in milliseconds. */
-export const GATE_LOCK_POLL_MS_ENV = 'SPUR_GATE_LOCK_POLL_MS';
-/** Set to `off` to run without the host-wide lock (1127 AC6 escape hatch). */
-export const GATE_LOCK_OFF_ENV = 'SPUR_GATE_LOCK';
-/** The holder exports its marker here so the gate child's nested acquire re-enters (1127 R6). */
-export const GATE_LOCK_TOKEN_ENV = 'SPUR_GATE_LOCK_TOKEN';
-/** Default holder-poll interval: five seconds between liveness probes. */
-export const GATE_LOCK_POLL_MS_DEFAULT = 5_000;
-/**
- * Test seam for the P2-1 ownership race (1127 review): holds the lock dir between its `mkdir`
- * and the marker write so a test can recreate the dir underneath the creator. Zero in production.
- */
-export const GATE_LOCK_MKDIR_HOLD_MS_ENV = 'SPUR_GATE_LOCK_TEST_MKDIR_HOLD_MS';
-/** Sleep between lost-claim retries so a pathological lost-race cannot hot-spin (1127 review P3-2). */
-const GATE_LOCK_LOST_RACE_SLEEP_MS = 20;
-/** Consecutive lost-claim retries after which the waiter says so once — visible, never fatal. */
-const GATE_LOCK_LOST_RACE_LOG_AT = 250;
-
-/** Host-wide gate lock handle: release plus the observed wait, for the receipt and the log. */
-export interface GateLock {
-    release(): void;
-    /** Milliseconds spent waiting for prior holders; 0 when acquired immediately or lockless. */
-    queueWaitMs: number;
-    /** Claim marker name; re-exported to the gate child via `GATE_LOCK_TOKEN_ENV` (R6). */
-    token: string;
-}
-
-/** What a holder records for the operator-facing wait line (1127 AC1). */
-interface GateLockClaim {
-    pid: number;
-    startedAt: number;
-    wbs: string;
-    runId: string;
-    cwd: string;
-}
-
-function gateLockDir(): string {
-    const raw = getEnvVar(GATE_LOCK_DIR_ENV);
-    return raw !== undefined && raw.length > 0 ? raw : join(homedir(), '.config', 'spur', 'run', 'full-gate.lock');
-}
-
-function gateLockPollMs(): number {
-    const raw = Number.parseInt(getEnvVar(GATE_LOCK_POLL_MS_ENV) ?? '', 10);
-    return Number.isFinite(raw) && raw > 0 ? raw : GATE_LOCK_POLL_MS_DEFAULT;
-}
-
-/**
- * Signal-0 existence probe; unknown failures (EPERM) fail closed as a live holder.
- *
- * Residual risk (1127 review P4, accepted): liveness is pid-based, so a pid recycled by an
- * unrelated process reads as a live holder and the lock waits until that process exits. The
- * alternative (comparing a recorded start time against the process start time) is not portable
- * across the supported platforms, and a wedged queue is visible via the holder line + queueWaitMs.
- */
-function isProcessAlive(pid: number): boolean {
-    try {
-        process.kill(pid, 0);
-        return true;
-    } catch (error) {
-        return (error as NodeJS.ErrnoException).code !== 'ESRCH';
-    }
-}
-
-/**
- * First sorted marker with a usable claim; `null` when the dir is unreadable or claimless.
- * A marker whose JSON is unreadable (mid-write, or torn by a crashed creator) still carries its
- * creator's pid in its `<pid>-<uuid>` name, so liveness is judged from that: a live creator is
- * waited on, a dead one is reclaimed — never an indefinite wait on wreckage (1127 review P4).
- */
-function readGateLockClaim(dir: string): { claim: GateLockClaim; marker: string } | null {
-    let markers: string[];
-    try {
-        markers = readdirSync(dir).sort();
-    } catch {
-        return null;
-    }
-    for (const marker of markers) {
-        try {
-            const claim = JSON.parse(readFileSync(join(dir, marker), 'utf8')) as GateLockClaim;
-            if (typeof claim.pid === 'number') return { claim, marker };
-        } catch {
-            const pid = Number.parseInt(/^(\d+)-/.exec(marker)?.[1] ?? '', 10);
-            if (pid > 0) {
-                return { claim: { pid, startedAt: Date.now(), wbs: '?', runId: '?', cwd: '?' }, marker };
-            }
-            // Not a gate marker at all: liveness falls back to the grace poll below.
-        }
-    }
-    return null;
-}
-
-/**
- * Serialize the full quality gate host-wide (1127 R1): one `mkdir` claim per holder, released
- * before returning. A live holder is named on exactly one operator-facing line with its wbs,
- * run id, pid, cwd and held time (AC1); a dead holder's claim is reclaimed with its pid logged
- * (AC2); the caller's own token re-enters without waiting (R6); `SPUR_GATE_LOCK=off` disables
- * the lock entirely (AC6). Polling is a blocking sleep — nothing else is scheduled while waiting.
- */
-export function acquireGateLock(env: QualityGateEnv, logLine: (line: string) => void = (): void => {}): GateLock {
-    if ((getEnvVar(GATE_LOCK_OFF_ENV) ?? '') === 'off') {
-        return { release(): void {}, queueWaitMs: 0, token: '' };
-    }
-    const dir = gateLockDir();
-    mkdirSync(dirname(dir), { recursive: true });
-    const pollMs = gateLockPollMs();
-    const claim: GateLockClaim = {
-        pid: process.pid,
-        startedAt: Date.now(),
-        wbs: env.wbs,
-        runId: receiptRunId(env),
-        cwd: process.cwd(),
-    };
-    const marker = `${process.pid}-${randomUUID()}`;
-    const startedWaitingAt = Date.now();
-    let holderLogged = false;
-    let graceLogged = false;
-    let lostRaces = 0;
-    let lostRaceLogged = false;
-    const mkdirHoldMs = Number.parseInt(getEnvVar(GATE_LOCK_MKDIR_HOLD_MS_ENV) ?? '', 10);
-    for (;;) {
-        let dirIno: number | null = null;
-        try {
-            mkdirSync(dir);
-            // Identity of the directory THIS call created, captured before the marker write can
-            // be preempted (see the ownership check below).
-            dirIno = statSync(dir).ino;
-            if (Number.isFinite(mkdirHoldMs) && mkdirHoldMs > 0) gateSleep(mkdirHoldMs);
-            writeFileSync(join(dir, marker), JSON.stringify(claim), { flag: 'wx' });
-        } catch (error) {
-            const code = (error as NodeJS.ErrnoException).code;
-            if (code === 'ENOENT' || code === 'EINVAL') {
-                // We lost the dir between mkdir and the marker write (a reclaiming waiter judged
-                // our in-progress claim wreckage); just try again. Darwin reports that same losing
-                // race as EINVAL from the exclusive create, not ENOENT (1127 fix hop: observed as
-                // an uncaught crash under full-suite load) — treat both as the retryable case.
-                // The sleep keeps a pathological streak from spinning a core (1127 review P3-2).
-                lostRaces += 1;
-                if (lostRaces === GATE_LOCK_LOST_RACE_LOG_AT && !lostRaceLogged) {
-                    lostRaceLogged = true;
-                    logLine(
-                        `quality gate lock: still losing the claim race after ${lostRaces} attempts (dir ${dir})\n`,
-                    );
-                }
-                gateSleep(GATE_LOCK_LOST_RACE_SLEEP_MS);
-                continue;
-            }
-            if (code !== 'EEXIST') {
-                throw error;
-            }
-            // EEXIST: fall through to the holder check below.
-        }
-        if (dirIno !== null) {
-            // R1/AC1, 1127 review P2-1: a successful `mkdir` is NOT proof of ownership. A waiter can
-            // reclaim a dir it reads as claimless and recreate it inside our mkdir→marker window, so
-            // this marker can land in the waiter's dir — and then two gates hold at once, the exact
-            // overlap R1 forbids. Ownership is therefore verified against the directory's identity:
-            // we hold only while the dir at this path is still the one our own `mkdir` created.
-            // (Inode numbers are not recycled inside that microsecond window on the supported local
-            // filesystems; the cited project-server-owner.ts pattern relies on the same mkdir claim.)
-            let currentIno: number | null = null;
-            let entries: string[] = [];
-            try {
-                currentIno = statSync(dir).ino;
-                entries = readdirSync(dir);
-            } catch {
-                // Reclaimed before we looked — same lost race as above.
-            }
-            if (currentIno !== dirIno || entries.length !== 1 || entries[0] !== marker) {
-                try {
-                    unlinkSync(join(dir, marker));
-                } catch {
-                    // Our marker went with the reclaimed dir, or a newer claim owns it now.
-                }
-                lostRaces += 1;
-                gateSleep(GATE_LOCK_LOST_RACE_SLEEP_MS);
-                continue;
-            }
-            return {
-                release(): void {
-                    try {
-                        rmSync(join(dir, marker), { force: true });
-                        rmdirSync(dir);
-                    } catch {
-                        // A reclaiming waiter raced the release — the dir is gone or replaced.
-                    }
-                },
-                queueWaitMs: Date.now() - startedWaitingAt,
-                token: marker,
-            };
-        }
-        // Reached only when `mkdir` lost to EEXIST: evaluate the existing holder below.
-        const held = readGateLockClaim(dir);
-        if (held !== null && isProcessAlive(held.claim.pid)) {
-            if (getEnvVar(GATE_LOCK_TOKEN_ENV) === held.marker) {
-                // R6 re-entrancy: the gate child re-acquiring its own parent's claim — no wait,
-                // no write, no release (the parent still owns the claim and releases it).
-                return { release(): void {}, queueWaitMs: Date.now() - startedWaitingAt, token: held.marker };
-            }
-            if (!holderLogged) {
-                holderLogged = true;
-                logLine(
-                    `quality gate lock: waiting for holder (wbs ${held.claim.wbs}, run ${held.claim.runId}, pid ${held.claim.pid}, cwd ${held.claim.cwd}, held ${Date.now() - held.claim.startedAt}ms)\n`,
-                );
-            }
-        } else if (held !== null) {
-            // AC2: dead holder — reclaim with the dead pid so the log explains the takeover.
-            logLine(`quality gate lock: reclaimed stale claim (pid ${held.claim.pid})\n`);
-            try {
-                unlinkSync(join(dir, held.marker));
-                // Empty-only removal: if other markers remain (multiple stale holders), the next
-                // iteration evaluates each one's liveness — never destroy a possibly-live claim.
-                rmdirSync(dir);
-            } catch {
-                // The holder's own release raced the reclaim — the dir is already gone or replaced.
-            }
-        } else {
-            // Dir with no readable claim: a creator is between mkdir and its marker write (fully
-            // synchronous, so one grace poll suffices) or the dir is empty wreckage (pre-created
-            // or a crashed creator). Reclaim ONLY an empty dir — rmdir fails on a claimed dir, so
-            // no concurrent waiter can ever destroy a live claim; junk keeps polling, visibly.
-            // Empty first, sleep only when the rmdir loses: a pre-created empty dir (tests/setup.ts)
-            // must not cost a full default poll (task 1127 — one grace sleep at 5s blew the suite).
-            try {
-                rmdirSync(dir);
-                graceLogged = false;
-            } catch {
-                gateSleep(pollMs);
-                try {
-                    rmdirSync(dir);
-                    graceLogged = false;
-                } catch {
-                    if (!graceLogged) {
-                        graceLogged = true;
-                        logLine('quality gate lock: dir has no readable claim and is not empty — waiting\n');
-                    }
-                }
-            }
-        }
-    }
-}
-
 /**
  * Task 1136 R3: Recompute the proof-input fingerprint for quality-gate receipt reuse.
  * Uses taskSpecPath and optional featureSpecPath from env/options.
@@ -1163,9 +916,6 @@ export function runQualityGate(
         rmSync(abs(`${logFile}.probe`), { force: true });
     }
 
-    // 1154 R5: the host-wide lock moves to test:heavy (through gate-lock.ts) —
-    // runQualityGate and the in-process suite run lockless. queueWaitMs is reported 0.
-    const queueWaitMs = 0;
     let gateRuntimeMs = 0;
     if (gateRc === 0) {
         const delayMs = retryDelayMs(env);
@@ -1185,7 +935,7 @@ export function runQualityGate(
             gateSleep(delayMs);
         }
         gateRuntimeMs = Date.now() - gateRuntimeStartMs;
-        appendFileSync(abs(logFile), `quality gate lock: queueWaitMs=${queueWaitMs} gateRuntimeMs=${gateRuntimeMs}\n`);
+        appendFileSync(abs(logFile), `gate runtime: ${gateRuntimeMs}ms\n`);
     }
 
     // Coverage-only failures carry no `file.ext:line` anchor, so findings extraction would hand the
@@ -1244,7 +994,6 @@ export function runQualityGate(
                     },
                 ],
                 completedAt: new Date().toISOString(),
-                queueWaitMs,
                 gateRuntimeMs,
             });
             writeFileSync(abs(receiptFile), `${JSON.stringify(receipt, null, 2)}\n`);

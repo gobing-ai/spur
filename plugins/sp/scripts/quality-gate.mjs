@@ -21,16 +21,14 @@ import {
   mkdirSync,
   mkdtempSync,
   openSync,
-  readdirSync,
   readFileSync,
-  rmdirSync,
   rmSync,
   statSync,
   unlinkSync,
   writeFileSync
 } from "node:fs";
-import { homedir, tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { createHash } from "node:crypto";
 var __defProp = Object.defineProperty;
 var __commonJS = (cb, mod) => () => (mod || cb((mod = { exports: {} }).exports, mod), mod.exports);
@@ -82,10 +80,6 @@ var init_api_response = __esm(() => {
   CLIENT_SAFE_CODES = new Set([ErrorCode.NotFound, ErrorCode.Validation, ErrorCode.Conflict]);
 });
 var init_cursor = () => {};
-function getEnvVar(name, fallback) {
-  const raw = process.env[name];
-  return raw === undefined ? fallback : raw;
-}
 function getEnvVars2() {
   return process.env;
 }
@@ -30369,159 +30363,6 @@ function runShellCommand(cmd, cwd, extraEnv) {
     rmSync(dir, { recursive: true, force: true });
   }
 }
-var GATE_LOCK_DIR_ENV = "SPUR_GATE_LOCK_DIR";
-var GATE_LOCK_POLL_MS_ENV = "SPUR_GATE_LOCK_POLL_MS";
-var GATE_LOCK_OFF_ENV = "SPUR_GATE_LOCK";
-var GATE_LOCK_TOKEN_ENV = "SPUR_GATE_LOCK_TOKEN";
-var GATE_LOCK_POLL_MS_DEFAULT = 5000;
-var GATE_LOCK_MKDIR_HOLD_MS_ENV = "SPUR_GATE_LOCK_TEST_MKDIR_HOLD_MS";
-var GATE_LOCK_LOST_RACE_SLEEP_MS = 20;
-var GATE_LOCK_LOST_RACE_LOG_AT = 250;
-function gateLockDir() {
-  const raw = getEnvVar(GATE_LOCK_DIR_ENV);
-  return raw !== undefined && raw.length > 0 ? raw : join(homedir(), ".config", "spur", "run", "full-gate.lock");
-}
-function gateLockPollMs() {
-  const raw = Number.parseInt(getEnvVar(GATE_LOCK_POLL_MS_ENV) ?? "", 10);
-  return Number.isFinite(raw) && raw > 0 ? raw : GATE_LOCK_POLL_MS_DEFAULT;
-}
-function isProcessAlive(pid) {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error51) {
-    return error51.code !== "ESRCH";
-  }
-}
-function readGateLockClaim(dir) {
-  let markers;
-  try {
-    markers = readdirSync(dir).sort();
-  } catch {
-    return null;
-  }
-  for (const marker of markers) {
-    try {
-      const claim = JSON.parse(readFileSync(join(dir, marker), "utf8"));
-      if (typeof claim.pid === "number")
-        return { claim, marker };
-    } catch {
-      const pid = Number.parseInt(/^(\d+)-/.exec(marker)?.[1] ?? "", 10);
-      if (pid > 0) {
-        return { claim: { pid, startedAt: Date.now(), wbs: "?", runId: "?", cwd: "?" }, marker };
-      }
-    }
-  }
-  return null;
-}
-function acquireGateLock(env2, logLine = () => {}) {
-  if ((getEnvVar(GATE_LOCK_OFF_ENV) ?? "") === "off") {
-    return { release() {}, queueWaitMs: 0, token: "" };
-  }
-  const dir = gateLockDir();
-  mkdirSync(dirname(dir), { recursive: true });
-  const pollMs = gateLockPollMs();
-  const claim = {
-    pid: process.pid,
-    startedAt: Date.now(),
-    wbs: env2.wbs,
-    runId: receiptRunId(env2),
-    cwd: process.cwd()
-  };
-  const marker = `${process.pid}-${randomUUID()}`;
-  const startedWaitingAt = Date.now();
-  let holderLogged = false;
-  let graceLogged = false;
-  let lostRaces = 0;
-  let lostRaceLogged = false;
-  const mkdirHoldMs = Number.parseInt(getEnvVar(GATE_LOCK_MKDIR_HOLD_MS_ENV) ?? "", 10);
-  for (;; ) {
-    let dirIno = null;
-    try {
-      mkdirSync(dir);
-      dirIno = statSync(dir).ino;
-      if (Number.isFinite(mkdirHoldMs) && mkdirHoldMs > 0)
-        gateSleep(mkdirHoldMs);
-      writeFileSync(join(dir, marker), JSON.stringify(claim), { flag: "wx" });
-    } catch (error51) {
-      const code = error51.code;
-      if (code === "ENOENT" || code === "EINVAL") {
-        lostRaces += 1;
-        if (lostRaces === GATE_LOCK_LOST_RACE_LOG_AT && !lostRaceLogged) {
-          lostRaceLogged = true;
-          logLine(`quality gate lock: still losing the claim race after ${lostRaces} attempts (dir ${dir})
-`);
-        }
-        gateSleep(GATE_LOCK_LOST_RACE_SLEEP_MS);
-        continue;
-      }
-      if (code !== "EEXIST") {
-        throw error51;
-      }
-    }
-    if (dirIno !== null) {
-      let currentIno = null;
-      let entries = [];
-      try {
-        currentIno = statSync(dir).ino;
-        entries = readdirSync(dir);
-      } catch {}
-      if (currentIno !== dirIno || entries.length !== 1 || entries[0] !== marker) {
-        try {
-          unlinkSync(join(dir, marker));
-        } catch {}
-        lostRaces += 1;
-        gateSleep(GATE_LOCK_LOST_RACE_SLEEP_MS);
-        continue;
-      }
-      return {
-        release() {
-          try {
-            rmSync(join(dir, marker), { force: true });
-            rmdirSync(dir);
-          } catch {}
-        },
-        queueWaitMs: Date.now() - startedWaitingAt,
-        token: marker
-      };
-    }
-    const held = readGateLockClaim(dir);
-    if (held !== null && isProcessAlive(held.claim.pid)) {
-      if (getEnvVar(GATE_LOCK_TOKEN_ENV) === held.marker) {
-        return { release() {}, queueWaitMs: Date.now() - startedWaitingAt, token: held.marker };
-      }
-      if (!holderLogged) {
-        holderLogged = true;
-        logLine(`quality gate lock: waiting for holder (wbs ${held.claim.wbs}, run ${held.claim.runId}, pid ${held.claim.pid}, cwd ${held.claim.cwd}, held ${Date.now() - held.claim.startedAt}ms)
-`);
-      }
-    } else if (held !== null) {
-      logLine(`quality gate lock: reclaimed stale claim (pid ${held.claim.pid})
-`);
-      try {
-        unlinkSync(join(dir, held.marker));
-        rmdirSync(dir);
-      } catch {}
-    } else {
-      try {
-        rmdirSync(dir);
-        graceLogged = false;
-      } catch {
-        gateSleep(pollMs);
-        try {
-          rmdirSync(dir);
-          graceLogged = false;
-        } catch {
-          if (!graceLogged) {
-            graceLogged = true;
-            logLine(`quality gate lock: dir has no readable claim and is not empty — waiting
-`);
-          }
-        }
-      }
-    }
-  }
-}
 function recomputeGateProofFingerprint(cwd, env2) {
   const taskSpecPath = env2.taskSpecPath ?? env2.taskFile;
   if (!taskSpecPath || taskSpecPath.trim() === "") {
@@ -30645,7 +30486,6 @@ function runQualityGate(mode, env2, options = {}) {
     appendFileSync(abs(logFile), probe.output);
     rmSync(abs(`${logFile}.probe`), { force: true });
   }
-  const queueWaitMs = 0;
   let gateRuntimeMs = 0;
   if (gateRc === 0) {
     const delayMs = retryDelayMs(env2);
@@ -30666,7 +30506,7 @@ function runQualityGate(mode, env2, options = {}) {
       gateSleep(delayMs);
     }
     gateRuntimeMs = Date.now() - gateRuntimeStartMs;
-    appendFileSync(abs(logFile), `quality gate lock: queueWaitMs=${queueWaitMs} gateRuntimeMs=${gateRuntimeMs}
+    appendFileSync(abs(logFile), `gate runtime: ${gateRuntimeMs}ms
 `);
   }
   if (gateRc !== 0) {
@@ -30719,7 +30559,6 @@ function runQualityGate(mode, env2, options = {}) {
           }
         ],
         completedAt: new Date().toISOString(),
-        queueWaitMs,
         gateRuntimeMs
       });
       writeFileSync(abs(receiptFile), `${JSON.stringify(receipt, null, 2)}
@@ -30797,7 +30636,6 @@ export {
   isTransientLock,
   extractFindings,
   buildReceipt,
-  acquireGateLock,
   RETRY_DELAY_MS_ENV,
   RETRY_DELAY_MS_DEFAULT,
   RECEIPT_SCHEMA_VERSION,
@@ -30805,12 +30643,6 @@ export {
   MAX_GATE_ATTEMPTS,
   MAX_FINDINGS,
   LOCKED_PATTERN,
-  GATE_LOCK_TOKEN_ENV,
-  GATE_LOCK_POLL_MS_ENV,
-  GATE_LOCK_POLL_MS_DEFAULT,
-  GATE_LOCK_OFF_ENV,
-  GATE_LOCK_MKDIR_HOLD_MS_ENV,
-  GATE_LOCK_DIR_ENV,
   FINDINGS_PATTERN,
   COVERAGE_ROW_PATTERN
 };
