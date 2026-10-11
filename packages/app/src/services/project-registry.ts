@@ -1,4 +1,13 @@
-import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import {
+    existsSync,
+    mkdirSync,
+    readFileSync,
+    realpathSync,
+    renameSync,
+    rmdirSync,
+    unlinkSync,
+    writeFileSync,
+} from 'node:fs';
 import { connect, createServer } from 'node:net';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -32,6 +41,10 @@ export interface RefreshProjectsOptions {
     killTimeoutMs?: number;
     /** Optional ProcessExecutor to use for process inspection (default: NodeProcessExecutor). */
     processExecutor?: ProcessExecutor;
+    /** Injectable fetch implementation for ownership probes (tests, 1156). */
+    fetchImpl?: typeof fetch;
+    /** Per-request timeout in milliseconds for the ownership probes (default: 1000, 1156). */
+    requestTimeoutMs?: number;
 }
 
 /** Test override function type for process killing. */
@@ -293,6 +306,7 @@ export class ProjectRegistry {
 
         const maxTries = 50;
         let acquired = false;
+        let markerPath: string | undefined;
 
         for (let i = 0; i < maxTries; i++) {
             try {
@@ -314,29 +328,44 @@ export class ProjectRegistry {
                             'The process is not permitted to write there — this is not lock contention.',
                     );
                 }
+                if (code !== 'EEXIST') {
+                    throw err;
+                }
                 await new Promise((r) => setTimeout(r, 50));
             }
         }
 
         if (!acquired) {
-            // Force break stale lock if it's held too long
+            // shortcut: abandoned registry claims need manual cleanup, add proven-dead owner recovery only when operational evidence requires it.
+            throw new Error(`Failed to acquire lock for project registry: ${this.lockDir}`);
+        }
+
+        const marker = `${process.pid}-${crypto.randomUUID()}`;
+        markerPath = join(this.lockDir, marker);
+        try {
+            writeFileSync(markerPath, '', { flag: 'wx' });
+        } catch (err) {
             try {
-                rmSync(this.lockDir, { recursive: true, force: true });
-                mkdirSync(this.lockDir);
-                acquired = true;
+                rmdirSync(this.lockDir);
             } catch {
-                throw new Error(`Failed to acquire lock for project registry: ${this.lockDir}`);
+                // Best-effort cleanup of owned empty directory
             }
+            throw err;
         }
 
         try {
             return await fn();
         } finally {
-            if (acquired) {
+            if (markerPath) {
                 try {
-                    rmSync(this.lockDir, { recursive: true, force: true });
+                    unlinkSync(markerPath);
+                    try {
+                        rmdirSync(this.lockDir);
+                    } catch {
+                        // Directory removal is best-effort (e.g. ENOENT or ENOTEMPTY)
+                    }
                 } catch {
-                    // Ignore unlock failure
+                    // If own marker is missing, leave the directory alone
                 }
             }
         }
@@ -574,13 +603,18 @@ export class ProjectRegistry {
 
     /**
      * Verify all registered project folders exist on disk; purge missing ones.
-     * For purged entries with port > 0, if the port is currently live, discover
-     * its listening process ID and terminate it cleanly (SIGTERM -> bounded wait -> SIGKILL).
+     * For purged entries with port > 0 and a live port, route the listener through
+     * the shared ownership-verified stop (1156): only a proven Spur server serving
+     * this exact project path is signaled, and a terminated record is reported
+     * only after the original listener is observed gone.
      */
     async refreshProjects(options?: RefreshProjectsOptions): Promise<RefreshProjectsResult> {
         const terminate = options?.terminateProcesses ?? true;
         const killTimeoutMs = options?.killTimeoutMs ?? 2000;
         const executor = options?.processExecutor ?? new NodeProcessExecutor();
+        // Dynamic import: project-stop depends on this module's process helpers, so a
+        // static import would create a cycle. Resolved once per refresh, cached after.
+        const { stopRegisteredProject } = await import('./project-stop');
 
         return this.withLock(async () => {
             const data = this.readRaw();
@@ -595,28 +629,14 @@ export class ProjectRegistry {
                 } else {
                     removed.push(project);
                     if (terminate && project.port > 0) {
-                        const live = await isPortLive(project.port);
-                        if (live) {
-                            const pid = await findListeningPid(project.port, executor);
-                            if (pid !== undefined) {
-                                sendSignalToPid(pid, 'SIGTERM');
-                                let stillLive = true;
-                                const pollInterval = 50;
-                                const maxTicks = Math.ceil(killTimeoutMs / pollInterval);
-                                for (let tick = 0; tick < maxTicks; tick++) {
-                                    await new Promise((r) => setTimeout(r, pollInterval));
-                                    stillLive = await isPortLive(project.port);
-                                    if (!stillLive) break;
-                                }
-
-                                if (stillLive) {
-                                    sendSignalToPid(pid, 'SIGKILL');
-                                    await new Promise((r) => setTimeout(r, pollInterval));
-                                    terminated.push({ pid, port: project.port, signal: 'SIGKILL' });
-                                } else {
-                                    terminated.push({ pid, port: project.port, signal: 'SIGTERM' });
-                                }
-                            }
+                        const stop = await stopRegisteredProject(project, {
+                            processExecutor: executor,
+                            killTimeoutMs,
+                            fetchImpl: options?.fetchImpl,
+                            requestTimeoutMs: options?.requestTimeoutMs,
+                        });
+                        if (stop.stopped && stop.terminated) {
+                            terminated.push(stop.terminated);
                         }
                     }
                 }

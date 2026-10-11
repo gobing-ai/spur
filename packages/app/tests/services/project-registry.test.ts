@@ -1,5 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+import * as fs from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -370,6 +371,273 @@ describe('ProjectRegistry', () => {
         }
     });
 
+    // AC1: A long-lived holder is never displaced
+    it('AC1: long-lived holder is never displaced and third acquisition succeeds after release', async () => {
+        const lockDir = `${projectsFile}.lock`;
+        const reg1 = new ProjectRegistry(projectsFile);
+        const reg2 = new ProjectRegistry(projectsFile);
+        const reg3 = new ProjectRegistry(projectsFile);
+
+        let resolveFirst: (() => void) | undefined;
+        const firstBlocker = new Promise<void>((resolve) => {
+            resolveFirst = resolve;
+        });
+
+        let firstEntered = false;
+        let secondEntered = false;
+        let thirdEntered = false;
+        let firstMarker: string | undefined;
+
+        const firstPromise = reg1.withLock(async () => {
+            firstEntered = true;
+            const markers = readdirSync(lockDir);
+            expect(markers.length).toBe(1);
+            firstMarker = markers[0];
+            await firstBlocker;
+            return 'first-done';
+        });
+
+        try {
+            while (!firstEntered) {
+                await new Promise((r) => setTimeout(r, 10));
+            }
+
+            // Second acquirer exhausts its 2.5s budget while first is held
+            await expect(
+                reg2.withLock(async () => {
+                    secondEntered = true;
+                    return 'second-done';
+                }),
+            ).rejects.toThrow(`Failed to acquire lock for project registry: ${lockDir}`);
+
+            expect(secondEntered).toBe(false);
+            expect(existsSync(lockDir)).toBe(true);
+            expect(firstMarker).toBeDefined();
+            expect(existsSync(join(lockDir, firstMarker ?? ''))).toBe(true);
+        } finally {
+            resolveFirst?.();
+            await firstPromise;
+        }
+
+        // Third acquisition succeeds only after the first owner releases
+        const thirdResult = await reg3.withLock(async () => {
+            thirdEntered = true;
+            return 'third-done';
+        });
+        expect(thirdEntered).toBe(true);
+        expect(thirdResult).toBe('third-done');
+        expect(existsSync(lockDir)).toBe(false);
+    }, 15_000);
+
+    // AC2: Short contention preserves both updates
+    it('AC2: short contention preserves both updates and callbacks run serially', async () => {
+        const reg1 = new ProjectRegistry(projectsFile);
+        const reg2 = new ProjectRegistry(projectsFile);
+
+        const alphaDir = join(tempDir, 'alpha');
+        const betaDir = join(tempDir, 'beta');
+        mkdirSync(alphaDir, { recursive: true });
+        mkdirSync(betaDir, { recursive: true });
+
+        const executionOrder: string[] = [];
+        let releaseHolder: (() => void) | undefined;
+        const holderBlocker = new Promise<void>((resolve) => {
+            releaseHolder = resolve;
+        });
+
+        const holderPromise = reg1.withLock(async () => {
+            executionOrder.push('holder-start');
+            await holderBlocker;
+            const data = reg1.readRaw();
+            data.projects.push({ name: 'Project Alpha', path: normalizeProjectPath(alphaDir), port: 0 });
+            reg1.writeRaw(data);
+            executionOrder.push('holder-end');
+        });
+
+        while (executionOrder.length === 0) {
+            await new Promise((r) => setTimeout(r, 10));
+        }
+
+        const secondPromise = reg2.upsert({ name: 'Project Beta', path: betaDir, port: 0 }).then(() => {
+            executionOrder.push('second-finished');
+        });
+
+        // Let second enter its retry loop
+        await new Promise((r) => setTimeout(r, 60));
+
+        releaseHolder?.();
+        await holderPromise;
+        await secondPromise;
+
+        expect(executionOrder).toEqual(['holder-start', 'holder-end', 'second-finished']);
+
+        const list = await reg1.list();
+        expect(list.length).toBe(2);
+        expect(list.find((p) => p.name === 'Project Alpha')).toBeDefined();
+        expect(list.find((p) => p.name === 'Project Beta')).toBeDefined();
+    });
+
+    // AC3: Old release cannot remove a replacement claim
+    it('AC3: old release cannot remove a replacement claim when callback exits', async () => {
+        const lockDir = `${projectsFile}.lock`;
+        const reg1 = new ProjectRegistry(projectsFile);
+
+        let releaseFirst: (() => void) | undefined;
+        const firstBlocker = new Promise<void>((resolve) => {
+            releaseFirst = resolve;
+        });
+        let firstEntered = false;
+
+        const firstPromise = reg1.withLock(async () => {
+            firstEntered = true;
+            await firstBlocker;
+            return 'first-done';
+        });
+
+        let replacementMarker: string | undefined;
+        try {
+            while (!firstEntered) {
+                await new Promise((r) => setTimeout(r, 10));
+            }
+
+            // Replace the claim with another unique claim while first is held
+            const markers = readdirSync(lockDir);
+            expect(markers.length).toBe(1);
+            const firstMarker = markers[0];
+            if (firstMarker === undefined) throw new Error('missing marker');
+            unlinkSync(join(lockDir, firstMarker));
+
+            replacementMarker = `${process.pid + 999}-${crypto.randomUUID()}`;
+            writeFileSync(join(lockDir, replacementMarker), '', { flag: 'wx' });
+
+            // Allow first callback to exit
+            releaseFirst?.();
+            const res = await firstPromise;
+            expect(res).toBe('first-done');
+
+            // Old release must leave replacement marker and lock directory intact
+            expect(existsSync(lockDir)).toBe(true);
+            expect(existsSync(join(lockDir, replacementMarker))).toBe(true);
+            expect(readdirSync(lockDir)).toEqual([replacementMarker]);
+        } finally {
+            releaseFirst?.();
+            if (existsSync(lockDir)) {
+                rmSync(lockDir, { recursive: true, force: true });
+            }
+        }
+    });
+
+    it('AC3 (throw): old release cannot remove a replacement claim when callback throws', async () => {
+        const lockDir = `${projectsFile}.lock`;
+        const reg1 = new ProjectRegistry(projectsFile);
+
+        let rejectFirst: ((err: Error) => void) | undefined;
+        const firstBlocker = new Promise<void>((_, reject) => {
+            rejectFirst = reject;
+        });
+        let firstEntered = false;
+
+        const firstPromise = reg1.withLock(async () => {
+            firstEntered = true;
+            await firstBlocker;
+        });
+
+        let replacementMarker: string | undefined;
+        try {
+            while (!firstEntered) {
+                await new Promise((r) => setTimeout(r, 10));
+            }
+
+            // Replace the claim with another unique claim while first is held
+            const markers = readdirSync(lockDir);
+            expect(markers.length).toBe(1);
+            const firstMarker = markers[0];
+            if (firstMarker === undefined) throw new Error('missing marker');
+            unlinkSync(join(lockDir, firstMarker));
+
+            replacementMarker = `${process.pid + 999}-${crypto.randomUUID()}`;
+            writeFileSync(join(lockDir, replacementMarker), '', { flag: 'wx' });
+
+            // Make first callback throw
+            rejectFirst?.(new Error('callback exploded'));
+            await expect(firstPromise).rejects.toThrow('callback exploded');
+
+            // Old release must leave replacement marker and lock directory intact
+            expect(existsSync(lockDir)).toBe(true);
+            expect(existsSync(join(lockDir, replacementMarker))).toBe(true);
+            expect(readdirSync(lockDir)).toEqual([replacementMarker]);
+        } finally {
+            if (existsSync(lockDir)) {
+                rmSync(lockDir, { recursive: true, force: true });
+            }
+        }
+    });
+
+    it('withLock cleans up lock directory and marker when callback throws', async () => {
+        const lockDir = `${projectsFile}.lock`;
+        await expect(
+            registry.withLock(async () => {
+                expect(existsSync(lockDir)).toBe(true);
+                expect(readdirSync(lockDir).length).toBe(1);
+                throw new Error('deliberate failure');
+            }),
+        ).rejects.toThrow('deliberate failure');
+
+        expect(existsSync(lockDir)).toBe(false);
+
+        // Immediate subsequent acquisition succeeds
+        const next = await registry.withLock(async () => 'next-ok');
+        expect(next).toBe('next-ok');
+    });
+
+    it('withLock marker initialization failure cleans up empty directory and rethrows', async () => {
+        const lockDir = `${projectsFile}.lock`;
+        let callbackExecuted = false;
+
+        const origWrite = fs.writeFileSync;
+        const spy = spyOn(fs, 'writeFileSync').mockImplementation((targetPath, ...rest) => {
+            if (typeof targetPath === 'string' && targetPath.includes('.lock')) {
+                throw new Error('simulated marker write failure');
+            }
+            return Reflect.apply(origWrite, fs, [targetPath, ...rest]);
+        });
+
+        try {
+            await expect(
+                registry.withLock(async () => {
+                    callbackExecuted = true;
+                    return 'should-not-run';
+                }),
+            ).rejects.toThrow('simulated marker write failure');
+
+            expect(callbackExecuted).toBe(false);
+            expect(existsSync(lockDir)).toBe(false);
+        } finally {
+            spy.mockRestore();
+        }
+    });
+
+    it('withLock immediately propagates non-EEXIST filesystem errors without retries', async () => {
+        const lockDir = `${projectsFile}.lock`;
+        const origMkdir = fs.mkdirSync;
+        const spy = spyOn(fs, 'mkdirSync').mockImplementation((targetPath, ...rest) => {
+            if (typeof targetPath === 'string' && targetPath === lockDir) {
+                const err = new Error('simulated ENOSPC error');
+                (err as NodeJS.ErrnoException).code = 'ENOSPC';
+                throw err;
+            }
+            return Reflect.apply(origMkdir, fs, [targetPath, ...rest]);
+        });
+
+        const started = Date.now();
+        try {
+            await expect(registry.withLock(async () => 'should-not-run')).rejects.toThrow('simulated ENOSPC error');
+            expect(Date.now() - started).toBeLessThan(500);
+        } finally {
+            spy.mockRestore();
+        }
+    });
+
     // AC6: seam resets cleanly and production path is default
     it('setPortProbeForTests clears and restores default path', async () => {
         setPortProbeForTests(async () => 'in-use');
@@ -429,7 +697,18 @@ describe('ProjectRegistry', () => {
                 },
             });
 
-            const result = await registry.refreshProjects({ killTimeoutMs: 200 });
+            // 1156: termination now requires ownership proof — the listener must
+            // answer service:spur and this exact project path over loopback HTTP.
+            const ownedFetch = (async (input: string | URL) => {
+                const url = new URL(String(input));
+                const body =
+                    url.pathname === '/api/health'
+                        ? { status: 'ok', service: 'spur' }
+                        : { name: 'Zombied Serve', path: normalizeProjectPath(missingDir) };
+                return { ok: true, status: 200, json: async () => body } as unknown as Response;
+            }) as unknown as typeof fetch;
+
+            const result = await registry.refreshProjects({ killTimeoutMs: 200, fetchImpl: ownedFetch });
             expect(result.removed).toHaveLength(1);
             expect(result.removed[0]?.name).toBe('Zombied Serve');
             expect(result.terminated).toHaveLength(1);
@@ -440,23 +719,69 @@ describe('ProjectRegistry', () => {
             expect(remaining).toHaveLength(0);
         });
 
-        it('escalates to SIGKILL if port remains bound after killTimeoutMs', async () => {
-            const missingDir = join(tempDir, 'stubborn-serve');
-            await registry.upsert({ name: 'Stubborn Serve', path: missingDir, port: 3789 });
+        // 1156 AC1 regression: before ownership verification, refresh SIGTERMed whatever
+        // PID owned the stale port — including a foreign service (proven in review a71c).
+        it('purges the deleted registration but never signals a foreign listener', async () => {
+            const missingDir = join(tempDir, 'deleted-foreign-port');
+            await registry.upsert({ name: 'Foreign Port', path: missingDir, port: 3457 });
 
-            // Port stays in-use even after SIGTERM
-            setPortProbeForTests(async (port) => (port === 3789 ? 'in-use' : 'available'));
-
+            setPortProbeForTests(async (port) => (port === 3457 ? 'in-use' : 'available'));
             const signalsReceived: Array<{ pid: number; signal: string }> = [];
             setProcessHelpersForTests({
-                pidFinder: (port) => (port === 3789 ? 88888 : undefined),
+                pidFinder: (port) => (port === 3457 ? 99998 : undefined),
                 processKiller: (pid, signal) => {
                     signalsReceived.push({ pid, signal });
                     return true;
                 },
             });
 
-            const result = await registry.refreshProjects({ killTimeoutMs: 100 });
+            // A non-Spur service answers the port: identity proof fails closed.
+            const foreignFetch = (async (input: string | URL) => {
+                const url = new URL(String(input));
+                const body =
+                    url.pathname === '/api/health' ? { status: 'ok', service: 'nginx' } : { error: 'Not Found' };
+                return { ok: true, status: 200, json: async () => body } as unknown as Response;
+            }) as unknown as typeof fetch;
+
+            const result = await registry.refreshProjects({ killTimeoutMs: 100, fetchImpl: foreignFetch });
+            expect(result.removed).toHaveLength(1);
+            expect(result.removed[0]?.name).toBe('Foreign Port');
+            expect(result.terminated).toHaveLength(0);
+            expect(result.terminatedProcesses).toHaveLength(0);
+            expect(signalsReceived).toEqual([]);
+            expect(registry.readRaw().projects).toHaveLength(0);
+        });
+
+        it('escalates to SIGKILL if port remains bound after killTimeoutMs', async () => {
+            const missingDir = join(tempDir, 'stubborn-serve');
+            await registry.upsert({ name: 'Stubborn Serve', path: missingDir, port: 3789 });
+
+            // Port stays in-use after SIGTERM; the verified listener dies on SIGKILL.
+            let liveState = true;
+            setPortProbeForTests(async (port) => (port === 3789 && liveState ? 'in-use' : 'available'));
+
+            const signalsReceived: Array<{ pid: number; signal: string }> = [];
+            setProcessHelpersForTests({
+                pidFinder: (port) => (port === 3789 ? 88888 : undefined),
+                processKiller: (pid, signal) => {
+                    signalsReceived.push({ pid, signal });
+                    if (signal === 'SIGKILL') {
+                        liveState = false;
+                    }
+                    return true;
+                },
+            });
+
+            const ownedFetch = (async (input: string | URL) => {
+                const url = new URL(String(input));
+                const body =
+                    url.pathname === '/api/health'
+                        ? { status: 'ok', service: 'spur' }
+                        : { name: 'Stubborn Serve', path: normalizeProjectPath(missingDir) };
+                return { ok: true, status: 200, json: async () => body } as unknown as Response;
+            }) as unknown as typeof fetch;
+
+            const result = await registry.refreshProjects({ killTimeoutMs: 100, fetchImpl: ownedFetch });
             expect(result.removed).toHaveLength(1);
             expect(result.terminated).toHaveLength(1);
             expect(result.terminated[0]).toEqual({ pid: 88888, port: 3789, signal: 'SIGKILL' });

@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: Keep live registry lock owners exclusive past the retry timeout
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-10-10T07:29:34.693Z
-updated_at: "2026-10-10T16:29:00.318Z"
+updated_at: "2026-10-11T00:26:27.370Z"
 feature_id: K3
 
 ac_altitude: task-local
 ac_numbering: task-local
 priority: P2
 estimate_hours: 4
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1157-verdict.json
 ---
 
 ## 1157. Keep live registry lock owners exclusive past the retry timeout
@@ -26,10 +28,10 @@ withLock removes a live lock after 2.5 seconds, enters a second writer, and lets
 
 ### Requirements
 
-- [ ] R1. Fail acquisition on contention timeout instead of breaking a live or unidentified owner; ensure release removes only its own claim
-- [ ] R2. Short contention still waits and serializes registry mutations without lost updates
-- [ ] R3. Add the reproducing regression and validate the affected callers through the existing test seams.
-- [ ] R4. Unknown or abandoned preexisting claims fail closed after the finite retry window; there is no automatic age-based stale recovery. Callback or marker-initialization failure cannot enter a second writer or delete a replacement claim, and non-contention filesystem errors retain their fast failure behavior.
+- [x] R1. Fail acquisition on contention timeout instead of breaking a live or unidentified owner; ensure release removes only its own claim
+- [x] R2. Short contention still waits and serializes registry mutations without lost updates
+- [x] R3. Add the reproducing regression and validate the affected callers through the existing test seams.
+- [x] R4. Unknown or abandoned preexisting claims fail closed after the finite retry window; there is no automatic age-based stale recovery. Callback or marker-initialization failure cannot enter a second writer or delete a replacement claim, and non-contention filesystem errors retain their fast failure behavior.
 
 ### Acceptance Criteria
 
@@ -79,15 +81,53 @@ Scenario: AC3 — Old release cannot remove a replacement claim (req: R1, R3, R4
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+- `packages/app/src/services/project-registry.ts:1-10`: replaced `rmSync` import with `rmdirSync` and `unlinkSync`.
+- `packages/app/src/services/project-registry.ts:291-379`: in `ProjectRegistry.withLock`:
+  - Preserved 50 retries and 50ms contention backoff; retry only `EEXIST` errors, immediately propagating non-`EEXIST` errors while preserving `EPERM`/`EACCES` diagnostics.
+  - Eliminated stale lock break on retry exhaustion: throw `Failed to acquire lock for project registry: ${this.lockDir}` without recursive deletion or directory removal (`// shortcut: abandoned registry claims need manual cleanup, add proven-dead owner recovery only when operational evidence requires it.`).
+  - After `mkdirSync`, write unique owner marker `${process.pid}-${crypto.randomUUID()}` with `{ flag: 'wx' }`; on marker write failure, attempt non-recursive `rmdirSync` of empty lock directory and propagate error without invoking callback.
+  - In `finally`, unlink only own unique marker; only if unlink succeeds attempt non-recursive `rmdirSync(this.lockDir)`. If marker is missing or unlink fails, leave the directory untouched.
+- `docs/design/project-switcher.md:71-74`: updated advisory-lock specification in section 3.1 item 4 to document unique owner marker, timeout refusal with no takeover, own-marker unlinking before non-recursive directory removal, and retention of abandoned claims.
+- `packages/app/tests/services/project-registry.test.ts:374-633`: added test coverage for:
+  - AC1: deferred holder held beyond 2.5s wait is never displaced, second acquisition rejects without entering callback or removing first marker, and third acquisition succeeds after release.
+  - AC2: short contention preserves both updates and serializes callbacks.
+  - AC3: disposable replacement claim remains untouched when old callback exits or throws.
+  - Error paths: callback throw cleans up own claim; marker initialization failure cleans up empty directory and rethrows; non-EEXIST errors fail fast without retry backoff.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | packages/app/src/services/project-registry.ts:337-372; packages/app/tests/services/project-registry.test.ts:375-430,482-581 |
+| R2 | MET | packages/app/src/services/project-registry.ts:312-335; packages/app/tests/services/project-registry.test.ts:432-480 |
+| R3 | MET | packages/app/tests/services/project-registry.test.ts:375-645 |
+| R4 | MET | packages/app/src/services/project-registry.ts:324-355; packages/app/tests/services/project-registry.test.ts:532-645 |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: AC1 — A long-lived holder is never displaced (req: R1, R3) | MET | test | packages/app/tests/services/project-registry.test.ts:375-430 (36 pass, 0 fail; holder preserved; second rejects without entering callback; third succeeds after release) |
+| Scenario: AC2 — Short contention preserves both updates (req: R2, R3) | MET | test | packages/app/tests/services/project-registry.test.ts:432-480 (36 pass, 0 fail; serial execution; both updates preserved) |
+| Scenario: AC3 — Old release cannot remove a replacement claim (req: R1, R3, R4) | MET | test | packages/app/tests/services/project-registry.test.ts:482-581 (36 pass, 0 fail; replacement claim preserved on both resolve and throw) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+Multi-dimensional review (functional traceability + SECUA + architecture depth) by an independent fresh reviewer. Verdict: PASS — no findings. Implementation matches R1–R4 and AC1–AC3 with direct source evidence.
+
+| Priority | Finding | Location | Disposition |
+| --- | --- | --- | --- |
+| P4 (advisory) | Advisory lock ownership: unique marker token, fail-closed timeout refusal, own-marker unlink before non-recursive rmdirSync, non-EEXIST fail-fast | packages/app/src/services/project-registry.ts:291-379 | ACCEPTED |
+
+Correct-with-evidence highlights:
+- Advisory Lock Safety & Exclusivity: replaced automatic stale lock break with fail-closed timeout refusal; live and unidentified lock holders are never displaced.
+- Unique Marker Ownership & Release: `${process.pid}-${crypto.randomUUID()}` with `{ flag: 'wx' }`; unlinks only own marker before non-recursive `rmdirSync`; replacement claims remain intact.
+- Fail-Fast Error Handling: non-`EEXIST` filesystem errors throw immediately without burning the 2.5s retry budget.
+- Comprehensive Test Suite: rigorous coverage for AC1 (timeout exhaustion refuses takeover; holder preserved; third writer succeeds after release), AC2 (short contention serializes mutations), AC3 (replacement claim preserved on callback resolve and throw), callback error cleanup, and non-EEXIST fast failure.
 
 ### References
 
@@ -112,4 +152,7 @@ Planning-only receipt: no implementation pipeline or behavior-change verificatio
 ### History
 
 - 2026-10-10T07:29:38.764Z backlog → todo (system)
+- 2026-10-10T23:34:50.186Z todo → wip (system)
+- 2026-10-11T00:26:11.649Z wip → testing (system)
+- 2026-10-11T00:26:27.361Z testing → done (system)
 

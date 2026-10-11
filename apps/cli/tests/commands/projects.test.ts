@@ -8,8 +8,9 @@ import {
     setDetachedServeSpawnForTests,
     setPortProbeForTests,
     setProcessHelpersForTests,
+    setProjectStopFetchForTests,
 } from '@gobing-ai/spur-app';
-import { getEnvVar, removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
+import { removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
 import { stringify } from 'yaml';
 import { main } from '../../src/index';
 
@@ -30,6 +31,7 @@ describe('spur projects CLI command', () => {
     afterEach(() => {
         setPortProbeForTests(undefined);
         setProcessHelpersForTests(undefined);
+        setProjectStopFetchForTests(undefined);
         ProjectRegistry.prototype.list = origList;
         ProjectRegistry.prototype.allocatePort = origAllocate;
         removeEnvVar('SPUR_PROJECTS_FILE');
@@ -40,6 +42,26 @@ describe('spur projects CLI command', () => {
             rmSync(projectPath, { recursive: true, force: true });
         }
     });
+
+    // 1156: fetch seams for the ownership identity probes the stop path requires.
+    function ownedFetchFor(path: string): typeof fetch {
+        return (async (input: string | URL) => {
+            const url = new URL(String(input));
+            const body =
+                url.pathname === '/api/health'
+                    ? { status: 'ok', service: 'spur' }
+                    : { name: 'proj', path: normalizeProjectPath(path) };
+            return { ok: true, status: 200, json: async () => body } as unknown as Response;
+        }) as unknown as typeof fetch;
+    }
+
+    function foreignFetch(): typeof fetch {
+        return (async (input: string | URL) => {
+            const url = new URL(String(input));
+            const body = url.pathname === '/api/health' ? { status: 'ok', service: 'nginx' } : { error: 'Not Found' };
+            return { ok: true, status: 200, json: async () => body } as unknown as Response;
+        }) as unknown as typeof fetch;
+    }
 
     function createMockOutput() {
         let outputText = '';
@@ -388,11 +410,27 @@ describe('spur projects CLI command', () => {
     it('should stop a registered project with active port via CLI', async () => {
         const registry = new ProjectRegistry(projectsFile);
         const activePort = 3503;
-        setPortProbeForTests(async (p) => (p === activePort ? 'in-use' : 'available'));
+        let liveState = true;
+        setPortProbeForTests(async (p) => (p === activePort && liveState ? 'in-use' : 'available'));
+
+        // 1156: the stop path signals only a verified same-owned Spur listener —
+        // fake PID via the process seams, identity via the fetch seam, and the
+        // port goes quiet once SIGTERM lands. Fake PIDs only: the test runner is
+        // never signaled.
+        const signalsReceived: Array<{ pid: number; signal: string }> = [];
+        setProcessHelpersForTests({
+            pidFinder: (p) => (p === activePort ? 97531 : undefined),
+            processKiller: (pid, signal) => {
+                signalsReceived.push({ pid, signal });
+                if (signal === 'SIGTERM') liveState = false;
+                return true;
+            },
+        });
+        setProjectStopFetchForTests(ownedFetchFor(projectPath));
 
         await registry.upsert({ name: 'ActiveStop', path: projectPath, port: activePort });
 
-        // Stop JSON — must not kill the test runner even when fuser reports us.
+        // Stop JSON — verified listener, existing success shape.
         const mockJson = createMockOutput();
         const exitJson = await main(['projects', 'stop', 'ActiveStop', '--json'], {
             cwd: tempDir,
@@ -400,10 +438,11 @@ describe('spur projects CLI command', () => {
         });
         expect(exitJson).toBe(0);
         expect(mockJson.getText()).toContain('"stopped": "ActiveStop"');
+        expect(signalsReceived).toEqual([{ pid: 97531, signal: 'SIGTERM' }]);
         // Still alive after stop (would not reach here if we SIGTERM'd ourselves).
         expect(process.pid).toBeGreaterThan(0);
 
-        // Stop text (port already cleared — no fuser path)
+        // Stop text (port already cleared — idempotent no-listener path)
         const mockText = createMockOutput();
         const exitText = await main(['projects', 'stop', 'ActiveStop'], {
             cwd: tempDir,
@@ -530,35 +569,96 @@ describe('spur projects CLI command', () => {
         }
     });
 
-    it('should signal fuser-reported pids but never itself during stop', async () => {
-        const { chmodSync, writeFileSync } = await import('node:fs');
+    it('should stop idempotently when no listener answers the registered port', async () => {
         const registry = new ProjectRegistry(projectsFile);
-        const activePort = 3506;
-        setPortProbeForTests(async (p) => (p === activePort ? 'in-use' : 'available'));
-        await registry.upsert({ name: 'FuserStop', path: projectPath, port: activePort });
+        const deadPort = 3509;
+        // Port is not live: absent listener is a successful stop that clears the
+        // stale port without any signal (1156 AC2).
+        setPortProbeForTests(async () => 'available');
+        const signalsReceived: Array<{ pid: number; signal: string }> = [];
+        setProcessHelpersForTests({
+            pidFinder: () => 97533,
+            processKiller: (pid, signal) => {
+                signalsReceived.push({ pid, signal });
+                return true;
+            },
+        });
 
-        // Fake `fuser` on PATH: reports this test's own pid (skipped — never
-        // SIGTERM ourselves) and an impossible pid (kill → ESRCH, ignored per-pid).
-        const binDir = mkdtempSync(join(tmpdir(), 'spur-fake-fuser-'));
-        const fuserPath = join(binDir, 'fuser');
-        writeFileSync(fuserPath, `#!/bin/sh\necho "${process.pid} 99999998"\n`);
-        chmodSync(fuserPath, 0o755);
-        const origPath = getEnvVar('PATH');
-        setEnvVar('PATH', `${binDir}${origPath !== undefined ? `:${origPath}` : ''}`);
+        await registry.upsert({ name: 'AbsentStop', path: projectPath, port: deadPort });
 
-        try {
-            const mock = createMockOutput();
-            const exit = await main(['projects', 'stop', 'FuserStop', '--json'], {
-                cwd: tempDir,
-                output: mock.output,
-            });
-            expect(exit).toBe(0);
-            expect(mock.getText()).toContain('"stopped": "FuserStop"');
-        } finally {
-            if (origPath !== undefined) setEnvVar('PATH', origPath);
-            else removeEnvVar('PATH');
-            if (existsSync(binDir)) rmSync(binDir, { recursive: true, force: true });
-        }
+        const mock = createMockOutput();
+        const exit = await main(['projects', 'stop', 'AbsentStop'], { cwd: tempDir, output: mock.output });
+        expect(exit).toBe(0);
+        expect(mock.getText()).toContain('Stopped project "AbsentStop"');
+        expect(signalsReceived).toEqual([]);
+        expect(registry.readRaw().projects.find((p) => p.name === 'AbsentStop')?.port).toBe(0);
+    });
+
+    it('should refuse to stop a foreign listener without signaling, clearing its port, or printing Stopped', async () => {
+        const registry = new ProjectRegistry(projectsFile);
+        const foreignPort = 3506;
+        setPortProbeForTests(async (p) => (p === foreignPort ? 'in-use' : 'available'));
+        const signalsReceived: Array<{ pid: number; signal: string }> = [];
+        setProcessHelpersForTests({
+            pidFinder: (p) => (p === foreignPort ? 97532 : undefined),
+            processKiller: (pid, signal) => {
+                signalsReceived.push({ pid, signal });
+                return true;
+            },
+        });
+        // A non-Spur service owns the port: identity proof fails closed (1156 AC1).
+        setProjectStopFetchForTests(foreignFetch());
+
+        await registry.upsert({ name: 'ForeignStop', path: projectPath, port: foreignPort });
+
+        const mockJson = createMockOutput();
+        const exitJson = await main(['projects', 'stop', 'ForeignStop', '--json'], {
+            cwd: tempDir,
+            output: mockJson.output,
+        });
+        expect(exitJson).toBe(1);
+        expect(mockJson.getText()).toContain('"ok": false');
+        expect(mockJson.getText()).toContain('Refused to stop');
+        expect(mockJson.getText()).not.toContain('"stopped"');
+
+        const mockText = createMockOutput();
+        const exitText = await main(['projects', 'stop', 'ForeignStop'], {
+            cwd: tempDir,
+            output: mockText.output,
+        });
+        expect(exitText).toBe(1);
+        expect(mockText.getText()).toContain('Error: Refused to stop');
+        expect(mockText.getText()).not.toContain('Stopped project');
+
+        // Foreign listener survives unsignaled and its registry port is preserved.
+        expect(signalsReceived).toEqual([]);
+        expect(registry.readRaw().projects.find((p) => p.name === 'ForeignStop')?.port).toBe(foreignPort);
+    });
+
+    it('should refuse to stop when the listener PID resolves to the CLI process itself', async () => {
+        const registry = new ProjectRegistry(projectsFile);
+        const selfPort = 3507;
+        setPortProbeForTests(async (p) => (p === selfPort ? 'in-use' : 'available'));
+        const signalsReceived: Array<{ pid: number; signal: string }> = [];
+        setProcessHelpersForTests({
+            // The unsafe-PID guard fires before any identity probe or signal, so
+            // an in-process listener can never suicide the CLI (1156 AC3).
+            pidFinder: () => process.pid,
+            processKiller: (pid, signal) => {
+                signalsReceived.push({ pid, signal });
+                return true;
+            },
+        });
+        setProjectStopFetchForTests(ownedFetchFor(projectPath));
+
+        await registry.upsert({ name: 'SelfStop', path: projectPath, port: selfPort });
+
+        const mock = createMockOutput();
+        const exit = await main(['projects', 'stop', 'SelfStop', '--json'], { cwd: tempDir, output: mock.output });
+        expect(exit).toBe(1);
+        expect(mock.getText()).toContain('unsafe PID');
+        expect(signalsReceived).toEqual([]);
+        expect(registry.readRaw().projects.find((p) => p.name === 'SelfStop')?.port).toBe(selfPort);
     });
 
     it('should purge missing projects and report results via clean --json', async () => {
@@ -605,16 +705,20 @@ describe('spur projects CLI command', () => {
         const registry = new ProjectRegistry(projectsFile);
         const missingPath = join(tempDir, 'ghost-with-port');
         const ghostPort = 3599;
-        setPortProbeForTests(async (p) => (p === ghostPort ? 'in-use' : 'available'));
+        let liveState = true;
+        setPortProbeForTests(async (p) => (p === ghostPort && liveState ? 'in-use' : 'available'));
 
         const killedPids: number[] = [];
         setProcessHelpersForTests({
             pidFinder: async (port) => (port === ghostPort ? 98765 : undefined),
-            processKiller: (pid) => {
+            processKiller: (pid, signal) => {
                 killedPids.push(pid);
+                if (signal === 'SIGTERM') liveState = false;
                 return true;
             },
         });
+        // 1156: the ghost's listener proves service:spur and the exact deleted path.
+        setProjectStopFetchForTests(ownedFetchFor(missingPath));
 
         await registry.upsert({ name: 'GhostWithPort', path: missingPath, port: ghostPort });
 
@@ -630,6 +734,43 @@ describe('spur projects CLI command', () => {
         expect(output).toContain('Terminated 1 lingering process(es):');
         expect(output).toContain('PID 98765 on port 3599');
         expect(killedPids).toContain(98765);
+    });
+
+    it('should purge a missing project but report no termination for a foreign listener via clean', async () => {
+        const registry = new ProjectRegistry(projectsFile);
+        const missingPath = join(tempDir, 'ghost-foreign-port');
+        const ghostPort = 3598;
+        setPortProbeForTests(async (p) => (p === ghostPort ? 'in-use' : 'available'));
+
+        const signalsReceived: Array<{ pid: number; signal: string }> = [];
+        setProcessHelpersForTests({
+            pidFinder: async (port) => (port === ghostPort ? 98764 : undefined),
+            processKiller: (pid, signal) => {
+                signalsReceived.push({ pid, signal });
+                return true;
+            },
+        });
+        // Foreign service owns the stale port: purged with no terminated entry (1156 AC1).
+        setProjectStopFetchForTests(foreignFetch());
+
+        await registry.upsert({ name: 'GhostForeign', path: missingPath, port: ghostPort });
+
+        const mockJson = createMockOutput();
+        const exit = await main(['projects', 'clean', '--json'], {
+            cwd: tempDir,
+            output: mockJson.output,
+        });
+        expect(exit).toBe(0);
+        const data = JSON.parse(mockJson.getText()) as {
+            ok: boolean;
+            purgedCount: number;
+            terminatedProcesses: Array<unknown>;
+        };
+        expect(data.ok).toBe(true);
+        expect(data.purgedCount).toBe(1);
+        expect(data.terminatedProcesses).toEqual([]);
+        expect(signalsReceived).toEqual([]);
+        expect(registry.readRaw().projects).toHaveLength(0);
     });
 
     it('should support --json-envelope on clean', async () => {

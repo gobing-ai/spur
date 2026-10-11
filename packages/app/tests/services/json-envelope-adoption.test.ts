@@ -83,10 +83,11 @@ async function agentDoctor(enveloped?: boolean): Promise<string> {
     // scratch the live tree happened to hold (the frozen json-raw-baseline fixture
     // expects an empty attribution set). A fresh temp cwd — same pattern as
     // ruleProject() — carries no scratch, so the bytes are tree-independent.
-    const svc = new AgentService({ cwd: await mkdtemp(join(tmpdir(), 'spur-0697-doctor-')), env: {}, output: out });
+    const scratch = await mkdtemp(join(tmpdir(), 'spur-0697-doctor-'));
+    const svc = new AgentService({ cwd: scratch, env: {}, output: out });
     await svc.doctor({ json: true, ...(enveloped === undefined ? {} : { enveloped }) }, {
         doctorRunner: { runAll: async () => DOCTOR_RESULTS },
-        fileSystem: createNodeFileSystem(await mkdtemp(join(tmpdir(), 'spur-0697-'))),
+        fileSystem: createNodeFileSystem(scratch),
         now: () => 0,
     } as never);
     return out.messages.join('\n');

@@ -22,7 +22,7 @@ shapes live in `apps/cli/src/commands/projects.ts`.
 | `clean` | Purge missing project folders and terminate lingering processes (alias: `refresh`) | `--no-terminate-processes` `--json` |
 | `list` | List entries with live running status | `--json` `--fleet` |
 | `start <target>` | Start or reuse a detached project server | `--port <n>` `--json` |
-| `stop <target>` | Best-effort stop the listener and clear its recorded port | `--json` |
+| `stop <target>` | Ownership-verified stop of the listener and clear its recorded port | `--json` |
 
 Every verb also advertises `--json-envelope`; use the facade's machine-output contract. Success is
 exit `0`; validation, registry, spawn, health, or lookup failure is exit `1`.
@@ -36,8 +36,8 @@ exit `0`; validation, registry, spawn, health, or lookup failure is exit `1`.
 - `add` requires an existing path, resolves a relative path from the current working directory, and
   defaults the display name to its basename. It upserts; it does not start a server. The current
   source does not enforce a `.spur/` marker or directory type.
-- `list` automatically heals tilde paths, verifies project directories exist on disk (purging missing entries and terminating lingering processes), and heals stale entries to `port: 0` before reporting `running`.
-- `clean` (alias `refresh`) explicitly purges non-existent project directories from `projects.json`, probes live ports for removed entries, and cleanly terminates orphaned listening processes (SIGTERM with bounded wait and SIGKILL escalation). Supports `--no-terminate-processes` to skip process kills.
+- `list` automatically heals tilde paths, verifies project directories exist on disk (purging missing entries and terminating only ownership-verified lingering processes), and heals stale entries to `port: 0` before reporting `running`.
+- `clean` (alias `refresh`) explicitly purges non-existent project directories from `projects.json`, probes live ports for removed entries, and terminates orphaned listeners only after ownership verification (SIGTERM with bounded wait and SIGKILL escalation, each signal gated on `service:spur` identity plus exact project path and a stable PID; foreign or unverified listeners are never signaled). Supports `--no-terminate-processes` to skip process kills.
 - `list --fleet` (0835/0858) additionally resolves each project's `agent.fleet` section from that
   project's `.spur/config.yaml` under the existing verb (no new noun). Per project it prints one line
   per member: instance id (the spec id / mailbox identity), `role`, resolved `executor`,
@@ -76,8 +76,10 @@ port is returned idempotently; otherwise the service allocates a port (3000–39
 set), spawns `spur serve --host 127.0.0.1 --no-open` detached in the project root, waits for the port,
 then persists it.
 
-`stop` finds processes bound to the recorded port, sends `SIGTERM` best-effort while excluding the
-CLI and its parent, and clears the registry port. It is not a persistent supervisor contract.
+`stop` signals only a listener that proves `service:spur` identity plus the exact registered project
+path with a stable rediscovered PID; it refuses foreign or unverified listeners with exit 1 and
+preserves the port, treats an absent listener as idempotent success, and excludes the CLI and its
+parent. It is not a persistent supervisor contract.
 `remove` only removes the registry entry; stop a running project first when process cleanup matters.
 
 Raw JSON success payloads are verb-specific (`project`, `projects`, `removed`, `stopped`, or start

@@ -599,6 +599,12 @@ export {
     startRegisteredProject,
 } from './services/project-start';
 export {
+    type StopRegisteredProjectOptions,
+    type StopRegisteredProjectResult,
+    setProjectStopFetchForTests,
+    stopRegisteredProject,
+} from './services/project-stop';
+export {
     type Colorize,
     type FailOnSeverity,
     type RuleEvaluateOptions,
