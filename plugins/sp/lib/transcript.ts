@@ -34,6 +34,12 @@ export interface Row {
     isMeta?: boolean;
     isCompactSummary?: boolean;
     id?: string; // pi: the row id doubles as the once-per-message usage key
+    /** pi `custom_message` body: a hook-relayed prompt's text. */
+    content?: string;
+    /** pi `custom_message` visibility; `false` keeps the row out of the operator-visible transcript. */
+    display?: boolean;
+    /** pi `custom_message` producer id (e.g. a hook), carried for diagnostics only. */
+    customType?: string;
     message?: {
         id?: string;
         role?: string;
@@ -97,8 +103,17 @@ export function formatTokenSplit(t: Tokens | null): string {
  * body-only fixture row had no real counterpart). Every such row is therefore an operator prompt,
  * rendered `/X <args>`; an ARGUMENT-LESS wrapper is still an invocation and renders `/X` (the skill
  * name is the stage label the review groups by, so arguments alone would lose which command ran).
+ *
+ * pi (1151 follow-up): a hook-relayed `custom_message` (`display: true`) is a real operator prompt —
+ * the host shows it and the agent answers it — so it opens a segment like typed text; a
+ * `display: false` row is a host-only notice and stays non-segmenting activity.
  */
 export function promptText(row: Row): string | undefined {
+    if (row.type === 'custom_message') {
+        if (row.display === false) return undefined;
+        const text = typeof row.content === 'string' ? row.content.trim() : '';
+        return text === '' ? undefined : text;
+    }
     if (row.type === 'message') {
         // pi (1130): only a user-role message with text content is a prompt; toolResult rows are not.
         if (row.message?.role !== 'user') return undefined;

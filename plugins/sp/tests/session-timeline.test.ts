@@ -366,6 +366,52 @@ describe('1151 — pi skill invocations are operator prompts', () => {
         expect(skillInvocationPrompt('<skill name="i">\nb\n</skill>')).toBe('/i');
     });
 
+    test('1151 follow-up: a hook-relayed custom_message segments; display:false stays activity', () => {
+        const custom = (content: unknown, display: unknown, offset: number) => ({
+            type: 'custom_message',
+            customType: 'cc-anti-hallucination',
+            content,
+            display,
+            id: `c${offset}`,
+            timestamp: at(offset),
+        });
+        const assistant = (id: string, offset: number) => ({
+            type: 'message',
+            id,
+            timestamp: at(offset),
+            message: { role: 'assistant', content: [], usage: { input: 10, cacheRead: 100, output: 1 } },
+        });
+        const tl = buildTimeline(
+            [
+                custom('typed-style prompt', true, 0),
+                assistant('a1', 5),
+                custom('Add verification for: confidence level (HIGH/MEDIUM/LOW)', true, 10),
+                assistant('a2', 15),
+            ].map((r) => JSON.stringify(r)),
+        );
+        // The relayed prompt opens its own segment with its own window and tokens — it used to be
+        // folded into the previous segment (no boundary) and misattributed.
+        expect(tl.segments.map((s) => s.prompt)).toEqual([
+            'typed-style prompt',
+            'Add verification for: confidence level (HIGH/MEDIUM/LOW)',
+        ]);
+        expect(tl.segments[1]?.work).toBe('0:05');
+        expect(tl.segments[0]?.tokens.input).toBe(10);
+        expect(tl.segments[1]?.tokens.input).toBe(10);
+
+        // display:false is a host-only notice; a blank body is not a prompt either.
+        const one = buildTimeline(
+            [
+                custom('real prompt', true, 0),
+                custom('hidden note', false, 5),
+                custom('   ', true, 6),
+                assistant('a1', 7),
+            ].map((r) => JSON.stringify(r)),
+        );
+        expect(one.segments).toHaveLength(1);
+        expect(one.segments[0]?.work).toBe('0:07');
+    });
+
     test('AC1/R1: PI_SESSION_FILE resolves when no Claude session id is set', () => {
         const path = join(mkdtempSync(join(tmpdir(), 'session-timeline-pienv-')), 'pi.jsonl');
         writeFileSync(path, '{}\n');
