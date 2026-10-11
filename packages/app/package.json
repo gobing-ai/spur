@@ -32,7 +32,8 @@
         "@gobing-ai/ts-runtime": "catalog:",
         "@gobing-ai/ts-utils": "catalog:",
         "yaml": "catalog:",
-        "@gobing-ai/ts-ai-decision": "catalog:"
+        "@gobing-ai/ts-ai-decision": "catalog:",
+        "@gobing-ai/ts-laya-mlx": "catalog:"
     },
     "devDependencies": {
         "@types/bun": "catalog:",

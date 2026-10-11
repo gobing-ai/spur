@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { SpurConfig } from '@gobing-ai/spur-config';
+import { getEnvVars, type SpurConfig } from '@gobing-ai/spur-config';
 import {
     DecisionCatalogError,
     type DecisionDescriptor,
@@ -130,7 +130,7 @@ export type ServedDecision = DecisionResult & { makerSource: DecisionMakerSource
  * explicit operator decision point.
  */
 export class DecisionService {
-    private readonly registry = new DecisionMakerRegistry();
+    private readonly registry: DecisionMakerRegistry;
     private readonly resolution: DecisionResolution;
     private readonly hub: DecisionHub;
     /** Decision ids served by two different winning files; `run`/`decide` of these fails closed. */
@@ -141,6 +141,15 @@ export class DecisionService {
     private constructor(resolution: DecisionResolution) {
         this.resolution = resolution;
         this.duplicateIds = new Map(resolution.duplicateIds.map((d) => [d.id, d.sources]));
+        const env = getEnvVars();
+        this.registry = new DecisionMakerRegistry({
+            builtins: {
+                makerOptions: { env },
+                driverOptions: {
+                    'laya-local': { env },
+                },
+            },
+        });
         this.hub = new DecisionHub({ registry: this.registry });
         // Feed the hub one catalog at a time, in layer order. An id declared by
         // an earlier winning file is stripped from every LATER file before load
