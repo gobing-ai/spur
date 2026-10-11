@@ -1598,7 +1598,7 @@ describe('worktree run-record integrity (task 1136 R1/R4/R5)', () => {
                 execSync('git init -q && git config user.email t@e.st && git config user.name t', { cwd: mainRepo });
                 writeFileSync(join(mainRepo, 'seed.txt'), 'seed\n');
                 execSync('git add seed.txt && git commit -qm "init"', { cwd: mainRepo });
-                execSync(`git worktree add -b "sp/markerless" "${linkedWt}" HEAD`, { cwd: mainRepo });
+                execSync(`git worktree add -q -b "sp/markerless" "${linkedWt}" HEAD`, { cwd: mainRepo });
 
                 const runId = 'run_markerless';
                 // Setup run in the linked worktree
@@ -1660,7 +1660,7 @@ describe('1165 — a failed owning-tree landing record is named, never swallowed
             execSync('git init -q && git config user.email t@e.st && git config user.name t', { cwd: mainRepo });
             writeFileSync(join(mainRepo, 'seed.txt'), 'seed\n');
             execSync(`git add seed.txt && git ${'com'}mit -qm "init"`, { cwd: mainRepo });
-            execSync(`git worktree add -b "sp/markerless-1165" "${linkedWt}" HEAD`, { cwd: mainRepo });
+            execSync(`git worktree add -q -b "sp/markerless-1165" "${linkedWt}" HEAD`, { cwd: mainRepo });
 
             const db = await openInlineRunProjectDb(linkedWt);
             try {
