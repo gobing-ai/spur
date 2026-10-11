@@ -87,7 +87,7 @@ describe('context-session-start — side effects', () => {
 
             const session = readSession(dir);
             expect(session).not.toBeNull();
-            expect(session?.session).toMatch(/^session-\d{4}-\d{2}-\d{2}-\d{4}$/);
+            expect(session?.session).toMatch(/^session-\d{4}-\d{2}-\d{2}-\d{6}-[0-9a-f]{8}$/);
 
             const ledger = readLedger(dir);
             expect(ledger).toHaveLength(1);
@@ -859,6 +859,32 @@ describe('context-session-stop — owner-gated finalization (task 1159)', () => 
             expect(readSession(dir)).toBeNull();
             expect(recordSessionEnd(ctx, undefined, ownerA)).toBeNull();
             expect(endRows(dir)).toHaveLength(1);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    // 1166 regression: minute-granular ids made a session started in the same minute as an
+    // already-ended one share its ledger id, so the frozen end algorithm suppressed the new
+    // session's `session_end` as a duplicate. Minted ids now carry seconds + a random suffix.
+    test('two sessions minted in the same minute get distinct ids and each closes once', async () => {
+        const dir = makeTempProject();
+        try {
+            const ctx = ctxDir(dir);
+            const { recordSessionStart } = await import('./context-session-start');
+            const { recordSessionEnd } = await import('./context-session-stop');
+            const sameMinute = () => new Date('2026-10-10T19:20:00.000Z');
+
+            const first = recordSessionStart(ctx, {}, sameMinute, undefined, ownerA);
+            expect(recordSessionEnd(ctx, sameMinute, ownerA)?.type).toBe('session_end');
+
+            const second = recordSessionStart(ctx, {}, sameMinute, undefined, ownerA);
+            expect(second).not.toBeNull();
+            expect(second).not.toBe(first);
+            expect(recordSessionEnd(ctx, sameMinute, ownerA)?.type).toBe('session_end');
+
+            expect(endRows(dir)).toHaveLength(2);
+            expect(new Set(endRows(dir).map((e) => e.session)).size).toBe(2);
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }

@@ -15,6 +15,7 @@
  */
 
 import { execSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { getEnvVar, getEnvVars } from '../lib/env';
@@ -71,7 +72,8 @@ interface SessionFileBody {
  * Return the id of the session already in flight, or null when a new one should be minted.
  *
  * **Why this exists (0398 R3).** `SessionStart` fires in every nested `agent.run` subprocess, not
- * once per host session. Each firing used to mint a fresh `session-<date>-<HHMM>` id, append a
+ * once per host session. Each firing used to mint a fresh `session-<date>-<HHMM>` id (now
+ * seconds-plus-random, 1166), append a
  * `session_start` row, and overwrite the `.session.json` pointer that `context-post-tool` reads —
  * so a single pipeline run registered as dozens of sessions and orphaned the parent's event
  * stream. The H6 corpus shows the signature: 332 `session_start` against 157 `session_end` over
@@ -141,7 +143,11 @@ export function recordSessionStart(
     const active = resolveActiveSession(dir, at, env);
     if (active !== null) return active;
     const pad = (n: number) => String(n).padStart(2, '0');
-    const sessionId = `session-${at.toISOString().slice(0, 10)}-${pad(at.getHours())}${pad(at.getMinutes())}`;
+    // Uniqueness suffix (1166): minute-granular ids collided when a session started in the same
+    // minute an earlier one ended, and the frozen end algorithm then suppressed the new session's
+    // `session_end` row as a duplicate. Seconds + a random suffix make collisions practically
+    // impossible; the id stays an opaque ledger key everywhere else.
+    const sessionId = `session-${at.toISOString().slice(0, 10)}-${pad(at.getHours())}${pad(at.getMinutes())}${pad(at.getSeconds())}-${randomUUID().slice(0, 8)}`;
     const ts = at.toISOString();
     const agent = resolveAgentHint(env, agentFallback);
     const model = resolveModelHint(env);

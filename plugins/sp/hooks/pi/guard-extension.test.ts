@@ -311,7 +311,7 @@ describe('session lifecycle and token ledger', () => {
         expect(existsSync(sessionFile)).toBe(true);
         const session = JSON.parse(readFileSync(sessionFile, 'utf-8')) as Record<string, unknown>;
         expect(typeof session.session).toBe('string');
-        expect(String(session.session)).toMatch(/^session-\d{4}-\d{2}-\d{2}-\d{4}$/);
+        expect(String(session.session)).toMatch(/^session-\d{4}-\d{2}-\d{2}-\d{6}-[0-9a-f]{8}$/);
         expect(session.started).toBeDefined();
         expect(session.session_id).toBeUndefined();
         expect(session.started_at).toBeUndefined();
@@ -606,7 +606,7 @@ describe('Pi session schema and reuse (0969 R2)', () => {
                 unknown
             >;
             expect(Object.keys(session)).toContain('session');
-            expect(String(session.session)).toMatch(/^session-\d{4}-\d{2}-\d{2}-\d{4}$/);
+            expect(String(session.session)).toMatch(/^session-\d{4}-\d{2}-\d{2}-\d{6}-[0-9a-f]{8}$/);
             expect(session.started).toBeDefined();
             expect(session.session_id).toBeUndefined();
             expect(session.started_at).toBeUndefined();

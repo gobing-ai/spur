@@ -291,7 +291,7 @@ describe('recordSessionStart (in-process)', () => {
         try {
             const fixed = new Date('2026-07-12T15:04:00.000Z');
             const id = recordSessionStart(ctx, { SPUR_AGENT: 'claude', SPUR_MODEL: 'opus' }, () => fixed);
-            expect(id).toBe('session-2026-07-12-1504');
+            expect(id).toMatch(/^session-2026-07-12-1504\d{2}-[0-9a-f]{8}$/);
             if (id === null) throw new Error('recordSessionStart returned null for a valid context');
             const session = JSON.parse(readFileSync(join(ctx, '.session.json'), 'utf-8')) as {
                 session: string;

@@ -152,13 +152,13 @@ or delete it; an ownerless (legacy) pointer is never finalized and expires under
 idle-start window instead.
 
 ```jsonl
-{"ts":"2026-07-09T14:23:01Z","session":"session-2026-07-09-1423","type":"session_start"}
-{"ts":"2026-07-09T14:23:15Z","session":"session-2026-07-09-1423","type":"read","file":"src/dao.ts","tokens":648}
-{"ts":"2026-07-09T14:24:00Z","session":"session-2026-07-09-1423","type":"write","file":"src/dao.ts","tokens":222,"action":"edit"}
-{"ts":"2026-07-12T15:00:00Z","session":"session-2026-07-12-1500","type":"bash","summary":"ls -la","tokens":12}
-{"ts":"2026-07-12T15:00:01Z","session":"session-2026-07-12-1500","type":"grep","summary":"/TODO/ src"}
-{"ts":"2026-07-12T15:00:02Z","session":"session-2026-07-12-1500","type":"glob","summary":"**/*.test.ts"}
-{"ts":"2026-07-09T14:30:00Z","session":"session-2026-07-09-1423","type":"session_end","totals":{"reads":5,"writes":19,"tokens":2783}}
+{"ts":"2026-07-09T14:23:01Z","session":"session-2026-07-09-142318-a1b2c3d4","type":"session_start"}
+{"ts":"2026-07-09T14:23:15Z","session":"session-2026-07-09-142318-a1b2c3d4","type":"read","file":"src/dao.ts","tokens":648}
+{"ts":"2026-07-09T14:24:00Z","session":"session-2026-07-09-142318-a1b2c3d4","type":"write","file":"src/dao.ts","tokens":222,"action":"edit"}
+{"ts":"2026-07-12T15:00:00Z","session":"session-2026-07-12-150007-e5f6a7b8","type":"bash","summary":"ls -la","tokens":12}
+{"ts":"2026-07-12T15:00:01Z","session":"session-2026-07-12-150007-e5f6a7b8","type":"grep","summary":"/TODO/ src"}
+{"ts":"2026-07-12T15:00:02Z","session":"session-2026-07-12-150007-e5f6a7b8","type":"glob","summary":"**/*.test.ts"}
+{"ts":"2026-07-09T14:30:00Z","session":"session-2026-07-09-142318-a1b2c3d4","type":"session_end","totals":{"reads":5,"writes":19,"tokens":2783}}
 ```
 
 **Never edit `token-ledger.jsonl` by hand.** It feeds the Board **Observability → Tool Using** tab.

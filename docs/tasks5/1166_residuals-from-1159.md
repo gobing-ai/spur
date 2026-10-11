@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Residuals from 1159
-status: backlog
+status: cancelled
 template: standard
 created_at: 2026-10-10T22:52:21.560Z
-updated_at: "2026-10-10T22:52:22.257Z"
+updated_at: "2026-10-11T03:04:23.146Z"
 
 ---
 
@@ -41,7 +41,12 @@ Source task: 1159 (feature H21) — deferred residuals filed by residual-scan se
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Both residuals resolved inline (operator directive: no deferral to new task files), then cancelled.
+
+- review-finding:815bf389 (session id collision): fixed at mint time at plugins/sp/hooks/context-session-start.ts:150 — ids are now `session-<date>-<HHMMSS>-<8 random hex>` (seconds + `randomUUID().slice(0,8)`), so a session started in the same minute an earlier one ended no longer shares the ledger id and gets its own `session_end` under the frozen end algorithm. Regression test "two sessions minted in the same minute get distinct ids and each closes once" at plugins/sp/hooks/context-hooks.test.ts:868; format assertions updated in plugins/sp/hooks/token-estimate.test.ts:294 and plugins/sp/hooks/pi/guard-extension.test.ts:314.
+- review-finding:ba85cf0d (Claude path drift): fixed cross-repo in superskill at apps/cli/src/commands/hook-run.ts:278 (`resolveSpPluginScript`) and apps/cli/src/commands/hook-run.ts:309 (`loadSpPluginDelegate`) — the `sp/context-session-start|stop|post-tool` runners now delegate in-process (Bun dynamic import of the plugin's dependency-free TS) to the plugin's self-contained scripts resolved via `SPUR_PLUGIN_ROOT` → `CLAUDE_PLUGIN_ROOT` → newest Claude plugin-cache version, so the plugin's `.session.json` ownership gating (1159) becomes the single source of truth. All-or-nothing: missing/unloadable adapter exports fail open to the in-CLI runners, never a mixed pointer scheme. Tests in superskill apps/cli/tests/commands/hook-run.test.ts (delegation, all-or-nothing fallback, unloadable script, version ordering).
+
+Deployment note: delegation activates on the installed Claude path once a spur plugin release containing the 1159 payload adapters (> 0.4.1) and a superskill release containing this change are published; until then the in-CLI fallback keeps current behavior.
 
 ### Testing
 
@@ -56,3 +61,6 @@ Source task: 1159 (feature H21) — deferred residuals filed by residual-scan se
 <!-- Links to features, docs, ADRs, related tasks, or external references. -->
 
 ### History
+
+- 2026-10-11T03:04:23.146Z backlog → cancelled (system)
+
