@@ -1,5 +1,58 @@
 # Changelog
 
+## [0.4.2] - 2026-10-11
+
+### Added
+- implement faster default gate without lowering 90/90 coverage floor (1154) (2b66604a8)
+- register the local laya decision driver (40ce521a1)
+- add decision volume trend chart with success rate and inline severity breakdown (ae8154d61)
+- carry the host-native session id next to the spur session (6cf6ca0a3)
+- restore live message updates in the conversation view (db124046f)
+- implement mark-read end to end with a message.read event (cf738b6c5)
+- keep live registry lock owners exclusive past retry timeout (1157) (aafc0e905)
+- require project ownership before signaling listener in registry and CLI cleanup (1156) (a44023abf)
+- gate ledger teardown on host-native session ownership (1159) (acc2f5f0c)
+- add dev-runall --mode auto and retire dev-parallel (e1356ca50)
+- sanitize raw HTML in Board Markdown previews (1162) (0505d8c6f)
+
+### Fixed
+- mint unique session ledger ids (1166) (e11f4123b)
+- parse inbox offsets independently of the page-size ceiling (1164) (242458f7c)
+- revalidate the PR head throughout review wait polling (1161) (68a32989d)
+- parse raw numstat paths with -z for sensitive routing (1160) (0cd63a861)
+- reject physical overlap before bundle-config cleanup (1155) (253ba71d5)
+- reset member terminal state when switching agent identity (1163) (8010269f8)
+- exempt @home-node from the DD-09 sweep and compute task-local orphans (1153) (d8d69cb4e)
+- redact quoted JSON credentials in tool summaries (1158) (c05baa65f)
+- tolerate missing learnings status in repair state (1152) (332a46296)
+- stop full quality gate from failing on load-sensitive timeouts (1150) (0de86eda4)
+- segment pi skill invocations as operator prompts (1151) (b13ffaf91)
+
+### Changed
+- remove gate-lock mechanism and simplify quality-gate (f1d3c2caa)
+- merge sp/runall-1150-1154-a739 (1150,1152,1154) (e697b03ab)
+- regenerate the inline-run bundle (b3c913521)
+- silence git worktree output leaking into the dots reporter (06428a320)
+- run stale-project probes outside the registry lock (1167) (917dcaf51)
+- append batch learnings for 1156,1157 (ea0a21fb7)
+- record learnings and doc-sync for 1156,1157 (c4b965115)
+- merge sp/runall-1156-1157-b510 (1156,1157) (ae5be18e1)
+- regenerate quality-gate twin for migration 0053 (42e0edfee)
+- record re-verification evidence for the landed runall batch (8c01e537f)
+- widen the --from workflow run aggregate case timeout (1dfb24d26)
+- merge sp/runall-1158-1159-2268 (1158,1159) (b53343861)
+- update bundle artifacts after 1156 CLI changes (477be30e0)
+- append batch learnings for 1158,1159 (9243a73a7)
+- record learnings, architecture and feature status for 1158,1159 (ad2c19714)
+- merge sp/runall-1151-1165-af998a (1151,1153,1155,1160,1161,1164,1165) (95c9119af)
+- append 1151,1153,1155,1160,1161,1164,1165 learnings (7fe5279d3)
+- name the run scratch subdirectory in the inline driver setup (13b376c2b)
+- repoint 1162 evidence anchors to the landed test lines (aa51dafa8)
+- pin the landing-record and reconcile failure diagnostics (1165) (7372e65c2)
+- updat tasks after refinment (419c8eed7)
+- updat tasks after refinment (df5718076)
+- updat tasks after refinment (13da1554f)
+
 ## [0.4.1] - 2026-10-10
 
 ### Added
