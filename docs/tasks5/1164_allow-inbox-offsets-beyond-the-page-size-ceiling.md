@@ -4,7 +4,7 @@ name: Allow inbox offsets beyond the page-size ceiling
 status: done
 template: feature-impl
 created_at: 2026-10-10T07:30:38.183Z
-updated_at: "2026-10-10T19:32:50.214Z"
+updated_at: "2026-10-10T23:56:13.156Z"
 feature_id: G1
 
 ac_altitude: task-local
@@ -71,11 +71,11 @@ Keep parseLimit and its limit defaults50/cap500 exactly as-is for inbox and rece
 
 ### Plan
 
-1. [ ] R1/R3: add failing Hono offset500/550/1000 argument regression and pagination-aware distinct-page fixture.
-2. [ ] R1/R2: implement private strict parseOffset and replace only the inbox offset call; correct limit/offset comments.
-3. [ ] R2/R3: add missing/invalid/precision table, maximum safe integer and independent capped-limit controls; retain global recent/default/missing-agent tests.
-4. [ ] Run apps/server tests/modules/messages/index.test.ts from its workspace and the task gate; update owning pagination surface prose if needed.
-5. [ ] Review/verify, record local evidence and commit.
+1. [x] R1/R3: add failing Hono offset500/550/1000 argument regression and pagination-aware distinct-page fixture.
+2. [x] R1/R2: implement private strict parseOffset and replace only the inbox offset call; correct limit/offset comments.
+3. [x] R2/R3: add missing/invalid/precision table, maximum safe integer and independent capped-limit controls; retain global recent/default/missing-agent tests.
+4. [x] Run apps/server tests/modules/messages/index.test.ts from its workspace and the task gate; update owning pagination surface prose if needed.
+5. [x] Review/verify, record local evidence and commit.
 
 ### Solution
 

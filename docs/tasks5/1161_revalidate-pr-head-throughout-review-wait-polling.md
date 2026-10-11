@@ -4,7 +4,7 @@ name: Revalidate PR head throughout review wait polling
 status: done
 template: feature-impl
 created_at: 2026-10-10T07:29:52.346Z
-updated_at: "2026-10-10T19:24:38.906Z"
+updated_at: "2026-10-10T23:56:11.933Z"
 feature_id: H1
 
 ac_altitude: task-local
@@ -71,11 +71,11 @@ Scenario: AC3 — A push during evidence fetch cannot win the terminal race (req
 
 ### Plan
 
-1. [ ] R1/R3: add two-poll and same-poll movement cases, including both delayed CLEAN and FOUND, plus missing/switched PR identity.
-2. [ ] R1: reuse viewPr/requireExpectedHead for each poll and pre-terminal check; pin number/head, fail with existing FAIL/exit2.
-3. [ ] R2/R3: retain stable FOUND/CLEAN, pending timeout, status-file and invalid-budget controls; assert no push/comment calls and mutation sensitivity to either check removal.
-4. [ ] Run plugin pr-reviewing suite, regenerate the twin through Superskill, check source/Node parity and update owning Current-HEAD prose.
-5. [ ] Run task gate, review/verify/record local evidence and commit.
+1. [x] R1/R3: add two-poll and same-poll movement cases, including both delayed CLEAN and FOUND, plus missing/switched PR identity.
+2. [x] R1: reuse viewPr/requireExpectedHead for each poll and pre-terminal check; pin number/head, fail with existing FAIL/exit2.
+3. [x] R2/R3: retain stable FOUND/CLEAN, pending timeout, status-file and invalid-budget controls; assert no push/comment calls and mutation sensitivity to either check removal.
+4. [x] Run plugin pr-reviewing suite, regenerate the twin through Superskill, check source/Node parity and update owning Current-HEAD prose.
+5. [x] Run task gate, review/verify/record local evidence and commit.
 
 ### Solution
 

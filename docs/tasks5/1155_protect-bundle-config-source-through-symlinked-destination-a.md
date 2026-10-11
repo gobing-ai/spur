@@ -4,7 +4,7 @@ name: Protect bundle-config source through symlinked destination ancestors
 status: done
 template: feature-impl
 created_at: 2026-10-10T07:27:54.618Z
-updated_at: "2026-10-10T18:57:28.581Z"
+updated_at: "2026-10-10T23:56:09.545Z"
 feature_id: A
 
 ac_altitude: task-local
@@ -69,11 +69,11 @@ Scenario: AC3 — Direct ancestors are protected (req: R1, R3)
 
 ### Plan
 
-1. [ ] R3: build the copied-script fixture and migrate direct source/ancestor safety tests off the real repository.
-2. [ ] R1/R3: add aliased ancestor, exact source, source-child, direct ancestor, final symlink and non-ENOENT path cases; demonstrate source deletion only inside the disposable fixture on the pre-fix implementation.
-3. [ ] R1/R2: add local canonicalPath/contains and reject bidirectional physical overlap before rm; retain other errors.
-4. [ ] R2/R3: check safe missing/aliased output, '..'-prefixed safe siblings, exclusion filter and schema uniqueness with unchanged source bytes.
-5. [ ] Run bun test --preload ./tests/setup.ts scripts/commands/bundle-config.test.ts from root, then apps/cli init-templates suite in its workspace and task gate. Review/verify/record and commit.
+1. [x] R3: build the copied-script fixture and migrate direct source/ancestor safety tests off the real repository.
+2. [x] R1/R3: add aliased ancestor, exact source, source-child, direct ancestor, final symlink and non-ENOENT path cases; demonstrate source deletion only inside the disposable fixture on the pre-fix implementation.
+3. [x] R1/R2: add local canonicalPath/contains and reject bidirectional physical overlap before rm; retain other errors.
+4. [x] R2/R3: check safe missing/aliased output, '..'-prefixed safe siblings, exclusion filter and schema uniqueness with unchanged source bytes.
+5. [x] Run bun test --preload ./tests/setup.ts scripts/commands/bundle-config.test.ts from root, then apps/cli init-templates suite in its workspace and task gate. Review/verify/record and commit.
 
 ### Solution
 
@@ -103,14 +103,14 @@ Rationale: the guard asked a *lexical* question ("is `target` textually inside t
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `scripts/commands/bundle-config.ts:51-54` canonicalizes source and destination and refuses physical overlap in both directions before `rm`; `canonicalPath` (`:27`) walks up only on `ENOENT`, so a non-ENOENT resolution error propagates; `contains` (`:38`) uses the empty-relative-path/`..`-exact/`..`-separator test, never a loose `startsWith('..')`. Tests: `scripts/commands/bundle-config.test.ts:136` (symlinked parent aliasing the repo, refusing `alias/config`, `alias/config/subdir` and `alias`), plus `:154` (non-ENOENT), and the direct source/ancestor/source-child/aliased-final-component cases |
+| R1 | MET | `scripts/commands/bundle-config.ts:51-54` canonicalizes source and destination and refuses physical overlap in both directions before `rm`; `canonicalPath` (`:27`) walks up only on `ENOENT`, so a non-ENOENT resolution error propagates; `contains` (`:38`) uses the empty-relative-path/`..`-exact/`..`-separator test, never a loose `startsWith('..')`. Tests: `scripts/commands/bundle-config.test.ts:140` (symlinked parent aliasing the repo, refusing `alias/config`, `alias/config/subdir` and `alias`), plus `:158` (non-ENOENT), and the direct source/ancestor/source-child/aliased-final-component cases |
 | R2 | MET | The bundle body is unchanged (`scripts/commands/bundle-config.ts:56`); `apps/cli/tests/init-templates.test.ts` source-vs-bundle parity is byte-for-byte green (24 pass / 0 fail) and the two pre-existing `$schema` tests still pass, so ordinary output and schema injection are preserved; unsafe targets are refused before any removal (every rejection asserts the sentinel bytes and source inventory) |
 | R3 | MET | The destructive cases moved off the live checkout onto an isolated `mkdtemp` repo whose `scripts/commands/bundle-config.ts` is copied byte-for-byte and imported by absolute file URL, so `SOURCE` binds to the fixture's `config/`; safe-path cases cover a missing nested destination, an aliased outside parent and a `..`-prefixed sibling name |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Aliased source cannot be deleted (req: R1, R2) | MET | test | `scripts/commands/bundle-config.test.ts:136` — `bun test --preload ./tests/setup.ts scripts/commands/bundle-config.test.ts` 11 pass / 0 fail; the symlinked-parent case rejects all three aliased targets and asserts `SENTINEL.txt` is byte-identical afterwards |
-| AC2 — Safe output still bundles (req: R2, R3) | MET | test | `scripts/commands/bundle-config.test.ts:162` asserts assets copied, `fixtures/` excluded and exactly one `$schema` directive per bundled YAML; `(cd apps/cli && bun test tests/init-templates.test.ts)` 24 pass / 0 fail including the source-vs-bundle byte-for-byte parity case |
+| AC1 — Aliased source cannot be deleted (req: R1, R2) | MET | test | `scripts/commands/bundle-config.test.ts:140` — `bun test --preload ./tests/setup.ts scripts/commands/bundle-config.test.ts` 11 pass / 0 fail; the symlinked-parent case rejects all three aliased targets and asserts `SENTINEL.txt` is byte-identical afterwards |
+| AC2 — Safe output still bundles (req: R2, R3) | MET | test | `scripts/commands/bundle-config.test.ts:166` asserts assets copied, `fixtures/` excluded and exactly one `$schema` directive per bundled YAML; `(cd apps/cli && bun test tests/init-templates.test.ts)` 24 pass / 0 fail including the source-vs-bundle byte-for-byte parity case |
 | AC3 — Direct ancestors are protected (req: R1, R3) | MET | test | `scripts/commands/bundle-config.test.ts:64` block — direct source destination, repo-root ancestor, source-child destination (including missing final directories) and the symlinked-final-component case, each rejected with the unchanged `refusing to replace` error and the source inventory re-verified |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 

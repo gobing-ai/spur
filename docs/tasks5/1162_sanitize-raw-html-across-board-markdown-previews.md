@@ -4,7 +4,7 @@ name: Sanitize raw HTML across Board Markdown previews
 status: done
 template: feature-impl
 created_at: 2026-10-10T07:30:27.598Z
-updated_at: "2026-10-10T22:31:08.634Z"
+updated_at: "2026-10-10T23:56:15.392Z"
 feature_id: F7
 
 ac_altitude: task-local
@@ -68,11 +68,11 @@ Scenario: AC2 — Existing behavior remains supported (req: R2, R3)
 
 ### Plan
 
-1. [ ] R1/R3: add real-renderer isolated DOM regressions and demonstrate dangerous output before the fix; keep code-fence literals as positive controls.
-2. [ ] R1: declare installed HAST utility dependencies; implement final synchronous DOMPurify bridge and shared markdownPreviewSafety props.
-3. [ ] R1/R2: apply to all four direct readers and all three editor callers; preserve custom code/heading components and dedicated Mermaid sanitizer.
-4. [ ] R2/R3: cover safe Markdown/HTML/links, table/checkbox/code, plan/design anchors, Mermaid and all unsafe payload classes; run caller wiring tests and isolated real-renderer suite from apps/web.
-5. [ ] Run task gate; update owning surface prose if applicable; verify/review and record evidence before commit.
+1. [x] R1/R3: add real-renderer isolated DOM regressions and demonstrate dangerous output before the fix; keep code-fence literals as positive controls.
+2. [x] R1: declare installed HAST utility dependencies; implement final synchronous DOMPurify bridge and shared markdownPreviewSafety props.
+3. [x] R1/R2: apply to all four direct readers and all three editor callers; preserve custom code/heading components and dedicated Mermaid sanitizer.
+4. [x] R2/R3: cover safe Markdown/HTML/links, table/checkbox/code, plan/design anchors, Mermaid and all unsafe payload classes; run caller wiring tests and isolated real-renderer suite from apps/web.
+5. [x] Run task gate; update owning surface prose if applicable; verify/review and record evidence before commit.
 
 ### Solution
 
@@ -111,7 +111,7 @@ Change map (paths repo-relative; one anchor per row):
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
-- Confidence: MEDIUM
+- Confidence: HIGH
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|

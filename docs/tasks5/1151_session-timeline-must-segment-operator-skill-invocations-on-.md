@@ -4,7 +4,7 @@ name: Session-timeline must segment operator skill invocations on pi, not count 
 status: done
 template: issue
 created_at: 2026-10-10T02:49:17.069Z
-updated_at: "2026-10-10T17:02:40.747Z"
+updated_at: "2026-10-10T23:53:14.524Z"
 feature_id: E5
 
 ac_altitude: task-local
@@ -282,7 +282,7 @@ Rationale: the prefix test (`startsWith('<skill name="')`) discarded exactly the
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — A skill invocation with arguments becomes an operator segment (req: R1) | MET | test | `plugins/sp/tests/session-timeline.test.ts:319` asserts the fixture invocation segment renders `/sp-dev-run --triage` and contains neither `body` nor `<skill`; `(cd plugins/sp && bun test tests/session-timeline.test.ts)` 39 pass / 0 fail |
+| AC1 — A skill invocation with arguments becomes an operator segment (req: R1) | MET | test | `plugins/sp/tests/session-timeline.test.ts:314` asserts the fixture invocation segment renders `/sp-dev-run --triage` and contains neither `body` nor `<skill`; `(cd plugins/sp && bun test tests/session-timeline.test.ts)` 39 pass / 0 fail |
 | AC2 — An argument-less wrapper is still an operator segment (req: R1, R3) | MET | test | `plugins/sp/tests/session-timeline.test.ts:322` asserts `/rd3-anti-hallucination` for the added argument-less fixture row |
 | AC3 — The injected-body class is gone (req: R2) | MET | test | `plugins/sp/tests/session-timeline.test.ts:326` asserts no `injectedPrompts` field, no `injected` fragment in the zero-segment reason, and no `isInjectedPrompt` token in any `.ts`/`.mjs` under `plugins/sp/lib` or `plugins/sp/scripts` |
 | AC4 — Plain operator text mentioning <skill is unaffected (req: R4) | MET | test | `plugins/sp/tests/session-timeline.test.ts:333` keeps the `operator note: the <skill name="x"> wrapper above is injected…` fixture row verbatim as a segment prompt |

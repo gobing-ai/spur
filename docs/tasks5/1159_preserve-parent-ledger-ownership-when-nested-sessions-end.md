@@ -4,7 +4,7 @@ name: Preserve parent ledger ownership when nested sessions end
 status: done
 template: feature-impl
 created_at: 2026-10-10T07:29:43.485Z
-updated_at: "2026-10-10T22:52:23.335Z"
+updated_at: "2026-10-10T23:56:08.371Z"
 feature_id: H21
 
 ac_altitude: task-local
@@ -79,11 +79,11 @@ Scenario: AC3 — Unknown and replaced ownership stays safe (req: R1, R3, R4)
 
 ### Plan
 
-1. [ ] R1/R3: add parent/child/next-tool regressions using distinct explicit identities in shared core and Claude/Pi adapters; observe current child teardown failure.
-2. [ ] R1: store optional private pointer owner on creation, preserve reused ownership, thread real native identities from both adapters.
-3. [ ] R2/R4: enforce owner-only finalization, prior-end deduplication and unchanged-pointer removal; preserve append-failure data.
-4. [ ] R3/R4: cover legacy/malformed/missing identity, owner-with-run-id, replay/removal failure and replacement pointer paths; update seeded happy paths to owned pointers.
-5. [ ] Run plugins/sp hooks/context-hooks.test.ts, hooks/token-estimate.test.ts and hooks/pi/guard-extension.test.ts from plugins/sp, update owning pointer prose, standalone/smoke and task gate; review/verify/record and commit.
+1. [x] R1/R3: add parent/child/next-tool regressions using distinct explicit identities in shared core and Claude/Pi adapters; observe current child teardown failure.
+2. [x] R1: store optional private pointer owner on creation, preserve reused ownership, thread real native identities from both adapters.
+3. [x] R2/R4: enforce owner-only finalization, prior-end deduplication and unchanged-pointer removal; preserve append-failure data.
+4. [x] R3/R4: cover legacy/malformed/missing identity, owner-with-run-id, replay/removal failure and replacement pointer paths; update seeded happy paths to owned pointers.
+5. [x] Run plugins/sp hooks/context-hooks.test.ts, hooks/token-estimate.test.ts and hooks/pi/guard-extension.test.ts from plugins/sp, update owning pointer prose, standalone/smoke and task gate; review/verify/record and commit.
 
 ### Solution
 
@@ -135,14 +135,14 @@ the change was a compaction only — no exported symbol, behaviour or test asser
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
-- Confidence: MEDIUM
+- Confidence: HIGH
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
 | R1 | MET | Owner is frozen at pointer creation and only it may finalize/remove: `plugins/sp/hooks/context-owner.ts:21` (SessionOwner = host + host-native id, never pid/ledger id/SPUR_RUN_ID), `plugins/sp/hooks/context-session-start.ts:160` (owner stored only when host+id valid), `plugins/sp/hooks/context-session-stop.ts:148` (owner-equality gate), `plugins/sp/hooks/pi/guard-extension.ts:52` (Pi identity from the session manager). Verified end-to-end on the plugin Claude stdin adapter (parent A start -> child B end no-op -> parent end once) and the Pi handler path. One layer deferred: the installed Claude host dispatches SessionStart/SessionEnd to an external in-CLI runner (`plugins/sp/hooks/hooks.json:33`), so the Claude half's deployed effect is a cross-repo follow-up (reviewer P3 #1, DEFER). |
 | R2 | MET | Exactly-once owning shutdown and nested reuse: `plugins/sp/hooks/context-session-start.ts:142` returns the reused ledger id and writes nothing, `plugins/sp/hooks/context-session-stop.ts:148` admits only the owner, `plugins/sp/hooks/context-session-stop.ts:153` suppresses a duplicate append on replay. Reproduced on the Claude stdin adapter: parent start -> child start with SPUR_RUN_ID -> child end (no row, pointer kept) -> parent tool event under the same ledger -> parent end once -> repeat end no second row. Tests `plugins/sp/hooks/context-hooks.test.ts:827` and `plugins/sp/hooks/pi/guard-extension.test.ts:667`. |
 | R3 | MET | Reproducing regressions added at the existing seams and re-run fresh: `plugins/sp/hooks/context-hooks.test.ts:827` (core), `:1024` (Claude stdin adapter), `:1130` (owner derivation), `:1202` (stdin-to-core halves), `:1260` (pointer-write + invalid-host guards), `plugins/sp/hooks/pi/guard-extension.test.ts:663` (Pi). Focused suite 174 pass / 0 fail (443 expect); hooks/ dir 386 pass / 0 fail. Falsification: the pre-fix `plugins/sp/hooks/context-session-stop.ts` source destroys the parent pointer on a child end (one session_end row, pointer removed), while the current source writes no row and retains it. |
-| R4 | MET | Fail-closed for missing/mismatched/malformed caller and legacy ownerless pointers (`plugins/sp/hooks/context-session-stop.ts:146-148` returns null with no writes/removal); replay after removal failure dedups (`:153`); append failure returns null and retains the pointer (`:166`); removal re-reads and requires id+owner unchanged (`:172-174`). Reproduced: legacy pointer untouchable with ledger bytes unchanged, append-failure (dir at ledger path) keeps pointer, pointer replaced during recording survives, unknown/mismatched identity cannot finalize. Tests `plugins/sp/hooks/context-hooks.test.ts:886`, `:906`, `:961`, `:986`. |
+| R4 | MET | Fail-closed for missing/mismatched/malformed caller and legacy ownerless pointers (`plugins/sp/hooks/context-session-stop.ts:146-148` returns null with no writes/removal); replay after removal failure dedups (`:153`); append failure returns null and retains the pointer (`:165`); removal re-reads and requires id+owner unchanged (`:172-174`). Reproduced: legacy pointer untouchable with ledger bytes unchanged, append-failure (dir at ledger path) keeps pointer, pointer replaced during recording survives, unknown/mismatched identity cannot finalize. Tests `plugins/sp/hooks/context-hooks.test.ts:886`, `:906`, `:961`, `:986`. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|

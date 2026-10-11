@@ -4,7 +4,7 @@ name: Redact quoted JSON credentials before persisting tool summaries
 status: done
 template: feature-impl
 created_at: 2026-10-10T07:29:39.093Z
-updated_at: "2026-10-10T17:57:35.319Z"
+updated_at: "2026-10-10T23:56:06.685Z"
 feature_id: H21
 
 ac_altitude: task-local
@@ -65,10 +65,10 @@ Scenario: AC2 — Existing behavior remains supported (req: R2, R3)
 
 ### Plan
 
-1. [ ] R1/R3: add quoted-JSON escape and truncation regressions plus a real recordToolUseEvent persisted-byte pin in hooks/token-estimate.test.ts; demonstrate current synthetic leak.
-2. [ ] R1: implement one escape-aware quoted-sensitive-field pass in scrubSecrets before generic assignment matching; redact unterminated strings to end.
-3. [ ] R2/R3: run existing provider/header/assignment and harmless-context matrix, cap-boundary cases and the shared Pi recorder pin.
-4. [ ] Run (cd plugins/sp && bun test hooks/token-estimate.test.ts hooks/context-hooks.test.ts hooks/pi/guard-extension.test.ts), standalone/smoke and task gate; review/verify/record and commit only source hooks/tests/evidence.
+1. [x] R1/R3: add quoted-JSON escape and truncation regressions plus a real recordToolUseEvent persisted-byte pin in hooks/token-estimate.test.ts; demonstrate current synthetic leak.
+2. [x] R1: implement one escape-aware quoted-sensitive-field pass in scrubSecrets before generic assignment matching; redact unterminated strings to end.
+3. [x] R2/R3: run existing provider/header/assignment and harmless-context matrix, cap-boundary cases and the shared Pi recorder pin.
+4. [x] Run (cd plugins/sp && bun test hooks/token-estimate.test.ts hooks/context-hooks.test.ts hooks/pi/guard-extension.test.ts), standalone/smoke and task gate; review/verify/record and commit only source hooks/tests/evidence.
 
 ### Solution
 
@@ -95,13 +95,13 @@ Rationale: `scrubSecrets` runs on full summary text before truncation and storag
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
 | R1 | MET | `plugins/sp/hooks/context-post-tool.ts:95` escape-aware quoted-JSON sensitive-field pass in `scrubSecrets` replaces whole quoted values (plain/single/shell-escaped keys, escaped quotes/backslashes as content, fail-closed to end-of-input); runs before caps/ledger write. Unit matrix `plugins/sp/hooks/token-estimate.test.ts:81` (escaped-quote whole-value :149, unterminated + trailing backslash :165, pre-truncation 200-char/4096-byte :170). My own end-to-end `recordToolUseEvent` repro over synthetic markers produced 0 leaks in returned event and raw ledger bytes. |
-| R2 | MET | Existing assignment/provider/authorization redaction tests remain unchanged and green: `plugins/sp/hooks/token-estimate.test.ts:60`; harmless-context pin `plugins/sp/hooks/token-estimate.test.ts:74`; shared Pi recorder path `plugins/sp/hooks/pi/guard-extension.test.ts:355`. Focused suite 140 pass / 0 fail; my repro confirmed ANTHROPIC_API_KEY/GITHUB_TOKEN/Bearer/PEM still scrubbed and `ls -la src/ && grep -r password .` byte-identical. |
-| R3 | MET | Regression pins assert raw ledger bytes not just the returned object: `plugins/sp/hooks/token-estimate.test.ts:411` and `plugins/sp/hooks/token-estimate.test.ts:437`; spawned real-hook end-to-end pin `plugins/sp/hooks/context-hooks.test.ts:252`. All green under `bun test hooks/token-estimate.test.ts hooks/context-hooks.test.ts hooks/pi/guard-extension.test.ts`. |
+| R2 | MET | Existing assignment/provider/authorization redaction tests remain unchanged and green: `plugins/sp/hooks/token-estimate.test.ts:60`; harmless-context pin `plugins/sp/hooks/token-estimate.test.ts:74`; shared Pi recorder path `plugins/sp/hooks/pi/guard-extension.test.ts:361`. Focused suite 140 pass / 0 fail; my repro confirmed ANTHROPIC_API_KEY/GITHUB_TOKEN/Bearer/PEM still scrubbed and `ls -la src/ && grep -r password .` byte-identical. |
+| R3 | MET | Regression pins assert raw ledger bytes not just the returned object: `plugins/sp/hooks/token-estimate.test.ts:411` and `plugins/sp/hooks/token-estimate.test.ts:437`; spawned real-hook end-to-end pin `plugins/sp/hooks/context-hooks.test.ts:261`. All green under `bun test hooks/token-estimate.test.ts hooks/context-hooks.test.ts hooks/pi/guard-extension.test.ts`. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Reproducing edge case is safe (req: R1, R3) | MET | test | `plugins/sp/hooks/context-hooks.test.ts:252` spawns the real `context-post-tool` hook with a Bash command carrying spaced/escaped-quote JSON password, token and api_key fields and asserts the ledger bytes omit every synthetic marker; `plugins/sp/hooks/token-estimate.test.ts:411` pins the returned event AND raw `token-ledger.jsonl` bytes. Independently reproduced end-to-end with `recordToolUseEvent`: all SYN-PRE/SYN-MID/SYN-POST/SYN-TOKEN-VALUE/SYN-KEY markers absent from both surfaces. |
-| AC2 — Existing behavior remains supported (req: R2, R3) | MET | test | `plugins/sp/hooks/token-estimate.test.ts:60` (assignment + provider-prefix samples still scrubbed) and `plugins/sp/hooks/token-estimate.test.ts:74` (harmless command context untouched); shared Pi recorder `plugins/sp/hooks/pi/guard-extension.test.ts:355`. Focused suite: 140 pass / 0 fail. |
+| AC1 — Reproducing edge case is safe (req: R1, R3) | MET | test | `plugins/sp/hooks/context-hooks.test.ts:261` spawns the real `context-post-tool` hook with a Bash command carrying spaced/escaped-quote JSON password, token and api_key fields and asserts the ledger bytes omit every synthetic marker; `plugins/sp/hooks/token-estimate.test.ts:411` pins the returned event AND raw `token-ledger.jsonl` bytes. Independently reproduced end-to-end with `recordToolUseEvent`: all SYN-PRE/SYN-MID/SYN-POST/SYN-TOKEN-VALUE/SYN-KEY markers absent from both surfaces. |
+| AC2 — Existing behavior remains supported (req: R2, R3) | MET | test | `plugins/sp/hooks/token-estimate.test.ts:60` (assignment + provider-prefix samples still scrubbed) and `plugins/sp/hooks/token-estimate.test.ts:74` (harmless command context untouched); shared Pi recorder `plugins/sp/hooks/pi/guard-extension.test.ts:361`. Focused suite: 140 pass / 0 fail. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

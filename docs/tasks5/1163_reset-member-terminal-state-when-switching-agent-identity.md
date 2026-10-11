@@ -4,7 +4,7 @@ name: Reset member terminal state when switching agent identity
 status: done
 template: feature-impl
 created_at: 2026-10-10T07:30:32.317Z
-updated_at: "2026-10-10T18:54:49.135Z"
+updated_at: "2026-10-10T23:56:16.457Z"
 feature_id: G63
 
 ac_altitude: task-local
@@ -64,11 +64,11 @@ Extend MemberTerminal.test.tsx reconnect test: deliver seq100, disconnect, advan
 
 ### Plan
 
-1. [ ] R1/R3: add real MemberDetail alpha100→beta20 rerender regression with typed input/status and old-stream/fetch completion controls.
-2. [ ] R1: key the sole terminal JSX by entry.instanceId; verify fleet and ProcessesView reach the shared seam.
-3. [ ] R2/R3: strengthen same-agent sinceSeq reconnect and session-metadata controls; verify pending reconnect/status poll cancellation on switch/unmount using scoped timers.
-4. [ ] Run MemberDetail, MemberTerminal and ProcessesView suites from apps/web; preserve existing stdin/error/sequence behavior and UI accessibility.
-5. [ ] Run task gate, review/verify, record evidence and commit.
+1. [x] R1/R3: add real MemberDetail alpha100→beta20 rerender regression with typed input/status and old-stream/fetch completion controls.
+2. [x] R1: key the sole terminal JSX by entry.instanceId; verify fleet and ProcessesView reach the shared seam.
+3. [x] R2/R3: strengthen same-agent sinceSeq reconnect and session-metadata controls; verify pending reconnect/status poll cancellation on switch/unmount using scoped timers.
+4. [x] Run MemberDetail, MemberTerminal and ProcessesView suites from apps/web; preserve existing stdin/error/sequence behavior and UI accessibility.
+5. [x] Run task gate, review/verify, record evidence and commit.
 
 ### Solution
 

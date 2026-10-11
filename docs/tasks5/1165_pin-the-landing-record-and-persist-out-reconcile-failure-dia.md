@@ -4,7 +4,7 @@ name: Pin the landing-record and persist-out reconcile failure diagnostics
 status: done
 template: feature-impl
 created_at: 2026-10-10T16:02:04.236Z
-updated_at: "2026-10-10T19:42:22.500Z"
+updated_at: "2026-10-10T23:56:14.262Z"
 feature_id: E71
 
 ac_altitude: task-local
@@ -99,12 +99,12 @@ Scenario: AC3 — A failed post-transfer database open is named on stderr (req: 
 
 ### Plan
 
-1. [ ] Preflight: reread task and three catch sites, check clean tree/exclusive ownership, prerequisite statuses and current test baseline. Preserve the existing happy-path tests.
-2. [ ] R1 / AC1: add the real linked-worktree obstruction case and exact log, successful stdout, return-code and terminal-row assertions.
-3. [ ] R2 / AC2: add the real SQLite trigger case with scoped stderr capture, stable stdout/sidecar assertions and unchanged stale receiving row.
-4. [ ] R2 / AC3: add the scoped second-target-open spy case; assert call count, exact outer diagnostic, stable stdout/sidecar and exit 0. Restore every spy, stream and cwd in finally.
-5. [ ] R3 / AC1–AC3: mutation-check each catch separately with its new test, record the failing diagnostic assertion and restore source immediately. Confirm the final diff contains only intended test and task evidence changes.
-6. [ ] Run `(cd packages/app && bun test tests/services/inline-run-setup.test.ts tests/services/inline-run-driver.test.ts)`, then `bun run spur-check` through the task pipeline. Review, verify and record evidence for R1–R3 and AC1–AC3 through their owning harness stages; commit the completed task. No source/plugin build is necessary unless scope changes.
+1. [x] Preflight: reread task and three catch sites, check clean tree/exclusive ownership, prerequisite statuses and current test baseline. Preserve the existing happy-path tests.
+2. [x] R1 / AC1: add the real linked-worktree obstruction case and exact log, successful stdout, return-code and terminal-row assertions.
+3. [x] R2 / AC2: add the real SQLite trigger case with scoped stderr capture, stable stdout/sidecar assertions and unchanged stale receiving row.
+4. [x] R2 / AC3: add the scoped second-target-open spy case; assert call count, exact outer diagnostic, stable stdout/sidecar and exit 0. Restore every spy, stream and cwd in finally.
+5. [x] R3 / AC1–AC3: mutation-check each catch separately with its new test, record the failing diagnostic assertion and restore source immediately. Confirm the final diff contains only intended test and task evidence changes.
+6. [x] Run `(cd packages/app && bun test tests/services/inline-run-setup.test.ts tests/services/inline-run-driver.test.ts)`, then `bun run spur-check` through the task pipeline. Review, verify and record evidence for R1–R3 and AC1–AC3 through their owning harness stages; commit the completed task. No source/plugin build is necessary unless scope changes.
 
 ### Solution
 

@@ -4,7 +4,7 @@ name: Parse raw Git numstat paths for sensitive gate routing
 status: done
 template: feature-impl
 created_at: 2026-10-10T07:29:47.892Z
-updated_at: "2026-10-10T19:12:07.689Z"
+updated_at: "2026-10-10T23:56:10.744Z"
 feature_id: H1
 
 ac_altitude: task-local
@@ -73,11 +73,11 @@ Scenario: AC3 — Unusual and malformed paths cannot bypass safety (req: R1, R3,
 
 ### Plan
 
-1. [ ] R1/R3: add real Git Unicode/rename regression and exact-count fixtures; set core.quotepath=true and retain pre-fix failure.
-2. [ ] R1/R2/R4: switch argv to -z, consume NUL count/ordinary/rename records, remove obsolete human-arrow helper and preserve failSafe semantics.
-3. [ ] R4: enable dotAll in the existing sensitive glob matcher; add unusual-name and malformed-frame controls plus unchanged untracked/binary behavior.
-4. [ ] Run plugin task-diffstat suite; regenerate via superskill script convert sp task-diffstat.ts --json and prove Node twin/source parity and standalone contracts.
-5. [ ] Run required task gate, review/verify/record exact raw-path/count evidence and commit without changing thresholds or lane policy.
+1. [x] R1/R3: add real Git Unicode/rename regression and exact-count fixtures; set core.quotepath=true and retain pre-fix failure.
+2. [x] R1/R2/R4: switch argv to -z, consume NUL count/ordinary/rename records, remove obsolete human-arrow helper and preserve failSafe semantics.
+3. [x] R4: enable dotAll in the existing sensitive glob matcher; add unusual-name and malformed-frame controls plus unchanged untracked/binary behavior.
+4. [x] Run plugin task-diffstat suite; regenerate via superskill script convert sp task-diffstat.ts --json and prove Node twin/source parity and standalone contracts.
+5. [x] Run required task gate, review/verify/record exact raw-path/count evidence and commit without changing thresholds or lane policy.
 
 ### Solution
 
@@ -110,7 +110,7 @@ The module sits at the 250-line `GLUE_BUDGET_LINES` ceiling precisely; the added
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
 | R1 | MET | `plugins/sp/scripts/task-diffstat.ts:177` (`git diff --numstat -z`), `:184` (NUL split, tail dropped), `:186-188` (header split at the first two tabs), `:190-193` (raw path added verbatim; empty path field = rename form), `:200-203` (old + new path). Tests: `plugins/sp/tests/task-diffstat.test.ts` asserts the `-z` argv, raw records, the rename pair and byte-exact tab/newline/` => ` names |
-| R2 | MET | Counts added once per count header (`:194-195`), `-` binary sentinel contributes no lines, `files` = sorted unique path count, untracked `-z`/`.spur` handling untouched (`:210-218`). Tests: the pure-rename case pins `insertions: 1` for a sibling-only change; the binary + untracked case pins `0/0` and `sensitive: false`; the pre-existing `$schema` and count suites still pass unedited |
+| R2 | MET | Counts added once per count header (`:192-193`), `-` binary sentinel contributes no lines, `files` = sorted unique path count, untracked `-z`/`.spur` handling untouched (`:210-218`). Tests: the pure-rename case pins `insertions: 1` for a sibling-only change; the binary + untracked case pins `0/0` and `sensitive: false`; the pre-existing `$schema` and count suites still pass unedited |
 | R3 | MET | New reproducing regression: `core.quotepath=true` with `plugins/sp/hooks/保護.ts` yields `paths: ['plugins/sp/hooks/保護.ts']` and `sensitive: true` (pre-fix: `sensitive: false`), plus rename into and out of `drizzle/`, and the Node twin parses the same fixture to an identical row |
 | R4 | MET | `:179-180` fails closed on a non-NUL-terminated frame; five malformed shapes each produce a named `git diff --numstat -z` diagnostic with `sensitive: true`; `addCounts` (`:128`) rejects non-decimal counts and non-safe-integer values; `globToRegex` (`:88`) is built with `s` (dotAll) so `**/*.sql` spans a newline-bearing directory — pinned by a direct `sensitiveReasonForPath` assertion |
 

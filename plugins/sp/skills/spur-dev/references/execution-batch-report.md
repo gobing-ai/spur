@@ -178,6 +178,11 @@ the wrap's refusal of non-done tasks remains the hard invariant.
 
 **Close-out commit (1129 R2/R5).** In sequential mode the wrap's writes (learnings, metrics,
 doc-sync) land in the invoking tree and are committed as ONE close-out commit after the wrap exits.
+**Under `--worktree` they land in the EXECUTION tree instead** and ride the branch as its own commit
+on `$BRANCH`: Step 6 runs before WT-4, so a close-out commit on the base ref would advance it and
+make the batch's own FF-merge impossible (the fresh base tip would no longer be an ancestor of the
+batch tip — the step that makes the close-out the report's own contradiction). The close-out commit
+is never a point on the base ref.
 Stage them through the guard — never a free-form `git add` — so a concurrent writer's file cannot
 ride into the close-out commit (incident `36f274590`). `$RUN_ID` is the id Step 3 fixed before
 `commit-guard start` (execution-batch.md § Step 3); an unset id makes the guard exit 1 — fail closed:
