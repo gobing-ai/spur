@@ -5975,3 +5975,86 @@ actually obtained, not the plausibility of the claim.
 `node_modules/@types/bun/index.d.ts` is a single `/// <reference types="bun-types" />` line and
 `bun-types` is not installed here, so only the runtime behavior (V2) is evidence-backed. No ADR, index
 row or corpus claim was altered on the strength of an unverified claim.
+**Doc-evolve wrapup (constitution 99): drift audit on batch 1156/1157**
+
+| Check | Command | Result |
+| --- | --- | --- |
+| T3/T9 sync for `apps/cli/src/commands/projects.ts` | diff of merged satellite vs `project-stop.ts:172-217`, `projects.ts:409-459`, `project-registry.ts:611-617` | Already synced in `ae5be18e1` (same merge): §3.1 item 4, §3.2 step 2, §6 `stop` row match code |
+| ADR necessity (99 §6.1) | `rg` ADR-037 + lock/termination terms in `00_ADR.md` | No amendment needed — bug fix strengthening an existing invariant, no new boundary |
+| `03_ARCHITECTURE.md` mechanism claims | `rg ProjectRegistry/stale/SIGTERM` | Only accurate mentions (`:168`, `:780`); no stale mechanism |
+| `04_DESIGN.md` index | pointer scan + broken-link scan of every `design/*.md` link | Clean, 0 broken; `project-switcher` row present; **`spur-team-mode-design.md` has no row and stays that way** (superseded) |
+| Metadata contract (§4.3/§7.1) | frontmatter `updated_at` vs `git log -1` per file | 1 defect: `docs/design/project-switcher.md` said `2026-10-05`, content edited 2026-10-10 |
+
+Repair: `docs/design/project-switcher.md:5` `updated_at: 2026-10-05` → `2026-10-10`. Nothing else touched; no corpus writes (`git diff --stat` = 1 file, 1 line). `bun run link-check` passes. Learnings written to `.spur/run/75333f1d-0d95-45ce-8c50-4f23898134f2-wrapup-learnings.md`.
+
+# Batch learnings — 2026-10-10
+
+## 1156 — Require project ownership before registry and CLI cleanup signal a listener
+
+**Errors fixed**
+- `ProjectRegistry.refreshProjects` SIGTERM'd whatever PID held a deleted project's port, and CLI
+  `spur projects stop` independently signaled raw `fuser` output — two unguarded port→PID paths.
+- Termination was reported as success even when `sendSignalToPid` returned false or a replacement
+  listener had already taken the port.
+
+**Patterns**
+- One shared owner seam beats two parallel fixes: `stopRegisteredProject(entry, options)` in
+  `packages/app/src/services/project-stop.ts` now backs both `refreshProjects` and the CLI verb;
+  each caller maps refusal onto its existing error channel, so no new DTO, verb or flag appeared.
+- Ownership proof must come from two independent facts over one loopback host: `/api/health`
+  `service === 'spur'` **and** `/api/project` path exact match, plus PID rediscovery unchanged
+  immediately before every signal. Re-probe fully before escalating to SIGKILL; a changed PID is a
+  replacement and is never signaled.
+- Report `terminated` only after the original listener is observed gone; an absent listener is an
+  idempotent success that still clears the port, a foreign listener is a refusal (exit 1, port
+  preserved, never printing `Stopped`).
+- Module cycle avoidance: `project-registry` loads `project-stop` via one cached dynamic import
+  because the helper reuses that module's process helpers.
+
+**Gotchas**
+- `isPortLive` / `probePort` are TCP liveness, not identity. A health probe alone, a process name,
+  or the deleted directory's owner marker proves nothing — the deleted path may be gone precisely
+  when the orphan needs cleanup.
+- CLI tests cannot thread options through `main()`; a process-wide fetch seam
+  (`setProjectStopFetchForTests`, matching the existing `setPortProbeForTests` pattern) is the
+  established way to make that path testable.
+- Residual, deliberately unfrozen: PID reuse between the last check and the signal (no pidfd
+  redesign), and `refreshProjects` holding the advisory lock across up to 4×1s probes + 2×2s kill
+  waits per stale entry — filed as task 1167 rather than restructuring inside 1156.
+
+## 1157 — Keep live registry lock owners exclusive past the retry timeout
+
+**Errors fixed**
+- `withLock` deleted the lock directory after a 2.5s retry timeout, admitting a second writer while
+  the first was alive; the original owner's `finally` then recursively deleted the replacement lock.
+
+**Patterns**
+- Fail closed instead of guessing staleness: no age-based reclamation, no stale reaper. Timeout means
+  "refuse with the existing `Failed to acquire lock` error", which is a documented operational limit
+  (marked in code as `shortcut:`) rather than an open design option.
+- Ownership = a unique marker written with `flag: 'wx'` inside the mkdir lock. Release unlinks only
+  its own marker and then attempts non-recursive `rmdirSync`; a missing own marker forbids directory
+  removal, so a replacement claim survives.
+- Retry only `EEXIST`; `EPERM`/`EACCES` and every other errno fail fast instead of burning the 50×50ms
+  budget (measured 2026-08-18: that backoff was the entire cost of 5s-timeout test failures).
+- The same "unique marker + own-marker unlink before rmdir" pattern already exists in
+  `project-server-owner.ts` — reuse the house pattern instead of inventing a second one.
+
+**Gotchas**
+- Bare `rmSync`/recursive removal on lock paths is the failure mode; `rmdirSync` + marker discipline
+  makes the unsafe operation unrepresentable.
+- Lock tests need deterministic scheduling: an explicit deferred release promise, not real sleeps;
+  only one bounded real-time contention test is worth its cost.
+
+## Wrap-up (doc-evolve, same batch)
+
+- Both tasks' contract changes already landed in the owning satellite
+  (`docs/design/project-switcher.md` §3.1 concurrency, §3.2 refresh, §6 CLI table) in the same merge,
+  so `00_ADR`/`03_ARCHITECTURE`/`04_DESIGN` needed no change — a bug fix that strengthens an existing
+  invariant is not ADR material (99 §6.1), and an unchanged index pointer needs no ceremonial edit.
+- Repaired one real drift: that satellite's `updated_at` stayed at 2026-10-05 while its content was
+  edited on 2026-10-10 (99 §4.3/§7.1 metadata contract).
+- The one satellite with no `04_DESIGN.md` row (`spur-team-mode-design.md`, superseded) stays unlinked
+  on purpose — do not re-add it.
+
+Skipped: no repository-wide doc audit (§7.1 says routine wrap-up needs affected owners only), and I did not re-verify `docs/help*` prose — the `stop` help summaries ("Stop a project's server") stay true under the narrowed behavior, so I judged them non-drift rather than rewriting them. Risk: if you want `docs/help2/projects.md` to spell out the new refusal semantics, that's a follow-up edit nobody has asked for.
