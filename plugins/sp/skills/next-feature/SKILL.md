@@ -64,7 +64,7 @@ Run the steps in order. Each step's depth lives in its reference; this file is t
    change a frontier feature's status, the report **leads with the drift summary** ("sync first")
    and the ranking is computed over the *post-sync* status view. Details:
    [references/signal-derivation.md](references/signal-derivation.md) §0.
-1. **Assemble the candidate set.** `spur feature list --json`; drop `done`/`cancelled`, drop
+1. **Assemble the candidate set.** `spur feature list --json`; drop `done`/`cancelled`/`deprecated`, drop
    structural containers (has children, no own open tasks — defect D1), drop the map/feature that
    owns this investigation if present. The `group` tag is **not** a reliable container marker (D3).
 2. **Gate on actionability.** Read the frontier predicate **at runtime** from

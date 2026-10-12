@@ -238,7 +238,15 @@ describe('round-trip property', () => {
 describe('vocabulary exports', () => {
     test('status enums cover the design contracts', () => {
         expect(TASK_STATUSES).toEqual(['backlog', 'todo', 'wip', 'testing', 'blocked', 'done', 'cancelled']);
-        expect(FEATURE_STATUSES).toEqual(['backlog', 'active', 'verifying', 'blocked', 'done', 'cancelled']);
+        expect(FEATURE_STATUSES).toEqual([
+            'backlog',
+            'active',
+            'verifying',
+            'blocked',
+            'done',
+            'cancelled',
+            'deprecated',
+        ]);
     });
 
     test('priority + profile enums match the design tables', () => {

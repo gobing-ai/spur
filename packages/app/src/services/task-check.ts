@@ -1139,6 +1139,18 @@ export class TaskCheckService extends PlanningCheckService {
                         message: `Feature "${featureId}" is ${featureStatus} — live tasks cannot stay linked without action. ${reopenGuide}`,
                     });
                 }
+                // 1180 R2: `deprecated` is non-terminal, so the error above never fires for it.
+                // A live task under a frozen feature is a warning (re-parent or cancel); a
+                // terminal task is the correct end state and gets no finding.
+                if (featureStatus === 'deprecated' && !taskTerminal) {
+                    findings.push({
+                        layer: 'L4',
+                        code: FINDING_CODES.L4_FEATURE_DEPRECATED,
+                        severity: 'warning',
+                        section: '',
+                        message: `Feature "${featureId}" is deprecated (frozen) — re-parent this live task (\`spur task update <wbs> --feature <otherId>\`) or cancel it.`,
+                    });
+                }
                 // ── AC coverage (R1, DD-09): task AC ⊆ linked feature AC ──
                 // Declared altitude (task 0584 R3): `task-local` skips the subset
                 // rule; absent/`graduating` enforces it. Field-only — never inferred.

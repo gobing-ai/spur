@@ -8,8 +8,9 @@
  * and exit codes 0/1/2 (design §7.2, §10).
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
     captureFeatureReceiptDigest,
@@ -396,6 +397,69 @@ describe('spur feature CLI', () => {
         const exitCode = await main(['feature', 'advance', id, '--to', 'verifying'], { cwd, output });
         expect(exitCode).toBe(1);
         expect(output.errors.at(-1)).toContain('Lifecycle transition denied');
+    });
+
+    test('advance on a deprecated feature exits 1 with the un-deprecate hint (human)', async () => {
+        // A private features folder keeps this from consuming the shared corpus's scarce
+        // top-level letters (a full-suite run already exhausts A–Z).
+        const root = mkdtempSync(join(tmpdir(), 'spur-advance-dep-'));
+        const featuresDir = join(root, 'features');
+        try {
+            const cOut = createCapturedOutput();
+            await main(['feature', 'create', 'Advance Deprecated', '--folder', featuresDir], {
+                cwd: root,
+                output: cOut,
+            });
+            const id = createdId(cOut);
+            await main(['feature', 'update', id, 'deprecated', '--folder', featuresDir], {
+                cwd: root,
+                output: createCapturedOutput(),
+            });
+
+            const output = createCapturedOutput();
+            const exitCode = await main(['feature', 'advance', id, '--folder', featuresDir], { cwd: root, output });
+            expect(exitCode).toBe(1);
+            expect(output.errors.at(-1)).toContain(`un-deprecate first: spur feature update ${id} active`);
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('advance on a deprecated feature emits GUARD_DENIED under --json-envelope and makes no transition', async () => {
+        const root = mkdtempSync(join(tmpdir(), 'spur-advance-dep-json-'));
+        const featuresDir = join(root, 'features');
+        try {
+            const cOut = createCapturedOutput();
+            await main(['feature', 'create', 'Advance Deprecated Json', '--folder', featuresDir], {
+                cwd: root,
+                output: cOut,
+            });
+            const id = createdId(cOut);
+            await main(['feature', 'update', id, 'deprecated', '--folder', featuresDir], {
+                cwd: root,
+                output: createCapturedOutput(),
+            });
+
+            const output = createCapturedOutput();
+            const exitCode = await main(
+                ['feature', 'advance', id, '--json', '--json-envelope', '--folder', featuresDir],
+                {
+                    cwd: root,
+                    output,
+                },
+            );
+            expect(exitCode).toBe(1);
+            const envelope = JSON.parse(lastMessage(output));
+            expect(envelope.error.code).toBe('GUARD_DENIED');
+            expect(envelope.error.message).toContain(`${id} is deprecated`);
+            // No transition: the feature is still deprecated and its History has no new line.
+            const featureFile = readdirSync(featuresDir).find((f) => f.startsWith(`${id}_`));
+            const after = readFileSync(join(featuresDir, featureFile ?? ''), 'utf8');
+            expect(after).toContain('status: deprecated');
+            expect(after).not.toContain('deprecated → done');
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
     });
 
     test('update with neither status nor --field exits 2', async () => {

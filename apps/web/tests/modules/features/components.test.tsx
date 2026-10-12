@@ -172,7 +172,7 @@ describe('FeatureTree', () => {
         expect(alphaBtn).toBeDefined();
     });
 
-    test('renders mapped status icons and accessible labels for all 6 canonical statuses', () => {
+    test('renders mapped status icons and accessible labels for all 7 canonical statuses', () => {
         const features: FeatureSummary[] = [
             { id: 'A', name: 'Backlog Item', status: 'backlog' },
             { id: 'B', name: 'Active Item', status: 'active' },
@@ -180,22 +180,23 @@ describe('FeatureTree', () => {
             { id: 'D', name: 'Blocked Item', status: 'blocked' },
             { id: 'E', name: 'Done Item', status: 'done' },
             { id: 'F', name: 'Cancelled Item', status: 'cancelled' },
+            { id: 'G', name: 'Deprecated Item', status: 'deprecated' },
         ];
         const { container } = render(<FeatureTree features={features} selectedId={null} onSelect={() => {}} />);
         const svgs = container.querySelectorAll('svg');
-        expect(svgs.length).toBe(6);
+        expect(svgs.length).toBe(7);
 
         // Each row carries exactly one leading status slot whose icon is named by the
         // capitalized vocabulary label; no badge chrome and no raw status text remain.
         const slots = container.querySelectorAll('[data-testid="feature-tree-status"]');
-        expect(slots.length).toBe(6);
-        for (const label of ['Backlog', 'Active', 'Verifying', 'Blocked', 'Done', 'Cancelled']) {
+        expect(slots.length).toBe(7);
+        for (const label of ['Backlog', 'Active', 'Verifying', 'Blocked', 'Done', 'Cancelled', 'Deprecated']) {
             expect(container.querySelector(`svg[role="img"][aria-label="${label}"]`)).not.toBeNull();
         }
         expect(container.querySelectorAll('[aria-label^="Status:"]').length).toBe(0);
         expect(container.querySelectorAll('[data-feature-tree] .badge').length).toBe(0);
         const html = container.innerHTML;
-        for (const status of ['backlog', 'active', 'verifying', 'blocked', 'done', 'cancelled']) {
+        for (const status of ['backlog', 'active', 'verifying', 'blocked', 'done', 'cancelled', 'deprecated']) {
             expect(html).not.toContain(`>${status}<`);
         }
     });
@@ -358,7 +359,15 @@ describe('FeatureStatusIcon', () => {
     test('re-exports the domain FEATURE_STATUSES verbatim — one definition site', () => {
         // Reference identity proves status-icons re-exports instead of re-declaring.
         expect(FEATURE_STATUSES).toBe(DOMAIN_FEATURE_STATUSES);
-        expect([...FEATURE_STATUSES]).toEqual(['backlog', 'active', 'verifying', 'blocked', 'done', 'cancelled']);
+        expect([...FEATURE_STATUSES]).toEqual([
+            'backlog',
+            'active',
+            'verifying',
+            'blocked',
+            'done',
+            'cancelled',
+            'deprecated',
+        ]);
     });
 
     test('every canonical status renders one img-role SVG named by its capitalized label', () => {
@@ -369,6 +378,7 @@ describe('FeatureStatusIcon', () => {
             ['blocked', 'Blocked'],
             ['done', 'Done'],
             ['cancelled', 'Cancelled'],
+            ['deprecated', 'Deprecated'],
         ];
         for (const [status, label] of cases) {
             const { container, unmount } = render(<FeatureStatusIcon status={status} />);
@@ -431,6 +441,7 @@ describe('FeatureStatusIcon', () => {
             blocked: 'text-spur-error',
             done: 'text-spur-success',
             cancelled: 'text-spur-text-faint',
+            deprecated: 'text-spur-text-muted',
         };
         for (const [status, expected] of Object.entries(expectedClass)) {
             const { container, unmount } = render(<FeatureStatusIcon status={status} />);
@@ -659,6 +670,127 @@ describe('FeatureDetail', () => {
         // Status unchanged; Complete still available.
         expect(getByTestId('status-pill').textContent).toBe('verifying');
         expect(getByLabelText('Complete')).toBeDefined();
+    });
+
+    // ── Deprecated status actions (task 1181: R3/R4) ──
+
+    test('R3: a done feature offers Deprecate as its only action (1181)', async () => {
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
+            if (url.includes('/tasks')) return jsonResponse({ ok: true, data: [] });
+            if (url.includes('/features/F')) {
+                return jsonResponse({
+                    ok: true,
+                    data: {
+                        id: 'F',
+                        name: 'Root',
+                        status: 'done',
+                        frontmatter: {},
+                        filePath: 'docs/features/F.md',
+                        content: '---\n---\n\n## Goal\nx',
+                    },
+                });
+            }
+            return jsonResponse({ ok: true, data: {} });
+        }) as unknown as typeof fetch);
+
+        const { getByLabelText, getByText, queryByLabelText } = render(<FeatureDetail featureId="F" />);
+        await waitFor(() => expect(getByText('done')).toBeDefined());
+
+        expect(getByLabelText('Deprecate')).toBeDefined();
+        // `done` gains its first action; no other button leaks in.
+        expect(queryByLabelText('Complete')).toBeNull();
+        expect(queryByLabelText('Un-deprecate')).toBeNull();
+    });
+
+    test('R4: a deprecated feature offers Un-deprecate + Cancel and re-renders the new status (1181)', async () => {
+        let status = 'deprecated';
+        let patched = '';
+        setFetchForTesting((async (input: RequestInfo | URL, init?: RequestInit) => {
+            const url = input instanceof Request ? input.url : String(input);
+            const method = input instanceof Request ? input.method : (init?.method ?? 'GET');
+            if (url.includes('/tasks')) return jsonResponse({ ok: true, data: [] });
+            if (url.includes('/features/F/status') && method === 'PATCH') {
+                patched = url;
+                status = 'active';
+                return jsonResponse({ ok: true, data: { status: 'active' } });
+            }
+            if (url.includes('/features/F')) {
+                return jsonResponse({
+                    ok: true,
+                    data: {
+                        id: 'F',
+                        name: 'Root',
+                        status,
+                        frontmatter: {},
+                        filePath: 'docs/features/F.md',
+                        content: '---\n---\n\n## Goal\nx',
+                    },
+                });
+            }
+            return jsonResponse({ ok: true, data: {} });
+        }) as unknown as typeof fetch);
+
+        const { getByLabelText, getByText, getByTestId, queryByLabelText } = render(<FeatureDetail featureId="F" />);
+        await waitFor(() => expect(getByText('deprecated')).toBeDefined());
+
+        expect(getByLabelText('Un-deprecate')).toBeDefined();
+        expect(getByLabelText('Cancel')).toBeDefined();
+        // No way back to frozen/other states besides the two declared exits.
+        expect(queryByLabelText('Deprecate')).toBeNull();
+        expect(queryByLabelText('Complete')).toBeNull();
+
+        fireEvent.click(getByLabelText('Un-deprecate'));
+
+        await waitFor(() => expect(getByTestId('status-pill').textContent).toBe('active'));
+        expect(patched).toContain('/features/F/status');
+        // Re-rendered action set follows the new status: the deprecated-only exits are gone
+        // and the active status's actions take over.
+        expect(queryByLabelText('Un-deprecate')).toBeNull();
+        expect(getByLabelText('Verify')).toBeDefined();
+        expect(getByLabelText('Deprecate')).toBeDefined();
+    });
+
+    test('R4: a 409 GUARD_DENIED on Un-deprecate surfaces through the existing error path (1181)', async () => {
+        setFetchForTesting((async (input: RequestInfo | URL, init?: RequestInit) => {
+            const url = input instanceof Request ? input.url : String(input);
+            const method = input instanceof Request ? input.method : (init?.method ?? 'GET');
+            if (url.includes('/tasks')) return jsonResponse({ ok: true, data: [] });
+            if (url.includes('/features/F/status') && method === 'PATCH') {
+                return jsonResponse(
+                    { ok: false, error: { code: 'GUARD_DENIED', message: 'edge deprecated → active denied' } },
+                    409,
+                );
+            }
+            if (url.includes('/features/F')) {
+                return jsonResponse({
+                    ok: true,
+                    data: {
+                        id: 'F',
+                        name: 'Root',
+                        status: 'deprecated',
+                        frontmatter: {},
+                        filePath: 'docs/features/F.md',
+                        content: '---\n---\n\n## Goal\nx',
+                    },
+                });
+            }
+            return jsonResponse({ ok: true, data: {} });
+        }) as unknown as typeof fetch);
+
+        const { getByLabelText, getByText, getByTestId } = render(<FeatureDetail featureId="F" />);
+        await waitFor(() => expect(getByText('deprecated')).toBeDefined());
+
+        fireEvent.click(getByLabelText('Un-deprecate'));
+
+        await waitFor(() => {
+            const feedback = getByTestId('action-feedback');
+            expect(feedback.getAttribute('data-kind')).toBe('error');
+            expect(feedback.textContent).toContain('edge deprecated → active denied');
+        });
+        // The refused transition wrote nothing: status and the action set are unchanged.
+        expect(getByTestId('status-pill').textContent).toBe('deprecated');
+        expect(getByLabelText('Un-deprecate')).toBeDefined();
     });
 
     // ── Child features section (task 0525: list and link child features) ──

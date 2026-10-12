@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Deprecated freeze guards in task link, checks, derivation and advance
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-10-12T05:21:53.039Z
-updated_at: "2026-10-12T05:34:46.924Z"
+updated_at: "2026-10-12T07:12:28.442Z"
 feature_id: F42
 priority: P1
 tags:
@@ -13,6 +13,8 @@ tags:
 
 dependencies: ["1179"]
 estimate_hours: 4
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1180-verdict.json
 ---
 
 ## 1180. Deprecated freeze guards in task link, checks, derivation and advance
@@ -33,19 +35,19 @@ Design: docs/design/feature-deprecated-status.md; ADR-136. Surfaces S5–S12, S1
 
 ### Requirements
 
-- [ ] R1. `guardParentFeature` throws `ParentFeatureStatusError` for a `deprecated` parent regardless of `noReopen`, before any write; the message reads `parent-feature-status: feature <id> is deprecated (frozen); new tasks cannot link to it. Run removal work under its own feature, or un-deprecate: spur feature update <id> active`. Covers `task create --feature`, `task update --feature` and `task batch-create` (whole batch rejected, no task file written, no feature reopened).
-- [ ] R2. `task check` emits warning `L4.feature-deprecated` (new `FINDING_CODES.L4_FEATURE_DEPRECATED` in `packages/config/src/finding-codes.ts`) for a live task (backlog/todo/wip/testing/blocked) under a deprecated feature, with guidance to re-parent (`spur task update <wbs> --feature <otherId>`) or cancel; terminal tasks get no finding; `--strict` elevates per existing policy.
-- [ ] R3. `FeatureService.updateSection` on a deprecated feature writes the section and appends `Feature <id> is deprecated (frozen); change it only as part of removal` to `warnings[]`; exit code stays 0.
-- [ ] R4. `deriveFeatureStatus` returns `{from: 'deprecated', to: 'deprecated', reason: 'Feature is deprecated (frozen)'}` before any task-based rule, so `spur feature sync` (incl. `--all`, `--force`) never changes it; `check --fix` leaves it unchanged.
-- [ ] R5. `spur feature advance <id>` on a deprecated feature exits 1 with `<id> is deprecated; un-deprecate first: spur feature update <id> active` (GUARD_DENIED under `--json`) and makes no transition.
-- [ ] R6. `plugins/sp/skills/next-feature/SKILL.md:67` drops `deprecated` alongside done/cancelled.
+- [x] R1. `guardParentFeature` throws `ParentFeatureStatusError` for a `deprecated` parent regardless of `noReopen`, before any write; the message reads `parent-feature-status: feature <id> is deprecated (frozen); new tasks cannot link to it. Run removal work under its own feature, or un-deprecate: spur feature update <id> active`. Covers `task create --feature`, `task update --feature` and `task batch-create` (whole batch rejected, no task file written, no feature reopened).
+- [x] R2. `task check` emits warning `L4.feature-deprecated` (new `FINDING_CODES.L4_FEATURE_DEPRECATED` in `packages/config/src/finding-codes.ts`) for a live task (backlog/todo/wip/testing/blocked) under a deprecated feature, with guidance to re-parent (`spur task update <wbs> --feature <otherId>`) or cancel; terminal tasks get no finding; `--strict` elevates per existing policy.
+- [x] R3. `FeatureService.updateSection` on a deprecated feature writes the section and appends `Feature <id> is deprecated (frozen); change it only as part of removal` to `warnings[]`; exit code stays 0.
+- [x] R4. `deriveFeatureStatus` returns `{from: 'deprecated', to: 'deprecated', reason: 'Feature is deprecated (frozen)'}` before any task-based rule, so `spur feature sync` (incl. `--all`, `--force`) never changes it; `check --fix` leaves it unchanged.
+- [x] R5. `spur feature advance <id>` on a deprecated feature exits 1 with `<id> is deprecated; un-deprecate first: spur feature update <id> active` (GUARD_DENIED under `--json`) and makes no transition.
+- [x] R6. `plugins/sp/skills/next-feature/SKILL.md:67` drops `deprecated` alongside done/cancelled.
 - Out of scope: override flag, Board (1181), docs beyond next-feature (1182).
 
 ### Acceptance Criteria
 
-- [ ] AC1 — New work cannot be linked to a deprecated feature (req: R1)
-- [ ] AC2 — Checks flag live work under a deprecated feature and advise on edits (req: R2, R3)
-- [ ] AC3 — Derivation and routing never pull a deprecated feature back into active work (req: R4, R5, R6)
+- [x] AC1 — New work cannot be linked to a deprecated feature (req: R1)
+- [x] AC2 — Checks flag live work under a deprecated feature and advise on edits (req: R2, R3)
+- [x] AC3 — Derivation and routing never pull a deprecated feature back into active work (req: R4, R5, R6)
 
 Verify lens: service tests observe the real guard and derivation (no mocked FeatureService); the E2E transcript observes CLI exit codes and file immutability.
 
@@ -75,30 +77,175 @@ Verify lens: service tests observe the real guard and derivation (no mocked Feat
 
 ### Plan
 
-- [ ] Step 0: 1179 merged (enum includes deprecated); `spur feature update <tmp> deprecated` works.
-- [ ] Link guard branch + error message variant (R1); tests for create, update `--feature`, batch-create (no files written).
-- [ ] Finding code + task-check branch (R2); tests for live vs terminal task.
-- [ ] Section-write warning (R3); test asserts write landed and warning present.
-- [ ] Derivation early return (R4); tests: sync with live and terminal tasks, `--force`, `check --fix`.
-- [ ] `advance` refusal (R5); CLI test for human and `--json`.
-- [ ] next-feature SKILL.md line (R6).
-- [ ] E2E: temp project via source CLI covering R1–R5; transcript `.spur/run/1180-e2e.txt`.
-- [ ] `bun run spur-check`.
+- [x] Step 0: 1179 merged (enum includes deprecated); `spur feature update <tmp> deprecated` works.
+- [x] Link guard branch + error message variant (R1); tests for create, update `--feature`, batch-create (no files written).
+- [x] Finding code + task-check branch (R2); tests for live vs terminal task.
+- [x] Section-write warning (R3); test asserts write landed and warning present.
+- [x] Derivation early return (R4); tests: sync with live and terminal tasks, `--force`, `check --fix`.
+- [x] `advance` refusal (R5); CLI test for human and `--json`.
+- [x] next-feature SKILL.md line (R6).
+- [x] E2E: temp project via source CLI covering R1–R5; transcript `.spur/run/1180-e2e.txt`.
+- [x] `bun run spur-check`.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Implemented F42 S5–S15 (minus Board/docs): the `deprecated` freeze is enforced in the four
+existing funnels every transport already routes through, plus one precise CLI message.
+
+**Change map**
+
+| Change | file:line |
+| --- | --- |
+| `L4.feature-deprecated` added to the code union | packages/config/src/finding-codes.ts:46 |
+| `FINDING_CODES.L4_FEATURE_DEPRECATED` constant | packages/config/src/finding-codes.ts:143 |
+| `ParentFeatureStatusError` deprecated message variant (exact R1 string) | packages/app/src/services/task-service.ts:216 |
+| `guardParentFeature` deprecated refusal before the `verifying` branch, regardless of `noReopen` | packages/app/src/services/task-service.ts:847 |
+| shared `activeSiblingsOf` sibling helper (reused by terminal + deprecated) | packages/app/src/services/task-service.ts:870 |
+| `task-check` live-under-deprecated warning branch (non-terminal, not an error) | packages/app/src/services/task-check.ts:1151 |
+| `updateSection` appends the freeze note to `warnings[]`, write still lands | packages/app/src/services/feature-service.ts:276 |
+| `deriveFeatureStatus` sticky `deprecated` early return before any task rule | packages/app/src/services/feature-service.ts:468 |
+| `advance` early `GUARD_DENIED` refusal with the un-deprecate hint | apps/cli/src/commands/feature.ts:206 |
+| next-feature candidate set drops `deprecated` alongside done/cancelled | plugins/sp/skills/next-feature/SKILL.md:67 |
+
+`refresh` and `feature check --fix` are unchanged by design: refresh is docs-only, and the
+reopen repair is already gated to `verifying`/`done`. Batch-create inherits R1 via the shared
+`guardParentFeature` (phase-1 reject-only pass), so no caller duplicates the check.
+
+**Tests added**
+
+- packages/app/tests/services/task-section-normalizer.test.ts — R1 create (exact message, no
+  file written, parent stays deprecated), `--no-reopen` no-bypass, update `--feature`, batch-create;
+  R4 `feature check --fix` leaves a deprecated feature frozen and never calls the transition port.
+- packages/app/tests/services/task-check.test.ts — R2 live task warns (severity `warning`, no
+  `L4.feature-terminal`), terminal task silent.
+- packages/app/tests/services/feature-service.test.ts — R3 section write lands + `warnings[]`
+  note; R4 derivation sticky for live and terminal tasks, `sync`/`sync --force` applied=false.
+- apps/cli/tests/commands/feature.test.ts — R5 human hint and `--json-envelope` `GUARD_DENIED`.
+
+**Targeted evidence**
+
+```
+$ (cd packages/app && bun test tests/services/task-section-normalizer.test.ts)
+ 26 pass, 0 fail
+$ (cd packages/app && bun test tests/services/task-check.test.ts -t 1180)
+(pass) R2 (1180): a live task under a deprecated feature warns (not errors) and advises re-parenting
+(pass) R2 (1180): a terminal task under a deprecated feature gets no finding
+ 2 pass, 0 fail
+$ (cd packages/app && bun test tests/services/feature-service.test.ts)
+(pass) FeatureService > feature status sync > R4 (1180): deriveFeatureStatus keeps a deprecated feature deprecated despite a live task
+(pass) FeatureService > feature status sync > R4 (1180): deprecated stays sticky for a terminal task too (no reopen, no done proposal)
+ 62 pass, 0 fail
+$ (cd packages/app && bun test tests/services/task-check.test.ts tests/services/task-section-normalizer.test.ts tests/services/feature-service.test.ts)
+ 292 pass, 0 fail
+$ (cd apps/cli && bun test tests/commands/feature.test.ts)
+ 52 pass, 0 fail
+```
+
+**Probe evidence (transcript `.spur/run/1180-e2e.txt`, throwaway root `/tmp/tmp.sIJwODy80O`)**
+
+```
+$ task create 'New work' --feature A --skip-ready --json            # A deprecated
+exit=1  parent-feature-status: feature A is deprecated (frozen); new tasks cannot link to it. …
+task files before=0 after=0 ; status(A)=deprecated
+$ task update 0001 --feature A --json
+exit=1 (same parent-feature-status error) ; task 0001 still feature_id: B
+$ task batch-create --file batch.json --skip-ready --json
+exit=1  code=batch-create-failed (ParentFeatureStatusError: … is deprecated (frozen) …)
+task files before=1 after=1 ; status(A)=deprecated
+$ task check 0001 --json        # live under deprecated B
+exit=0  L4.feature-deprecated warning, severity=warning, pass=true
+$ task check 0002 --json        # cancelled task under deprecated C
+exit=0  findings=[] (no deprecated finding)
+$ feature update A --section Notes --from-file note.md --json
+exit=0  warnings["Feature A is deprecated (frozen); change it only as part of removal"] ; section landed
+$ feature sync A --json ; feature sync --all --force --json
+exit=0  proposal {from: deprecated, to: deprecated, reason: 'Feature is deprecated (frozen)'}, applied=false
+$ feature advance A --json --json-envelope
+exit=1  {"ok":false,"error":{"code":"GUARD_DENIED","message":"A is deprecated; un-deprecate first: spur feature update A active"}}
+```
+
+**Changed-path self-check**
+
+```
+$ spur rule run --preset recommended-pre-check --fail-on warning --no-logo
+All 51 rules passed — no violations found.
+$ bun run script-contract-check
+script-contract-check: 22 script(s) baselined, 0 violation(s) — PASS
+$ (cd packages/app && bun run typecheck) ; (cd packages/config && bun run typecheck) ; (cd apps/cli && bun run typecheck)
+0 errors
+```
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/services/task-service.ts:846` throws ParentFeatureStatusError for a deprecated parent before the verifying branch and regardless of noReopen; exact message at `packages/app/src/services/task-service.ts:216`. The single funnel is reached by create `packages/app/src/services/task-service.ts:979`, update `packages/app/src/services/task-service.ts:1093`, and batch-create phase 1 `packages/app/src/services/task-service.ts:2076`. Tests `packages/app/tests/services/task-section-normalizer.test.ts:345`. Fresh CLI probe: task create, task update --feature and batch-create under a deprecated feature each exited 1 with zero task files written and the feature still deprecated. |
+| R2 | MET | `packages/config/src/finding-codes.ts:46` and `packages/config/src/finding-codes.ts:143` add L4.feature-deprecated; `packages/app/src/services/task-check.ts:1145` emits it as severity warning only for a non-terminal task with re-parent-or-cancel guidance; strict elevation at `packages/app/src/services/planning-check-base.ts:363`. Tests `packages/app/tests/services/task-check.test.ts:2792` and `packages/app/tests/services/task-check.test.ts:2815`. Fresh CLI probe: live task warned pass=true, cancelled task produced no finding, and --strict raised severity to error. |
+| R3 | MET | `packages/app/src/services/feature-service.ts:276` appends the exact freeze note to warnings[] while the section write still lands and exit stays 0. Test `packages/app/tests/services/feature-service.test.ts:240`. Fresh CLI probe: feature update --section Goal exited 0 with the warning present, the body landed, and the status stayed deprecated. |
+| R4 | MET | `packages/app/src/services/feature-service.ts:468` early-returns from=deprecated to=deprecated with reason Feature is deprecated (frozen) before any task-based rule; `packages/app/src/services/feature-service.ts:674` short-circuits equal from/to so sync never applies; the check --fix reopen repair stays gated to verifying/done at `packages/app/src/services/feature-check.ts:251`. Tests `packages/app/tests/services/feature-service.test.ts:868` and `packages/app/tests/services/task-section-normalizer.test.ts:548`. Fresh CLI probe: sync and sync --all --force both applied=false with the status unchanged, and feature check --fix reported no repair. |
+| R5 | MET | `apps/cli/src/commands/feature.ts:210` refuses before the transition loop with GUARD_DENIED and exit 1. Test `apps/cli/tests/commands/feature.test.ts:402`. Fresh CLI probe: feature advance --json --json-envelope exited 1 with code GUARD_DENIED and message A is deprecated; un-deprecate first: spur feature update A active, and the status stayed deprecated. |
+| R6 | MET | `plugins/sp/skills/next-feature/SKILL.md:67` drops done, cancelled and deprecated from the candidate set. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — New work cannot be linked to a deprecated feature (req: R1) | MET | test | `packages/app/tests/services/task-section-normalizer.test.ts:345` covers create, --no-reopen no-bypass, update --feature and batch-create with the exact message and zero files written; fresh CLI probe of create, update and batch-create under a deprecated feature each exited 1 with no task file written and the feature still deprecated. |
+| AC2 — Checks flag live work under a deprecated feature and advise on edits (req: R2, R3) | MET | test | `packages/app/tests/services/task-check.test.ts:2792` asserts the warning with re-parent guidance and strict elevation; `packages/app/tests/services/feature-service.test.ts:240` asserts the section write lands and the freeze warning is appended; fresh CLI probes confirmed both paths. |
+| AC3 — Derivation and routing never pull a deprecated feature back into active work (req: R4, R5, R6) | MET | test | `packages/app/tests/services/feature-service.test.ts:868` asserts sticky derivation and sync applied=false; `apps/cli/tests/commands/feature.test.ts:402` asserts the advance refusal; `plugins/sp/skills/next-feature/SKILL.md:67` drops deprecated; fresh CLI probes of sync, sync --all --force and advance confirmed no transition. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review Report — 1180
+
+**Scope:** task 1180 change set — `packages/config/src/finding-codes.ts`, `packages/app/src/services/{task-service,task-check,feature-service}.ts`, `apps/cli/src/commands/feature.ts`, `plugins/sp/skills/next-feature/SKILL.md`, regenerated `plugins/sp/lib/*.generated.mjs` + `plugins/sp/scripts/quality-gate.mjs`, and their tests. Landed 1179 (enum + lifecycle graph) judged only as 1180's dependency.
+**Dimensions:** functional, security, efficiency, correctness, usability, architecture
+**Verdict:** PASS
+
+##### Findings (ranked)
+
+| # | Priority | Dimension | Finding | Location | Disposition |
+|---|----------|-----------|---------|----------|-------------|
+| 1 | P4 (advisory) | functional | No P1–P3 findings: R1–R6 and AC1–AC3 all traceable to code with `file:line` evidence; freeze is un-bypassable across every transport (create/update/batch-create/server link all funnel through `guardParentFeature`); fresh targeted tests + E2E transcript + fresh twin regeneration all green | `packages/app/src/services/task-service.ts:847`, `task-check.ts:1151`, `feature-service.ts:276,468`, `apps/cli/src/commands/feature.ts:206` | ACCEPTED |
+| 2 | P4 (advisory) | correctness | Design doc prose drifts from the frozen R5 message: doc says `Feature <id> is deprecated; run spur feature update <id> active first`, code implements R5's authoritative `<id> is deprecated; un-deprecate first: spur feature update <id> active`. Docs beyond next-feature are 1182's remit | `docs/design/feature-deprecated-status.md:85` | ACCEPTED |
+| 3 | P4 (advisory) | usability | The R2 warning keys `taskTerminal` off the *effective* `--as` status, so `task check <wbs> --as done` on a still-live record under a deprecated feature emits no warning. This deliberately mirrors the existing `L4.feature-terminal` branch; normal (no `--as`) checks behave exactly per R2 | `packages/app/src/services/task-check.ts:1147` | ACCEPTED |
+
+##### Functional Traceability
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | `task-service.ts:847` throws `ParentFeatureStatusError` for `deprecated` before the `verifying` branch, regardless of `noReopen`; message variant at `:216` matches R1 verbatim. All three transports call the one funnel: create `:979`, update `:1093`, batch-create `:2076,:2082` (reject-only phase 1); server `link` → `updateField` → same guard. E2E `.spur/run/1180-e2e.txt` shows exit 1 + zero files written on all three. |
+| R2 | MET | `finding-codes.ts:46,143` add `L4.feature-deprecated`; `task-check.ts:1151` pushes it as `severity:'warning'` only for non-terminal tasks, sibling to (not overlapping) `L4.feature-terminal`; `--strict` elevates via `planning-check-base.ts:363`. E2E: live task warns pass=true, cancelled task findings=[]. |
+| R3 | MET | `feature-service.ts:276` appends the exact freeze note to `warnings[]` while the section write still lands; exit 0 (E2E). |
+| R4 | MET | `feature-service.ts:468` early-returns `{from:'deprecated',to:'deprecated',reason:'Feature is deprecated (frozen)'}` before any task rule; `runSyncFeature:672` short-circuits `from===to` so `--force`/`--all` apply nothing; `check --fix` reopen repair stays gated to verifying/done (`feature-check.ts:249`). E2E: `sync`, `sync --all --force` applied=false. |
+| R5 | MET | `feature.ts:206` refuses before the loop with `GUARD_DENIED`, exit 1, message `<id> is deprecated; un-deprecate first: spur feature update <id> active`; no transition. E2E + CLI test. |
+| R6 | MET | `plugins/sp/skills/next-feature/SKILL.md:67` now drops `done`/`cancelled`/`deprecated`. |
+
+| AC | Status | Evidence |
+|----|--------|----------|
+| AC1 | MET | R1 tests in `task-section-normalizer.test.ts:345-435` (create exact-message, `--no-reopen` no-bypass, update `--feature`, batch-create) + E2E R1a/R1b/R1c. |
+| AC2 | MET | R2 `task-check.test.ts:2792-2826` (warning not error, strict elevation, terminal silence) + R3 `feature-service.test.ts:240`. |
+| AC3 | MET | R4 `feature-service.test.ts:868,897` + `task-section-normalizer.test.ts:548` (`check --fix` frozen); R5 `apps/cli/tests/commands/feature.test.ts:402,428`; R6 SKILL.md diff. |
+
+##### Verification evidence (this review)
+
+- `packages/app` 3 files → 292 pass, 0 fail  · `apps/cli` feature.test.ts → 52 pass, 0 fail  · `packages/config` finding-codes → 1 pass.
+- `scripts/commands/bundle-plugin-lib.test.ts` → 16 pass; committed `quality-gate`/`idea-handoff`/`inline-run` `.generated.mjs` regenerate byte-identically (md5 unchanged) → twins genuinely match sources.
+- `bun run script-contract-check` → 22 scripts, 0 violations. `tsc --noEmit` clean for config/app/cli.
+
+**Next:** Ready to gate; no P1–P3 to disposition. Optional 1182 doc pass to align `feature-deprecated-status.md` with the frozen R5 string.
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-10-12T06:38:34.126Z todo → wip (system)
+- 2026-10-12T07:12:15.984Z wip → testing (system)
+- 2026-10-12T07:12:28.435Z testing → done (system)
+

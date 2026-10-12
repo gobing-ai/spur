@@ -209,15 +209,24 @@ export class ParentFeatureStatusError extends Error {
     readonly status: string;
     readonly activeSiblings: string[];
     constructor(featureId: string, status: string, activeSiblings: string[]) {
-        const group = featureId[0] ?? '';
-        const hint =
-            activeSiblings.length > 0
-                ? `active siblings in group ${group}: ${activeSiblings.join(', ')}`
-                : `no active sibling features in group ${group} — reopen ${featureId} to active first`;
-        super(
-            `parent-feature-status: feature ${featureId} is ${status}; new tasks cannot link to a ` +
-                `done/cancelled parent. ${hint}`,
-        );
+        // 1180 R1: `deprecated` is frozen, not terminal — the message names the removal
+        // path and the un-deprecate command rather than a reopen/re-parent hint.
+        if (status === 'deprecated') {
+            super(
+                `parent-feature-status: feature ${featureId} is deprecated (frozen); new tasks cannot link to it. ` +
+                    `Run removal work under its own feature, or un-deprecate: spur feature update ${featureId} active`,
+            );
+        } else {
+            const group = featureId[0] ?? '';
+            const hint =
+                activeSiblings.length > 0
+                    ? `active siblings in group ${group}: ${activeSiblings.join(', ')}`
+                    : `no active sibling features in group ${group} — reopen ${featureId} to active first`;
+            super(
+                `parent-feature-status: feature ${featureId} is ${status}; new tasks cannot link to a ` +
+                    `done/cancelled parent. ${hint}`,
+            );
+        }
         this.name = 'ParentFeatureStatusError';
         this.featureId = featureId;
         this.status = status;
@@ -832,6 +841,11 @@ export class TaskService {
         }
         const feature = summaries.find((f) => f.id === featureId);
         if (feature === undefined) return undefined;
+        // 1180 R1: a deprecated parent is frozen for new work regardless of `noReopen`
+        // (the reopen path exists only for `verifying`, so this branch precedes it).
+        if (feature.status === 'deprecated') {
+            throw new ParentFeatureStatusError(featureId, feature.status, this.activeSiblingsOf(summaries, featureId));
+        }
         if (feature.status === 'verifying') {
             if (noReopen === true) return undefined;
             // The caller's port carries the FEATURE lifecycle profile; the local fallback
@@ -844,14 +858,22 @@ export class TaskService {
             return { id: featureId, from: wr?.fromStatus ?? 'verifying', to: wr?.toStatus ?? 'active' };
         }
         if (feature.status === 'done' || feature.status === 'cancelled') {
-            const siblings: string[] = [];
-            for (const f of summaries) {
-                if (siblings.length >= 3) break;
-                if (f.id !== featureId && f.id[0] === featureId[0] && f.status === 'active') siblings.push(f.id);
-            }
-            throw new ParentFeatureStatusError(featureId, feature.status, siblings);
+            throw new ParentFeatureStatusError(featureId, feature.status, this.activeSiblingsOf(summaries, featureId));
         }
         return undefined;
+    }
+
+    /**
+     * Up to three `active` features sharing `featureId`'s ID group, offered as
+     * re-point targets in a {@link ParentFeatureStatusError} message.
+     */
+    private activeSiblingsOf(summaries: Array<{ id: string; status: string }>, featureId: string): string[] {
+        const siblings: string[] = [];
+        for (const f of summaries) {
+            if (siblings.length >= 3) break;
+            if (f.id !== featureId && f.id[0] === featureId[0] && f.status === 'active') siblings.push(f.id);
+        }
+        return siblings;
     }
 
     /**

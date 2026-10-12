@@ -4,7 +4,7 @@ owns: WHY — lasting architectural choices, context and tradeoffs
 authority: authoritative
 version: 1.69.0
 owner: Robin Min
-updated_at: 2026-10-11
+updated_at: 2026-10-12
 read_before: any structural change; before diverging from a decision
 edit_rules: 99 §6.1
 sync: [T1, T2]
@@ -2256,7 +2256,7 @@ owner split this entry established.
 
 ## ADR-136: Feature `deprecated` Is a Frozen, Non-Terminal Lifecycle State
 
-- **Status:** Proposed · **Date:** 2026-10-11 · **Extends:** DD-13, ADR-135
+- **Status:** Accepted (implemented) · **Date:** 2026-10-11 · **Extends:** DD-13, ADR-135
 - **Decision:** `deprecated` joins the canonical `FeatureStatus` vocabulary as a non-terminal state
   meaning "retained, do not change unless removing". The feature lifecycle graph admits it from
   `backlog`, `active`, `verifying`, `blocked` and `done`, and leaves it only to `active`

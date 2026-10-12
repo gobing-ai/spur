@@ -81,9 +81,45 @@ mode needs its own required args).
 spur feature update H2 active
 ```
 
-Valid statuses: `backlog → active → verifying → blocked → done → cancelled`. The lifecycle engine
-enforces legal transitions; `verifying` is the gate where AC traceability must hold (L4).
-**One active goal** at a time is enforced by `check` (a corpus invariant).
+Valid statuses: `backlog → active → verifying → blocked → done → cancelled`, plus the frozen
+`deprecated`. The lifecycle engine enforces legal transitions; `verifying` is the gate where AC
+traceability must hold (L4). **One active goal** at a time is enforced by `check` (a corpus invariant).
+
+**`deprecated` — frozen, not terminal (ADR-136).** The state means *retained and frozen*: the record
+stays readable and countable, but nothing may attach new work to it or advance it. It is entered from
+`backlog`, `active`, `verifying`, `blocked` and `done`, and left only to `active` (un-deprecate,
+mandatory History entry) or `cancelled` (removed) — every other edge out of `deprecated` is undeclared
+and refused by the graph. The freeze, as shipped:
+
+- **Task links are refused** — `task create`, `update --feature` and `batch-create` exit non-zero and
+  write nothing (no sibling hint; `--no-reopen` is irrelevant for a frozen parent):
+
+  ```
+  parent-feature-status: feature <id> is deprecated (frozen); new tasks cannot link to it. Run removal work under its own feature, or un-deprecate: spur feature update <id> active
+  ```
+
+- **`L4.feature-deprecated`** — `task check` warns (does not error) for a *live* task under a
+  deprecated feature; a terminal task is the correct end state and gets no finding; `--strict`
+  elevates the warning as usual:
+
+  ```
+  Feature "<id>" is deprecated (frozen) — re-parent this live task (`spur task update <wbs> --feature <otherId>`) or cancel it.
+  ```
+
+- **`update --section` still lands** (exit `0`), appending a warning to `warnings[]`:
+
+  ```
+  Feature <id> is deprecated (frozen); change it only as part of removal
+  ```
+
+- **`sync` / `refresh` / `check --fix` never move it** — derivation is sticky and returns the no-op
+  proposal `{ from: 'deprecated', to: 'deprecated', reason: 'Feature is deprecated (frozen)' }`.
+
+- **`advance` refuses** with exit `1`, naming the un-deprecate command:
+
+  ```
+  <id> is deprecated; un-deprecate first: spur feature update <id> active
+  ```
 
 **Scalar field set:**
 
@@ -113,7 +149,8 @@ spur feature advance H2 --to verifying
 ```
 
 Walks the legal forward path (`backlog → active → verifying → done`) hop-by-hop until `--to`
-(default `done`). No-op when already at the target.
+(default `done`). No-op when already at the target; a `deprecated` feature is refused up front (see
+the freeze block above).
 
 ## Acceptance criteria conventions
 
@@ -169,7 +206,8 @@ the AC coverage map. Habits that keep it green:
 Use feature hierarchy for user-facing capabilities and roadmap themes; keep technical-module mapping
 as prose or notes unless the product surface is developer infrastructure. Priority is a scalar field
 (`spur feature update <id> --field priority --value P1`), while status is lifecycle state
-(`backlog → active → verifying → blocked → done → cancelled`). Do not conflate the two.
+(`backlog → active → verifying → blocked → done → cancelled`, plus the frozen `deprecated`). Do not
+conflate the two.
 
 **Structure first:** [features/hierarchy-mece.md](features/hierarchy-mece.md) (MECE roots, when to
 extend vs create). **Then priority:** [features/roadmap-priority.md](features/roadmap-priority.md).
@@ -216,6 +254,9 @@ spur feature sync H2 --force                   # re-derive live: bypass replay +
 spur feature sync H2 --folder docs/custom-tasks --json   # non-default tasks folder
 ```
 
+- **`deprecated` is sticky:** derivation returns no proposal for it
+  (`reason: 'Feature is deprecated (frozen)'`), so neither `sync` nor `check --fix` moves a frozen
+  feature — see the freeze block in §Editing a feature.
 - **`[id]`** syncs one feature; **`--all`** syncs every feature with linked tasks. One of the two is
   required - exit `2` if neither is given.
 - **`--dry-run`** reports proposed transitions without applying. **`--force`** applies a *reopen*
