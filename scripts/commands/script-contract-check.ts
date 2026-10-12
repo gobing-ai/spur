@@ -488,7 +488,13 @@ export function validateContract(
 
 export const GLUE_BUDGET_LINES = 250;
 
-export type PlacementFindingKind = 'budget' | 'db-import' | 'corpus-parse' | 'noun-clash' | 'stale-baseline';
+export type PlacementFindingKind =
+    | 'budget'
+    | 'db-import'
+    | 'corpus-parse'
+    | 'noun-clash'
+    | 'hook-layout'
+    | 'stale-baseline';
 
 export interface PlacementFinding {
     file: string;
@@ -546,6 +552,150 @@ function collectPlacementTsFiles(dir: string, out: string[] = []): string[] {
     return out;
 }
 
+/** Every `.ts` under a hooks tree, tests included — the hook-layout check owns test placement. */
+function collectHookTsFiles(dir: string, out: string[] = []): string[] {
+    if (!existsSync(dir)) return out;
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const abs = join(dir, entry.name);
+        if (entry.isDirectory()) collectHookTsFiles(abs, out);
+        else if (entry.isFile() && entry.name.endsWith('.ts')) out.push(abs);
+    }
+    return out;
+}
+
+/**
+ * The DB/corpus boundary every handwritten plugin source carries (scripts, hooks and lib).
+ * Generated `.mjs`/`.d.mts` bundles are build outputs, not authored sources, so they never reach
+ * here (`collectPlacementTsFiles` keeps `.ts` only).
+ */
+function recordDbAndCorpusFindings(
+    file: string,
+    content: string,
+    record: (file: string, kind: PlacementFindingKind, detail: string) => void,
+): void {
+    const dbImport = DB_IMPORT_RE.exec(content);
+    if (dbImport) {
+        record(file, 'db-import', `value-import of ${dbImport[1]}`);
+    } else {
+        // ponytail: per-line comment skip — `//`, continuation `*`, and single-line
+        // `/* … */` shapes. Trailing comments on code lines, multi-line block interiors,
+        // and template-string content are not handled — widen only on a false negative.
+        for (const line of content.split('\n')) {
+            const trimmed = line.trim();
+            if (trimmed.startsWith('//') || trimmed.startsWith('*') || trimmed.startsWith('/*')) continue;
+            const dynamic = DB_DYNAMIC_IMPORT_RE.exec(line);
+            if (dynamic) {
+                record(file, 'db-import', `dynamic import of ${dynamic[1]}`);
+                break;
+            }
+        }
+    }
+    if (content.includes('docs/tasks') || content.includes('docs/features')) {
+        record(file, 'corpus-parse', 'contains a docs/tasks or docs/features path literal (corpus parsing)');
+    }
+}
+
+interface HooksJsonGroup {
+    matcher?: string;
+    hooks?: Array<{ command?: string }>;
+}
+
+interface HooksJson {
+    hooks?: Record<string, HooksJsonGroup[]>;
+}
+
+/**
+ * Entry mechanisms outside the `hooks.json` registry (ADR-129): the Pi extension normalizer and
+ * the opt-in conditional guard. Each is one authored entry file, exactly like a registered
+ * identity — only the registration channel differs.
+ */
+const EXTRA_HOOK_ENTRIES = ['careful-guard.ts', 'pi/guard-extension.ts'];
+
+/** Identity from `superskill hook run sp <identity>`; null for any other command shape. */
+function hookIdentity(command: string | undefined): string | null {
+    return /\bhook\s+run\s+sp\s+([\w-]+)/.exec(command ?? '')?.[1] ?? null;
+}
+
+/**
+ * Hook source-layout contract (ADR-129, task 1173): one registered identity has one authored
+ * entry under `plugins/sp/hooks`, reusable helpers live in `plugins/sp/lib`, and hook tests live
+ * in `plugins/sp/tests/hooks`. Pure and side-effect free; task 1174 activates its strict call in
+ * `checkPlacement` only after the hook relocation lands, so the intermediate tree stays green.
+ */
+export function checkHookLayout(opts: { repoRoot: string }): PlacementFinding[] {
+    const root = resolve(opts.repoRoot);
+    const hooksDir = join(root, 'plugins', 'sp', 'hooks');
+    const findings: PlacementFinding[] = [];
+    if (!existsSync(hooksDir)) return findings;
+
+    const registered = new Set<string>();
+    const hooksJsonPath = join(hooksDir, 'hooks.json');
+    if (existsSync(hooksJsonPath)) {
+        let parsed: HooksJson = {};
+        try {
+            parsed = JSON.parse(readFileSync(hooksJsonPath, 'utf8')) as HooksJson;
+        } catch (error) {
+            findings.push({
+                file: 'plugins/sp/hooks/hooks.json',
+                kind: 'hook-layout',
+                detail: `unreadable hooks.json: ${(error as Error).message}`,
+            });
+        }
+        for (const [event, groups] of Object.entries(parsed.hooks ?? {})) {
+            // One identity per event: a second registration for the same event would run the same
+            // entry twice for any tool matching both matchers (task 1173 R1 — one identity, one entry).
+            const seen = new Set<string>();
+            for (const group of groups) {
+                for (const entry of group.hooks ?? []) {
+                    const identity = hookIdentity(entry.command);
+                    if (identity === null) continue;
+                    registered.add(identity);
+                    if (seen.has(identity)) {
+                        findings.push({
+                            file: 'plugins/sp/hooks/hooks.json',
+                            kind: 'hook-layout',
+                            detail: `hook identity '${identity}' is registered twice for ${event}${group.matcher ? ` (matcher ${group.matcher})` : ''} — one identity, one authored entry`,
+                        });
+                    }
+                    seen.add(identity);
+                }
+            }
+        }
+    }
+
+    for (const identity of [...registered].sort()) {
+        if (!existsSync(join(hooksDir, `${identity}.ts`))) {
+            findings.push({
+                file: `plugins/sp/hooks/${identity}.ts`,
+                kind: 'hook-layout',
+                detail: `registered hook identity '${identity}' has no authored entry under plugins/sp/hooks`,
+            });
+        }
+    }
+
+    const allowedEntries = new Set([...registered].map((identity) => `${identity}.ts`));
+    for (const extra of EXTRA_HOOK_ENTRIES) allowedEntries.add(extra);
+    for (const abs of collectHookTsFiles(hooksDir).sort()) {
+        const rel = abs.slice(hooksDir.length + 1);
+        if (rel.endsWith('.test.ts')) {
+            findings.push({
+                file: `plugins/sp/hooks/${rel}`,
+                kind: 'hook-layout',
+                detail: 'hook tests belong in plugins/sp/tests/hooks — one test owner for the plugin',
+            });
+            continue;
+        }
+        if (!allowedEntries.has(rel)) {
+            findings.push({
+                file: `plugins/sp/hooks/${rel}`,
+                kind: 'hook-layout',
+                detail: 'not a registered hook entry or a supported extension entry — reusable helpers belong in plugins/sp/lib',
+            });
+        }
+    }
+    return findings;
+}
+
 export function checkPlacement(opts: { repoRoot: string; baselinePath: string }): PlacementFinding[] {
     const root = resolve(opts.repoRoot);
     const findings: PlacementFinding[] = [];
@@ -584,27 +734,15 @@ export function checkPlacement(opts: { repoRoot: string; baselinePath: string })
             const content = readFileSync(abs, 'utf8');
             const lines = placementLineCount(content);
             if (lines > GLUE_BUDGET_LINES) record(rel, 'budget', `${lines} lines > budget ${GLUE_BUDGET_LINES}`);
-            const dbImport = DB_IMPORT_RE.exec(content);
-            if (dbImport) {
-                record(rel, 'db-import', `value-import of ${dbImport[1]}`);
-            } else {
-                // ponytail: per-line comment skip — `//`, continuation `*`, and single-line
-                // `/* … */` shapes. Trailing comments on code lines, multi-line block interiors,
-                // and template-string content are not handled — widen only on a false negative.
-                for (const line of content.split('\n')) {
-                    const trimmed = line.trim();
-                    if (trimmed.startsWith('//') || trimmed.startsWith('*') || trimmed.startsWith('/*')) continue;
-                    const dynamic = DB_DYNAMIC_IMPORT_RE.exec(line);
-                    if (dynamic) {
-                        record(rel, 'db-import', `dynamic import of ${dynamic[1]}`);
-                        break;
-                    }
-                }
-            }
-            if (content.includes('docs/tasks') || content.includes('docs/features')) {
-                record(rel, 'corpus-parse', 'contains a docs/tasks or docs/features path literal (corpus parsing)');
-            }
+            recordDbAndCorpusFindings(rel, content, record);
         }
+    }
+
+    // Handwritten lib carries the same DB/corpus boundary but no line budget: P2 of the A91 plan —
+    // a line count is a review trigger, not an architecture test — so shortening a wrapper cannot
+    // push application logic into lib without the boundary still answering for it.
+    for (const abs of collectPlacementTsFiles(join(root, 'plugins', 'sp', 'lib'))) {
+        recordDbAndCorpusFindings(abs.slice(root.length + 1), readFileSync(abs, 'utf8'), record);
     }
 
     const { baseline, error } = loadPlacementBaseline(resolve(opts.baselinePath));

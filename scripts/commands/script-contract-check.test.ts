@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, w
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+    checkHookLayout,
     checkPlacement,
     loadManifest,
     loadPlacementBaseline,
@@ -452,9 +453,12 @@ function createPlacementFixture(): string {
     const root = mkdtempSync(join(tmpdir(), 'placement-test-'));
     const scriptsDir = join(root, 'plugins', 'sp', 'scripts');
     const hooksDir = join(root, 'plugins', 'sp', 'hooks');
+    const libDir = join(root, 'plugins', 'sp', 'lib');
     const repoCommandsDir = join(root, 'scripts', 'commands');
     const cliCommandsDir = join(root, 'apps', 'cli', 'src', 'commands');
-    for (const dir of [scriptsDir, hooksDir, repoCommandsDir, cliCommandsDir]) mkdirSync(dir, { recursive: true });
+    for (const dir of [scriptsDir, hooksDir, libDir, repoCommandsDir, cliCommandsDir]) {
+        mkdirSync(dir, { recursive: true });
+    }
     writeFileSync(join(scriptsDir, 'big.ts'), `${Array.from({ length: 301 }, (_, i) => `// line ${i}`).join('\n')}\n`);
     writeFileSync(join(scriptsDir, 'db.ts'), `import { Database } from 'bun:sqlite';\nexport const db = 1;\n`);
     writeFileSync(join(scriptsDir, 'corpus.ts'), `export const path = 'docs/tasks/0099_task.md';\n`);
@@ -675,6 +679,129 @@ test('placement baseline reconciles with plan §2 (task 1000 R7)', () => {
             'plugins/sp/scripts/wrapup-steps.ts',
         ].sort(),
     );
+});
+
+test('checkPlacement applies the DB/corpus boundary to handwritten lib without a line budget (task 1173 R1)', () => {
+    const root = createPlacementFixture();
+    try {
+        const lib = join(root, 'plugins', 'sp', 'lib');
+        writeFileSync(join(lib, 'lib-db.ts'), `import { Database } from 'bun:sqlite';\nexport const db = 1;\n`);
+        writeFileSync(join(lib, 'lib-corpus.ts'), `export const path = 'docs/features/A91_x.md';\n`);
+        // Over budget, as the real lib cores are: lib has no line budget by design (plan P2).
+        writeFileSync(join(lib, 'lib-big.ts'), `${Array.from({ length: 301 }, (_, i) => `// line ${i}`).join('\n')}\n`);
+        writeFileSync(join(lib, 'lib-typed.ts'), `import type { Database } from 'bun:sqlite';\nexport const t = 1;\n`);
+        const findings = checkPlacement({ repoRoot: root, baselinePath: join(root, 'config', 'missing.json') });
+        const byFile = new Map(findings.map((f) => [f.file, f.kind]));
+        expect(byFile.get('plugins/sp/lib/lib-db.ts')).toBe('db-import');
+        expect(byFile.get('plugins/sp/lib/lib-corpus.ts')).toBe('corpus-parse');
+        expect(findings.some((f) => f.file === 'plugins/sp/lib/lib-big.ts')).toBe(false);
+        expect(findings.some((f) => f.file === 'plugins/sp/lib/lib-typed.ts')).toBe(false);
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
+// ---- Hook source layout (ADR-129, task 1173 R1: helper unit-fixtured here, wired in 1174) ----
+
+/** Registered identities match real hooks.json: `superskill hook run sp <identity>`. */
+function createHookFixture(hooksJson: unknown = { hooks: {} }): string {
+    const root = mkdtempSync(join(tmpdir(), 'hook-layout-test-'));
+    mkdirSync(join(root, 'plugins', 'sp', 'hooks', 'pi'), { recursive: true });
+    writeFileSync(join(root, 'plugins', 'sp', 'hooks', 'hooks.json'), JSON.stringify(hooksJson, null, 4));
+    return root;
+}
+
+function group(identities: string[], matcher?: string): Record<string, unknown> {
+    return {
+        ...(matcher ? { matcher } : {}),
+        hooks: identities.map((identity) => ({ type: 'command', command: `superskill hook run sp ${identity}` })),
+    };
+}
+
+test('checkHookLayout resolves one authored entry per registered identity (task 1173 R1)', () => {
+    const root = createHookFixture({ hooks: { Stop: [group(['task-write-guard'])] } });
+    try {
+        const hooks = join(root, 'plugins', 'sp', 'hooks');
+        writeFileSync(join(hooks, 'task-write-guard.ts'), 'export const guard = 1;\n');
+        writeFileSync(join(root, 'plugins', 'sp', 'hooks', 'agent-lifecycle.ts'), 'export const stray = 1;\n');
+        const findings = checkHookLayout({ repoRoot: root });
+        expect(findings.map((f) => [f.file, f.kind])).toEqual([['plugins/sp/hooks/agent-lifecycle.ts', 'hook-layout']]);
+        expect(findings[0]?.detail).toContain('plugins/sp/lib');
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('checkHookLayout flags a registered identity with no authored entry (task 1173 R1)', () => {
+    const root = createHookFixture({ hooks: { SessionStart: [group(['context-session-start', 'agent-lifecycle'])] } });
+    try {
+        const hooks = join(root, 'plugins', 'sp', 'hooks');
+        writeFileSync(join(hooks, 'agent-lifecycle.ts'), 'export const entry = 1;\n');
+        const findings = checkHookLayout({ repoRoot: root });
+        expect(findings).toHaveLength(1);
+        expect(findings[0]?.file).toBe('plugins/sp/hooks/context-session-start.ts');
+        expect(findings[0]?.detail).toContain('no authored entry');
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('one identity may serve several events but not twice in one group (task 1173 R1)', () => {
+    const root = createHookFixture({
+        hooks: {
+            SessionStart: [group(['agent-lifecycle'])],
+            UserPromptSubmit: [group(['agent-lifecycle'])],
+            Stop: [group(['agent-lifecycle']), group(['agent-lifecycle'], 'Bash')],
+        },
+    });
+    try {
+        writeFileSync(join(root, 'plugins', 'sp', 'hooks', 'agent-lifecycle.ts'), 'export const entry = 1;\n');
+        writeFileSync(join(root, 'plugins', 'sp', 'hooks', 'stop-lifecycle.ts'), 'export const helper = 1;\n');
+        // The multi-event registration itself is legal; only the duplicated group and the unregistered
+        // sibling helper are findings.
+        const findings = checkHookLayout({ repoRoot: root });
+        expect(findings.map((f) => f.file)).toEqual([
+            'plugins/sp/hooks/hooks.json',
+            'plugins/sp/hooks/stop-lifecycle.ts',
+        ]);
+        expect(findings[0]?.detail).toContain('registered twice for Stop');
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('hook tests belong to the plugin test owner, and both extension entries are entries (task 1173 R1)', () => {
+    const root = createHookFixture({ hooks: { Stop: [group(['fleet-guest-stop'])] } });
+    try {
+        const hooks = join(root, 'plugins', 'sp', 'hooks');
+        for (const entry of ['fleet-guest-stop.ts', 'careful-guard.ts']) {
+            writeFileSync(join(hooks, entry), 'export const entry = 1;\n');
+        }
+        writeFileSync(join(hooks, 'pi', 'guard-extension.ts'), 'export const extension = 1;\n');
+        writeFileSync(
+            join(hooks, 'fleet-guest-stop.test.ts'),
+            `import { test } from 'bun:test';\ntest('x', () => {});\n`,
+        );
+        const findings = checkHookLayout({ repoRoot: root });
+        expect(findings).toHaveLength(1);
+        expect(findings[0]?.file).toBe('plugins/sp/hooks/fleet-guest-stop.test.ts');
+        expect(findings[0]?.detail).toContain('plugins/sp/tests/hooks');
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('checkHookLayout is clean on its own fixture and reports unreadable hooks.json (task 1173 R1)', () => {
+    const root = createHookFixture({ hooks: { SessionStart: [group(['agent-lifecycle'])] } });
+    try {
+        writeFileSync(join(root, 'plugins', 'sp', 'hooks', 'agent-lifecycle.ts'), 'export const entry = 1;\n');
+        expect(checkHookLayout({ repoRoot: root })).toEqual([]);
+        writeFileSync(join(root, 'plugins', 'sp', 'hooks', 'hooks.json'), '{ not json');
+        const broken = checkHookLayout({ repoRoot: root });
+        expect(broken.some((f) => f.detail.includes('unreadable hooks.json'))).toBe(true);
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
 });
 
 test('daily-summary dynamic db import is baselined and the real tree is clean (task 1018 AC3)', () => {
