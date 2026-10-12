@@ -108,6 +108,7 @@ export function decisionStatusReadiness(
     // registry does not hold — a config error that must stay visible in the Makers table
     // rather than disappearing from it.
     const names = new Set<string>(status.registeredMakers);
+    if (status.configDefaultMaker !== null) names.add(status.configDefaultMaker);
     for (const row of status.perDecision) names.add(row.maker);
     for (const name of Object.values(status.configDecisionMakers)) names.add(name);
 

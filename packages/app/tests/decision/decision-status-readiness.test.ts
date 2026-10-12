@@ -97,6 +97,17 @@ const probe = (maker: string, overrides: Partial<DecisionProbeOutcome> = {}): De
 });
 
 describe('decisionStatusReadiness (task 1170)', () => {
+    test('R2: an unregistered default maker stays visible even with an empty catalog', () => {
+        const readiness = decisionStatusReadiness(statusOf({ configDefaultMaker: 'gone', perDecision: [] }));
+        expect(readiness.makers.find((maker) => maker.name === 'gone')).toEqual({
+            name: 'gone',
+            registered: false,
+            configuredBy: ['decisions.maker'],
+            serves: [],
+            evidence: { recorded: 0, accepted: 0, lastSeen: null },
+        });
+    });
+
     test('R2: makers carry registration, the config keys naming them and what they serve', () => {
         const status = statusOf({ configDecisionMakers: { 'task-triage': 'fm-local' } });
         const { makers } = decisionStatusReadiness(status);

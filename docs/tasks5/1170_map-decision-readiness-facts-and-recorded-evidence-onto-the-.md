@@ -4,7 +4,7 @@ name: Map decision readiness facts and recorded evidence onto the status report
 status: done
 template: feature-impl
 created_at: 2026-10-11T23:23:16.864Z
-updated_at: "2026-10-12T01:57:45.473Z"
+updated_at: "2026-10-12T02:19:43.515Z"
 feature_id: P11
 
 done_forced: "false"
@@ -108,7 +108,7 @@ maker from one that has actually served a decision.
   `decisionStatusReadiness(status, groups?)`. Makers are the registered set first, then any configured name
   the registry does not hold, so an unregistered configured maker stays a visible failing row instead of
   disappearing from the report.
-- **R3 — the read** (`:145`): `readDecisionStatusReadiness(dao, status)` calls the existing
+- **R3 — the read** (`packages/app/src/decision/decision-status-readiness.ts`): `readDecisionStatusReadiness(dao, status)` calls the existing
   `decisionReliability(dao)` aggregation and maps it; no new DAO method, no new SQL, no new migration.
 - **R4 — exports**: the overlay symbols are exported from `packages/app/src/index.ts` next to the
   reliability block, so the CLI imports only through the package index (ADR-021).
@@ -125,6 +125,9 @@ maker from one that has actually served a decision.
   updated to the shipped names.
 
 - **Citations**: `packages/app/src/decision/decision-status-readiness.ts:96` (`decisionStatusReadiness`), `packages/app/src/decision/decision-status-readiness.ts:145` (`readDecisionStatusReadiness`), `packages/app/src/decision/decision-service.ts:415` (`DecisionStatusRow` fields).
+
+
+- Re-audit correction: include the configured default maker even when the catalog has no decisions; the regression test exercises an unregistered default with an empty catalog.
 
 ### Testing
 
