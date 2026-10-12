@@ -241,6 +241,13 @@ PASS into a refused one: consumer repositories gate the review answer artifact a
 claims, exactly as they gate the verify answer. This is a contract change — review answers written
 before it were never asked for a level, so pre-adoption artifacts read as debt, not defects.
 
+**Machine-checked at the gate.** The pipeline's own review PASS edges enforce the line before verify:
+`residual-scan review-gate` reads the recorded `### Review` body, and a missing, duplicated or
+out-of-enum level becomes a **blocking** `review-contract` item — `review → verify` stops and the run
+enters `review-fail-triage` with the bounded repair hop, exactly as an open P1–P3 row does. The gate
+checks presence and vocabulary only: whether a level is *earned* stays a judgement call (see the
+earning rule above), so the report must still argue it.
+
 **Source citations for external claims (one claim contract, 2026-10-12).** A Finding cell or a
 Functional Traceability `Evidence` cell that asserts an external API/library claim carries a
 verifiable citation in the SAME cell — a repo `path:line(-end)`, the external named-origin form
@@ -252,6 +259,14 @@ here. The findings table's `Location` column does not stand in for it: `Location
 finding's subject, not the claim's source. Cell-free receipts (test counts, reviewed-log notes)
 assert no external claim and need no citation. An uncited external claim is an assumption, so it
 caps the level the report can defend (above).
+
+**Machine-checked at the gate (findings table).** `residual-scan review-gate` applies the same two
+predicates to every finding row: a Finding cell carrying one of the verify lint's claim markers with
+no citation form becomes a **blocking** `review-contract` item, so `review → verify` stops and the
+run enters `review-fail-triage`. The `Location` column is deliberately not consulted as a citation —
+that is the rule stated above, and a gate that accepted it would pass every row that has an anchor.
+Functional Traceability `Evidence` cells stay reviewer-enforced (SECUA review): they are free prose
+in a table the gate does not parse.
 
 **No findings.** Never invent a defect to populate the table. Emit one substantive `P4 (advisory)`
 row that states what was reviewed and what was found — placeholder cells (empty, `—`, `n/a`) are

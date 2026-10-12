@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+
 /**
  * Residual scan — task-leftover classification and recorded-verdict discovery (F96, ADR-071).
  *
@@ -14,9 +15,15 @@ import { join } from 'node:path';
  */
 
 import { createHash } from 'node:crypto';
+import { extractAnswerConfidence, hasCitationForm, hasClaimMarker } from './verify-answer-lint';
 
 /** Residual-scan item categories: review-table rows, TODO markers, unchecked boxes, staging residue. */
-export type ResidualCategory = 'review-finding' | 'diff-marker' | 'unchecked-box' | 'staging-residue';
+export type ResidualCategory =
+    | 'review-finding'
+    | 'diff-marker'
+    | 'unchecked-box'
+    | 'staging-residue'
+    | 'review-contract';
 /** Severity class assigned by {@link classify}: blocking gates the sweep, deferrable has a reason, the rest are informational. */
 export type ResidualClass = 'blocking' | 'deferrable' | 'advisory' | 'housekeeping';
 
@@ -97,6 +104,12 @@ export function locationOf(locationCell: string, finding: string): string {
     return backtick === undefined ? '' : normalizeAnchor(backtick);
 }
 
+/** The `### Review` body (up to the next `### `), or `null` when the section is absent. */
+function reviewBody(taskContent: string): string | null {
+    const section = taskContent.split(/^### Review\b/m)[1];
+    return section === undefined ? null : (section.split(/^### /m)[0] ?? '');
+}
+
 /**
  * Extract review-finding rows: any `### Review` section table whose header carries a
  * Priority column. Rows need `^P[1-4]` priority and a finding other than `none`/`—`.
@@ -106,9 +119,9 @@ export function locationOf(locationCell: string, finding: string): string {
 export function parseReviewFindings(
     taskContent: string,
 ): Array<{ priority: string; location: string; text: string; deferral?: string }> {
-    const section = taskContent.split(/^### Review\b/m)[1];
-    if (section === undefined) return [];
-    const body = section.split(/^### /m)[0] ?? '';
+    const section = reviewBody(taskContent);
+    if (section === null) return [];
+    const body = section;
     const out: Array<{ priority: string; location: string; text: string; deferral?: string }> = [];
     const lines = body.split('\n');
     for (let i = 0; i < lines.length; i++) {
@@ -266,6 +279,7 @@ export function scanResiduals(inputs: ResidualScanInputs): ResidualArtifact {
             'diff-marker': base !== null,
             'unchecked-box': true,
             'staging-residue': true,
+            'review-contract': false,
         },
         items,
         counts,
@@ -308,6 +322,43 @@ export function blockingReviewFindings(taskContent: string, deferrals: Deferral[
 }
 
 /**
+ * The two review-report contract rules the gate can decide deterministically (task 1070 R1 on the
+ * review side): a report states the confidence level it can defend, and a finding that asserts an
+ * external API/library claim cites it in the same cell. The claim predicates are the verify lint's,
+ * so both paths share one definition of "external claim" and one set of accepted citation forms.
+ *
+ * Deliberately scoped to the findings table (the rows `parseReviewFindings` already extracts) and to
+ * `### Review` bodies that exist: a missing section is not a contract violation, and the Functional
+ * Traceability `Evidence` cells stay reviewer-enforced — see `verdict-schema.md` § Source citations
+ * for external claims for why presence-only prose checks are kept narrow.
+ */
+export function reviewContractViolations(taskContent: string): Array<{ location: string; text: string }> {
+    const violations: Array<{ location: string; text: string }> = [];
+    const body = reviewBody(taskContent);
+    if (body !== null && extractAnswerConfidence(body.replace(/\*\*/g, '')) === undefined) {
+        violations.push({
+            location: 'task-file:Review',
+            text:
+                'Review report carries no single valid `**Confidence:** HIGH | MEDIUM | LOW` line — ' +
+                'state the level the report can defend (HIGH: every requirement row MET, every finding ' +
+                'dispositioned, evidence cited; MEDIUM/LOW: name the gap).',
+        });
+    }
+    for (const row of parseReviewFindings(taskContent)) {
+        if (hasClaimMarker(row.text) && !hasCitationForm(row.text)) {
+            violations.push({
+                location: row.location.length > 0 ? row.location : 'task-file:Review',
+                text:
+                    `${row.priority} finding asserts an external API/library/version claim without a ` +
+                    'same-cell citation (add a repo `path:line`, an external named-origin form, or a URL ' +
+                    `to the Finding cell): ${row.text.slice(0, 80)}`,
+            });
+        }
+    }
+    return violations;
+}
+
+/**
  * Task 1122 R2: the review-gate artifact assembly — the review-finding slice
  * ({@link blockingReviewFindings}) shaped into the same `ResidualArtifact` the record sweep
  * writes to `.spur/run/<wbs>-residuals.json` (the test-fix hop's remediation input; the
@@ -320,7 +371,16 @@ export function buildReviewGateArtifact(
     taskContent: string,
     deferrals: Deferral[],
 ): { artifact: ResidualArtifact; note: string } {
-    const items = blockingReviewFindings(taskContent, deferrals);
+    const items = [
+        ...blockingReviewFindings(taskContent, deferrals),
+        ...reviewContractViolations(taskContent).map((v) => ({
+            id: makeItemId('review-contract', v.location, v.text),
+            category: 'review-contract' as const,
+            class: 'blocking' as const,
+            location: v.location,
+            text: v.text,
+        })),
+    ];
     const blocking = items.filter((i) => i.class === 'blocking');
     const counts = { blocking: 0, deferrable: 0, advisory: 0, housekeeping: 0 };
     for (const item of items) counts[item.class]++;
@@ -332,6 +392,7 @@ export function buildReviewGateArtifact(
             'diff-marker': false,
             'unchecked-box': false,
             'staging-residue': false,
+            'review-contract': true,
         },
         items,
         counts,

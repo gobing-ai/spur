@@ -202,6 +202,10 @@ citation in the SAME cell, or lint rejects the row with `evidence-citation` (blo
 - The rule is cell-local: a citation in another row or a "receipt above" cross-reference does not
   satisfy it. Marker-free receipts (test counts, reviewed-log notes) need no citation. The check is
   presence-only — which citation proves which claim is not deterministically decidable.
+- The same two predicates (`hasClaimMarker` / `hasCitationForm` in
+  `packages/app/src/services/verify-answer-lint.ts`) gate the review report's findings table through
+  `residual-scan review-gate` as the blocking `review-contract` category — one definition of
+  "external claim" and one set of accepted citation forms for both paths.
 
 ## Hedged evidence is rejected on MET rows
 
