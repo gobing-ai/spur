@@ -632,7 +632,9 @@ test('placement baseline reconciles with plan §2 (task 1000 R7)', () => {
         expect(inScripts || underDirs || inHooks).toBe(true);
     }
     const dirKeys = keys.filter((k) => /^(plugins\/sp\/scripts\/)?(daily-summary|dogfood-testing)\//.test(k));
-    expect(dirKeys).toHaveLength(3);
+    // task 1173: the dogfood-testing rows left with the move of their pure logic into plugins/sp/lib —
+    // both entries dropped under the 250-line budget, so the baseline shrank by two rows.
+    expect(dirKeys).toEqual(['plugins/sp/scripts/daily-summary/daily-summary.ts']);
 
     // direction A: plan §2 Move/Delete/→scripts/over-budget rows are all baselined
     // (script-contract-check excluded: task 1000 itself moved it to scripts/commands)

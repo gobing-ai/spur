@@ -13,6 +13,11 @@ function getEnvVars() {
 import { existsSync as existsSync2, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join as join2 } from "node:path";
 
+// plugins/sp/lib/env.ts
+function getEnvVars2() {
+  return process.env;
+}
+
 // plugins/sp/lib/transcript.ts
 import { existsSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
@@ -205,11 +210,6 @@ function resolveTranscript(env, projectsRoot = join(homedir(), ".claude", "proje
       return { ok: true, path };
   }
   return { ok: false, reason: `no transcript for session ${id}` };
-}
-
-// plugins/sp/lib/env.ts
-function getEnvVars2() {
-  return process.env;
 }
 
 // plugins/sp/lib/run-summary-core.ts

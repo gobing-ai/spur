@@ -30,14 +30,6 @@
             "kinds": ["budget", "db-import"],
             "reason": "Keep (daily-summary/, plan \u00a72); read-only history-health query via dynamic bun:sqlite import (task 1018)"
         },
-        "plugins/sp/scripts/dogfood-testing/detect-pipeline-driving.ts": {
-            "kinds": ["budget"],
-            "reason": "Keep (dogfood-testing/, plan \u00a72)"
-        },
-        "plugins/sp/scripts/dogfood-testing/validate-report.ts": {
-            "kinds": ["budget"],
-            "reason": "Keep (dogfood-testing/, plan \u00a72)"
-        },
         "plugins/sp/hooks/context-post-tool.ts": {
             "kinds": ["budget"],
             "reason": "Keep: ADR-129 core (budget exemption) (plan \u00a72)",
