@@ -35,6 +35,7 @@ Root [DESIGN.md](../DESIGN.md) owns visual and interaction design;
 | Desktop shell — Electron launch, project and binary env, packaging, IPC, title-bar overlay | [desktop-shell](design/desktop-shell.md) |
 | Planning records and lifecycle contracts | [planning-record-contracts](design/planning-record-contracts.md) |
 | Planning workflow and operation contracts | [planning-workflow-contracts](design/planning-workflow-contracts.md) |
+| Feature `deprecated` status — frozen lifecycle state and affected surfaces (F42) | [feature-deprecated-status](design/feature-deprecated-status.md) |
 | Observability and HTTP read contracts | [observability-contracts](design/observability-contracts.md) |
 | Essential workflow checks and observable execution | [essential-workflow-checks.md](design/essential-workflow-checks.md) |
 | Executor availability | [executor-availability.md](design/executor-availability.md) |
