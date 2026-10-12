@@ -4,7 +4,7 @@ name: Add the maker-liveness catalog decision for probe runs
 status: done
 template: feature-impl
 created_at: 2026-10-11T23:23:16.306Z
-updated_at: "2026-10-12T01:57:45.164Z"
+updated_at: "2026-10-12T02:22:55.902Z"
 feature_id: P11
 
 done_forced: "false"
@@ -95,6 +95,30 @@ Served from the shared catalog layer, next to `gates.yaml` and the pipeline cata
   call blocked for ~1 h instead of returning `no-backend`. Recorded in the design satellite §6 as
   the probe-deadline tradeoff; the hardening work owns the root cause.
 
+#### Q&A entry — 2026-10-12T02:22:52.245Z
+
+Closed decisions retained from the original refinement and implementation session:
+
+- Operator request (this session): make `spur decision status` show whether a maker is *actually
+  working*, and accepted the recommended probe target — a new bundled `maker-liveness` catalog entry
+  — over reusing a served decision or calling the registry directly.
+
+- Floor 0 is the probe's contract, not a relaxation of the catalog's confidence policy: the probe asks
+  whether the maker answered, and a working maker's low-confidence answer must not read as a failure.
+
+- Deferred: persisting probe runs as evidence. Server-side, on the condition that recorded evidence
+  from real decisions (task 1170) is shown next to the probe result in every report.
+
+- Operator instruction during implementation: do not use `laya-local` as a decision maker until the
+  `spur decision` hardening work lands. Consequence for this task: none in the catalog entry itself
+  (it names no maker and resolves through config like every other id), but the probe it serves must
+  never be exercised against `laya-local` in this repo. The implementation therefore bounds every
+  driver (task 1171/1172 R2) and verification runs use `typesafe` in a throwaway project.
+
+- Observed hazard behind that instruction, reproduced while implementing: a `laya-local` decision
+  call blocked for ~1 h instead of returning `no-backend`. Recorded in the design satellite §6 as
+  the probe-deadline tradeoff; the hardening work owns the root cause.
+
 ### Design
 
 **Chosen: a dedicated bundled catalog entry, floor 0, no declared parameters.**
@@ -117,7 +141,8 @@ non-question and the probe would be indistinguishable from a real classification
 
 ### Plan
 
-<!-- Ordered implementation checklist. Fill before moving to todo/wip. -->
+- [x] Ship the dedicated maker-liveness choice catalog with floor zero and implicit instructions.
+- [x] Document the catalog entry and verify list/show plus missing-entry behavior.
 
 ### Solution
 
@@ -160,17 +185,9 @@ Verified with the source-local CLI (`bun run apps/cli/src/index.ts …`, source 
 
 ### Review
 
-## Review — self-review against the verification lens, 2026-10-11 (inline; `sp-code-verification` dimensions)
+Current audit: the dedicated catalog has the declared vocabulary, fallback, zero confidence floor and no declared parameters. The prior low-confidence finding conflated live-provider testing with deterministic catalog semantics: the served descriptor and service mapping can be checked without a live model. Basename shadowing is intentional catalog behavior; missing entries are reported before probes. Two owner documents describe different contracts (catalog inventory and readiness behavior), so their existence is not a defect.
 
-**Verdict: PASS-WITH-FINDINGS.** Read-only review of the slice's diff (`config/decisions/maker-liveness.yaml`,
-`docs/design/decision-catalog.md`, `docs/design/decision-observability-and-adoption.md`). No P1 findings;
-no code paths, no schema, no migration.
-
-| # | Priority | Dimension | Finding | Location | Disposition |
-|---|----------|-----------|---------|----------|-------------|
-| 1 | P3 (minor) | verification honesty | The floor-0 rationale is argued from the hub's fallback taxonomy, not from a live low-confidence sample: `--probe` was exercised against `typesafe` only, and `laya-local` is off-limits in this repo by operator instruction, so the claim "a working maker reporting 0.6 still passes" rests on `effectiveMinConfidence` reading, not on a recorded outcome. | `config/decisions/maker-liveness.yaml:14` | ACCEPTED — the taxonomy is pinned by upstream tests and the rationale is recorded in design §6; live validation belongs to the `spur decision` hardening work. |
-| 2 | P4 (nit) | config surface | The entry is shadowable by basename like every catalog file, so a project override omitting the id breaks `--probe`. | `packages/app/src/decision/decision-catalog-resolver.ts:77` | ACCEPTED — the failure is loud (exit 1, id named) and is now covered end to end by `apps/cli/tests/commands/decision.test.ts` (`R7`). |
-| 3 | P4 (nit) | docs | The id is documented in two satellites (§3.4.1 and §3.1); a future rename must touch both. | `docs/design/decision-catalog.md:87` | ACCEPTED — both are same-file-family docs owned by the same reviewer, and the parity test on catalog listing catches a stale inventory only partially. |
+No unresolved implementation finding in this slice. Live provider quality is outside the liveness catalog contract.
 
 ### References
 
