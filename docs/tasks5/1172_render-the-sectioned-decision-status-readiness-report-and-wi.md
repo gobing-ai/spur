@@ -4,7 +4,7 @@ name: Render the sectioned decision status readiness report and wire --probe
 status: done
 template: feature-impl
 created_at: 2026-10-11T23:23:17.914Z
-updated_at: "2026-10-12T02:21:55.733Z"
+updated_at: "2026-10-12T02:23:33.986Z"
 feature_id: P11
 
 done_forced: "false"
@@ -55,7 +55,7 @@ to match: `agent doctor`'s aligned `✓/✗` table (`packages/app/src/services/a
   `--probe` (exit 0, PROBE column, streamed line, no recorded row written), `--probe --json` staying
   one document, and the `--probe` + `--reliability` conflict.
 - [x] R6. Add `packages/app/tests/decision/decision-status-readiness.test.ts` covering the mapping and
-  the probe loop, with the failure-mode table written before the assertions (AGENTS.md).
+  the probe loop, with the failure-mode table written before the assertions.
 
 ### Acceptance Criteria
 
@@ -86,6 +86,26 @@ to match: `agent doctor`'s aligned `✓/✗` table (`packages/app/src/services/a
   `scripts/commands` entry) is recorded in Design.
 - Closed: `--json` grows additively (`makers`, per-decision `evidence`, `probes?`). No existing field
   is renamed or removed, so machine consumers and the existing CLI tests keep working.
+- Closed: `--since` keeps its current contract (only valid with `--reliability`). The readiness
+  evidence window is the whole ledger; narrowing it was not requested and would break a documented
+  caller mistake.
+
+#### Q&A entry — 2026-10-12T02:23:27.472Z
+
+Closed decisions retained from the original refinement and implementation session:
+
+- Operator request (this session): `spur decision status` output should be clearer, and should show
+  the registered / configured / actually-working markers. Accepted the recommended layout: labelled
+  sections with aligned `✓/✗` tables (the `spur agent doctor` renderer shape) over the smaller
+  "keep flat lines, add one aligned table" alternative.
+
+- Public-surface consent: `--probe` is a new public flag on the existing `decision status` verb. The
+  operator asked for exactly this marker, which is the consent; the rejected alternative (an internal
+  `scripts/commands` entry) is recorded in Design.
+
+- Closed: `--json` grows additively (`makers`, per-decision `evidence`, `probes?`). No existing field
+  is renamed or removed, so machine consumers and the existing CLI tests keep working.
+
 - Closed: `--since` keeps its current contract (only valid with `--reliability`). The readiness
   evidence window is the whole ledger; narrowing it was not requested and would break a documented
   caller mistake.
@@ -132,7 +152,9 @@ this repository is currently in, where the previous output read as healthy.
 
 ### Plan
 
-<!-- Ordered implementation checklist. Fill before moving to todo/wip. -->
+- [x] Render one summary header, aligned maker/decision tables and labelled catalog/errors.
+- [x] Wire opt-in probes, named stderr progress and additive JSON with isolated stdout.
+- [x] Preserve timestamps and document the surface; run CLI, parity and feature gates.
 
 ### Solution
 
@@ -182,17 +204,14 @@ this repository is currently in, where the previous output read as healthy.
 
 ### Review
 
-## Review — self-review against the verification lens, 2026-10-11 (inline; `sp-code-verification` dimensions)
+Current audit found three mismatches with the written contract: JSON progress was suppressed, the first line lacked the summary facts, and LAST SEEN discarded the time. The renderer now preserves the full timestamp and puts all summary facts on the first line. Progress identifies its maker and goes to stderr in human and JSON modes; separate-stream CLI assertions prove JSON stdout remains parseable.
 
-**Verdict: PASS-WITH-FINDINGS.** Read-only review of the renderer, the `--probe` wiring, the additive
-JSON and the five documentation surfaces the parity tests enforce. One P2 finding, accepted by design.
+| Priority | Dimension | Location | Finding | Disposition |
+| --- | --- | --- | --- | --- |
+| P2 | usability | apps/cli/src/commands/decision.ts | JSON probes suppressed the promised progress channel. | FIXED — named stderr progress in both modes; stdout checked independently. |
+| P3 | contract | apps/cli/src/commands/decision.ts | Header facts occupied a second line and timestamps were truncated to dates. | FIXED — one summary line and complete timestamps; CLI assertions pass. |
 
-| # | Priority | Dimension | Finding | Location | Disposition |
-|---|----------|-----------|---------|----------|-------------|
-| 1 | P2 (major) | operator experience | Under `--probe --json` nothing is printed until every maker has been probed, so a slow backend is indistinguishable from a hang for a machine consumer. | `apps/cli/src/commands/decision.ts:283` | ACCEPTED — progress on stdout would break the single-document contract the same flag promises; the human path streams to stderr, and the per-driver budget bounds the wait. |
-| 2 | P3 (minor) | duplication | A second table renderer now exists in the tree: this one in the CLI, and `renderDoctorTable` in `packages/app`. They differ in columns, glyphs and padding rules. | `apps/cli/src/commands/decision.ts:460` | ACCEPTED — extracting a shared helper would couple a CLI-local layout to the agent report for two callers; revisit at the third. |
-| 3 | P3 (minor) | output contract | `perDecision[]` gained `type`, `layer` and `minConfidence`, which is additive but changes the shape any external `perDecision` consumer sees. | `packages/app/src/decision/decision-service.ts:415` | ACCEPTED — asserted by the CLI test's key-set check, which fails if a pre-existing key ever disappears; the three fields are what the report needs to name its own rows. |
-| 4 | P4 (nit) | precision | The human `LAST SEEN` column renders date-only, so two runs on one day look identical; the full timestamps live in the `--reliability` report and in `--json`. | `apps/cli/src/commands/decision.ts:441` | ACCEPTED — the column answers "when did this last work", and the second-resolution detail is one flag away. |
+The local table renderer is appropriate for the existing CLI boundary. Additive catalog fields are required by this report and compatibility is checked against the old JSON keys. The prior duplication and additive-field rows did not establish a defect. The probe-only hub's external cancellation limit is documented under task 1171 and the owning satellite.
 
 ### References
 
