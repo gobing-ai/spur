@@ -4,7 +4,7 @@ name: Add the opt-in decision maker liveness probe
 status: done
 template: feature-impl
 created_at: 2026-10-11T23:23:17.424Z
-updated_at: "2026-10-12T02:21:02.627Z"
+updated_at: "2026-10-12T02:23:19.344Z"
 feature_id: P11
 
 done_forced: "false"
@@ -76,6 +76,22 @@ code, and it leaves no trace in the ledger.
   readiness report is data, not a failing command; a non-zero exit stays reserved for caller mistakes
   and catalog or maker-config errors.
 
+#### Q&A entry — 2026-10-12T02:23:14.899Z
+
+Closed decisions retained from the original refinement and implementation session:
+
+- Operator request (this session): prove "actually working" by having the maker answer a real, simple
+  decision one by one rather than inferring health from configuration. Accepted the recommended shape:
+  one liveness decision per distinct registered effective maker, opt-in via `--probe`.
+
+- Closed: the probe writes no `decision_logs` row and emits no decision event, so the recorded
+  evidence column cannot be satisfied by the probe that checks it. Tradeoff (no probe audit trail) is
+  recorded in the design satellite §6.
+
+- Closed: a failing probe never changes the exit code. `--probe` answers "is it working now", and a
+  readiness report is data, not a failing command; a non-zero exit stays reserved for caller mistakes
+  and catalog or maker-config errors.
+
 ### Design
 
 **Chosen: loop in the app service, one bounded probe call per maker, injectable seam for the failure table.**
@@ -99,7 +115,9 @@ code, and it leaves no trace in the ledger.
 
 ### Plan
 
-<!-- Ordered implementation checklist. Fill before moving to todo/wip. -->
+- [x] Validate the liveness entry before iterating and reject duplicate catalog ids.
+- [x] Probe each registered effective maker once through the isolated bounded hub without event/log sinks.
+- [x] Test accepted/fallback results, deadline expiry, propagation, filtering and deduplication.
 
 ### Solution
 
@@ -149,18 +167,15 @@ Failure modes were enumerated before the assertions (R6); every one lands as dat
 
 ### Review
 
-## Review — self-review against the verification lens, 2026-10-11 (inline; `sp-code-verification` dimensions)
+Current audit corrected stale Requirements/Design that named decision-readiness.ts and service.decide. The implementation intentionally uses a probe-only hub to bound drivers without shortening real decisions or attaching sinks. Missing-entry preflight now runs even with no effective makers, and probeMaker rejects duplicate ids before reaching the hub. Service tests now execute accepted results, every fallback reason, timeout expiry and rejection instead of relying only on preconstructed outcome stubs.
 
-**Verdict: PASS-WITH-FINDINGS.** Read-only review of `probeMaker`, the probe-only hub, `loadCatalogs`
-and the probe loop. One P2 finding, accepted and documented; no P1 finding, and no path that mutates
-ledger, event or catalog state.
+| Priority | Dimension | Location | Finding | Disposition |
+| --- | --- | --- | --- | --- |
+| P2 | correctness | packages/app/src/decision/decision-status-readiness.ts | Empty maker set bypassed missing-entry validation. | FIXED — describe runs before iteration; zero-call regression passes. |
+| P2 | correctness | packages/app/src/decision/decision-service.ts | Probe hub bypassed the duplicate-id guard used by real decisions. | FIXED — duplicate catalog rejection precedes hub decide; regression asserts zero calls. |
+| P3 | test coverage | packages/app/tests/decision/decision-service.test.ts | Prior tests supplied already-mapped probe outcomes and did not exercise timeout mapping. | FIXED — real service mapping and deadline are exercised with substituted hub results. |
 
-| # | Priority | Dimension | Finding | Location | Disposition |
-|---|----------|-----------|---------|----------|-------------|
-| 1 | P2 (major) | resource lifetime | A probe that hits its wall-clock backstop abandons the promise rather than cancelling it: with the in-process `mlx-native` core a wedged weight load can keep the process alive after the report is printed (the exit code is already correct). | `packages/app/src/decision/decision-service.ts:153` | ACCEPTED + DOCUMENTED — the driver exposes no cancellation; recorded in design §6 as a known limit with its upgrade trigger. The probe writes nothing, so nothing lands after the deadline. |
-| 2 | P3 (minor) | config surface | `PROBE_DRIVER_BUDGET_MS` is a module constant with no config key, so a cold local model slower than 120 s on one machine is reported `timeout` with no way to raise the budget. | `packages/app/src/decision/decision-service.ts:146` | DEFERRED — add `decisions.probeTimeoutMs` if a real machine hits it; a config key invented ahead of the need is the change nobody asked for. |
-| 3 | P3 (minor) | duplication | The probe-only hub re-instantiates the registry and re-loads every catalog, so a future change to the builtin registry options must be mirrored in both. | `packages/app/src/decision/decision-service.ts:284` | MITIGATED IN-SLICE — catalog loading is shared through `loadCatalogs`, so the two hubs cannot diverge on what they serve; extracting a registry factory for two call sites stays out of scope. |
-| 4 | P4 (nit) | scope | A probe result is not persisted anywhere, so "was this maker working last Tuesday" is unanswerable from probes alone. | `packages/app/src/decision/decision-service.ts:260` | ACCEPTED — recording probes would inflate the evidence the report shows beside them; the upgrade path (`maker-liveness` isolates its own `decisionId`) is recorded in design §6. |
+Known external limit: the wall-clock backstop returns timeout data but cannot cancel an in-process driver that exposes no cancellation. Such a driver may retain process resources after the report prints. This feature promises a bounded result, not driver cancellation; upstream cancellation support is the concrete upgrade trigger. Hardware behavior remains unverified here. The prior major label incorrectly treated that explicit scope limit as a completed local fix. No timeout configuration or persisted probe history is required by P11.
 
 ### References
 
