@@ -171,6 +171,21 @@ describe('insertOnEntry (1104 R2/AC4 label stability)', () => {
         expect(insertOnEntry(plan, 'done', base)).toEqual(plan);
         expect(insertOnEntry(plan, 'test', def([{ id: 'test' }, { id: 'done' }]))).toEqual(plan);
     });
+
+    // Ported from the retired `docs/analysis/2026-10-plan-projection-prototype.ts` self-checks
+    // (task 1173 R3): a run inserts on-entry states one after another, and the first insertion keeps
+    // its label while the next takes the following digit — the whole point of label stability.
+    test('a later on-entry state takes the next digit and never renumbers an earlier one', () => {
+        const withFix = insertOnEntry(plan, 'test-fix', base);
+        const withBoth = insertOnEntry(withFix, 'test-recheck', base);
+        expect(withFix.find((i) => i.id === 'test-fix')?.label).toBe('B2');
+        expect(withBoth.find((i) => i.id === 'test-fix')?.label).toBe('B2');
+        expect(withBoth.find((i) => i.id === 'test-recheck')?.label).toBe('B3');
+        // Every originally published label survives both insertions.
+        for (const before of plan) {
+            expect(withBoth.find((i) => i.id === before.id)?.label).toBe(before.label);
+        }
+    });
 });
 
 describe('validatePhaseTable (1104 AC3)', () => {

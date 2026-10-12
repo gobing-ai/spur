@@ -5,8 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getEnvVars } from '@gobing-ai/spur-config';
 import { loadWorkflowDefFromText } from '@gobing-ai/ts-dual-workflow-engine';
-import { evaluateWrapupRoute, type RouteInput, safetyFloorHolds } from '../../../../config/proportional-route-table';
 import { computeDefinitionDigest } from '../../src/workflow/composition-baseline';
+import { evaluateWrapupRoute, type RouteInput, safetyFloorHolds } from '../fixtures/proportional-route-table';
 
 const REPO_ROOT = join(import.meta.dir, '../../../../');
 const WORKFLOWS_DIR = join(REPO_ROOT, 'config', 'workflows');
