@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+- project-layer `feature-lifecycle.yaml` overrides must be re-synced to gain the `deprecated` edges
+  (ADR-136); until then the graph refuses `→ deprecated` as an undeclared edge. Source of truth:
+  `config/workflows/feature-lifecycle.yaml`.
+
 ## [0.4.2] - 2026-10-11
 
 ### Added

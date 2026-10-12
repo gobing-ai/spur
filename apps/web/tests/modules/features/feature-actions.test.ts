@@ -17,7 +17,29 @@ describe('feature-actions constants', () => {
     test('defines expected status actions', () => {
         expect(FEATURE_STATUS_ACTIONS.backlog).toContain('brainstorm');
         expect(FEATURE_STATUS_ACTIONS.active).toContain('add-task');
-        expect(FEATURE_STATUS_ACTIONS.done).toEqual([]);
+        expect(FEATURE_STATUS_ACTIONS.done).toEqual(['deprecate']);
+    });
+
+    test('offers deprecate from every non-terminal status and undeprecate/cancel from deprecated (1181 R3)', () => {
+        for (const status of ['backlog', 'active', 'verifying', 'blocked', 'done']) {
+            expect(FEATURE_STATUS_ACTIONS[status]).toContain('deprecate');
+        }
+        expect(FEATURE_STATUS_ACTIONS.deprecated).toEqual(['undeprecate', 'cancel']);
+        expect(FEATURE_STATUS_ACTIONS.cancelled).toEqual([]);
+    });
+
+    test('labels and tiers the deprecate pair (1181 R3)', () => {
+        expect(FEATURE_ACTION_LABELS.deprecate).toBe('Deprecate');
+        expect(FEATURE_ACTION_LABELS.undeprecate).toBe('Un-deprecate');
+        expect(FEATURE_ACTION_TIER.deprecate).toBe('hazard');
+        expect(FEATURE_ACTION_TIER.undeprecate).toBe('primary');
+    });
+
+    test('marks both deprecate actions as FSM transitions with their targets (1181 R3)', () => {
+        expect(FSM_ACTIONS.deprecate).toBe(true);
+        expect(FSM_ACTIONS.undeprecate).toBe(true);
+        expect(FSM_TRANSITION_TARGET.deprecate).toBe('deprecated');
+        expect(FSM_TRANSITION_TARGET.undeprecate).toBe('active');
     });
 
     test('defines labels for each action', () => {
@@ -110,11 +132,11 @@ describe('feature action group — FSM legality floor (0351 matrix invariant)', 
     });
 
     test('terminal statuses surface no FSM action buttons (no egress from terminal)', () => {
-        // `done` has no outbound transitions in the YAML; `cancelled` is declared terminal.
-        // Both must surface zero FSM buttons — the matrix's "terminal gets no FSM buttons" rule.
-        const terminalOrDone = [...TERMINAL_STATUSES];
-        if (!terminalOrDone.includes('done')) terminalOrDone.push('done');
-        for (const status of terminalOrDone) {
+        // `cancelled` is the only declared terminal status and has no outbound transitions
+        // in the YAML, so it must surface zero FSM buttons — the matrix's "terminal gets no
+        // FSM buttons" rule. `done` is deliberately absent from terminalStates (ADR-136):
+        // 1181 adds `done → deprecated`, so `done` legitimately surfaces the deprecate button.
+        for (const status of TERMINAL_STATUSES) {
             const surfaced = (FEATURE_STATUS_ACTIONS[status] ?? []).filter((a) => FSM_ACTIONS[a]);
             expect(surfaced).toEqual([]);
         }

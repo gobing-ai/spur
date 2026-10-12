@@ -200,6 +200,19 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
                     context.setExitCode(1);
                     return;
                 }
+                // 1180 R5: `deprecated` has no forward path entry, so the loop below would
+                // stop with a generic message. Refuse up front with the un-deprecate hint
+                // instead, before any transition.
+                if (initial.status === 'deprecated') {
+                    writeJsonError(
+                        context.output,
+                        options,
+                        `${id} is deprecated; un-deprecate first: spur feature update ${id} active`,
+                        'GUARD_DENIED',
+                    );
+                    context.setExitCode(1);
+                    return;
+                }
                 let current = initial.status;
                 if (current === target) {
                     if (options.json) {

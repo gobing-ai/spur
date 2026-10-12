@@ -4,6 +4,7 @@ import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { OpenAPIHandler } from '@orpc/openapi/fetch';
 import { Hono } from 'hono';
 import type { ServerContext } from './context';
+import { isDomainErrorApiCode, toDomainORPCError } from './middleware/error-handler';
 import { mountMiddleware } from './middleware/pipeline';
 import { registerModules } from './modules/registry';
 import { generateOpenApiSpec } from './openapi';
@@ -37,7 +38,31 @@ export function createApp(appRt?: ApplicationRuntime, opts?: { fs?: FileSystem; 
 
     // ── oRPC handler for /api/* ──
     const router = createRouter(ctx);
-    const oapiHandler = new OpenAPIHandler(router);
+    const oapiHandler = new OpenAPIHandler(router, {
+        // oRPC serializes procedure errors itself, so `globalErrorHandler` never
+        // sees them. Carry the typed domain errors to the same documented
+        // status + `{ ok: false, error }` envelope the Hono path emits (R4/1137).
+        clientInterceptors: [
+            async ({ next }) => {
+                try {
+                    return await next();
+                } catch (err) {
+                    throw toDomainORPCError(err) ?? err;
+                }
+            },
+        ],
+        customErrorResponseBodyEncoder: (error) => {
+            if (!isDomainErrorApiCode(error.code)) return undefined;
+            return {
+                ok: false,
+                error: {
+                    code: error.code,
+                    message: error.message,
+                    ...(error.data !== undefined ? { details: error.data } : {}),
+                },
+            };
+        },
+    });
     app.use('/api/*', async (c, next) => {
         if (ctx) c.set('ctx', ctx);
         const { matched, response } = await oapiHandler.handle(c.req.raw, {

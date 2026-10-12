@@ -437,7 +437,7 @@ describe('domain-type purity', () => {
     });
 
     test('FEATURE_STATUSES enum values are valid in feature list schema', () => {
-        const statuses = ['backlog', 'active', 'verifying', 'blocked', 'done', 'cancelled'] as const;
+        const statuses = ['backlog', 'active', 'verifying', 'blocked', 'done', 'cancelled', 'deprecated'] as const;
         for (const status of statuses) {
             const result = featureListResponseSchema.parse({
                 ok: true,
@@ -445,6 +445,15 @@ describe('domain-type purity', () => {
             });
             expect(result.data[0]?.status).toBe(status);
         }
+    });
+
+    test('1179 R4: `deprecated` round-trips through the feature transition schemas (no contract edit)', () => {
+        // The enum flows from FEATURE_STATUSES into every contract site, so the
+        // transition input/output accept `deprecated` verbatim with no local edit.
+        const input = featureTransitionInputSchema.parse({ id: 'A', toStatus: 'deprecated' });
+        expect(input.toStatus).toBe('deprecated');
+        const output = featureTransitionResponseSchema.parse({ ok: true, data: { id: 'A', status: 'deprecated' } });
+        expect(output.data.status).toBe('deprecated');
     });
 
     test('feature id respects FEATURE_ID_PATTERN from spur-domain', () => {

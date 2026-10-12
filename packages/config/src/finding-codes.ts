@@ -43,6 +43,7 @@ export const ALL_FINDING_CODES = [
     'L4.design-placeholder',
     'L4.feature-not-found',
     'L4.feature-terminal',
+    'L4.feature-deprecated',
     'L4.missing-feature-id',
     'L4.parent-not-found',
     'L4.dependency-not-found',
@@ -136,6 +137,10 @@ export const FINDING_CODES = {
     L4_DESIGN_PLACEHOLDER: 'L4.design-placeholder',
     L4_FEATURE_NOT_FOUND: 'L4.feature-not-found',
     L4_FEATURE_TERMINAL: 'L4.feature-terminal',
+    // 1180 R2: `deprecated` is non-terminal, so L4.feature-terminal never fires for it;
+    // live work under a frozen feature is surfaced as this warning instead. `--strict`
+    // elevates it per existing policy.
+    L4_FEATURE_DEPRECATED: 'L4.feature-deprecated',
     L4_MISSING_FEATURE_ID: 'L4.missing-feature-id',
     L4_PARENT_NOT_FOUND: 'L4.parent-not-found',
     L4_DEPENDENCY_NOT_FOUND: 'L4.dependency-not-found',

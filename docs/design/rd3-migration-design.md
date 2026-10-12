@@ -135,7 +135,7 @@ Frontmatter schema (`featureFrontmatterSchema`):
 | `schema_version` | literal `1` | ✔ | Same evolution mechanism as tasks. |
 | `id` | feature ID (`^[A-Z][1-9]*$`) | ✔ | Position-encoding hierarchical ID (§2.4, DD-14); the parent is derived by dropping the last character — no `parent_id` field exists. |
 | `name` | string | ✔ | |
-| `status` | `FeatureStatus` | ✔ | `backlog \| active \| verifying \| blocked \| done \| cancelled` (§2.3, DD-13). |
+| `status` | `FeatureStatus` | ✔ | `backlog \| active \| verifying \| blocked \| done \| cancelled \| deprecated` (§2.3, DD-13, ADR-136). |
 | `priority` | `P0..P3` | ✔ | The P0 feature in `active`/`verifying` is the project goal (B09). |
 | `tags` | string[] | — | |
 | `created_at` / `updated_at` | ISO 8601 | ✔ | Write-service-owned, same as tasks. |
@@ -165,13 +165,17 @@ warning-first; `testing → done` runs `task check` with the hard core (AC forma
 `file:line`, Review table) plus Testing-evidence presence. `done → wip` (reopen) is allowed with
 a warning + mandatory History entry; `cancelled` is terminal.
 
-**FeatureStatus:** `backlog · active · verifying · blocked · done · cancelled` (DD-13)
+**FeatureStatus:** `backlog · active · verifying · blocked · done · cancelled · deprecated` (DD-13,
+ADR-136)
 
 ```
 backlog ──► active ──► verifying ──► done        blocked ◄─► active
               ▲             │
               └── rework ◄──┘
    any non-terminal ──► cancelled (terminal)
+
+   backlog · active · verifying · blocked · done ──► deprecated   (frozen, retained — ADR-136)
+   deprecated ──► active (un-deprecate)  ·  deprecated ──► cancelled (removed)
 ```
 
 `verifying` is the state that makes **feature verification work derivable** — listable

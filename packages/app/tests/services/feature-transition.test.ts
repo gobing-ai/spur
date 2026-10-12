@@ -312,3 +312,64 @@ describe('1137 R2 — transitionFeatureGuarded', () => {
         }
     });
 });
+
+// Task 1179 R2/R3 — the `deprecated` state is reached from every entry state and
+// leaves only by un-deprecation or removal. The graph owns legality (ADR-135);
+// no edge here is special-cased in the transition service.
+describe('1179 R3 — deprecated state edges', () => {
+    for (const entry of ['backlog', 'active', 'verifying', 'blocked', 'done']) {
+        test(`R3: ${entry} → deprecated is a declared always edge and appends one History line`, async () => {
+            const { featFile, deps, cleanup } = setup(entry);
+            try {
+                const result = await transitionFeatureGuarded(deps, { id: 'F9', to: 'deprecated' });
+                expect(result.fromStatus).toBe(entry);
+                expect(result.toStatus).toBe('deprecated');
+                const after = readFileSync(featFile, 'utf8');
+                expect(after).toContain('status: deprecated');
+                expect(after.split('\n').filter((l) => new RegExp(`${entry} → deprecated`).test(l))).toHaveLength(1);
+            } finally {
+                cleanup();
+            }
+        });
+    }
+
+    test('R3: deprecated → active (un-deprecate) succeeds with its History line', async () => {
+        const { featFile, deps, cleanup } = setup('deprecated');
+        try {
+            const result = await transitionFeatureGuarded(deps, { id: 'F9', to: 'active' });
+            expect(result.toStatus).toBe('active');
+            const after = readFileSync(featFile, 'utf8');
+            expect(after).toContain('status: active');
+            expect(after.split('\n').filter((l) => /deprecated → active/.test(l))).toHaveLength(1);
+        } finally {
+            cleanup();
+        }
+    });
+
+    test('R3: deprecated → cancelled (removal) is a declared always edge', async () => {
+        const { featFile, deps, cleanup } = setup('deprecated');
+        try {
+            const result = await transitionFeatureGuarded(deps, { id: 'F9', to: 'cancelled' });
+            expect(result.toStatus).toBe('cancelled');
+            const after = readFileSync(featFile, 'utf8');
+            expect(after).toContain('status: cancelled');
+            expect(after.split('\n').filter((l) => /deprecated → cancelled/.test(l))).toHaveLength(1);
+        } finally {
+            cleanup();
+        }
+    });
+
+    test('R3/AC2: deprecated → done is an undeclared edge, refused, and writes nothing', async () => {
+        const { featFile, deps, cleanup } = setup('deprecated');
+        try {
+            const before = readFileSync(featFile, 'utf8');
+            await expect(transitionFeatureGuarded(deps, { id: 'F9', to: 'done' })).rejects.toThrow(GuardDeniedError);
+            await expect(transitionFeatureGuarded(deps, { id: 'F9', to: 'done' })).rejects.toThrow(
+                /undeclared edge deprecated → done/,
+            );
+            expect(readFileSync(featFile, 'utf8')).toBe(before);
+        } finally {
+            cleanup();
+        }
+    });
+});

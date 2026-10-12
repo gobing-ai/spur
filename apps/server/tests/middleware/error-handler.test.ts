@@ -10,7 +10,7 @@ import { ConflictError, NotFoundError, ValidationError } from '@gobing-ai/ts-uti
 import { Hono } from 'hono';
 import { createServerContext } from '../../src/context';
 import { GuardDeniedError, LockTimeoutError } from '../../src/errors';
-import { globalErrorHandler } from '../../src/middleware/error-handler';
+import { globalErrorHandler, isDomainErrorApiCode, toDomainORPCError } from '../../src/middleware/error-handler';
 import { mockRuntime } from './helpers';
 
 function app() {
@@ -314,5 +314,52 @@ describe('globalErrorHandler', () => {
         const body = await json(res);
         expect(body.ok).toBe(false);
         expect(body.error.code).toBe('NOT_FOUND');
+    });
+});
+
+/**
+ * The `/api/*` oRPC path serializes procedure errors itself, so these are the
+ * mapping `globalErrorHandler` would have produced, carried onto the transport
+ * error the OpenAPI handler encodes (task 1181 R4).
+ */
+describe('toDomainORPCError', () => {
+    test('GuardDeniedError → 409 GUARD_DENIED', () => {
+        const error = toDomainORPCError(new GuardDeniedError('undeclared edge deprecated → done'));
+        expect(error?.status).toBe(409);
+        expect(error?.code).toBe('GUARD_DENIED');
+        expect(error?.message).toMatch(/undeclared edge deprecated → done/);
+    });
+
+    test('WbsCollisionError → 409 WBS_COLLISION with the collision details', () => {
+        const error = toDomainORPCError(
+            new WbsCollisionError('0150', '/corpus/tasks/0150_x.md', '/corpus/tasks/0150_y.md'),
+        );
+        expect(error?.status).toBe(409);
+        expect(error?.code).toBe('WBS_COLLISION');
+        expect(error?.data).toMatchObject({
+            wbs: '0150',
+            existingPath: '/corpus/tasks/0150_x.md',
+            attemptedPath: '/corpus/tasks/0150_y.md',
+        });
+    });
+
+    test('LockTimeoutError → 503 LOCK_TIMEOUT', () => {
+        const error = toDomainORPCError(new LockTimeoutError('Write lock timed out'));
+        expect(error?.status).toBe(503);
+        expect(error?.code).toBe('LOCK_TIMEOUT');
+    });
+
+    test('untyped errors are left to oRPC default handling', () => {
+        expect(toDomainORPCError(new Error('Lifecycle transition denied for task 0001'))).toBeUndefined();
+        expect(toDomainORPCError(new NotFoundError('Task 0001 not found'))).toBeUndefined();
+    });
+
+    test('isDomainErrorApiCode admits only the re-shaped codes', () => {
+        for (const code of ['GUARD_DENIED', 'WBS_COLLISION', 'LOCK_TIMEOUT']) {
+            expect(isDomainErrorApiCode(code)).toBe(true);
+        }
+        for (const code of ['INTERNAL_ERROR', 'NOT_FOUND', 'CONFLICT']) {
+            expect(isDomainErrorApiCode(code)).toBe(false);
+        }
     });
 });

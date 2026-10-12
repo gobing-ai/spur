@@ -146,12 +146,13 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
         // ('8' since 1147 added those checks, '7' since 1037 added the
         // doc-tripwire hop, '6' since 0986 added the learnings shape gate, '5' since 0944 added
         // the drift probe + mode projection and moved the route-reason writer behind the
-        // wrapup-steps locator; '4' since 0871's repair edge). feature-lifecycle is '2' since
-        // 1147 cleared the inherited nested-run marker at its one nested invocation.
+        // wrapup-steps locator; '4' since 0871's repair edge). feature-lifecycle is '3' since
+        // 1179 added the ADR-136 `deprecated` state and its deprecate/un-deprecate edges ('2'
+        // since 1147 cleared the inherited nested-run marker at its one nested invocation).
         // (feature-dev was pinned '3' until task 0866 retired the definition.)
         const expectedVersions: Record<string, string> = {
             'task-lifecycle': '1',
-            'feature-lifecycle': '2',
+            'feature-lifecycle': '3',
             'wrapup-pipeline': '9',
         };
         for (const [name, version] of Object.entries(expectedVersions)) {

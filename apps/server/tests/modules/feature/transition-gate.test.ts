@@ -20,6 +20,7 @@ import {
 } from '@gobing-ai/spur-app';
 import { ArtifactDao } from '@gobing-ai/spur-domain';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
+import { createApp } from '../../../src/bootstrap';
 import { createServerContext, type ServerContext } from '../../../src/context';
 import { createFeatureHandlers } from '../../../src/modules/feature';
 import { mockRuntime } from '../../middleware/helpers';
@@ -256,6 +257,32 @@ describe('server feature.transition guard (task 1137 R2)', () => {
             const after = readFileSync(featurePath('F2'), 'utf8');
             expect(after).toContain('status: active');
             expect(after.split('\n').filter((l) => /verifying → active/.test(l))).toHaveLength(1);
+        } finally {
+            cleanup();
+        }
+    });
+});
+
+describe('denied transition over the /api oRPC path (task 1181 R4)', () => {
+    test('an undeclared edge is refused as 409 GUARD_DENIED, not a generic 500', async () => {
+        const { ctx, featurePath, cleanup } = makeCtx({ F9: 'deprecated' });
+        try {
+            // `/api/*` is served by oRPC's OpenAPIHandler, which serializes
+            // procedure errors itself — the denial must still reach the client
+            // as the documented status + envelope the Board's error path reads.
+            const app = createApp(undefined, { ctx });
+            const res = await app.request('/api/features/F9/status', {
+                method: 'PATCH',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ toStatus: 'done' }),
+            });
+            expect(res.status).toBe(409);
+            const body = (await res.json()) as { ok: boolean; error: { code: string; message: string } };
+            expect(body.ok).toBe(false);
+            expect(body.error.code).toBe('GUARD_DENIED');
+            expect(body.error.message).toMatch(/undeclared edge deprecated → done/);
+            // The refused transition wrote nothing.
+            expect(readFileSync(featurePath('F9'), 'utf8')).toContain('status: deprecated');
         } finally {
             cleanup();
         }

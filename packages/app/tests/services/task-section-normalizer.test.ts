@@ -10,7 +10,7 @@ import { FeatureService } from '../../src/services/feature-service';
 import { PlanningWriteService } from '../../src/services/planning-write-service';
 import type { SectionMatrix } from '../../src/services/task-check';
 import { normalizeTaskSection } from '../../src/services/task-section-normalizer';
-import { featuresDirFor, TaskService } from '../../src/services/task-service';
+import { featuresDirFor, ParentFeatureStatusError, TaskService } from '../../src/services/task-service';
 
 const MATRIX: SectionMatrix = {
     variants: {
@@ -342,6 +342,103 @@ describe('parent-status link guard', () => {
     });
 });
 
+describe('1180 R1 — deprecated link guard', () => {
+    const seed = (statuses: Record<string, string>) => {
+        const root = mkdtempSync(join(tmpdir(), 'spur-1180-guard-'));
+        const featuresDir = join(root, 'features');
+        const tasksDir = join(root, 'tasks');
+        mkdirSync(featuresDir, { recursive: true });
+        mkdirSync(tasksDir, { recursive: true });
+        const fs = createNodeFileSystem(root);
+        for (const [id, status] of Object.entries(statuses)) {
+            writeFileSync(join(featuresDir, `${id}_feature.md`), featureFile(id, `Feature ${id}`, status));
+        }
+        return {
+            root,
+            featuresDir,
+            tasksDir,
+            svc: new TaskService({
+                fs,
+                tasksDir,
+                featuresDir,
+                writeService: new PlanningWriteService({ fs }),
+                sectionMatrix: MATRIX,
+            }),
+            statusOf: (id: string) => {
+                const raw = readFileSync(join(featuresDir, `${id}_feature.md`), 'utf8');
+                return /status:\s*(\S+)/.exec(raw)?.[1];
+            },
+        };
+    };
+
+    test('R1: create under a deprecated parent is refused with the frozen message and writes nothing', async () => {
+        const env = seed({ A: 'deprecated', A1: 'active' });
+        try {
+            let err: Error | undefined;
+            try {
+                await env.svc.create({ title: 'probe', featureId: 'A', dedupeWithinSec: null });
+            } catch (e) {
+                err = e as Error;
+            }
+            expect(err?.message).toBe(
+                'parent-feature-status: feature A is deprecated (frozen); new tasks cannot link to it. ' +
+                    'Run removal work under its own feature, or un-deprecate: spur feature update A active',
+            );
+            expect(err instanceof ParentFeatureStatusError).toBe(true);
+            expect(readdirSync(env.tasksDir)).toHaveLength(0);
+            expect(env.statusOf('A')).toBe('deprecated');
+        } finally {
+            rmSync(env.root, { recursive: true, force: true });
+        }
+    });
+
+    test('R1: --no-reopen does not bypass the deprecated refusal (the flag only governs verifying)', async () => {
+        const env = seed({ A: 'deprecated' });
+        try {
+            await expect(
+                env.svc.create({ title: 'probe', featureId: 'A', noReopen: true, dedupeWithinSec: null }),
+            ).rejects.toThrow(/is deprecated \(frozen\)/);
+            expect(readdirSync(env.tasksDir)).toHaveLength(0);
+            expect(env.statusOf('A')).toBe('deprecated');
+        } finally {
+            rmSync(env.root, { recursive: true, force: true });
+        }
+    });
+
+    test('R1: update --feature refuses a deprecated parent and leaves the task unlinked', async () => {
+        const env = seed({ A: 'deprecated' });
+        try {
+            const created = await env.svc.create({ title: 'orphan', dedupeWithinSec: null });
+            await expect(env.svc.updateField(created.ref.id, 'feature_id', 'A')).rejects.toThrow(
+                /is deprecated \(frozen\)/,
+            );
+            const raw = readFileSync(created.ref.filePath, 'utf8');
+            expect(raw).not.toContain('feature_id: A');
+        } finally {
+            rmSync(env.root, { recursive: true, force: true });
+        }
+    });
+
+    test('R1: batch-create rejects the whole batch, writes no task and does not reopen the parent', async () => {
+        const env = seed({ A: 'deprecated' });
+        try {
+            const batchFile = join(env.root, 'batch.json');
+            writeFileSync(
+                batchFile,
+                JSON.stringify([
+                    { name: 'first', feature_id: 'A' },
+                    { name: 'second', feature_id: 'A' },
+                ]),
+            );
+            await expect(env.svc.batchCreate(batchFile)).rejects.toThrow(/is deprecated \(frozen\)/);
+            expect(readdirSync(env.tasksDir)).toHaveLength(0);
+            expect(env.statusOf('A')).toBe('deprecated');
+        } finally {
+            rmSync(env.root, { recursive: true, force: true });
+        }
+    });
+});
+
 describe('review P4 (direct fix) — the report matches what was written', () => {
     test('a repeat gherkin-AC write reports no ac-altitude normalization', async () => {
         const root = mkdtempSync(join(tmpdir(), 'spur-1132-idem-'));
@@ -439,6 +536,59 @@ describe('feature check --fix feature-reopen', () => {
                 },
             });
             expect(result.repairs?.some((r) => r.kind === 'feature-reopen')).toBeFalsy();
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+});
+
+// 1180 R4/lens — `check --fix` must leave a deprecated feature frozen. The reopen repair
+// is gated to `verifying`/`done`, so a deprecated feature with a live task is untouched
+// and the transition port is never called.
+describe('1180 R4 — feature check --fix leaves a deprecated feature frozen', () => {
+    test('a deprecated feature with a linked live task is not reopened', async () => {
+        const root = mkdtempSync(join(tmpdir(), 'spur-1180-fix-'));
+        try {
+            const featuresDir = join(root, 'features');
+            const tasksDir = join(root, 'tasks');
+            mkdirSync(featuresDir, { recursive: true });
+            mkdirSync(tasksDir, { recursive: true });
+            const featFile = join(featuresDir, 'A_probe.md');
+            writeFileSync(featFile, featureFile('A', 'Probe', 'deprecated'));
+            writeFileSync(
+                join(tasksDir, '0900_probe.md'),
+                [
+                    '---',
+                    'schema_version: 1',
+                    'wbs: "0900"',
+                    'name: probe',
+                    'status: todo',
+                    'feature_id: A',
+                    'variant: standard',
+                    '---',
+                    '# 0900. probe',
+                    '## Background',
+                    'b',
+                    '## Acceptance Criteria',
+                    'ac',
+                    '## Design',
+                    'd',
+                    '## Plan',
+                    'p',
+                ].join('\n'),
+            );
+            const fs = createNodeFileSystem(root);
+            const svc = new FeatureCheckService(fs);
+            const result = await svc.check(featFile, 'A', {
+                featuresDir,
+                tasksDirs: [tasksDir],
+                fix: true,
+                transitionPort: () => {
+                    throw new Error('a deprecated feature must never be reopened');
+                },
+            });
+            expect(result.repairs?.some((r) => r.kind === 'feature-reopen')).toBeFalsy();
+            expect(readFileSync(featFile, 'utf8')).toContain('status: deprecated');
         } finally {
             rmSync(root, { recursive: true, force: true });
         }

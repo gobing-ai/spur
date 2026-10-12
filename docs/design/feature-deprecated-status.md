@@ -1,9 +1,9 @@
 ---
 kind: design
 title: Feature `deprecated` status — frozen-but-retained lifecycle state
-status: proposed
+status: current
 created_at: 2026-10-11
-updated_at: 2026-10-11
+updated_at: 2026-10-12
 related: [F42, ADR-136, ADR-135, DD-13]
 tags: [feature, lifecycle, status, planning]
 ---
@@ -20,7 +20,7 @@ abandoned; `done` invites follow-up tasks through the reopen rule. Neither tells
 Scope (F42): add `deprecated` as a canonical non-terminal `FeatureStatus`, wire it through the
 lifecycle graph, freeze guards, checks, derivation, CLI, Board, skills and docs. Out of scope:
 relabelling existing features, a feature delete verb, an override flag, and a task-level
-`deprecated` status. This document is **proposed**; §3 lists the surfaces as they must change.
+`deprecated` status. F42 and ADR-136 are shipped; §3 records the surfaces as they landed.
 
 ## 2. Context and constraints
 
@@ -76,13 +76,15 @@ refused by the graph (ADR-135). `cancelled → deprecated` is not declared; canc
 ### 4.2 Guards and findings
 
 - **Link guard (S8):** `spur task create|update --feature F|batch-create` with a deprecated parent
-  exits non-zero, writes nothing, names the status and up to three `active` sibling ids. Batch-create
-  rejects the whole batch in its phase-1 parent check.
+  exits non-zero, writes nothing, and names the un-deprecate command; no sibling hint (that hint
+  belongs to the `done`/`cancelled` refusal). Batch-create rejects the whole batch in its phase-1
+  parent check.
 - **`L4.feature-deprecated` (S9):** warning, not error — existing live tasks are surfaced, not blocked;
   `--strict` elevates it as usual.
 - **Section-write warning (S6):** `warnings[]` gains `Feature <id> is deprecated (frozen); change it
   only as part of removal`. Exit code 0.
-- **`advance` (S11):** exit 1 with `Feature <id> is deprecated; run spur feature update <id> active first`.
+- **`advance` (S11):** exit 1 with `<id> is deprecated; un-deprecate first: spur feature update <id>
+  active`.
 - **Derivation (S5/S12):** `sync`, `refresh` and `check --fix` never propose a status for a
   deprecated feature.
 - **next-feature (S15):** deprecated features are never candidates.

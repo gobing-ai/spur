@@ -3,7 +3,7 @@ kind: design
 title: "Task creation and implementation readiness"
 status: implemented
 created_at: 2026-09-06
-updated_at: 2026-10-08
+updated_at: 2026-10-12
 related: [F21]
 tags: [contract, F21, planning]
 adr: ADR-109
@@ -130,14 +130,15 @@ get the same guard):
 | Parent status | Outcome |
 | --- | --- |
 | `done` / `cancelled` | Rejected — structured error naming the status and up to three `active` siblings in the same ID group; no task file is written |
+| `deprecated` | Rejected — frozen (ADR-136); the structured error names the un-deprecate command instead of a sibling hint, and no task file is written. Checked before the `verifying` branch, so `--no-reopen` cannot bypass it |
 | `verifying` | Reopened to `active` through the existing guarded feature transition (never a raw frontmatter write); result carries `featureReopened: {id, from: "verifying", to: "active"}` |
 | anything else | Link proceeds unchanged |
 
 **Flag decision — `--no-reopen` (operator-consented, 2026-10-08).** R2's authoring left the flag to
 explicit consent under the public-surface rule (`AGENTS.md` § Spur CLI surface). Consent was granted,
 so `--no-reopen` ships on `task create` / `task update`: it restores the pre-1132 behavior by
-accepting a `verifying` parent **without** reopening it, and never bypasses the `done`/`cancelled`
-rejection. Without the flag the reopen is automatic.
+accepting a `verifying` parent **without** reopening it, and never bypasses the `done`/`cancelled`/
+`deprecated` rejection. Without the flag the reopen is automatic.
 
 **`feature check --fix` reopen.** A `verifying` or `done` feature that still has linked live tasks
 (`backlog|todo|wip|testing|blocked`) is reopened to `active` and reported as repair kind
