@@ -3,7 +3,7 @@ kind: design
 title: Decision observability and staged workflow adoption
 status: accepted
 created_at: 2026-10-06
-updated_at: 2026-10-07
+updated_at: 2026-10-11
 related: [ADR-134, ADR-125, feature P, feature P1, decision-catalog.md]
 tags: [decision, events, workflow, observability]
 ---
