@@ -5,13 +5,11 @@
  *  `loadInlineApp` seam the setup facade uses. It is a SEPARATE script from `inline-run-setup.ts`
  *  because it is a separate operation and the ADR-130 glue budget is per script. */
 import { spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 // Type-only namespace import (erased before bundling; the smoke scanner exempts `import type`).
 import type * as spurApp from '@gobing-ai/spur-app';
 import { getEnvVar } from '../lib/env';
-import { loadInlineApp } from '../lib/inline-run-app';
+import { loadInlineApp, resolveAppEntry } from '../lib/inline-run-app';
 
 // EMBEDDED_SPUR_SCHEMAS is declared by the bundle twin, never exported by the barrel.
 type InlineApp = typeof spurApp & { EMBEDDED_SPUR_SCHEMAS?: ReadonlyMap<string, string> };
@@ -32,24 +30,6 @@ function usage(): never {
 const SAFE_RUN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 /** Resolve the app entry: --spur-bin/SPUR_BIN main module if it proves a repo checkout, else the bundle. */
-function resolveAppEntry(spurBin: string): { entry: string; portable: boolean } {
-    const fallback = fileURLToPath(new URL('../../../apps/cli/src/index.ts', import.meta.url));
-    const candidates = spurBin !== '' ? [spurBin] : [fallback];
-    for (const candidate of candidates) {
-        const tokens = candidate.split(/\s+/).filter(Boolean);
-        // Main module = last path-like token; only a .ts source entry proves a repo checkout.
-        const mainModule = [...tokens].reverse().find((t) => t.endsWith('.ts'));
-        if (mainModule === undefined || !existsSync(mainModule)) continue;
-        const repoRoot = resolve(dirname(mainModule), '..', '..', '..');
-        const appEntry = join(repoRoot, 'packages', 'app', 'src', 'index.ts');
-        if (existsSync(appEntry)) return { entry: appEntry, portable: false };
-    }
-    const entry = fileURLToPath(new URL('../lib/inline-run.generated.mjs', import.meta.url));
-    if (!existsSync(entry)) {
-        throw new Error('inline application bundle is missing — rebuild/install the sp plugin before running inline');
-    }
-    return { entry, portable: true };
-}
 
 async function main(): Promise<void> {
     // The portable Node twin has no workspace imports; the app bundle still uses Spur's Bun runtime.

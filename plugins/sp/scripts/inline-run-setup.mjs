@@ -3,9 +3,7 @@
 
 // plugins/sp/scripts/inline-run-setup.ts
 import { spawnSync } from "child_process";
-import { existsSync as existsSync3 } from "fs";
-import { dirname, join as join3, resolve } from "path";
-import { fileURLToPath } from "url";
+import { fileURLToPath as fileURLToPath2 } from "url";
 
 // plugins/sp/lib/env.ts
 function getEnvVar(name, fallback) {
@@ -14,8 +12,30 @@ function getEnvVar(name, fallback) {
 }
 
 // plugins/sp/lib/inline-run-app.ts
-async function loadInlineApp(spurBin, resolveAppEntry, required) {
-  const { entry, portable } = resolveAppEntry(spurBin);
+import { existsSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+function resolveAppEntry(spurBin) {
+  const fallback = fileURLToPath(new URL("../../../apps/cli/src/index.ts", import.meta.url));
+  const candidates = spurBin !== "" ? [spurBin] : [fallback];
+  for (const candidate of candidates) {
+    const tokens = candidate.split(/\s+/).filter(Boolean);
+    const mainModule = [...tokens].reverse().find((t) => t.endsWith(".ts"));
+    if (mainModule === undefined || !existsSync(mainModule))
+      continue;
+    const repoRoot = resolve(dirname(mainModule), "..", "..", "..");
+    const appEntry = join(repoRoot, "packages", "app", "src", "index.ts");
+    if (existsSync(appEntry))
+      return { entry: appEntry, portable: false };
+  }
+  const entry = fileURLToPath(new URL("./inline-run.generated.mjs", import.meta.url));
+  if (!existsSync(entry)) {
+    throw new Error("inline application bundle is missing — rebuild/install the sp plugin before running inline");
+  }
+  return { entry, portable: true };
+}
+async function loadInlineApp(spurBin, resolveAppEntry2, required) {
+  const { entry, portable } = resolveAppEntry2(spurBin);
   const app = await import(entry);
   const missing = portable ? required.filter((name) => typeof app[name] !== "function") : [];
   if (missing.length > 0) {
@@ -30,13 +50,13 @@ function getEnvVars() {
 }
 
 // plugins/sp/lib/run-summary-core.ts
-import { existsSync as existsSync2, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join as join2 } from "node:path";
+import { existsSync as existsSync3, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join as join3 } from "node:path";
 
 // plugins/sp/lib/transcript.ts
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync as existsSync2, readdirSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join as join2 } from "node:path";
 var SESSION_ID = /^[A-Za-z0-9_-]+$/;
 var OPERATOR_TOOLS = new Set(["AskUserQuestion", "ask_user_question"]);
 var PI_ROLES = new Set(["user", "assistant", "toolResult"]);
@@ -201,14 +221,14 @@ function parseRows(lines) {
   }
   return { rows, skippedLines, format: sniffFormat(rows.map(([r]) => r)) };
 }
-function resolveTranscript(env, projectsRoot = join(homedir(), ".claude", "projects"), override) {
+function resolveTranscript(env, projectsRoot = join2(homedir(), ".claude", "projects"), override) {
   if (override)
-    return existsSync(override) ? { ok: true, path: override } : { ok: false, reason: "no transcript" };
+    return existsSync2(override) ? { ok: true, path: override } : { ok: false, reason: "no transcript" };
   const id = env.CLAUDE_CODE_SESSION_ID;
   if (!id) {
     const piFile = env.PI_SESSION_FILE;
     if (piFile !== undefined && piFile !== "") {
-      return existsSync(piFile) ? { ok: true, path: piFile } : { ok: false, reason: `PI_SESSION_FILE ${piFile} does not exist` };
+      return existsSync2(piFile) ? { ok: true, path: piFile } : { ok: false, reason: `PI_SESSION_FILE ${piFile} does not exist` };
     }
     return {
       ok: false,
@@ -217,11 +237,11 @@ function resolveTranscript(env, projectsRoot = join(homedir(), ".claude", "proje
   }
   if (!SESSION_ID.test(id))
     return { ok: false, reason: "refusing a session id with path characters" };
-  if (!existsSync(projectsRoot))
+  if (!existsSync2(projectsRoot))
     return { ok: false, reason: `no transcript root ${projectsRoot}` };
   for (const dir of readdirSync(projectsRoot)) {
-    const path = join(projectsRoot, dir, `${id}.jsonl`);
-    if (existsSync(path))
+    const path = join2(projectsRoot, dir, `${id}.jsonl`);
+    if (existsSync2(path))
       return { ok: true, path };
   }
   return { ok: false, reason: `no transcript for session ${id}` };
@@ -493,9 +513,9 @@ function renderSummaryMarkdown(summary) {
 }
 function writeCloseSummary(run, opts = {}) {
   const cwd = opts.cwd ?? process.cwd();
-  const runDir = join2(cwd, ".spur", "run");
-  const rel = join2(".spur", "run", `${run.runId}-summary.md`);
-  const abs = join2(cwd, rel);
+  const runDir = join3(cwd, ".spur", "run");
+  const rel = join3(".spur", "run", `${run.runId}-summary.md`);
+  const abs = join3(cwd, rel);
   const na = (reason) => {
     mkdirSync(runDir, { recursive: true });
     writeFileSync(abs, `Execution summary: n/a (${reason})
@@ -516,7 +536,7 @@ function writeCloseSummary(run, opts = {}) {
     mkdirSync(runDir, { recursive: true });
     writeFileSync(abs, `${renderSummaryMarkdown(summary)}
 `);
-    writeFileSync(join2(runDir, `${run.runId}-summary.json`), JSON.stringify({ ...summary, runId: run.runId, startedAt: run.startedAt, completedAt: run.completedAt }, null, 2));
+    writeFileSync(join3(runDir, `${run.runId}-summary.json`), JSON.stringify({ ...summary, runId: run.runId, startedAt: run.startedAt, completedAt: run.completedAt }, null, 2));
     return rel;
   } catch (error) {
     return na(error instanceof Error ? error.message : String(error));
@@ -552,29 +572,10 @@ function refuseUnsafeRunId(runId) {
   console.error("  The run id must be a single safe filename component (alphanumeric/._-, no leading dot, no path separators, interpolation or traversal; same class as the task-pipeline route-reason guard, task 0804 R8). Allocate a fresh run id (uuid or timestamp slug) and retry.");
   process.exit(1);
 }
-function resolveAppEntry(spurBin) {
-  const fallback = fileURLToPath(new URL("../../../apps/cli/src/index.ts", import.meta.url));
-  const candidates = spurBin !== "" ? [spurBin] : [fallback];
-  for (const candidate of candidates) {
-    const tokens = candidate.split(/\s+/).filter(Boolean);
-    const mainModule = [...tokens].reverse().find((t) => t.endsWith(".ts"));
-    if (mainModule === undefined || !existsSync3(mainModule))
-      continue;
-    const repoRoot = resolve(dirname(mainModule), "..", "..", "..");
-    const appEntry = join3(repoRoot, "packages", "app", "src", "index.ts");
-    if (existsSync3(appEntry))
-      return { entry: appEntry, portable: false };
-  }
-  const entry = fileURLToPath(new URL("../lib/inline-run.generated.mjs", import.meta.url));
-  if (!existsSync3(entry)) {
-    throw new Error("inline application bundle is missing \u2014 rebuild/install the sp plugin before running inline");
-  }
-  return { entry, portable: true };
-}
 var SETUP_EXPORTS = ["readInstalledInventory", "runInlineRunSetup", "writeInlineRunOutcome"];
 async function main() {
   if (!process.versions.bun) {
-    const child = spawnSync("bun", [fileURLToPath(import.meta.url), ...process.argv.slice(2)], {
+    const child = spawnSync("bun", [fileURLToPath2(import.meta.url), ...process.argv.slice(2)], {
       stdio: "inherit"
     });
     if (child.error)
@@ -643,7 +644,7 @@ async function main() {
       refuseUnsafeRunId(runId);
     try {
       const { app: app2, portable: portable2 } = await loadInlineApp(spurBin, resolveAppEntry, ["runInlineRunDecide"]);
-      const { app: lib } = await loadInlineApp(spurBin, () => ({ entry: fileURLToPath(new URL("../lib/inline-run.generated.mjs", import.meta.url)), portable: portable2 }), ["resolveDecideDecisionMakerEnabled", "loadSpurConfig"]);
+      const { app: lib } = await loadInlineApp(spurBin, () => ({ entry: fileURLToPath2(new URL("../lib/inline-run.generated.mjs", import.meta.url)), portable: portable2 }), ["resolveDecideDecisionMakerEnabled", "loadSpurConfig"]);
       const loadOpts = portable2 ? { embeddedSchemas: lib.EMBEDDED_SPUR_SCHEMAS } : undefined;
       const [enabled, spurConfig] = await Promise.all([
         lib.resolveDecideDecisionMakerEnabled(process.cwd(), loadOpts),
@@ -699,7 +700,7 @@ async function main() {
     inventory = await app.readInstalledInventory({
       file,
       spurBin,
-      localCli: fileURLToPath(new URL("../../../apps/cli/src/index.ts", import.meta.url))
+      localCli: fileURLToPath2(new URL("../../../apps/cli/src/index.ts", import.meta.url))
     });
   } catch (error) {
     const message = `could not resolve the workflow definition: ${error instanceof Error ? error.message : String(error)}`;

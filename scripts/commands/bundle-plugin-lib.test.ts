@@ -236,3 +236,35 @@ test('inline-run runtime exports and declared names are the same set (task 0972)
     const declared = [...dmts.matchAll(/^export declare (?:const|function) (\w+)/gm)].map((m) => m[1]).sort();
     expect(declared).toEqual(exported);
 });
+
+test('the inline bundle exposes no DB/DAO surface (task 1177 R2)', async () => {
+    // The plugin entries reach persistence through application operations only; the low-level
+    // handles that used to be exported (and that a plugin could have driven directly) are gone
+    // from both the runtime bundle and its declarations.
+    const lib = join(import.meta.dir, '../../plugins/sp/lib');
+    const exported = Object.keys(await import(join(lib, 'inline-run.generated.mjs')));
+    const dmts = readFileSync(join(lib, 'inline-run.generated.d.mts'), 'utf8');
+    for (const retired of ['openInlineRunProjectDb', 'ArtifactDao', 'RunDao']) {
+        expect(exported, `${retired} must not be exported at runtime`).not.toContain(retired);
+        expect(dmts, `${retired} must not be declared`).not.toContain(`declare const ${retired}`);
+    }
+    // The operations that own persistence stay exported, so the removal retired capability only.
+    expect(exported).toContain('runInlineRunSetup');
+    expect(exported).toContain('runFeatureVerification');
+});
+
+test('setup and dispatch share one application-entry resolution (task 1177 R1)', async () => {
+    const setup = readFileSync(join(import.meta.dir, '../../plugins/sp/scripts/inline-run-setup.ts'), 'utf8');
+    const dispatch = readFileSync(join(import.meta.dir, '../../plugins/sp/scripts/inline-run-dispatch.ts'), 'utf8');
+    const loader = readFileSync(join(import.meta.dir, '../../plugins/sp/lib/inline-run-app.ts'), 'utf8');
+    for (const [name, source] of [
+        ['inline-run-setup', setup],
+        ['inline-run-dispatch', dispatch],
+    ] as const) {
+        expect(source, `${name} must not define its own resolver`).not.toContain('function resolveAppEntry');
+        expect(source, `${name} must import the shared resolver`).toContain(
+            "import { loadInlineApp, resolveAppEntry } from '../lib/inline-run-app';",
+        );
+    }
+    expect(loader).toContain('export function resolveAppEntry');
+});

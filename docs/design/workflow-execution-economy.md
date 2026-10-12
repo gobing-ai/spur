@@ -96,6 +96,18 @@ plus the existing embedded schema assets; it contains no second SQL writer or di
 The standard `inline-run-setup.mjs` twin uses Bun for the existing SQLite runtime, without requiring
 workspace packages or repository source files on the installed target.
 
+**Remaining packaging exception (task 1177).** The generated bundles are the exception that keeps a
+bundle-only install working, and it is bounded on purpose:
+`plugins/sp/lib/inline-run.generated.mjs` is the **Bun/SQLite** operation bundle — it exports
+application operations only, and since 1177 it no longer exports the low-level DB/DAO handles
+(`openInlineRunProjectDb`, `ArtifactDao`, `RunDao`), so a plugin entry cannot reach persistence except
+through an operation that owns it. The **Node-pure** bundles stay separate and import nothing
+(`plan-projection.generated.mjs`, which now also carries the admission and triage policy, and
+`step-profile`/`history-anatomy`/`residual-scan`/`quality-gate`): a Node-only caller never loads the
+SQLite runtime. One shared resolver (`plugins/sp/lib/inline-run-app.ts` `resolveAppEntry`) decides
+source-checkout versus staged-bundle loading for setup and dispatch alike. Retiring the exception
+itself needs a separately approved owning-noun transport; it is not implied by any of the above.
+
 For source and installed setup, the selected Spur CLI's existing `workflow show --format todo --json`
 projection owns project/registered/shared resolution. The application service validates the
 projection and re-loads its selected definition under schema validation, checks name and digest,

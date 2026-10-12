@@ -3,13 +3,11 @@
  *  handshake, mode dispatch. Mode bodies live in the bundled app service (`runInlineRun*` exports); the `.mjs`
  *  twin re-enters Bun in `main()` (SQLite) and imports the bundle dynamically, so bare `node` never loads app code. */
 import { spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 // Type-only namespace import (erased before bundling; the smoke scanner exempts `import type`).
 import type * as spurApp from '@gobing-ai/spur-app';
 import { getEnvVar } from '../lib/env';
-import { loadInlineApp } from '../lib/inline-run-app';
+import { loadInlineApp, resolveAppEntry } from '../lib/inline-run-app';
 import { writeCloseSummary } from './run-summary';
 
 // EMBEDDED_SPUR_SCHEMAS: declared by the bundle twin, never exported by the barrel — optional
@@ -47,24 +45,6 @@ function refuseUnsafeRunId(runId: string): never {
 }
 
 /** Resolve the app entry: --spur-bin/SPUR_BIN main module if it proves a repo checkout, else the adjacent bundle. */
-function resolveAppEntry(spurBin: string): { entry: string; portable: boolean } {
-    const fallback = fileURLToPath(new URL('../../../apps/cli/src/index.ts', import.meta.url));
-    const candidates = spurBin !== '' ? [spurBin] : [fallback];
-    for (const candidate of candidates) {
-        const tokens = candidate.split(/\s+/).filter(Boolean);
-        // Main module = last path-like token; only a .ts source entry proves a repo checkout.
-        const mainModule = [...tokens].reverse().find((t) => t.endsWith('.ts'));
-        if (mainModule === undefined || !existsSync(mainModule)) continue;
-        const repoRoot = resolve(dirname(mainModule), '..', '..', '..');
-        const appEntry = join(repoRoot, 'packages', 'app', 'src', 'index.ts');
-        if (existsSync(appEntry)) return { entry: appEntry, portable: false };
-    }
-    const entry = fileURLToPath(new URL('../lib/inline-run.generated.mjs', import.meta.url));
-    if (!existsSync(entry)) {
-        throw new Error('inline application bundle is missing — rebuild/install the sp plugin before running inline');
-    }
-    return { entry, portable: true };
-}
 
 const SETUP_EXPORTS = ['readInstalledInventory', 'runInlineRunSetup', 'writeInlineRunOutcome'] as const;
 

@@ -3,9 +3,7 @@
 
 // plugins/sp/scripts/inline-run-dispatch.ts
 import { spawnSync } from "child_process";
-import { existsSync } from "fs";
-import { dirname, join, resolve } from "path";
-import { fileURLToPath } from "url";
+import { fileURLToPath as fileURLToPath2 } from "url";
 
 // plugins/sp/lib/env.ts
 function getEnvVar(name, fallback) {
@@ -14,8 +12,30 @@ function getEnvVar(name, fallback) {
 }
 
 // plugins/sp/lib/inline-run-app.ts
-async function loadInlineApp(spurBin, resolveAppEntry, required) {
-  const { entry, portable } = resolveAppEntry(spurBin);
+import { existsSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+function resolveAppEntry(spurBin) {
+  const fallback = fileURLToPath(new URL("../../../apps/cli/src/index.ts", import.meta.url));
+  const candidates = spurBin !== "" ? [spurBin] : [fallback];
+  for (const candidate of candidates) {
+    const tokens = candidate.split(/\s+/).filter(Boolean);
+    const mainModule = [...tokens].reverse().find((t) => t.endsWith(".ts"));
+    if (mainModule === undefined || !existsSync(mainModule))
+      continue;
+    const repoRoot = resolve(dirname(mainModule), "..", "..", "..");
+    const appEntry = join(repoRoot, "packages", "app", "src", "index.ts");
+    if (existsSync(appEntry))
+      return { entry: appEntry, portable: false };
+  }
+  const entry = fileURLToPath(new URL("./inline-run.generated.mjs", import.meta.url));
+  if (!existsSync(entry)) {
+    throw new Error("inline application bundle is missing — rebuild/install the sp plugin before running inline");
+  }
+  return { entry, portable: true };
+}
+async function loadInlineApp(spurBin, resolveAppEntry2, required) {
+  const { entry, portable } = resolveAppEntry2(spurBin);
   const app = await import(entry);
   const missing = portable ? required.filter((name) => typeof app[name] !== "function") : [];
   if (missing.length > 0) {
@@ -36,28 +56,9 @@ function usage() {
   process.exit(2);
 }
 var SAFE_RUN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
-function resolveAppEntry(spurBin) {
-  const fallback = fileURLToPath(new URL("../../../apps/cli/src/index.ts", import.meta.url));
-  const candidates = spurBin !== "" ? [spurBin] : [fallback];
-  for (const candidate of candidates) {
-    const tokens = candidate.split(/\s+/).filter(Boolean);
-    const mainModule = [...tokens].reverse().find((t) => t.endsWith(".ts"));
-    if (mainModule === undefined || !existsSync(mainModule))
-      continue;
-    const repoRoot = resolve(dirname(mainModule), "..", "..", "..");
-    const appEntry = join(repoRoot, "packages", "app", "src", "index.ts");
-    if (existsSync(appEntry))
-      return { entry: appEntry, portable: false };
-  }
-  const entry = fileURLToPath(new URL("../lib/inline-run.generated.mjs", import.meta.url));
-  if (!existsSync(entry)) {
-    throw new Error("inline application bundle is missing \u2014 rebuild/install the sp plugin before running inline");
-  }
-  return { entry, portable: true };
-}
 async function main() {
   if (!process.versions.bun) {
-    const child = spawnSync("bun", [fileURLToPath(import.meta.url), ...process.argv.slice(2)], {
+    const child = spawnSync("bun", [fileURLToPath2(import.meta.url), ...process.argv.slice(2)], {
       stdio: "inherit"
     });
     if (child.error)
@@ -113,7 +114,7 @@ async function main() {
   }
   if (decision.trim() === "" || text === "" === (textFile === ""))
     usage();
-  const { app: lib } = await loadInlineApp(spurBin, () => ({ entry: fileURLToPath(new URL("../lib/inline-run.generated.mjs", import.meta.url)), portable }), ["loadSpurConfig"]);
+  const { app: lib } = await loadInlineApp(spurBin, () => ({ entry: fileURLToPath2(new URL("../lib/inline-run.generated.mjs", import.meta.url)), portable }), ["loadSpurConfig"]);
   const spurConfig = await lib.loadSpurConfig(process.cwd(), portable ? { embeddedSchemas: lib.EMBEDDED_SPUR_SCHEMAS } : undefined);
   process.exit(await app.runInlineRunDispatchFailure({
     runId,

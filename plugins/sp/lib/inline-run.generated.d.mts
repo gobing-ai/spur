@@ -4,7 +4,6 @@ export declare const createOrAttachInlineRun: typeof import('@gobing-ai/spur-app
 export declare const inlineRunRecordLogPath: typeof import('@gobing-ai/spur-app').inlineRunRecordLogPath;
 export declare const isInlineRunActionStatus: typeof import('@gobing-ai/spur-app').isInlineRunActionStatus;
 export declare const isInlineRunCloseStatus: typeof import('@gobing-ai/spur-app').isInlineRunCloseStatus;
-export declare const openInlineRunProjectDb: typeof import('@gobing-ai/spur-app').openInlineRunProjectDb;
 export declare const persistWorktreeRuns: typeof import('@gobing-ai/spur-app').persistWorktreeRuns;
 export declare const recordInlineRunAttribution: typeof import('@gobing-ai/spur-app').recordInlineRunAttribution;
 export declare const runInlineRunDispatchFailure: typeof import('@gobing-ai/spur-app').runInlineRunDispatchFailure;
@@ -34,6 +33,4 @@ export declare const validateFeatureVerificationReceipt: typeof import('@gobing-
 export declare const resolveWorkflowDefinition: typeof import('@gobing-ai/spur-app').resolveWorkflowDefinition;
 export declare const resolveDecideDecisionMakerEnabled: typeof import('@gobing-ai/spur-config/loader').resolveDecideDecisionMakerEnabled;
 export declare const loadSpurConfig: typeof import('@gobing-ai/spur-config/loader').loadSpurConfig;
-export declare const ArtifactDao: typeof import('@gobing-ai/spur-domain').ArtifactDao;
-export declare const RunDao: typeof import('@gobing-ai/spur-domain').RunDao;
 export declare const EMBEDDED_SPUR_SCHEMAS: ReadonlyMap<string, string>;

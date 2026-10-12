@@ -792,7 +792,6 @@ const INLINE_RUN_EXPORTS: readonly InlineRunExport[] = [
         'inlineRunRecordLogPath',
         'isInlineRunActionStatus',
         'isInlineRunCloseStatus',
-        'openInlineRunProjectDb',
         'persistWorktreeRuns',
         // Task 1134 R1/R3: the driver's fail-fast hop and its pre-dispatch attribution call
         // their app runners through this facade, so both twins must export them.
@@ -864,11 +863,6 @@ const INLINE_RUN_EXPORTS: readonly InlineRunExport[] = [
         from: 'packages/config/src/loader',
         declare: "export declare const loadSpurConfig: typeof import('@gobing-ai/spur-config/loader').loadSpurConfig;",
     },
-    ...['ArtifactDao', 'RunDao'].map((name) => ({
-        name,
-        from: 'packages/domain/src/dao',
-        declare: `export declare const ${name}: typeof import('@gobing-ai/spur-domain').${name};`,
-    })),
     {
         name: 'EMBEDDED_SPUR_SCHEMAS',
         from: 'apps/cli/src/config/embedded-schemas',
