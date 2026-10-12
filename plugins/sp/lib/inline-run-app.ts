@@ -34,7 +34,7 @@ export function resolveAppEntry(spurBin: string): { entry: string; portable: boo
         const appEntry = join(repoRoot, 'packages', 'app', 'src', 'index.ts');
         if (existsSync(appEntry)) return { entry: appEntry, portable: false };
     }
-    const entry = fileURLToPath(new URL('./inline-run.generated.mjs', import.meta.url));
+    const entry = fileURLToPath(new URL('../lib/inline-run.generated.mjs', import.meta.url));
     if (!existsSync(entry)) {
         throw new Error('inline application bundle is missing — rebuild/install the sp plugin before running inline');
     }

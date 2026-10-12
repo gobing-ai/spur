@@ -28,7 +28,7 @@ function resolveAppEntry(spurBin) {
     if (existsSync(appEntry))
       return { entry: appEntry, portable: false };
   }
-  const entry = fileURLToPath(new URL("./inline-run.generated.mjs", import.meta.url));
+  const entry = fileURLToPath(new URL("../lib/inline-run.generated.mjs", import.meta.url));
   if (!existsSync(entry)) {
     throw new Error("inline application bundle is missing — rebuild/install the sp plugin before running inline");
   }
