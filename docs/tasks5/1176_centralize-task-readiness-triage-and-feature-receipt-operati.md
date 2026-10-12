@@ -4,7 +4,7 @@ name: Centralize task readiness triage and feature receipt operations
 status: wip
 template: feature-impl
 created_at: 2026-10-12T03:34:10.717Z
-updated_at: "2026-10-12T06:07:51.358Z"
+updated_at: "2026-10-12T06:08:42.330Z"
 feature_id: A91
 priority: P1
 tags:
@@ -144,5 +144,28 @@ with in-memory run/artifact backing (receipt lifecycle, ID/path refusals, select
 spawned-command failure, digest mismatch), keep both plugin `feature-verification-steps` suites green,
 and prove the plugin source scan finds no `openInlineRunProjectDb`/`ArtifactDao`/`findFeatureFile`
 ownership. Then run the task-local gate and verify.
-- 2026-10-12T06:07:51.358Z todo → wip (system)
+
+**Blocking finding for R2 (resolve before writing the operation).** The Design says to resolve the
+feature spec "through existing app feature lookup". The existing lookup is `FeatureService.show(id)`
+(`packages/app/src/services/feature-service.ts:325`), and its constructor requires
+`{ fs, writeService, featuresDir, tasksDir }` where `writeService` is a `PlanningWriteService`. No app
+factory composes that service — every current call site builds it from a CLI `CliContext`
+(`apps/cli/src/commands/feature.ts:631`, `apps/cli/src/commands/task.ts:2002`,
+`packages/app/src/services/task-service.ts:794`). So the operation cannot self-compose the lookup, and
+the plugin adapter cannot compose it either without re-opening the composition the task exists to
+remove. Pick one before implementing:
+
+1. add a small app composition helper (e.g. `createFeatureLookup(cwd)` beside the receipt module) that
+   builds `fs` + `PlanningWriteService` + `featuresDirFor(tasksDir)` — a new internal app seam, so it
+   needs the same review the rest of the move gets; or
+2. give `runFeatureVerification` the resolved feature spec as an explicit input (`featurePath` +
+   `featureContent`) and have the *pipeline* pass it, keeping resolution out of the plugin entirely
+   (the workflow already captures `featureSpecPath` at the `test` hop); or
+3. keep resolution in the plugin as an explicitly named packaging exception, which contradicts R2 as
+   written.
+
+Option 2 needs no new seam and matches the existing proof-chain pattern, but changes who calls the
+script (a workflow var instead of a directory scan) — a caller-contract change R1 said to preserve.
+Recommend 1 if a new internal app helper is acceptable, otherwise 2 with the workflow var wired in the
+same commit.
 
