@@ -2,7 +2,7 @@
 doc: 00_ADR
 owns: WHY — lasting architectural choices, context and tradeoffs
 authority: authoritative
-version: 1.68.0
+version: 1.69.0
 owner: Robin Min
 updated_at: 2026-10-11
 read_before: any structural change; before diverging from a decision
@@ -2218,6 +2218,17 @@ owner split this entry established.
 - **Retains:** ADR-113 (layered resolution), ADR-125 (non-pausing, default-on-degrade decide and its
   `workflow.decideDecisionMaker` switch, unchanged until P1), ADR-117 (inline/subprocess parity).
 - **Detail:** [decision catalog](design/decision-catalog.md).
+- **Amendment (2026-10-11 · task 1171 follow-up):** Owning the maker includes owning its process
+  lifetime. A maker backend that holds resources outside the JS heap (today only `laya-local`,
+  whose Python worker stays warm for the client's lifetime) MUST be released at the boundary of the
+  Spur process that resolved it: `DecisionService` builds that client itself through the registry's
+  typed `client` driver option and closes it in `dispose()`, called once from `runCli`; consumers
+  that do not build the client use the upstream seam (`DecisionMaker.dispose()` /
+  `DecisionMakerRegistry.dispose(name?)`). Why: the worker's open pipes keep the event loop alive,
+  so a one-shot command printed its result and then never exited. Rejected: forcing `process.exit`
+  at the CLI entry (discards pending cleanup, e.g. the DB close) and releasing per decision (a local
+  model would reload its weights on every gate). Detail: [decision catalog](design/decision-catalog.md)
+  §3.3, §3.7 and [decision observability](design/decision-observability-and-adoption.md) §6.
 
 ## ADR-135: A Lifecycle Status Write Is Validated by the Graph or Refused
 

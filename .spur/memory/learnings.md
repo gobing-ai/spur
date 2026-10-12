@@ -6058,3 +6058,43 @@ Repair: `docs/design/project-switcher.md:5` `updated_at: 2026-10-05` → `2026-1
   on purpose — do not re-add it.
 
 Skipped: no repository-wide doc audit (§7.1 says routine wrap-up needs affected owners only), and I did not re-verify `docs/help*` prose — the `stop` help summaries ("Stop a project's server") stay true under the narrowed behavior, so I judged them non-drift rather than rewriting them. Risk: if you want `docs/help2/projects.md` to spell out the new refusal semantics, that's a follow-up edit nobody has asked for.
+
+## 1171/1172 follow-up — the `laya-local` block was lifecycle, not a timeout (2026-10-12)
+
+- **The recorded diagnosis was wrong.** Tasks 1169/1171/1172 and the design satellite §6 blamed a
+  missing driver budget. `ts-laya-mlx` already bounds the call (`startupTimeoutMs` 120 s,
+  `requestTimeoutMs` 30 s) and the answer came back in ~1.5 s. The process then hung for ~1 h.
+- **Actual root cause:** `createLayaDriver` keeps a `LayaWorkerClient` warm "for the client's
+  lifetime", exposes no disposal (the returned object is `{ name, ask }`), and `DecisionMaker`/
+  `DecisionMakerRegistry` have no dispose either — so a Python worker's piped stdio kept the event
+  loop alive after the command printed its result. Reproduce with
+  `spur decision run maker-liveness --maker laya-local` and watch the wall clock, not the output:
+  `timeout 60 …` kills it (exit 124) even though the JSON is already on stdout. Killing the
+  `laya_worker.py` child makes the parent exit instantly.
+- **Diagnostic method that found it:** compare `date +%s` around the command (output present, wall
+  time == the timeout) and `ps -Ao pid,ppid,command | grep laya_worker` — a "hang" whose result is
+  printed is a lifecycle leak, not a slow call. `time | head -c` hides this: it exits when the pipe
+  closes, not when the process does.
+- **Fix:** Spur owns the client. `DecisionService` builds it through the registry's typed
+  `driverOptions['laya-local'].client` seam (lazily, so the Apple-Silicon check stays at first ask
+  and `list`/`status` still work on a host that cannot serve the backend) and releases it in
+  `dispose()`; `disposeDecisionServices()` runs once at the CLI process boundary (`runCli`). A
+  disposed service stays usable — the client is rebuilt on the next ask.
+- **Makers are not interchangeable with `dispose`:** `fm-local` spawns one-shot processes per ask and
+  `typesafe`/`clef` are HTTP, so only `laya-local` needs this.
+- **Second, unrelated defect found while verifying (fixed upstream in `ts-libs`, unreleased):** the hub
+  sends `state: null` when every declared parameter is absent (`buildState` returns null when only
+  `instructions` exists), the SDK drops the null field, and the TypeSafe API rejects it with
+  `422 state: Field required`, which the hub maps to `reason: 'error'`. Every *parameterless* catalog
+  decision (`maker-liveness`, `needs-design`, `idea-recommendation`) therefore falls back on the
+  shipped default maker `typesafe` — measured with `state: null` → 422 and `state: ''` → answered.
+  `ts-libs` now applies the null→`''` mapping the laya and fm drivers already used
+  (`typesafe-driver`), together with the `DecisionDriver.dispose()` / `DecisionMaker.dispose()` /
+  `DecisionMakerRegistry.dispose(name?)` seam; this repository sees both after the `^0.5.23` bump.
+  It did not affect HITL gates: those always pass a non-null state (`{actions,node}` / the evidence
+  payload / `gate-evidence`'s prompt+evidence+node).
+- **Test hermeticity gotcha:** `apps/cli/tests/workflow/idea-pipeline-rescue.test.ts` builds an
+  "explicit PATH, no ambient spread" env but omitted `HOME`, so the child's `os.homedir()` fell back
+  to the passwd entry, read the machine's `~/.config/spur/config.yaml`, and let its
+  `decisions.maker: fm-local` decide an asserted maker resolution — the fallback E2E only passed on a
+  machine whose global maker cannot answer. Pin `HOME` in any hermetic config-layering test.

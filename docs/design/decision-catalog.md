@@ -288,6 +288,17 @@ Cloudflare Workers AI backend from `@gobing-ai/ts-decision-clef`, wrapped as
 
 ### Risks and open questions
 
+- **Parameterless decisions on the `typesafe` backend (found 2026-10-11, fixed upstream, bump pending).**
+  The hub sends `state: null` when a decision declares no parameter beside `instructions`, the SDK drops
+  the null field, and TypeSafe answers `422 state: Field required` — which the hub maps to reason
+  `error`, so `maker-liveness`, `needs-design` and `idea-recommendation` silently fell back on the
+  **shipped default maker** (`config/config.global.yaml: decisions.maker: typesafe`). Fixed in
+  `ts-libs` (`typesafe-driver`: the same null→`''` mapping the laya and fm drivers already apply) but
+  not yet released, so this repository keeps the behaviour until the `^0.5.23` catalog bump. HITL gates
+  are unaffected: they always pass a non-null state (`{actions,node}`, the evidence payload, or
+  `gate-evidence`'s prompt+evidence+node). Verify after the bump with
+  `spur decision run needs-design --maker typesafe --json` → `source: model`.
+
 - **Bundle size:** `ts-laya-mlx` and `ts-decision-fm` may pull native or large dependencies into
   the compiled binary. The first implementation task measures `build:bundle` size before and
   after. If the growth is material, load makers lazily behind the switch.

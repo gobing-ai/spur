@@ -354,5 +354,7 @@ decision fallback reproduces today's behavior.
   result printed at 1.4 s, process still running at 150 s, and it exited the instant the worker was
   killed). `DecisionService` now owns the client and releases it at the process boundary, so a
   one-shot command exits normally; the per-driver probe budget stays as the deadline for a call that
-  does not answer. The upstream driver still has no disposal seam, so the process-backed worker is
-  Spur's to close.
+  does not answer. The upstream driver had no disposal seam at the time, so the process-backed worker
+  is Spur's to close until the `ts-libs` release that adds `DecisionDriver.dispose()` /
+  `DecisionMakerRegistry.dispose(name?)` reaches this repository (see
+  [decision catalog](decision-catalog.md) §3.3).
