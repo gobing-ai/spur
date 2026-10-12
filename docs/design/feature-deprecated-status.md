@@ -46,11 +46,11 @@ attach new work to it or advance it. Leaving the state is explicit — un-deprec
 | S2 | Contracts / OpenAPI | `packages/contracts/src/feature.ts:16,32,61,69` | No edit; OpenAPI is built at runtime (`apps/server/src/openapi.ts`), so nothing to regenerate. |
 | S3 | Lifecycle graph | `config/workflows/feature-lifecycle.yaml` (+ generated `apps/cli/config/`) | States + edges in §4.1; `deprecated` stays out of `terminalStates`. |
 | S4 | Shipped graph copy | `apps/cli/config/workflows/feature-lifecycle.yaml` (generated) | Byte-identical to S3 via `build:bundle`; no separate init template exists. |
-| S5 | Status derivation | `packages/app/src/services/feature-service.ts:441,463,470` | `deriveFeatureStatus` returns no proposal for `deprecated` (sticky); not terminal, never reopened. |
-| S6 | Feature writes | `feature-service.ts:225` (`update --section`) | Write lands; append a freeze note to `warnings[]`. |
+| S5 | Status derivation | `packages/app/src/services/feature-service.ts:441,452` | `deriveFeatureStatus` returns `to: 'deprecated'` (reason `Feature is deprecated (frozen)`) before any task rule — sticky; not terminal, never reopened. |
+| S6 | Feature writes | `feature-service.ts:256` (`updateSection`, shared by CLI and server) | Write lands; append a freeze note to `warnings[]`. |
 | S7 | One-active-goal | `feature-service.ts:786`, `feature-check.ts:511` | No change: only `active` counts. |
-| S8 | Task link guard | `packages/app/src/services/task-service.ts:807,817,2040` | Reject `deprecated` parents on create / update `--feature` / batch-create, no reopen, `--no-reopen` irrelevant. |
-| S9 | Task check | `packages/app/src/services/task-check.ts:1110` | New warning `L4.feature-deprecated` for a live task under a deprecated feature. |
+| S8 | Task link guard | `packages/app/src/services/task-service.ts:207,825` (`guardParentFeature`; batch-create phase 1 at `:2054`) | One branch rejects `deprecated` parents on create / update `--feature` / batch-create; no reopen, `--no-reopen` irrelevant. |
+| S9 | Task check | `packages/app/src/services/task-check.ts:1127` (beside `L4_FEATURE_TERMINAL`) | New warning `L4.feature-deprecated` for a live task under a deprecated feature. |
 | S10 | Feature check | `packages/app/src/services/feature-check.ts:239,706,806,821` | No verifying/done probes for `deprecated`; no new errors. |
 | S11 | CLI `advance` | `apps/cli/src/commands/feature.ts:180` | Already stops (no `forwardPath` entry); add the un-deprecate hint. `list --status deprecated` works through the enum. |
 | S12 | `sync` / `refresh` | `feature-service.ts` sync path; `docs/features/INDEX.md` | `sync`: no status change for deprecated. `refresh` is docs-only by contract; INDEX lists it. |
@@ -76,15 +76,17 @@ refused by the graph (ADR-135). `cancelled → deprecated` is not declared; canc
 ### 4.2 Guards and findings
 
 - **Link guard (S8):** `spur task create|update --feature F|batch-create` with a deprecated parent
-  exits non-zero, writes nothing, names the status and up to three `active` sibling ids. Batch-create
-  rejects the whole batch in its phase-1 parent check.
+  exits non-zero, writes nothing, and reads `parent-feature-status: feature <id> is deprecated (frozen);
+  new tasks cannot link to it. Run removal work under its own feature, or un-deprecate: spur feature
+  update <id> active`. Batch-create rejects the whole batch in its phase-1 parent check.
 - **`L4.feature-deprecated` (S9):** warning, not error — existing live tasks are surfaced, not blocked;
   `--strict` elevates it as usual.
 - **Section-write warning (S6):** `warnings[]` gains `Feature <id> is deprecated (frozen); change it
   only as part of removal`. Exit code 0.
-- **`advance` (S11):** exit 1 with `Feature <id> is deprecated; run spur feature update <id> active first`.
-- **Derivation (S5/S12):** `sync`, `refresh` and `check --fix` never propose a status for a
-  deprecated feature.
+- **`advance` (S11):** exit 1 (`GUARD_DENIED` under `--json`) with `<id> is deprecated; un-deprecate first:
+  spur feature update <id> active`.
+- **Derivation (S5/S12):** `deriveFeatureStatus` proposes `deprecated → deprecated`, so `sync`
+  (incl. `--all`, `--force`) and `check --fix` never change it; `refresh` is docs-only.
 - **next-feature (S15):** deprecated features are never candidates.
 
 ### 4.3 Compatibility
