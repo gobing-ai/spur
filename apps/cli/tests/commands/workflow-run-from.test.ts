@@ -374,9 +374,14 @@ transitions:
         expect(readLines('marker.txt')).toEqual([]);
 
         const trace = await runCli(['workflow', 'trace', 'dry-1', '--json'], project);
+        // Assert the spawn outcome before matching its payload: `runCli` returns instead of throwing,
+        // so a killed or failed subprocess would otherwise surface as a bare empty-stdout mismatch
+        // with no cause (observed once under full-suite load, 2026-10-12). Two cold `bun run` starts
+        // per test is also why this needs more than bun's 5s default (same class as line ~193).
+        expect(trace.code, `workflow trace failed: ${trace.stderr}`).toBe(0);
         expect(trace.stdout).toMatch(/"isDryRun":\s*true/);
         expect(trace.stdout).toMatch(/"startState":\s*"s2"/);
-    });
+    }, 20000);
 
     test('AC5: --async --from threads the start state to the worker and marks the plan artifact', async () => {
         const fixture = writeFixture('sm.yaml', SM_FIXTURE);

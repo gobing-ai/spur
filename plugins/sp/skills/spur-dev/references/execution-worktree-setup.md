@@ -180,6 +180,13 @@ main-repo hooks from inside the "isolated" tree. Scripts are skipped only at thi
 a normal clone keeps `prepare`. The worktree still gets a usable dependency tree — the install
 exists so the first `bun test` resolves workspace imports.
 
+**Generated trees are still missing after the install.** A gitignored generated tree does not ride the
+worktree, so any suite comparing the canonical source against its generated copy fails until the
+generator runs. In this repo that is `apps/cli/config/` (from `bun run bundle:config`): without it
+`plugins/sp/tests/command-flag-parity.test.ts` fails on the missing generated pipeline YAML under that
+directory (observed 2026-10-12, A91 batch). Run the generator once after a create-mode install, and
+again after a rebase or merge that touches the canonical workflow sources it is built from.
+
 #### Reuse mode (`--worktree <name>`)
 
 Creation is **skipped entirely**. `$BRANCH` is the resolved worktree's already-checked-out branch; a
@@ -373,6 +380,13 @@ same call, verifies the WT-3 identity, and never relies on a persistent `cd` or 
 > **Forbidden in every driver commit step:** `git add -A` and `git add .`. They stage whatever a
 > concurrent writer happened to leave in the tree — the two incidents this guard exists for are
 > `a94f9f431` and `36f274590` — so a driver stages only through `commit-guard stage`.
+
+> **`stage` takes files, never directories.** A directory argument is refused as `(unchanged since
+> base)` and stages *nothing*, so a task whose diff lives in a moved tree must expand the changed
+> paths (`git status --porcelain` plus the filter for the task's own files) instead of passing
+> `plugins/sp/hooks` or `packages/app/tests/hooks`. Symptom observed on 2026-10-12 (A91 batch): the
+> first commit captured only the pre-staged `git mv`/`git rm` renames and needed an amend to carry
+> the rest of the task.
 
 The FF-only git merge carries only commits — uncommitted writes in the worktree would be left
 behind by the merge and then destroyed by create mode's `git worktree remove`. WT-3b exists so

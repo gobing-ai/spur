@@ -835,6 +835,19 @@ The quality gate's `proofDigest` certifies a specific tree. Two rules protect it
    before a review dispatch is spent. The mismatch routes through the existing tripwire to `failed`;
    there is no new re-certify path.
 
+**A host-driven pass that skips the `test` hop has no digest-bound receipt.** `proofDigest` is
+captured by the `test` state's `proof.fingerprint` action, so hops driven out of band — an operator
+implementing/verifying/recording by hand, or an audit of a task whose gate the host ran directly —
+leave no `.spur/run/<wbs>-check-receipt.json`. The deciding artifacts are then
+`.spur/run/<wbs>-test-gate.status` plus its gate log. Two consequences, in order of preference:
+
+1. **Drive the pipeline** for anything that must be certified: only a digest-bound full receipt
+   satisfies a review/verify/record boundary (`sp-spur-check`), and the `test` hop owns the capture.
+2. **When a host-driven pass is unavoidable, say so in the verdict** — name the status file and gate
+   log as the evidence and grade confidence `MEDIUM`. A `HIGH` claim needs re-runnable evidence from a
+   checked path (the `sp-code-verification` ladder); claiming a receipt that was never written is the
+   failure mode this note exists to prevent (observed across four A91 tasks, 2026-10-12).
+
 **A mismatch names the drifted paths (R5).** At gate entry the pipeline snapshots the non-corpus tree
 state (`git status --porcelain=v1 -uall` plus `git diff --name-only HEAD`, excluding
 `docs/tasks*` / `docs/features*`) into `.spur/run/<run-id>-gate-paths.txt`. On a mismatch the
