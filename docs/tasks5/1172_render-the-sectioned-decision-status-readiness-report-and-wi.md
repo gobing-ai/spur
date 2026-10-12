@@ -4,7 +4,7 @@ name: Render the sectioned decision status readiness report and wire --probe
 status: done
 template: feature-impl
 created_at: 2026-10-11T23:23:17.914Z
-updated_at: "2026-10-12T02:30:24.795Z"
+updated_at: "2026-10-12T02:52:21.747Z"
 feature_id: P11
 
 done_forced: "false"
@@ -185,14 +185,15 @@ this repository is currently in, where the previous output read as healthy.
 
 ### Review
 
-Current audit found three mismatches with the written contract: JSON progress was suppressed, the first line lacked the summary facts, and LAST SEEN discarded the time. The renderer now preserves the full timestamp and puts all summary facts on the first line. Progress identifies its maker and goes to stderr in human and JSON modes; separate-stream CLI assertions prove JSON stdout remains parseable.
+Current audit: PASS. The implementation and regression tests satisfy the renderer and probe contract. The table records defects found against earlier revisions and their verified repairs; a defect repaired before re-verification remains a fixed finding.
 
 | Priority | Dimension | Location | Finding | Disposition |
 | --- | --- | --- | --- | --- |
-| P2 | usability | apps/cli/src/commands/decision.ts | JSON probes suppressed the promised progress channel. | FIXED — named stderr progress in both modes; stdout checked independently. |
-| P3 | contract | apps/cli/src/commands/decision.ts | Header facts occupied a second line and timestamps were truncated to dates. | FIXED — one summary line and complete timestamps; CLI assertions pass. |
+| P2 | usability | apps/cli/src/commands/decision.ts | JSON probes suppressed the promised progress channel in the earlier implementation. | FIXED — named progress goes to stderr in human and JSON modes; separate-stream CLI assertions prove stdout remains parseable. |
+| P3 | contract | apps/cli/src/commands/decision.ts | Header facts occupied a second line and LAST SEEN truncated timestamps to dates in the earlier implementation. | FIXED — one summary line and complete timestamps; CLI assertions pass. |
+| P3 | operator clarity | apps/cli/src/commands/decision.ts | Probe cells exposed raw fallback taxonomy instead of readable reasons. | FIXED — human labels explain no backend, timed out, errored and low confidence; JSON retains the raw reason. CLI tests pin both formats. |
 
-The local table renderer is appropriate for the existing CLI boundary. Additive catalog fields are required by this report and compatibility is checked against the old JSON keys. The prior duplication and additive-field rows did not establish a defect. The probe-only hub's external cancellation limit is documented under task 1171 and the owning satellite.
+The local table renderer fits the existing CLI boundary; another renderer with different columns and layout does not establish a defect requiring shared code. Additive catalog fields are required by the readiness contract, and regression tests preserve the pre-existing JSON keys. These observations are design choices, not unresolved findings. The external driver cancellation limit remains documented under task 1171 and the owning satellite; it does not prevent the promised bounded probe result.
 
 ### References
 

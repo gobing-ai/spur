@@ -488,6 +488,9 @@ describe('spur decision status readiness marks (feature P11)', () => {
         expect(probed.stderr).toMatch(/probing typesafe: [✓✗] .+ · \d+\.\ds/);
         const makerLine = probed.out.split('\n').find((line) => /^[✓✗]\s+typesafe\s/.test(line));
         expect(makerLine).toMatch(/[✓✗] .+ · \d+\.\ds$/);
+        // The cell spells the reason for an operator; the raw taxonomy token stays in --json.
+        expect(makerLine).toMatch(/via (accepted|low confidence|no backend|timed out|errored)/);
+        expect(makerLine).not.toMatch(/via (no-backend|low-confidence|timeout|error)\b/);
         // A probe writes no decision log row: the evidence the report shows cannot be
         // satisfied by the probe that checked it.
         const after = CLEAN_JSON((await main(['decision', 'status', '--json', '--json-envelope'], project)).out);

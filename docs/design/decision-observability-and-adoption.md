@@ -196,7 +196,8 @@ decision".
   no `decision_logs` row: the `recorded` column can never be satisfied by the probe that checks it.
 - Backend fallback results never change the exit code; caller and catalog faults still fail the command.
   Per-maker results stream as `probing <maker>: <outcome>` to stderr, including with `--json`, while the
-  report is built. `--probe` with `--reliability`
+  report is built. The cell spells the reason for an operator (`no backend`, `timed out`, `errored`,
+  `low confidence`); the raw taxonomy value stays on `probes[].reason`. `--probe` with `--reliability`
   is refused as a caller mistake before any maker call.
 
 **JSON.** `--json` stays additive: `ok`, `layers`, `loadErrors`, `duplicateIds`, `registeredMakers`,

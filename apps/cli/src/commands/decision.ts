@@ -449,9 +449,21 @@ function renderDecisionStatus(status: DecisionStatus, readiness: DecisionStatusR
  */
 function renderProbe(probe: DecisionProbeOutcome): string {
     const value = probe.value === null ? '—' : String(probe.value);
-    const outcome = probe.ok ? value : `${value} via ${probe.reason}`;
+    // Human labels rather than the raw taxonomy words: `no-backend` reads as an internal token,
+    // and the cell must tell an operator whether the backend was missing, slow or broken without
+    // a second `--json` run. The raw reason stays on `probes[].reason` for machine consumers.
+    const outcome = probe.ok ? value : `${value} via ${PROBE_REASON_LABELS[probe.reason]}`;
     return `${probe.ok ? '✓' : '✗'} ${outcome} · ${(probe.durationMs / 1000).toFixed(1)}s`;
 }
+
+/** Display spelling of each served reason; the `--json` payload keeps the raw value. */
+const PROBE_REASON_LABELS: Record<DecisionProbeOutcome['reason'], string> = {
+    accepted: 'accepted',
+    'low-confidence': 'low confidence',
+    'no-backend': 'no backend',
+    timeout: 'timed out',
+    error: 'errored',
+};
 
 /** Pad every column to its widest cell, header included. */
 function alignTable(header: readonly string[], rows: readonly (readonly string[])[]): string[] {
