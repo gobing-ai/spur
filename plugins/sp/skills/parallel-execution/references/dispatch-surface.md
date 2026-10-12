@@ -167,7 +167,7 @@ rule at the source, so no per-path shim is needed:
 | `spur agent loop` | `AgentService.run` per drained iteration | Same resolution path as `spur agent run`; inherits its own `SPUR_ROLE` |
 | `spur serve` team supervisor → member | spawns `spur agent loop` | Member inherits the supervisor's `SPUR_ROLE` (recursive by construction) |
 | Native subagent fan-out (this skill's default) | in-session `Task()`/`Skill()` | In-session subagents share the host session; when they themselves dispatch, the host's role is already in the session env — the rule holds at the next `spur agent run` boundary |
-| `plugins/sp/evals/run-eval.ts` | `spawnSync('spur agent run', …)` per scenario | Out of scope: a top-level eval harness, not a fan-out — no dispatcher role exists to inherit; each scenario is an independent top-level run (documented, no shim) |
+| `scripts/commands/skill-eval.ts` | `spawnSync('spur agent run', …)` per scenario | Out of scope: a top-level eval harness, not a fan-out — no dispatcher role exists to inherit; each scenario is an independent top-level run (documented, no shim) |
 
 The inventory is recorded in `docs/04_DESIGN.md` § `spur agent run` envelope (`roleOrigin`).
 Paths that shell out to `spur agent run` without the rule would silently drop or double-attribute

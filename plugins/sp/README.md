@@ -281,8 +281,9 @@ plugins/sp/
 │                                    # env.ts, plus generated *.generated.mjs|.d.mts bundles over packages/app
 ├── scripts/                         # Executable helpers, split from prompts (ADR-031) — batch-preflight.ts + scripts/<skill>/
 │                                    # (daily-summary: daily-summary.ts; dogfood-testing: {detect-pipeline-driving, validate-report}.ts)
-├── tests/                           # Plugin tests — skill-structure.test.ts + hooks/ (guard, context, Pi suites) + per-skill suites
-├── evals/                           # Skill behavioral eval harness (scenarios + judge + run-eval runner)
+├── tests/                           # Plugin tests — skill-structure.test.ts + hooks/ (guard, context, Pi suites)
+│                                    # + evals/ (behavioral eval corpus + judge; see tests/evals/README.md,
+│                                    # runner at scripts/commands/skill-eval.ts) + per-skill suites
 ├── plugin.json                      # Marketplace entry
 └── README.md                        # This file
 ```

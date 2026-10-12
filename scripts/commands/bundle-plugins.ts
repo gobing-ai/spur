@@ -31,7 +31,8 @@ const MARKETPLACE_TARGET = join(REPO_ROOT, 'apps/cli/.claude-plugin');
  *    root suite is `bun test … ./apps/cli … ./scripts`; `bun test` walks the
  *    staged tree and ignores `.gitignore`, so an unpruned test file is
  *    discovered twice — AC7);
- *  - `evals/` (monorepo-only; its sole consumer is the root `eval` script);
+ *  - `evals/` directories (`plugins/sp/tests/evals` after task 1175) — harness fixtures whose
+ *    sole consumer is the root `eval` script;
  *  - OS junk (`.DS_Store`), matching `bundle-config`'s EXCLUDE.
  */
 export const EXCLUDE = /(^|\/)(\.DS_Store|tests|evals)($|\/)|\.test\.ts$/;

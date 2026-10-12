@@ -1639,10 +1639,13 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
 
         // R2: a behavioral eval harness exists with a free (deterministic) and paid (live) tier,
         // documented, with a separate `bun run eval` entry point that is not a *.test.ts file.
-        const evalsDir = join(SKILLS_DIR, '..', 'evals');
-        for (const f of ['judge.ts', 'scenarios.ts', 'run-eval.ts', 'judge.test.ts', 'README.md']) {
+        // R2 (task 1175): the eval corpus and judge live under the plugin test owner; the runner is
+        // repository tooling at scripts/commands/skill-eval.ts.
+        const evalsDir = join(SKILLS_DIR, '..', 'tests', 'evals');
+        for (const f of ['judge.ts', 'scenarios.ts', 'judge.test.ts', 'README.md']) {
             statSync(join(evalsDir, f));
         }
+        statSync(join(REPO_ROOT, 'scripts', 'commands', 'skill-eval.ts'));
         const evalReadme = readFileSync(join(evalsDir, 'README.md'), 'utf8');
         expect(evalReadme.toLowerCase()).toContain('free');
         expect(evalReadme.toLowerCase()).toContain('paid');
@@ -1650,7 +1653,7 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         const pkg = JSON.parse(readFileSync(join(REPO_ROOT, 'package.json'), 'utf8')) as {
             scripts: Record<string, string>;
         };
-        expect(pkg.scripts.eval, 'package.json must expose a separate `eval` entry point').toContain('run-eval.ts');
+        expect(pkg.scripts.eval, 'package.json must expose a separate `eval` entry point').toContain('skill-eval.ts');
         // The live/paid tier runner is a standalone script, NOT a test file — so the default suite
         // never picks it up (D4: behavioral evals do not entangle the always-on structural suite).
         expect(pkg.scripts.eval).not.toContain('.test.ts');
