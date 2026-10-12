@@ -4,7 +4,7 @@ name: Map decision readiness facts and recorded evidence onto the status report
 status: done
 template: feature-impl
 created_at: 2026-10-11T23:23:16.864Z
-updated_at: "2026-10-12T02:23:04.303Z"
+updated_at: "2026-10-12T02:30:10.086Z"
 feature_id: P11
 
 done_forced: "false"
@@ -58,29 +58,7 @@ maker from one that has actually served a decision.
 
 ### Q&A
 
-<!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
-     condition. Not a parking lot for open questions — an unanswered question here means the task
-     is not ready to hand off. Keep empty if none. -->
-
-#### Q&A entry — 2026-10-11T23:24:39.262Z
-
-<!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
-     condition. Not a parking lot for open questions — an unanswered question here means the task
-     is not ready to hand off. Keep empty if none. -->
-
-#### Q&A entry — 2026-10-11T23:20:00.000Z
-
-- Operator request (this session): the report must let an end user see the *registered*, *configured*
-  and *actually working* markers per maker and per decision. Accepted the recommended evidence source:
-  the recorded `decision.end` ledger via the existing reliability aggregation.
-- Deferred: a dedicated `group by maker` DAO aggregate. Condition: a caller needs per-maker evidence
-  without a per-decision breakdown, or the group count grows past a single bounded query.
-- Deferred: using `decision_logs` as the evidence source. Condition: never for this column — it is
-  gated by the `decisions.log` config, so an `off` project would report a working maker as unused.
-
-#### Q&A entry — 2026-10-12T02:22:59.655Z
-
-Closed decisions retained from the original refinement and implementation session:
+Closed decisions from the original 2026-10-11 refinement and implementation session (deduplicated during this audit):
 
 - Operator request (this session): the report must let an end user see the *registered*, *configured*
   and *actually working* markers per maker and per decision. Accepted the recommended evidence source:
@@ -124,7 +102,7 @@ Closed decisions retained from the original refinement and implementation sessio
   `decisionStatusReadiness(status, groups?)`. Makers are the registered set first, then any configured name
   the registry does not hold, so an unregistered configured maker stays a visible failing row instead of
   disappearing from the report.
-- **R3 — the read** (`packages/app/src/decision/decision-status-readiness.ts`): `readDecisionStatusReadiness(dao, status)` calls the existing
+- **R3 — the read** (`packages/app/src/decision/decision-status-readiness.ts:148`): `readDecisionStatusReadiness(dao, status)` calls the existing
   `decisionReliability(dao)` aggregation and maps it; no new DAO method, no new SQL, no new migration.
 - **R4 — exports**: the overlay symbols are exported from `packages/app/src/index.ts` next to the
   reliability block, so the CLI imports only through the package index (ADR-021).
@@ -140,20 +118,32 @@ Closed decisions retained from the original refinement and implementation sessio
   already owned the former name for the workflow's evidence-mode responder). The Requirements section was
   updated to the shipped names.
 
-- **Citations**: `packages/app/src/decision/decision-status-readiness.ts:96` (`decisionStatusReadiness`), `packages/app/src/decision/decision-status-readiness.ts:145` (`readDecisionStatusReadiness`), `packages/app/src/decision/decision-service.ts:415` (`DecisionStatusRow` fields).
+- **Citations**: `packages/app/src/decision/decision-status-readiness.ts:98` (mapping), `packages/app/src/decision/decision-status-readiness.ts:148` (ledger read), `packages/app/src/decision/decision-service.ts:539` (status rows), `packages/app/src/index.ts:78` (exports).
 
 
 - Re-audit correction: include the configured default maker even when the catalog has no decisions; the regression test exercises an unregistered default with an empty catalog.
 
 ### Testing
 
-`bun test packages/app/tests/decision/decision-status-readiness.test.ts` → 11 pass, 0 fail
-(cover: `(id, maker)` matching, maker folding, configured-but-unregistered rows, empty ledger,
-recorded ledger through the real `SystemEventDao` on in-memory SQLite).
+**Pipeline verify results**
 
-Per-file coverage in the `bun run spur-check` run: `packages/app/src/decision/decision-status-readiness.ts`
-100 % functions / 100 % lines; `decision-service.ts` 94.12 / 100.00 (Makers and per-decision rows keep
-their existing suites passing).
+- Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | App tests pass: readiness rows and evidence interfaces used by mapping; `packages/app/src/decision/decision-status-readiness.ts:98`. |
+| R2 | MET | App tests pass: empty catalog default, configured missing maker, pair matching, fold totals and changed maker; `packages/app/tests/decision/decision-status-readiness.test.ts:100`. |
+| R3 | MET | App tests pass: ledger mapping via real in-memory DAO; `packages/app/tests/decision/decision-status-readiness.test.ts:209`; additional unmigrated in-memory database command exited 0 with zero evidence. |
+| R4 | MET | Export block inspected: all readiness symbols exposed by the package facade; `packages/app/src/index.ts:78`. |
+| R5 | MET | CLI tests pass: original JSON key-set retained and per-decision catalog facts/evidence added; `apps/cli/tests/commands/decision.test.ts:427`. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R2 — Every maker row shows registration, configuration and what it serves | MET | test | App/CLI suites: maker registration, configuration sources, serves count and configured missing makers. Fresh commands: bun test tests/decision (cwd packages/app) exited 0, 80 pass/0 fail; bun test tests/commands/decision.test.ts (cwd apps/cli) exited 0, 32 pass/0 fail; .spur/run/P11-golden-path.json records source-local CLI commands. |
+| Scenario: R3 — Each decision row shows its effective maker, resolution source and catalog facts | MET | test | App/CLI suites: effective maker precedence, catalog fields and unregistered glyph. Fresh commands: bun test tests/decision (cwd packages/app) exited 0, 80 pass/0 fail; bun test tests/commands/decision.test.ts (cwd apps/cli) exited 0, 32 pass/0 fail; .spur/run/P11-golden-path.json records source-local CLI commands. |
+| Scenario: R4 — Recorded evidence separates registered and configured from actually working | MET | test | App/CLI suites: pair-matched ledger evidence, zero evidence, facade compatibility and no default probing. Fresh commands: bun test tests/decision (cwd packages/app) exited 0, 80 pass/0 fail; bun test tests/commands/decision.test.ts (cwd apps/cli) exited 0, 32 pass/0 fail; .spur/run/P11-golden-path.json records source-local CLI commands. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
