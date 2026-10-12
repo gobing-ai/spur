@@ -177,6 +177,22 @@ function captureSink(): CommandOutput & { text: string } {
 
 const ENVELOPE_ENV = 'SPUR_JSON_ENVELOPE';
 
+/**
+ * `agent doctor` embeds `usage.age` — a millisecond age derived from the cached timestamp at read
+ * time — so two invocations ~40 ms apart legitimately disagree on it (observed: 2542864 vs
+ * 2542896). Whole-document equality assertions must therefore ignore that one clock-derived value;
+ * each caller asserts it is present and numeric on the raw document instead, so nothing stops
+ * being checked. The other verbs in `SERVICE_VERBS` carry no `usage`, making this a no-op for them.
+ */
+function withoutLiveAge(value: unknown): unknown {
+    type WithUsage = { usage?: { age?: unknown }; data?: { usage?: { age?: unknown } } };
+    const clone = structuredClone(value) as WithUsage;
+    if (clone.usage !== undefined) clone.usage.age = 0;
+    // The enveloped document nests the same payload under `data`.
+    if (clone.data?.usage !== undefined) clone.data.usage.age = 0;
+    return clone;
+}
+
 /** The four confirmed service-emitting verbs (task 0697 Background table). */
 const SERVICE_VERBS: Array<{ label: string; argv: string[]; assertExit: boolean }> = [
     { label: 'agent list', argv: ['agent', 'list'], assertExit: true },
@@ -213,7 +229,7 @@ describe('service-emitting verbs honor --json-envelope end-to-end (0697 AC2)', (
                     output: byEnv,
                 });
                 if (assertExit) expect(envCode).toBe(0);
-                expect(byEnv.text).toBe(byFlag.text);
+                expect(withoutLiveAge(JSON.parse(byEnv.text))).toEqual(withoutLiveAge(JSON.parse(byFlag.text)));
             } finally {
                 removeEnvVar(ENVELOPE_ENV);
             }
@@ -333,7 +349,12 @@ describe('raw default byte-identity vs pre-change baseline (0697 AC3)', () => {
             cwd: mkdtempSync(join(tmpdir(), 'spur-raw-')),
             output: raw,
         });
-        expect(raw.text).toBe(toJson(JSON.parse(enveloped.text).data));
+        const envelopedData = (JSON.parse(enveloped.text) as { data: unknown }).data;
+        const rawDoc = JSON.parse(raw.text) as { usage?: { age?: unknown } };
+        // The value the equality below ignores is still asserted here.
+        expect(typeof rawDoc.usage?.age).toBe('number');
+        // Byte-identical comparison (key order included), ignoring only the clock-derived age above.
+        expect(toJson(withoutLiveAge(rawDoc))).toBe(toJson(withoutLiveAge(envelopedData)));
     }, 30000);
 });
 
