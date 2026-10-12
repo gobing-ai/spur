@@ -4,7 +4,7 @@ name: Centralize task readiness triage and feature receipt operations
 status: done
 template: feature-impl
 created_at: 2026-10-12T03:34:10.717Z
-updated_at: "2026-10-12T07:12:31.232Z"
+updated_at: "2026-10-12T18:10:01.647Z"
 feature_id: A91
 priority: P1
 tags:
@@ -148,6 +148,13 @@ Deferred: retiring the two boundary exemptions needs a merged-fd/timeout option 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | — | — | No findings (verify verdict PASS) |
+
+**Confidence:** MEDIUM
+
+The gap: the ownership moves and the receipt operation were verified by the tree’s own full gate, with per-file coverage on the new operation, but these hops ran out of band from the pipeline. So the `test` hop never captured `proofDigest` and no digest-bound
+`.spur/run/1176-check-receipt.json` exists; the deciding evidence is
+`.spur/run/1176-test-gate.status` plus its log. A pipeline-driven run that writes that receipt
+is what raises this to HIGH.
 
 ### References
 

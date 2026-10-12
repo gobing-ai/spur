@@ -4,7 +4,7 @@ name: Consolidate inline workflow adapters on the application runtime owner
 status: done
 template: feature-impl
 created_at: 2026-10-12T03:34:10.718Z
-updated_at: "2026-10-12T07:30:39.273Z"
+updated_at: "2026-10-12T18:10:02.211Z"
 feature_id: A91
 priority: P1
 tags:
@@ -135,6 +135,13 @@ Deferred: the heavy installed-invocation suite (`plugins/sp/tests/inline-run-ins
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | — | — | No findings (verify verdict PASS) |
+
+**Confidence:** MEDIUM
+
+The gap: the bundle-surface retirement and the shared resolver were verified by the tree’s own full gate, `plugin-smoke` and the inline parity check, but these hops ran out of band from the pipeline. So the `test` hop never captured `proofDigest` and no digest-bound
+`.spur/run/1177-check-receipt.json` exists; the deciding evidence is
+`.spur/run/1177-test-gate.status` plus its log. A pipeline-driven run that writes that receipt
+is what raises this to HIGH.
 
 ### References
 

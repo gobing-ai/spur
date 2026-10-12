@@ -4,7 +4,7 @@ name: Normalize hook entries helpers and tests without changing host behavior
 status: done
 template: feature-impl
 created_at: 2026-10-12T03:34:10.714Z
-updated_at: "2026-10-12T05:36:38.410Z"
+updated_at: "2026-10-12T18:10:00.275Z"
 feature_id: A91
 priority: P1
 tags:
@@ -137,6 +137,13 @@ Deferred: no application-service ownership moved here, so 1176/1177 keep their o
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | — | — | No findings (verify verdict PASS) |
+
+**Confidence:** MEDIUM
+
+The gap: the hook move and the activated layout checker were verified by the tree’s own full gate, `plugin-smoke` and the hook suites, but these hops ran out of band from the pipeline. So the `test` hop never captured `proofDigest` and no digest-bound
+`.spur/run/1174-check-receipt.json` exists; the deciding evidence is
+`.spur/run/1174-test-gate.status` plus its log. A pipeline-driven run that writes that receipt
+is what raises this to HIGH.
 
 ### References
 
