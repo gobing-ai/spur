@@ -67,6 +67,7 @@ export {
     DecisionService,
     type DecisionStatus,
     type DecisionStatusRow,
+    disposeDecisionServices,
     type EffectiveMaker,
     getDecisionService,
     type ServedDecision,

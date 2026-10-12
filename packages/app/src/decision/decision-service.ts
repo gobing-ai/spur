@@ -13,6 +13,13 @@ import {
 } from '@gobing-ai/ts-ai-decision';
 import { createDecisionMaker } from '@gobing-ai/ts-ai-runner';
 import { type ClefDriverOptions, createClefDriver } from '@gobing-ai/ts-decision-clef';
+import {
+    createLayaClient,
+    type LayaClient,
+    type LayaDriverOptions,
+    type LayaWorkerResult,
+    type WorkerQuestion,
+} from '@gobing-ai/ts-laya-mlx';
 import { redactAndBound } from '../observability/agent-execution';
 import type { SystemEventBus } from '../services/system-event-tap';
 import {
@@ -138,6 +145,32 @@ export interface DecisionProbeOutcome {
 }
 
 /**
+ * A `laya-local` client Spur owns so it can be released again. The driver the registry builds
+ * keeps its worker "warm for the client's lifetime" and exposes no disposal seam, so the piped
+ * stdio of its Python worker holds the event loop open: without this, a one-shot Spur process
+ * prints its decision result and then never exits (measured: still alive after 150 s, and a
+ * ~1 h block in a real session). The real client is built on FIRST ASK rather than here — its
+ * constructor runs the Apple-Silicon host check, and `list`/`status` must keep working on a host
+ * that cannot serve this backend at all (a construction throw is mapped to `no-backend` by the
+ * hub, exactly as the lazy registry factory did before). Rebuilt on demand after {@link dispose}.
+ */
+class OwnedLayaClient implements LayaClient {
+    private client: LayaClient | undefined;
+
+    constructor(private readonly options: LayaDriverOptions) {}
+
+    async ask(state: string, questions: Record<string, WorkerQuestion>): Promise<LayaWorkerResult> {
+        this.client ??= createLayaClient(this.options);
+        return await this.client.ask(state, questions);
+    }
+
+    dispose(): void {
+        this.client?.dispose();
+        this.client = undefined;
+    }
+}
+
+/**
  * Per-driver budget for a probe call. A cold local model legitimately needs its load budget
  * (the `laya-local` startup handshake defaults to 120 s), so the probe sets a bounded but
  * generous ceiling per driver rather than racing every call on a short timer — a healthy but
@@ -185,6 +218,11 @@ export class DecisionService {
     private readonly catalogErrors: string[] = [];
     /** Probe-only hub (feature P11 R5): bounded drivers, built on first probe, never by `status`. */
     private probeOnlyHub: DecisionHub | undefined;
+    /**
+     * Process-backed local driver clients this service owns (today only `laya-local`). Held for
+     * {@link dispose}; each entry builds its real client on first ask.
+     */
+    private readonly ownedLayaClients: OwnedLayaClient[] = [];
 
     private constructor(resolution: DecisionResolution) {
         this.resolution = resolution;
@@ -194,7 +232,7 @@ export class DecisionService {
             builtins: {
                 makerOptions: { env },
                 driverOptions: {
-                    'laya-local': { env },
+                    'laya-local': { env, client: this.ownLayaClient({ env }) },
                 },
             },
         });
@@ -204,6 +242,27 @@ export class DecisionService {
         }
         this.hub = new DecisionHub({ registry: this.registry });
         this.catalogErrors.push(...this.loadCatalogs(this.hub));
+    }
+
+    /**
+     * Take ownership of one `laya-local` client so {@link dispose} can release its worker.
+     */
+    private ownLayaClient(options: LayaDriverOptions): LayaClient {
+        const owned = new OwnedLayaClient(options);
+        this.ownedLayaClients.push(owned);
+        return owned;
+    }
+
+    /**
+     * Release the process-backed local driver clients this service created. A `laya-local` maker
+     * holds a warm Python worker whose piped stdio keeps the event loop alive, so a one-shot Spur
+     * process prints its result and then hangs forever unless the worker is closed; disposing ends
+     * its stdin, the worker exits on EOF and the handles are released. Idempotent, and a later
+     * decision simply rebuilds a client — the service stays usable after disposal.
+     */
+    dispose(): void {
+        for (const client of this.ownedLayaClients) client.dispose();
+        this.ownedLayaClients.length = 0;
     }
 
     /**
@@ -299,8 +358,11 @@ export class DecisionService {
                 driverOptions: {
                     'laya-local': {
                         env,
-                        startupTimeoutMs: PROBE_DRIVER_BUDGET_MS,
-                        requestTimeoutMs: PROBE_DRIVER_BUDGET_MS,
+                        client: this.ownLayaClient({
+                            env,
+                            startupTimeoutMs: PROBE_DRIVER_BUDGET_MS,
+                            requestTimeoutMs: PROBE_DRIVER_BUDGET_MS,
+                        }),
                     },
                     'fm-local': { requestTimeoutMs: PROBE_DRIVER_BUDGET_MS },
                 },
@@ -650,6 +712,25 @@ export async function getDecisionService(
     }
     const service = await pending;
     return service.withConfig(config);
+}
+
+/**
+ * Release every cached service's process-backed local driver clients. Called once as the Spur
+ * process winds down (`runCli`), because nothing else ends a warm `laya-local` Python worker and
+ * its open pipes otherwise keep the CLI alive after its command has printed its result.
+ */
+export async function disposeDecisionServices(): Promise<void> {
+    const pending = [...serviceCache.values()];
+    serviceCache.clear();
+    await Promise.all(
+        pending.map(async (entry) => {
+            try {
+                (await entry).dispose();
+            } catch {
+                // A service that failed to build owns no client; there is nothing to release.
+            }
+        }),
+    );
 }
 
 // Re-export for consumers (CLI in task 1093) so the app package stays the one

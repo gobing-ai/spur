@@ -11,6 +11,7 @@
 import './sanitize-env';
 import '@gobing-ai/ts-db';
 import { Command } from '@commander-js/extra-typings';
+import { disposeDecisionServices } from '@gobing-ai/spur-app';
 import { getEnvVar, getEnvVars, type SpurAppConfig, type SpurConfig } from '@gobing-ai/spur-config';
 import { loadSpurConfig, resolveConfigFile } from '@gobing-ai/spur-config/loader';
 import type { DbAdapter } from '@gobing-ai/spur-domain';
@@ -283,7 +284,14 @@ export async function runCli(): Promise<number> {
     if (shouldRenderBanner(argv)) {
         consoleOutput.write(bannerText());
     }
-    return main();
+    try {
+        return await main();
+    } finally {
+        // A `laya-local` decision leaves a warm Python worker whose open pipes keep this process
+        // alive; the CLI owns that client, so it releases it at the process boundary (otherwise the
+        // command prints its result and the process never exits).
+        await disposeDecisionServices();
+    }
 }
 
 if (import.meta.main) {
