@@ -4,7 +4,7 @@ name: Board deprecated icon, filter and actions
 status: todo
 template: feature-impl
 created_at: 2026-10-12T05:21:53.040Z
-updated_at: "2026-10-12T05:22:38.836Z"
+updated_at: "2026-10-12T05:34:47.673Z"
 feature_id: F42
 priority: P2
 tags:
@@ -12,6 +12,7 @@ tags:
   - web
 
 dependencies: ["1179"]
+estimate_hours: 2
 ---
 
 ## 1181. Board deprecated icon, filter and actions
@@ -20,17 +21,27 @@ dependencies: ["1179"]
 
 Implements: R6 — The Board shows deprecated features and offers deprecate and undeprecate actions.
 
-Design: docs/design/feature-deprecated-status.md; ADR-136. Surface S13; read root DESIGN.md for status tokens first.
+Design: docs/design/feature-deprecated-status.md; ADR-136; ADR-133 (icon system). Surface S13. Depends on 1179 (enum + graph edges).
+
+**Refine corrections (2026-10-11)**
+- "Add a filter entry in `FeaturesShell.tsx`" → the filter maps `FEATURE_STATUSES` (`apps/web/src/modules/features/FeaturesShell.tsx:265`), so it lists deprecated once 1179 lands → no code change there, only a test.
+- "Icon from DESIGN.md tokens" → status icons are `FEATURE_STATUS_MAP` entries with an `Icon` component and a `colorClass` (`apps/web/src/modules/features/status-icons.tsx:20`); ADR-133 requires Lucide over new ad-hoc SVG → use `lucide-react` `Archive` (installed, `apps/web/package.json:28`) with `text-spur-text-muted`.
+- "done offers deprecate" → `done` currently offers no actions (`apps/web/src/modules/features/feature-actions.ts:7`) → adding `deprecate` there is the first done action; intended.
+- Actions route through `transitionFeature` (`apps/web/src/modules/features/FeatureDetail.tsx:347`) → server in-process graph guard (ADR-135); no new client API.
 
 ### Requirements
 
-- [ ] R1. `status-icons.tsx` maps deprecated to its own icon; the `FeaturesShell.tsx` filter lists it via `FEATURE_STATUSES`.
-- [ ] R2. `feature-actions.ts` offers `deprecate` on backlog, active, verifying, blocked and done, and only `undeprecate` and `cancel` on deprecated.
-- [ ] R3. Actions route through the guarded server transition (ADR-135).
+- [ ] R1. `FEATURE_STATUS_MAP.deprecated` = `{status: 'deprecated', label: 'Deprecated', colorClass: 'text-spur-text-muted', Icon: <lucide Archive>}` honoring the existing `className`/`ariaLabel` Icon props.
+- [ ] R2. The status filter lists Deprecated (via `FEATURE_STATUSES`) and filtering shows only deprecated features.
+- [ ] R3. `FEATURE_STATUS_ACTIONS`: `deprecate` appended for backlog, active, verifying, blocked and done; `deprecated: ['undeprecate', 'cancel']`. Labels `Deprecate` / `Un-deprecate`; tiers `deprecate: 'hazard'`, `undeprecate: 'primary'`; `FSM_ACTIONS` marks both; `FSM_TRANSITION_TARGET` maps `deprecate → 'deprecated'`, `undeprecate → 'active'`.
+- [ ] R4. Clicking either action calls `transitionFeature` and re-renders the new status; a 409 GUARD_DENIED surfaces through the existing error path.
+- Out of scope: other UI restyling, migrating the existing inline SVG icons to Lucide.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — The Board shows deprecated features and offers deprecate and undeprecate actions
+- [ ] AC1 — The Board shows deprecated features and offers deprecate and undeprecate actions (req: R1, R2, R3, R4)
+
+Verify lens: `components.test.tsx` observes the icon and action membership; the browser check observes the real transition round-trip.
 
 ### Q&A
 
@@ -40,13 +51,23 @@ Design: docs/design/feature-deprecated-status.md; ADR-136. Surface S13; read roo
 
 ### Design
 
-Extend the existing action tables (`FEATURE_STATUS_ACTIONS`, `FSM_ACTIONS`, `FSM_TRANSITION_TARGET`) — no new component. Icon and colour come from DESIGN.md tokens.
+**Approach.** Data-only change in the existing action tables plus one icon entry; `FeatureDetail` and `FeaturesShell` already render from those tables. Why: `feature-actions.ts` is the declared single source of truth for button visibility.
+
+**Frozen names.** Action ids `deprecate`, `undeprecate`; labels `Deprecate`, `Un-deprecate`; icon `Archive` from `lucide-react`; color `text-spur-text-muted`.
+
+**Files.** `apps/web/src/modules/features/feature-actions.ts`; `apps/web/src/modules/features/status-icons.tsx` (+ header comment listing canonical statuses); tests `apps/web/tests/modules/features/components.test.tsx` (`:198` iterates statuses — extend to deprecated) and the feature-actions test if present.
+
+**Anti-patterns.** No new component or confirm dialog. No emoji in the web icon. Do not convert other status icons (no drive-by). Do not compute legality client-side beyond the action table — the server graph decides.
+
+**Handoff.** Relies on 1179's enum and edges. 1182 screenshots/notes nothing extra.
 
 ### Plan
 
-- Icon map
-- Action tables
-- Browser check of filter and detail actions on a deprecated and a done feature
+- [ ] Step 0: 1179 merged; Board server runs against the source tree.
+- [ ] Icon map entry (R1); component test renders the deprecated icon with its aria label.
+- [ ] Action tables (R3); unit test on `FEATURE_STATUS_ACTIONS` for done and deprecated.
+- [ ] Browser check (R2, R4): filter by Deprecated; open a done feature → Deprecate; then Un-deprecate; save screenshots under `.spur/run/1181-board/`.
+- [ ] `bun run spur-check`.
 
 ### Solution
 

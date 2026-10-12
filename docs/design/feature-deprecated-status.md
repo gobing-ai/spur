@@ -42,22 +42,22 @@ attach new work to it or advance it. Leaving the state is explicit — un-deprec
 
 | # | Surface | Location | Change |
 | --- | --- | --- | --- |
-| S1 | Domain vocabulary | `packages/domain/src/planning/schema.ts:23,42,152,205,347` | Append `deprecated` to `FEATURE_STATUSES`; add icon in `FEATURE_STATUS_ICONS`; no new aliases. |
-| S2 | Contracts / OpenAPI | `packages/contracts/src/feature.ts:16,32,61,69` | No edit; regenerate OpenAPI and accept the enum delta. |
+| S1 | Domain vocabulary | `packages/domain/src/planning/schema.ts:23,42,152,205,347` | Append `deprecated` to `FEATURE_STATUSES`; add icon in `FEATURE_STATUS_ICONS`; add only the identity alias `deprecated: 'deprecated'` (`normalizeFeatureStatus` throws on keys missing from the alias map). |
+| S2 | Contracts / OpenAPI | `packages/contracts/src/feature.ts:16,32,61,69` | No edit; OpenAPI is built at runtime (`apps/server/src/openapi.ts`), so nothing to regenerate. |
 | S3 | Lifecycle graph | `config/workflows/feature-lifecycle.yaml` (+ generated `apps/cli/config/`) | States + edges in §4.1; `deprecated` stays out of `terminalStates`. |
-| S4 | Init templates | init template copy of `feature-lifecycle.yaml` | Same graph as S3 (parity). |
+| S4 | Shipped graph copy | `apps/cli/config/workflows/feature-lifecycle.yaml` (generated) | Byte-identical to S3 via `build:bundle`; no separate init template exists. |
 | S5 | Status derivation | `packages/app/src/services/feature-service.ts:441,463,470` | `deriveFeatureStatus` returns no proposal for `deprecated` (sticky); not terminal, never reopened. |
 | S6 | Feature writes | `feature-service.ts:225` (`update --section`) | Write lands; append a freeze note to `warnings[]`. |
 | S7 | One-active-goal | `feature-service.ts:786`, `feature-check.ts:511` | No change: only `active` counts. |
 | S8 | Task link guard | `packages/app/src/services/task-service.ts:807,817,2040` | Reject `deprecated` parents on create / update `--feature` / batch-create, no reopen, `--no-reopen` irrelevant. |
 | S9 | Task check | `packages/app/src/services/task-check.ts:1110` | New warning `L4.feature-deprecated` for a live task under a deprecated feature. |
 | S10 | Feature check | `packages/app/src/services/feature-check.ts:239,706,806,821` | No verifying/done probes for `deprecated`; no new errors. |
-| S11 | CLI `advance` | `apps/cli/src/commands/feature.ts:180` | Refuse with an un-deprecate hint; `list --status deprecated` works through the enum. |
-| S12 | `sync` / `refresh` | `feature-service.ts` sync path; `docs/features/INDEX.md` | No status change for deprecated; INDEX lists it. |
-| S13 | Board | `apps/web/src/modules/features/feature-actions.ts`, `status-icons.tsx:20`, `FeaturesShell.tsx:265`, `FeatureDetail.tsx:489` | Icon + filter entry; `deprecate` action on backlog/active/verifying/blocked/done; deprecated shows only `undeprecate` and `cancel`. |
+| S11 | CLI `advance` | `apps/cli/src/commands/feature.ts:180` | Already stops (no `forwardPath` entry); add the un-deprecate hint. `list --status deprecated` works through the enum. |
+| S12 | `sync` / `refresh` | `feature-service.ts` sync path; `docs/features/INDEX.md` | `sync`: no status change for deprecated. `refresh` is docs-only by contract; INDEX lists it. |
+| S13 | Board | `apps/web/src/modules/features/feature-actions.ts`, `status-icons.tsx:20`, `FeaturesShell.tsx:265`, `FeatureDetail.tsx:489` | Lucide `Archive` icon (ADR-133); filter follows `FEATURE_STATUSES` automatically; `deprecate` action on backlog/active/verifying/blocked/done; deprecated shows only `undeprecate` and `cancel`. |
 | S14 | Plugin scripts | `plugins/sp/scripts/wrapup-steps.ts:171,288`, `batch-preflight.ts:144,258` | Audit only — they read task statuses or `verifying`; expected no edit. |
-| S15 | Skills | `plugins/sp/skills/next-feature/SKILL.md:67`; `spur-cli/references/features.md`, `features/verbs.md`; `spur-dev/references/dev-operations.md` | Drop deprecated candidates; document status, edges, guards. |
-| S16 | Docs | `planning-record-contracts.md` §7.3.3, `rd3-migration-design.md` §2.3, `planning-workflow-contracts.md`, `e2e-workflow-for-system-development.md`, `03_ARCHITECTURE.md` | Update the status vocabulary and graph. |
+| S15 | Skills | `plugins/sp/skills/next-feature/SKILL.md:67`; `spur-cli/references/features.md` | Drop deprecated candidates; document status, edges, guards. |
+| S16 | Docs | `planning-record-contracts.md` §7.3.3, `rd3-migration-design.md` §2.3, `planning-workflow-contracts.md`, `e2e-workflow-for-system-development.md` | Update the status vocabulary and graph. |
 | S17 | Persistence | — | None (frontmatter only). |
 
 ## 4. Contract and compatibility
@@ -102,5 +102,5 @@ refused by the graph (ADR-135). `cancelled → deprecated` is not declared; canc
   gate for unrelated work; the link guard already stops new attachments.
 - **No override flag:** removal work runs under its own feature; YAGNI until a real case needs to
   attach a task to a frozen feature.
-- **No aliases** (`obsolete`, `retired`): add when an importer needs them.
+- **No synonym aliases** (`obsolete`, `retired`): add when an importer needs them.
 - Open: relabel M, M3, M6 after ship — operator decision, tracked outside F42.
