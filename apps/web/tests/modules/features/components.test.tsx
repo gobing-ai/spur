@@ -1268,6 +1268,29 @@ describe('FeaturesShell', () => {
         expect(queryByText('Child')).toBeNull();
     });
 
+    test('1181 R2: deprecated filter lists Deprecated and shows only frozen features', async () => {
+        setFetchForTesting((async () =>
+            jsonResponse({
+                ok: true,
+                data: [
+                    { id: 'F', name: 'Frozen', status: 'deprecated' },
+                    { id: 'G', name: 'Live', status: 'active' },
+                ],
+            })) as unknown as typeof fetch);
+        const { getByLabelText, getByText, queryByText, container } = render(<FeaturesShell />);
+        await waitFor(() => expect(getByText('Frozen')).toBeDefined());
+        expect(getByText('Live')).toBeDefined();
+        fireEvent.click(getByLabelText('Filter features by status'));
+        const option = Array.from(container.querySelectorAll('[data-filter-menu] button')).find((button) =>
+            button.textContent?.includes('deprecated'),
+        );
+        expect(option).toBeDefined();
+        if (!option) throw new Error('Deprecated filter option missing');
+        fireEvent.click(option);
+        expect(getByText('Frozen')).toBeDefined();
+        expect(queryByText('Live')).toBeNull();
+    });
+
     test('shows empty state message when status filter matches zero features', async () => {
         installFeatureFetchMock();
         const { getByLabelText, getByText, container } = render(<FeaturesShell />);
