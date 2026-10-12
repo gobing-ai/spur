@@ -4,7 +4,7 @@ import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { OpenAPIHandler } from '@orpc/openapi/fetch';
 import { Hono } from 'hono';
 import type { ServerContext } from './context';
-import { isDomainErrorApiCode, toDomainORPCError } from './middleware/error-handler';
+import { encodeDomainErrorBody, toDomainORPCError } from './middleware/error-handler';
 import { mountMiddleware } from './middleware/pipeline';
 import { registerModules } from './modules/registry';
 import { generateOpenApiSpec } from './openapi';
@@ -51,17 +51,7 @@ export function createApp(appRt?: ApplicationRuntime, opts?: { fs?: FileSystem; 
                 }
             },
         ],
-        customErrorResponseBodyEncoder: (error) => {
-            if (!isDomainErrorApiCode(error.code)) return undefined;
-            return {
-                ok: false,
-                error: {
-                    code: error.code,
-                    message: error.message,
-                    ...(error.data !== undefined ? { details: error.data } : {}),
-                },
-            };
-        },
+        customErrorResponseBodyEncoder: (error) => encodeDomainErrorBody(error),
     });
     app.use('/api/*', async (c, next) => {
         if (ctx) c.set('ctx', ctx);

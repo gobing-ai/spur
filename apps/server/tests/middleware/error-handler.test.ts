@@ -4,13 +4,19 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { WbsCollisionError } from '@gobing-ai/spur-app';
 import { getEnvVar, setEnvVar } from '@gobing-ai/spur-config';
+import { decodeApiErrorBody } from '@gobing-ai/spur-contracts';
 import { EventBus } from '@gobing-ai/ts-infra';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { ConflictError, NotFoundError, ValidationError } from '@gobing-ai/ts-utils';
 import { Hono } from 'hono';
 import { createServerContext } from '../../src/context';
 import { GuardDeniedError, LockTimeoutError } from '../../src/errors';
-import { globalErrorHandler, isDomainErrorApiCode, toDomainORPCError } from '../../src/middleware/error-handler';
+import {
+    encodeDomainErrorBody,
+    globalErrorHandler,
+    isDomainErrorApiCode,
+    toDomainORPCError,
+} from '../../src/middleware/error-handler';
 import { mockRuntime } from './helpers';
 
 function app() {
@@ -361,5 +367,36 @@ describe('toDomainORPCError', () => {
         for (const code of ['INTERNAL_ERROR', 'NOT_FOUND', 'CONFLICT']) {
             expect(isDomainErrorApiCode(code)).toBe(false);
         }
+    });
+
+    // Task 1185: the encode end (this module) and the decode end (the typed client in
+    // `apps/web/src/lib/rpc-client.ts`, which reads `decodeApiErrorBody`) are one contract. Before
+    // this test nothing exercised the encoder at all, and `WBS_COLLISION` was outside the vocabulary
+    // the envelope schema accepted — so a real WBS-collision response could not be decoded.
+    test('every re-shaped code round-trips through the client decoder', () => {
+        const cases = [
+            new GuardDeniedError('undeclared edge deprecated → done'),
+            new WbsCollisionError('0150', '/corpus/tasks/0150_x.md', '/corpus/tasks/0150_y.md'),
+            new LockTimeoutError('Write lock timed out'),
+        ] as const;
+        const seen: string[] = [];
+        for (const err of cases) {
+            const orpc = toDomainORPCError(err);
+            expect(orpc).toBeDefined();
+            if (orpc === undefined) continue;
+            const body = encodeDomainErrorBody(orpc);
+            expect(body?.ok).toBe(false);
+            const decoded = decodeApiErrorBody(body);
+            expect(decoded?.code).toBe(body?.error.code);
+            expect(decoded?.message).toBe(orpc.message);
+            expect(decoded?.details).toEqual(orpc.data);
+            seen.push(orpc.code);
+        }
+        // All three domain codes travel, WBS_COLLISION included.
+        expect(seen).toEqual(['GUARD_DENIED', 'WBS_COLLISION', 'LOCK_TIMEOUT']);
+    });
+
+    test('a non-domain code encodes to nothing, leaving oRPC its own body', () => {
+        expect(encodeDomainErrorBody({ code: 'INTERNAL_ERROR', message: 'boom' })).toBeUndefined();
     });
 });

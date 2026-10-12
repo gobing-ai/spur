@@ -6,6 +6,7 @@ import { onError } from '@orpc/shared';
 import {
     api,
     apiFetchWithTimeout,
+    decodeApiError,
     fetchWithTimeout,
     logTransportError,
     resetFetchForTesting,
@@ -188,5 +189,68 @@ describe('rpc client', () => {
         } finally {
             globalThis.dispatchEvent = origDispatch;
         }
+    });
+
+    // Task 1185: the `/api/*` seam re-shapes typed domain errors into `{ ok:false, error:{…} }`
+    // (apps/server/src/bootstrap.ts), which OpenAPILink cannot match to `isORPCErrorJson` — so
+    // without a decoder the client threw a synthesised `ORPCError('CONFLICT', 409, 'Conflict')` and
+    // callers lost both the domain code and the reason the transition was refused.
+    describe('typed domain errors decode with their code and reason (task 1185)', () => {
+        const clientWith = (respond: () => Promise<Response>, decode: boolean) =>
+            createORPCClient(
+                new OpenAPILink(contract, {
+                    url: 'http://localhost/api',
+                    fetch: respond,
+                    ...(decode
+                        ? { customErrorResponseBodyDecoder: (body, response) => decodeApiError(body, response) }
+                        : {}),
+                }),
+            ) as { health: () => Promise<unknown> };
+
+        const envelope = (code: string, message: string, status: number) => (): Promise<Response> =>
+            Promise.resolve(
+                new Response(JSON.stringify({ ok: false, error: { code, message } }), {
+                    status,
+                    headers: { 'content-type': 'application/json' },
+                }),
+            );
+
+        test('decodes code, status and the guard reason; without the decoder it degrades to CONFLICT', async () => {
+            const respond = envelope('GUARD_DENIED', 'undeclared edge deprecated → done', 409);
+            await expect(clientWith(respond, true).health()).rejects.toMatchObject({
+                code: 'GUARD_DENIED',
+                status: 409,
+                message: 'undeclared edge deprecated → done',
+            });
+            // The pre-fix behaviour, pinned: no decoder → the reason is unreachable.
+            await expect(clientWith(respond, false).health()).rejects.toMatchObject({ code: 'CONFLICT', status: 409 });
+        });
+
+        test('the status comes from the response, not a second code→status table', async () => {
+            await expect(clientWith(envelope('LOCK_TIMEOUT', 'lock held', 503), true).health()).rejects.toMatchObject({
+                code: 'LOCK_TIMEOUT',
+                status: 503,
+            });
+        });
+
+        test("a body that is not the envelope keeps oRPC's own handling", async () => {
+            const respond = (): Promise<Response> =>
+                Promise.resolve(
+                    new Response(
+                        JSON.stringify({
+                            defined: false,
+                            code: 'INTERNAL_SERVER_ERROR',
+                            status: 500,
+                            message: 'boom',
+                        }),
+                        { status: 500, headers: { 'content-type': 'application/json' } },
+                    ),
+                );
+            await expect(clientWith(respond, true).health()).rejects.toMatchObject({
+                code: 'INTERNAL_SERVER_ERROR',
+                status: 500,
+                message: 'boom',
+            });
+        });
     });
 });

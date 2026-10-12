@@ -1,5 +1,6 @@
 import { WbsCollisionError } from '@gobing-ai/spur-app';
 import { getEnvVar } from '@gobing-ai/spur-config';
+import { DOMAIN_ERROR_CODES, type DomainErrorCode } from '@gobing-ai/spur-contracts';
 import { ORPCError } from '@orpc/server';
 import type { ErrorHandler } from 'hono';
 import { GuardDeniedError, LockTimeoutError } from '../errors';
@@ -178,13 +179,36 @@ function resolveError(err: unknown, requestId: string | undefined, isProd: boole
 /**
  * API codes the typed domain-error table above owns. `toDomainORPCError`
  * produces only these, and the `/api/*` oRPC body encoder re-shapes only these —
- * every other oRPC error keeps its default body.
+ * every other oRPC error keeps its default body. The list lives in the
+ * contracts package because the typed client's decoder reads it too
+ * (task 1185): one vocabulary, so the two ends cannot disagree about which
+ * codes carry the envelope.
  */
-const DOMAIN_ERROR_API_CODES = new Set<string>(['GUARD_DENIED', 'WBS_COLLISION', 'LOCK_TIMEOUT']);
-
 /** True when `code` is one of the typed domain-error codes the transport seam re-shapes. */
-export function isDomainErrorApiCode(code: string): boolean {
-    return DOMAIN_ERROR_API_CODES.has(code);
+export function isDomainErrorApiCode(code: string): code is DomainErrorCode {
+    return (DOMAIN_ERROR_CODES as readonly string[]).includes(code);
+}
+
+/**
+ * The `/api/*` response body for a typed domain error, or `undefined` to leave oRPC's own
+ * serialization in place. The encode end of the envelope whose decode end is the typed client's
+ * `customErrorResponseBodyDecoder` — kept here beside {@link toDomainORPCError} so the pair is read
+ * and changed together (task 1185).
+ */
+export function encodeDomainErrorBody(error: {
+    code: string;
+    message: string;
+    data?: unknown;
+}): { ok: false; error: { code: DomainErrorCode; message: string; details?: unknown } } | undefined {
+    if (!isDomainErrorApiCode(error.code)) return undefined;
+    return {
+        ok: false,
+        error: {
+            code: error.code,
+            message: error.message,
+            ...(error.data !== undefined ? { details: error.data } : {}),
+        },
+    };
 }
 
 /**
