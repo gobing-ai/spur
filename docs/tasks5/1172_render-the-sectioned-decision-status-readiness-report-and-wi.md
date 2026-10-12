@@ -4,7 +4,7 @@ name: Render the sectioned decision status readiness report and wire --probe
 status: done
 template: feature-impl
 created_at: 2026-10-11T23:23:17.914Z
-updated_at: "2026-10-12T02:23:33.986Z"
+updated_at: "2026-10-12T02:30:24.795Z"
 feature_id: P11
 
 done_forced: "false"
@@ -65,34 +65,7 @@ to match: `agent doctor`'s aligned `✓/✗` table (`packages/app/src/services/a
 
 ### Q&A
 
-<!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
-     condition. Not a parking lot for open questions — an unanswered question here means the task
-     is not ready to hand off. Keep empty if none. -->
-
-#### Q&A entry — 2026-10-11T23:24:39.979Z
-
-<!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
-     condition. Not a parking lot for open questions — an unanswered question here means the task
-     is not ready to hand off. Keep empty if none. -->
-
-#### Q&A entry — 2026-10-11T23:20:00.000Z
-
-- Operator request (this session): `spur decision status` output should be clearer, and should show
-  the registered / configured / actually-working markers. Accepted the recommended layout: labelled
-  sections with aligned `✓/✗` tables (the `spur agent doctor` renderer shape) over the smaller
-  "keep flat lines, add one aligned table" alternative.
-- Public-surface consent: `--probe` is a new public flag on the existing `decision status` verb. The
-  operator asked for exactly this marker, which is the consent; the rejected alternative (an internal
-  `scripts/commands` entry) is recorded in Design.
-- Closed: `--json` grows additively (`makers`, per-decision `evidence`, `probes?`). No existing field
-  is renamed or removed, so machine consumers and the existing CLI tests keep working.
-- Closed: `--since` keeps its current contract (only valid with `--reliability`). The readiness
-  evidence window is the whole ledger; narrowing it was not requested and would break a documented
-  caller mistake.
-
-#### Q&A entry — 2026-10-12T02:23:27.472Z
-
-Closed decisions retained from the original refinement and implementation session:
+Closed decisions from the original 2026-10-11 refinement and implementation session (deduplicated during this audit):
 
 - Operator request (this session): `spur decision status` output should be clearer, and should show
   the registered / configured / actually-working markers. Accepted the recommended layout: labelled
@@ -178,29 +151,37 @@ this repository is currently in, where the previous output read as healthy.
   `plugins/sp/skills/spur-cli/references/decision.md`; and the two help trees
   (`docs/help/cmd_decision.md`, `docs/help2/decision.md`) that the parity tests enforce.
 - **R5/R6 — tests**: the CLI suite's flat-dump assertions were replaced by layout and readiness
-  assertions (31 pass); the new app suite covers the mapping and the probe loop (11 pass).
+  assertions (fresh CLI suite: 32 pass); the new app suite covers the mapping and the probe loop (fresh readiness suite: 13 pass).
 - **Generated artifact**: `plugins/sp/lib/inline-run.generated.mjs` regenerated via
   `bun run scripts/commands/bundle-plugin-lib.ts` — the determinism test diffs it against a fresh build.
 
-- **Citations**: `apps/cli/src/commands/decision.ts:380` (`renderDecisionStatus`), `apps/cli/src/commands/decision.ts:453` (`renderProbe`), `apps/cli/src/commands/decision.ts:460` (`alignTable`), `apps/cli/src/commands/decision.ts:275` (`--probe`), `apps/cli/src/commands/decision.ts:283` (the `--probe` + `--reliability` refusal).
+- **Citations**: `apps/cli/src/commands/decision.ts:377` (renderer), `apps/cli/src/commands/decision.ts:450` (probe cell), `apps/cli/src/commands/decision.ts:334` (stderr progress), `apps/cli/src/commands/decision.ts:275` (flag).
 
 
 - Re-audit corrections: preserve full LAST SEEN timestamps, identify the maker in every stderr progress line (also with JSON), and put counts and the configured default on the first status line. CLI regressions now inspect stdout and stderr separately.
 
 ### Testing
 
-- `(cd apps/cli && bun test tests/commands/decision.test.ts)` → 31 pass, 0 fail, including the
-  sectioned layout, the readiness marks in JSON, recorded evidence in both the JSON and the human
-  row, `--probe` (exit 0, PROBE cell, streamed stderr line, no recorded row written),
-  `--probe --json` staying one parseable document, and the `--probe` + `--reliability` refusal.
-- Manual render in a throwaway project (source-local CLI): header, `Makers`, `Decisions`,
-  `Catalog` blocks aligned; `--probe` printed `probing ✗ unclear via error · 0.2s` on stderr and
-  filled the PROBE column; a second `status` still reported `RECORDED 0` for every row.
-- Docs parity: `apps/cli/tests/help-doc-parity.test.ts` and `plugins/sp/tests/help-docs-parity.test.ts`
-  pass with `--probe` documented in `docs/help/cmd_decision.md` and `docs/help2/decision.md`.
-- `bun run lint` (biome + every workspace typecheck) clean; `bun run spur-check` run on the final
-  tree (see the wrap report for the one flaky, unrelated `rule run` envelope timeout).
-- Per-file coverage: `apps/cli/src/commands/decision.ts` 94.29 % functions / 100 % lines.
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | CLI tests pass: single summary line, aligned headers, labelled errors/catalog, no raw JSON cells and complete timestamp; `apps/cli/tests/commands/decision.test.ts:368`. |
+| R2 | MET | CLI tests pass: opt-in probe column, maker-named stderr progress, unchanged recorded evidence, and conflicting flags rejected; `apps/cli/tests/commands/decision.test.ts:482`. |
+| R3 | MET | CLI tests pass: separate stdout parses in raw and enveloped JSON modes while stderr carries progress; existing JSON keys retained; `apps/cli/tests/commands/decision.test.ts:500`. |
+| R4 | MET | Owning readiness layout/probe contract inspected at `docs/design/decision-observability-and-adoption.md:164`; catalog inventory at `docs/design/decision-catalog.md:88`; CLI reference/help parity covered by repository gate. |
+| R5 | MET | CLI decision suite passes 32 tests, zero failures, including human layout, JSON compatibility, evidence, probes and conflict handling; `apps/cli/tests/commands/decision.test.ts:427`. |
+| R6 | MET | App decision suite passes, including readiness mapping and probe failure table; `packages/app/tests/decision/decision-status-readiness.test.ts:14`. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R1 — The readiness report renders as labelled sections instead of a flat key dump | MET | test | CLI suite: human sectioned report, single summary header, errors and aligned tables. Fresh commands: bun test tests/decision (cwd packages/app) exited 0, 80 pass/0 fail; bun test tests/commands/decision.test.ts (cwd apps/cli) exited 0, 32 pass/0 fail; .spur/run/P11-golden-path.json records source-local CLI commands. |
+| Scenario: R4 — Recorded evidence separates registered and configured from actually working | MET | test | App/CLI suites: pair-matched ledger evidence, zero evidence, facade compatibility and no default probing. Fresh commands: bun test tests/decision (cwd packages/app) exited 0, 80 pass/0 fail; bun test tests/commands/decision.test.ts (cwd apps/cli) exited 0, 32 pass/0 fail; .spur/run/P11-golden-path.json records source-local CLI commands. |
+| Scenario: R8 — Mutually exclusive status flags are refused as a caller mistake | MET | test | CLI suite: --probe plus --reliability exits one before maker progress. Fresh commands: bun test tests/decision (cwd packages/app) exited 0, 80 pass/0 fail; bun test tests/commands/decision.test.ts (cwd apps/cli) exited 0, 32 pass/0 fail; .spur/run/P11-golden-path.json records source-local CLI commands. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 

@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: []
 created_at: "2026-10-11T23:22:45.710Z"
-updated_at: "2026-10-12T02:21:58.142Z"
+updated_at: "2026-10-12T02:30:17.138Z"
 ---
 
 # P11: Decision status readiness surface: maker registration, configuration and proof of work
@@ -33,8 +33,9 @@ liveness decision per maker. The report renders as labelled, aligned sections in
     aggregation — the report constructs no maker.
   - `--probe`: one liveness decision (`maker-liveness`) served per distinct registered effective
     maker through the real catalog-resolution, input-validation and fallback seam, reporting the
-    outcome, the fallback reason, the served value and the elapsed time. Backend fallbacks do not fail the command; caller/catalog faults do. It
-    writes no decision log row and emits no decision event, so recorded evidence stays uncontaminated.
+    outcome, the fallback reason, the served value and the elapsed time. Backend fallbacks do not fail
+    the command; caller/catalog faults do. It writes no decision log row and emits no decision event,
+    so recorded evidence stays uncontaminated.
   - Additive JSON fields (`makers`, per-decision `evidence`, `probes`); every existing field keeps its
     name and meaning.
   - The owning design satellite (`decision-observability-and-adoption.md` §3.4) and its tradeoffs
