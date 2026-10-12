@@ -233,6 +233,7 @@ Feature: Projects board module and global input wiring
 | 0843 | Work view reusing task and feature surfaces with reference chips | done |
 | 0844 | Global input durable submission with receipt and result states | done |
 | 0845 | Keyboard, IME, accessibility, and responsive verification for Projects | done |
+| 1163 | Reset member terminal state when switching agent identity | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
