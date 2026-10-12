@@ -25,16 +25,27 @@ afterAll(() => {
     for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
 });
 
-async function main(argv: string[], cwd: string): Promise<{ code: number; out: string }> {
+async function main(
+    argv: string[],
+    cwd: string,
+): Promise<{ code: number; out: string; stdout: string; stderr: string }> {
     const chunks: string[] = [];
+    const stdout: string[] = [];
+    const stderr: string[] = [];
     const code = await runMain(argv, {
         cwd,
         output: {
-            write: (message: string) => chunks.push(message),
-            error: (message: string) => chunks.push(message),
+            write: (message: string) => {
+                chunks.push(message);
+                stdout.push(message);
+            },
+            error: (message: string) => {
+                chunks.push(message);
+                stderr.push(message);
+            },
         },
     } satisfies MainOptions);
-    return { code, out: chunks.join('\n') };
+    return { code, out: chunks.join('\n'), stdout: stdout.join('\n'), stderr: stderr.join('\n') };
 }
 
 const FIXTURE = `version: 1
@@ -359,7 +370,9 @@ describe('spur decision status (AC5)', () => {
         const clean = tempProject({ '.spur/decisions/fixture.yaml': FIXTURE });
         const result = await main(['decision', 'status'], clean);
         expect(result.code).toBe(0);
-        expect(result.out).toMatch(/^decision status — OK$/m);
+        expect(result.out).toMatch(
+            /^decision status — OK · \d+ decisions · \d+ makers · default maker \S+ · 0 recorded$/m,
+        );
         // Aligned tables with a header row: the operator can read what each column is.
         expect(result.out).toMatch(/^ST\s+MAKER\s+CONFIGURED BY\s+SERVES\s+RECORDED\s+ACCEPTED\s+LAST SEEN$/m);
         expect(result.out).toMatch(
@@ -383,7 +396,9 @@ describe('spur decision status (AC5)', () => {
         });
         const result = await main(['decision', 'status'], broken);
         expect(result.code).toBe(1);
-        expect(result.out).toMatch(/^decision status — FAILED \(1 error\)$/m);
+        expect(result.out).toMatch(
+            /^decision status — FAILED \(1 error\) · \d+ decisions · \d+ makers · default maker /m,
+        );
         expect(result.out).toMatch(/^Errors \(1\)$/m);
         expect(result.out).toContain('load error in project layer');
         // Errors render before the tables, so a failing run reads top-down.
@@ -461,7 +476,7 @@ describe('spur decision status readiness marks (feature P11)', () => {
         expect(cells[1]).toBe('triage-test');
         expect(cells.at(-3)).toBe('2'); // RECORDED — two served invocations
         expect(cells.at(-2)).toMatch(/^\d+$/); // ACCEPTED depends on the backend, the count is what is shown
-        expect(cells.at(-1)).not.toBe('—'); // LAST SEEN is a real date
+        expect(cells.at(-1)).toMatch(/^\d{4}-\d{2}-\d{2}T.+Z$/); // LAST SEEN preserves the timestamp
     });
 
     test('R5: --probe asks each effective maker once and leaves the recorded evidence untouched', async () => {
@@ -470,7 +485,7 @@ describe('spur decision status readiness marks (feature P11)', () => {
         expect(probed.code).toBe(0);
         expect(probed.out).toMatch(/^ST\s+MAKER\s+CONFIGURED BY\s+SERVES\s+RECORDED\s+ACCEPTED\s+LAST SEEN\s+PROBE$/m);
         // The streamed progress line and the table cell both carry a glyph + value + a duration.
-        expect(probed.out).toMatch(/probing [✓✗] .+ · \d+\.\ds/);
+        expect(probed.stderr).toMatch(/probing typesafe: [✓✗] .+ · \d+\.\ds/);
         const makerLine = probed.out.split('\n').find((line) => /^[✓✗]\s+typesafe\s/.test(line));
         expect(makerLine).toMatch(/[✓✗] .+ · \d+\.\ds$/);
         // A probe writes no decision log row: the evidence the report shows cannot be
@@ -483,7 +498,9 @@ describe('spur decision status readiness marks (feature P11)', () => {
         const project = tempProject({ '.spur/decisions/fixture.yaml': FIXTURE });
         const result = await main(['decision', 'status', '--probe', '--json', '--json-envelope'], project);
         expect(result.code).toBe(0);
-        const json = CLEAN_JSON(result.out);
+        const json = CLEAN_JSON(result.stdout);
+        expect(result.stderr).toMatch(/probing typesafe: [✓✗]/);
+        expect(result.stdout).not.toContain('probing ');
         expect(json.data.probes).toHaveLength(1);
         // A probe outcome is data whatever the backend does: the assertions stay true whether the
         // maker answers or falls back, which is exactly the "reported, not raised" contract.
@@ -492,6 +509,9 @@ describe('spur decision status readiness marks (feature P11)', () => {
         expect(typeof probeRow?.ok).toBe('boolean');
         expect(['accepted', 'low-confidence', 'no-backend', 'timeout', 'error']).toContain(probeRow?.reason ?? 'none');
         expect(typeof probeRow?.durationMs).toBe('number');
+        const raw = await main(['decision', 'status', '--probe', '--json'], project);
+        expect(raw.code).toBe(0);
+        expect(JSON.parse(raw.stdout).probes).toHaveLength(1);
     });
 
     test('R7: a catalog without the liveness entry fails --probe loudly and calls no maker', async () => {

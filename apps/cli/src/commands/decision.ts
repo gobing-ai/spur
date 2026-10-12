@@ -331,10 +331,7 @@ export function registerDecisionCommand(program: Command, context: CliContext): 
                     // parseable document). A probe is opted into and bounded per driver, but a
                     // cold local model can still take its full budget per maker.
                     readiness.probes = await probeDecisionMakers(service, status, {
-                        onResult:
-                            options.json === true
-                                ? undefined
-                                : (result) => context.output.error(`probing ${renderProbe(result)}`),
+                        onResult: (result) => context.output.error(`probing ${result.maker}: ${renderProbe(result)}`),
                     });
                 }
                 if (options.json === true) {
@@ -381,8 +378,8 @@ function renderDecisionStatus(status: DecisionStatus, readiness: DecisionStatusR
     const makers = readiness.makers;
     const probes = new Map((readiness.probes ?? []).map((probe) => [probe.maker, probe]));
     const lines: string[] = [
-        `decision status — ${status.ok ? 'OK' : `FAILED (${status.errors.length} error${status.errors.length === 1 ? '' : 's'})`}`,
-        `  ${status.perDecision.length} decisions · ${makers.length} makers · default maker` +
+        `decision status — ${status.ok ? 'OK' : `FAILED (${status.errors.length} error${status.errors.length === 1 ? '' : 's'})`}` +
+            ` · ${status.perDecision.length} decisions · ${makers.length} makers · default maker` +
             ` ${status.configDefaultMaker ?? '(unset)'} · ${makers.reduce((total, m) => total + m.evidence.recorded, 0)} recorded`,
     ];
     if (status.errors.length > 0) {
@@ -409,7 +406,7 @@ function renderDecisionStatus(status: DecisionStatus, readiness: DecisionStatusR
                 String(maker.serves.length),
                 String(maker.evidence.recorded),
                 String(maker.evidence.accepted),
-                maker.evidence.lastSeen?.slice(0, 10) ?? '—',
+                maker.evidence.lastSeen ?? '—',
                 ...(readiness.probes !== undefined
                     ? [probes.has(maker.name) ? renderProbe(probes.get(maker.name) as DecisionProbeOutcome) : '—']
                     : []),
@@ -429,7 +426,7 @@ function renderDecisionStatus(status: DecisionStatus, readiness: DecisionStatusR
                 row.layer,
                 String(row.evidence.recorded),
                 String(row.evidence.accepted),
-                row.evidence.lastSeen?.slice(0, 10) ?? '—',
+                row.evidence.lastSeen ?? '—',
             ]),
         ),
         '',

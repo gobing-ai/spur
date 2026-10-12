@@ -164,7 +164,8 @@ recorded rows is *never used*, and recorded rows with zero accepted is *never on
 **Layout contract.** One status line (`decision status — OK|FAILED (n errors)`, then the decision
 count, maker count, configured default maker and recorded total), then errors when there are any,
 then a `Makers` table, a `Decisions` table and a `Catalog` block. Both tables carry a header row
-and pad every column to its widest cell; empty cells render `—` and failures render `✗`. Values
+and pad every column to its widest cell; empty cells render `—` and failures render `✗`. `LAST SEEN`
+preserves the full recorded timestamp. Values
 never render as raw JSON: the layer counts, duplicates and overrides render as `name value` pairs.
 `SERVES` is a count — the ids are the `MAKER` column of the Decisions table — while the full id
 list stays on `makers[].serves` in `--json`. The renderer follows the readiness shape
@@ -180,7 +181,8 @@ decision".
 
 **Probe (`--probe`).** Opt-in, because it is the one `status` path that calls a maker:
 
-- Each distinct registered effective maker is asked the catalog's `maker-liveness` decision once,
+- The liveness entry is validated even when no effective makers exist; a missing entry or duplicate
+  liveness id fails before any maker call. Each distinct registered effective maker is asked once,
   sequentially, through the real resolution → validation → maker → fallback seam.
 - The maker comes from a probe-only registry whose drivers carry the probe budget (`timeoutMs` for
   the hosted backend, `startupTimeoutMs` / `requestTimeoutMs` for the local ones), plus a
@@ -192,8 +194,9 @@ decision".
   `error`) is a failure mark.
 - The probe passes no event bus and no decision log, so it emits no `decision.*` event and writes
   no `decision_logs` row: the `recorded` column can never be satisfied by the probe that checks it.
-- A failing probe never changes the exit code, and the per-maker results stream to stderr while the
-  report is built, so a slow maker is visible before the tables land. `--probe` with `--reliability`
+- Backend fallback results never change the exit code; caller and catalog faults still fail the command.
+  Per-maker results stream as `probing <maker>: <outcome>` to stderr, including with `--json`, while the
+  report is built. `--probe` with `--reliability`
   is refused as a caller mistake before any maker call.
 
 **JSON.** `--json` stays additive: `ok`, `layers`, `loadErrors`, `duplicateIds`, `registeredMakers`,

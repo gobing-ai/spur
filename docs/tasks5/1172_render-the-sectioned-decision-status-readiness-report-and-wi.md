@@ -4,7 +4,7 @@ name: Render the sectioned decision status readiness report and wire --probe
 status: done
 template: feature-impl
 created_at: 2026-10-11T23:23:17.914Z
-updated_at: "2026-10-12T01:57:46.149Z"
+updated_at: "2026-10-12T02:21:55.733Z"
 feature_id: P11
 
 done_forced: "false"
@@ -137,7 +137,7 @@ this repository is currently in, where the previous output read as healthy.
 ### Solution
 
 - **R1 — the renderer** (`apps/cli/src/commands/decision.ts`): `renderDecisionStatus(status, readiness)`
-  emits the status line, the `Errors` block (only when there are errors, above the tables), the `Makers`
+  emits the single status line carrying counts and the configured default, the `Errors` block (only when there are errors, above the tables), the `Makers`
   table, the `Decisions (n)` table and the `Catalog` block, using a local `alignTable` that pads each
   column to its widest cell. `✓`/`✗` glyphs, `—` for empty cells, `renderProbe` for the probe cell
   (`glyph value via reason · duration`). No cell renders JSON: `layers`, `duplicates` and `overrides`
@@ -146,8 +146,8 @@ this repository is currently in, where the previous output read as healthy.
   the `MAKER` column of the Decisions table and stay on `makers[].serves` in `--json`. The feature AC
   scenario was amended to state the count, not the list.
 - **R2 — `--probe`**: opt-in; runs `probeDecisionMakers` over the distinct registered effective makers,
-  adds the `PROBE` column, and streams `probing <cell>` to stderr as each result lands (skipped under
-  `--json`, so stdout stays one parseable document). `--probe` + `--reliability` is refused before any
+  adds the `PROBE` column, and streams `probing <maker>: <cell>` to stderr as each result lands (including under
+  `--json`, whose stdout stays one parseable document). `--probe` + `--reliability` is refused before any
   maker call; probe outcomes never change the exit code.
 - **R3 — additive JSON**: `{ ...status, makers, perDecision (+type/layer/minConfidence/evidence), probes? }`.
 - **R4 — same-commit docs** (T3): `docs/design/decision-observability-and-adoption.md` §3.4.1 (marks,
@@ -161,6 +161,9 @@ this repository is currently in, where the previous output read as healthy.
   `bun run scripts/commands/bundle-plugin-lib.ts` — the determinism test diffs it against a fresh build.
 
 - **Citations**: `apps/cli/src/commands/decision.ts:380` (`renderDecisionStatus`), `apps/cli/src/commands/decision.ts:453` (`renderProbe`), `apps/cli/src/commands/decision.ts:460` (`alignTable`), `apps/cli/src/commands/decision.ts:275` (`--probe`), `apps/cli/src/commands/decision.ts:283` (the `--probe` + `--reliability` refusal).
+
+
+- Re-audit corrections: preserve full LAST SEEN timestamps, identify the maker in every stderr progress line (also with JSON), and put counts and the configured default on the first status line. CLI regressions now inspect stdout and stderr separately.
 
 ### Testing
 
