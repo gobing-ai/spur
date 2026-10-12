@@ -124,6 +124,14 @@ decision point (§3.5).
 - It never reads `workflows.decideDecisionMaker`. That switch governs only the workflow `decide`
   action. `spur decision run` is an explicit operator call whose purpose is measuring reliability.
 - It constructs makers lazily, so `list`, `show` and `status` never build one.
+- It **owns the `laya-local` client**. That backend's driver holds a warm Python worker "for the
+  client's lifetime" and exposes no disposal seam, so the worker's piped stdio keeps the event loop
+  alive: without an owner, a one-shot command prints its decision result and then never exits.
+  `DecisionService` builds the client itself through the registry's typed `client` driver option
+  (built on first ask, so `list`/`status` still work on a host that cannot serve the backend) and
+  releases it in `dispose()`. `disposeDecisionServices()` releases every cached service and is
+  called once at the Spur process boundary (`runCli`). A disposed service stays usable — the client
+  is rebuilt on the next ask.
 
 Today the CLI is the only consumer. In P1 the workflow action calls the same service, so neither
 builds its own hub.
@@ -241,6 +249,10 @@ Cloudflare Workers AI backend from `@gobing-ai/ts-decision-clef`, wrapped as
   clef` exits 1 before any backend call (§3.6).
 - **Model:** the driver defaults to `clef-flash`; a catalog `model` (or an `ask({ model })` call)
   selects `clef` instead. Per-decision model selection in config stays out of scope (§1).
+- **Credential-free host checks stay lazy.** `laya-local` and `fm-local` are registered
+  unconditionally because registration cannot detect Apple Silicon; their host checks run at first
+  resolve, and a construction failure is the hub's `no-backend`. `DecisionService` builds the
+  `laya-local` client on first ask for the same reason (§3.3).
 - **Failure taxonomy:** a malformed account id or an unreachable host is a driver error, so the
   hub maps it to the declared fallback with `reason: no-backend` (construction) or per the error
   taxonomy (transport). It never throws and never escapes the fallback contract.

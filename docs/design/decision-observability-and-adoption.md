@@ -346,3 +346,13 @@ decision fallback reproduces today's behavior.
   core exposes no cancellation, so a wedged weight load can hold the process open after the report
   is printed. This is an upstream driver gap; the probe's own side effects are nil, so nothing is
   written after the deadline.
+- **`laya-local` process lifetime (corrected 2026-10-12).** The ~1 h block observed while
+  implementing P11 was not a missing driver budget — `startupTimeoutMs` (120 s) and
+  `requestTimeoutMs` (30 s) already bounded the call, and the answer came back in ~1.5 s. The cause
+  was lifecycle: `createLayaDriver` keeps a warm Python worker for the client's lifetime and exposes
+  no disposal, and the worker's open pipes kept the calling process alive indefinitely (reproduced:
+  result printed at 1.4 s, process still running at 150 s, and it exited the instant the worker was
+  killed). `DecisionService` now owns the client and releases it at the process boundary, so a
+  one-shot command exits normally; the per-driver probe budget stays as the deadline for a call that
+  does not answer. The upstream driver still has no disposal seam, so the process-backed worker is
+  Spur's to close.

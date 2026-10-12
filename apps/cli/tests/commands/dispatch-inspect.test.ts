@@ -1,5 +1,8 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DecisionService, getDecisionService } from '@gobing-ai/spur-app';
 import { createBufferTarget, setDefaultOutputTargets } from '@gobing-ai/ts-utils';
 import { bannerText, main, runCli, shouldRenderBanner } from '../../src';
 import { noopSetExitCode } from '../../src/context';
@@ -163,6 +166,27 @@ describe('CLI dispatch and status', () => {
     test('noopSetExitCode is callable', () => {
         noopSetExitCode(0);
         noopSetExitCode(1);
+    });
+
+    test('runCli releases the cached decision services before returning', async () => {
+        // `laya-local` holds a warm Python worker whose open pipes keep the event loop alive, so a
+        // command that decided through it prints its result and then never exits. The entry point
+        // owns the release; without it the process hangs after the command has finished.
+        const cwd = await mkdtemp(join(tmpdir(), 'spur-cli-dispose-'));
+        const dispose = spyOn(DecisionService.prototype, 'dispose');
+        const stdout = createBufferTarget();
+        const stderr = createBufferTarget();
+        const restore = setDefaultOutputTargets({ stdout, stderr });
+        try {
+            await getDecisionService(null, cwd, join(cwd, 'shared'));
+            const released = dispose.mock.calls.length;
+            await runCli();
+            expect(dispose.mock.calls.length).toBeGreaterThan(released);
+        } finally {
+            restore();
+            dispose.mockRestore();
+            await rm(cwd, { recursive: true, force: true });
+        }
     });
 });
 

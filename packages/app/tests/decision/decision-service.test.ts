@@ -4,8 +4,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getEnvVar, removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
 import { DecisionHub } from '@gobing-ai/ts-ai-decision';
+import { LayaWorkerClient } from '@gobing-ai/ts-laya-mlx';
 
-import { getDecisionService } from '../../src/decision/decision-service';
+import { DecisionService, disposeDecisionServices, getDecisionService } from '../../src/decision/decision-service';
 
 const newRoot = async (): Promise<string> => mkdtemp(join(tmpdir(), 'spur-decision-service-'));
 
@@ -149,6 +150,113 @@ describe('DecisionService (task 1092, design §3.3/§3.6)', () => {
         expect(status.ok).toBe(false);
         expect(status.errors.join(' ')).toContain('nope-missing');
         await expect(service.decide('scoped-maker', { x: 1 }, { maker: 'nope-missing' })).rejects.toThrow();
+    });
+});
+
+/** The serving hub and the probe hub each own a laya client, so this catalog serves both. */
+const LAYA_CATALOG = `
+version: 1
+decisions:
+    pick-lane:
+        type: choice
+        criteria:
+            fast: go fast
+            slow: go slow
+        fallback: slow
+    maker-liveness:
+        type: choice
+        criteria:
+            ok: answered
+            unclear: could not answer
+        fallback: unclear
+`;
+
+/** The worker's own answer shape, so the driver's mapping runs without spawning Python. */
+const LAYA_WORKER_RESULT = {
+    model: 'stub',
+    answers: {
+        'pick-lane': { choice: 'fast', confidence: 0.9, probabilities: { fast: 0.9, slow: 0.1 } },
+        'maker-liveness': { choice: 'ok', confidence: 0.9, probabilities: { ok: 0.9, unclear: 0.1 } },
+    },
+};
+
+/** `laya-local` is Apple-Silicon macOS only; the client's own host check enforces it. */
+const NON_LAY_HOST = process.platform !== 'darwin' || process.arch !== 'arm64';
+
+/**
+ * `spur decision run` against `laya-local` used to print its result and then hang forever: the
+ * driver holds a warm Python worker "for the client's lifetime", exposes no disposal seam, and the
+ * worker's open pipes keep the event loop alive (~1 h observed in a real session). These tests pin
+ * the fix — Spur builds the client itself (through the registry's typed `client` option) and owns
+ * it — without spawning the real worker.
+ */
+describe('DecisionService — laya-local worker lifecycle', () => {
+    test.skipIf(NON_LAY_HOST)('dispose releases the laya client the serving hub used', async () => {
+        const root = await newRoot();
+        roots.push(root);
+        await writeCatalog(root, 'laya.yaml', LAYA_CATALOG);
+        const service = await getDecisionService(null, root, join(root, 'shared'));
+        const ask = spyOn(LayaWorkerClient.prototype, 'ask').mockResolvedValue(LAYA_WORKER_RESULT);
+        const dispose = spyOn(LayaWorkerClient.prototype, 'dispose');
+        try {
+            await expect(service.decide('pick-lane', {}, { maker: 'laya-local' })).resolves.toMatchObject({
+                value: 'fast',
+                source: 'model',
+                reason: 'accepted',
+                maker: 'laya-local',
+            });
+            expect(ask).toHaveBeenCalledTimes(1);
+            // The worker is held while the decision is served…
+            expect(dispose).not.toHaveBeenCalled();
+            // …and released by the service, which is what lets a one-shot process exit.
+            service.dispose();
+            expect(dispose).toHaveBeenCalledTimes(1);
+        } finally {
+            ask.mockRestore();
+            dispose.mockRestore();
+        }
+    });
+
+    test.skipIf(NON_LAY_HOST)('the probe hub owns its own bounded laya client', async () => {
+        const root = await newRoot();
+        roots.push(root);
+        await writeCatalog(root, 'laya.yaml', LAYA_CATALOG);
+        const service = await getDecisionService(null, root, join(root, 'shared'));
+        const ask = spyOn(LayaWorkerClient.prototype, 'ask').mockResolvedValue(LAYA_WORKER_RESULT);
+        const dispose = spyOn(LayaWorkerClient.prototype, 'dispose');
+        try {
+            await expect(service.probeMaker('maker-liveness', 'laya-local', {}, 1_000)).resolves.toMatchObject({
+                maker: 'laya-local',
+                ok: true,
+                value: 'ok',
+            });
+            service.dispose();
+            expect(dispose).toHaveBeenCalledTimes(1);
+        } finally {
+            ask.mockRestore();
+            dispose.mockRestore();
+        }
+    });
+
+    test('disposeDecisionServices releases every cached service once and is idempotent', async () => {
+        const root = await newRoot();
+        roots.push(root);
+        await writeCatalog(root, 'base.yaml', CATALOG);
+        const service = await getDecisionService(null, root, join(root, 'shared'));
+        const dispose = spyOn(DecisionService.prototype, 'dispose');
+        try {
+            await disposeDecisionServices();
+            // Every service in the process-wide cache is released, this one included.
+            const released = dispose.mock.calls.length;
+            expect(released).toBeGreaterThan(0);
+            // The cache is cleared, so a second call has nothing left to release.
+            await disposeDecisionServices();
+            expect(dispose.mock.calls.length).toBe(released);
+            // A disposed service is still usable: the client is rebuilt on the next ask.
+            expect(service.status().ok).toBe(true);
+        } finally {
+            dispose.mockRestore();
+        }
     });
 });
 
