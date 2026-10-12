@@ -45,6 +45,25 @@ export interface RunLogReclamationResult {
     failures: Array<{ path: string; error: string }>;
 }
 
+/** An expired top-level `.spur/run` scratch entry reclaimed by `spur workflow clean`. */
+export interface ReclaimedScratchEntry {
+    /** Entry name directly under `.spur/run/`. */
+    name: string;
+    /** Path of the removed (or would-be-removed) file or directory. */
+    path: string;
+    /** Newest mtime in the entry's subtree at scan time (ISO 8601). */
+    mtime: string;
+}
+
+/** Result of expired scratch reclamation (`.spur/run/`, ADR-131 disposable storage). */
+export interface ScratchReclamationResult {
+    retentionDays: number;
+    dryRun: boolean;
+    reclaimed: ReclaimedScratchEntry[];
+    /** Best-effort: one entry failing never aborts the rest; an ownership-read failure refuses all. */
+    failures: Array<{ path: string; error: string }>;
+}
+
 /** An expired terminal checkpoint removed (or reportable) by checkpoint reclamation (task 0711 R5). */
 export interface ReclaimedCheckpoint {
     /** File name under `.spur/memory/sessions/`. */

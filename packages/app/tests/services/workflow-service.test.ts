@@ -2934,6 +2934,68 @@ terminalStates:
         });
     });
 
+    describe('cleanScratch (expired .spur/run scratch reclamation)', () => {
+        const DAY = 24 * 60 * 60 * 1000;
+
+        test('reclaims expired scratch, keeps fresh, active-run, guest and log entries', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-scratch-'));
+            try {
+                const ctx = makeCtx(dir);
+                const live = await new RunDao(await ctx.getDb()).open({ status: 'running' });
+                const runDir = join(dir, '.spur', 'run');
+                const old = new Date(Date.now() - 40 * DAY);
+                const seed = async (rel: string) => {
+                    const path = join(runDir, rel);
+                    await mkdir(join(path, '..'), { recursive: true });
+                    await writeFile(path, rel);
+                    await utimes(path, old, old);
+                };
+                await seed('0999-verdict.json');
+                await seed('stale-dir/inner/a.txt');
+                await seed('mixed-dir/old.txt');
+                await writeFile(join(runDir, 'mixed-dir', 'fresh.txt'), 'fresh'); // a fresh child keeps the dir
+                await writeFile(join(runDir, '1000-verdict.json'), 'fresh');
+                await seed(`${live.id}-mode.txt`);
+                await seed(`${live.id}/gate-env.sh`);
+                await seed('guests/g1.json');
+                await seed('old-run.log'); // cleanRunLogs owns .log files
+                await seed('stale-wt/.git'); // a git worktree may hold uncommitted work
+
+                const dry = await new WorkflowAppService(ctx).cleanScratch(30, true);
+                expect(dry.reclaimed.map((r) => r.name).sort()).toEqual(['0999-verdict.json', 'stale-dir']);
+                expect(await readFile(join(runDir, '0999-verdict.json'), 'utf8')).toBe('0999-verdict.json');
+
+                const result = await new WorkflowAppService(ctx).cleanScratch(30, false);
+                expect(result.reclaimed.map((r) => r.name).sort()).toEqual(['0999-verdict.json', 'stale-dir']);
+                expect(result.failures).toEqual([]);
+                await expect(readFile(join(runDir, 'stale-dir', 'inner', 'a.txt'))).rejects.toThrow();
+                for (const kept of [
+                    'mixed-dir/old.txt',
+                    '1000-verdict.json',
+                    `${live.id}-mode.txt`,
+                    `${live.id}/gate-env.sh`,
+                    'guests/g1.json',
+                    'old-run.log',
+                    'stale-wt/.git',
+                ]) {
+                    expect(await readFile(join(runDir, kept), 'utf8')).toBeTruthy();
+                }
+
+                const broken = {
+                    ...ctx,
+                    getDb: async () => {
+                        throw new Error('ownership unavailable');
+                    },
+                };
+                const refused = await new WorkflowAppService(broken).cleanScratch(0, false);
+                expect(refused.reclaimed).toEqual([]);
+                expect(refused.failures[0]?.error).toContain('ownership unavailable');
+            } finally {
+                await rm(dir, { recursive: true, force: true });
+            }
+        });
+    });
+
     describe('cleanRunLogs (retained run-log reclamation, 0429)', () => {
         const DAY = 24 * 60 * 60 * 1000;
 
