@@ -27664,6 +27664,9 @@ var artifactsTable = defineTable("artifacts", {
   ...standardColumns
 });
 var artifacts = artifactsTable.table;
+// packages/domain/src/dao/database-inspector.ts
+var encoder = new TextEncoder;
+var decoder = new TextDecoder;
 // packages/domain/src/schema/phase-runs.ts
 init_schema();
 var phaseRunsTable = defineTable("phase_runs", {

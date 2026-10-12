@@ -27620,6 +27620,8 @@ var artifactsTable = defineTable("artifacts", {
   ...standardColumns
 });
 var artifacts = artifactsTable.table;
+var encoder = new TextEncoder;
+var decoder = new TextDecoder;
 init_schema();
 var phaseRunsTable = defineTable("phase_runs", {
   id: text("id").primaryKey(),

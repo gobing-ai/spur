@@ -2,6 +2,7 @@ import type { Hono } from 'hono';
 import type { ServerContext } from '../context';
 import { boardModule } from './board';
 import { commandsModule } from './commands';
+import { databaseModule } from './database';
 import { eventsModule } from './events';
 import { featureModule } from './feature';
 import { healthModule } from './health';
@@ -38,6 +39,7 @@ const builtins: ServerModule[] = [
     runsModule,
     historyModule,
     commandsModule,
+    databaseModule,
 ];
 
 /**
