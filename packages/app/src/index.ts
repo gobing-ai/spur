@@ -63,6 +63,7 @@ export {
     type DecisionListEntry,
     type DecisionLogOption,
     type DecisionMakerSource,
+    type DecisionProbeOutcome,
     DecisionService,
     type DecisionStatus,
     type DecisionStatusRow,
@@ -72,6 +73,21 @@ export {
     UnknownDecisionError,
     UnknownDecisionMakerError,
 } from './decision/decision-service';
+// Decision readiness overlay for `spur decision status` (feature P11): the registered,
+// configured, recorded and probed marks over the same service.
+export {
+    DEFAULT_PROBE_BACKSTOP_MS,
+    type DecisionEvidence,
+    type DecisionMakerProbe,
+    type DecisionMakerReadiness,
+    type DecisionStatusEvidenceRow,
+    type DecisionStatusReadiness,
+    decisionStatusReadiness,
+    LIVENESS_DECISION_ID,
+    LIVENESS_PROBE_QUESTION,
+    probeDecisionMakers,
+    readDecisionStatusReadiness,
+} from './decision/decision-status-readiness';
 export {
     GuardDeniedError,
     hitlAutoApproveEnabled,

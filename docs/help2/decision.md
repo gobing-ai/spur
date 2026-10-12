@@ -15,6 +15,10 @@ Decisions resolve first-wins across three layers:
 | `registered` | config `decisions.paths` folders + programmatic registrations |
 | `shared` | bundled `config/decisions/` |
 
+The shared layer ships `task-triage`, `failure-class`, `review-failure-class`, `gate-evidence`,
+`idea-recommendation`, `needs-design`, `anatomy-validation-verdict` and `maker-liveness` (the last
+served only by `spur decision status --probe`; no workflow references it).
+
 ## spur decision list
 
 Every visible decision: id, type, layer, catalog file, description.
@@ -57,8 +61,24 @@ missing required parameter, type-invalid parameter, unregistered maker, unreadab
 
 ## spur decision status
 
-Layer counts, registered makers, per-decision maker resolution, and load errors. Exit 0 on a clean
-catalog; exit 1 when any layer reports load errors (errors are listed either way).
+Sectioned readiness report: one status line, errors, aligned `Makers` and `Decisions` tables and a
+`Catalog` block. Exit 0 on a clean catalog; exit 1 when any layer reports load errors or a configured
+maker is unregistered (errors are listed either way).
+
+| Option | Description |
+|---|---|
+| `--probe` | Ask one liveness decision of each distinct registered effective maker (feature P11). Refused together with `--reliability`; never changes the exit code, writes no decision log row and emits no decision event |
+| `--reliability` | Report recorded decision outcomes per decision and maker from the `decision.end` ledger instead (task 1096) |
+| `--since <iso>` | With `--reliability`: only rows at or after this ISO timestamp |
+| `--json` | Output machine-readable JSON (bare payload) |
+| `--json-envelope` | Wrap `--json` output in the `{ok, data}` envelope |
+
+The readiness view separates four marks per maker and per decision: **registered** (the `ST` glyph),
+**configured** (`CONFIGURED BY`: `decisions.maker` / `decisions.makers.<id>`), **recorded**
+(`RECORDED` / `ACCEPTED` / `LAST SEEN` from the ledger, matched on `(decisionId, maker)`), and
+**proven** (`PROBE`, only with `--probe`). `RECORDED` with `ACCEPTED 0` is the state that reads as
+healthy elsewhere: registered and configured, never once succeeded. `--json` is additive over the
+pre-P11 fields and adds `makers[]`, `perDecision[].evidence`, and `probes[]` under `--probe`.
 
 With `--reliability [--since <iso>]`, report recorded decision outcomes per decision and maker from
 the `decision.end` ledger instead (task 1096): samples, acceptedRate, fallbacks by reason,

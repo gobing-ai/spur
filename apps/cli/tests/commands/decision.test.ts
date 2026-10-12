@@ -322,7 +322,16 @@ describe('spur decision status (AC5)', () => {
             data: {
                 layers: Record<string, number>;
                 registeredMakers: string[];
-                perDecision: Array<{ id: string; maker: string; source: string; registered: boolean }>;
+                perDecision: Array<{
+                    id: string;
+                    type: string;
+                    maker: string;
+                    source: string;
+                    registered: boolean;
+                    layer: string;
+                    minConfidence: number;
+                    evidence: { recorded: number; accepted: number; lastSeen: string | null };
+                }>;
                 errors: string[];
             };
         };
@@ -345,23 +354,164 @@ describe('spur decision status (AC5)', () => {
         expect(result.code).toBe(1);
     });
 
-    test('human output lists makers and per-decision resolution', async () => {
-        const result = await main(['decision', 'status'], CLEAN);
+    test('human output is a sectioned readiness report, not a flat key dump', async () => {
+        // Own project: the shared CLEAN fixture accumulates recorded rows from the run tests.
+        const clean = tempProject({ '.spur/decisions/fixture.yaml': FIXTURE });
+        const result = await main(['decision', 'status'], clean);
         expect(result.code).toBe(0);
-        expect(result.out).toContain('defaultMaker:');
-        expect(result.out).toContain('registeredMakers: typesafe');
-        expect(result.out).toMatch(/triage-test: maker typesafe \(catalog-default\)/);
-        expect(result.out).toContain('loadErrors: (none)');
+        expect(result.out).toMatch(/^decision status — OK$/m);
+        // Aligned tables with a header row: the operator can read what each column is.
+        expect(result.out).toMatch(/^ST\s+MAKER\s+CONFIGURED BY\s+SERVES\s+RECORDED\s+ACCEPTED\s+LAST SEEN$/m);
+        expect(result.out).toMatch(
+            /^ST\s+DECISION\s+TYPE\s+MAKER\s+SOURCE\s+MIN\s+LAYER\s+RECORDED\s+ACCEPTED\s+LAST SEEN$/m,
+        );
+        expect(result.out).toMatch(
+            /^✓\s+triage-test\s+choice\s+typesafe\s+catalog-default\s+0.8\s+project\s+0\s+0\s+—$/m,
+        );
+        expect(result.out).toMatch(/^Catalog$/m);
+        expect(result.out).toMatch(/^ {2}layers {6}project 1 · registered 0 · shared 5$/m);
+        expect(result.out).toMatch(/^ {2}duplicates {2}\(none\)$/m);
+        // Object values never render as a JSON blob (the old output did).
+        expect(result.out).not.toContain('"project":');
+        expect(result.out).not.toContain('defaultMaker:');
     });
 
-    test('human catalog error exits 1', async () => {
+    test('human catalog error exits 1 with the error above the tables', async () => {
         const broken = tempProject({
             '.spur/decisions/broken.yaml':
                 'version: 1\ndecisions:\n    broken-decision:\n        type: choice\n        fallback: x\n',
         });
         const result = await main(['decision', 'status'], broken);
         expect(result.code).toBe(1);
-        expect(result.out).toContain('loadErrors:');
+        expect(result.out).toMatch(/^decision status — FAILED \(1 error\)$/m);
+        expect(result.out).toMatch(/^Errors \(1\)$/m);
+        expect(result.out).toContain('load error in project layer');
+        // Errors render before the tables, so a failing run reads top-down.
+        expect(result.out.indexOf('Errors (1)')).toBeLessThan(result.out.indexOf('\nMakers\n'));
+    });
+});
+
+describe('spur decision status readiness marks (feature P11)', () => {
+    const CLEAN_JSON = (
+        out: string,
+    ): {
+        data: {
+            makers: Array<{
+                name: string;
+                registered: boolean;
+                configuredBy: string[];
+                serves: string[];
+                evidence: { recorded: number; accepted: number; lastSeen: string | null };
+            }>;
+            perDecision: Array<{ id: string; evidence: { recorded: number; accepted: number } }>;
+            probes?: Array<{ maker: string; ok: boolean; value: unknown; reason: string; durationMs: number }>;
+            configDecisionMakers: Record<string, string>;
+        };
+    } => JSON.parse(out) as ReturnType<typeof CLEAN_JSON>;
+
+    test('R2/R3/R4: makers carry registration, configuration and served count; decisions carry evidence', async () => {
+        const project = tempProject({
+            '.spur/decisions/fixture.yaml': FIXTURE,
+            '.spur/config.yaml': 'decisions:\n    maker: typesafe\n    makers:\n        triage-test: fm-local\n',
+        });
+        const result = await main(['decision', 'status', '--json', '--json-envelope'], project);
+        expect(result.code).toBe(0);
+        const { data } = CLEAN_JSON(result.out);
+        const typesafe = data.makers.find((maker) => maker.name === 'typesafe');
+        const fm = data.makers.find((maker) => maker.name === 'fm-local');
+        // Configured: `decisions.maker` names typesafe, `decisions.makers.triage-test` names fm-local.
+        expect(typesafe).toMatchObject({ registered: true, configuredBy: ['decisions.maker'] });
+        expect(fm).toMatchObject({ registered: true, configuredBy: ['decisions.makers.triage-test'] });
+        expect(fm?.serves).toEqual(['triage-test']);
+        expect(typesafe?.evidence).toEqual({ recorded: 0, accepted: 0, lastSeen: null });
+        expect(data.configDecisionMakers).toEqual({ 'triage-test': 'fm-local' });
+        // Every pre-existing status field survives: the overlay is additive only.
+        const raw = JSON.parse(result.out) as { data: Record<string, unknown> };
+        expect(Object.keys(raw.data)).toEqual(
+            expect.arrayContaining([
+                'ok',
+                'layers',
+                'loadErrors',
+                'duplicateIds',
+                'registeredMakers',
+                'configDefaultMaker',
+                'configDecisionMakers',
+                'perDecision',
+                'errors',
+                'makers',
+            ]),
+        );
+        expect(data.probes).toBeUndefined();
+    });
+
+    test('R2/R3/R4: recorded invocations show up as evidence per decision and per maker', async () => {
+        const project = tempProject({ '.spur/decisions/fixture.yaml': FIXTURE });
+        for (const _ of [1, 2]) {
+            expect((await main(['decision', 'run', 'triage-test', '--param', 'wbs=1'], project)).code).toBe(0);
+        }
+        const json = CLEAN_JSON((await main(['decision', 'status', '--json', '--json-envelope'], project)).out);
+        const row = json.data.perDecision.find((entry) => entry.id === 'triage-test');
+        expect(row?.evidence.recorded).toBe(2);
+        expect(json.data.makers.find((maker) => maker.name === 'typesafe')?.evidence.recorded).toBe(2);
+
+        // The human report carries the same counts in the decision row.
+        const human = await main(['decision', 'status'], project);
+        const line = human.out.split('\n').find((entry) => entry.includes('triage-test') && entry.includes('typesafe'));
+        const cells = (line ?? '').split(/\s{2,}/);
+        expect(cells[1]).toBe('triage-test');
+        expect(cells.at(-3)).toBe('2'); // RECORDED — two served invocations
+        expect(cells.at(-2)).toMatch(/^\d+$/); // ACCEPTED depends on the backend, the count is what is shown
+        expect(cells.at(-1)).not.toBe('—'); // LAST SEEN is a real date
+    });
+
+    test('R5: --probe asks each effective maker once and leaves the recorded evidence untouched', async () => {
+        const project = tempProject({ '.spur/decisions/fixture.yaml': FIXTURE });
+        const probed = await main(['decision', 'status', '--probe'], project);
+        expect(probed.code).toBe(0);
+        expect(probed.out).toMatch(/^ST\s+MAKER\s+CONFIGURED BY\s+SERVES\s+RECORDED\s+ACCEPTED\s+LAST SEEN\s+PROBE$/m);
+        // The streamed progress line and the table cell both carry a glyph + value + a duration.
+        expect(probed.out).toMatch(/probing [✓✗] .+ · \d+\.\ds/);
+        const makerLine = probed.out.split('\n').find((line) => /^[✓✗]\s+typesafe\s/.test(line));
+        expect(makerLine).toMatch(/[✓✗] .+ · \d+\.\ds$/);
+        // A probe writes no decision log row: the evidence the report shows cannot be
+        // satisfied by the probe that checked it.
+        const after = CLEAN_JSON((await main(['decision', 'status', '--json', '--json-envelope'], project)).out);
+        expect(after.data.makers.find((maker) => maker.name === 'typesafe')?.evidence.recorded).toBe(0);
+    });
+
+    test('R5: --probe --json stays one parseable document and carries the probe results', async () => {
+        const project = tempProject({ '.spur/decisions/fixture.yaml': FIXTURE });
+        const result = await main(['decision', 'status', '--probe', '--json', '--json-envelope'], project);
+        expect(result.code).toBe(0);
+        const json = CLEAN_JSON(result.out);
+        expect(json.data.probes).toHaveLength(1);
+        // A probe outcome is data whatever the backend does: the assertions stay true whether the
+        // maker answers or falls back, which is exactly the "reported, not raised" contract.
+        const probeRow = json.data.probes?.[0];
+        expect(probeRow?.maker).toBe('typesafe');
+        expect(typeof probeRow?.ok).toBe('boolean');
+        expect(['accepted', 'low-confidence', 'no-backend', 'timeout', 'error']).toContain(probeRow?.reason ?? 'none');
+        expect(typeof probeRow?.durationMs).toBe('number');
+    });
+
+    test('R7: a catalog without the liveness entry fails --probe loudly and calls no maker', async () => {
+        // A project catalog wins per basename, so this shadows the shipped maker-liveness.yaml
+        // with one that serves a different id — the liveness decision is then unresolvable.
+        const project = tempProject({
+            '.spur/decisions/maker-liveness.yaml':
+                'version: 1\ndecisions:\n    shadow-decision:\n        type: choice\n        criteria:\n            a: A.\n            b: B.\n        fallback: a\n',
+        });
+        const result = await main(['decision', 'status', '--probe'], project);
+        expect(result.code).toBe(1);
+        expect(result.out).toContain('maker-liveness');
+        expect(result.out).not.toContain('probing ');
+    });
+
+    test('R8: --probe with --reliability is refused before any maker call', async () => {
+        const result = await main(['decision', 'status', '--probe', '--reliability'], CLEAN);
+        expect(result.code).toBe(1);
+        expect(result.out).toContain('--probe and --reliability cannot be combined');
+        expect(result.out).not.toContain('probing ');
     });
 });
 

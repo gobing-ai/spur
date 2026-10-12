@@ -81,6 +81,15 @@ decision point (§3.5).
 
 - Catalogs live in `config/decisions/*.yaml` and follow upstream format version 1. Pipeline
   decisions go in `config/decisions/task-pipeline.yaml`, one file per owning workflow.
+  - `gates.yaml` carries `gate-evidence`; `idea-pipeline.yaml` `idea-recommendation` and
+    `needs-design`; `history-anatomy.yaml` `anatomy-validation-verdict`; `task-pipeline.yaml`
+    `task-triage`, `failure-class` and `review-failure-class`. The workflow audit that maps them
+    to steps is `decision-observability-and-adoption.md` §4.
+  - `maker-liveness.yaml` carries `maker-liveness`, served by exactly one caller: `spur decision
+    status --probe` (§3.4). It declares `minConfidence: 0` because the probe asks whether the maker
+    *answered*, not whether the answer was good — a working maker reporting low confidence must not
+    read as a dead one. No workflow may reference it, and it ships no parameters: the implicit
+    `instructions` parameter carries the probe question.
 - `bundle-config.ts`:
   - `schemaFor()` gains a `decisions/` mapping, so the bundled copy carries `$schema`.
   - The upstream `decision-catalog.schema.json` is copied into `apps/cli/schemas/`.
@@ -126,13 +135,19 @@ builds its own hub.
 | `list [--layer <l>] --json` | id, type, description, catalog file, layer | 0; 1 on an invalid `--layer` |
 | `show <id> --json` | full entry: type, choices/criteria, parameters, fallback, minConfidence, model, catalog, layer, plus the effective maker and its source. Never constructs a maker | 0; 1 if unknown id |
 | `run <id> [--param k=v]… [--evidence <file>]… [--maker <name>] --json` | validates params, redacts and bounds evidence, calls the effective maker, prints the result. Never writes a workflow result file | 0 for every backend outcome (accepted, low-confidence, no-backend, timeout, error) |
-| `status --json` | configured default maker, per-decision effective maker and source, registered makers, per-layer catalog counts and load errors, duplicate ids | 0 when clean; 1 on any catalog or maker-config error |
+| `status --json` | configured default maker, per-decision effective maker and source, registered makers, per-layer catalog counts and load errors, duplicate ids, then the readiness marks: per maker registration, the config key naming it, how many decisions it serves and its recorded evidence; per decision the same evidence | 0 when clean; 1 on any catalog or maker-config error |
+| `status --probe` | as `status`, plus one liveness decision (`maker-liveness`) served per distinct registered effective maker, reported as a `PROBE` column and streamed to stderr. Never constructs a maker without the flag, never changes the exit code, writes no decision log row and emits no event. `--probe` with `--reliability` is refused | 0 on a completed report, whatever the probe outcomes; 1 on a catalog or maker-config error |
 
 - `run` exits 1 for caller mistakes, and only those: an unknown id, a missing or invalid
   parameter, an unknown or unregistered maker (from the flag or from config), or an unreadable
   evidence file. All are rejected before any backend
   call.
-- The human output is one line per result. `--json` uses the standard output envelope.
+  `status --probe` reports a maker that falls back as data (feature P11); only an unresolvable
+  liveness id or an unknown maker is a caller mistake there.
+- The human output is one line per result. `status` renders a sectioned readiness report
+  (`decision-observability-and-adoption.md` §3.4.1): one status line, errors, then aligned
+  `Makers` and `Decisions` tables and a `Catalog` block, with `✓`/`✗` glyphs and `—` for empty
+  cells. `run` keeps one line per result. `--json` uses the standard output envelope.
 - The `sp:spur-cli` reference `references/decision.md` lands in the same change, per the parity
   rule.
 

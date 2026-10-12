@@ -182,4 +182,5 @@
 [backlog] **O**: Observability run-detail refinements ([O_observability-run-detail-refinements.md](./O_observability-run-detail-refinements.md))
 [done] **P**: Decision catalogs and the spur decision noun ([P_decision-catalogs-and-the-spur-decision-noun.md](./P_decision-catalogs-and-the-spur-decision-noun.md))
     └── [verifying] **P1**: Spur decision production readiness: events and workflow adoption ([P1_workflow-decision-points-adopt-spur-decision-catalogs.md](./P1_workflow-decision-points-adopt-spur-decision-catalogs.md))
+        └── [done] **P11**: Decision status readiness surface: maker registration, configuration and proof of work ([P11_decision-status-readiness-surface-maker-registration-configuration-and-proof-of-work.md](./P11_decision-status-readiness-surface-maker-registration-configuration-and-proof-of-work.md))
 <!-- END AUTO-GENERATED -->

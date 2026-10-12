@@ -1,0 +1,38 @@
+# Liveness probe catalog (feature P11, docs/design/decision-observability-and-adoption.md §3.4).
+#
+# `maker-liveness` is served by exactly one caller: `spur decision status --probe`,
+# which asks it once per distinct registered effective maker to prove the maker
+# answers *now* rather than inferring health from configuration. No workflow may
+# reference this id — a decision whose answer classifies nothing real has no place
+# in a run, and `spur decision status --reliability` would otherwise count probe
+# runs as adoption evidence.
+#
+# The probe writes no `decision_logs` row and emits no `decision.*` event, so these
+# runs never enter the recorded evidence the same report displays next to them.
+#
+# Resolution: this file ships in the shared layer (the installed package's
+# config/decisions/). A project can override it per basename through
+# .spur/decisions/ or decisions.paths (first layer wins, ADR-113 style). Replacing it
+# with a catalog that omits the id makes `--probe` fail loudly before any maker call.
+version: 1
+
+defaults:
+    # Deliberately not the 0.7 upstream / 0.8 catalog floor. minConfidence gates
+    # whether an *answer* is accepted; the probe asks whether the *maker* answered.
+    # Under a 0.8 floor a live maker reporting 0.6 would fall back and the probe would
+    # report "not working" for a backend that is working. A maker that never answered
+    # (no-backend, timeout, error) falls back regardless of this value.
+    minConfidence: 0
+
+decisions:
+    maker-liveness:
+        type: choice
+        # Rendered as the question when the caller passes no `instructions`: the probe
+        # always does pass one, so this description is the fallback wording, not the
+        # probe prompt.
+        description: >
+            Liveness probe. Answer `ok` if this maker can serve a decision right now.
+        criteria:
+            ok: This maker answered the probe.
+            unclear: This maker did not answer the probe.
+        fallback: unclear

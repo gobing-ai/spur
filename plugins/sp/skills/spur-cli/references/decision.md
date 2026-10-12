@@ -1,6 +1,6 @@
 ---
 name: spur-cli-decision
-description: "spur-cli noun reference: operate `spur decision` as the read/serve surface over the decision catalog - list registered decisions, show one served contract (parameters, criteria vocabulary, effective maker), run a decision to a served outcome (never writes a workflow resultFile), and status the catalog layers. Backed by @gobing-ai/ts-ai-decision 0.5.22 hub; offline by default via the built-in `typesafe` maker. Introduced by task 1093."
+description: "spur-cli noun reference: operate `spur decision` as the read/serve surface over the decision catalog - list registered decisions, show one served contract (parameters, criteria vocabulary, effective maker), run a decision to a served outcome (never writes a workflow resultFile), and status the catalog layers with per-maker readiness marks (registered, configured, recorded, probed). Backed by @gobing-ai/ts-ai-decision 0.5.22 hub; offline by default via the built-in `typesafe` maker. Introduced by task 1093; readiness marks and `--probe` by feature P11."
 see_also:
   - spur-cli
 ---
@@ -25,9 +25,10 @@ Decisions resolve first-wins across three layers:
 | `registered` | folders listed in config `decisions.paths` | Operator-added catalogs |
 | `shared` | `decisions/` under the bundled config root | Shipped catalogs (`config/decisions/` in-repo) |
 
-The bundled shared catalog ships `task-triage`, `failure-class`, and `review-failure-class` (all
-`choice` type, param `wbs`). Duplicate ids across layers keep the higher layer; duplicates inside
-one file are a load error.
+The bundled shared catalog ships `task-triage`, `failure-class`, `review-failure-class`,
+`gate-evidence`, `idea-recommendation`, `needs-design`, `anatomy-validation-verdict` and
+`maker-liveness` (the last served only by `spur decision status --probe`; no workflow references
+it). Duplicate ids across layers keep the higher layer; duplicates inside one file are a load error.
 
 **Config keys** (under `decisions:` in the global `~/.config/spur/config.yaml` or project `.spur/config.yaml`):
 `paths` (extra catalog folders forming the `registered` layer), `maker` (default DecisionMaker
@@ -41,7 +42,7 @@ config error, never a silent fallback (design §3.6).
 | `list` | Every visible decision: id, type, layer, catalog file, description | `--layer <layer>`, `--json` |
 | `show <id>` | One served contract: type, parameters, criteria, fallback, minConfidence, effective maker + source | `--json` |
 | `run <id>` | Serve one outcome (closed vocabulary; **never writes a resultFile**) | `--param <pairs...>`, `--evidence <files...>`, `--maker <name>`, `--json` |
-| `status` | Layer counts, registered makers, per-decision maker resolution, load errors | `--json` |
+| `status` | Sectioned readiness report: one status line, errors, aligned `Makers` and `Decisions` tables (registration, configuration source, recorded evidence), `Catalog` block | `--probe`, `--reliability [--since <iso>]`, `--json` |
 
 All verbs support `--json` (bare payload) and `--json-envelope` (`{ok, data|error}` envelope,
 ADR-091). Failure output for `--json` commands uses the canonical error envelope only under
@@ -50,6 +51,25 @@ ADR-091). Failure output for `--json` commands uses the canonical error envelope
 **Exit codes:** `status` exits 1 on any catalog load error or maker-config error; `show` exits 1 on unknown id; `list` exits 0
 (design §3.4 — load errors surface via `status`) except for an invalid `--layer` value (exit 1).
 Error envelopes use `NOT_FOUND` for an unknown id and `VALIDATION_FAILED` for every other caller mistake.
+
+## Readiness marks (`status`, feature P11)
+
+The default `status` output separates four marks per maker and per decision
+(`docs/design/decision-observability-and-adoption.md` §3.4.1):
+
+| Mark | Column | Source |
+| ---- | ------ | ------ |
+| registered | `ST` glyph on the maker row | the maker registry holds the name |
+| configured | `CONFIGURED BY` | `decisions.maker` / `decisions.makers.<id>` |
+| recorded | `RECORDED` / `ACCEPTED` / `LAST SEEN` | the recorded `decision.end` ledger, matched on `(decisionId, maker)` |
+| proven | `PROBE` (only with `--probe`) | one live liveness decision per maker |
+
+`RECORDED` with `ACCEPTED 0` is the state that reads as healthy everywhere else: the maker is
+registered and configured but has never once succeeded. `--probe` is the only path that calls a
+maker, is bounded per driver, writes no decision log row and emits no event (`--probe` with
+`--reliability` is refused). Parse the marks with `--json`: `makers[]`
+(`registered`, `configuredBy`, `serves`, `evidence`), `perDecision[].evidence`, and `probes[]`
+under `--probe`.
 
 **Exit contract for `run` (design §3.4):** any backend-observed outcome — low confidence, model
 error surfaced as fallback, declined — is still a **successful serve** (exit 0, envelope carries
@@ -95,11 +115,16 @@ spur decision run task-triage --param wbs=1093 --json
 spur decision run failure-class --param wbs=1093 \
     --evidence .spur/run/<runId>-test-output.txt    # redacted evidence -> instructions
 spur decision status --json | jq '.loadErrors'      # audit catalog health
+spur decision status                                 # readiness marks: registered / configured / recorded
+spur decision status --probe                          # prove each effective maker answers now
+spur decision status --json | jq '.makers[] | {name, registered, recorded: .evidence.recorded}'
 ```
 
 ## References
 
-- Design: `docs/design/decision-catalog.md` (§2 catalog authoring, §3.4 CLI surface)
+- Design: `docs/design/decision-catalog.md` (§2 catalog authoring, §3.4 CLI surface),
+  `docs/design/decision-observability-and-adoption.md` (§3.4 reliability report, §3.4.1 readiness view)
 - Hub: `@gobing-ai/ts-ai-decision` 0.5.22 (`DecisionService`, catalog schema, maker registry)
-- App service: `packages/app/src/decision/decision-service.ts`
+- App service: `packages/app/src/decision/decision-service.ts` (makers, `probeMaker`),
+  `packages/app/src/decision/decision-status-readiness.ts` (readiness marks, probe loop)
 - Shipped catalogs: `config/decisions/*.yaml`

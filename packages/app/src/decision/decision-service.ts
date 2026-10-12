@@ -72,9 +72,14 @@ export interface DecisionDescription {
 /** Per-decision row of {@link DecisionStatus}. */
 export interface DecisionStatusRow {
     id: string;
+    type: DecisionSummary['type'];
     maker: string;
     source: DecisionMakerSource;
     registered: boolean;
+    /** Winning catalog layer, so the report can name where the served contract comes from. */
+    layer: DecisionLayerId;
+    /** Effective confidence floor (decision → catalog defaults → hub default). */
+    minConfidence: number;
 }
 
 /** Readiness report behind `spur decision status` (design §3.4). */
@@ -121,6 +126,44 @@ export interface DecideOptions {
 /** One decide outcome plus the maker resolution that served it. */
 export type ServedDecision = DecisionResult & { makerSource: DecisionMakerSource };
 
+/** One maker's liveness-probe result (feature P11 R5) — the readiness report's "working now" mark. */
+export interface DecisionProbeOutcome {
+    maker: string;
+    /** The maker answered without falling back (`source: model`). */
+    ok: boolean;
+    /** The served value; null when no answer was obtained before the deadline. */
+    value: string | number | boolean | null;
+    reason: DecisionResult['reason'];
+    durationMs: number;
+}
+
+/**
+ * Per-driver budget for a probe call. A cold local model legitimately needs its load budget
+ * (the `laya-local` startup handshake defaults to 120 s), so the probe sets a bounded but
+ * generous ceiling per driver rather than racing every call on a short timer — a healthy but
+ * cold backend must not be reported as broken.
+ */
+const PROBE_DRIVER_BUDGET_MS = 120_000;
+
+/**
+ * Race `promise` against `budgetMs`; `undefined` when the budget expires first. The abandoned
+ * call cannot be cancelled and keeps running, but it holds no ledger or event side effect (the
+ * probe passes neither), so the report stays truthful and nothing is written after the fact.
+ */
+async function raceTimeout<T>(promise: Promise<T>, budgetMs: number): Promise<T | undefined> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+        return await Promise.race([
+            promise,
+            new Promise<undefined>((resolve) => {
+                timer = setTimeout(() => resolve(undefined), budgetMs);
+            }),
+        ]);
+    } finally {
+        if (timer !== undefined) clearTimeout(timer);
+    }
+}
+
 /**
  * One decision service over one cached hub (design §3.3). The service resolves
  * catalogs, builds `createDecisionHub`-equivalent state with the default maker
@@ -140,6 +183,8 @@ export class DecisionService {
     private readonly duplicateIds: Map<string, string[]>;
     /** Catalog-level errors beyond file loading (e.g. an unregistered catalog maker), from hub loads. */
     private readonly catalogErrors: string[] = [];
+    /** Probe-only hub (feature P11 R5): bounded drivers, built on first probe, never by `status`. */
+    private probeOnlyHub: DecisionHub | undefined;
 
     private constructor(resolution: DecisionResolution) {
         this.resolution = resolution;
@@ -158,24 +203,31 @@ export class DecisionService {
             this.registry.register('clef', () => createDecisionMaker({ driver: createClefDriver(clef) }));
         }
         this.hub = new DecisionHub({ registry: this.registry });
-        // Feed the hub one catalog at a time, in layer order. An id declared by
-        // an earlier winning file is stripped from every LATER file before load
-        // (hub.load throws on duplicates): the id stays served from its first
-        // file, while decide fails closed via {@link duplicateIds}. Any
-        // remaining hub load failure (e.g. a catalog naming an unregistered
-        // maker) is reported, never thrown.
+        this.catalogErrors.push(...this.loadCatalogs(this.hub));
+    }
+
+    /**
+     * Feed `hub` one catalog at a time, in layer order, returning the load failures.
+     * An id declared by an earlier winning file is stripped from every LATER file before
+     * load (hub.load throws on duplicates): the id stays served from its first file, while
+     * decide fails closed via {@link duplicateIds}. Any remaining hub load failure (e.g. a
+     * catalog naming an unregistered maker) is reported, never thrown.
+     */
+    private loadCatalogs(hub: DecisionHub): string[] {
+        const errors: string[] = [];
         const declaredEarlier = new Set<string>();
-        for (const file of resolution.files) {
+        for (const file of this.resolution.files) {
             const decisions = Object.fromEntries(
                 Object.entries(file.catalog.decisions).filter(([id]) => !declaredEarlier.has(id)),
             );
             for (const id of Object.keys(file.catalog.decisions)) declaredEarlier.add(id);
             try {
-                this.hub.load({ ...file.catalog, decisions });
+                hub.load({ ...file.catalog, decisions });
             } catch (error) {
-                this.catalogErrors.push(error instanceof Error ? error.message : String(error));
+                errors.push(error instanceof Error ? error.message : String(error));
             }
         }
+        return errors;
     }
 
     /**
@@ -190,6 +242,69 @@ export class DecisionService {
             sharedRoot,
         });
         return new DecisionService(resolution).withConfig(config);
+    }
+
+    /**
+     * Serve one liveness probe with a bounded maker (feature P11 R5). The probe gets its own
+     * registry so a budget never shortens a real decision call: `probeDriverBudgetMs` is the
+     * DRIVER's own timeout (`timeoutMs` for the hosted backend, `startupTimeoutMs` /
+     * `requestTimeoutMs` for the local ones), so a dead or cold backend reports `timeout`
+     * instead of blocking the readiness report. The wall-clock `backstopMs` covers a driver
+     * with no budget of its own (the in-process `mlx-native` core).
+     *
+     * No bus and no decision log are passed, so a probe emits no event and writes no row: the
+     * recorded evidence the probe sits next to can never be satisfied by the probe itself.
+     * Caller mistakes (unknown id, unregistered maker, invalid input) still throw — the hub
+     * rejects those before any backend call.
+     */
+    async probeMaker(
+        decisionId: string,
+        maker: string,
+        input: Record<string, unknown>,
+        backstopMs: number,
+    ): Promise<DecisionProbeOutcome> {
+        const startedAt = Date.now();
+        const served = await raceTimeout(
+            this.probeHub().decide(decisionId, input as Parameters<DecisionHub['decide']>[1], { maker }),
+            backstopMs,
+        );
+        if (served === undefined) {
+            return { maker, ok: false, value: null, reason: 'timeout', durationMs: Date.now() - startedAt };
+        }
+        return {
+            maker,
+            ok: served.source === 'model',
+            value: served.value,
+            reason: served.reason,
+            durationMs: served.durationMs,
+        };
+    }
+
+    /** Probe-only hub over the same catalogs, with the probe budget on every driver. */
+    private probeHub(): DecisionHub {
+        if (this.probeOnlyHub !== undefined) return this.probeOnlyHub;
+        const env = getEnvVars();
+        const registry = new DecisionMakerRegistry({
+            builtins: {
+                makerOptions: { env, timeoutMs: PROBE_DRIVER_BUDGET_MS },
+                driverOptions: {
+                    'laya-local': {
+                        env,
+                        startupTimeoutMs: PROBE_DRIVER_BUDGET_MS,
+                        requestTimeoutMs: PROBE_DRIVER_BUDGET_MS,
+                    },
+                    'fm-local': { requestTimeoutMs: PROBE_DRIVER_BUDGET_MS },
+                },
+            },
+        });
+        const clef = clefCredentials(env);
+        if (clef !== undefined) {
+            registry.register('clef', () => createDecisionMaker({ driver: createClefDriver(clef) }));
+        }
+        const hub = new DecisionHub({ registry });
+        this.loadCatalogs(hub);
+        this.probeOnlyHub = hub;
+        return hub;
     }
 
     /** Every loaded decision, with the layer its winning file came from. */
@@ -419,7 +534,15 @@ export class DecisionService {
                 file?.catalog.decisions[entry.id]?.maker,
                 file?.catalog.defaults.maker,
             );
-            return { id: entry.id, maker: name, source, registered: this.registry.has(name) };
+            return {
+                id: entry.id,
+                type: entry.type,
+                maker: name,
+                source,
+                registered: this.registry.has(name),
+                layer: entry.layer,
+                minConfidence: this.hub.describe(entry.id).minConfidence,
+            };
         });
         return {
             ok: errors.length === 0,

@@ -147,6 +147,60 @@ each group it reports:
 It never calls a maker. A decision with zero rows reports `evidence: none`. This report is the
 evidence each adoption slice cites.
 
+#### 3.4.1 Readiness view (the default `status` output, feature P11)
+
+The default output answers a different question than §3.4: not "how well did this maker do" but
+"is this maker registered, configured, and actually working". Four marks are reported separately,
+because collapsing them hides the state that matters most — registered and configured with zero
+recorded rows is *never used*, and recorded rows with zero accepted is *never once succeeded*.
+
+| Mark | Source | Reads as |
+| --- | --- | --- |
+| `registered` | `DecisionService.status().registeredMakers` | the registry holds this name |
+| `configured` | `decisions.maker`, `decisions.makers.<id>` | a config key names it (`—` for the catalog floor) |
+| `recorded` | the `decision.end` ledger, folded per maker and matched per `(decisionId, maker)` | it has served at least once |
+| `proven` | `--probe` | it answered one live liveness decision just now |
+
+**Layout contract.** One status line (`decision status — OK|FAILED (n errors)`, then the decision
+count, maker count, configured default maker and recorded total), then errors when there are any,
+then a `Makers` table, a `Decisions` table and a `Catalog` block. Both tables carry a header row
+and pad every column to its widest cell; empty cells render `—` and failures render `✗`. Values
+never render as raw JSON: the layer counts, duplicates and overrides render as `name value` pairs.
+`SERVES` is a count — the ids are the `MAKER` column of the Decisions table — while the full id
+list stays on `makers[].serves` in `--json`. The renderer follows the readiness shape
+`agent doctor` established (`packages/app/src/services/agent-service.ts:3158`).
+
+**Evidence.** The `recorded`/`accepted`/`lastSeen` columns come from the same recorded
+`decision.end` rows as §3.4, folded per maker (`DecisionStatusReadiness` in
+`packages/app/src/decision/decision-status-readiness.ts`). The default output therefore reads the
+ledger — it already opened the project database — but still constructs no maker. Evidence matches
+on `(decisionId, maker)`, never on the id alone: a decision whose configured maker changed has no
+evidence for its new maker, which is the honest answer to "is this maker working for this
+decision".
+
+**Probe (`--probe`).** Opt-in, because it is the one `status` path that calls a maker:
+
+- Each distinct registered effective maker is asked the catalog's `maker-liveness` decision once,
+  sequentially, through the real resolution → validation → maker → fallback seam.
+- The maker comes from a probe-only registry whose drivers carry the probe budget (`timeoutMs` for
+  the hosted backend, `startupTimeoutMs` / `requestTimeoutMs` for the local ones), plus a
+  wall-clock backstop for a driver with no budget of its own. A cold local model therefore gets its
+  real load budget instead of a short race, and a dead backend reports `timeout` rather than
+  blocking the report.
+- `maker-liveness` declares `minConfidence: 0`: the probe asks whether the maker *answered*, so a
+  working maker reporting low confidence is a pass. A fallback reason (`no-backend`, `timeout`,
+  `error`) is a failure mark.
+- The probe passes no event bus and no decision log, so it emits no `decision.*` event and writes
+  no `decision_logs` row: the `recorded` column can never be satisfied by the probe that checks it.
+- A failing probe never changes the exit code, and the per-maker results stream to stderr while the
+  report is built, so a slow maker is visible before the tables land. `--probe` with `--reliability`
+  is refused as a caller mistake before any maker call.
+
+**JSON.** `--json` stays additive: `ok`, `layers`, `loadErrors`, `duplicateIds`, `registeredMakers`,
+`configDefaultMaker`, `configDecisionMakers`, `perDecision` and `errors` keep their names and
+meaning; `perDecision[]` gains `type`, `layer`, `minConfidence` and `evidence`, and the payload
+gains `makers[]` and — only under `--probe` — `probes[]`.
+
 ### 3.5 Decision log (`decision_logs`)
 
 The `decision.*` lifecycle events of §3.3 are stored in `system_events` with every other source.
@@ -271,3 +325,20 @@ decision fallback reproduces today's behavior.
   [--since <iso>] [--json]` — `status` already owns readiness reporting, so a flag is the smaller
   surface change; operator consent for the new public flag was granted. A separate `decision
   report` verb was rejected.
+- **Probe surface (2026-10-11, feature P11).** Chosen: the readiness marks render in the default
+  `status` output, and `--probe` is the one opt-in maker call. Readiness is what the operator asked
+  `status` for, so a second verb would fragment the answer across two commands; `--probe` is a flag
+  because it is a live, budgeted, potentially slow call that a readiness read must not cost by
+  default. `--json` grows additively rather than reshape, so machine consumers and the Board are
+  unaffected.
+- **Probe writes nothing (feature P11).** A probe result is deliberately not persisted — no event,
+  no `decision_logs` row. Tradeoff: a probe run leaves no audit trail, and "was this maker working
+  last Tuesday" is answerable only from real decision traffic. Accepted because a recorded probe
+  would inflate the very evidence the report shows beside it. Upgrade path: record probes under
+  their own `decisionId` (`maker-liveness` already isolates them) if an audit trail is ever needed.
+- **Probe deadline (feature P11).** The per-driver budget is authoritative and the wall-clock
+  backstop only covers drivers without one. A local-model probe can therefore take its full load
+  budget, and a timed-out call is abandoned rather than cancelled — the in-process `mlx-native`
+  core exposes no cancellation, so a wedged weight load can hold the process open after the report
+  is printed. This is an upstream driver gap; the probe's own side effects are nil, so nothing is
+  written after the deadline.

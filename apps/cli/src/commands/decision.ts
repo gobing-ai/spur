@@ -3,13 +3,17 @@ import type { Command } from '@commander-js/extra-typings';
 import {
     confidenceLevel,
     DecisionInputError,
+    type DecisionProbeOutcome,
     type DecisionStatus,
+    type DecisionStatusReadiness,
     decisionCorrelationFromVars,
     decisionLogSink,
     decisionReliability,
     emitDecisionRejected,
     getDecisionService,
+    probeDecisionMakers,
     readDecisionEvidence,
+    readDecisionStatusReadiness,
     type SystemEventBus,
     UnknownDecisionError,
 } from '@gobing-ai/spur-app';
@@ -55,7 +59,7 @@ export function registerDecisionCommand(program: Command, context: CliContext): 
                 const service = await getDecisionService(context.spurConfig ?? null, context.cwd);
                 let entries = service.list();
                 if (options.layer !== undefined) {
-                    if (!DECISION_LAYERS.includes(options.layer)) {
+                    if (!isDecisionLayer(options.layer)) {
                         throw new Error(
                             `invalid --layer "${options.layer}": expected one of ${DECISION_LAYERS.join(', ')}`,
                         );
@@ -241,25 +245,44 @@ export function registerDecisionCommand(program: Command, context: CliContext): 
         .summary('catalog and maker-config readiness report')
         .description(
             [
-                'Configured default maker, per-decision effective maker and source,',
-                'registered makers, per-layer catalog counts, load errors and duplicate',
-                'ids. Exits 0 when clean; exits 1 on any catalog or maker-config error.',
+                'Readiness report in labelled sections: one status line, then errors, the',
+                'makers with their registration, configuration source, served decisions and',
+                'recorded evidence, the served decisions with their effective maker and',
+                'evidence, and the catalog layer counts.',
+                '',
+                'Three marks stay separate per row: registered (the registry holds the',
+                'maker), configured (a config key names it), and recorded (the ledger holds',
+                'outcomes). A maker can be registered and configured and still have never',
+                'succeeded: that is what the recorded/accepted counts show.',
+                '',
+                'With --probe, each distinct registered effective maker is asked one',
+                'liveness decision (maker-liveness) through the real resolution, validation',
+                'and fallback seam, and reports whether it answered. A failing probe never',
+                'changes the exit code, writes no decision_logs row and emits no decision',
+                'event, so recorded evidence stays uncontaminated. Without --probe no maker',
+                'is constructed.',
                 '',
                 'With --reliability, reports recorded decision outcomes per decision',
                 'and maker from the `decision.end` ledger instead (task 1096): samples,',
                 'acceptedRate, fallbacks by reason, medianConfidence, p50/p95 durationMs',
                 'and firstSeen/lastSeen. Catalog ids with no recorded rows report',
-                "evidence: 'none'. Reads recorded rows only — never calls a maker — and",
-                'exits 0 on a successful report.',
+                "evidence: 'none'. Reads recorded rows only and never calls a maker.",
+                '',
+                'Exits 0 when clean; exits 1 on any catalog or maker-config error.',
             ].join('\n'),
         )
         .option('--reliability', 'report recorded decision outcomes per decision and maker from the ledger')
+        .option('--probe', 'ask one liveness decision of each distinct registered effective maker')
         .option('--since <iso>', 'with --reliability: only rows at or after this ISO timestamp')
         .option(...SHARED_OPTIONS.json)
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (options) => {
             try {
                 const service = await getDecisionService(context.spurConfig ?? null, context.cwd);
+                // Refused before the reliability branch returns and before any maker call.
+                if (options.probe === true && options.reliability === true) {
+                    throw new Error('--probe and --reliability cannot be combined: run one report at a time');
+                }
                 if (options.reliability === true) {
                     if (options.since !== undefined && Number.isNaN(Date.parse(options.since))) {
                         throw new Error(`invalid --since "${options.since}": expected an ISO timestamp`);
@@ -299,23 +322,35 @@ export function registerDecisionCommand(program: Command, context: CliContext): 
                     throw new Error('--since is only valid together with --reliability');
                 }
                 const status: DecisionStatus = service.status();
+                const readiness: DecisionStatusReadiness = await readDecisionStatusReadiness(
+                    new SystemEventDao(await context.getDb()),
+                    status,
+                );
+                if (options.probe === true) {
+                    // Progress goes to stderr: stdout stays the report (and, with --json, one
+                    // parseable document). A probe is opted into and bounded per driver, but a
+                    // cold local model can still take its full budget per maker.
+                    readiness.probes = await probeDecisionMakers(service, status, {
+                        onResult:
+                            options.json === true
+                                ? undefined
+                                : (result) => context.output.error(`probing ${renderProbe(result)}`),
+                    });
+                }
                 if (options.json === true) {
-                    context.output.write(toEnvelopeJson(status, { enveloped: options.jsonEnvelope === true }));
-                } else {
-                    for (const line of [
-                        `defaultMaker: ${status.configDefaultMaker ?? '(unset)'}`,
-                        `registeredMakers: ${status.registeredMakers.join(', ')}`,
-                        `layers: ${toJson(status.layers)}`,
-                        `duplicateIds: ${toJson(status.duplicateIds)}`,
-                        `loadErrors: ${status.loadErrors.map((e) => `${e.path}: ${e.message}`).join('; ') || '(none)'}`,
-                        ...status.perDecision.map(
-                            (row) =>
-                                `${row.id}: maker ${row.maker} (${row.source})${row.registered ? '' : ' UNREGISTERED'}`,
+                    context.output.write(
+                        toEnvelopeJson(
+                            {
+                                ...status,
+                                perDecision: readiness.perDecision,
+                                makers: readiness.makers,
+                                ...(readiness.probes !== undefined ? { probes: readiness.probes } : {}),
+                            },
+                            { enveloped: options.jsonEnvelope === true },
                         ),
-                        ...(status.errors.length > 0 ? ['errors:', ...status.errors.map((e) => `  ${e}`)] : []),
-                    ]) {
-                        context.output.write(line);
-                    }
+                    );
+                } else {
+                    context.output.write(renderDecisionStatus(status, readiness));
                 }
                 if (!status.ok) context.setExitCode(1);
             } catch (error) {
@@ -324,7 +359,114 @@ export function registerDecisionCommand(program: Command, context: CliContext): 
         });
 }
 
-const DECISION_LAYERS: readonly string[] = ['project', 'registered', 'shared'];
+const DECISION_LAYERS = ['project', 'registered', 'shared'] as const;
+
+/** Narrow the free-form `--layer` string onto the layer ids `status` counts. */
+function isDecisionLayer(value: string): value is (typeof DECISION_LAYERS)[number] {
+    return (DECISION_LAYERS as readonly string[]).includes(value);
+}
+
+/**
+ * Readiness report for `spur decision status` (feature P11 R1): labelled sections, one
+ * aligned table per subject, `✓`/`✗` status glyphs and `—` for an empty cell — the shape
+ * `agent doctor` established (`packages/app/src/services/agent-service.ts:3158`). Object
+ * values never render as raw JSON: the layer counts and duplicates read as `name value`
+ * pairs, because the operator is reading a state, not a payload.
+ *
+ * `SERVES` counts rather than lists: the id → maker mapping is the Decisions table one
+ * block down, and a list of every served id inlined here would be wider than the table it
+ * belongs to. The ids stay on `makers[].serves` in `--json`.
+ */
+function renderDecisionStatus(status: DecisionStatus, readiness: DecisionStatusReadiness): string {
+    const makers = readiness.makers;
+    const probes = new Map((readiness.probes ?? []).map((probe) => [probe.maker, probe]));
+    const lines: string[] = [
+        `decision status — ${status.ok ? 'OK' : `FAILED (${status.errors.length} error${status.errors.length === 1 ? '' : 's'})`}`,
+        `  ${status.perDecision.length} decisions · ${makers.length} makers · default maker` +
+            ` ${status.configDefaultMaker ?? '(unset)'} · ${makers.reduce((total, m) => total + m.evidence.recorded, 0)} recorded`,
+    ];
+    if (status.errors.length > 0) {
+        lines.push('', `Errors (${status.errors.length})`, ...status.errors.map((error) => `  ${error}`));
+    }
+    lines.push(
+        '',
+        'Makers',
+        ...alignTable(
+            [
+                'ST',
+                'MAKER',
+                'CONFIGURED BY',
+                'SERVES',
+                'RECORDED',
+                'ACCEPTED',
+                'LAST SEEN',
+                ...(readiness.probes !== undefined ? ['PROBE'] : []),
+            ],
+            makers.map((maker) => [
+                maker.registered ? '✓' : '✗',
+                maker.name,
+                maker.configuredBy.join(', ') || '—',
+                String(maker.serves.length),
+                String(maker.evidence.recorded),
+                String(maker.evidence.accepted),
+                maker.evidence.lastSeen?.slice(0, 10) ?? '—',
+                ...(readiness.probes !== undefined
+                    ? [probes.has(maker.name) ? renderProbe(probes.get(maker.name) as DecisionProbeOutcome) : '—']
+                    : []),
+            ]),
+        ),
+        '',
+        `Decisions (${status.perDecision.length})`,
+        ...alignTable(
+            ['ST', 'DECISION', 'TYPE', 'MAKER', 'SOURCE', 'MIN', 'LAYER', 'RECORDED', 'ACCEPTED', 'LAST SEEN'],
+            readiness.perDecision.map((row) => [
+                row.registered ? '✓' : '✗',
+                row.id,
+                row.type,
+                row.maker,
+                row.source,
+                String(row.minConfidence),
+                row.layer,
+                String(row.evidence.recorded),
+                String(row.evidence.accepted),
+                row.evidence.lastSeen?.slice(0, 10) ?? '—',
+            ]),
+        ),
+        '',
+        'Catalog',
+        `  layers      ${DECISION_LAYERS.map((layer) => `${layer} ${status.layers[layer] ?? 0}`).join(' · ')}`,
+        `  duplicates  ${status.duplicateIds.map((d) => `${d.id} (${d.sources.join(', ')})`).join(' · ') || '(none)'}`,
+        `  overrides   ${
+            Object.entries(status.configDecisionMakers)
+                .map(([id, maker]) => `${id} ${maker}`)
+                .join(' · ') || '(none)'
+        }`,
+    );
+    return lines.join('\n');
+}
+
+/**
+ * One probe result as `glyph value via reason · duration`. The value is the served answer
+ * (`ok` when the maker answered) and the reason distinguishes a named fallback from a
+ * deadline; a probe that obtained no answer renders `—` rather than a value it never got.
+ */
+function renderProbe(probe: DecisionProbeOutcome): string {
+    const value = probe.value === null ? '—' : String(probe.value);
+    const outcome = probe.ok ? value : `${value} via ${probe.reason}`;
+    return `${probe.ok ? '✓' : '✗'} ${outcome} · ${(probe.durationMs / 1000).toFixed(1)}s`;
+}
+
+/** Pad every column to its widest cell, header included. */
+function alignTable(header: readonly string[], rows: readonly (readonly string[])[]): string[] {
+    const all = [header, ...rows];
+    const widths = header.map((_, column) => Math.max(...all.map((row) => (row[column] ?? '').length)));
+    return all.map((row) =>
+        row
+            .map((cell, column) => cell.padEnd(widths[column] ?? 0))
+            .join('  ')
+            .trimEnd(),
+    );
+}
 
 /** --param/--evidence collector: commander repeatable-option value arrays. */
 function collect(value: string, previous: string[] | undefined): string[] {
