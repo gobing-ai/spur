@@ -104,7 +104,7 @@
         ├── [done] **G61**: Durable project command and result loop ([G61_durable-project-command-and-result-loop.md](./G61_durable-project-command-and-result-loop.md))
         ├── [done] **G62**: Project fleet, orchestrator binding, and rest/GTD strategy runtime ([G62_project-fleet-orchestrator-binding-and-rest-gtd-strategy-runtime.md](./G62_project-fleet-orchestrator-binding-and-rest-gtd-strategy-runtime.md))
         ├── [active] **G63**: Projects board module and global input wiring ([G63_projects-board-module-and-global-input-wiring.md](./G63_projects-board-module-and-global-input-wiring.md))
-            └── [backlog] **G631**: Projects Database tab: read-only table browser for the project database ([G631_projects-database-tab-read-only-table-browser-for-the-project-database.md](./G631_projects-database-tab-read-only-table-browser-for-the-project-database.md))
+            └── [active] **G631**: Projects Database tab: read-only table browser for the project database ([G631_projects-database-tab-read-only-table-browser-for-the-project-database.md](./G631_projects-database-tab-read-only-table-browser-for-the-project-database.md))
         ├── [done] **G64**: Retire Workspace, Inbox, Teams, and spur team ([G64_retire-workspace-inbox-teams-and-spur-team.md](./G64_retire-workspace-inbox-teams-and-spur-team.md))
         ├── [verifying] **G65**: Fleet declaration in spur config ([G65_fleet-declaration-in-spur-config.md](./G65_fleet-declaration-in-spur-config.md))
         ├── [done] **G66**: Persistent fleet member: one agent session per member across inbox drains ([G66_persistent-fleet-member-one-agent-session-per-member-across-inbox-drains.md](./G66_persistent-fleet-member-one-agent-session-per-member-across-inbox-drains.md))

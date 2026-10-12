@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Read-only project database browse API (domain inspector, app service, contracts, server routes)
-status: testing
+status: wip
 template: feature-impl
 created_at: 2026-10-12T05:49:58.428Z
-updated_at: "2026-10-12T07:16:59.194Z"
+updated_at: "2026-10-12T21:12:00.126Z"
 feature_id: G631
 priority: P2
 tags:
@@ -14,6 +14,7 @@ tags:
   - server
 estimate_hours: 4
 
+ac_altitude: task-local
 ---
 
 ## 1183. Read-only project database browse API (domain inspector, app service, contracts, server routes)
@@ -47,14 +48,14 @@ Premises (verified against the tree):
 
 ### Acceptance Criteria
 
-- [ ] AC1 — The user picks any table of the project database and the choice survives reload
-- [ ] AC2 — The selected table shows its schema and exact row count
-- [ ] AC3 — Rows are paginated on the server with a bounded page size
-- [ ] AC4 — The user sorts by one column and filters one column by a contains match
-- [ ] AC5 — Long, null and binary cell values stay readable
+- [ ] AC1 — The server lists every user table of the project database in sorted order and excludes internal tables
+- [ ] AC2 — The server returns the selected table's columns in declaration order with name, declared type, nullability and primary-key flag, plus its exact row count
+- [ ] AC3 — The server returns one page of rows with a bounded page size, the total row count and the current range
+- [ ] AC4 — The server honours a single-column sort and a single-column contains filter and reports the filtered total
+- [ ] AC5 — The server projects long text, NULL and BLOB cells as JSON-safe values, cutting long text with a truncation marker and giving BLOBs a byte length
 - [x] AC6 — Data access is read-only and refuses names outside the live schema
 
-Task-local checks: the URL persistence half of AC1 and the rendering halves of AC2–AC5 are delivered by the web task; this task proves the server responses those halves consume.
+Task-local altitude (`ac_altitude: task-local`): these are the server obligations this task proves, each backed by R1–R6. The client halves — URL persistence, schema strip and grid rendering, sort/filter controls, cell markers and the row-detail modal — are delivered by task 1184 and are not ship criteria of this task. The feature's R2–R6 scenarios remain covered by 1184's AC, and R7 stays covered here by AC6.
 
 ### Q&A
 
@@ -82,13 +83,13 @@ Frozen call shape: every read goes through `db.queryAll<T>(sql, ...params)` (ts-
 
 ### Plan
 
-- [ ] Write the failure list first: unknown table, unknown sort/filter column, SQL-looking identifiers, LIKE wildcard escaping, page beyond end, pageSize over cap, BLOB/NULL/huge text cells, getDb throwing. (R1–R4, R6)
-- [ ] Add packages/domain/src/dao/database-inspector.ts and export it from packages/domain/src/dao/index.ts. (R1–R3)
-- [ ] Add packages/contracts/src/database.ts DTOs and export them from packages/contracts/src/index.ts. (R5)
-- [ ] Add packages/app/src/database/ DatabaseBrowserService and export it from packages/app/src/index.ts. (R4)
-- [ ] Add apps/server/src/modules/database/index.ts, append it to `builtins`, and update apps/server/tests/modules/registry.test.ts:8. (R6)
-- [ ] Cover the failure list: in-memory SQLite DAO/service tests under packages/domain/tests and packages/app/tests; route tests in apps/server/tests/modules/database/ mounting the module on a stub ServerContext with an in-memory adapter, plus a throwing getDb for the 503. (AC1–AC6)
-- [ ] Run bun run spur-check.
+- [x] Write the failure list first: unknown table, unknown sort/filter column, SQL-looking identifiers, LIKE wildcard escaping, page beyond end, pageSize over cap, BLOB/NULL/huge text cells, getDb throwing. (R1–R4, R6)
+- [x] Add packages/domain/src/dao/database-inspector.ts and export it from packages/domain/src/dao/index.ts. (R1–R3)
+- [x] Add packages/contracts/src/database.ts DTOs and export them from packages/contracts/src/index.ts. (R5)
+- [x] Add packages/app/src/database/ DatabaseBrowserService and export it from packages/app/src/index.ts. (R4)
+- [x] Add apps/server/src/modules/database/index.ts, append it to `builtins`, and update apps/server/tests/modules/registry.test.ts:8. (R6)
+- [x] Cover the failure list: in-memory SQLite DAO/service tests under packages/domain/tests and packages/app/tests; route tests in apps/server/tests/modules/database/ mounting the module on a stub ServerContext with an in-memory adapter, plus a throwing getDb for the 503. (AC1–AC6)
+- [x] Run bun run spur-check.
 
 ### Solution
 
@@ -101,16 +102,16 @@ Read-only Projects Database browse API (G631 / task 1183) — server half. Deliv
 | `packages/domain/src/dao/database-inspector.ts:58` | `UnknownTableError`/`UnknownColumnError` raised before any SQL is built; identifier resolution is case-insensitive but quotes the schema's own spelling. |
 | `packages/domain/src/dao/database-inspector.ts:95` | `truncateUtf8`/`projectCell` — cells become tagged JSON-safe values (`null`/`num`/`text`/`blob`+byte length); text > 4 KiB is cut on a UTF-8 boundary with `truncated: true`, and `readRow` opts out of truncation. |
 | `packages/domain/src/dao/index.ts:22` | Exports the inspector, its query/result types, the two errors, and the page-size/text-bound constants. |
-| `packages/contracts/src/database.ts:14` | Wire DTOs: cell union, column, `tables`, `table`, `rows`, `row` and the error body — the §3.3 shapes 1184 binds to. |
-| `packages/contracts/src/index.ts:47` | Re-exports the database DTOs (Hono-served, documented for OpenAPI like observability). |
+| `packages/contracts/src/database.ts:14-76` | Wire DTOs: cell union, column, `tables`, `table`, `rows`, `row` and the error body — the §3.3 shapes 1184 binds to. |
+| `packages/contracts/src/index.ts:45-47` | Re-exports the database DTOs (Hono-served, documented for OpenAPI like observability). |
 | `packages/app/src/database/database-browser-service.ts:113` | `DatabaseBrowserService` clamps `pageSize` (default 50, max 200), normalises `page >= 1`, validates `dir ∈ {asc, desc}`, validates the row-detail offset, and maps domain errors to `unknown-table`/`unknown-column`/`invalid-request`. |
 | `packages/app/src/index.ts:17` | Exports the service and its request/result types. |
 | `apps/server/src/modules/database/index.ts:87` | The `database` module: four GET routes under `/api/project/database`. `:24` `withService` maps a throwing `getDb()` to 503 and any other error to 500; `:44` `resultResponse` maps named outcomes to 404/400. |
 | `apps/server/src/modules/registry.ts:5` | Imports `databaseModule`; `:42` appends it LAST in `builtins`. |
 | `apps/server/tests/modules/registry.test.ts:21` | Expectation updated with `'database'` appended. |
-| `packages/domain/tests/dao/database-inspector.test.ts:1` | DAO suite: list/describe, pagination past the end, sort, contains filter, LIKE-wildcard escaping, NULL/BLOB/5 KB text projection, UTF-8 cut, unknown table/column, SQL-looking identifiers, and a read-only probe asserting only `SELECT`/`PRAGMA` are ever issued. |
-| `packages/app/tests/database/database-browser-service.test.ts:1` | Service suite: defaults, pageSize cap, page normalisation, invalid `dir`, named outcomes, offset validation, sort+filter pass-through. |
-| `apps/server/tests/modules/database/index.test.ts:1` | Route suite on a stub `ServerContext` + in-memory adapter: all four routes, page clamp, sort/filter, cell projection, 404/400 mappings, and a throwing `getDb` → 503 on every route. |
+| `packages/domain/tests/dao/database-inspector.test.ts:85-302` | DAO suite: list/describe, pagination past the end, sort, contains filter, LIKE-wildcard escaping, NULL/BLOB/5 KB text projection, UTF-8 cut, unknown table/column, SQL-looking identifiers, and a read-only probe asserting only `SELECT`/`PRAGMA` are ever issued. |
+| `packages/app/tests/database/database-browser-service.test.ts:15-155` | Service suite: defaults, pageSize cap, page normalisation, invalid `dir`, named outcomes, offset validation, sort+filter pass-through. |
+| `apps/server/tests/modules/database/index.test.ts:24-163` | Route suite on a stub `ServerContext` + in-memory adapter: all four routes, page clamp, sort/filter, cell projection, 404/400 mappings, and a throwing `getDb` → 503 on every route. |
 
 Validation: `(cd packages/domain && bun test tests/dao/database-inspector.test.ts)` 16 pass; `(cd packages/app && bun test tests/database/database-browser-service.test.ts)` 10 pass; `(cd apps/server && bun test tests/modules/database tests/modules/registry.test.ts)` 13 pass; typechecks clean for domain/app/contracts/server; `recommended-pre-check` and `recommended-post-check` rule presets pass. End-to-end probe against a throwaway `spur serve` root confirmed all four routes plus the 404/400 status mappings.
 
@@ -144,46 +145,50 @@ Validation: `(cd packages/domain && bun test tests/dao/database-inspector.test.t
 
 #### Review Report — 1183
 
-**Scope:** task 1183 change set — domain `DatabaseInspector`, app `DatabaseBrowserService`, contracts DTOs, server `database` module + registry, their three test suites, and the two mechanical plugin-bundle regenerations. Foreign uncommitted changes (workflow/CLI/docs) were excluded via explicit `git diff -- <path>` reads.
+**Scope:** task 1183 change set at commit `c56652073` — 15 files: domain `DatabaseInspector` + DAO index, app `DatabaseBrowserService` + app index, `packages/contracts/src/database.ts` + contracts index, server `database` module + `registry.ts` + its tests, three new suites, two mechanical plugin-bundle regenerations, and the task record. Read with explicit paths (`git show c56652073 -- <path>`); the foreign uncommitted changes (`apps/web/tests/modules/features/components.test.tsx`, `packages/app/tests/services/feature-transition.test.ts`, `docs/tasks5/1179..1182*.md`, `docs/features/G631*`) were never read into evidence, staged, or commented on. Re-derived independently — the prior PASS and its advisories were not carried forward.
 **Dimensions:** functional traceability, security, correctness, efficiency, usability, architecture
 **Verdict:** PASS
+**Confidence:** HIGH
 
 ##### Findings (ranked)
 
 | # | Priority | Dimension | Finding | Location | Disposition |
 |---|----------|-----------|---------|----------|-------------|
-| 1 | P4 (advisory) | correctness | `page`/`offset` are bounded only from below: `page=1e21` passes `Number.isInteger` and reaches SQL as an OFFSET SQLite cannot represent, answering 500 `{"error":"datatype mismatch"}` (raw driver message) instead of a named 400/empty page. Reproduced on the mounted module; `pageSize` itself is correctly clamped, so no stated requirement is violated. Suggested: reject page/offset above `Number.MAX_SAFE_INTEGER` as `invalid-request`. | `packages/app/src/database/database-browser-service.ts:52-63`, `:156-168` | ACCEPTED |
-| 2 | P4 (advisory) | functional | The contracts comment claims the generated OpenAPI covers the four Hono-served routes; verified it does not — `generateOpenApiSpec()` emits 31 paths, none matching `/database` (and none matching `/observability`). Documenting a Hono route requires an `oc.route({ method, path })` entry inside a spread contract (`fleet.ts:178`, `runs.ts:106`). R5 is still MET: the DTOs exist and are exported, and every success/400/404/503 body parses against them. | `packages/contracts/src/database.ts:5-6`, `packages/contracts/src/index.ts:45-46` | ACCEPTED |
-| 3 | P4 (advisory) | architecture | The module comment and design §3.3 attribute the `database-unavailable` 503 to the Cloudflare Worker path, but the Worker app never mounts server modules — it answers unmatched `/api/*` with 503 `{"error":"This endpoint requires the local Bun server runtime."}`. The 503 is real and correct on the Bun composition root (`context.ts:453-461`), so R6 holds; only the stated rationale and the Worker's body differ, which matters if the web tab keys on the named body for the feature's R9 state. | `apps/server/src/modules/database/index.ts:20-21`, `apps/server/src/worker-app.ts:62-69` | ACCEPTED |
-
-No open P1–P3 findings.
+| 1 | P3 (minor) | correctness | `page` and `offset` are bounded only from below. Reproduced on the mounted module: `?page=1e21` and `?offset=1e21` reach SQL as an OFFSET SQLite cannot represent and answer 500 with the raw driver string (`datatype mismatch`), while `?page=9999999999999999` answers 200 with an empty page. `pageSize` itself is correctly clamped, and no stated requirement or AC commits the route to a behaviour for an unbounded page, so this is a hardening gap rather than a requirement breach. Follow-up: reject page/offset above `Number.MAX_SAFE_INTEGER` as `invalid-request` at `packages/app/src/database/database-browser-service.ts:52-56` (page) and `packages/app/src/database/database-browser-service.ts:159-167` (offset). | `packages/app/src/database/database-browser-service.ts:52-56`, `:159-167` | DEFER(no requirement/AC covers an unbounded page; needs a follow-up bound-check) |
+| 2 | P4 (advisory) | usability | Any non-domain throw is answered with the raw error message, a body no contract shape covers: `databaseErrorResponseSchema` enumerates only the four named outcomes, so a client that schema-validates error bodies rejects the 500 case and internal driver text reaches the wire. The server is local-only and host-guarded, so this is hygiene, not exposure; a fixed internal-error body would close it. | `apps/server/src/modules/database/index.ts:35-40` | ACCEPTED |
+| 3 | P4 (advisory) | functional | The header comment claims the DTOs are documented "so the generated OpenAPI covers them"; measured, `generateOpenApiSpec()` emits 31 paths and none matches `/database` (nor `/observability`). R5 still holds — the DTOs exist, are re-exported, and every success/400/404/503 body validates against them. Measured: `generateOpenApiSpec()` emits 31 paths and none matches `/database` (nor `/observability`), because the document is generated from the oRPC `contract` (`apps/server/src/openapi.ts:16`) and that contract carries no Hono route. R5 still holds — the DTOs exist, are re-exported, and every success/400/404/503 body validates against them. Either drop the claim or register the four paths with the generator. | `packages/contracts/src/database.ts:3-8` | ACCEPTED |
+| 4 | P4 (advisory) | architecture | The module comment and the design (`docs/design/projects-database-tab.md:79`) explain the `database-unavailable` 503 as the Worker path's, but the Worker never mounts server modules: `apps/server/src/worker-app.ts:62-69` answers unmatched `/api/*` with a different body. The named 503 is only the Bun composition root's behaviour when `getDb()` rejects (`apps/server/src/context.ts:453-461`), which is what the route tests pin. R6 holds there; the wording matters only if the web tab keys its unavailable state on the named body. | `apps/server/src/modules/database/index.ts:17-18` | ACCEPTED |
+| 5 | P4 (advisory) | functional | The tracked `## Testing` AC table is keyed to the pre-rewrite, feature-level scenario titles with status `N/A`, while `## Acceptance Criteria` now declares the task-local server obligations — so AC1–AC5 carry no evidence row under their current identities and their boxes are still open. Every `- [ ]` classifies as a blocking residual at record, so this run's verify must key AC1–AC5 (`AC1`–`AC5` rows, `MET`) for `record` to flip the boxes; otherwise `done` fails on open boxes despite the behaviours being delivered and tested. | `docs/tasks5/1183_read-only-project-database-browse-api-domain-inspector-app-s.md:51-55`, `:136-140` | OPEN |
+| 6 | P4 (advisory) | architecture | `type QueryContext = Context` adds no members and names no domain concept, so every handler signature reads as if it depended on a Spur type that does not exist; Hono's `Context` can be named directly, as the mount signature already does. | `apps/server/src/modules/database/index.ts:21` | ACCEPTED |
 
 ##### Functional Traceability
 
 | Req | Status | Evidence |
 |-----|--------|----------|
-| R1 | MET | `packages/domain/src/dao/database-inspector.ts:134` `listTables` (`sqlite_master`, `sqlite\_%` excluded, `ORDER BY name`); `:142` `describe` (`PRAGMA table_info` in `cid` order + exact `COUNT(*)`); `:155` `readRows` (optional single-column sort + single-column contains filter); tests `packages/domain/tests/dao/database-inspector.test.ts:71,89,132,158` |
-| R2 | MET | `:202` `resolveTableName` / `:223` `resolveColumnName` resolve against the live schema and quote its own spelling (`:85`); typed errors `:58`,`:69`; `:90` `escapeLike` (`, `%`, `_`, `\` escaped) bound at `:229`; only SELECT/PRAGMA issued (probe test `database-inspector.test.ts:271`; wire probe 404s all injection-shaped names) |
-| R3 | MET | `:104` `projectCell` (null / blob+byte length / num / text); `:95` `truncateUtf8` cuts at 4096 bytes on a code-point boundary with `truncated: true`; `:184` `readRow` passes `truncateText=false`; tests `database-inspector.test.ts:206,225,240` |
-| R4 | MET | `packages/app/src/database/database-browser-service.ts:14` cap 200, `:59-63` default 50 + clamp, `:52` `page >= 1`, `:72-95` `dir` validation, `:99-104` error naming; tests `packages/app/tests/database/database-browser-service.test.ts:43,60,100,120` |
-| R5 | MET | `packages/contracts/src/database.ts` cell/column/table/tables/rows/row/error schemas; re-exported at `packages/contracts/src/index.ts:47`; all four success bodies and the 400/404/503 bodies parse against them (review probe) |
-| R6 | MET | `apps/server/src/modules/database/index.ts:92-95` four GET routes; `:24-41` `getDb()` throw → 503 and other errors → 500; `:44-46` named outcomes → 400/404; `apps/server/src/modules/registry.ts:42` registered LAST; `apps/server/tests/modules/registry.test.ts:21` order updated; tests `apps/server/tests/modules/database/index.test.ts:36-136` |
-| AC1 (server half) | MET | `GET /api/project/database/tables` serves the sorted live table list the picker binds to; URL persistence is task 1184 by the task's own split |
-| AC2–AC5 (server halves) | MET | `describe` returns schema + exact count; `rows` is server-paged with `pageSize`/`total`; sort + contains filter honoured; null/blob+bytes/long-text cells projected |
-| AC6 | MET | Read-only by construction (only SELECT/PRAGMA in the DAO); names outside the live schema answer 404 `unknown-table`/`unknown-column`, including `sqlite_*` internals and SQL-text names (wire probe) |
+| R1 | MET | `packages/domain/src/dao/database-inspector.ts:134` — `listTables` (`sqlite_master`, `sqlite\_%` excluded, `ORDER BY name`); `:142` — `describe` (`PRAGMA table_info` in `cid` order + exact `COUNT(*)`); `:155` — `readRows` (optional single sort column + single contains filter, `LIMIT`/`OFFSET` bound). Fresh: `(cd packages/domain && bun test tests/dao/database-inspector.test.ts)` → 16 pass / 0 fail |
+| R2 | MET | `:202` `resolveTableName` and `:223` `resolveColumnName` resolve against the live schema before any SQL string is built (`:85` `quoteIdentifier` quotes the schema's own spelling, `:90` `escapeLike`); `:211-213` is the only `PRAGMA`, `:234` binds the LIKE pattern. Probe recorded every statement issued through the mounted module — all started with `SELECT`/`PRAGMA` (no other PRAGMA form), and a stub adapter whose `run`/`exec`/`batch` throw was never asked to write. Injection-shaped table and sort names → 404; `sqlite_sequence` → 404; `filter=%`, `filter=_`, `filter=\` matched only the row holding that literal character; table list and row count unchanged afterwards |
+| R3 | MET | `:104` `projectCell` (null / blob+byte length / finite num, non-finite as text / text); `:95` `truncateUtf8` cuts at 4096 bytes on a code-point boundary with `truncated: true`; `:184-197` `readRow` projects with truncation off. Probe: a 4097-byte `x…é` cell paged back as 4096 bytes with `truncated: true`, and the same row's detail read returned all 4096 code units untruncated. Tests: `packages/domain/tests/dao/database-inspector.test.ts:197,239` |
+| R4 | MET | `packages/app/src/database/database-browser-service.ts:14` cap 200; `:58-64` default 50 + clamp; `:52-56` page normalises to ≥ 1; `:72-97` `dir` validated case-insensitively, anything else `invalid-request`; `:99-104` domain errors → `unknown-table`/`unknown-column`, others rethrown; `:159-167` offset must be a non-negative integer. Fresh: `(cd packages/app && bun test tests/database/database-browser-service.test.ts)` → 10 pass / 0 fail |
+| R5 | MET | `packages/contracts/src/database.ts:14` cell union, `:25` column, `:36` tables, `:44` table, `:54` rows, `:66` row, `:75` error enum; re-exported at `packages/contracts/src/index.ts:47`. Probe: the four success bodies plus the 400/404/503 bodies all validate against those schemas (the 500 body does not — finding 2) |
+| R6 | MET | `apps/server/src/modules/database/index.ts:92-95` — the four GET routes under `/api/project/database`; `:30-34` `getDb()` throw → 503 `database-unavailable`; `:44-47` named outcomes → 404 (unknown-table/unknown-column) / 400 (invalid-request); registered last in `builtins` at `apps/server/src/modules/registry.ts:42` with the order assertion at `apps/server/tests/modules/registry.test.ts:12-26`. Fresh: `(cd apps/server && bun test tests/modules/database tests/modules/registry.test.ts)` → 13 pass / 0 fail. Probe: all four routes → 503 `database-unavailable` under a throwing `getDb`, 404/400 with the documented bodies |
+| AC1 (server half) | MET | `GET /api/project/database/tables` → `{"tables":["alpha","autoinc","weird"]}` sorted, `sqlite_sequence` absent (probe); served at `apps/server/src/modules/database/index.ts:92` from `packages/domain/src/dao/database-inspector.ts:134` |
+| AC2 (server half) | MET | `/tables/ALPHA` → `{"name":"alpha",columns:[id, name, payload, note] in declaration order with type/notNull/pk, "rowCount":3}` (probe); declared-order + exact count from `packages/domain/src/dao/database-inspector.ts:142-148` |
+| AC3 (server half) | MET | `/rows` → `{"page":1,"pageSize":50,"total":3,"columns":[…],"rows":[…]}`; `pageSize=100000` → 200 (probe); clamp at `packages/app/src/database/database-browser-service.ts:58-64` |
+| AC4 (server half) | MET | `/rows?sort=name&dir=desc&filterColumn=name&filter=x` → filtered `total` + ordered rows, single column each (probe); SQL at `packages/domain/src/dao/database-inspector.ts:229-243` |
+| AC5 (server half) | MET | Probe: long text cut with `truncated: true`, BLOB → `{"t":"blob","bytes":3}`, NULL → `{"t":"null"}`, and `/row?offset=0` returned the full 4096-unit text |
+| AC6 | MET | Read-only and schema-bounded by construction: every issued statement is `SELECT`/`PRAGMA table_info` (probe + `packages/domain/tests/dao/database-inspector.test.ts:272-302`), no write method on the adapter is reachable from the DAO, and names outside the live schema answer 404 `unknown-table`/`unknown-column` (injection-shaped names, `sqlite_sequence`, unknown sort/filter columns) |
 
 ##### Verification evidence
 
 - `(cd packages/domain && bun test tests/dao/database-inspector.test.ts)` → 16 pass / 0 fail
 - `(cd packages/app && bun test tests/database/database-browser-service.test.ts)` → 10 pass / 0 fail
 - `(cd apps/server && bun test tests/modules/database tests/modules/registry.test.ts)` → 13 pass / 0 fail
-- `tsc --noEmit` clean in packages/domain, packages/contracts, packages/app, apps/server
-- `bunx biome check` over the 12 non-generated files → no findings
-- Wire probe on the mounted module: injection-shaped table/column names → 404; `sqlite_sequence` → 404; `filter=%`/`filter=_` match only the literal `a%b_c` row; table list unchanged afterwards
-- DTO conformance probe: 4 success bodies + 400/404/503 bodies validate against the database contract schemas; the 500 body does not (finding 1)
-- OpenAPI probe: `generateOpenApiSpec()` → 31 paths, none matching `/database` (finding 2)
+- Independent mounted-module probe (this run): table list, describe (exact count, cid order, quoted/space-bearing column names), default page, LIKE escaping for `%`/`_`/`\`, 404 on injection-shaped table and sort names and on `sqlite_sequence`, 400 on bad `dir`/`offset`, BLOB/NULL/truncated-text projection, full-value row detail, 503 on a throwing `getDb` for all four routes, statement log free of non-`SELECT`/`PRAGMA` SQL, and `page=1e21` / `offset=1e21` → 500 (finding 1)
+- Independent OpenAPI probe (this run): `generateOpenApiSpec()` → 31 paths, none matching `/database` or `/observability` (finding 3)
+- Design conformance: `docs/design/projects-database-tab.md` §3.1–§3.3 claims DONE across all three layers; the only deviations are the documented-rationale wordings in findings 3 and 4, no silent scope change in the diff
+- Not re-run by instruction: `bun run spur-check` (green on this tree already); no staged files were added by this review
 
-**Next:** hand the four routes and the `packages/contracts/src/database.ts` DTOs to task 1184 (web tab); optionally correct the P4-2 comment/claim and harden the page/offset upper bound in a follow-up.
+**Next:** hand the four routes and the `packages/contracts/src/database.ts` DTOs to task 1184; verify must re-key AC1–AC5 to the task-local wording (finding 5), and the page/offset bound is the one follow-up candidate (finding 1).
 
 ### References
 
@@ -194,4 +199,5 @@ No open P1–P3 findings.
 - 2026-10-12T05:59:48.111Z feature_id Q → G631 (system)
 - 2026-10-12T06:24:22.086Z todo → wip (system)
 - 2026-10-12T07:16:59.194Z wip → testing (system)
+- 2026-10-12T20:57:28.810Z testing → wip (system)
 
