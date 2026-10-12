@@ -16,6 +16,28 @@ When the batch completes with **no failed task**, fast-forward-merge the worktre
 base ref. The terminal action after the merge differs by mode (ownership rule: *the flag removes
 only what it created*):
 
+**Duplicate-WBS sweep before the merge (observed 2026-10-12).** WBS allocation is per-tree — a
+worktree's allocator reads only its own corpus and DB — so two trees cut from the same base both
+allocate the same next number, and the collision surfaces only here (measured: the F42 batch's
+residual task shipped as `1183` while the base ref had already given `1183` to another task, so the
+file had to be re-filed before landing). Run this against the ref you are about to merge INTO:
+
+```bash
+TARGET=<base-ref>; BRANCH=sp/<branch>
+for f in $(git diff --diff-filter=A --name-only "$(git merge-base "$TARGET" "$BRANCH")..$BRANCH" -- docs \
+           | grep -E '^docs/tasks[0-9]*/'); do
+  wbs=$(basename "$f" | cut -c1-4)
+  git ls-tree -r --name-only "$TARGET" -- docs | grep -qE "/${wbs}_" && echo "COLLISION $wbs $f"
+done
+```
+
+A hit means one file must lose: keep the target's task, re-create the branch's task in the invoking
+tree through `spur task create` (the allocator picks the next free number), and drop the branch's
+file in the merge resolution — never land both, and never renumber by hand. Verified against a
+fixture (flags a duplicate, silent on a free WBS). The pathspec form is load-bearing: `-- docs` plus
+the `^docs/tasks[0-9]*/` filter, because plain `docs/tasks*` matches nothing under `ls-tree` here and
+`:(glob)` magic is rejected by `ls-tree`/`diff` (it works for `git status`).
+
 #### Create mode — merge, remove, delete
 
 ```bash

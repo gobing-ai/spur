@@ -592,6 +592,14 @@ export class TaskCheckService extends PlanningCheckService {
         const variant = (fm.template as string) ?? DEFAULT_TASK_VARIANT;
         const entry = this.resolveMatrixEntry(variant, effectiveStatus);
 
+        // ── L1 identity: one WBS, one file (2026-10-12). WBS allocation is per-tree, so two
+        // worktrees cut from one base both mint the same number and the collision only appears at
+        // integration. The corpus-wide `task check` reports duplicates (0416 R6) but nothing
+        // enforced the invariant on the per-task path every pipeline guard actually runs — which is
+        // how two `1183` files reached an integration in this repo (see execution-worktree-landing.md
+        // § WT-4 for the sweep the same gap required before this check existed).
+        await this.runWbsCollisionCheck(dirname(filePath), wbs, findings);
+
         // ── L2: Section presence (warning-first, gate:true hard) ──
         this.runL2(doc, entry, findings, raw);
 
@@ -705,6 +713,26 @@ export class TaskCheckService extends PlanningCheckService {
         return { doc, findings: effectiveFindings, entry };
     }
     // ── L3: Format rules ──
+    /**
+     * L1 identity: this WBS must be claimed by exactly one file across the configured corpus
+     * folders. Reuses {@link TaskLocator.findDuplicateWbs} — the same scan `task check` (corpus
+     * mode) reports from, so the per-task gate and the corpus report cannot disagree.
+     */
+    private async runWbsCollisionCheck(tasksDir: string, wbs: string, findings: CheckFindings[]): Promise<void> {
+        const group = (await this.locatorFor(tasksDir).findDuplicateWbs()).find((hits) => hits[0]?.wbs === wbs);
+        if (group === undefined || group.length < 2) return;
+        findings.push({
+            layer: 'L1',
+            code: FINDING_CODES.L1_WBS_COLLISION,
+            severity: 'error',
+            section: '',
+            message:
+                `WBS ${wbs} is claimed by ${group.length} task files: ${group.map((hit) => hit.filePath).join(', ')}. ` +
+                'Keep one and re-create the other through `spur task create` (the allocator picks the next free ' +
+                'number) — never renumber by hand.',
+        });
+    }
+
     private runL3(
         doc: MarkdownDocument,
         entry: MatrixEntry | undefined,

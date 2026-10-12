@@ -10,6 +10,7 @@ export const ALL_FINDING_CODES = [
     // L1: Schema & syntax
     'L1.markdown-parse',
     'L1.schema-validation',
+    'L1.wbs-collision',
 
     // L2: Section presence & matrix rules
     'L2.missing-required-section',
@@ -102,6 +103,7 @@ export const FINDING_CODES = {
     // L1
     L1_MARKDOWN_PARSE: 'L1.markdown-parse',
     L1_SCHEMA_VALIDATION: 'L1.schema-validation',
+    L1_WBS_COLLISION: 'L1.wbs-collision',
 
     // L2
     L2_MISSING_REQUIRED_SECTION: 'L2.missing-required-section',

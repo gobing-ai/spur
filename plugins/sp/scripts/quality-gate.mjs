@@ -24437,6 +24437,7 @@ function isRfc3339Timestamp(value) {
 var ALL_FINDING_CODES = [
   "L1.markdown-parse",
   "L1.schema-validation",
+  "L1.wbs-collision",
   "L2.missing-required-section",
   "L2.forbidden-section",
   "L2.disallowed-section",

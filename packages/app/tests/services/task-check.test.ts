@@ -4550,3 +4550,37 @@ describe('TaskCheckService.firstBlockingPrerequisite (0838)', () => {
         expect(blocked).toBeNull();
     });
 });
+
+// 2026-10-12: WBS allocation is per-tree, so two worktrees cut from one base both mint the same
+// number and the collision appears only at integration (two `1183` files reached a real merge in
+// this repo).`task check` in corpus mode already reported duplicates (0416 R6), but the per-task
+// path every pipeline guard runs did not — this closes that gap with the same locator scan.
+describe('L1.wbs-collision (2026-10-12)', () => {
+    test('a WBS claimed by two files is an error naming both files', async () => {
+        const { fs, path, cleanup } = seedEnv({
+            wbs: '1183',
+            taskContent: `${taskFm()}\n## Background\n\nfirst\n`,
+            extraTasks: { '1183': `${taskFm({ name: 'Rival' })}\n## Background\n\nsecond\n` },
+        });
+        const result = await new TaskCheckService(fs, matrix).check(path, '1183');
+        cleanup();
+        const collisions = result.findings.filter((f) => f.code === FINDING_CODES.L1_WBS_COLLISION);
+        expect(collisions).toHaveLength(1);
+        expect(collisions[0]?.severity).toBe('error');
+        expect(collisions[0]?.message).toContain('claimed by 2 task files');
+        expect(collisions[0]?.message).toContain('1183_task.md');
+        expect(collisions[0]?.message).toContain('1183_extra.md');
+        expect(collisions[0]?.message).toContain('spur task create');
+        expect(result.pass).toBe(false);
+    });
+
+    test('a unique WBS raises nothing', async () => {
+        const { fs, path, cleanup } = seedEnv({
+            wbs: '1185',
+            taskContent: `${taskFm()}\n## Background\n\nonly\n`,
+        });
+        const result = await new TaskCheckService(fs, matrix).check(path, '1185');
+        cleanup();
+        expect(result.findings.some((f) => f.code === FINDING_CODES.L1_WBS_COLLISION)).toBe(false);
+    });
+});
