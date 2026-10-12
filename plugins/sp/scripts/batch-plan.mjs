@@ -5,6 +5,204 @@
 import { readFileSync } from "fs";
 
 // plugins/sp/lib/plan-projection.generated.mjs
+var NON_ABORTING_PREFLIGHT_CODES = new Set([
+  "L4.scenario-unverified",
+  "L4.verifying-incomplete-tasks"
+]);
+function classifyFeaturePreflightFindings(findings) {
+  const aborting = [];
+  const nonAborting = [];
+  for (const f of findings) {
+    if (f.severity === "error") {
+      if (NON_ABORTING_PREFLIGHT_CODES.has(f.code)) {
+        nonAborting.push(f);
+      } else {
+        aborting.push(f);
+      }
+    } else {
+      nonAborting.push(f);
+    }
+  }
+  return {
+    aborting,
+    nonAborting,
+    shouldAbort: aborting.length > 0
+  };
+}
+function quickReadiness(input) {
+  const status = (input.status ?? "").toLowerCase();
+  const operation = input.operation;
+  if (operation !== "run" && operation !== "refine" && operation !== "verify") {
+    return {
+      action: "invalid",
+      code: "IV",
+      reason: `quick-readiness: unknown operation '${operation}' (${input.wbs})`
+    };
+  }
+  if (input.filteredCount !== undefined) {
+    if (input.filteredCount < 0) {
+      return {
+        action: "invalid",
+        code: "IV",
+        reason: `quick-readiness: invalid negative filtered count '${input.filteredCount}' (${input.wbs})`
+      };
+    }
+    if (input.filteredCount === 0) {
+      return {
+        action: "skipped",
+        code: "EMPTY",
+        reason: `quick-readiness: empty status-filtered set — nothing to ${operation} (${input.wbs})`
+      };
+    }
+  }
+  if (status === "cancelled" || status === "done") {
+    if (operation === "verify" && input.force === true) {
+      return {
+        action: "runnable",
+        code: "FORCE",
+        reason: `quick-readiness: verify --force re-verification of ${status} task ${input.wbs}`
+      };
+    }
+    return {
+      action: "skipped",
+      code: status === "done" ? "DONE" : "CANCELLED",
+      reason: `quick-readiness: already ${status} — no ${operation} hop (${input.wbs})`
+    };
+  }
+  if (status === "blocked") {
+    return {
+      action: "blocked",
+      code: "BLK",
+      reason: `quick-readiness: blocked — human/handover first (${input.wbs})`
+    };
+  }
+  if (operation === "run" && input.dependencies && input.dependencies.length > 0) {
+    const unmet = input.dependencies.filter((d) => (input.depStatuses?.[d] ?? "missing").toLowerCase() !== "done");
+    if (unmet.length > 0) {
+      return {
+        action: "blocked",
+        code: "DEP",
+        reason: `quick-readiness: unmet deps — ${unmet.join(", ")} (${input.wbs})`,
+        unmetDeps: unmet
+      };
+    }
+  }
+  const required = input.requiredSections ?? [];
+  const present = input.presentSections ?? [];
+  const gaps = required.filter((s) => {
+    const finding = input.sectionFindings?.[s];
+    return !present.includes(s) || finding !== undefined && finding !== "";
+  });
+  if (operation === "refine") {
+    if (status !== "backlog" && status !== "todo") {
+      return {
+        action: "skipped",
+        code: "NONPLAN",
+        reason: `quick-readiness: refine targets backlog/todo only, not '${status}' (${input.wbs})`
+      };
+    }
+    return {
+      action: "runnable",
+      code: "OK",
+      reason: `quick-readiness: refine ready for ${input.wbs} (${gaps.length} planning gap(s) to fill)`
+    };
+  }
+  if (operation === "verify") {
+    if (status !== "testing" && status !== "wip") {
+      return {
+        action: "invalid",
+        code: "NOVERIFY",
+        reason: `quick-readiness: verify needs testing/wip, not '${status}' (${input.wbs})`
+      };
+    }
+    return {
+      action: "runnable",
+      code: "OK",
+      reason: `quick-readiness: verify ready for ${input.wbs}`
+    };
+  }
+  if (status !== "todo" && status !== "wip" && status !== "testing") {
+    return {
+      action: "invalid",
+      code: "NORUN",
+      reason: `quick-readiness: run needs todo/wip/testing, not '${status}' (${input.wbs})`
+    };
+  }
+  if (gaps.length > 0) {
+    return {
+      action: "needs-refinement",
+      code: "REFINE",
+      reason: `quick-readiness: implementation sections incomplete (${input.wbs})`,
+      gaps
+    };
+  }
+  return {
+    action: "runnable",
+    code: "OK",
+    reason: `quick-readiness: run ready for ${input.wbs}`
+  };
+}
+function preflightTask(input) {
+  const status = (input.status ?? "").toLowerCase();
+  const deps = input.dependencies ?? [];
+  const depStatuses = input.depStatuses ?? {};
+  if (status === "cancelled") {
+    return {
+      action: "skip",
+      code: "A9",
+      reason: `dev-next: cancelled — nothing to advance (${input.wbs})`
+    };
+  }
+  if (status === "done") {
+    return {
+      action: "skip",
+      code: "A8",
+      reason: `dev-next: already done — batch does not auto-wrap (${input.wbs})`
+    };
+  }
+  if (status === "blocked") {
+    return {
+      action: "skip",
+      code: "A7",
+      reason: `dev-next: blocked — do not launch pipeline; human/handover first (${input.wbs})`
+    };
+  }
+  if (status === "todo" || status === "backlog") {
+    const unmet = deps.filter((d) => {
+      const st = (depStatuses[d] ?? "missing").toLowerCase();
+      return st !== "done";
+    });
+    if (unmet.length > 0) {
+      return {
+        action: "skip",
+        code: "A2",
+        reason: `dev-next: blocked by deps — unmet: ${unmet.join(", ")} (${input.wbs})`,
+        unmetDeps: unmet
+      };
+    }
+  }
+  return { action: "run", code: "OK", reason: `preflight clear — launch task-pipeline for ${input.wbs}` };
+}
+var SENSITIVE_PREFIXES = ["drizzle/", "packages/config/", ".github/", "plugins/sp/hooks/"];
+var SENSITIVE_GLOBS = ["apps/server/src/**/auth*", "**/*secret*", "**/*.sql"];
+function globToRegex(glob) {
+  const escaped = glob.replace(/[.+^${}()|[\]\\]/g, "\\$&").replaceAll("**/", "\x00").replaceAll("**", "\x01").replaceAll("*", "[^/]*").replaceAll("\x00", "(?:.*/)?").replaceAll("\x01", ".*");
+  return new RegExp(`^${escaped}$`, "s");
+}
+var SENSITIVE_MATCHERS = [
+  ...SENSITIVE_PREFIXES.map((prefix) => ({
+    label: prefix,
+    test: (path) => path.startsWith(prefix)
+  })),
+  ...SENSITIVE_GLOBS.map((glob) => {
+    const regex = globToRegex(glob);
+    return { label: glob, test: (path) => regex.test(path) };
+  })
+];
+function sensitiveReasonForPath(path) {
+  const match = SENSITIVE_MATCHERS.find((entry) => entry.test(path));
+  return match ? `matches sensitive pattern ${match.label}` : null;
+}
 function planLetter(index) {
   if (!Number.isInteger(index) || index < 0 || index > 25) {
     throw new Error(`plan letter out of range: ${index} (expected 0..25)`);
@@ -475,14 +673,21 @@ function main(argv) {
 export {
   validatePhaseTable,
   taskPhaseChildren,
+  sensitiveReasonForPath,
   scheduleBatch,
+  quickReadiness,
+  preflightTask,
   planLetter,
   planChild,
   main,
   insertOnEntry,
   hostText,
   hostStatus,
+  classifyFeaturePreflightFindings,
   buildPhasedPlan,
   buildBatchPlan,
+  SENSITIVE_PREFIXES,
+  SENSITIVE_GLOBS,
+  NON_ABORTING_PREFLIGHT_CODES,
   BATCH_PLAN_USAGE
 };

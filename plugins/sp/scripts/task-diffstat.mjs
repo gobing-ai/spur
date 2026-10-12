@@ -11,7 +11,11 @@ function getEnvVars() {
   return process.env;
 }
 
-// plugins/sp/scripts/task-diffstat.ts
+// plugins/sp/lib/plan-projection.generated.mjs
+var NON_ABORTING_PREFLIGHT_CODES = new Set([
+  "L4.scenario-unverified",
+  "L4.verifying-incomplete-tasks"
+]);
 var SENSITIVE_PREFIXES = ["drizzle/", "packages/config/", ".github/", "plugins/sp/hooks/"];
 var SENSITIVE_GLOBS = ["apps/server/src/**/auth*", "**/*secret*", "**/*.sql"];
 function globToRegex(glob) {
@@ -32,6 +36,8 @@ function sensitiveReasonForPath(path) {
   const match = SENSITIVE_MATCHERS.find((entry) => entry.test(path));
   return match ? `matches sensitive pattern ${match.label}` : null;
 }
+
+// plugins/sp/scripts/task-diffstat.ts
 function defaultGitRunner(cwd) {
   return (args) => {
     const run = spawnSync("git", args, { cwd, encoding: "utf8" });

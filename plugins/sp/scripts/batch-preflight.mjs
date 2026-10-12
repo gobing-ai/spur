@@ -2,7 +2,7 @@
 import { createRequire } from "node:module";
 var __require = /* @__PURE__ */ createRequire(import.meta.url);
 
-// plugins/sp/scripts/batch-preflight.ts
+// plugins/sp/lib/plan-projection.generated.mjs
 var NON_ABORTING_PREFLIGHT_CODES = new Set([
   "L4.scenario-unverified",
   "L4.verifying-incomplete-tasks"
@@ -181,6 +181,24 @@ function preflightTask(input) {
   }
   return { action: "run", code: "OK", reason: `preflight clear — launch task-pipeline for ${input.wbs}` };
 }
+var SENSITIVE_PREFIXES = ["drizzle/", "packages/config/", ".github/", "plugins/sp/hooks/"];
+var SENSITIVE_GLOBS = ["apps/server/src/**/auth*", "**/*secret*", "**/*.sql"];
+function globToRegex(glob) {
+  const escaped = glob.replace(/[.+^${}()|[\]\\]/g, "\\$&").replaceAll("**/", "\x00").replaceAll("**", "\x01").replaceAll("*", "[^/]*").replaceAll("\x00", "(?:.*/)?").replaceAll("\x01", ".*");
+  return new RegExp(`^${escaped}$`, "s");
+}
+var SENSITIVE_MATCHERS = [
+  ...SENSITIVE_PREFIXES.map((prefix) => ({
+    label: prefix,
+    test: (path) => path.startsWith(prefix)
+  })),
+  ...SENSITIVE_GLOBS.map((glob) => {
+    const regex = globToRegex(glob);
+    return { label: glob, test: (path) => regex.test(path) };
+  })
+];
+
+// plugins/sp/scripts/batch-preflight.ts
 function recoveryHint(status, wbs) {
   const st = (status ?? "").toLowerCase();
   switch (st) {

@@ -45,3 +45,54 @@ export declare function hostStatus(
     outcome: 'pending' | 'active' | 'completed' | 'skipped' | 'failed' | 'blocked' | 'unattempted',
 ): 'completed' | 'in_progress' | 'pending';
 export declare function hostText(item: PhasedPlanItem): string;
+// task 1176: pure admission + triage policy, exported through the same generated entry.
+export declare type TaskStatus = 'backlog' | 'todo' | 'wip' | 'testing' | 'blocked' | 'done' | 'cancelled' | string;
+export declare interface PreflightInput {
+    wbs: string;
+    status: TaskStatus;
+    dependencies: string[];
+    depStatuses: Record<string, string>;
+}
+export declare type PreflightResult =
+    | { action: 'run'; code?: string; reason?: string }
+    | { action: 'skip'; code: string; reason: string; unmetDeps?: string[] };
+export declare const NON_ABORTING_PREFLIGHT_CODES: Set<string>;
+export declare interface FeaturePreflightFinding {
+    layer: string;
+    code: string;
+    severity: string;
+    message: string;
+    section?: string;
+}
+export declare interface FeaturePreflightClassification {
+    aborting: FeaturePreflightFinding[];
+    nonAborting: FeaturePreflightFinding[];
+    shouldAbort: boolean;
+}
+export declare function classifyFeaturePreflightFindings(
+    findings: FeaturePreflightFinding[],
+): FeaturePreflightClassification;
+export declare type ReadinessOperation = 'run' | 'refine' | 'verify';
+export declare interface QuickReadinessInput {
+    wbs: string;
+    status: TaskStatus;
+    operation: ReadinessOperation;
+    dependencies?: string[];
+    depStatuses?: Record<string, string>;
+    filteredCount?: number;
+    requiredSections?: string[];
+    presentSections?: string[];
+    sectionFindings?: Record<string, string>;
+    force?: boolean;
+}
+export declare type QuickReadinessResult =
+    | { action: 'runnable'; code: string; reason: string }
+    | { action: 'needs-refinement'; code: string; reason: string; gaps: string[] }
+    | { action: 'blocked'; code: string; reason: string; unmetDeps?: string[] }
+    | { action: 'skipped'; code: string; reason: string }
+    | { action: 'invalid'; code: string; reason: string };
+export declare function quickReadiness(input: QuickReadinessInput): QuickReadinessResult;
+export declare function preflightTask(input: PreflightInput): PreflightResult;
+export declare const SENSITIVE_PREFIXES: readonly ['drizzle/', 'packages/config/', '.github/', 'plugins/sp/hooks/'];
+export declare const SENSITIVE_GLOBS: readonly ['apps/server/src/**/auth*', '**/*secret*', '**/*.sql'];
+export declare function sensitiveReasonForPath(path: string): string | null;

@@ -65,45 +65,14 @@ export interface DiffstatResult extends Diffstat {
     exitCode: number;
 }
 
-/**
- * Sensitive paths (0943 R2c): any changed path under one of these forces the safety lane
- * before the `task-triage` decide runs — sensitive work is never lane-negotiated with a
- * model. Frozen list: `drizzle/`, `packages/config/`, auth-prefixed basenames anywhere
- * under the server src tree, `*secret*` basenames, `.github/`, `plugins/sp/hooks/`, and
- * any `*.sql` — spelled out in SENSITIVE_PREFIXES / SENSITIVE_GLOBS below (kept as data,
- * not prose, so the `*` / `/` sequences survive the doc comment).
- */
-export const SENSITIVE_PREFIXES = ['drizzle/', 'packages/config/', '.github/', 'plugins/sp/hooks/'] as const;
-export const SENSITIVE_GLOBS = ['apps/server/src/**/auth*', '**/*secret*', '**/*.sql'] as const;
+// Task 1176: the sensitive-path policy (0943 R2c) moved to the workflow/task owner —
+// `packages/app/src/workflow/task-triage.ts`, reached through the generated pure bundle. That policy
+// still forces the safety lane for any changed path under the frozen sensitive list before the
+// `task-triage` decide runs, so sensitive work is never lane-negotiated with a model; this entry
+// keeps git capture and the output artifact, and re-exports the policy for existing callers.
+import { SENSITIVE_GLOBS, SENSITIVE_PREFIXES, sensitiveReasonForPath } from '../lib/plan-projection.generated.mjs';
 
-// Glob → RegExp: `**` + `/` matches any-or-no directories, bare `**` any characters, `*` within one segment.
-function globToRegex(glob: string): RegExp {
-    const escaped = glob
-        .replace(/[.+^${}()|[\]\\]/g, '\\$&')
-        .replaceAll('**/', '\u0000')
-        .replaceAll('**', '\u0001')
-        .replaceAll('*', '[^/]*')
-        .replaceAll('\u0000', '(?:.*/)?')
-        .replaceAll('\u0001', '.*');
-    return new RegExp(`^${escaped}$`, 's');
-}
-
-const SENSITIVE_MATCHERS: Array<{ label: string; test: (path: string) => boolean }> = [
-    ...SENSITIVE_PREFIXES.map((prefix) => ({
-        label: prefix,
-        test: (path: string): boolean => path.startsWith(prefix),
-    })),
-    ...SENSITIVE_GLOBS.map((glob) => {
-        const regex = globToRegex(glob);
-        return { label: glob, test: (path: string): boolean => regex.test(path) };
-    }),
-];
-
-/** Sensitive-pattern match for one path, or null — mirrors wrapup-drift-probe's driftReasonForPath. */
-export function sensitiveReasonForPath(path: string): string | null {
-    const match = SENSITIVE_MATCHERS.find((entry) => entry.test(path));
-    return match ? `matches sensitive pattern ${match.label}` : null;
-}
+export { SENSITIVE_GLOBS, SENSITIVE_PREFIXES, sensitiveReasonForPath };
 
 function defaultGitRunner(cwd?: string): GitRunner {
     return (args: string[]): GitRunResult => {

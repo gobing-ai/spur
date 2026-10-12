@@ -16,6 +16,12 @@
 import type { StateDef, StateDisplay, StateMachineWorkflowDef, WorkflowDef } from '@gobing-ai/ts-dual-workflow-engine';
 import type { VisibleItem, VisibleOutcome } from './step-reporter';
 
+// Task 1176: the plugin's pure policy surface rides this same generated bundle entry, so the
+// hand-rolled generated `.mjs` twins import one Node-pure artifact instead of gaining a second
+// bundle or registry. Both modules below are import-free and side-effect free.
+export * from '../services/planning-admission';
+export * from './task-triage';
+
 // ── Label caps ───────────────────────────────────────────────────────────────
 
 /**
