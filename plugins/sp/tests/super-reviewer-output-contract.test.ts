@@ -28,3 +28,16 @@ describe('super-reviewer confidence contract', () => {
         expect(REVIEWER).toContain('turns an otherwise usable');
     });
 });
+
+// The citation contract (2026-10-12): a review finding that asserts an external API/library claim
+// carries its citation in the same cell — the verify answer's `evidence-citation` rule, which blocks
+// derivation there, owned by verdict-schema.md and enforced here in SECUA review (the same split the
+// docs-corpus rule documents). Pinned so the review path cannot silently lose the claim contract.
+describe('super-reviewer citation contract', () => {
+    test('the Output Format requires a same-cell citation for external claims', () => {
+        expect(REVIEWER).toContain('Source citations for external claims');
+        expect(REVIEWER).toContain('SAME cell');
+        expect(REVIEWER).toContain('does not stand in for it');
+        expect(REVIEWER).toContain('caps the level the report can defend');
+    });
+});

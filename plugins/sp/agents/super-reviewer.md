@@ -241,6 +241,18 @@ PASS into a refused one: consumer repositories gate the review answer artifact a
 claims, exactly as they gate the verify answer. This is a contract change — review answers written
 before it were never asked for a level, so pre-adoption artifacts read as debt, not defects.
 
+**Source citations for external claims (one claim contract, 2026-10-12).** A Finding cell or a
+Functional Traceability `Evidence` cell that asserts an external API/library claim carries a
+verifiable citation in the SAME cell — a repo `path:line(-end)`, the external named-origin form
+(@origin `path` line N, line number outside the backticks), or an http(s) URL. It is the verify
+answer's rule verbatim, owned by
+[verdict-schema.md](../skills/code-verification/references/verdict-schema.md) § Source citations
+for external claims — claim markers and accepted forms are defined once there and are not restated
+here. The findings table's `Location` column does not stand in for it: `Location` anchors the
+finding's subject, not the claim's source. Cell-free receipts (test counts, reviewed-log notes)
+assert no external claim and need no citation. An uncited external claim is an assumption, so it
+caps the level the report can defend (above).
+
 **No findings.** Never invent a defect to populate the table. Emit one substantive `P4 (advisory)`
 row that states what was reviewed and what was found — placeholder cells (empty, `—`, `n/a`) are
 rejected by the checker, and so they should be:
