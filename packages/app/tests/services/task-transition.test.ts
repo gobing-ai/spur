@@ -306,10 +306,11 @@ describe('1040 — close-audit reconciliation on unforced done (R2)', () => {
         expect(h.calls.updateStatus).toEqual(['0001:done']);
         expect(h.calls.updateField).toContain('0001:done_forced');
         expect(h.calls.updateField).toContain('0001:done_reason');
-        // Stale forced flag cleared; reason describes the accepted PASS artifact.
+        // Stale forced flag cleared; reason describes the accepted PASS artifact through its
+        // durable owner (ADR-131 — the tracked Testing section when no evidence copy exists).
         expect(h.calls.fieldValues['0001:done_forced']).toBe('false');
         expect(h.calls.fieldValues['0001:done_reason']).toContain('PASS artifact at');
-        expect(h.calls.fieldValues['0001:done_reason']).toContain('0001-verdict.json');
+        expect(h.calls.fieldValues['0001:done_reason']).toContain('tracked Testing section');
         // Not an override: no forced attribution on the result.
         if (out.kind === 'transitioned') expect(out.forced).toBeUndefined();
         h.cleanup();
@@ -349,16 +350,26 @@ describe('1040 — close-audit reconciliation on unforced done (R2)', () => {
     });
 });
 
-describe('1089 R2 — the close reason records a repo-relative artifact path', () => {
-    test('the scratch verdict is recorded relative to the project root', async () => {
+describe('1089 R2 + ADR-131 — the close reason cites a durable owner', () => {
+    test('a scratch-only close cites the tracked Testing section, never the disposable run scratch', async () => {
         const h = makeHarness({ task: GATED_TASK, verdict: PASS_ARTIFACT });
         const out = await transitionTaskGuarded(h.deps, { wbs: '0001', toStatus: 'done' });
         expect(out.kind).toBe('transitioned');
-        // A committed absolute path is machine-specific and stops resolving once the
-        // tree that produced it is removed (the `--worktree` close case).
+        // ADR-131: `.spur/run/` may be absent in any later run, so the accepted artifact is
+        // referenced through its durable owner. A committed `.spur/run/…` pointer is both
+        // machine-specific (the `--worktree` close case, 1089 R2) and a dead reference.
         expect(h.calls.fieldValues['0001:done_reason']).toBe(
-            'unforced close; PASS artifact at .spur/run/0001-verdict.json',
+            'unforced close; PASS artifact at tracked Testing section (scratch verdict not retained)',
         );
+        h.cleanup();
+    });
+
+    test('with no durable copy and no Testing record the pointer is dropped, not fabricated', async () => {
+        const h = makeHarness({ task: UNGATED_TASK, verdict: PASS_ARTIFACT });
+        await transitionTaskGuarded(h.deps, { wbs: '0001', toStatus: 'done' });
+        // Neither owner exists: writing the scratch path would produce the value the
+        // `no-scratch-verdict-pointer` rule rejects, so the reason carries no pointer at all.
+        expect(h.calls.fieldValues['0001:done_reason']).toBe('unforced close');
         h.cleanup();
     });
 

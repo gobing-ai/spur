@@ -2721,7 +2721,10 @@ describe('1040 — record re-pulls verdict state and reconciles close metadata',
             const doc = MarkdownDocument.parse(raw, 'task');
             expect(String(doc.frontmatterData?.done_forced)).toBe('false');
             expect(String(doc.frontmatterData?.done_reason)).toContain('unforced close');
-            expect(String(doc.frontmatterData?.done_reason)).toContain(`${wbs}-verdict.json`);
+            // ADR-131: the close reason must not cite the disposable run scratch it was
+            // accepted from; the durable owner (evidence copy or tracked Testing section)
+            // is pinned by the task-transition suite.
+            expect(String(doc.frontmatterData?.done_reason)).not.toContain('.spur/run/');
         } finally {
             db.close();
             rmSync(root, { recursive: true, force: true });

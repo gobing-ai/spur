@@ -32,10 +32,11 @@
  * `tasks.show`/`updateStatus` (0966 Q&A) rather than a guard denial.
  */
 
-import { dirname, isAbsolute, relative, sep } from 'node:path';
-import { normalizeTaskStatus } from '@gobing-ai/spur-domain';
+import { dirname, isAbsolute, join, relative, sep } from 'node:path';
+import { MarkdownDocument, normalizeTaskStatus } from '@gobing-ai/spur-domain';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { GuardDeniedError } from '../errors';
+import { retargetScratchVerdictPointer } from './anchor-qualifier';
 import { evaluateDoneTransition, readVerdictArtifact, type VerdictAggregate } from './done-transition-guard';
 import type { WriteResult } from './planning-write-service';
 import type { TaskCheckService } from './task-check';
@@ -173,7 +174,19 @@ export function canonicalStatusOrRaw(raw: string): string {
 export async function reconcileDoneCloseAudit(
     tasks: Pick<TaskService, 'updateField'>,
     wbs: string,
-    opts: { forced: boolean; reason?: string; passArtifactPath?: string },
+    opts: {
+        forced: boolean;
+        reason?: string;
+        passArtifactPath?: string;
+        /**
+         * ADR-131 / 1140 R1: does the durable `.spur/memory/evidence/<wbs>-verdict.json`
+         * copy exist? Resolved by the caller (it owns the filesystem) and used only on the
+         * unforced path, where the reason must not cite the disposable run scratch.
+         */
+        durableVerdictCopy?: boolean;
+        /** The task's tracked `## Testing` body; the fallback owner when no durable copy exists. */
+        testingBody?: string | null;
+    },
 ): Promise<string | undefined> {
     try {
         if (opts.forced) {
@@ -185,15 +198,59 @@ export async function reconcileDoneCloseAudit(
         }
         // Unforced close: the forced flag from any earlier override is stale.
         await tasks.updateField(wbs, 'done_forced', 'false');
-        const described =
+        const base =
             opts.passArtifactPath !== undefined
                 ? `unforced close; PASS artifact at ${opts.passArtifactPath}`
                 : 'unforced close';
-        await tasks.updateField(wbs, 'done_reason', described);
+        // ADR-131 (1140 R1/R2): `.spur/run/` may be absent in any later run, so the reason
+        // cites durable evidence instead: the `.spur/memory/evidence/` copy when it exists,
+        // else the tracked Testing section. This is the same resolution the repair pass
+        // (`spur task migrate-anchors`) applies, so a fresh close needs no repair. With
+        // neither owner the pointer is dropped rather than persisted as a dead reference —
+        // the previous `unforced close; PASS artifact at .spur/run/…` shape is exactly what
+        // the `no-scratch-verdict-pointer` rule rejects.
+        const retargeted = retargetScratchVerdictPointer(base, {
+            durableVerdictExists: () => opts.durableVerdictCopy === true,
+            testingBody: opts.testingBody ?? null,
+        });
+        await tasks.updateField(
+            wbs,
+            'done_reason',
+            retargeted.unresolved !== undefined ? 'unforced close' : retargeted.value,
+        );
         return undefined;
     } catch (auditErr) {
         return String(auditErr);
     }
+}
+
+/**
+ * Resolve the two durable owners {@link reconcileDoneCloseAudit} may cite. Best-effort by
+ * construction: the close is already committed when this runs, so a failed probe degrades to
+ * "no durable owner" (the reason then omits the pointer) instead of blocking the transition.
+ */
+async function resolveCloseReasonContext(
+    deps: GuardedTransitionDeps,
+    wbs: string,
+): Promise<{ durableVerdictCopy: boolean; testingBody: string | null }> {
+    let durableVerdictCopy = false;
+    try {
+        // Sibling of the run dir's parent — the same resolution the done gate reads
+        // (`done-transition-guard.ts`), so the writer and the reader agree on the owner.
+        durableVerdictCopy = await deps.fs.exists(
+            join(dirname(deps.runDir), 'memory', 'evidence', `${wbs}-verdict.json`),
+        );
+    } catch {
+        // Absent owner.
+    }
+    let testingBody: string | null = null;
+    try {
+        const shown = await deps.tasks.show(wbs);
+        testingBody = MarkdownDocument.parse(await deps.fs.readFile(shown.filePath), 'task').getSection('Testing');
+    } catch {
+        // Absent owner.
+    }
+    return { durableVerdictCopy, testingBody };
 }
 
 /**
@@ -308,12 +365,16 @@ export async function transitionTaskGuarded(
     let closeAuditError: string | undefined;
     if (status === 'done') {
         const doneArtifactPath = doneLoaded?.path;
+        // ADR-131 (1140): the unforced reason cites a durable owner, so resolve it before the
+        // write. Forced closes keep the operator's rationale verbatim and need neither probe.
+        const reasonContext = forced === undefined ? await resolveCloseReasonContext(deps, wbs) : undefined;
         closeAuditError = await reconcileDoneCloseAudit(deps.tasks, wbs, {
             forced: forced !== undefined,
             ...(forced !== undefined ? { reason: input.reason } : {}),
             ...(forced === undefined && doneArtifactPath !== undefined
                 ? { passArtifactPath: projectRelativeArtifactPath(deps.runDir, doneArtifactPath) }
                 : {}),
+            ...(reasonContext !== undefined ? reasonContext : {}),
         });
     }
 
