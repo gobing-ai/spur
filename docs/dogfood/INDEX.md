@@ -17,6 +17,7 @@ git ls-files docs/dogfood | grep -Ev '(README|INDEX)\.md$'
 
 ## Reports
 
+- `2026-10-12-F42-deprecated-status-dogfood.md`
 - `2026-10-07-f91-corpus-gate-integrity-dogfood.md`
 - `2026-07-28-D1-0365-workflow-observability-dogfood.md`
 - `2026-10-07-H15-runall-batch-execution-dogfood.md`
