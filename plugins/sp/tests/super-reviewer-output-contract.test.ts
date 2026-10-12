@@ -17,3 +17,14 @@ describe('super-reviewer Output Format contract (task 1122 R4)', () => {
         expect(REVIEWER).toContain('wrap');
     });
 });
+
+// The confidence contract (2026-10-12): a review report states the level it can defend, in the enum
+// the verify answer and every consumer use. A missing line or a HIGH the rows do not earn refuses an
+// otherwise usable PASS, so the contract is pinned here rather than left to review discretion.
+describe('super-reviewer confidence contract', () => {
+    test('the Output Format requires exactly one earned HIGH | MEDIUM | LOW line', () => {
+        expect(REVIEWER).toContain('**Confidence:** HIGH | MEDIUM | LOW');
+        expect(REVIEWER).toContain('../skills/code-verification/references/verdict-schema.md');
+        expect(REVIEWER).toContain('turns an otherwise usable');
+    });
+});

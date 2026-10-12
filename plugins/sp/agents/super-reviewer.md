@@ -200,6 +200,7 @@ shallower.
 **Scope:** <wbs diff | path glob>
 **Dimensions:** functional, security, efficiency, correctness, usability, architecture
 **Verdict:** PASS | PARTIAL | FAIL
+**Confidence:** HIGH | MEDIUM | LOW
 ##### Findings (ranked)
 
 | # | Priority | Dimension | Finding | Location | Disposition |
@@ -224,6 +225,21 @@ verify|approve` requires a line matching `Verdict: PASS` (plain or bold), and AN
 FAIL, PARTIAL, a missing line, a line split across two lines — routes the run into
 `review-fail-triage` and its bounded repair hop. Keep it on one line, in that shape, in every
 review answer; never restate it as prose only.
+
+**The Confidence line is machine-read too (one confidence contract, 2026-10-12).** Every review
+report carries exactly one `Confidence: HIGH | MEDIUM | LOW` line, stated at the level the review can
+actually defend — the same enum and the same earning rule the verify answer uses
+([verdict-schema.md](../skills/code-verification/references/verdict-schema.md) § Confidence level):
+
+- `HIGH` — every requirement row is `MET`, every finding carries a disposition, and the report cites
+  its evidence. `HIGH` says the evidence needs no re-check.
+- `MEDIUM` — the verdict holds but evidence gaps remain; name them.
+- `LOW` — the verdict rests on unverified assumptions that could plausibly flip it; name them.
+
+A missing line, a level outside the enum, or a `HIGH` the rows do not earn turns an otherwise usable
+PASS into a refused one: consumer repositories gate the review answer artifact and every level it
+claims, exactly as they gate the verify answer. This is a contract change — review answers written
+before it were never asked for a level, so pre-adoption artifacts read as debt, not defects.
 
 **No findings.** Never invent a defect to populate the table. Emit one substantive `P4 (advisory)`
 row that states what was reviewed and what was found — placeholder cells (empty, `—`, `n/a`) are
