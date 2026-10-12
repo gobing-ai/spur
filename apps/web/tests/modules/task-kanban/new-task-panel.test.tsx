@@ -66,9 +66,16 @@ function MockInput({ id, onChange, variant, size, error, className, value, ...re
     if (size === 'sm') inputClasses.push('input-sm');
     if (error) inputClasses.push('input-error');
     if (typeof className === 'string') inputClasses.push(className);
-    // defaultValue (not value) avoids React's controlled-without-onChange warning; the real
-    // onChange is captured above and invoked directly, bypassing happy-dom's broken input events.
-    return React.createElement('input', { id, className: inputClasses.join(' '), defaultValue: value, ...rest });
+    // `value`/`onChange` stay on the node: bun's `mock.module` is process-global and last-wins,
+    // so this Input is what EVERY later web test file resolves, and dropping onChange silently
+    // breaks them (1184). The handler is still captured above for direct invocation.
+    return React.createElement('input', {
+        id,
+        className: inputClasses.join(' '),
+        value,
+        onChange: onChange as ((e: unknown) => void) | undefined,
+        ...rest,
+    });
 }
 
 mock.module('@/ui', () => ({

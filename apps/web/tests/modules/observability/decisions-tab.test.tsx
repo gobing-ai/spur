@@ -20,7 +20,14 @@ function MockInput(props: Record<string, unknown>) {
     if (label && typeof onChange === 'function') {
         inputOnChangeByLabel.set(label, onChange as (e: { target: { value: string } }) => void);
     }
-    return React.createElement('input', { ...rest, defaultValue: typeof value === 'string' ? value : '' });
+    // Forward `value`/`onChange` rather than stripping them into `defaultValue`: bun's
+    // `mock.module` is process-global and last-wins, so this Input is what EVERY later web
+    // test file resolves, and dropping onChange silently breaks them (1184).
+    return React.createElement('input', {
+        ...rest,
+        value: typeof value === 'string' ? value : '',
+        onChange: onChange as ((e: unknown) => void) | undefined,
+    });
 }
 
 mock.module('@/ui', () => ({ ...RealUI, Input: MockInput }));
