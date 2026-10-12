@@ -1620,7 +1620,7 @@ across unversioned and versioned definition forms.
 overhead without compromising the deterministic safety floor. Piloting on `wrapup-pipeline` and
 `task-lifecycle` proves the closed route table on real callers before migrating `task-pipeline`.
 
-**Detail:** `config/proportional-route-table.ts`; `docs/plans/2026-09-02-d8-proportional-workflow-upgrade-strategy.md` §4; task 0758.
+**Detail:** `packages/app/tests/fixtures/proportional-route-table.ts` (test-only scaffold; moved out of `config/` in task 1173 — config keeps declarative data only); `docs/plans/2026-09-02-d8-proportional-workflow-upgrade-strategy.md` §4; task 0758.
 
 **Amendment (2026-09-04 — D9 Option B closure, task 0764).** The failed re-measure selects the
 feature's complete Option B branch: `task-lifecycle` proportional routing is reverted because its
