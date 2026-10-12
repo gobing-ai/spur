@@ -4,7 +4,7 @@ name: Map decision readiness facts and recorded evidence onto the status report
 status: done
 template: feature-impl
 created_at: 2026-10-11T23:23:16.864Z
-updated_at: "2026-10-12T02:19:43.515Z"
+updated_at: "2026-10-12T02:23:04.303Z"
 feature_id: P11
 
 done_forced: "false"
@@ -78,6 +78,20 @@ maker from one that has actually served a decision.
 - Deferred: using `decision_logs` as the evidence source. Condition: never for this column — it is
   gated by the `decisions.log` config, so an `off` project would report a working maker as unused.
 
+#### Q&A entry — 2026-10-12T02:22:59.655Z
+
+Closed decisions retained from the original refinement and implementation session:
+
+- Operator request (this session): the report must let an end user see the *registered*, *configured*
+  and *actually working* markers per maker and per decision. Accepted the recommended evidence source:
+  the recorded `decision.end` ledger via the existing reliability aggregation.
+
+- Deferred: a dedicated `group by maker` DAO aggregate. Condition: a caller needs per-maker evidence
+  without a per-decision breakdown, or the group count grows past a single bounded query.
+
+- Deferred: using `decision_logs` as the evidence source. Condition: never for this column — it is
+  gated by the `decisions.log` config, so an `off` project would report a working maker as unused.
+
 ### Design
 
 **Chosen: reuse the existing reliability aggregation; map in the app layer.**
@@ -99,7 +113,9 @@ maker from one that has actually served a decision.
 
 ### Plan
 
-<!-- Ordered implementation checklist. Fill before moving to todo/wip. -->
+- [x] Map registry, configuration and effective decision makers in the app layer.
+- [x] Fold reliability groups per maker and match per decision/maker; retain unused configured defaults.
+- [x] Export the overlay and verify empty/recorded ledgers and maker changes.
 
 ### Solution
 
@@ -141,18 +157,13 @@ their existing suites passing).
 
 ### Review
 
-## Review — self-review against the verification lens, 2026-10-11 (inline; `sp-code-verification` dimensions)
+Current audit found and fixed an unused configured default disappearing when the catalog is empty. The mapping now includes that name independently of per-decision rows; its regression test asserts registration, configuration source, empty serves and zero evidence.
 
-**Verdict: PASS-WITH-FINDINGS.** Read-only review of `decision-status-readiness.ts`, its export block,
-the `DecisionStatusRow` field additions and the app suite. No P1 findings; the change is additive and
-read-only, and the whole new module is covered (100 % functions / 100 % lines).
+Per-maker totals intentionally include historical groups, while each decision matches its current maker. The Decisions table and reliability view supply the breakdown. Rendering serves as a count follows the feature contract; one in-memory descriptor lookup per decision is necessary for its catalog facts. These prior rows were design descriptions, not unresolved defects. Stored ledger timestamps are UTC ISO strings, so the latest timestamp fold follows the existing ledger contract.
 
-| # | Priority | Dimension | Finding | Location | Disposition |
-|---|----------|-----------|---------|----------|-------------|
-| 1 | P3 (minor) | report readability | `serves` is rendered as a count, so "which ids does `clef` serve?" needs the Decisions table or `--json`; the feature AC scenario had to be amended after implementation to match what the width allowed. | `apps/cli/src/commands/decision.ts:436` | ACCEPTED — inlining every id made the Makers table wider than the report; the ids stay on `makers[].serves` and in the `MAKER` column below. |
-| 2 | P3 (minor) | aggregate masking | Per-maker evidence folds across decisions, so a maker that serves four healthy ids and one broken id reads as healthy in aggregate. | `packages/app/src/decision/decision-status-readiness.ts:112` | ACCEPTED — the per-decision rows are the drill-down, and the `--reliability` report gives the per-`(id, maker)` breakdown the adoption evidence bar reads. |
-| 3 | P4 (nit) | performance | `status()` now calls `hub.describe(id)` once per decision to read `minConfidence` — O(decisions) in-memory catalog lookups. | `packages/app/src/decision/decision-service.ts:415` | ACCEPTED — measured 0.29 s wall for a 12-decision project, dominated by process start; no caching added for a map read. |
-| 4 | P4 (nit) | assumption | The per-maker `lastSeen` fold compares ISO timestamps lexicographically, which is exact only for uniform UTC strings. | `packages/app/src/decision/decision-status-readiness.ts:189` | ACCEPTED — every row's `occurred_at` is written as `new Date().toISOString()` (`packages/app/src/services/system-event-tap.ts:81`), so the invariant holds table-wide; a display-only column, never a sort key. |
+| Priority | Dimension | Location | Finding | Disposition |
+| --- | --- | --- | --- | --- |
+| P2 | correctness | packages/app/src/decision/decision-status-readiness.ts | Unregistered configured default omitted with no decisions. | FIXED — default name included independently; empty-catalog regression passes. |
 
 ### References
 
