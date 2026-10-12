@@ -936,7 +936,11 @@ clean` reclaims retained logs older than `workflows.logRetentionDays` (default 3
   persisting eligible lasting task verdicts, feature verification receipts, and terminal run-record
   pairs from `.spur/run/` into `.spur/memory/evidence/` and `.spur/memory/runs/` before housekeeping;
   JSON adds `migration: { dryRun, logsOnly, entries, failures }` (honoring `--dry-run` and `--logs`),
-  and human mode prints migration counts. `--logs` scopes to log reclamation and log-only migration;
+  and human mode prints migration counts. After a successful migration, a full clean also reclaims
+  top-level `.spur/run/` scratch entries whose newest file mtime is past the same retention (JSON
+  `scratch: { retentionDays, dryRun, reclaimed: [{ name, path, mtime }], failures }`), skipping `.log`
+  files, `guests/`, git worktrees and entries named for an active run; an ownership-read failure
+  reclaims nothing. `--logs` scopes to log reclamation and log-only migration;
   `--dry-run` lists what would be cleaned without writing; `--force` overrides `--older-than`.
   Action lines include the action kind, duration when finalized, and an in-flight/success/failure marker.
   **Per-step cost (0311 / task 0559):** `agent.run` lines carry token usage + cache-hit joined from

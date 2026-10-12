@@ -12,6 +12,17 @@ export {
 export { DecisionInputError } from '@gobing-ai/ts-ai-decision';
 export type { PlanningFolders } from './config/planning-folders';
 export { resolvePlanningFolders } from './config/planning-folders';
+// Read-only Projects Database browse service (G631 / task 1183): the server module's only way
+// into the live project schema — the Hono routes stay thin per ADR-021.
+export {
+    DatabaseBrowserService,
+    type DatabaseFailure,
+    type DatabaseResult,
+    type DatabaseRowDetailParams,
+    type DatabaseRowParams,
+    type DatabaseRowsPage,
+    MAX_DATABASE_PAGE_SIZE,
+} from './database/database-browser-service';
 // Derived confidence level (design §3.5): receipts expose it next to the raw confidence, so the
 // CLI derives it at its own boundary through this facade rather than reimplementing the thresholds.
 export { type ConfidenceLevel, confidenceLevel } from './decision/confidence-level';

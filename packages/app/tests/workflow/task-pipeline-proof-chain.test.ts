@@ -719,7 +719,7 @@ describe('task-pipeline review-failure routing (session finding after 1088)', ()
             const stub = join(dir, 'stub-spur.sh');
             const cleanReview = JSON.stringify({
                 content:
-                    '### Review\n\n| Priority | Finding | Location | Disposition |\n| --- | --- | --- | --- |\n| P4 (advisory) | Note | src/d.ts:1 | ACCEPTED |\n',
+                    '### Review\n\n**Confidence:** HIGH\n\n| Priority | Finding | Location | Disposition |\n| --- | --- | --- | --- |\n| P4 (advisory) | Note | src/d.ts:1 | ACCEPTED |\n',
             }).replaceAll("'", "'\\''");
             writeFileSync(stub, `#!/bin/sh\ncase "$2" in\n  show) printf '%s' '${cleanReview}' ;;\nesac\n`);
             chmodSync(stub, 0o755);
@@ -759,7 +759,10 @@ describe('task-pipeline review-failure routing (session finding after 1088)', ()
 // cycle (record would terminally fail it after a full verify + record). Same classifier, same
 // deferrals, resolved like the record step's scanner, fail-closed into review-fail-triage.
 describe('task-pipeline review PASS-edge review-gate (task 1122)', () => {
-    const TABLE_HEAD = '### Review\n\n| Priority | Finding | Location | Disposition |\n| --- | --- | --- | --- |\n';
+    // A well-formed review now states its confidence level (the 2026-10-12 contract, machine-checked
+    // by the same gate): every fixture below carries it, so these tests exercise the finding rules.
+    const TABLE_HEAD =
+        '### Review\n\n**Confidence:** HIGH\n\n| Priority | Finding | Location | Disposition |\n| --- | --- | --- | --- |\n';
     const runSh = (script: string, cwd: string, spurBin: string): number =>
         Bun.spawnSync(['sh', '-c', script], {
             cwd,

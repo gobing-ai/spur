@@ -2789,6 +2789,43 @@ describe('TaskCheckService', () => {
             expect(terminalErrors[0]?.message).not.toContain('spur feature update');
         });
 
+        test('R2 (1180): a live task under a deprecated feature warns (not errors) and advises re-parenting', async () => {
+            const content = taskFm({ status: 'todo', feature_id: 'F1' });
+            const { fs, path, cleanup } = seedEnv({
+                taskContent: content,
+                features: { F1: featureFm('F1', 'deprecated') },
+            });
+            const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+            const strictResult = await new TaskCheckService(fs, matrix).check(path, '0001', { strict: true });
+            cleanup();
+
+            const deprecated = result.findings.filter((f) => f.code === FINDING_CODES.L4_FEATURE_DEPRECATED);
+            expect(deprecated).toHaveLength(1);
+            expect(deprecated[0]?.severity).toBe('warning');
+            expect(deprecated[0]?.message).toContain('deprecated');
+            expect(deprecated[0]?.message).toContain('spur task update <wbs> --feature <otherId>');
+            // The non-terminal frozen state must NOT trip the terminal error path.
+            expect(result.findings.filter((f) => f.code === FINDING_CODES.L4_FEATURE_TERMINAL)).toEqual([]);
+            // --strict elevates the warning through the shared base.
+            expect(strictResult.findings.find((f) => f.code === FINDING_CODES.L4_FEATURE_DEPRECATED)?.severity).toBe(
+                'error',
+            );
+        });
+
+        test('R2 (1180): a terminal task under a deprecated feature gets no finding', async () => {
+            // WHY: done-under-deprecated is the intended retained end state; flagging it
+            // would re-litigate completed work exactly as 0339 R1 warns against.
+            const content = taskFm({ status: 'done', feature_id: 'F1' });
+            const { fs, path, cleanup } = seedEnv({
+                taskContent: content,
+                features: { F1: featureFm('F1', 'deprecated') },
+            });
+            const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+            cleanup();
+
+            expect(result.findings.filter((f) => f.code === FINDING_CODES.L4_FEATURE_DEPRECATED)).toEqual([]);
+        });
+
         test('R3 (F21 0787): placeholder-only Requirements is tolerated where the matrix does not require it', async () => {
             // WHY: 0337 made L3_REQUIREMENTS_EMPTY unconditional; F21 0787 R1
             // supersedes that — creation scaffolded placeholders everywhere, so a

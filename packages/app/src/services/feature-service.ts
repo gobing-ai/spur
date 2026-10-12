@@ -266,6 +266,17 @@ export class FeatureService {
         const raw = await this.ctx.fs.readFile(sourceFile);
         const body = stripLeadingSectionHeader(raw, sectionName);
         let result = await this.ctx.writeService.updateSection(ref, sectionName, body);
+        // 1180 R3: a deprecated feature is frozen but the write still lands (exit code stays
+        // 0); the freeze note rides `warnings[]` so CLI and server both surface it.
+        if ((doc.frontmatterData?.status as string | undefined) === 'deprecated') {
+            result = {
+                ...result,
+                warnings: [
+                    ...(result.warnings ?? []),
+                    `Feature ${id} is deprecated (frozen); change it only as part of removal`,
+                ],
+            };
+        }
         // Write-time mirror of `feature check` L3.ac-bdd-error (same validator, same
         // checklist-tier exemption): a Gherkin AC without a `Feature:` line is the
         // recurring authoring slip, so name it at the write instead of the next check.
@@ -450,6 +461,18 @@ export class FeatureService {
         const tasksByFeature = await this.collectTasksByFeature();
         const linkedTasks = tasksByFeature.get(featureId) ?? [];
         const from = feature.status;
+
+        // 1180 R4: `deprecated` is sticky — no task-based rule may pull a frozen feature
+        // back into active work. This precedes the no-linked-tasks, reopen and blocked rules,
+        // so `sync` (incl. `--all`/`--force`) proposes no change and `check --fix` leaves it alone.
+        if (from === 'deprecated') {
+            return {
+                featureId,
+                from,
+                to: 'deprecated',
+                reason: 'Feature is deprecated (frozen)',
+            };
+        }
 
         if (linkedTasks.length === 0) {
             return {

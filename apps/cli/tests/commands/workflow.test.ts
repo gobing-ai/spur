@@ -2120,7 +2120,32 @@ failureStates:
         expect(result.cleaned).toHaveLength(0); // already finalized on previous run
         expect(result.logs.reclaimed).toEqual([]);
         expect(result.checkpoints.reclaimed).toEqual([]);
+        expect(result.scratch.reclaimed).toEqual([]);
 
+        await rm(cwd, { recursive: true, force: true });
+    });
+
+    test('clean reclaims expired .spur/run scratch; --logs leaves scratch alone', async () => {
+        const cwd = await createTempProject();
+        const runDir = join(cwd, '.spur', 'run');
+        await mkdir(join(runDir, 'old-scratch'), { recursive: true });
+        const oldFile = join(runDir, 'old-scratch', 'note.txt');
+        await writeFile(oldFile, 'x');
+        const old = new Date(Date.now() - 400 * 24 * 60 * 60 * 1000);
+        await utimes(oldFile, old, old);
+
+        const logsOutput = createCapturedOutput();
+        expect(
+            await main(['workflow', 'clean', '--logs', '--json'], { output: logsOutput, cwd, dbUrl: ':memory:' }),
+        ).toBe(0);
+        expect(JSON.parse(logsOutput.messages[0] ?? '{}').scratch).toBeUndefined();
+        expect(await exists(oldFile)).toBe(true);
+
+        const output = createCapturedOutput();
+        expect(await main(['workflow', 'clean', '--json'], { output, cwd, dbUrl: ':memory:' })).toBe(0);
+        const result = JSON.parse(output.messages[0] ?? '{}');
+        expect(result.scratch.reclaimed.map((e: { name: string }) => e.name)).toEqual(['old-scratch']);
+        expect(await exists(join(runDir, 'old-scratch'))).toBe(false);
         await rm(cwd, { recursive: true, force: true });
     });
 

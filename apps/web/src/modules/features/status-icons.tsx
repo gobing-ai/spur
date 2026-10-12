@@ -1,3 +1,4 @@
+import { Archive } from 'lucide-react';
 import type React from 'react';
 
 /**
@@ -15,7 +16,9 @@ export interface StatusMeta {
 
 /**
  * Mapping table from canonical feature status to inline SVG icon & color class.
- * Canonical statuses: backlog, active, verifying, blocked, done, cancelled.
+ * Canonical statuses: backlog, active, verifying, blocked, done, cancelled, deprecated.
+ * `deprecated` uses the installed Lucide `Archive` glyph (ADR-133) rather than a new
+ * ad-hoc inline SVG; the existing legacy inline SVGs are intentionally untouched.
  */
 export const FEATURE_STATUS_MAP: Record<string, StatusMeta> = {
     backlog: {
@@ -132,6 +135,14 @@ export const FEATURE_STATUS_MAP: Record<string, StatusMeta> = {
                 <path d="M5.5 2.5h5l3 3v5l-3 3h-5l-3-3v-5l3-3z" />
                 <path d="M6.25 6.25l3.5 3.5M9.75 6.25l-3.5 3.5" />
             </svg>
+        ),
+    },
+    deprecated: {
+        status: 'deprecated',
+        label: 'Deprecated',
+        colorClass: 'text-spur-text-muted',
+        Icon: ({ className = 'w-3.5 h-3.5', ariaLabel }: { className?: string; ariaLabel?: string }) => (
+            <Archive className={`inline-block shrink-0 ${className}`} role="img" aria-label={ariaLabel} />
         ),
     },
 };

@@ -237,6 +237,23 @@ describe('FeatureService', () => {
             expect((result.warnings ?? []).join('\n')).not.toContain('L3.ac-bdd-error');
         });
 
+        test('R3 (1180): a deprecated feature still accepts the section write but warns it is frozen', async () => {
+            const created = await svc.create('Frozen Section Feature');
+            await svc.transition(created.ref.id, 'deprecated');
+            const source = join(root, 'feature-goal-frozen.md');
+            writeFileSync(source, 'Removal-scoped goal rewrite.\n');
+
+            const result = await svc.updateSection(created.ref.id, 'Goal', source);
+
+            // The write lands (no error, exit code would stay 0); the freeze note rides warnings[].
+            expect(result.warnings ?? []).toContain(
+                `Feature ${created.ref.id} is deprecated (frozen); change it only as part of removal`,
+            );
+            const shown = await svc.show(created.ref.id);
+            expect(shown?.content).toContain('## Goal\n\nRemoval-scoped goal rewrite.\n');
+            expect(shown?.status).toBe('deprecated');
+        });
+
         test('throws with available sections when the section is absent', async () => {
             const created = await svc.create('Missing Section Feature');
             const source = join(root, 'feature-missing.md');
@@ -846,6 +863,59 @@ describe('FeatureService', () => {
             expect(prop.from).toBe('backlog');
             expect(prop.to).toBe('backlog');
             expect(prop.reason).toBe('No linked tasks found');
+        });
+
+        test('R4 (1180): deriveFeatureStatus keeps a deprecated feature deprecated despite a live task', async () => {
+            const feat = await svc.create('Sync Test Deprecated');
+            await svc.transition(feat.ref.id, 'deprecated');
+            writeFileSync(
+                join(tasksDir, '9920_dep-live.md'),
+                `---
+schema_version: 1
+wbs: "9920"
+name: "Dep Live"
+status: "wip"
+feature_id: "${feat.ref.id}"
+created_at: "${new Date().toISOString()}"
+updated_at: "${new Date().toISOString()}"
+---
+# 9920: Dep Live
+`,
+            );
+            const prop = await svc.deriveFeatureStatus(feat.ref.id);
+            expect(prop).toMatchObject({
+                from: 'deprecated',
+                to: 'deprecated',
+                reason: 'Feature is deprecated (frozen)',
+            });
+            // sync must not move it, with or without --force.
+            expect((await svc.syncFeature(feat.ref.id)).applied).toBe(false);
+            expect((await svc.syncFeature(feat.ref.id, { force: true })).applied).toBe(false);
+            expect((await svc.show(feat.ref.id))?.status).toBe('deprecated');
+        });
+
+        test('R4 (1180): deprecated stays sticky for a terminal task too (no reopen, no done proposal)', async () => {
+            const feat = await svc.create('Sync Test Deprecated Terminal');
+            await svc.transition(feat.ref.id, 'deprecated');
+            writeFileSync(
+                join(tasksDir, '9921_dep-done.md'),
+                `---
+schema_version: 1
+wbs: "9921"
+name: "Dep Done"
+status: "done"
+feature_id: "${feat.ref.id}"
+created_at: "${new Date().toISOString()}"
+updated_at: "${new Date().toISOString()}"
+---
+# 9921: Dep Done
+`,
+            );
+            const prop = await svc.deriveFeatureStatus(feat.ref.id);
+            expect(prop.to).toBe('deprecated');
+            const res = await svc.syncFeature(feat.ref.id, { force: true });
+            expect(res.applied).toBe(false);
+            expect((await svc.show(feat.ref.id))?.status).toBe('deprecated');
         });
 
         test('deriveFeatureStatus proposes active when linked task is wip', async () => {

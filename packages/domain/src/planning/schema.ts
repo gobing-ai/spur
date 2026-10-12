@@ -20,7 +20,15 @@ import { z } from 'zod';
 export const TASK_STATUSES = ['backlog', 'todo', 'wip', 'testing', 'blocked', 'done', 'cancelled'] as const;
 
 /** Canonical feature statuses (lowercase). Lowercase-only on output. */
-export const FEATURE_STATUSES = ['backlog', 'active', 'verifying', 'blocked', 'done', 'cancelled'] as const;
+export const FEATURE_STATUSES = [
+    'backlog',
+    'active',
+    'verifying',
+    'blocked',
+    'done',
+    'cancelled',
+    'deprecated',
+] as const;
 
 /** Type alias for the canonical task status vocabulary. */
 export type TaskStatus = (typeof TASK_STATUSES)[number];
@@ -46,6 +54,7 @@ export const FEATURE_STATUS_ICONS: Record<FeatureStatus, string> = {
     blocked: '🚫',
     done: '✅',
     cancelled: '⛔',
+    deprecated: '🗄️',
 };
 
 /** Get the emoji icon for a task status (presentation-only). Normalizes legacy statuses so old rd3 tasks display correctly. */
@@ -170,6 +179,7 @@ const FEATURE_STATUS_ALIASES: Readonly<Record<string, FeatureStatus>> = {
     backlog: 'backlog',
     active: 'active',
     verifying: 'verifying',
+    deprecated: 'deprecated',
 };
 
 /**

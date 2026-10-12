@@ -4,7 +4,7 @@ owns: WHY — lasting architectural choices, context and tradeoffs
 authority: authoritative
 version: 1.69.0
 owner: Robin Min
-updated_at: 2026-10-11
+updated_at: 2026-10-12
 read_before: any structural change; before diverging from a decision
 edit_rules: 99 §6.1
 sync: [T1, T2]
@@ -2253,3 +2253,24 @@ owner split this entry established.
   (deterministic fail-closed guards).
 - **Detail:** `03 §12.2`; [planning records](design/planning-record-contracts.md);
   [server-side adjustment](design/server-side-adjustment-design.md).
+
+## ADR-136: Feature `deprecated` Is a Frozen, Non-Terminal Lifecycle State
+
+- **Status:** Accepted (implemented) · **Date:** 2026-10-11 · **Extends:** DD-13, ADR-135
+- **Decision:** `deprecated` joins the canonical `FeatureStatus` vocabulary as a non-terminal state
+  meaning "retained, do not change unless removing". The feature lifecycle graph admits it from
+  `backlog`, `active`, `verifying`, `blocked` and `done`, and leaves it only to `active`
+  (un-deprecate, History entry mandatory) or `cancelled` (removed). Every surface that attaches or
+  advances work treats it as frozen: task links are refused without reopen, `advance` refuses,
+  derivation/sync never propose a status, next-feature skips it; existing live tasks and section
+  writes get warnings, not errors. Alternatives rejected: keep overloading `done`/`cancelled` (done
+  invites follow-up through the reopen rule; cancelled claims abandonment and is terminal); a
+  terminal `deprecated` (duplicates `cancelled`, loses un-deprecate); a per-feature `frozen` flag
+  (a second status axis every consumer must combine with `status`).
+- **Why:** freeze intent must be machine-readable so agents and gates stop attaching work, without
+  deleting the record or misreporting its outcome.
+- **Consequence:** project-layer `feature-lifecycle.yaml` overrides must be re-synced to gain the
+  edges; removal work runs under its own feature (no override flag).
+- **Retains:** ADR-135 (graph-validated status writes), ADR-022 (lifecycles are workflow definitions).
+- **Detail:** [feature deprecated status](design/feature-deprecated-status.md);
+  [planning records](design/planning-record-contracts.md).

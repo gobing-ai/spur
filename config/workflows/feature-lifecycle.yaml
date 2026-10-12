@@ -9,7 +9,7 @@
 "$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
 kind: state-machine
 name: feature-lifecycle
-version: "2"
+version: "3"
 description: >
   Feature lifecycle FSM (design §2.3, §5.1, DD-13). States are the canonical
   FeatureStatus vocabulary; transitions encode the §2.3 graph including the
@@ -64,6 +64,11 @@ states:
     description: Completed and verified.
   - id: cancelled
     description: Terminal — abandoned.
+  - id: deprecated
+    description: >
+      Retained and frozen (ADR-136). Non-terminal: the record stays readable and
+      countable, nothing may attach new work to it, and leaving it is explicit —
+      un-deprecate to active, or cancelled once the feature is removed.
 
 transitions:
   # Forward path: backlog → active → verifying → done
@@ -140,5 +145,45 @@ transitions:
   - from: blocked
     to: cancelled
     description: Cancel feature
+    guard:
+      kind: always
+
+  # Deprecate: any non-terminal-or-done state → deprecated (frozen, retained — ADR-136)
+  - from: backlog
+    to: deprecated
+    description: Deprecate feature (frozen, retained)
+    guard:
+      kind: always
+  - from: active
+    to: deprecated
+    description: Deprecate feature (frozen, retained)
+    guard:
+      kind: always
+  - from: verifying
+    to: deprecated
+    description: Deprecate feature (frozen, retained)
+    guard:
+      kind: always
+  - from: blocked
+    to: deprecated
+    description: Deprecate feature (frozen, retained)
+    guard:
+      kind: always
+  - from: done
+    to: deprecated
+    description: Deprecate feature (frozen, retained)
+    guard:
+      kind: always
+
+  # Exits out of deprecated: un-deprecate or remove only. Any other edge is
+  # undeclared and refused by the graph (ADR-135).
+  - from: deprecated
+    to: active
+    description: Un-deprecate (mandatory History entry)
+    guard:
+      kind: always
+  - from: deprecated
+    to: cancelled
+    description: Remove deprecated feature
     guard:
       kind: always

@@ -1,4 +1,5 @@
 import { realpathSync, statSync } from 'node:fs';
+import { lstat, readdir, rm } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { AGENT_ROLE_NAMES, getEnvVars, type SpurConfig } from '@gobing-ai/spur-config';
 import { resolvePlanningFolders } from '@gobing-ai/spur-config/loader';
@@ -86,6 +87,7 @@ import {
     type ReclaimedCheckpoint,
     type ReclaimedRunLog,
     type RunLogReclamationResult,
+    type ScratchReclamationResult,
     type SkippedCheckpoint,
     type WorkflowRunRecordInspection,
 } from '../workflow/run-record';
@@ -1153,6 +1155,48 @@ export class WorkflowAppService {
             }
         }
         return { retentionDays, dryRun, reclaimed, failures };
+    }
+
+    /**
+     * Reclaim expired top-level `.spur/run/` scratch (ADR-131: scratch is disposable;
+     * durable state lives in `.spur/memory/`). An entry is reclaimed only when its newest
+     * subtree mtime is past retention, it is not a `.log` (owned by `cleanRunLogs`), not the
+     * live fleet-lease dir `guests`, not a git worktree, and its name does not start with an
+     * active run id. If run ownership cannot be read, nothing is reclaimed.
+     */
+    async cleanScratch(retentionDays = 30, dryRun = false): Promise<ScratchReclamationResult> {
+        const scratchDir = runStoragePaths(this.ctx.cwd).scratchDir;
+        const cutoffMs = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
+        const result: ScratchReclamationResult = { retentionDays, dryRun, reclaimed: [], failures: [] };
+
+        let liveIds: string[];
+        try {
+            liveIds = (await new RunDao(await this.ctx.getDb()).listActiveRuns()).map((row) => row.id);
+        } catch (err) {
+            result.failures.push({ path: scratchDir, error: String(err) });
+            return result;
+        }
+
+        let names: string[];
+        try {
+            names = await readdir(scratchDir);
+        } catch {
+            return result; // Absent scratch root — nothing to reclaim.
+        }
+        for (const name of names) {
+            if (name.endsWith('.log') || name === 'guests' || liveIds.some((id) => name.startsWith(id))) continue;
+            const path = join(scratchDir, name);
+            try {
+                const newest = await newestMtime(path);
+                if (newest === null || newest >= cutoffMs) continue;
+                const entry = { name, path, mtime: new Date(newest).toISOString() };
+                if (!dryRun) await rm(path, { recursive: true, force: true });
+                result.reclaimed.push(entry);
+            } catch (err) {
+                result.failures.push({ path, error: String(err) });
+            }
+        }
+        return result;
     }
 
     /**
@@ -2491,6 +2535,24 @@ async function outputArtifactForRun(cwd: string, runId: string): Promise<string 
  */
 type WorkflowListEntryIdentity = Pick<WorkflowListEntry, 'name' | 'kind' | 'valid' | 'description'> &
     Partial<Pick<WorkflowListEntry, 'error' | 'version' | 'definitionDigest'>>;
+
+/**
+ * Newest file mtime in a subtree (symlinks not followed; an empty dir uses its own mtime);
+ * `null` when it contains a git worktree (`.git`).
+ */
+async function newestMtime(path: string): Promise<number | null> {
+    const st = await lstat(path);
+    if (!st.isDirectory()) return st.mtimeMs;
+    const names = await readdir(path);
+    let newest = names.length === 0 ? st.mtimeMs : 0;
+    for (const name of names) {
+        if (name === '.git') return null;
+        const child = await newestMtime(join(path, name));
+        if (child === null) return null;
+        newest = Math.max(newest, child);
+    }
+    return newest;
+}
 
 async function scanWorkflowFiles(
     rootPath: string,

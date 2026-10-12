@@ -18,6 +18,7 @@ describe('module registry', () => {
             'runs',
             'history',
             'commands',
+            'database',
         ]);
     });
 

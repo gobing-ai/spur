@@ -270,7 +270,13 @@ describe('foldVerdict', () => {
     ): ResidualArtifact => ({
         wbs: '0949',
         base: 'b',
-        scanned: { 'review-finding': true, 'diff-marker': true, 'unchecked-box': true, 'staging-residue': true },
+        scanned: {
+            'review-finding': true,
+            'diff-marker': true,
+            'unchecked-box': true,
+            'staging-residue': true,
+            'review-contract': false,
+        },
         items: classes.map((klass, i) => ({
             id: `x${i}`,
             category: 'review-finding',
@@ -330,7 +336,13 @@ describe('verdict copy freshness', () => {
     const artifact: ResidualArtifact = {
         wbs: '1065',
         base: 'b',
-        scanned: { 'review-finding': false, 'diff-marker': false, 'unchecked-box': false, 'staging-residue': false },
+        scanned: {
+            'review-finding': false,
+            'diff-marker': false,
+            'unchecked-box': false,
+            'staging-residue': false,
+            'review-contract': false,
+        },
         items: [],
         counts: { blocking: 0, deferrable: 0, advisory: 0, housekeeping: 0 },
     };
@@ -475,6 +487,7 @@ describe('CLI modes', () => {
                     'diff-marker': false,
                     'unchecked-box': true,
                     'staging-residue': true,
+                    'review-contract': false,
                 },
                 items: [{ id: 'd1', category: 'diff-marker', class: 'blocking', location: 'src/z.ts:4', text: 'TODO' }],
                 counts: { blocking: 1, deferrable: 0, advisory: 0, housekeeping: 0 },
@@ -630,8 +643,10 @@ describe('blockingReviewFindings (task 1122 R1)', () => {
  * only review-finding items so the test-fix hop's existing hand-off feeds /sp:dev-fixall.
  */
 describe('review-gate mode (task 1122 R2/AC1)', () => {
+    // A well-formed review states its confidence level (the 2026-10-12 contract the gate now
+    // machine-checks), so these fixtures exercise the finding rules rather than the contract rule.
     const REVIEW_TABLE_HEAD =
-        '### Review\n\n| Priority | Finding | Location | Disposition |\n| --- | --- | --- | --- |\n';
+        '### Review\n\n**Confidence:** HIGH\n\n| Priority | Finding | Location | Disposition |\n| --- | --- | --- | --- |\n';
     const stubSpurShow = (dir: string, content: string): string => {
         const stub = join(dir, 'stub-spur.sh');
         const payload = JSON.stringify({ content, frontmatter: { feature_id: 'H15' } }).replaceAll("'", "'\\''");
@@ -686,6 +701,7 @@ describe('review-gate mode (task 1122 R2/AC1)', () => {
                 'diff-marker': false,
                 'unchecked-box': false,
                 'staging-residue': false,
+                'review-contract': true,
             });
             if (expected === 1) {
                 expect(art.counts.blocking).toBe(1);

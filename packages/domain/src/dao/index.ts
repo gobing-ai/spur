@@ -20,6 +20,19 @@ export {
     type StartCoordinationRunInput,
 } from './coordination-run-dao';
 export {
+    DATABASE_TEXT_CELL_MAX_BYTES,
+    DatabaseInspector,
+    type DatabaseRowQuery,
+    type DbCell,
+    type DbColumn,
+    type DbRowDetail,
+    type DbRowPage,
+    type DbTableDescription,
+    DEFAULT_DATABASE_PAGE_SIZE,
+    UnknownColumnError,
+    UnknownTableError,
+} from './database-inspector';
+export {
     type CreateDecisionLogInput,
     DECISION_LOG_RETENTION_ROWS,
     DecisionLogDao,

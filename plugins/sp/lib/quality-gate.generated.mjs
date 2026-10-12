@@ -24465,6 +24465,7 @@ var ALL_FINDING_CODES = [
   "L4.design-placeholder",
   "L4.feature-not-found",
   "L4.feature-terminal",
+  "L4.feature-deprecated",
   "L4.missing-feature-id",
   "L4.parent-not-found",
   "L4.dependency-not-found",
@@ -27664,6 +27665,9 @@ var artifactsTable = defineTable("artifacts", {
   ...standardColumns
 });
 var artifacts = artifactsTable.table;
+// packages/domain/src/dao/database-inspector.ts
+var encoder = new TextEncoder;
+var decoder = new TextDecoder;
 // packages/domain/src/schema/phase-runs.ts
 init_schema();
 var phaseRunsTable = defineTable("phase_runs", {
@@ -29885,7 +29889,15 @@ function escapeYamlValue(value) {
 // packages/domain/src/planning/schema.ts
 init_zod();
 var TASK_STATUSES = ["backlog", "todo", "wip", "testing", "blocked", "done", "cancelled"];
-var FEATURE_STATUSES = ["backlog", "active", "verifying", "blocked", "done", "cancelled"];
+var FEATURE_STATUSES = [
+  "backlog",
+  "active",
+  "verifying",
+  "blocked",
+  "done",
+  "cancelled",
+  "deprecated"
+];
 var PRIORITIES = ["P0", "P1", "P2", "P3"];
 var PROFILES = [
   "simple",

@@ -1,5 +1,6 @@
 import { WbsCollisionError } from '@gobing-ai/spur-app';
 import { getEnvVar } from '@gobing-ai/spur-config';
+import { ORPCError } from '@orpc/server';
 import type { ErrorHandler } from 'hono';
 import { GuardDeniedError, LockTimeoutError } from '../errors';
 
@@ -172,6 +173,42 @@ function resolveError(err: unknown, requestId: string | undefined, isProd: boole
           ? { stack: err.stack, requestId }
           : { raw: String(err), requestId };
     return { status: 500, apiCode: 'INTERNAL_ERROR', message: isProd ? 'Internal server error' : message, details };
+}
+
+/**
+ * API codes the typed domain-error table above owns. `toDomainORPCError`
+ * produces only these, and the `/api/*` oRPC body encoder re-shapes only these —
+ * every other oRPC error keeps its default body.
+ */
+const DOMAIN_ERROR_API_CODES = new Set<string>(['GUARD_DENIED', 'WBS_COLLISION', 'LOCK_TIMEOUT']);
+
+/** True when `code` is one of the typed domain-error codes the transport seam re-shapes. */
+export function isDomainErrorApiCode(code: string): boolean {
+    return DOMAIN_ERROR_API_CODES.has(code);
+}
+
+/**
+ * Translate a thrown typed domain error into the oRPC error the `/api/*`
+ * OpenAPI handler serializes, preserving the documented HTTP status.
+ *
+ * The oRPC handler owns `/api/*` (bootstrap.ts) and converts every thrown value
+ * into a generic 500 `INTERNAL_SERVER_ERROR` response itself, so a
+ * `GuardDeniedError`/`WbsCollisionError`/`LockTimeoutError` never reaches
+ * `globalErrorHandler`. Returning `undefined` for anything else leaves oRPC's
+ * default handling for every other error untouched.
+ */
+export function toDomainORPCError(err: unknown): ORPCError<string, unknown> | undefined {
+    if (!(err instanceof GuardDeniedError || err instanceof WbsCollisionError || err instanceof LockTimeoutError)) {
+        return undefined;
+    }
+    const isProd = (getEnvVar('NODE_ENV') ?? '') === 'production';
+    // No Hono requestId on this path — each resolver tolerates `undefined`.
+    const resolved = resolveError(err, undefined, isProd);
+    return new ORPCError(resolved.apiCode, {
+        status: resolved.status,
+        message: resolved.message,
+        data: resolved.details,
+    });
 }
 
 /**

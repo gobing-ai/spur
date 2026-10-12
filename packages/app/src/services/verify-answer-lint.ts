@@ -256,11 +256,20 @@ const CITATION_FORMS: readonly RegExp[] = [
     /https?:\/\/\S+/i, // URL
 ];
 
-function hasClaimMarker(evidence: string): boolean {
+/**
+ * Does this text assert an external API/library claim? Exported so the review gate applies the SAME
+ * closed marker set the verify answer is linted with (task 1070 R1); two definitions of "external
+ * claim" would drift.
+ */
+export function hasClaimMarker(evidence: string): boolean {
     return CLAIM_MARKERS.some((re) => re.test(evidence));
 }
 
-function hasCitationForm(evidence: string): boolean {
+/**
+ * Does this text carry a verifiable citation (repo `path:line`, the external named-origin form, or
+ * a URL)? Exported beside {@link hasClaimMarker} for the same single-sourcing reason.
+ */
+export function hasCitationForm(evidence: string): boolean {
     return CITATION_FORMS.some((re) => re.test(evidence));
 }
 

@@ -19,6 +19,7 @@ import {
     parseScanArgs,
     recordedVerdictPath,
     renderReport,
+    reviewContractViolations,
     scanResiduals,
     verdictDisagreementNote,
 } from '../../src/services/residual-scan';
@@ -320,9 +321,15 @@ describe('review-finding parser hardening (task 1065 R4)', () => {
 
 /** Shared Review-section table head for the task 1122 review-gate tests. */
 const gateTable = (rows: string[]): string =>
-    ['### Review', '', '| Priority | Finding | Location | Disposition |', '| --- | --- | --- | --- |', ...rows].join(
-        '\n',
-    );
+    [
+        '### Review',
+        '',
+        '**Confidence:** HIGH',
+        '',
+        '| Priority | Finding | Location | Disposition |',
+        '| --- | --- | --- | --- |',
+        ...rows,
+    ].join('\n');
 
 /** The plugin script's fail-closed exit decision for the review-gate mode (task 1122 R2). */
 const gateExit = (counts: { blocking: number }): 0 | 1 => (counts.blocking > 0 ? 1 : 0);
@@ -396,6 +403,7 @@ describe('buildReviewGateArtifact (task 1122 R2)', () => {
             'diff-marker': false,
             'unchecked-box': false,
             'staging-residue': false,
+            'review-contract': true,
         });
         // Unchecked boxes are not decidable pre-record: the gate artifact stays review-only.
         expect(gate.artifact.items.map((i) => [i.category, i.class])).toEqual([['review-finding', 'blocking']]);
@@ -422,6 +430,92 @@ describe('buildReviewGateArtifact (task 1122 R2)', () => {
         expect(gate.artifact.counts.blocking).toBe(0);
         expect(gate.note).toBe('residual-review-gate: 1122 blocking=0\n');
         expect(gateExit(gate.artifact.counts)).toBe(0);
+    });
+});
+
+describe('review-report contract at the gate (task 1070 R1 on the review side)', () => {
+    const reviewWith = (confidence: string, rows: string[]): string =>
+        [
+            '### Review',
+            '',
+            confidence,
+            '',
+            '| Priority | Finding | Location | Disposition |',
+            '| --- | --- | --- | --- |',
+            ...rows,
+        ].join('\n');
+
+    test('a report with no valid Confidence line is a blocking contract violation', () => {
+        for (const body of [
+            reviewWith('', ['| P4 (advisory) | Fuzzy name | `src/e.ts:20` | ACCEPTED |']),
+            reviewWith('**Confidence:** PROBABLY', ['| P4 (advisory) | Fuzzy name | `src/e.ts:20` | ACCEPTED |']),
+            reviewWith('**Confidence:** HIGH\n\n**Confidence:** LOW', [
+                '| P4 (advisory) | Fuzzy name | `src/e.ts:20` | ACCEPTED |',
+            ]),
+        ]) {
+            const violations = reviewContractViolations(body);
+            expect(violations).toHaveLength(1);
+            expect(violations[0]?.location).toBe('task-file:Review');
+            expect(violations[0]?.text).toContain('no single valid');
+            const gate = buildReviewGateArtifact('1070', body, []);
+            expect(gate.artifact.items.some((i) => i.category === 'review-contract' && i.class === 'blocking')).toBe(
+                true,
+            );
+            expect(gateExit(gate.artifact.counts)).toBe(1);
+        }
+    });
+
+    test('an external API/library claim needs a same-cell citation in the Finding cell', () => {
+        const claims = [
+            '`@orpc/client` loses the error code',
+            'pinned at 1.14.4 it throws',
+            'reads node_modules/@orpc/openapi-client internals',
+            '`OpenAPIHandler.handle()` swallows the error',
+        ];
+        for (const claim of claims) {
+            const uncited = reviewContractViolations(
+                reviewWith('**Confidence:** MEDIUM', [`| P3 | ${claim} | \`src/lib/rpc.ts:91\` | OPEN |`]),
+            );
+            expect(uncited).toHaveLength(1);
+            expect(uncited[0]?.text).toContain('without a same-cell citation');
+            expect(uncited[0]?.location).toBe('src/lib/rpc.ts:91');
+            // A citation IN THE SAME CELL clears it; the Location column does not stand in.
+            for (const cited of [`${claim} — see \`src/lib/rpc.ts:91\``, `${claim} — https://orpc.unnoq.com/docs`]) {
+                expect(
+                    reviewContractViolations(
+                        reviewWith('**Confidence:** MEDIUM', [`| P3 | ${cited} | \`src/lib/rpc.ts:91\` | OPEN |`]),
+                    ),
+                ).toEqual([]);
+            }
+        }
+    });
+
+    test('claim-free findings and a missing Review section raise nothing', () => {
+        expect(
+            reviewContractViolations(
+                reviewWith('**Confidence:** HIGH', [
+                    '| P2 (major) | Missing validation | `src/c.ts:8` | OPEN |',
+                    '| P4 (advisory) | Fuzzy name | `src/e.ts:20` | ACCEPTED |',
+                ]),
+            ),
+        ).toEqual([]);
+        expect(reviewContractViolations('## Requirements\n\n- [ ] R1. x\n')).toEqual([]);
+    });
+
+    test('the record sweep does not carry the review-contract slice (no retro-downgrade)', () => {
+        // A completed task re-scanned at record time must not be re-graded on a rule its review
+        // was never asked for: only the review-time gate claims this category.
+        const artifact = scanResiduals({
+            wbs: '1070',
+            base: null,
+            taskContent: reviewWith('', ['| P4 (advisory) | Fuzzy name | `src/e.ts:20` | ACCEPTED |']),
+            addedLines: [],
+            stagingResidue: [],
+            deferrals: [],
+        });
+        expect(artifact.scanned['review-contract']).toBe(false);
+        expect(artifact.items.every((i) => i.category !== 'review-contract')).toBe(true);
+        expect(artifact.counts.blocking).toBe(0);
     });
 });
 

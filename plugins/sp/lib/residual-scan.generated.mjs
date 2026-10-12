@@ -1,6 +1,36 @@
 // packages/app/src/services/residual-scan.ts
 import { join } from "node:path";
 import { createHash } from "node:crypto";
+
+// packages/app/src/services/verify-answer-lint.ts
+var CLAIM_MARKERS = [
+  /@[a-z0-9._-]+\/[a-z0-9._-]+/i,
+  /\bnode_modules\//,
+  /\b\d+\.\d+\.\d+\b/,
+  /`[A-Za-z_$][\w.$]*\s*\([^`]*\)`/
+];
+var CITATION_FORMS = [
+  /`[^`\s]+:\d+(?:-\d+)?`/,
+  /`[^`]+`\s+lines?\s+\d+/i,
+  /\b[\w./-]+\.[A-Za-z0-9]+:\d+(?:-\d+)?\b/,
+  /https?:\/\/\S+/i
+];
+function hasClaimMarker(evidence) {
+  return CLAIM_MARKERS.some((re) => re.test(evidence));
+}
+function hasCitationForm(evidence) {
+  return CITATION_FORMS.some((re) => re.test(evidence));
+}
+var CONFIDENCE_LEVELS = ["HIGH", "MEDIUM", "LOW"];
+function extractAnswerConfidence(text) {
+  const matches = [...text.matchAll(/^\s*Confidence:\s*(\S+)\s*$/gim)];
+  if (matches.length !== 1)
+    return;
+  const value = (matches[0]?.[1] ?? "").toUpperCase();
+  return CONFIDENCE_LEVELS.includes(value) ? value : undefined;
+}
+
+// packages/app/src/services/residual-scan.ts
 var MARKER_PATTERN = /TODO|FIXME|XXX|HACK/;
 var PRIORITY_PATTERN = /^P[1-4]/;
 var RANGE_PRIORITY = /^P[1-4]\s*[\u2013\u2014-]\s*P?[1-4]/;
@@ -27,11 +57,15 @@ function locationOf(locationCell, finding) {
   const backtick = finding.match(/`([^`]+)`/)?.[1];
   return backtick === undefined ? "" : normalizeAnchor(backtick);
 }
-function parseReviewFindings(taskContent) {
+function reviewBody(taskContent) {
   const section = taskContent.split(/^### Review\b/m)[1];
-  if (section === undefined)
+  return section === undefined ? null : section.split(/^### /m)[0] ?? "";
+}
+function parseReviewFindings(taskContent) {
+  const section = reviewBody(taskContent);
+  if (section === null)
     return [];
-  const body = section.split(/^### /m)[0] ?? "";
+  const body = section;
   const out = [];
   const lines = body.split(`
 `);
@@ -144,7 +178,8 @@ function scanResiduals(inputs) {
       "review-finding": true,
       "diff-marker": base !== null,
       "unchecked-box": true,
-      "staging-residue": true
+      "staging-residue": true,
+      "review-contract": false
     },
     items,
     counts
@@ -165,8 +200,36 @@ function blockingReviewFindings(taskContent, deferrals) {
   }));
   return classify(items, [...tableDeferrals, ...deferrals]);
 }
+function reviewContractViolations(taskContent) {
+  const violations = [];
+  const body = reviewBody(taskContent);
+  if (body !== null && extractAnswerConfidence(body.replace(/\*\*/g, "")) === undefined) {
+    violations.push({
+      location: "task-file:Review",
+      text: "Review report carries no single valid `**Confidence:** HIGH | MEDIUM | LOW` line — " + "state the level the report can defend (HIGH: every requirement row MET, every finding " + "dispositioned, evidence cited; MEDIUM/LOW: name the gap)."
+    });
+  }
+  for (const row of parseReviewFindings(taskContent)) {
+    if (hasClaimMarker(row.text) && !hasCitationForm(row.text)) {
+      violations.push({
+        location: row.location.length > 0 ? row.location : "task-file:Review",
+        text: `${row.priority} finding asserts an external API/library/version claim without a ` + "same-cell citation (add a repo `path:line`, an external named-origin form, or a URL " + `to the Finding cell): ${row.text.slice(0, 80)}`
+      });
+    }
+  }
+  return violations;
+}
 function buildReviewGateArtifact(wbs, taskContent, deferrals) {
-  const items = blockingReviewFindings(taskContent, deferrals);
+  const items = [
+    ...blockingReviewFindings(taskContent, deferrals),
+    ...reviewContractViolations(taskContent).map((v) => ({
+      id: makeItemId("review-contract", v.location, v.text),
+      category: "review-contract",
+      class: "blocking",
+      location: v.location,
+      text: v.text
+    }))
+  ];
   const blocking = items.filter((i) => i.class === "blocking");
   const counts = { blocking: 0, deferrable: 0, advisory: 0, housekeeping: 0 };
   for (const item of items)
@@ -178,7 +241,8 @@ function buildReviewGateArtifact(wbs, taskContent, deferrals) {
       "review-finding": true,
       "diff-marker": false,
       "unchecked-box": false,
-      "staging-residue": false
+      "staging-residue": false,
+      "review-contract": true
     },
     items,
     counts
@@ -313,6 +377,7 @@ function parseScanArgs(argv, cwd, defaultTmpDir) {
 export {
   verdictDisagreementNote,
   scanResiduals,
+  reviewContractViolations,
   renderReport,
   recordedVerdictPath,
   parseScanArgs,
