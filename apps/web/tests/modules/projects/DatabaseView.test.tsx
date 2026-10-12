@@ -119,13 +119,19 @@ function lastRowsParams(requests: string[]): URLSearchParams | undefined {
     return all[all.length - 1];
 }
 
-/** Drive a controlled input/select through its real React onChange prop. */
+/**
+ * Drive a controlled input/select through its real React onChange prop.
+ *
+ * happy-dom + React 19 do not deliver `fireEvent.change` to a controlled input's
+ * onChange (capricorn86/happy-dom#856), so — matching the sibling `MemberTerminal` and
+ * `components` convention — the test reads the handler off the real node. The lookup walks
+ * `getOwnPropertyNames` because bun's `mock.module` is process-global: an earlier file's
+ * `@/ui` mock is what this suite resolves here, and its Input carries the props differently.
+ */
 function setControlValue(el: Element, value: string): void {
-    const holder = el as unknown as Record<string, Record<string, unknown> | undefined>;
-    const key = Object.keys(holder).find((k) => k.startsWith('__reactProps$'));
-    const onChange = key
-        ? (holder[key]?.onChange as ((e: { target: { value: string } }) => void) | undefined)
-        : undefined;
+    const key = Object.getOwnPropertyNames(el).find((k) => k.startsWith('__reactProps$'));
+    const props = key ? (el as unknown as Record<string, { onChange?: (e: unknown) => void }>)[key] : undefined;
+    const onChange = props?.onChange;
     if (!onChange) throw new Error('onChange not found on control');
     act(() => onChange({ target: { value } }));
 }
