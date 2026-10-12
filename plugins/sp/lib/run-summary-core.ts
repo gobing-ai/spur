@@ -9,6 +9,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { WorkflowProgressProjection } from '@gobing-ai/spur-app';
+import { getEnvVars } from './env';
 import {
     accumulate,
     type Block,
@@ -18,15 +19,14 @@ import {
     newAcc,
     parseRows,
     promptText,
-    resolveTranscript,
     type Row,
+    resolveTranscript,
     type Span,
     sumSpans,
     sumTokens,
     type Tokens,
     zeroTokens,
 } from './transcript';
-import { getEnvVars } from './env';
 
 interface ProgressAttempt {
     startedAt?: string;
@@ -558,4 +558,3 @@ export function gateFromReceipt(cwd: string, runId: string): GateTime {
         return { ms: null, reason: 'check receipt is unreadable' };
     }
 }
-

@@ -17,20 +17,21 @@ function getEnvVars() {
   return process.env;
 }
 
-// plugins/sp/scripts/daily-summary/logger.ts
-var state = { console: true, file: false };
-function emit(stream, message) {
-  if (!state.console)
+// plugins/sp/scripts/daily-summary/daily-summary.ts
+var consoleEnabled = true;
+function enableLogger(consoleOn) {
+  consoleEnabled = consoleOn;
+}
+function logAt(stream, message) {
+  if (!consoleEnabled)
     return;
   console[stream](message);
 }
 var logger = {
-  info: (message) => emit("log", message),
-  warn: (message) => emit("warn", message),
-  error: (message) => emit("error", message)
+  info: (message) => logAt("log", message),
+  warn: (message) => logAt("warn", message),
+  error: (message) => logAt("error", message)
 };
-
-// plugins/sp/scripts/daily-summary/daily-summary.ts
 var DAILY_DIR = "docs/daily";
 var DEFAULT_DATE = "today";
 function parseArgs(argv = process.argv.slice(2)) {
@@ -602,6 +603,7 @@ export {
   getCcusageData,
   generateMarkdown,
   ensureDir,
+  enableLogger,
   defaultProcessSpawner,
   buildDailySummary
 };

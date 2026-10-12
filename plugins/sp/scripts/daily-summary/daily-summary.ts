@@ -13,7 +13,27 @@ import { existsSync, mkdirSync, readlinkSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { getEnvVar, getEnvVars } from '../../lib/env';
 
-import { logger } from './logger';
+// ─── In-script logger ────────────────────────────────────────────────────────
+
+// The former `logger.ts` helper exposed a file channel nothing ever implemented, so the used part
+// — a console toggle the tests need — lives here instead of a one-caller module (task 1173, plan P7).
+let consoleEnabled = true;
+
+/** Silence or restore this script's console output (test hook). */
+export function enableLogger(consoleOn: boolean): void {
+    consoleEnabled = consoleOn;
+}
+
+function logAt(stream: 'log' | 'warn' | 'error', message: string): void {
+    if (!consoleEnabled) return;
+    console[stream](message);
+}
+
+const logger = {
+    info: (message: string): void => logAt('log', message),
+    warn: (message: string): void => logAt('warn', message),
+    error: (message: string): void => logAt('error', message),
+};
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 

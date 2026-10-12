@@ -9,6 +9,7 @@ import {
     type CliOptions,
     type DailySummary,
     defaultProcessSpawner,
+    enableLogger,
     ensureDir,
     generateMarkdown,
     getCcusageData,
@@ -23,15 +24,14 @@ import {
     todayLocal,
     writeSummary,
 } from '../../scripts/daily-summary/daily-summary';
-import { enableLogger } from '../../scripts/daily-summary/logger';
 
 beforeAll(() => {
-    enableLogger(false, false);
+    enableLogger(false);
     setEnvVar('SP_DAILY_SUMMARY_NO_PROMPT', '1');
 });
 
 afterAll(() => {
-    enableLogger(true, true);
+    enableLogger(true);
     removeEnvVar('SP_DAILY_SUMMARY_NO_PROMPT');
     removeEnvVar('RD3_DAILY_SUMMARY_NO_PROMPT');
 });

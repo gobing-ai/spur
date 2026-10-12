@@ -20,7 +20,8 @@
             "!drizzle",
             "!**/.spur",
             "!plugins/sp/scripts/**/*.mjs",
-            "!plugins/sp/lib"
+            "!plugins/sp/lib/*.generated.mjs",
+            "!plugins/sp/lib/*.generated.d.mts"
         ]
     },
     "formatter": {

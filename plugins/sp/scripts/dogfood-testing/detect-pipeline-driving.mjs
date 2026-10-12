@@ -2,7 +2,7 @@
 import { createRequire } from "node:module";
 var __require = /* @__PURE__ */ createRequire(import.meta.url);
 
-// plugins/sp/scripts/dogfood-testing/detect-pipeline-driving.ts
+// plugins/sp/lib/dogfood-pipeline.ts
 var PIPELINE_TOKENS = [
   "--next",
   "dev-runall",
@@ -125,6 +125,7 @@ function evaluateDogfoodGate(testee, options = {}) {
     exitCode: 0
   };
 }
+// plugins/sp/scripts/dogfood-testing/detect-pipeline-driving.ts
 function parseCliArgs(argv) {
   let testee = null;
   let maxRetryPresent = false;

@@ -4,6 +4,8 @@ var __require = /* @__PURE__ */ createRequire(import.meta.url);
 
 // plugins/sp/scripts/dogfood-testing/validate-report.ts
 import { readFileSync } from "node:fs";
+
+// plugins/sp/lib/dogfood-report.ts
 var REQUIRED_SECTIONS = [1, 2, 3, 4, 5, 6];
 var CANONICAL_PROTOCOL = "sp:dogfood-testing@1.2";
 function countSectionHeadings(markdown, section) {
@@ -188,6 +190,7 @@ function validateReport(markdown) {
   validateCostEvidence(markdown, errors);
   return { ok: errors.length === 0, errors };
 }
+// plugins/sp/scripts/dogfood-testing/validate-report.ts
 function parseValidateCliArgs(argv) {
   let file = null;
   let json = false;

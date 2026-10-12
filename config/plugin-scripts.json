@@ -23,10 +23,6 @@
             "twin": "daily-summary/daily-summary.mjs"
         },
         {
-            "rel": "daily-summary/logger.ts",
-            "contract": "repo-only"
-        },
-        {
             "rel": "dogfood-testing/detect-pipeline-driving.ts",
             "contract": "standard",
             "twin": "dogfood-testing/detect-pipeline-driving.mjs"

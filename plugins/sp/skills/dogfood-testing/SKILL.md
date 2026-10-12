@@ -82,11 +82,11 @@ The command forwards these via `$ARGUMENTS`:
 >   <!-- pipeline-tokens:end -->
 >   matched as a **distinct hyphen-word**
 >   (machine-checked by
->   [`detectPipelineDriving`](../../scripts/dogfood-testing/detect-pipeline-driving.ts);
+>   [`detectPipelineDriving`](../../lib/dogfood-pipeline.ts);
 >   see [§Pipeline-driving word-boundary contract](#pipeline-driving-word-boundary-contract))
 >   → `⚠ pipeline-driving testee detected; pass --max-retry 0 (observe-only) or --max-retry N (fix mode, tree mutation acknowledged)`.
 > - **Mutating `--fix` modes** — `--fix all` / `--fix blockers-first`, boundary-guarded via
->   [`hasMutatingFixMode`](../../scripts/dogfood-testing/detect-pipeline-driving.ts) (never matches
+>   [`hasMutatingFixMode`](../../lib/dogfood-pipeline.ts) (never matches
 >   `--fix none` / `--focus all` / `--prefix all`). No pipeline token required: a verify/review leg
 >   with `--fix all` mutates the tree on its own (0280 dogfood P2, task 0293). Honesty note:
 >   `--max-retry 0` here bounds **the driver only** — the testee still mutates the tree — so the
