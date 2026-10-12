@@ -1,8 +1,9 @@
-import { afterAll, describe, expect, test } from 'bun:test';
+import { afterAll, describe, expect, spyOn, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getEnvVar, removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
+import { DecisionHub } from '@gobing-ai/ts-ai-decision';
 
 import { getDecisionService } from '../../src/decision/decision-service';
 
@@ -43,6 +44,63 @@ afterAll(async () => {
 });
 
 describe('DecisionService (task 1092, design §3.3/§3.6)', () => {
+    test('probe rejects duplicate catalogs before entering the hub', async () => {
+        const root = await newRoot();
+        roots.push(root);
+        await writeCatalog(root, 'base.yaml', CATALOG);
+        await writeCatalog(root, 'dup.yaml', CATALOG);
+        const service = await getDecisionService(null, root, join(root, 'shared'));
+        const decide = spyOn(DecisionHub.prototype, 'decide');
+        try {
+            await expect(service.probeMaker('pick-lane', 'typesafe', {}, 10)).rejects.toThrow(
+                'multiple winning catalogs',
+            );
+            expect(decide).not.toHaveBeenCalled();
+        } finally {
+            decide.mockRestore();
+        }
+    });
+
+    test('probe maps accepted and fallback results and bounds an unanswered hub', async () => {
+        const root = await newRoot();
+        roots.push(root);
+        await writeCatalog(root, 'base.yaml', CATALOG);
+        const service = await getDecisionService(null, root, join(root, 'shared'));
+        const decide = spyOn(DecisionHub.prototype, 'decide');
+        try {
+            for (const reason of ['accepted', 'low-confidence', 'no-backend', 'timeout', 'error'] as const) {
+                decide.mockResolvedValueOnce({
+                    id: 'pick-lane',
+                    type: 'choice',
+                    maker: 'typesafe',
+                    value: 'slow',
+                    source: reason === 'accepted' ? 'model' : 'default',
+                    reason,
+                    confidence: 0.6,
+                    durationMs: 12,
+                });
+                expect(await service.probeMaker('pick-lane', 'typesafe', {}, 100)).toEqual({
+                    maker: 'typesafe',
+                    ok: reason === 'accepted',
+                    value: 'slow',
+                    reason,
+                    durationMs: 12,
+                });
+            }
+            decide.mockImplementationOnce(() => new Promise(() => {}));
+            expect(await service.probeMaker('pick-lane', 'typesafe', {}, 1)).toMatchObject({
+                maker: 'typesafe',
+                ok: false,
+                value: null,
+                reason: 'timeout',
+            });
+            decide.mockRejectedValueOnce(new Error('invalid input'));
+            await expect(service.probeMaker('pick-lane', 'typesafe', {}, 100)).rejects.toThrow('invalid input');
+        } finally {
+            decide.mockRestore();
+        }
+    });
+
     test('list layers, describe maker precedence and lazy registry', async () => {
         const root = await newRoot();
         roots.push(root);

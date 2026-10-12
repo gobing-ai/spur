@@ -4,7 +4,7 @@ name: Add the opt-in decision maker liveness probe
 status: done
 template: feature-impl
 created_at: 2026-10-11T23:23:17.424Z
-updated_at: "2026-10-12T01:57:45.810Z"
+updated_at: "2026-10-12T02:21:02.627Z"
 feature_id: P11
 
 done_forced: "false"
@@ -24,12 +24,11 @@ code, and it leaves no trace in the ledger.
 
 ### Requirements
 
-- [x] R1. Add `probeDecisionMakers(service, makers, spec?)` to
-  `packages/app/src/decision/decision-readiness.ts`, with `LIVENESS_DECISION_ID` exported as the
+- [x] R1. Add `probeDecisionMakers(service, status, spec?)` to
+  `packages/app/src/decision/decision-status-readiness.ts`, with `LIVENESS_DECISION_ID` exported as the
   catalog id the probe serves (`maker-liveness`, task 1169).
 - [x] R2. For each distinct maker, serve `LIVENESS_DECISION_ID` once with
-  `service.decide(id, { instructions: PROBE_QUESTION }, { maker: name })` — the same seam
-  `spur decision run` uses, so catalog resolution, input validation, the maker call and the fallback
+  `service.probeMaker(id, name, { instructions: LIVENESS_PROBE_QUESTION }, backstopMs)` — a probe-only hub over the same catalog loader as `spur decision run`, so catalog resolution, input validation, the maker call and the fallback
   route are all exercised.
 - [x] R3. Map each outcome to `DecisionProbeOutcome { maker, ok, value, reason, durationMs }` where
   `ok` is `source === 'model'`, `reason` is the served reason, and `value` is null only when the
@@ -43,7 +42,7 @@ code, and it leaves no trace in the ledger.
 - [x] R5. Fail before any maker call when the liveness id is not served: `service.describe(id)` throws
   `UnknownDecisionError` and the caller surfaces it as a caller/environment mistake (task 1172 R2
   maps it to the non-zero exit).
-- [x] R6. Failure modes are enumerated in the test **before** the implementation (AGENTS.md): answered
+- [x] R6. Enumerate failure modes before the assertions and cover them with deterministic tests: answered
   and accepted (`ok: true`); low confidence; no backend; timeout; maker error; unexpected throw from
   the seam; absent liveness id (validated before the loop); unregistered maker (never listed by the
   caller).
@@ -79,12 +78,13 @@ code, and it leaves no trace in the ledger.
 
 ### Design
 
-**Chosen: loop in the app service, one decide call per maker, injectable seam for the failure table.**
+**Chosen: loop in the app service, one bounded probe call per maker, injectable seam for the failure table.**
 
-- `probeDecisionMakers` takes an optional `decide` seam defaulting to `service.decide`. The happy path
-  needs a live backend, so the six failure modes and the accepted case are covered by a table-driven
-  test over the seam; the end-to-end path is covered by the CLI test with an unreachable maker
-  (deterministic locally, no network).
+- `probeDecisionMakers` accepts the `DecisionMakerProbe` seam implemented by `DecisionService`.
+  It validates the liveness entry before iterating, including an empty maker set. `probeMaker` rejects
+  duplicate ids before constructing a maker, then uses a probe-only hub with bounded drivers.
+  Service tests substitute hub outcomes to cover acceptance, each fallback reason, deadline expiry
+  and rejection; CLI tests exercise the real offline typesafe backend.
 - Sequential, not parallel: a probe is a diagnostic an operator watches; concurrent local-model calls
   would queue against one server and turn a latency signal into noise.
 - No ledger writes: keeping probe rows out of `system_events` and `decision_logs` means the "working"
@@ -126,6 +126,9 @@ code, and it leaves no trace in the ledger.
   timeout. Recorded in the design satellite §6 as a known limit.
 
 - **Citations**: `packages/app/src/decision/decision-service.ts:260` (`probeMaker`), `packages/app/src/decision/decision-service.ts:284` (`probeHub`), `packages/app/src/decision/decision-service.ts:146` (`PROBE_DRIVER_BUDGET_MS`), `packages/app/src/decision/decision-service.ts:153` (`raceTimeout`), `packages/app/src/decision/decision-service.ts:216` (`loadCatalogs`), `packages/app/src/decision/decision-status-readiness.ts:162` (`probeDecisionMakers`).
+
+
+- Re-audit corrections: preflight the liveness entry even with an empty maker set, and reject duplicate catalog ids before entering the probe hub. Service regression tests now execute result mapping, every fallback reason, the wall-clock deadline and caller-error propagation.
 
 ### Testing
 

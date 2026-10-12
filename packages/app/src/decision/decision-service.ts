@@ -263,6 +263,15 @@ export class DecisionService {
         input: Record<string, unknown>,
         backstopMs: number,
     ): Promise<DecisionProbeOutcome> {
+        if (this.duplicateIds.has(decisionId)) {
+            const sources = this.duplicateIds.get(decisionId)?.join(', ') ?? '';
+            throw new DecisionCatalogError(
+                `decision "${decisionId}" is declared by multiple winning catalogs (${sources}); remove one to unblock decide`,
+                sources,
+                decisionId,
+            );
+        }
+        this.describe(decisionId);
         const startedAt = Date.now();
         const served = await raceTimeout(
             this.probeHub().decide(decisionId, input as Parameters<DecisionHub['decide']>[1], { maker }),

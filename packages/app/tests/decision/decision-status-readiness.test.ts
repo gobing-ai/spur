@@ -237,6 +237,7 @@ describe('decisionStatusReadiness (task 1170)', () => {
 describe('probeDecisionMakers (task 1171)', () => {
     const calls: Array<{ decisionId: string; maker: string; input: Record<string, unknown>; backstopMs: number }> = [];
     function stubProbe(outcomes: Record<string, Partial<DecisionProbeOutcome>>): {
+        describe: (decisionId: string) => unknown;
         probeMaker: (
             decisionId: string,
             maker: string,
@@ -246,6 +247,7 @@ describe('probeDecisionMakers (task 1171)', () => {
     } {
         calls.length = 0;
         return {
+            describe: () => ({}),
             probeMaker: async (decisionId, maker, input, backstopMs) => {
                 calls.push({ decisionId, maker, input, backstopMs });
                 return probe(maker, outcomes[maker] ?? {});
@@ -290,6 +292,7 @@ describe('probeDecisionMakers (task 1171)', () => {
 
     test('R6: a seam that rejects (unknown id) propagates instead of reporting a dead maker', async () => {
         const failing = {
+            describe: () => ({}),
             probeMaker: async (): Promise<DecisionProbeOutcome> => {
                 throw new Error('Unknown decision "maker-liveness"');
             },
@@ -300,5 +303,14 @@ describe('probeDecisionMakers (task 1171)', () => {
     test('R5: the caller can pass its own backstop budget', async () => {
         await probeDecisionMakers(stubProbe({}), statusOf(), { backstopMs: 1 });
         expect(calls.every((call) => call.backstopMs === 1)).toBe(true);
+    });
+
+    test('R7: a missing liveness entry fails before probing even with no effective makers', async () => {
+        const seam = stubProbe({});
+        seam.describe = () => {
+            throw new Error('Unknown decision "maker-liveness"');
+        };
+        await expect(probeDecisionMakers(seam, statusOf({ perDecision: [] }))).rejects.toThrow('maker-liveness');
+        expect(calls).toHaveLength(0);
     });
 });

@@ -58,6 +58,8 @@ export interface DecisionStatusReadiness {
  * substitutes it to reach the failure table without a live backend.
  */
 export interface DecisionMakerProbe {
+    /** Validate the liveness catalog entry before any maker is called. */
+    describe(decisionId: string): unknown;
     probeMaker(
         decisionId: string,
         maker: string,
@@ -108,7 +110,7 @@ export function decisionStatusReadiness(
     // registry does not hold — a config error that must stay visible in the Makers table
     // rather than disappearing from it.
     const names = new Set<string>(status.registeredMakers);
-    if (status.configDefaultMaker !== null) names.add(status.configDefaultMaker);
+    if (status.configDefaultMaker !== undefined) names.add(status.configDefaultMaker);
     for (const row of status.perDecision) names.add(row.maker);
     for (const name of Object.values(status.configDecisionMakers)) names.add(name);
 
@@ -165,6 +167,7 @@ export async function probeDecisionMakers(
     status: DecisionStatus,
     spec: { backstopMs?: number; onResult?: (result: DecisionProbeOutcome) => void } = {},
 ): Promise<DecisionProbeOutcome[]> {
+    probe.describe(LIVENESS_DECISION_ID);
     const backstopMs = spec.backstopMs ?? DEFAULT_PROBE_BACKSTOP_MS;
     const makers = [...new Set(status.perDecision.filter((row) => row.registered).map((row) => row.maker))];
     const results: DecisionProbeOutcome[] = [];
