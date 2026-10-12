@@ -4,7 +4,7 @@ name: Add the opt-in decision maker liveness probe
 status: done
 template: feature-impl
 created_at: 2026-10-11T23:23:17.424Z
-updated_at: "2026-10-12T02:23:19.344Z"
+updated_at: "2026-10-12T02:30:12.584Z"
 feature_id: P11
 
 done_forced: "false"
@@ -54,31 +54,7 @@ code, and it leaves no trace in the ledger.
 
 ### Q&A
 
-<!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
-     condition. Not a parking lot for open questions — an unanswered question here means the task
-     is not ready to hand off. Keep empty if none. -->
-
-#### Q&A entry — 2026-10-11T23:24:39.649Z
-
-<!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
-     condition. Not a parking lot for open questions — an unanswered question here means the task
-     is not ready to hand off. Keep empty if none. -->
-
-#### Q&A entry — 2026-10-11T23:20:00.000Z
-
-- Operator request (this session): prove "actually working" by having the maker answer a real, simple
-  decision one by one rather than inferring health from configuration. Accepted the recommended shape:
-  one liveness decision per distinct registered effective maker, opt-in via `--probe`.
-- Closed: the probe writes no `decision_logs` row and emits no decision event, so the recorded
-  evidence column cannot be satisfied by the probe that checks it. Tradeoff (no probe audit trail) is
-  recorded in the design satellite §6.
-- Closed: a failing probe never changes the exit code. `--probe` answers "is it working now", and a
-  readiness report is data, not a failing command; a non-zero exit stays reserved for caller mistakes
-  and catalog or maker-config errors.
-
-#### Q&A entry — 2026-10-12T02:23:14.899Z
-
-Closed decisions retained from the original refinement and implementation session:
+Closed decisions from the original 2026-10-11 refinement and implementation session (deduplicated during this audit):
 
 - Operator request (this session): prove "actually working" by having the maker answer a real, simple
   decision one by one rather than inferring health from configuration. Accepted the recommended shape:
@@ -143,27 +119,32 @@ Closed decisions retained from the original refinement and implementation sessio
   instead of failing fast, which is why the probe bounds every driver rather than trusting one shared
   timeout. Recorded in the design satellite §6 as a known limit.
 
-- **Citations**: `packages/app/src/decision/decision-service.ts:260` (`probeMaker`), `packages/app/src/decision/decision-service.ts:284` (`probeHub`), `packages/app/src/decision/decision-service.ts:146` (`PROBE_DRIVER_BUDGET_MS`), `packages/app/src/decision/decision-service.ts:153` (`raceTimeout`), `packages/app/src/decision/decision-service.ts:216` (`loadCatalogs`), `packages/app/src/decision/decision-status-readiness.ts:162` (`probeDecisionMakers`).
+- **Citations**: `packages/app/src/decision/decision-service.ts:260` (probeMaker), `packages/app/src/decision/decision-service.ts:293` (probeHub), `packages/app/src/decision/decision-service.ts:153` (raceTimeout), `packages/app/src/decision/decision-status-readiness.ts:165` (probe loop).
 
 
 - Re-audit corrections: preflight the liveness entry even with an empty maker set, and reject duplicate catalog ids before entering the probe hub. Service regression tests now execute result mapping, every fallback reason, the wall-clock deadline and caller-error propagation.
 
 ### Testing
 
-Failure modes were enumerated before the assertions (R6); every one lands as data, never as a raise:
+**Pipeline verify results**
 
-| Mode | Test |
-| --- | --- |
-| answered above the floor | `R5: each distinct registered effective maker is asked … once` (stub seam, `ok: true`) |
-| fallback reason (`no-backend`) | `R6: a fallback outcome is data, and the caller sees each result as it lands` |
-| caller mistake at the seam | `R6: a seam that rejects (unknown id) propagates …` |
-| maker not registered | `R5: an unregistered maker is never probed` |
-| duplicate effective maker | `R5` (two decisions, one maker ⇒ one call) |
-| caller-supplied budget | `R5: the caller can pass its own backstop budget` |
-| real backend, end to end | `apps/cli/tests/commands/decision.test.ts` → `--probe` exits 0, writes a PROBE cell, and leaves `RECORDED` at 0 |
+- Verdict: PASS (from verdict artifact)
+- Confidence: HIGH
 
-`bun test packages/app/tests/decision/decision-status-readiness.test.ts` → 11 pass; the CLI suite's
-`--probe` cases pass in-process against the offline `typesafe` maker.
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | App tests pass: exported liveness id and injectable probe API; `packages/app/src/decision/decision-status-readiness.ts:165`. |
+| R2 | MET | App tests pass: one call per registered effective maker, instructions input, duplicate rejection before hub; `packages/app/tests/decision/decision-status-readiness.test.ts:258`; `packages/app/tests/decision/decision-service.test.ts:47`. |
+| R3 | MET | App service tests pass: accepted and each fallback mapped, actual deadline race expires with null value, rejection propagates; `packages/app/tests/decision/decision-service.test.ts:64`. |
+| R4 | MET | Probe-only hub receives only maker selection with no bus or decision log; inspected `packages/app/src/decision/decision-service.ts:260`; CLI probe regression exits 0 with ledger evidence unchanged at zero, `apps/cli/tests/commands/decision.test.ts:482`. |
+| R5 | MET | App tests pass: missing-entry preflight on empty effective set makes zero calls; `packages/app/tests/decision/decision-status-readiness.test.ts:308`; CLI missing-entry regression exits 1 before progress. |
+| R6 | MET | Failure table inspected and executable cases pass: acceptance, all fallback reasons, deadline, unexpected rejection, missing id, registration filtering and deduplication; `packages/app/tests/decision/decision-status-readiness.test.ts:14`; `packages/app/tests/decision/decision-service.test.ts:64`. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R5 — An opt-in probe proves a maker answers right now | MET | test | App service and CLI suites: real catalog probe, deduplication, fallback data, bounds and unchanged recorded ledger. Fresh commands: bun test tests/decision (cwd packages/app) exited 0, 80 pass/0 fail; bun test tests/commands/decision.test.ts (cwd apps/cli) exited 0, 32 pass/0 fail; .spur/run/P11-golden-path.json records source-local CLI commands. |
+| Scenario: R6 — A probe that cannot reach its maker is reported, not raised | MET | test | App service/loop suites: every fallback reason and deadline mapped to data, followed by other makers; CLI fallback exits zero. Fresh commands: bun test tests/decision (cwd packages/app) exited 0, 80 pass/0 fail; bun test tests/commands/decision.test.ts (cwd apps/cli) exited 0, 32 pass/0 fail; .spur/run/P11-golden-path.json records source-local CLI commands. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
