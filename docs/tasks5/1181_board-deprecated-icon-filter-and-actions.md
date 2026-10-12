@@ -4,7 +4,7 @@ name: Board deprecated icon, filter and actions
 status: done
 template: feature-impl
 created_at: 2026-10-12T05:21:53.040Z
-updated_at: "2026-10-12T18:03:49.762Z"
+updated_at: "2026-10-12T20:52:27.087Z"
 feature_id: F42
 priority: P2
 tags:
@@ -203,18 +203,18 @@ above.
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
-- Confidence: HIGH
+- Confidence: MEDIUM
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `apps/web/src/modules/features/status-icons.tsx:1` imports Lucide `Archive` (installed dep, ADR-133); `:140-146` defines `FEATURE_STATUS_MAP.deprecated = {status:'deprecated', label:'Deprecated', colorClass:'text-spur-text-muted', Icon}`, and the `Archive` render honors both existing Icon props (`className` merged, `role="img"`, `aria-label={ariaLabel}`). Pinned by `apps/web/tests/modules/features/components.test.tsx:175` (FeatureTree renders all 7 canonical statuses incl. `svg[role="img"][aria-label="Deprecated"]`) and `:381` (FeatureStatusIcon case `['deprecated','Deprecated']`). Ran `cd apps/web && bun test tests/modules/features/components.test.tsx tests/modules/features/feature-actions.test.ts` — 77 pass / 0 fail. |
-| R2 | MET | No code change needed: `apps/web/src/modules/features/FeaturesShell.tsx:265` maps `FEATURE_STATUSES` verbatim; that enum (`packages/domain/src/planning/schema.ts:23-30`) now includes `'deprecated'`, so the filter lists Deprecated. The icon/label test asserts the exact 7-value canonical list (7 rows → 7 status slots, `Deprecated` present). Browser frames `.spur/run/1181-board/02-filter-menu-shows-deprecated.png` and `03-filter-deprecated-only.png` show the menu + filtered tree (prior-run artifacts; not re-captured here). |
-| R3 | MET | `apps/web/src/modules/features/feature-actions.ts:3-8`: `deprecate` appended to backlog/active/verifying/blocked, `done: ['deprecate']`, `deprecated: ['undeprecate','cancel']`; `:27-28` labels `Deprecate`/`Un-deprecate`; `:48-49` tiers `hazard`/`primary`; `:61-62` `FSM_ACTIONS` marks both; `:74-75` `FSM_TRANSITION_TARGET` maps `deprecate→'deprecated'`, `undeprecate→'active'`. Asserted in `apps/web/tests/modules/features/feature-actions.test.ts:23-43` and `apps/web/tests/modules/features/components.test.tsx:677-752` (a `done` feature offers `Deprecate` as its only action; a `deprecated` feature offers `Un-deprecate`+`Cancel`). |
-| R4 | MET | Actions route through `handledFSMTransition → applyFsmTransition → transitionFeature` (`apps/web/src/modules/features/FeatureDetail.tsx:335-367`); `transitionFeature` (`apps/web/src/lib/feature-client.ts:53-69`) reads `body.error.message` on `!res.ok` — no new API/component/dialog. Re-render proven by `apps/web/tests/modules/features/components.test.tsx:706-752` (pill `deprecated → active`) and the 409 error-path mock at `:754-793`. The denial clause is now real end-to-end on the CURRENT tree: live probe `PATCH /api/features/Y/status {"toStatus":"done"}` (undeclared `deprecated → done` edge) returns **HTTP 409** `{"ok":false,"error":{"code":"GUARD_DENIED","message":"Feature transition refused: undeclared edge deprecated → done …","details":{}}}` in 0.016 s (not the previous 500/timeout), and wrote nothing (`status: deprecated` unchanged); a legal `deprecated → active` PATCH returns 200 and writes `status: active` + a History line. Also asserted by `apps/server/tests/modules/feature/transition-gate.test.ts:266-285` (409 + envelope + file unchanged) and unit-tested in `apps/server/tests/middleware/error-handler.test.ts` (`toDomainORPCError` → 409/409/503). Tests run: `apps/server/tests/modules/feature/transition-gate.test.ts` → 8 pass / 0 fail; `apps/server/tests/middleware/error-handler.test.ts` → 23 pass / 0 fail. |
+| R1 | MET | `apps/web/src/modules/features/status-icons.tsx:140` — Deprecated Archive icon has muted class and preserves accessible label/class props; web focused suite 94 pass / 0 fail. Verification artifacts refreshed: `.spur/run/1181-verify-answer.txt:1-34`; `.spur/run/1181-verdict.json:1-10` (verdict header, requirements and AC rows re-derived by CLI). |
+| R2 | MET | `apps/web/tests/modules/features/components.test.tsx:1270` — New behavioral filter check selects deprecated, retains Frozen and hides Live; web focused suite 94 pass / 0 fail. |
+| R3 | MET | `apps/web/src/modules/features/feature-actions.ts:3` — All five entry statuses offer deprecate; deprecated offers undeprecate/cancel; labels, tiers and FSM targets asserted; web focused suite 94 pass / 0 fail. |
+| R4 | MET | `apps/server/tests/modules/feature/transition-gate.test.ts:266` — Real oRPC endpoint returns 409 GUARD_DENIED and preserves deprecated file; server focused suite 33 pass / 0 fail. Component click rerenders active and denial shows error; typed-client decoder tests also pass; web focused suite 94 pass / 0 fail. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — The Board shows deprecated features and offers deprecate and undeprecate actions (req: R1, R2, R3, R4) | MET | test | `apps/web/tests/modules/features/components.test.tsx:175` + `:381` (deprecated icon/label rendered), `:677` (`done` offers `Deprecate` only), `:706` (deprecated offers `Un-deprecate`+`Cancel`, click re-renders `active`), `:754` (409 `GUARD_DENIED` surfaces via the existing error path, status unchanged); `apps/web/tests/modules/features/feature-actions.test.ts:23-43` (membership/labels/tiers/FSM targets). Executed: `cd apps/web && bun test tests/modules/features/components.test.tsx tests/modules/features/feature-actions.test.ts` → 77 pass / 0 fail, 512 expect() calls. Behavioral transport clause re-confirmed by command: `PATCH /api/features/Y/status {"toStatus":"done"}` → HTTP 409 `GUARD_DENIED` on a disposable project served from the current source tree. |
+| Scenario: R6 — The Board shows deprecated features and offers deprecate and undeprecate actions | MET | test | `apps/web/tests/modules/features/components.test.tsx:175`, `apps/web/tests/modules/features/components.test.tsx:677`, `apps/web/tests/modules/features/components.test.tsx:706`, `apps/web/tests/modules/features/components.test.tsx:1270`, `apps/server/tests/modules/feature/transition-gate.test.ts:266` — icon, filter, actions, click rerender and guard-denial path: web suite 94 pass / 0 fail; server suite 33 pass / 0 fail. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

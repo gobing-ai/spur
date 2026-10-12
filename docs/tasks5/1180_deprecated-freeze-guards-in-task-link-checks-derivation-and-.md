@@ -4,7 +4,7 @@ name: Deprecated freeze guards in task link, checks, derivation and advance
 status: done
 template: feature-impl
 created_at: 2026-10-12T05:21:53.039Z
-updated_at: "2026-10-12T07:12:28.442Z"
+updated_at: "2026-10-12T20:52:25.530Z"
 feature_id: F42
 priority: P1
 tags:
@@ -180,22 +180,22 @@ $ (cd packages/app && bun run typecheck) ; (cd packages/config && bun run typech
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
-- Confidence: HIGH
+- Confidence: MEDIUM
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/task-service.ts:846` throws ParentFeatureStatusError for a deprecated parent before the verifying branch and regardless of noReopen; exact message at `packages/app/src/services/task-service.ts:216`. The single funnel is reached by create `packages/app/src/services/task-service.ts:979`, update `packages/app/src/services/task-service.ts:1093`, and batch-create phase 1 `packages/app/src/services/task-service.ts:2076`. Tests `packages/app/tests/services/task-section-normalizer.test.ts:345`. Fresh CLI probe: task create, task update --feature and batch-create under a deprecated feature each exited 1 with zero task files written and the feature still deprecated. |
-| R2 | MET | `packages/config/src/finding-codes.ts:46` and `packages/config/src/finding-codes.ts:143` add L4.feature-deprecated; `packages/app/src/services/task-check.ts:1145` emits it as severity warning only for a non-terminal task with re-parent-or-cancel guidance; strict elevation at `packages/app/src/services/planning-check-base.ts:363`. Tests `packages/app/tests/services/task-check.test.ts:2792` and `packages/app/tests/services/task-check.test.ts:2815`. Fresh CLI probe: live task warned pass=true, cancelled task produced no finding, and --strict raised severity to error. |
-| R3 | MET | `packages/app/src/services/feature-service.ts:276` appends the exact freeze note to warnings[] while the section write still lands and exit stays 0. Test `packages/app/tests/services/feature-service.test.ts:240`. Fresh CLI probe: feature update --section Goal exited 0 with the warning present, the body landed, and the status stayed deprecated. |
-| R4 | MET | `packages/app/src/services/feature-service.ts:468` early-returns from=deprecated to=deprecated with reason Feature is deprecated (frozen) before any task-based rule; `packages/app/src/services/feature-service.ts:674` short-circuits equal from/to so sync never applies; the check --fix reopen repair stays gated to verifying/done at `packages/app/src/services/feature-check.ts:251`. Tests `packages/app/tests/services/feature-service.test.ts:868` and `packages/app/tests/services/task-section-normalizer.test.ts:548`. Fresh CLI probe: sync and sync --all --force both applied=false with the status unchanged, and feature check --fix reported no repair. |
-| R5 | MET | `apps/cli/src/commands/feature.ts:210` refuses before the transition loop with GUARD_DENIED and exit 1. Test `apps/cli/tests/commands/feature.test.ts:402`. Fresh CLI probe: feature advance --json --json-envelope exited 1 with code GUARD_DENIED and message A is deprecated; un-deprecate first: spur feature update A active, and the status stayed deprecated. |
-| R6 | MET | `plugins/sp/skills/next-feature/SKILL.md:67` drops done, cancelled and deprecated from the candidate set. |
+| R1 | MET | `packages/app/src/services/task-service.ts:846` — Shared parent guard rejects before create/update/batch writes, including no-reopen. task-section-normalizer tests passed in the app suite: 358 pass / 0 fail across five files. Verification artifacts refreshed: `.spur/run/1180-verify-answer.txt:1-38`; `.spur/run/1180-verdict.json:1-10` (verdict header, requirements and AC rows re-derived by CLI). |
+| R2 | MET | `packages/app/tests/services/task-check.test.ts:2792` — Live task warning and terminal exemption verified; strict warning elevation uses existing planning-check policy; app targeted suite 358 pass / 0 fail. |
+| R3 | MET | `packages/app/tests/services/feature-service.test.ts:240` — Deprecated section write succeeds with the freeze warning; app targeted suite 358 pass / 0 fail. |
+| R4 | MET | `packages/app/src/services/feature-service.ts:468` — Early sticky derivation precedes task rules; tests cover live/terminal tasks and check --fix; app suite 358 pass / 0 fail. Source-CLI sync --force exit 0 preserved bytes. |
+| R5 | MET | `apps/cli/tests/commands/feature.test.ts:402` — Advance refuses with un-deprecate hint; CLI suite 52 pass / 0 fail. Fresh source-CLI advance exit 1 and preserved bytes. |
+| R6 | MET | `plugins/sp/skills/next-feature/SKILL.md:67` — Candidate set explicitly drops deprecated alongside done/cancelled; source read and documentation assertion exit 0. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — New work cannot be linked to a deprecated feature (req: R1) | MET | test | `packages/app/tests/services/task-section-normalizer.test.ts:345` covers create, --no-reopen no-bypass, update --feature and batch-create with the exact message and zero files written; fresh CLI probe of create, update and batch-create under a deprecated feature each exited 1 with no task file written and the feature still deprecated. |
-| AC2 — Checks flag live work under a deprecated feature and advise on edits (req: R2, R3) | MET | test | `packages/app/tests/services/task-check.test.ts:2792` asserts the warning with re-parent guidance and strict elevation; `packages/app/tests/services/feature-service.test.ts:240` asserts the section write lands and the freeze warning is appended; fresh CLI probes confirmed both paths. |
-| AC3 — Derivation and routing never pull a deprecated feature back into active work (req: R4, R5, R6) | MET | test | `packages/app/tests/services/feature-service.test.ts:868` asserts sticky derivation and sync applied=false; `apps/cli/tests/commands/feature.test.ts:402` asserts the advance refusal; `plugins/sp/skills/next-feature/SKILL.md:67` drops deprecated; fresh CLI probes of sync, sync --all --force and advance confirmed no transition. |
+| Scenario: R3 — New work cannot be linked to a deprecated feature | MET | test | `packages/app/tests/services/task-section-normalizer.test.ts:345` — real shared guard create/update/batch rejection and no-reopen behavior verified in app suite 358 pass / 0 fail. |
+| Scenario: R4 — Checks flag live work under a deprecated feature and advise on edits | MET | test | `packages/app/tests/services/task-check.test.ts:2792` and `packages/app/tests/services/feature-service.test.ts:240` — live warning, terminal exemption and successful section write with advisory; app suite 358 pass / 0 fail. |
+| Scenario: R5 — Derivation and routing never pull a deprecated feature back into active work | MET | test | `packages/app/tests/services/feature-service.test.ts:868`, `apps/cli/tests/commands/feature.test.ts:402`, `plugins/sp/skills/next-feature/SKILL.md:67` — app suite 358 pass / 0 fail, CLI suite 52 pass / 0 fail; sticky sync, check --fix and advance refusal verified; candidate exclusion read directly. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
