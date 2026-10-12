@@ -828,6 +828,13 @@ const INLINE_RUN_EXPORTS: readonly InlineRunExport[] = [
         declare:
             'export declare function splitLaunchCommand(value: string, label: string): { command: string; leadingArgs: string[] } | { error: string };',
     },
+    // Task 1176 R2: the feature-receipt operation and its app-owned feature lookup. The plugin
+    // entry keeps argv/usage only — it no longer opens the project DB or constructs an ArtifactDao.
+    ...appExports(
+        'packages/app/src/workflow/feature-verification-run',
+        'createFeatureLookup',
+        'runFeatureVerification',
+    ),
     // Feature verification receipt (D63 task 0915): the standard script
     // records/validates receipts and resolves the selected verifier
     // definition through the same seams in both layouts.

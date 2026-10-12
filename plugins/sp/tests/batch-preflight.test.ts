@@ -365,4 +365,26 @@ describe('batch-preflight CLI arg parsing (task 0814 R2)', () => {
         const cliFail = Bun.spawnSync(['bun', script, '--classify-feature', JSON.stringify(fatal)]);
         expect(cliFail.exitCode).toBe(1);
     });
+
+    test('classify-feature mode reports the classification in-process (task 1176 move)', () => {
+        const findings = [
+            { layer: 'L4', code: 'L4.scenario-unverified', severity: 'error', message: 'expected' },
+            { layer: 'L3', code: 'L3.scope-delineation', severity: 'error', message: 'real defect' },
+        ];
+        const ok = runPreflightCli(['--classify-feature', JSON.stringify(findings)]);
+        expect(ok.exitCode).toBe(1);
+        expect(JSON.parse(ok.stdout)).toMatchObject({ shouldAbort: true });
+        const abortingOnly = runPreflightCli([
+            '--classify-feature',
+            JSON.stringify([{ layer: 'L4', code: 'L4.scenario-unverified', severity: 'error', message: 'expected' }]),
+        ]);
+        expect(abortingOnly.exitCode).toBe(0);
+        expect(JSON.parse(abortingOnly.stdout)).toMatchObject({ shouldAbort: false });
+    });
+
+    test('classify-feature mode reports malformed JSON as a usage-level failure', () => {
+        const bad = runPreflightCli(['--classify-feature', '{not json']);
+        expect(bad.exitCode).toBe(1);
+        expect(bad.stderr).toContain('Invalid JSON for --classify-feature');
+    });
 });

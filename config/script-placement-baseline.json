@@ -16,11 +16,6 @@
             "reason": "Keep (budget exemption; reviewed W4) (plan \u00a72)",
             "exempt": true
         },
-        "plugins/sp/scripts/feature-verification-steps.ts": {
-            "kinds": ["budget"],
-            "reason": "Keep (ADR-119 receipt writer; budget exemption) (plan \u00a72)",
-            "exempt": true
-        },
         "plugins/sp/scripts/wrapup-drift-probe.ts": {
             "kinds": ["budget", "corpus-parse"],
             "reason": "Keep (glue over capture file; budget exemption) (plan \u00a72)",

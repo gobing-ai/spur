@@ -28,3 +28,25 @@ test('bundle mode in this checkout loads the generated bundle (0948 R3)', () => 
     expect(stderr).not.toContain('source mode');
     expect(stderr).not.toContain('rebuild/install the sp plugin');
 });
+
+test('the plugin entry no longer owns the DB, artifact or feature-directory surfaces (1176 R2)', () => {
+    // The AC's source scan: the operation owns those concerns now, so the adapter must not reach for
+    // the DB facade, the DAO, or a feature-directory listing.
+    const source = Bun.file(SCRIPT).text();
+    return source.then((text) => {
+        // Comments are excluded: the entry may *document* the boundary it no longer owns, so the scan
+        // looks at executable lines only.
+        const code = text
+            .split('\n')
+            .filter((line) => {
+                const t = line.trim();
+                return !(t.startsWith('//') || t.startsWith('*') || t.startsWith('/*'));
+            })
+            .join('\n');
+        for (const owned of ['openInlineRunProjectDb', 'ArtifactDao', 'findFeatureFile', 'readdirSync']) {
+            expect(code, `plugin entry must not own ${owned}`).not.toContain(owned);
+        }
+        // The single seam it does consume is the app operation.
+        expect(code).toContain('runFeatureVerification');
+    });
+});

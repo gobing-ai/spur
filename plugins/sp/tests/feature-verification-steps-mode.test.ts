@@ -3,7 +3,7 @@
  *
  * Before this fix, `loadModule` preferred `packages/app/src/index.ts` whenever a source
  * checkout was detected. That entry is not a plugin-script contract surface and does not
- * re-export every seam (`splitLaunchCommand`, `ArtifactDao`), so the pass failed with
+ * re-export the verification operation, so the pass failed with
  * "application entry is missing feature-verification seams — rebuild/install the sp plugin".
  * No rebuild could fix it: the source entry genuinely lacks the seams.
  *
@@ -71,7 +71,7 @@ test('0948 AC3: a missing bundle names the mode and the build fix, not the retir
     }
 });
 
-test('0948 AC3: a seam-less bundle names the mode, the entry, and the fix', () => {
+test('0948 AC3: a seam-less bundle names the mode, the entry, and the fix (task 1176 seam)', () => {
     // Exports nothing → every seam is reported missing.
     const dir = makeSandbox('export const unrelated = 1;\n');
     try {
@@ -79,8 +79,7 @@ test('0948 AC3: a seam-less bundle names the mode, the entry, and the fix', () =
         expect(exitCode).not.toBe(0);
         expect(stderr).toContain('mode=bundle');
         expect(stderr).toContain('inline-run.generated.mjs');
-        expect(stderr).toContain('splitLaunchCommand');
-        expect(stderr).toContain('ArtifactDao');
+        expect(stderr).toContain('runFeatureVerification');
         expect(stderr).toContain('build:bundle');
         expect(stderr).not.toContain(RETIRED_ADVICE);
     } finally {

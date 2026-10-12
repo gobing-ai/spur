@@ -1050,6 +1050,14 @@ export {
     validateFeatureVerificationReceipt,
 } from './workflow/feature-verification-receipt';
 export {
+    createFeatureLookup,
+    type FeatureSpec,
+    type FeatureSpecLookup,
+    type FeatureVerificationRunInput,
+    type FeatureVerificationRunResult,
+    runFeatureVerification,
+} from './workflow/feature-verification-run';
+export {
     type FinalizeIdeaHandoffOptions,
     type FinalizeIdeaHandoffResult,
     finalizeIdeaHandoff,

@@ -23,6 +23,8 @@ export declare const computeProofInputFingerprint: typeof import('@gobing-ai/spu
 export declare const readProofInputContents: typeof import('@gobing-ai/spur-app').readProofInputContents;
 export declare const createWorkflowActionTraceWriter: typeof import('@gobing-ai/spur-app').createWorkflowActionTraceWriter;
 export declare function splitLaunchCommand(value: string, label: string): { command: string; leadingArgs: string[] } | { error: string };
+export declare const createFeatureLookup: typeof import('@gobing-ai/spur-app').createFeatureLookup;
+export declare const runFeatureVerification: typeof import('@gobing-ai/spur-app').runFeatureVerification;
 export declare const captureFeatureReceiptDigest: typeof import('@gobing-ai/spur-app').captureFeatureReceiptDigest;
 export declare const completeFeatureVerificationReceipt: typeof import('@gobing-ai/spur-app').completeFeatureVerificationReceipt;
 export declare const DEFAULT_FEATURE_VERIFICATION_CMD: typeof import('@gobing-ai/spur-app').DEFAULT_FEATURE_VERIFICATION_CMD;

@@ -159,6 +159,23 @@ function stage(options: {
     writeFileSync(join(cwd, 'config', 'plugin-scripts.json'), '{}\n');
     copyFileSync(DIFFSTAT_SCRIPT, join(cwd, 'plugins/sp/scripts/task-diffstat.ts'));
     copyFileSync(join(import.meta.dir, '../../../../plugins/sp/lib', 'env.ts'), join(cwd, 'plugins/sp/lib/env.ts'));
+    // task 1176: the sensitive-path policy is app-owned and reached through the generated pure
+    // bundle, which ships with the plugin — the sandbox must carry it exactly as an install does.
+    copyFileSync(
+        join(import.meta.dir, '../../../../plugins/sp/lib', 'plan-projection.generated.mjs'),
+        join(cwd, 'plugins/sp/lib/plan-projection.generated.mjs'),
+    );
+    // The scaffolding is committed into the fixture's base, so it is not counted as part of the
+    // fixture diff: the generated policy bundle alone exceeds the >400-changed-lines safety floor
+    // this suite exercises (task 1176).
+    spawnSync('git', ['add', '-A'], { cwd, encoding: 'utf8' });
+    spawnSync('git', ['commit', '-q', '-m', 'fixture scaffolding'], { cwd, encoding: 'utf8' });
+    // Re-point the diff base at the scaffold commit: the recorded base predates the copies, so
+    // leaving it would keep the scaffolding inside the fixture diff.
+    if (options.anchorBase !== false) {
+        const scaffoldSha = spawnSync('git', ['rev-parse', 'HEAD'], { cwd, encoding: 'utf8' }).stdout.trim();
+        writeFileSync(join(cwd, '.spur', 'run', `${WBS}-base.sha`), `${scaffoldSha}\n`);
+    }
     for (const [path, content] of Object.entries(options.files ?? {})) {
         mkdirSync(join(cwd, path, '..'), { recursive: true });
         writeFileSync(join(cwd, path), content);

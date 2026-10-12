@@ -653,6 +653,8 @@ test('placement baseline reconciles with plan §2 (task 1000 R7)', () => {
         // task 1005 R6 / 1006 R5: the W3 scripts' logic moved into packages/app lib bundles; the
         // ≤250 glue stays, so their plan-§2 rows left the baseline instead of their files.
         // task 1007 R7: residual-scan (W2, same shape) leaves too — its row listed no kinds.
+        // task 1176: feature-verification-steps joins them — its verify body moved to the app
+        // operation, so the ≤250 argv adapter keeps no budget row.
         .filter(
             (m) =>
                 ![
@@ -661,6 +663,7 @@ test('placement baseline reconciles with plan §2 (task 1000 R7)', () => {
                     'quality-gate',
                     'inline-run-setup',
                     'residual-scan',
+                    'feature-verification-steps',
                 ].includes(m.name),
         )
         .filter(
@@ -680,13 +683,13 @@ test('placement baseline reconciles with plan §2 (task 1000 R7)', () => {
         .sort();
     expect(actual).toEqual(expected);
 
-    // exempt: true is exactly the four over-budget Keep files (task-frozen list; the context-post-tool
-    // row left in task 1174 when the hook became a thin adapter over its lib core)
+    // exempt: true is exactly the three over-budget Keep files (task-frozen list). The context-post-tool
+    // row left in task 1174 (hook → lib core adapter) and the feature-verification-steps row left in
+    // task 1176 (verify body → app operation), both because the entry fell under the budget.
     const exempt = keys.filter((k) => entries[k]?.exempt === true).sort();
     expect(exempt).toEqual(
         [
             'plugins/sp/scripts/batch-preflight.ts',
-            'plugins/sp/scripts/feature-verification-steps.ts',
             'plugins/sp/scripts/wrapup-drift-probe.ts',
             'plugins/sp/scripts/wrapup-steps.ts',
         ].sort(),

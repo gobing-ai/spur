@@ -10,6 +10,7 @@
 
 export type TaskStatus = 'backlog' | 'todo' | 'wip' | 'testing' | 'blocked' | 'done' | 'cancelled' | string;
 
+/** Inputs for TABLE A STOP evaluation: the task status plus every dependency status. */
 export interface PreflightInput {
     wbs: string;
     status: TaskStatus;
@@ -19,6 +20,7 @@ export interface PreflightInput {
     depStatuses: Record<string, string>;
 }
 
+/** The STOP decision: launch the pipeline, or skip with the TABLE A code and reason. */
 export type PreflightResult =
     | { action: 'run'; code?: string; reason?: string }
     | { action: 'skip'; code: string; reason: string; unmetDeps?: string[] };
@@ -33,6 +35,7 @@ export const NON_ABORTING_PREFLIGHT_CODES = new Set<string>([
     'L4.verifying-incomplete-tasks',
 ]);
 
+/** One feature-check finding as the CLI reports it (layer/code/severity plus message). */
 export interface FeaturePreflightFinding {
     layer: string;
     code: string;
@@ -41,12 +44,14 @@ export interface FeaturePreflightFinding {
     section?: string;
 }
 
+/** The split of feature findings into aborting and expected pre-run classes. */
 export interface FeaturePreflightClassification {
     aborting: FeaturePreflightFinding[];
     nonAborting: FeaturePreflightFinding[];
     shouldAbort: boolean;
 }
 
+/** Classify feature-check findings; the expected pre-run classes never abort a batch. */
 export function classifyFeaturePreflightFindings(findings: FeaturePreflightFinding[]): FeaturePreflightClassification {
     const aborting: FeaturePreflightFinding[] = [];
     const nonAborting: FeaturePreflightFinding[] = [];
@@ -76,6 +81,7 @@ export function classifyFeaturePreflightFindings(findings: FeaturePreflightFindi
 
 export type ReadinessOperation = 'run' | 'refine' | 'verify';
 
+/** Inputs for command-aware readiness: the operation, the task, and its planning gaps. */
 export interface QuickReadinessInput {
     wbs: string;
     status: TaskStatus;
@@ -96,6 +102,7 @@ export interface QuickReadinessInput {
     force?: boolean;
 }
 
+/** The readiness outcome: runnable, needs-refinement, blocked, skipped or invalid. */
 export type QuickReadinessResult =
     | { action: 'runnable'; code: string; reason: string }
     | { action: 'needs-refinement'; code: string; reason: string; gaps: string[] }

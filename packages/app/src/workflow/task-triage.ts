@@ -8,6 +8,7 @@
  */
 
 export const SENSITIVE_PREFIXES = ['drizzle/', 'packages/config/', '.github/', 'plugins/sp/hooks/'] as const;
+/** Basename globs that always take the safety lane (matched with dotAll semantics). */
 export const SENSITIVE_GLOBS = ['apps/server/src/**/auth*', '**/*secret*', '**/*.sql'] as const;
 
 // Glob → RegExp: `**` + `/` matches any-or-no directories, bare `**` any characters, `*` within one segment.
