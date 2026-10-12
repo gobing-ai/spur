@@ -3,7 +3,7 @@ kind: design
 title: "Harness surface governance"
 status: accepted
 created_at: 2026-08-21
-updated_at: 2026-09-30
+updated_at: 2026-10-11
 related: [G64, A9, "0613", "0614", "0617", "0625", "0670", "0693"]
 tags: [contract, G64, plugin, cli]
 ---
@@ -82,21 +82,53 @@ judges them from step profiles ([workflow composition](workflow-composition-cont
 
 ## 2. Script placement (ADR-051 R4 amendment, ADR-130)
 
+The ADR-130 amendment of 2026-10-11 governs new work immediately. Existing exceptions below are
+migration subjects, not proof that every current file already follows the target layout.
+
 | Surface | Hosts | Selection condition |
 | --- | --- | --- |
 | `apps/cli/src/commands` (+ `packages/app`) | public `spur` verbs; the logic lives in `packages/app` | a Spur **end user** runs it on any Spur-managed project, or it reads/validates/mutates Spur's own nouns (task, feature, workflow run, history, self). Placed under the **owning existing noun**; each new noun, verb or flag needs the consent gate (§3–4). A new noun additionally records why no existing noun can own the action |
-| `scripts/commands` | internal spur-dev commands | **Spur self-dev only** — packaging/release, building Spur, monorepo gates, including gates that validate the plugin's shipped surface (one module per command, test sibling). No logic a consumer project needs |
+| `scripts/commands` | internal spur-dev commands | **Spur self-dev only** — packaging/release, building Spur, monorepo gates and repo evaluation runners. Tests/fixtures follow the owning workspace. Reusable noun queries/rules are application-owned even when the only current caller is this repo; repository policy may compose those services |
 | `package.json` scripts | repo-wide developer entrypoints | a **repo developer** invokes it by name (`bun run …`); it composes existing binaries, adds no logic, and its name is the contract |
-| `plugins/sp/scripts` | plugin glue | sequences `spur` calls, git/gh, and run-scoped files for an sp skill, command or pipeline; must run on **agent machines that only have the plugin** — entrypoint contract owned by ADR-065 (`.mjs` twins, `config/plugin-scripts.json`, no repo-relative paths, [configuration contracts §2.6](configuration-contracts.md#26-plugin-script-contract-manifest--gate-task-0600-adr-065)). Does not re-implement a rule owned by a `spur` verb |
-| `plugins/sp/hooks` | host hook glue | normalizes a host event and calls a hook core or a `spur` verb; the ADR-129 ledger/session cores are the only hook-resident logic |
-| `plugins/sp/lib` | code shared by ≥2 plugin glue files | `env.ts`, the shared `spur-bin.ts` spur-CLI invocation helper, and generated bundles of `packages/app` code (`bundle-plugin-lib`); a plugin that must run without the monorepo imports the app implementation from here instead of forking it. Nothing outside the plugin imports it |
+| `plugins/sp/scripts` | executable skill/command/pipeline adapters | translates arguments, invokes `spur`/git/gh, and renders results; no helper-only modules or tests. Standard installed scripts use `superskill script run`; `script path` remains the supported resolver where a path is required. ADR-065 owns generated twins and manifest/runtime contracts. No direct corpus parsing, DB access or lifecycle policy, including through a generated bundle |
+| `plugins/sp/hooks` | registered host hook entries and required host extensions | one authored entry per registered hook identity; an entry may serve several events. Normalizes host input and delegates. Installed hooks use `superskill hook run`; Pi extensions retain their host loader. Helpers/cores belong in lib, unit tests/fixtures in `plugins/sp/tests` |
+| `plugins/sp/lib` | plugin-local helpers and justified local hook cores | pure skill helpers, shared transport helpers and ADR-129 bounded capture/guard cores may live here, including a substantial core extracted from one entry for a clear adapter boundary. A trivial single-use helper stays inline. No application behavior hidden here to pass an entry LOC check. Existing generated app bundles require explicit migration exceptions; nothing outside the plugin imports lib at runtime |
+| `plugins/sp/tests` | plugin unit tests and fixtures | owns hook, extension and skill-helper tests, including behavioral-eval judge/fixtures. Live evaluation runner is repository tooling, opt-in, outside normal gates. `plugins/sp/evals` has no separate shipping responsibility |
 
-Decision procedure for a new script: (1) does it touch Spur's own nouns or rules? → a flag/verb on
-the owning noun (consent gate); (2) self-dev or plugin-surface gate? → `scripts/commands`; (3) plugin
-sequencing a `spur`/git/gh flow? → `plugins/sp/scripts` or `hooks`, reusing `lib` bundles for any
-app logic it needs. **Glue budget:** a plugin script or hook over 250 LOC, or one that opens the
-database or parses corpus files itself, is a placement finding (`sp-script-placement` rule,
-existing files listed in a shrinking baseline).
+### 2.1 Decision procedure and exception boundary
+
+1. Is it still needed? Check runtime registrations, imports, package scripts and installed consumers before
+   deleting it. Test-only references can mean an obsolete implementation or a legitimate fixture; inspect both.
+2. Does it implement reusable task, feature, workflow, history, self, projects or builder behavior? Put the
+   implementation in `packages/app`, reuse existing services and invoke an existing owning-noun contract.
+   A missing public contract requires a concrete operator consent brief before implementation, including flags,
+   hidden commands, output/error changes and compatibility. `--auto` on a planning pipeline is not that consent.
+3. Does it depend on Spur repository build inputs, release policy or test fixtures? Keep that portion in scripts.
+   The `spur-dev.ts` dispatcher may compose it. A repository caller does not make general DB analytics repo-only.
+4. Is it host-event translation or immediate local guard/capture? Hook entry → plugin lib core. Preserve
+   ADR-129 standalone capture, redaction, bounded execution and error policy without requiring a CLI round-trip
+   per tool event. This is a named runtime exception, not permission to implement task/feature policy locally.
+5. Is it skill-specific argument/host translation? Script entry → plugin lib helper → existing `spur` contract.
+   Tests/fixtures go to plugin tests; config holds declarative inputs, not executable domain evaluators.
+
+Generated app bundles temporarily preserve existing installed contracts during migration. They must identify
+the app source owner, runtime reason, callers, compatibility test and concrete retirement condition in the
+owning task/design. They must not gain new DB/DAO exposure. Replace each only after its installed replacement is
+proven; do not add an unapproved hidden CLI surface to remove it. Existing ADR-065 twins are generated packaging
+artifacts, not independent implementations. Superskill owns adapter generation; never hand-edit emitted adapters.
+
+The audited migration is recorded in [the consolidation plan](../plans/2026-10-11-harness-script-consolidation.md).
+This accepts placement policy, not any public CLI expansion or premature removal of working runtime paths.
+
+### 2.2 Enforcement and migration
+
+**Current enforcement:** `sp-script-placement` uses a 250 LOC entry budget and detects direct DB
+imports/corpus parsing with the shrinking `config/script-placement-baseline.json`. A small entry
+is not proof of correct ownership. **Planned enforcement:** cover helper-only files, misplaced
+tests, hook registration/extension entry reachability and lib dependencies in the existing checker;
+use focused semantic review for behavior that import checks cannot classify. No second exception registry.
+Retain strict corpus, test, verification and standalone correctness gates; do not restore the removed
+host-wide gate lock or add a lock manager. SQLite busy retries and corpus allocation locks are separate concerns.
 
 ## 3. Consent record (ADR-051 R5 amendment, feature A3)
 

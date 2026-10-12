@@ -2,9 +2,9 @@
 doc: 00_ADR
 owns: WHY — lasting architectural choices, context and tradeoffs
 authority: authoritative
-version: 1.67.0
+version: 1.68.0
 owner: Robin Min
-updated_at: 2026-10-10
+updated_at: 2026-10-11
 read_before: any structural change; before diverging from a decision
 edit_rules: 99 §6.1
 sync: [T1, T2]
@@ -2105,6 +2105,7 @@ descriptions above record earlier stages, not supported configuration.
 - **Retains:** ADR-021 (thin transports), ADR-051 (public-surface consent), ADR-065 (plugin entrypoint contract), ADR-115 (composition budgets), ADR-129 (hook cores).
 - **Detail:** [harness surface governance](design/harness-surface-governance.md) §2; plan `docs/plans/A9-script-placement-migration.md`; feature A9.
 - **Amendment (2026-09-30 · task 1035):** `plugins/sp/lib` also holds hand-written helpers shared by ≥2 glue files — today `spur-bin.ts` (`spurCommand`, the one spur-CLI invocation split, task 1019) — beside `env.ts` and the generated bundles. Why: per-script copies of that split drifted; one helper keeps the glue thin without a CLI round-trip. Lib stays under the plugin standalone import rule (no `@gobing-ai/*` value imports).
+- **Amendment (2026-10-11):** Classify by responsibility before path or size. Reusable harness behavior is application-owned, including when Spur uses itself. Plugin lib may hold pure helpers and the ADR-129 local capture/guard cores; hook directories contain registered host entrypoints and required host extensions only, with helpers in lib and tests/fixtures in plugin tests. A hook identity has one authored entry, which may serve several events. Skill scripts are executable adapters; repository-only build, packaging, release and evaluation policy stays in scripts. Generated application bundles are explicit compatibility exceptions, not an alternative persistence owner or a way around CLI consent; retire them when an approved installed contract covers their callers. Public nouns, verbs, flags, hidden commands and observable contract changes require explicit operator approval independently of planning auto-approval. Moving domain logic into lib merely to pass a LOC budget is rejected. This preserves standalone capture while preventing a second harness inside the plugin. Detailed placement and migration exceptions: governance §2; investigation: `docs/plans/2026-10-11-harness-script-consolidation.md`. Existing implementations migrate through planned tasks; this amendment does not claim their cutover is complete.
 - **Correction (2026-09-30 · task 1035):** `spur-bin.ts` was introduced by task 1007 R9; task 1019 adopted it in residual-scan.
 
 ## ADR-131: Completed Run Scratch Is Disposable; Lasting Records Have Durable Owners

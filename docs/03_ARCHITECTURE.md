@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.72.0
+version: 1.73.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-10-10
+updated_at: 2026-10-11
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -1271,6 +1271,13 @@ invariants hold at the pointer: redaction and both byte caps apply before any su
 and only the pointer's recorded `{host, sessionId}` owner may append the `session_end` rollup or
 remove it, so a nested run reuses the parent ledger without being able to close it. Row and
 session-event contracts: [observability contracts](design/observability-contracts.md) §7.8b.
+
+**Accepted target, migration pending:** ADR-130's 2026-10-11 amendment keeps this standalone
+capture behavior but places its cores/helpers in `plugins/sp/lib`, tests in `plugins/sp/tests`,
+and only registered hook/host-extension entries in `plugins/sp/hooks`. Reusable noun behavior
+remains application-owned; generated plugin bundles are temporary compatibility exceptions,
+not a second persistence owner. Current paths above describe the implementation before cutover.
+Placement contract: [harness surface governance](design/harness-surface-governance.md) §2.
 
 ## 32. Disposable Run Storage and Durable Evidence (ADR-131; E71)
 
