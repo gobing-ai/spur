@@ -112,6 +112,10 @@ function stubFetch(): typeof fetch {
         if (url.includes('/project/requests')) {
             return Promise.resolve(new Response(JSON.stringify({ requests: [] }), { status: 200 }));
         }
+        // Database tab (1184): an empty database keeps the rail's named state, no crash.
+        if (url.includes('/project/database/tables')) {
+            return Promise.resolve(new Response(JSON.stringify({ tables: [] }), { status: 200 }));
+        }
         return Promise.resolve(new Response(JSON.stringify({ messages: [], count: 0 }), { status: 200 }));
     }) as typeof fetch;
 }
@@ -181,7 +185,7 @@ describe('R2: tabs are keyboard-navigable with aria-selected (0840 frozen tablis
         const tablist = container.querySelector('[role="tablist"]');
         expect(tablist?.getAttribute('aria-label')).toBe('Projects tabs');
         const tabs = [...container.querySelectorAll('[data-projects-tab]')];
-        expect(tabs).toHaveLength(2);
+        expect(tabs).toHaveLength(3);
         for (const tab of tabs) {
             expect(tab.getAttribute('role')).toBe('tab');
             expect(tab.getAttribute('aria-selected')).toMatch(/true|false/);
@@ -211,6 +215,20 @@ describe('R2: tabs are keyboard-navigable with aria-selected (0840 frozen tablis
         expect(tab('inbox').getAttribute('aria-selected')).toBe('true');
         expect(tab('fleet').getAttribute('aria-selected')).toBe('false');
         expect(container.querySelector('#projects-tab-panel-inbox')).not.toBeNull();
+        expect(document.activeElement).toBe(tab('inbox'));
+
+        // 1184 R1: the cycle now covers Database too.
+        fireEvent.keyDown(tablist, { key: 'ArrowRight' });
+        await settleInAct(); // panel switch mounts the database panel, which fetches on mount
+        expect(tab('database').getAttribute('aria-selected')).toBe('true');
+        expect(tab('inbox').getAttribute('aria-selected')).toBe('false');
+        expect(container.querySelector('#projects-tab-panel-database')).not.toBeNull();
+        expect(document.activeElement).toBe(tab('database'));
+
+        fireEvent.keyDown(tablist, { key: 'ArrowLeft' });
+        await settleInAct(); // panel switch mounts the inbox panel, which fetches on mount
+        expect(tab('inbox').getAttribute('aria-selected')).toBe('true');
+        expect(tab('database').getAttribute('aria-selected')).toBe('false');
         expect(document.activeElement).toBe(tab('inbox'));
 
         fireEvent.keyDown(tablist, { key: 'ArrowLeft' });

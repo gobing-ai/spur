@@ -112,7 +112,7 @@ describe('ProjectsShell header (0840 R5)', () => {
         expect(container.querySelector('[data-projects-header]')?.getAttribute('data-projects-state')).toBe(
             'unresolvable',
         );
-        expect(container.querySelectorAll('[data-projects-tab]')).toHaveLength(2);
+        expect(container.querySelectorAll('[data-projects-tab]')).toHaveLength(3);
     });
 
     test('fleet-unavailable when identity is ready but fleet fetch failed', async () => {
@@ -155,10 +155,10 @@ describe('ProjectsShell header (0840 R5)', () => {
 });
 
 describe('ProjectsShell tabs (0840 R3/R5)', () => {
-    test('two tabs render with the WorkspaceShell aria contract and deep-link selection', async () => {
+    test('three tabs render with the WorkspaceShell aria contract and deep-link selection', async () => {
         const { container } = await renderShell(ctx(), ['/board/projects/fleet']);
         const tabs = container.querySelectorAll('[data-projects-tab]');
-        expect(tabs).toHaveLength(2);
+        expect(tabs).toHaveLength(3);
         const fleetTab = container.querySelector('#projects-tab-fleet');
         expect(fleetTab?.getAttribute('aria-selected')).toBe('true');
         expect(container.querySelector('[role="tablist"]')?.getAttribute('aria-label')).toBe('Projects tabs');
