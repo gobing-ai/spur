@@ -606,15 +606,25 @@ The cheap rule gates fail fast when run first — the full-gate run is dominated
 suite, so a gate run that dies at `test-post-check` or `corpus-check` wastes most of its wall time.
 Before launching a full `spur-check-new`:
 
-1. **Run the two rule gates first** — `bun run test-pre-check` (43 rules: `no-console-output`,
+1. **Run the static checks first** — `bun run lint` (biome over the whole tree plus every workspace
+   typecheck). They fail in ~20 s and are the two defects that most often kill a full launch: a
+   formatting miss in a touched test file, or a generated declaration surface that no longer lists a
+   new export. Measured 2026-10-12: two consecutive `spur-check` launches died here and each spent
+   its whole wall time before reaching the suite.
+2. **Then the two rule gates** — `bun run test-pre-check` (43 rules: `no-console-output`,
    `no-direct-process-spawn`, `cli-*`, `require-corresponding-test`) and `bun run test-post-check`
    (`every-export-has-tsdoc`, `coverage-gate`). They catch boundary/TSDoc violations in seconds.
-2. **Promoted code must satisfy the boundary rules `scripts/` never enforced.** A command module
+   Two `coverage-gate` facts change how you call post-check: it **fails closed when
+   `.coverage/lcov.info` is absent**, which is the normal state of a fresh worktree, so run it after
+   the suite has written coverage or expect that one error instead of reading it as a finding; and a
+   targeted `bun test <file>` **overwrites** the tracefile, so post-check judges partial data if it
+   runs after one (the `coverage-gate` rule's own header documents both facts).
+3. **Promoted code must satisfy the boundary rules `scripts/` never enforced.** A command module
    moving from `scripts/` into `apps/cli/src` must route output through the `CommandOutput` seam (no
    `console.*`), spawn processes via `NodeProcessExecutor` (no `Bun.spawnSync`), get a
    `runtime-boundaries` fs-io exemption for sync reads (mirrors `task.ts`), and a non-command helper
    must not live in `apps/cli/src/commands/` (the noun scan treats every file there as a noun).
-3. **Doc/TSDoc edits shift `file:line` anchors** cited by other tasks — the per-task gate surfaces
+4. **Doc/TSDoc edits shift `file:line` anchors** cited by other tasks — the per-task gate surfaces
    them as `L4.anchor-subject-mismatch` (0775: the corpus sweep retired; run `spur task check <wbs>`
    on touched tasks). Repoint the shifted citations (via `spur task update --section`)
 
