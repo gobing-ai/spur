@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Centralize task readiness triage and feature receipt operations
-status: todo
+status: wip
 template: feature-impl
 created_at: 2026-10-12T03:34:10.717Z
-updated_at: "2026-10-12T04:01:54.627Z"
+updated_at: "2026-10-12T06:07:51.358Z"
 feature_id: A91
 priority: P1
 tags:
@@ -111,3 +111,38 @@ Premise sources:
 - `plugins/sp/tests/task-diffstat.test.ts:1`
 
 ### History
+
+**2026-10-12 — session 1 (worktree batch, partial):** R1 landed and committed as `8d9880515`.
+Moved to the application owners, with the plugin adapters delegating:
+
+- `packages/app/src/services/planning-admission.ts` — `quickReadiness`, `preflightTask`,
+  `classifyFeaturePreflightFindings`, `NON_ABORTING_PREFLIGHT_CODES` and their pure types, out of
+  `plugins/sp/scripts/batch-preflight.ts` (which keeps the CLI surface, argv/usage contracts and
+  `recoveryHint`, and re-exports the moved names so existing callers are unaffected).
+- `packages/app/src/workflow/task-triage.ts` — `sensitiveReasonForPath`, `SENSITIVE_PREFIXES`,
+  `SENSITIVE_GLOBS` and the glob matcher, out of `plugins/sp/scripts/task-diffstat.ts` (which keeps
+  git capture and the output artifact). The safety floor is unchanged and still decides the lane.
+- Both are reached through the existing generated pure bundle entry: `plan-projection.ts` re-exports
+  them (`export * from '../services/planning-admission'; export * from './task-triage';`) and
+  `scripts/commands/bundle-plugin-lib.ts` declares them in `PLAN_PROJECTION_DECLS`. Regenerated:
+  `plugins/sp/lib/plan-projection.generated.{mjs,d.mts}`, `plugins/sp/lib/inline-run.generated.mjs`,
+  the `batch-preflight`/`task-diffstat`/`batch-plan` `.mjs` twins.
+- New direct-policy suites: `packages/app/tests/services/planning-admission.test.ts` and
+  `packages/app/tests/workflow/task-triage.test.ts`. The plugin suites stay as adapter contract tests.
+- Verified: `bun run lint` clean; `plugins/sp` batch-preflight + task-diffstat suites 61 pass;
+  `scripts/commands/bundle-plugin-lib.test.ts` 16 pass (determinism + export/declaration parity).
+
+Remaining (R2/R3, not started): add `runFeatureVerification` to
+`packages/app/src/workflow/feature-verification-receipt.ts` (or a sibling
+`feature-verification-run.ts`) as the single receipt operation with injected
+FileSystem/launcher/run+artifact seams and an app-owned default artifact write and feature lookup
+(`FeatureService.show` over the configured features dir), export it through the existing
+inline generated entry, then reduce `plugins/sp/scripts/feature-verification-steps.ts` to the argv
+adapter — deleting `VerificationModule`'s `openInlineRunProjectDb`/`ArtifactDao` facade,
+`findFeatureFile` and `nodeFsShim`. Add `packages/app/tests/workflow/feature-verification-run.test.ts`
+with in-memory run/artifact backing (receipt lifecycle, ID/path refusals, selected definition,
+spawned-command failure, digest mismatch), keep both plugin `feature-verification-steps` suites green,
+and prove the plugin source scan finds no `openInlineRunProjectDb`/`ArtifactDao`/`findFeatureFile`
+ownership. Then run the task-local gate and verify.
+- 2026-10-12T06:07:51.358Z todo → wip (system)
+
