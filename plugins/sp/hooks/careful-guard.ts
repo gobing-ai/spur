@@ -22,8 +22,8 @@
  * adapter. This file owns the Claude Code payload/decision shape only.
  */
 
+import { classifyCommand } from '../lib/destructive-policy';
 import { getEnvVar } from '../lib/env';
-import { classifyCommand } from './destructive-policy';
 
 interface ToolPayload {
     tool_name?: string;

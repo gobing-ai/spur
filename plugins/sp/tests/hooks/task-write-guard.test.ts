@@ -16,10 +16,10 @@
 import { describe, expect, test } from 'bun:test';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { getEnvVar } from '../lib/env';
+import { getEnvVar } from '../../lib/env';
 
-const REPO_ROOT = join(import.meta.dir, '..', '..', '..');
-const HOOK = join(import.meta.dir, 'task-write-guard.ts');
+const REPO_ROOT = join(import.meta.dir, '..', '..', '..', '..');
+const HOOK = join(import.meta.dir, '../../hooks', 'task-write-guard.ts');
 
 const OWNED_TASK = join(REPO_ROOT, 'docs', 'tasks2', '0181_0176-wave-e-comprehensive-sweep-cleanup.md');
 const UNOWNED_SRC = join(REPO_ROOT, 'packages', 'app', 'src', 'services', 'task-service.ts');

@@ -21,7 +21,7 @@
 
 import { spawnSync } from 'node:child_process';
 import { getEnvVar } from '../lib/env';
-import { couldBeTaskFile } from './task-file-policy';
+import { couldBeTaskFile } from '../lib/task-file-policy';
 
 interface ToolPayload {
     tool_name?: string;

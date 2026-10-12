@@ -27,13 +27,14 @@ import { existsSync, realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
+import type { SessionOwner } from '../../lib/context-owner';
+import { recordToolUseEvent, type ToolPayload } from '../../lib/context-post-tool';
+import { recordSessionStart } from '../../lib/context-session-start';
+import { recordSessionEnd } from '../../lib/context-session-stop';
+import { classifyCommand } from '../../lib/destructive-policy';
 import { getEnvVar, getEnvVars } from '../../lib/env';
+import { couldBeTaskFile } from '../../lib/task-file-policy';
 import { reportLifecycleHook } from '../agent-lifecycle';
-import { recordToolUseEvent, type ToolPayload } from '../context-post-tool';
-import { recordSessionStart, type SessionOwner } from '../context-session-start';
-import { recordSessionEnd } from '../context-session-stop';
-import { classifyCommand } from '../destructive-policy';
-import { couldBeTaskFile } from '../task-file-policy';
 
 // ─── Constants ───────────────────────────────────────────────────────────
 

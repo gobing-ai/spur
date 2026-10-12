@@ -619,8 +619,8 @@ function hookIdentity(command: string | undefined): string | null {
 /**
  * Hook source-layout contract (ADR-129, task 1173): one registered identity has one authored
  * entry under `plugins/sp/hooks`, reusable helpers live in `plugins/sp/lib`, and hook tests live
- * in `plugins/sp/tests/hooks`. Pure and side-effect free; task 1174 activates its strict call in
- * `checkPlacement` only after the hook relocation lands, so the intermediate tree stays green.
+ * in `plugins/sp/tests/hooks`. Pure and side-effect free; task 1174 activates the strict call in
+ * `checkPlacement` after the relocation lands.
  */
 export function checkHookLayout(opts: { repoRoot: string }): PlacementFinding[] {
     const root = resolve(opts.repoRoot);
@@ -743,6 +743,12 @@ export function checkPlacement(opts: { repoRoot: string; baselinePath: string })
     // push application logic into lib without the boundary still answering for it.
     for (const abs of collectPlacementTsFiles(join(root, 'plugins', 'sp', 'lib'))) {
         recordDbAndCorpusFindings(abs.slice(root.length + 1), readFileSync(abs, 'utf8'), record);
+    }
+
+    // Hook source layout (ADR-129, task 1173 helper — activated in 1174 once the relocation landed):
+    // one authored entry per registered identity, helpers in lib, tests in the plugin test owner.
+    for (const finding of checkHookLayout({ repoRoot: root })) {
+        record(finding.file, finding.kind, finding.detail);
     }
 
     const { baseline, error } = loadPlacementBaseline(resolve(opts.baselinePath));

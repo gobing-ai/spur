@@ -1,4 +1,4 @@
-import { getEnvVars } from '../lib/env';
+import { getEnvVars } from './env';
 /**
  * Shared host-agent identification helpers — the **only** host-agent detection path
  * in the sp plugin hooks.

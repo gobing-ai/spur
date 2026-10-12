@@ -18,9 +18,9 @@ import { afterAll, describe, expect, test } from 'bun:test';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { getEnvVar, removeEnvVar, setEnvVar } from '../../lib/env';
-import { recordToolUseEvent } from '../context-post-tool';
-import guardExtension from './guard-extension';
+import guardExtension from '../../../hooks/pi/guard-extension';
+import { recordToolUseEvent } from '../../../lib/context-post-tool';
+import { getEnvVar, removeEnvVar, setEnvVar } from '../../../lib/env';
 
 // ─── Harness ─────────────────────────────────────────────────────────────
 

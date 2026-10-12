@@ -18,10 +18,10 @@ import { describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { getEnvVar, removeEnvVar, setEnvVar } from '../lib/env';
-import type { SessionOwner } from './context-session-start';
+import type { SessionOwner } from '../../lib/context-owner';
+import { getEnvVar, removeEnvVar, setEnvVar } from '../../lib/env';
 
-const HOOKS_DIR = import.meta.dir;
+const HOOKS_DIR = join(import.meta.dir, '../../hooks');
 const START_HOOK = join(HOOKS_DIR, 'context-session-start.ts');
 const POST_TOOL_HOOK = join(HOOKS_DIR, 'context-post-tool.ts');
 const STOP_HOOK = join(HOOKS_DIR, 'context-session-stop.ts');
@@ -556,14 +556,14 @@ describe('resolveActiveSession — unit (task 0398 R3)', () => {
     const NOW = new Date('2026-07-31T12:00:00.000Z');
 
     test('returns the id when the session is recent', async () => {
-        const { resolveActiveSession } = await import('./context-session-start');
+        const { resolveActiveSession } = await import('../../lib/context-session-start');
         const dir = seed({ session: 'session-2026-07-31-1150', started: '2026-07-31T11:50:00.000Z' });
         expect(resolveActiveSession(dir, NOW, {})).toBe('session-2026-07-31-1150');
         rmSync(dir, { recursive: true, force: true });
     });
 
     test('returns null past the idle window so a stale file cannot capture a new session', async () => {
-        const { resolveActiveSession, SESSION_REUSE_IDLE_MS } = await import('./context-session-start');
+        const { resolveActiveSession, SESSION_REUSE_IDLE_MS } = await import('../../lib/context-session-start');
         const stale = new Date(NOW.getTime() - SESSION_REUSE_IDLE_MS - 1000).toISOString();
         const dir = seed({ session: 'session-old', started: stale });
         expect(resolveActiveSession(dir, NOW, {})).toBeNull();
@@ -571,7 +571,7 @@ describe('resolveActiveSession — unit (task 0398 R3)', () => {
     });
 
     test('returns null on a future timestamp (clock skew)', async () => {
-        const { resolveActiveSession } = await import('./context-session-start');
+        const { resolveActiveSession } = await import('../../lib/context-session-start');
         const dir = seed({ session: 'session-future', started: '2026-08-01T00:00:00.000Z' });
         expect(resolveActiveSession(dir, NOW, {})).toBeNull();
         rmSync(dir, { recursive: true, force: true });
@@ -584,14 +584,14 @@ describe('resolveActiveSession — unit (task 0398 R3)', () => {
         ['missing started', JSON.stringify({ session: 'x' })],
         ['unparseable started', JSON.stringify({ session: 'x', started: 'whenever' })],
     ])('returns null on %s', async (_label, body) => {
-        const { resolveActiveSession } = await import('./context-session-start');
+        const { resolveActiveSession } = await import('../../lib/context-session-start');
         const dir = seed(body);
         expect(resolveActiveSession(dir, NOW, {})).toBeNull();
         rmSync(dir, { recursive: true, force: true });
     });
 
     test('returns null when no pointer file exists', async () => {
-        const { resolveActiveSession } = await import('./context-session-start');
+        const { resolveActiveSession } = await import('../../lib/context-session-start');
         const dir = mkdtempSync(join(tmpdir(), 'spur-sess-none-'));
         expect(resolveActiveSession(dir, NOW, {})).toBeNull();
         rmSync(dir, { recursive: true, force: true });
@@ -611,7 +611,7 @@ describe('resolveActiveSession — exact ancestor signal (task 0398 R3, ts-ai-ru
 
     test('reuses the session when SPUR_RUN_ID is set, even far past the idle window', async () => {
         const { resolveActiveSession, SESSION_REUSE_IDLE_MS, AGENT_RUN_ID_ENV } = await import(
-            './context-session-start'
+            '../../lib/context-session-start'
         );
         const ancient = new Date(NOW.getTime() - SESSION_REUSE_IDLE_MS * 10).toISOString();
         const dir = seed({ session: 'session-parent', started: ancient });
@@ -620,7 +620,7 @@ describe('resolveActiveSession — exact ancestor signal (task 0398 R3, ts-ai-ru
     });
 
     test('without the marker the same ancient session is retired by the window', async () => {
-        const { resolveActiveSession, SESSION_REUSE_IDLE_MS } = await import('./context-session-start');
+        const { resolveActiveSession, SESSION_REUSE_IDLE_MS } = await import('../../lib/context-session-start');
         const ancient = new Date(NOW.getTime() - SESSION_REUSE_IDLE_MS * 10).toISOString();
         const dir = seed({ session: 'session-parent', started: ancient });
         expect(resolveActiveSession(dir, NOW, {})).toBeNull();
@@ -628,7 +628,7 @@ describe('resolveActiveSession — exact ancestor signal (task 0398 R3, ts-ai-ru
     });
 
     test('reuses on the marker even when started is missing or unparseable', async () => {
-        const { resolveActiveSession, AGENT_RUN_ID_ENV } = await import('./context-session-start');
+        const { resolveActiveSession, AGENT_RUN_ID_ENV } = await import('../../lib/context-session-start');
         for (const body of [{ session: 'session-x' }, { session: 'session-x', started: 'whenever' }]) {
             const dir = seed(body);
             expect(resolveActiveSession(dir, NOW, { [AGENT_RUN_ID_ENV]: 'run-abc' })).toBe('session-x');
@@ -641,7 +641,7 @@ describe('resolveActiveSession — exact ancestor signal (task 0398 R3, ts-ai-ru
         ['whitespace', '   '],
     ])('a %s SPUR_RUN_ID is not a marker and falls through to the window', async (_label, value) => {
         const { resolveActiveSession, SESSION_REUSE_IDLE_MS, AGENT_RUN_ID_ENV } = await import(
-            './context-session-start'
+            '../../lib/context-session-start'
         );
         const ancient = new Date(NOW.getTime() - SESSION_REUSE_IDLE_MS * 10).toISOString();
         const dir = seed({ session: 'session-parent', started: ancient });
@@ -650,14 +650,14 @@ describe('resolveActiveSession — exact ancestor signal (task 0398 R3, ts-ai-ru
     });
 
     test('the marker never fabricates a session when no pointer file exists', async () => {
-        const { resolveActiveSession, AGENT_RUN_ID_ENV } = await import('./context-session-start');
+        const { resolveActiveSession, AGENT_RUN_ID_ENV } = await import('../../lib/context-session-start');
         const dir = mkdtempSync(join(tmpdir(), 'spur-sess-env-none-'));
         expect(resolveActiveSession(dir, NOW, { [AGENT_RUN_ID_ENV]: 'run-abc' })).toBeNull();
         rmSync(dir, { recursive: true, force: true });
     });
 
     test('the env var name matches the ts-ai-runner published contract', async () => {
-        const { AGENT_RUN_ID_ENV } = await import('./context-session-start');
+        const { AGENT_RUN_ID_ENV } = await import('../../lib/context-session-start');
         expect(AGENT_RUN_ID_ENV).toBe('SPUR_RUN_ID');
     });
 });
@@ -668,7 +668,7 @@ describe('resolveActiveSession — exact ancestor signal (task 0398 R3, ts-ai-ru
 
 describe('context freshness sidecar (task 0711 R4)', () => {
     test('isContextIndexFile matches only .md files inside the context dir', async () => {
-        const { isContextIndexFile } = await import('./context-post-tool');
+        const { isContextIndexFile } = await import('../../lib/context-post-tool');
         const dir = makeTempProject();
         try {
             const ctx = join(dir, '.spur', 'context');
@@ -681,7 +681,7 @@ describe('context freshness sidecar (task 0711 R4)', () => {
     });
 
     test('currentHeadCommit returns HEAD inside a repo and null outside one', async () => {
-        const { currentHeadCommit } = await import('./context-post-tool');
+        const { currentHeadCommit } = await import('../../lib/context-post-tool');
         expect(currentHeadCommit()).toMatch(/^[0-9a-f]{40}$/);
         const outside = mkdtempSync(join(tmpdir(), 'spur-nogit-'));
         try {
@@ -698,7 +698,7 @@ describe('context freshness sidecar (task 0711 R4)', () => {
     });
 
     test('stamp + read roundtrip; null commit writes nothing', async () => {
-        const { readContextFreshness, stampContextFreshness } = await import('./context-post-tool');
+        const { readContextFreshness, stampContextFreshness } = await import('../../lib/context-post-tool');
         const dir = makeTempProject();
         try {
             const ctx = join(dir, '.spur', 'context');
@@ -718,7 +718,7 @@ describe('context freshness sidecar (task 0711 R4)', () => {
     });
 
     test('checkContextFreshness classifies all staleness reasons', async () => {
-        const { CONTEXT_FRESHNESS_SCHEMA_VERSION, checkContextFreshness } = await import('./context-post-tool');
+        const { CONTEXT_FRESHNESS_SCHEMA_VERSION, checkContextFreshness } = await import('../../lib/context-post-tool');
         expect(checkContextFreshness(null, 'c0ffee')).toEqual({ stale: true, reason: 'never stamped' });
         expect(checkContextFreshness('not json', 'c0ffee')).toEqual({ stale: true, reason: 'malformed sidecar' });
         expect(
@@ -745,7 +745,7 @@ describe('context freshness sidecar (task 0711 R4)', () => {
     });
 
     test('a Write landing on a context index refreshes .freshness.json (producer moment)', async () => {
-        const { recordToolUseEvent } = await import('./context-post-tool');
+        const { recordToolUseEvent } = await import('../../lib/context-post-tool');
         const dir = makeTempProject();
         try {
             const ctx = join(dir, '.spur', 'context');
@@ -785,7 +785,7 @@ describe('context-session-stop — recordSessionEnd core (0969 R3)', () => {
                 join(contextDir, 'token-ledger.jsonl'),
                 `${JSON.stringify({ ts: 't', session: 's1', type: 'read' })}\n${JSON.stringify({ ts: 't', session: 's1', type: 'write', tokens: 3 })}\n`,
             );
-            const { recordSessionEnd } = await import('./context-session-stop');
+            const { recordSessionEnd } = await import('../../lib/context-session-stop');
             const event = recordSessionEnd(contextDir, undefined, { host: 'claude', sessionId: 'owner-1' });
             expect(event?.type).toBe('session_end');
             expect(event?.session).toBe('s1');
@@ -800,7 +800,7 @@ describe('context-session-stop — recordSessionEnd core (0969 R3)', () => {
         const dir = makeTempProject();
         try {
             const contextDir = join(dir, '.spur', 'context');
-            const { recordSessionEnd } = await import('./context-session-stop');
+            const { recordSessionEnd } = await import('../../lib/context-session-stop');
             expect(recordSessionEnd(contextDir)).toBeNull();
             writeFileSync(join(contextDir, '.session.json'), 'not json');
             expect(recordSessionEnd(contextDir)).toBeNull();
@@ -828,9 +828,9 @@ describe('context-session-stop — owner-gated finalization (task 1159)', () => 
         const dir = makeTempProject();
         try {
             const ctx = ctxDir(dir);
-            const { recordSessionStart } = await import('./context-session-start');
-            const { recordSessionEnd } = await import('./context-session-stop');
-            const { recordToolUseEvent } = await import('./context-post-tool');
+            const { recordSessionStart } = await import('../../lib/context-session-start');
+            const { recordSessionEnd } = await import('../../lib/context-session-stop');
+            const { recordToolUseEvent } = await import('../../lib/context-post-tool');
 
             const ledgerId = recordSessionStart(ctx, {}, undefined, undefined, ownerA);
             expect(ledgerId).not.toBeNull();
@@ -871,8 +871,8 @@ describe('context-session-stop — owner-gated finalization (task 1159)', () => 
         const dir = makeTempProject();
         try {
             const ctx = ctxDir(dir);
-            const { recordSessionStart } = await import('./context-session-start');
-            const { recordSessionEnd } = await import('./context-session-stop');
+            const { recordSessionStart } = await import('../../lib/context-session-start');
+            const { recordSessionEnd } = await import('../../lib/context-session-stop');
             const sameMinute = () => new Date('2026-10-10T19:20:00.000Z');
 
             const first = recordSessionStart(ctx, {}, sameMinute, undefined, ownerA);
@@ -894,8 +894,8 @@ describe('context-session-stop — owner-gated finalization (task 1159)', () => 
         const dir = makeTempProject();
         try {
             const ctx = ctxDir(dir);
-            const { recordSessionStart } = await import('./context-session-start');
-            const { recordSessionEnd } = await import('./context-session-stop');
+            const { recordSessionStart } = await import('../../lib/context-session-start');
+            const { recordSessionEnd } = await import('../../lib/context-session-stop');
             recordSessionStart(ctx, {}, undefined, undefined, ownerA);
             setEnvVar('SPUR_RUN_ID', 'run-A');
             try {
@@ -913,8 +913,8 @@ describe('context-session-stop — owner-gated finalization (task 1159)', () => 
         const dir = makeTempProject();
         try {
             const ctx = ctxDir(dir);
-            const { recordSessionStart } = await import('./context-session-start');
-            const { recordSessionEnd } = await import('./context-session-stop');
+            const { recordSessionStart } = await import('../../lib/context-session-start');
+            const { recordSessionEnd } = await import('../../lib/context-session-stop');
             recordSessionStart(ctx, {}, undefined, undefined, ownerA);
 
             expect(recordSessionEnd(ctx)).toBeNull(); // no caller identity
@@ -941,7 +941,7 @@ describe('context-session-stop — owner-gated finalization (task 1159)', () => 
                 join(ctx, 'token-ledger.jsonl'),
                 `${JSON.stringify({ ts: 't', session: 'legacy-1', type: 'read' })}\n`,
             );
-            const { recordSessionEnd } = await import('./context-session-stop');
+            const { recordSessionEnd } = await import('../../lib/context-session-stop');
             expect(recordSessionEnd(ctx, undefined, { host: 'claude', sessionId: 'legacy-1' })).toBeNull();
             expect(endRows(dir)).toHaveLength(0);
             expect(readSession(dir)).not.toBeNull();
@@ -956,7 +956,7 @@ describe('context-session-stop — owner-gated finalization (task 1159)', () => 
         const dir = makeTempProject();
         try {
             const ctx = ctxDir(dir);
-            const { recordSessionEnd } = await import('./context-session-stop');
+            const { recordSessionEnd } = await import('../../lib/context-session-stop');
             for (const owner of ['owner-A', { host: 'claude' }, { host: 'vscode', sessionId: 'x' }, null]) {
                 writeFileSync(join(ctx, '.session.json'), JSON.stringify({ session: 's-1', owner }));
                 expect(recordSessionEnd(ctx, undefined, ownerA)).toBeNull();
@@ -971,8 +971,8 @@ describe('context-session-stop — owner-gated finalization (task 1159)', () => 
         const dir = makeTempProject();
         try {
             const ctx = ctxDir(dir);
-            const { recordSessionStart } = await import('./context-session-start');
-            const { recordSessionEnd } = await import('./context-session-stop');
+            const { recordSessionStart } = await import('../../lib/context-session-start');
+            const { recordSessionEnd } = await import('../../lib/context-session-stop');
             recordSessionStart(ctx, {}, undefined, undefined, ownerA);
             // A directory at the ledger path makes appendFileSync throw.
             rmSync(join(ctx, 'token-ledger.jsonl'), { force: true });
@@ -988,8 +988,8 @@ describe('context-session-stop — owner-gated finalization (task 1159)', () => 
         const dir = makeTempProject();
         try {
             const ctx = ctxDir(dir);
-            const { recordSessionStart } = await import('./context-session-start');
-            const { recordSessionEnd } = await import('./context-session-stop');
+            const { recordSessionStart } = await import('../../lib/context-session-start');
+            const { recordSessionEnd } = await import('../../lib/context-session-stop');
             const ledgerId = recordSessionStart(ctx, {}, undefined, undefined, ownerA);
             // Simulate the earlier failure: the end row landed but the pointer survived.
             writeFileSync(
@@ -1013,8 +1013,8 @@ describe('context-session-stop — owner-gated finalization (task 1159)', () => 
         const dir = makeTempProject();
         try {
             const ctx = ctxDir(dir);
-            const { recordSessionStart } = await import('./context-session-start');
-            const { recordSessionEnd } = await import('./context-session-stop');
+            const { recordSessionStart } = await import('../../lib/context-session-start');
+            const { recordSessionEnd } = await import('../../lib/context-session-stop');
             const ledgerId = recordSessionStart(ctx, {}, undefined, undefined, ownerA);
             const replacement = {
                 session: 'session-replaced',
@@ -1154,7 +1154,7 @@ describe('Claude stdin adapters — owner identity (task 1159)', () => {
 // ---------------------------------------------------------------------------
 
 describe('claudeHookOwnerFromPayloadText — pure owner derivation (task 1159)', () => {
-    const load = () => import('./context-owner');
+    const load = () => import('../../lib/context-owner');
 
     test('reads and trims the payload session_id', async () => {
         const { claudeHookOwnerFromPayloadText } = await load();
@@ -1240,7 +1240,7 @@ describe('recordSessionStartFromPayloadText / recordSessionEndFromPayloadText (t
         const dir = makeTempProject();
         try {
             await withProjectDir(dir, async () => {
-                const { recordSessionStartFromPayloadText } = await import('./context-session-start');
+                const { recordSessionStartFromPayloadText } = await import('../../lib/context-session-start');
                 expect(recordSessionStartFromPayloadText('{"session_id":"claude-A"}', {})).not.toBeNull();
                 expect(readSession(dir)?.owner).toEqual({ host: 'claude', sessionId: 'claude-A' });
             });
@@ -1253,7 +1253,7 @@ describe('recordSessionStartFromPayloadText / recordSessionEndFromPayloadText (t
         const dir = makeTempProject();
         try {
             await withProjectDir(dir, async () => {
-                const { recordSessionStartFromPayloadText } = await import('./context-session-start');
+                const { recordSessionStartFromPayloadText } = await import('../../lib/context-session-start');
                 expect(recordSessionStartFromPayloadText('not json', {})).not.toBeNull();
                 expect(readSession(dir)?.owner).toBeUndefined();
             });
@@ -1266,8 +1266,8 @@ describe('recordSessionStartFromPayloadText / recordSessionEndFromPayloadText (t
         const dir = makeTempProject();
         try {
             await withProjectDir(dir, async () => {
-                const { recordSessionStart } = await import('./context-session-start');
-                const { recordSessionEndFromPayloadText } = await import('./context-session-stop');
+                const { recordSessionStart } = await import('../../lib/context-session-start');
+                const { recordSessionEndFromPayloadText } = await import('../../lib/context-session-stop');
                 const ctx = join(dir, '.spur', 'context');
                 recordSessionStart(ctx, {}, undefined, undefined, { host: 'claude', sessionId: 'claude-A' });
                 expect(recordSessionEndFromPayloadText('{"session_id":"claude-B"}', {})).toBeNull();
@@ -1290,7 +1290,7 @@ describe('recordSessionStart — owner write guards (task 1159)', () => {
             const ctx = join(dir, '.spur', 'context');
             // A directory at the pointer path makes writeFileSync throw (EISDIR).
             mkdirSync(join(ctx, '.session.json'));
-            const { recordSessionStart } = await import('./context-session-start');
+            const { recordSessionStart } = await import('../../lib/context-session-start');
             expect(
                 recordSessionStart(ctx, {}, undefined, undefined, { host: 'claude', sessionId: 'claude-A' }),
             ).toBeNull();
@@ -1304,7 +1304,7 @@ describe('recordSessionStart — owner write guards (task 1159)', () => {
         const dir = makeTempProject();
         try {
             const ctx = join(dir, '.spur', 'context');
-            const { recordSessionStart } = await import('./context-session-start');
+            const { recordSessionStart } = await import('../../lib/context-session-start');
             recordSessionStart(ctx, {}, undefined, undefined, {
                 host: 'vscode',
                 sessionId: 'x',

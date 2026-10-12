@@ -15,9 +15,9 @@
 
 import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
-import { getEnvVar } from '../lib/env';
+import { getEnvVar } from '../../lib/env';
 
-const HOOK = join(import.meta.dir, 'careful-guard.ts');
+const HOOK = join(import.meta.dir, '../../hooks', 'careful-guard.ts');
 
 interface Decision {
     permissionDecision: 'allow' | 'ask' | 'deny';

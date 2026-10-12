@@ -272,14 +272,16 @@ plugins/sp/
 │   └── wayfinder/                   # Multi-session investigation maps (SKILL.md only)
 ├── commands/                        # Slash-command wrappers — the SSOT (hand-editable thin wrappers; see Commands below)
 ├── agents/                          # 4 specialist subagents (expert-spur, super-coder, super-planner, super-reviewer)
-├── hooks/                           # hooks.json + task-write-guard.{ts,test.ts} + context-{session-start,post-tool,session-stop}.ts
-│                                    # + agent-lifecycle.{ts,test.ts} + fleet-guest-stop.{ts,test.ts} (fleet member/guest hooks)
-│                                    # + careful-guard.{ts,test.ts} + context-hooks.test.ts + token-estimate.test.ts
-│                                    # + shared policy modules: agent-hint.ts, destructive-policy.{ts,test.ts}, task-file-policy.{ts,test.ts}
-│                                    # + pi/guard-extension.{ts,test.ts} (plugin.json `extensions.pi` entry point)
+├── hooks/                           # hooks.json + one thin entry per registered identity
+│                                    # + task-write-guard.ts (compat shim) + careful-guard.ts (opt-in, unwired)
+│                                    # + pi/guard-extension.ts (plugin.json `extensions.pi` entry point)
+│                                    # entries delegate to lib cores (task 1174); hook suites live in tests/hooks/
+├── lib/                             # Handwritten plugin cores — context-{post-tool,session-start,session-stop}.ts,
+│                                    # agent-hint.ts, context-owner.ts, destructive-policy.ts, task-file-policy.ts,
+│                                    # env.ts, plus generated *.generated.mjs|.d.mts bundles over packages/app
 ├── scripts/                         # Executable helpers, split from prompts (ADR-031) — batch-preflight.ts + scripts/<skill>/
-│                                    # (daily-summary: {daily-summary, logger}.ts; dogfood-testing: {detect-pipeline-driving, validate-report}.ts)
-├── tests/                           # Plugin tests — skill-structure.test.ts + batch-preflight.test.ts + per-skill suites (command-contract moved to scripts/commands/)
+│                                    # (daily-summary: daily-summary.ts; dogfood-testing: {detect-pipeline-driving, validate-report}.ts)
+├── tests/                           # Plugin tests — skill-structure.test.ts + hooks/ (guard, context, Pi suites) + per-skill suites
 ├── evals/                           # Skill behavioral eval harness (scenarios + judge + run-eval runner)
 ├── plugin.json                      # Marketplace entry
 └── README.md                        # This file
@@ -512,8 +514,9 @@ hint on first launch, and `context-session-stop` closes out the session record.
 `SPUR_SPEC_ID` is set, so outside a fleet it makes no call. `fleet-guest-stop` delivers pending
 inbox work to a session joined as a fleet guest at turn end; any other session passes through.
 
-**Available but unwired:** `careful-guard.ts` ships in `hooks/` (with tests) as an opt-in
-`PreToolUse` guard that asks before destructive shell commands (`rm -rf`, `DROP TABLE`,
+**Available but unwired:** `careful-guard.ts` ships in `hooks/` (its suite is
+`tests/hooks/careful-guard.test.ts`) as an opt-in `PreToolUse` guard that asks before destructive
+shell commands (`rm -rf`, `DROP TABLE`,
 `git push --force`, …) — it is **not** registered in `hooks.json`. Fail-open by contract; escape
 hatch `SPUR_CAREFUL=off`.
 
@@ -529,9 +532,11 @@ hold `SKILL.md` and prompt-side companions only.
 | Script                                               | Role                                                                                                                                                                                                                                                                                              |
 | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `hooks/task-write-guard.ts`                          | Compatibility shim for older installs that still execute the script path directly. Forwards stdin to the stable PATH command `superskill hook run sp task-write-guard`, mirrors parseable PreToolUse decisions, and fails open if the runtime is unavailable. Performs no source-tree CLI lookup. |
-| `hooks/context-*.ts`                                 | Runtime for the three registered context hooks (session-start, post-tool, session-stop) — token-cost estimation + ledger append for `sp:indexed-context`                                                                                                                                          |
+| `hooks/context-*.ts`                                 | argv/stdin entries for the three registered context hooks; the capture, ledger and session logic is the `lib/context-*.ts` core (task 1174)                                                                                                                                                        |
 | `hooks/{agent-lifecycle,fleet-guest-stop}.ts`       | Fleet hooks (1080/1081): member lifecycle reports via `spur agent report`; turn-end inbox delivery to joined guests |
-| `hooks/careful-guard.ts`                             | Opt-in destructive-command guard (unwired — see Hooks above)                                                                                                                                                                                                                                      |
+| `hooks/careful-guard.ts`                             | Opt-in destructive-command guard (unwired — see Hooks above); policy is `lib/destructive-policy.ts`                                                                                                                                                                                                |
+| `lib/context-{post-tool,session-start,session-stop}.ts` | Redaction-capped ledger append, session open/ownership and owner-gated teardown for `sp:indexed-context`                                                                                                                                                                                       |
+| `lib/{agent-hint,context-owner,destructive-policy,task-file-policy}.ts` | Shared hook cores — agent/model hint resolution, host-native session owner derivation, destructive-command classification, task-file matching                                                                                                                              |
 | `scripts/batch-preflight.ts`                         | Pure TABLE A STOP evaluation for `super-planner` — skip doomed pipeline launches without spawning a Skill subprocess; recovery hints map stuck statuses to a single `/sp:dev-*` hop                                                                                                               |
 | `scripts/workflow-step-profile.ts`                   | Thin glue over the generated lib bundle (`lib/step-profile.generated.mjs` from `packages/app/src/workflow/step-profile.ts`) — read-only step profile from `spur workflow trace`: per node and action-kind durations, idle gaps, session mode and `cacheHit` coverage, plus the ADR-115 cache-window flags `sp:spur-doctor` turns into workflow-optimization proposals |
 | `scripts/dogfood-testing/detect-pipeline-driving.ts` | Live Phase 1.0 CLI gate over `lib/dogfood-pipeline.ts` — word-boundary detector for pipeline-driving testees (leading-space invariant)                                                                                                                                  |
@@ -541,7 +546,7 @@ hold `SKILL.md` and prompt-side companions only.
 | `scripts/run-summary.ts`                             | Measured execution summary `/sp:dev-run` / `/sp:dev-runall` print by default (`--no-summary` skips) — windows the host transcript by `spur workflow progress` attempt timestamps; per stage/run time, wait, tool calls, total / non-cached tokens; `n/a` for subprocess windows |
 | `scripts/session-timeline.ts`                        | Measured Time/Wait/Token evidence for `sp:session-review` — reads the active Claude Code transcript read-only, one segment per operator prompt, usage deduplicated by message id, tokens split total / non-cached; `{available:false}` exit 0 when no transcript |
 | `scripts/commands/validate-flag-contracts.ts`        | Mechanical consistency gate — compares flag claims across command files, flag-glossary, cross-cutting, dev-operations, and ADR; reports disagreements                                                                                    |
-| `*.test.ts`                                          | Unit suites — in `hooks/` for guards, in `tests/<skill>/` per ADR-031 pairing                                                                                                                                                                                                                     |
+| `*.test.ts`                                          | Unit suites — `tests/hooks/` for the hook entries and their lib cores, `tests/<skill>/` per ADR-031 pairing                                                                                                                                                                                        |
 
 **Design principle:** Scripts are **deterministic enforcement**. Unlike skills (which are advisory
 knowledge consumed by the LLM), scripts run as code and make binary allow/deny decisions. They are

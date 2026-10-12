@@ -11,7 +11,7 @@
 import { describe, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
-import { classifyCommand } from './destructive-policy';
+import { classifyCommand } from '../../lib/destructive-policy';
 
 type Expected = 'ask' | 'allow';
 
@@ -100,7 +100,7 @@ describe('destructive-policy — classification', () => {
 
 /** Run the Claude Code hook end-to-end and read back its permission decision. */
 function claudeDecision(command: string): Expected {
-    const res = spawnSync('bun', [join(import.meta.dir, 'careful-guard.ts')], {
+    const res = spawnSync('bun', [join(import.meta.dir, '../../hooks', 'careful-guard.ts')], {
         input: JSON.stringify({ tool_name: 'Bash', tool_input: { command } }),
         encoding: 'utf-8',
         timeout: 30_000,
@@ -116,7 +116,7 @@ function claudeDecision(command: string): Expected {
  * `ctx.ui.confirm`, so "was confirm called" is the Pi-side equivalent of `ask`.
  */
 async function piDecision(command: string): Promise<Expected> {
-    const mod = (await import('./pi/guard-extension')) as {
+    const mod = (await import('../../hooks/pi/guard-extension')) as {
         default: (pi: unknown) => void;
     };
     let handler: ((event: unknown, ctx: unknown) => Promise<unknown>) | undefined;

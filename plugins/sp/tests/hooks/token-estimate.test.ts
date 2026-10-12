@@ -6,6 +6,7 @@ import { describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { resolveAgentHint, resolveModelHint } from '../../lib/agent-hint';
 import {
     buildToolSummary,
     cappedByteLength,
@@ -18,8 +19,8 @@ import {
     SUMMARY_MAX_CHARS,
     scrubSecrets,
     truncateSummary,
-} from './context-post-tool';
-import { recordSessionStart, resolveAgentHint, resolveModelHint } from './context-session-start';
+} from '../../lib/context-post-tool';
+import { recordSessionStart } from '../../lib/context-session-start';
 
 describe('estimateTokens', () => {
     test('ceil bytes/4', () => {

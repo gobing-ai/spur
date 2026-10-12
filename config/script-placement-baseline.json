@@ -30,11 +30,6 @@
             "kinds": ["budget", "db-import"],
             "reason": "Keep (daily-summary/, plan \u00a72); read-only history-health query via dynamic bun:sqlite import (task 1018)"
         },
-        "plugins/sp/hooks/context-post-tool.ts": {
-            "kinds": ["budget"],
-            "reason": "Keep: ADR-129 core (budget exemption) (plan \u00a72)",
-            "exempt": true
-        },
         "plugins/sp/hooks/pi/guard-extension.ts": {
             "kinds": ["budget"],
             "reason": "Keep (ADR-129 normalizer) (plan \u00a72)"

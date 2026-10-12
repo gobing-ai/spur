@@ -10,10 +10,10 @@
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { couldBeTaskFile } from './task-file-policy';
+import { couldBeTaskFile } from '../../lib/task-file-policy';
 
 // Repo-anchored so the suite passes from any cwd (repo root or plugins/sp).
-const REPO_ROOT = join(import.meta.dir, '..', '..', '..');
+const REPO_ROOT = join(import.meta.dir, '..', '..', '..', '..');
 
 describe('couldBeTaskFile — matches the corpus convention', () => {
     test('accepts a task file basename', () => {

@@ -465,6 +465,16 @@ function createPlacementFixture(): string {
     writeFileSync(join(scriptsDir, 'typed.ts'), `import type { Database } from 'bun:sqlite';\nexport const t = 1;\n`);
     writeFileSync(join(repoCommandsDir, 'task.ts'), 'export const glue = 1;\n');
     writeFileSync(join(cliCommandsDir, 'task.ts'), 'export const noun = 1;\n');
+    // A hook entry must be a registered identity (task 1174 activates checkHookLayout), so the
+    // fixture registers the one clean entry it expects to produce no finding.
+    writeFileSync(
+        join(hooksDir, 'hooks.json'),
+        JSON.stringify(
+            { hooks: { Stop: [{ hooks: [{ type: 'command', command: 'superskill hook run sp fine' }] }] } },
+            null,
+            4,
+        ),
+    );
     writeFileSync(join(hooksDir, 'fine.ts'), 'export const fine = 1;\n');
     writeFileSync(join(scriptsDir, 'skipped.test.ts'), `import { test } from 'bun:test';\ntest('skip', () => {});\n`);
     return root;
@@ -670,17 +680,39 @@ test('placement baseline reconciles with plan §2 (task 1000 R7)', () => {
         .sort();
     expect(actual).toEqual(expected);
 
-    // exempt: true is exactly the five over-budget Keep files (task-frozen list)
+    // exempt: true is exactly the four over-budget Keep files (task-frozen list; the context-post-tool
+    // row left in task 1174 when the hook became a thin adapter over its lib core)
     const exempt = keys.filter((k) => entries[k]?.exempt === true).sort();
     expect(exempt).toEqual(
         [
-            'plugins/sp/hooks/context-post-tool.ts',
             'plugins/sp/scripts/batch-preflight.ts',
             'plugins/sp/scripts/feature-verification-steps.ts',
             'plugins/sp/scripts/wrapup-drift-probe.ts',
             'plugins/sp/scripts/wrapup-steps.ts',
         ].sort(),
     );
+});
+
+test('checkPlacement includes the hook source-layout findings (task 1174 R3 activation)', () => {
+    const root = createPlacementFixture();
+    try {
+        const hooks = join(root, 'plugins', 'sp', 'hooks');
+        // Stray helper: not registered, not a supported extension entry.
+        writeFileSync(join(hooks, 'stray-helper.ts'), 'export const helper = 1;\n');
+        // Misplaced test: hook tests belong to plugins/sp/tests/hooks.
+        writeFileSync(join(hooks, 'fine.test.ts'), `import { test } from 'bun:test';\ntest('x', () => {});\n`);
+        const findings = checkPlacement({ repoRoot: root, baselinePath: join(root, 'config', 'missing.json') });
+        const hookFindings = findings.filter((f) => f.kind === 'hook-layout');
+        expect(hookFindings.map((f) => f.file).sort()).toEqual([
+            'plugins/sp/hooks/fine.test.ts',
+            'plugins/sp/hooks/stray-helper.ts',
+        ]);
+        expect(hookFindings.every((f) => f.detail.length > 0)).toBe(true);
+        // The registered entry itself stays clean.
+        expect(hookFindings.some((f) => f.file === 'plugins/sp/hooks/fine.ts')).toBe(false);
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
 });
 
 test('checkPlacement applies the DB/corpus boundary to handwritten lib without a line budget (task 1173 R1)', () => {
