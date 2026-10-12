@@ -69,7 +69,11 @@ function rescueEnv(): Record<string, string> {
 function runShell(dir: string, command: string): void {
     const result = spawnSync('sh', ['-c', command], {
         cwd: dir,
-        env: rescueEnv(),
+        // HOME pins the config layers to the temp project. Without it the child's `os.homedir()`
+        // falls back to the passwd entry, the machine's `~/.config/spur/config.yaml` is read, and
+        // its `decisions.maker` decides the maker this test asserts — so an operator who points the
+        // global config at a working local backend (fm-local) turns this fallback E2E green-only.
+        env: { ...rescueEnv(), HOME: dir },
         encoding: 'utf8',
     });
     // Every rescue path must exit 0 — pipeline shell default onError is `fail`.
