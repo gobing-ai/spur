@@ -8,8 +8,9 @@ see_also:
 # spur builder - release plumbing
 
 `spur builder` is the CLI for **version bumps and release tags**. It wraps the internal
-`spur-dev release` flow behind a public two-verb surface, promoted verbatim from
-`scripts/commands/release.ts` (now a thin forwarder to the same implementation). Package ids are
+`release-ops` implementation behind a public two-verb surface. The repo-local forwarder
+(`scripts/commands/release.ts`) and its `spur-dev` dispatcher cases were retired in task 1173; the
+root `bun run bump-ver` / `bun run drop-tags` names route to `spur builder` directly. Package ids are
 the unscoped short names (`@gobing-ai/spur` → `spur`); the released set and the aggregate tag are
 discovered from the repo's own workspace manifests, so the same code serves any git+semver
 monorepo.

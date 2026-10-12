@@ -7,7 +7,8 @@
  * never the staged `apps/cli/` copies.
  *
  * Release keeps these in lockstep via `syncMarketplaceAndPlugins`
- * (scripts/commands/release.ts), so any drift at publish time means the packed
+ * (`apps/cli/src/release-ops.ts`, reached through `spur builder bump-ver`), so any drift at publish
+ * time means the packed
  * marketplace advertises a stale plugin version (superskill task 0113 measured
  * this class of defect — see `findMarketplaceVersionDrift`).
  */

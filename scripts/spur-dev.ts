@@ -7,8 +7,6 @@
  *   bun scripts/spur-dev.ts <command> [args...]
  *
  * Commands:
- *   bump-ver <pkg|--all> <version> [--push]    bump version(s), commit, tag, push
- *   drop-tags <pkg|--all> <version> [--remote] delete release tag(s)
  *   publish <package-dir> [--otp <code>]       resolve deps + npm publish (OIDC)
  *   bundle-config <out-dir>                     copy config/ into a tarball dir
  *   bundle-web [out-dir]                        copy dist/web into apps/cli/web for npm
@@ -43,13 +41,12 @@ import { linkCheck } from './commands/link-check';
 import { checkPipelineBudgets } from './commands/pipeline-budgets';
 import { publish } from './commands/publish';
 import { realRunCost } from './commands/real-run-cost';
-import { bumpVer, dropTags } from './commands/release';
 import { verifyPack } from './commands/verify-pack';
 import { runWorkflowPromotion } from './commands/workflow-promotion';
 
 function usage(message?: string): never {
     console.error(
-        'Commands: bump-ver, drop-tags, publish, bundle-config, bundle-web, bundle-plugins, emit-board-types, check-marketplace-version, verify-pack, build-binaries, build-cli, build-server, dev-all, link-check, eval-pipeline, fleet-e2e, real-run-cost, check-pipeline-budgets, promotion',
+        'Commands: publish, bundle-config, bundle-web, bundle-plugins, emit-board-types, check-marketplace-version, verify-pack, build-binaries, build-cli, build-server, dev-all, link-check, eval-pipeline, fleet-e2e, real-run-cost, check-pipeline-budgets, promotion',
     );
     process.exit(message ? 1 : 0);
 }
@@ -58,13 +55,6 @@ const [command, ...args] = process.argv.slice(2);
 
 try {
     switch (command) {
-        case 'bump-version':
-        case 'bump-ver':
-            await bumpVer(args);
-            break;
-        case 'drop-tags':
-            await dropTags(args);
-            break;
         case 'publish': {
             const otpIndex = args.indexOf('--otp');
             const otp = otpIndex !== -1 ? args[otpIndex + 1] : undefined;

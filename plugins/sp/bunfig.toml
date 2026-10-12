@@ -1,8 +1,11 @@
 # Workspace-local test config (task 1127 R8/AC7, mirroring apps/cli's 0699 R3 precedent): without
-# it, `cd plugins/sp && bun test` — the run AGENTS.md prescribes — skipped the root preload and
-# resolved the operator's real ~/.config/spur/run/full-gate.lock. These suites then waited silently
-# behind any live host-wide gate holder (their holder line is swallowed by `silenceStdout`), which
-# is the dispatch-budget burn this task exists to remove. Coverage stays gated by the root bunfig
-# (bun run test).
+# it, `cd plugins/sp && bun test` — the run AGENTS.md prescribes — skipped the root preload, so these
+# suites lost the shared test setup (logger muting, the util shims, and the hermeticity env that keeps
+# tests off the operator's real ~/.config/spur/ config, projects registry and slash-command catalog).
+# Coverage stays gated by the root bunfig (bun run test).
+#
+# Historical: this comment once justified the preload by a host-wide `full-gate.lock` wait. That lock
+# was deleted in `refactor(gate): remove gate-lock mechanism and simplify quality-gate`; the preload
+# is still required, for the reasons above (task 1173 R5).
 [test]
 preload = ["../../tests/setup.ts"]

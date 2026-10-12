@@ -165,7 +165,7 @@ that single full gate.
 1. The **changed-path matrix** below (narrow behavior tests + affected consumers);
 2. the resolved `quality-gate` script in `light` mode (source-repo probe, else the installed twin) (biome on changed files, per-workspace typecheck, rule presets `rules:pre`/`rules:post`, related tests).
 
-Neither step takes the host-wide full-gate lock. The full gate is named only for the pipeline's `test` and `test-recheck` hops.
+Neither step takes the full project gate. The full gate is named only for the pipeline's `test` and `test-recheck` hops.
 
 | Changed surface | Required targeted tests | Required typechecks |
 | --- | --- | --- |

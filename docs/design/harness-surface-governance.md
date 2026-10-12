@@ -124,9 +124,13 @@ This accepts placement policy, not any public CLI expansion or premature removal
 
 **Current enforcement:** `sp-script-placement` uses a 250 LOC entry budget and detects direct DB
 imports/corpus parsing with the shrinking `config/script-placement-baseline.json`. A small entry
-is not proof of correct ownership. **Planned enforcement:** cover helper-only files, misplaced
-tests, hook registration/extension entry reachability and lib dependencies in the existing checker;
-use focused semantic review for behavior that import checks cannot classify. No second exception registry.
+is not proof of correct ownership. **Landed (task 1173):** the same DB/corpus boundary now covers
+handwritten `plugins/sp/lib` sources (no line budget — a line count is a review trigger, not an
+architecture test), and `checkHookLayout` answers for hook source layout: one authored entry per
+registered identity, helpers in lib, tests in the plugin test owner. The hook check is unit-fixtured
+and its strict call activates in 1174, once the relocation it judges has landed. **Remaining:**
+reusable helper dependencies beyond that boundary still need focused semantic review, since import
+checks cannot classify behavior. No second exception registry.
 Retain strict corpus, test, verification and standalone correctness gates; do not restore the removed
 host-wide gate lock or add a lock manager. SQLite busy retries and corpus allocation locks are separate concerns.
 

@@ -441,9 +441,9 @@ Action semantics come from the YAML and the workflow action contract:
   recheck's `no-progress` guard honours it, so a cap-kill reads as a red gate the next time. Preserve
   the signal-induced receipt under a distinct name (`<wbs>-check-receipt.false-fail-<signal>.json`)
   and say so in the run log before re-running: never delete it silently, and never report a
-  cap-killed attempt as a genuine gate failure. Measured this session: one foreground gate call
-  (25.6 min host-wide lock wait + 7.4 min runtime) was SIGTERM-killed at the host cap and produced
-  exactly that false FAIL receipt.
+  cap-killed attempt as a genuine gate failure. Measured 2026-10-10 (before the gate-lock removal):
+  one foreground gate call (25.6 min host-wide lock wait + 7.4 min runtime) was SIGTERM-killed at the
+  host cap and produced exactly that false FAIL receipt.
 - `note` — append the expanded message to the inline run log.
 - `doctor.probe` — run the declared Spur doctor once, persist its status file, and apply any
   `setVars` result (including a resolved executor) before the next action or state.
@@ -766,7 +766,7 @@ host-owned gate sat between the stages, or when the platform cannot address comp
 **Implement and test-fix workers never run the full gate (task 1142 R3).** Workers use the light tier as their iteration check (task 1142 R3) in exact order:
 1. the **changed-path matrix** (`code-implementation/SKILL.md` § Changed-path targeted checks) over the paths they touched;
 2. the resolved `quality-gate` script in `light` mode (source-repo probe, else the installed twin) (biome, per-workspace typecheck, rule presets, related tests).
-Neither step takes the full-gate lock. The pipeline's `test` and `test-recheck` hops remain the only full gate. Carry
+Neither step takes the full gate. The pipeline's `test` and `test-recheck` hops remain the only full gate. Carry
 `--gate-log <path>` through to the child **verbatim**: never paraphrase it into "re-run the named
 gate command". That paraphrase is not cosmetic — it sent a worker into a full gate run instead of
 targeted iteration checks. The pipeline's next `test` (recheck)
@@ -909,21 +909,25 @@ verdict artifact exists (tasks 0617, 0619 — the clobbering spiral).
 
 ## Running the full gate (task 0872 / 1127 R7)
 
-The full gate serializes behind a host-wide lock and legitimately runs 10-25 minutes. Two rules keep
-it from becoming a hazard (both violated once on 2026-10-10, blocking every other session for ~11
-minutes and aborting the run's own verification):
+The full gate legitimately runs 10-25 minutes. Two rules keep it from becoming a hazard (both
+violated once on 2026-10-10, aborting the run's own verification):
 
 - **Never wrap it in an external `timeout`, and never treat its runtime as a hang.** An outer bound
-  that fires mid-suite leaves the holder alive holding the lock while the caller believes it is gone.
-- **Run it detached and poll the log**, so losing the foreground call cannot lose the holder:
+  that fires mid-suite leaves a half-finished suite behind while the caller believes it is gone.
+- **Run it detached and poll the log**, so losing the foreground call cannot lose the run:
 
   ```bash
   nohup bash -c 'bun run spur-check > /tmp/gate.log 2>&1; echo "EXIT=$?" >> /tmp/gate.log' &
   ```
 
-- **Never kill a gate holder whose pid is alive.** The waiter line `waiting for holder (… held Nms)`
-  is printed only after `isProcessAlive(held.claim.pid)` succeeded, so a printed holder is a live one
-  by construction; only the lock's own dead-pid reclaim is authorised to clear a claim.
+- **Preserve a signal-induced receipt.** A cap-killed attempt leaves a red receipt that the next
+  recheck's `no-progress` guard honours, so it reads as a genuine failure unless the receipt is kept
+  under a distinct name and the run log says so.
+
+> Historical (task 1127, removed in task 1173): these rules were once stated in terms of a host-wide
+> `full-gate.lock`. The lock mechanism was deleted (`refactor(gate): remove gate-lock mechanism and
+> simplify quality-gate`), so nothing serializes gate runs today — the guidance above stands on its
+> own without it.
 
 ## Runtime interface contracts (from run evidence)
 

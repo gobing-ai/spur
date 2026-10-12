@@ -159,8 +159,9 @@ project. Re-running fills missing assets and preserves existing configuration/cu
 #### `spur builder bump-ver <package-id|--all> <version> [--push]` · `spur builder drop-tags <package-id|--all> <version> [--remote]`
 
 **Release plumbing, promoted from `spur-dev` (ADR-051, task 0617).** `builder` hosts the two
-release verbs formerly hidden behind the internal `bun run scripts/spur-dev.ts release` command;
-`scripts/commands/release.ts` is now a thin forwarder to the same implementation. The noun is
+release verbs formerly hidden behind the internal `bun run scripts/spur-dev.ts release` command.
+The repo-local forwarder `scripts/commands/release.ts` and its `spur-dev` dispatcher cases were
+retired in task 1173 — `bun run bump-ver` / `bun run drop-tags` route here directly. The noun is
 **frozen at exactly these two verbs** — no further spur-dev verb may be promoted onto it, and any
 future spur-dev → public-noun promotion needs its own consent-gate entry
 (`docs/design/harness-surface-governance.md` §3).
