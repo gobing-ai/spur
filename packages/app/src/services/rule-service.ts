@@ -1,5 +1,6 @@
 import { homedir } from 'node:os';
 import { delimiter, join, relative, resolve } from 'node:path';
+import { getEnvVar } from '@gobing-ai/spur-config';
 import { bundledConfigRoot } from '@gobing-ai/spur-config/loader';
 import {
     createId,
@@ -489,7 +490,7 @@ export class RuleService {
         // `SPUR_SKIP_GLOBAL_CONFIG=true` skips `~/.config/spur/config.yaml` in the config loader;
         // the global rules dir lives under the same root and must honour the same switch, or a
         // stale operator `~/.config/spur/rules` silently shadows the bundled presets.
-        const skipGlobal = (env.SPUR_SKIP_GLOBAL_CONFIG ?? process.env.SPUR_SKIP_GLOBAL_CONFIG) === 'true';
+        const skipGlobal = (env.SPUR_SKIP_GLOBAL_CONFIG ?? getEnvVar('SPUR_SKIP_GLOBAL_CONFIG')) === 'true';
         if (hasGlobalOverride || !skipGlobal) {
             layers.push({
                 id: 'global',
