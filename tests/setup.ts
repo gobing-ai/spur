@@ -92,7 +92,13 @@ process.env.SPUR_SLASH_COMMANDS_FILE = testSlashCommandsFile;
 // `afterEach` and never restore it; because Bun runs test files in one process, that
 // stranded later files on the operator's real registry. Their own beforeEach runs
 // after this one, so an explicit per-suite path still wins.
+// The two config-skip switches get the same treatment: health.test used to `removeEnvVar`
+// SPUR_SKIP_GLOBAL_CONFIG in afterEach, after which every later file in the process read the
+// operator's ~/.config/spur layers (observed: rule-service preset tests resolving a stale
+// global `recommended-pre-check.yaml`).
 beforeEach(() => {
+    process.env.SPUR_SKIP_GLOBAL_CONFIG = 'true';
+    process.env.SPUR_SKIP_PROJECT_CONFIG = 'true';
     process.env.SPUR_PROJECTS_FILE = testRegistryFile;
     process.env.SPUR_SLASH_COMMANDS_FILE = testSlashCommandsFile;
 });
