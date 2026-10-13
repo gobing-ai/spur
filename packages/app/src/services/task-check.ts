@@ -1214,6 +1214,12 @@ export class TaskCheckService extends PlanningCheckService {
         }
 
         // ── dependency edges ──
+        // ADR-137 (task 1190 R4): a *live* dependent of a `deprecated` task gets
+        // `L4.task-deprecated` — the edge recorded before the deprecation keeps holding
+        // live work behind frozen material, so it is reported with the two remedies
+        // (re-point, or un-deprecate). A terminal dependent is the retained end state and
+        // gets no finding, and the edge is never rewritten: the freeze is prospective.
+        const taskLive = status !== 'done' && status !== 'cancelled' && status !== 'deprecated';
         if (deps && deps.length > 0) {
             for (const dep of deps) {
                 // Dependencies can be WBS numbers ("0001") or WBS+name strings ("0001: some desc")
@@ -1230,7 +1236,18 @@ export class TaskCheckService extends PlanningCheckService {
                             section: '',
                             message: `Dependency "${dep}" not found in ${this.searchedFolders(tasksDir)}`,
                         });
+                        continue;
                     }
+                    if (!taskLive) continue;
+                    const depStatus = (await this.readTaskSnapshot(tasksDir, depWbs))?.status;
+                    if (depStatus !== 'deprecated') continue;
+                    findings.push({
+                        layer: 'L4',
+                        code: FINDING_CODES.L4_TASK_DEPRECATED,
+                        severity: 'warning',
+                        section: '',
+                        message: `Task ${wbs} depends on deprecated task ${depWbs} (frozen) — re-point the dependency at live work or un-deprecate it (\`spur task update ${depWbs} todo\`)`,
+                    });
                 }
             }
         }

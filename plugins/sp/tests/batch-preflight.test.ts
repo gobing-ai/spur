@@ -95,6 +95,17 @@ describe('batch-preflight — TABLE A STOP evaluation (task 0279)', () => {
         expect(preflightTask({ wbs: '1', status: 'testing', dependencies: [], depStatuses: {} }).action).toBe('run');
     });
 
+    test('ADR-137 (1190) — a deprecated task is never routed into the pipeline', () => {
+        const r = preflightTask({ wbs: '1190', status: 'deprecated', dependencies: [], depStatuses: {} });
+        expect(r.action).toBe('skip');
+        if (r.action !== 'skip') throw new Error('expected skip');
+        expect(r.code).toBe('DEPRECATED');
+        expect(r.reason).toContain('spur task update 1190 todo');
+        const cli = runPreflightCli(['--wbs', '1190', '--status', 'deprecated']);
+        expect(cli.exitCode).toBe(2);
+        expect(cli.stdout).toContain('skip DEPRECATED');
+    });
+
     test('recoveryHint — one hop per status (never a loop)', () => {
         expect(recoveryHint('testing', '0042')?.command).toContain('dev-verify 0042');
         expect(recoveryHint('wip', '0042')?.command).toContain('implement');
@@ -189,6 +200,40 @@ describe('quickReadiness — command-aware readiness (task 0814 R2)', () => {
         });
         expect(r.action).toBe('blocked');
         if (r.action === 'blocked') expect(r.unmetDeps).toEqual(['0275']);
+    });
+
+    test('ADR-137 (1190) — a deprecated task is non-runnable with its own code', () => {
+        for (const operation of ['run', 'refine', 'verify'] as ReadinessOperation[]) {
+            const r = quickReadiness({ wbs: '1190', status: 'deprecated', operation });
+            expect(r.action).toBe('skipped');
+            if (r.action !== 'skipped') throw new Error('expected skipped');
+            expect(r.code).toBe('DEPRECATED');
+            expect(r.reason).toContain('spur task update 1190 todo');
+        }
+        // Even verify --force never re-admits a frozen task (unlike done/cancelled).
+        const forced = quickReadiness({ wbs: '1190', status: 'deprecated', operation: 'verify', force: true });
+        expect(forced.action).toBe('skipped');
+        if (forced.action === 'skipped') expect(forced.code).toBe('DEPRECATED');
+
+        const cli = runPreflightCli(['--operation', 'run', '--wbs', '1190', '--status', 'deprecated', '--json']);
+        expect(cli.exitCode).toBe(2);
+        expect(JSON.parse(cli.stdout).code).toBe('DEPRECATED');
+    });
+
+    test('ADR-137 (1190) — a deprecated dependency never reads as satisfied', () => {
+        const r = quickReadiness({
+            wbs: '0814',
+            status: 'todo',
+            operation: 'run',
+            dependencies: ['1190'],
+            depStatuses: { '1190': 'deprecated' },
+        });
+        expect(r.action).toBe('blocked');
+        if (r.action !== 'blocked') throw new Error('expected blocked');
+        expect(r.code).toBe('DEP');
+        expect(r.unmetDeps).toEqual(['1190']);
+        expect(r.reason).toContain('deprecated');
+        expect(r.reason).toContain('spur task update 1190 todo');
     });
 
     test('skipped — empty status-filtered set (zero-task rule)', () => {

@@ -17,6 +17,7 @@ import { DbWorkflowPersistenceAdapter } from '@gobing-ai/ts-dual-workflow-engine
 import { createNodeFileSystem, type FileSystem } from '@gobing-ai/ts-runtime';
 import { GuardDeniedError } from '../../src/errors';
 import { FeatureCheckService } from '../../src/services/feature-check';
+import { TASK_FORWARD_CHAIN } from '../../src/services/pipeline-run-link';
 import type { SectionMatrix } from '../../src/services/planning-check-base';
 import { type EntityRef, type LifecyclePort, PlanningWriteService } from '../../src/services/planning-write-service';
 import type { TaskCheckService } from '../../src/services/task-check';
@@ -48,7 +49,11 @@ import {
     DEFAULT_FEATURE_VERIFICATION_CMD,
     startFeatureVerificationReceipt,
 } from '../../src/workflow/feature-verification-receipt';
-import { reconcileExistingLifecycleRow, TASK_LIFECYCLE_PROFILE } from '../../src/workflow/lifecycle-adapter';
+import {
+    LifecycleAdapter,
+    reconcileExistingLifecycleRow,
+    TASK_LIFECYCLE_PROFILE,
+} from '../../src/workflow/lifecycle-adapter';
 import { resolveWorkflowDefinition } from '../../src/workflow/workflow-resolver';
 
 // ─── Helpers ────────────────────────────────────────────────────────────
@@ -3145,6 +3150,116 @@ describe('1047 — record/update reconcile pre-existing lifecycle bookkeeping', 
             expect(await lifecycleCounts(db)).toEqual({ runs: 1, links: 0 });
             const links = await db.queryAll<{ id: string; kind: string }>('SELECT id, kind FROM task_run_links');
             expect(links).toEqual([{ id: pipelineLinkId, kind: 'pipeline' }]);
+        } finally {
+            db.close();
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+});
+
+// ─── ADR-137 (1190 R3/R6): the deprecated freeze is prospective and status-only ───
+
+describe('record on a deprecated task (ADR-137)', () => {
+    /**
+     * One record fixture per test: the shared `beforeAll` service above uses the
+     * permissive `SchemaLifecyclePort`, and the subject here is the REAL lifecycle
+     * graph's refusal — so the write service is wired to the engine adapter, exactly
+     * as the CLI composes it.
+     */
+    async function makeDeprecatedRecordEnv(): Promise<{
+        svc: TaskService;
+        fs: FileSystem;
+        taskPath: string;
+        db: DbAdapter;
+        root: string;
+    }> {
+        const root = mkdtempSync(join(tmpdir(), 'spur-record-deprecated-'));
+        const dir = join(root, 'tasks');
+        const fs = createNodeFileSystem(root);
+        await fs.ensureDir(dir);
+        await fs.ensureDir(join(root, '.spur', 'run'));
+        const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(db);
+        const definition = await resolveWorkflowDefinition(root, 'task-lifecycle');
+        const lifecycle = new LifecycleAdapter({
+            profile: TASK_LIFECYCLE_PROFILE,
+            getDb: async () => db,
+            taskRunLinkDao: (adapter) => new TaskRunLinkDao(adapter),
+            workflowPath: definition.path,
+            cwd: root,
+            spurBin: 'spur',
+        });
+        const svc = new TaskService({
+            fs,
+            tasksDir: dir,
+            writeService: new PlanningWriteService({ fs, lifecycle }),
+            sectionMatrix: RECORD_SECTION_MATRIX,
+        });
+        const taskPath = join(dir, '1190_frozen-record.md');
+        // Already-authored Testing/Review so record's own bookkeeping writes are no-ops:
+        // the only write this fixture can observe is the status move it must refuse.
+        await fs.writeFile(
+            taskPath,
+            `---
+schema_version: 1
+name: Frozen record task
+status: deprecated
+created_at: 2026-10-13T00:00:00Z
+updated_at: 2026-10-13T00:00:00Z
+---
+## 1190. Frozen record task
+### Background
+Recorded before the freeze.
+### Requirements
+- [ ] R1. Keep the record readable.
+### Acceptance Criteria
+- [ ] AC1 — record stays readable (req: R1)
+### Solution
+Recorded before the freeze.
+### Testing
+**Pipeline verify results** — authored record, do not clobber.
+### Review
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|---------|
+| P4 | Records | \`n/a\` | authored review, do not clobber |
+### History
+`,
+        );
+        return { svc, fs, taskPath, db, root };
+    }
+
+    test('the auto-walk chain has no hop out of deprecated', () => {
+        // The freeze is expressed by the graph, not by a special case in record: the
+        // forward chain the auto-walk indexes simply has no `deprecated` entry.
+        expect(TASK_FORWARD_CHAIN).not.toContain('deprecated');
+    });
+
+    test('R3: the refused status move performs no write (file stays byte-identical)', async () => {
+        const { svc, fs, taskPath, db, root } = await makeDeprecatedRecordEnv();
+        try {
+            const before = await fs.readFile(taskPath);
+
+            await expect(svc.record('1190', { transition: 'testing' })).rejects.toThrow(/deprecated/);
+
+            expect(await fs.readFile(taskPath)).toBe(before);
+        } finally {
+            db.close();
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('R6: the record hop itself is exempt — it lands on a deprecated task', async () => {
+        const { svc, fs, taskPath, db, root } = await makeDeprecatedRecordEnv();
+        try {
+            const verdictPath = join(root, '.spur', 'run', '1190-verdict.json');
+            await fs.writeFile(verdictPath, JSON.stringify(makeVerdict({ wbs: '1190' })));
+
+            const result = await svc.record('1190', { verdictFile: verdictPath });
+
+            expect(result.testingWritten).toBe(true);
+            const landed = await fs.readFile(taskPath);
+            expect(MarkdownDocument.parse(landed, 'task').frontmatterData?.status).toBe('deprecated');
+            expect(landed).toContain('| R1 | MET |');
         } finally {
             db.close();
             rmSync(root, { recursive: true, force: true });

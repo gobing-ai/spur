@@ -68,6 +68,18 @@ describe('LifecycleAdapter (engine integration)', () => {
         db.close();
     });
 
+    test('R3 (ADR-137, 1190): a deprecated task denial adds the un-deprecate hint', async () => {
+        const { adapter, db } = await makeAdapter();
+        const result = await adapter.requestTransition(makeRef('0013'), 'deprecated', 'wip');
+        expect(result.allowed).toBe(false);
+        if (result.allowed) throw new Error('expected denial');
+        expect(result.report ?? '').toContain('deprecated');
+        expect(result.report ?? '').toContain('un-deprecate');
+        expect(result.report ?? '').toContain('spur task update 0013 todo');
+        expect(result.report ?? '').toContain('spur task update 0013 cancelled');
+        db.close();
+    });
+
     test('R2: a shell guard denies the transition with its report (wip → testing, no task file)', async () => {
         // wip→testing is guarded by `spur task check ${vars.wbs}`. With no real
         // task file on disk the guard command fails, so the transition is denied

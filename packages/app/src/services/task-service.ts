@@ -100,7 +100,7 @@ function citationOrigin(verdict: CanonicalVerifyVerdict, name: string): string {
  * - `cycle`     — the resulting graph has a cycle → exit 3
  */
 export class DependencyMutationError extends Error {
-    readonly code: 'usage' | 'format' | 'not-found' | 'self-edge' | 'duplicate' | 'cycle';
+    readonly code: 'usage' | 'format' | 'not-found' | 'self-edge' | 'duplicate' | 'cycle' | 'deprecated';
     constructor(code: DependencyMutationError['code'], message: string) {
         super(message);
         this.name = 'DependencyMutationError';
@@ -1144,6 +1144,7 @@ export class TaskService {
      *   3. Self-edge — `values` must not contain the target `wbs`
      *   4. Duplicates — `values` itself must not contain duplicates
      *   5. Cycle detection — DFS over the resulting dependency graph
+     *   6. Deprecated target — a *new* edge onto a `deprecated` task is refused (ADR-137)
      *
      * On success, writes via `writeService.updateFrontmatterArray` (atomic,
      * schema-validated, emits `task.updated`). Throws `DependencyMutationError`
@@ -1210,6 +1211,22 @@ export class TaskService {
 
         // 5. Cycle detection — DFS over the graph that *would* result.
         await this.assertNoCycle(wbs, next);
+
+        // 6. Deprecated target (ADR-137, task 1190 R1): a NEW edge onto a frozen task is
+        // refused before any write, naming the un-deprecate exit. The freeze is prospective —
+        // an edge already present in `current` is neither dropped nor rewritten by this guard
+        // (it is reported by `L4.task-deprecated` instead), so keeping a pre-existing edge
+        // while editing the rest of the array still works.
+        for (const v of next) {
+            if (current.includes(v)) continue;
+            const target = await this.findTaskFileName(v);
+            if (target === null) continue; // step 2 already refused a missing WBS
+            if ((await this.readTaskStatus(target.filePath)) !== 'deprecated') continue;
+            throw new DependencyMutationError(
+                'deprecated',
+                `Task ${v} is deprecated (frozen) — a new dependency edge onto it is refused; re-point at live work, or un-deprecate it (\`spur task update ${v} todo\`)`,
+            );
+        }
 
         const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder: this.ctx.tasksDir };
         const result = await this.writeService.updateFrontmatterArray(ref, 'dependencies', next);
@@ -1369,6 +1386,13 @@ export class TaskService {
         };
     }
 
+    /** Read a sibling task file's frontmatter `status` (null when absent or unparsable). */
+    private async readTaskStatus(filePath: string): Promise<string | null> {
+        const raw = await this.ctx.fs.readFile(filePath);
+        const status = MarkdownDocument.parse(raw, 'task').frontmatterData?.status;
+        return typeof status === 'string' ? status : null;
+    }
+
     /** Read the current `dependencies[]` array from a task file (empty if absent). */
     private async readDependencyArray(filePath: string): Promise<string[]> {
         const raw = await this.ctx.fs.readFile(filePath);
@@ -1489,6 +1513,12 @@ export class TaskService {
             );
         }
         const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder: this.ctx.tasksDir };
+        // ADR-137 (S6): a section write is a RECORD write, not a status move, so it is
+        // exempt from the deprecated freeze — but the operator gets a note on the result
+        // so a recorded write is never mistaken for resuming frozen work.
+        const freezeWarning = await this.sectionWriteFreezeWarning(wbs, filePath);
+        const noteFreeze = (written: WriteResult): WriteResult =>
+            freezeWarning === null ? written : { ...written, warnings: [...(written.warnings ?? []), freezeWarning] };
         let result = await this.writeService.updateSection(ref, sectionName, body, append);
 
         // 1132 R1: report what was normalized, and let gherkin-only AC imply the
@@ -1553,14 +1583,33 @@ export class TaskService {
             const report = evaluateTaskSize(written);
             if (!report.ok) warnings.push(...report.reasons);
             if (warnings.length > 0) {
-                return {
+                return noteFreeze({
                     ...result,
                     warnings: [...(result.warnings ?? []), ...warnings],
-                };
+                });
             }
         }
 
-        return result;
+        return noteFreeze(result);
+    }
+
+    /**
+     * ADR-137 (S6): the advisory appended to a successful section write on a `deprecated`
+     * (frozen) task, or null for every other status. The write is exempt from the freeze —
+     * it records what already happened — so this is a note on the result, never a refusal.
+     */
+    private async sectionWriteFreezeWarning(wbs: string, filePath: string): Promise<string | null> {
+        try {
+            const fm = MarkdownDocument.parse(await this.ctx.fs.readFile(filePath), 'task').frontmatterData ?? {};
+            const status = typeof fm.status === 'string' ? fm.status.toLowerCase() : '';
+            if (status !== 'deprecated') return null;
+            return (
+                `Task ${wbs} is deprecated (frozen, ADR-137) — the section write was recorded, but status ` +
+                `moves stay refused until it is un-deprecated (\`spur task update ${wbs} todo\`)`
+            );
+        } catch {
+            return null;
+        }
     }
 
     /**

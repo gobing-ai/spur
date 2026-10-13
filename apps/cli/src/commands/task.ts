@@ -805,9 +805,9 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                 '  add <wbs...>     — append the given values (deduped)\n' +
                 '  remove <wbs...>  — drop the given values\n' +
                 '  clear            — empty the array\n\n' +
-                'Validation: WBS format, existence, self-edge, duplicates, and cycle detection\n' +
-                'all run BEFORE any write (atomic — R2). Exit codes: 0 success, 1 generic error,\n' +
-                '2 usage error, 3 validation error.',
+                'Validation: WBS format, existence, self-edge, duplicates, cycle detection, and the ' +
+                'ADR-137 freeze (a new edge onto a `deprecated` task is refused) all run BEFORE any write (atomic — R2).\n\n' +
+                'Exit codes: 0 success, 1 generic error, 2 usage error, 3 validation error.',
         )
         .argument('<wbs>', 'Task WBS number to mutate')
         .argument('<op>', 'Operation: set | add | remove | clear')

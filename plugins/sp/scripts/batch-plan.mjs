@@ -55,6 +55,13 @@ function quickReadiness(input) {
       };
     }
   }
+  if (status === "deprecated") {
+    return {
+      action: "skipped",
+      code: "DEPRECATED",
+      reason: `quick-readiness: deprecated (frozen) — no ${operation} hop; un-deprecate with \`spur task update ${input.wbs} todo\` (${input.wbs})`
+    };
+  }
   if (status === "cancelled" || status === "done") {
     if (operation === "verify" && input.force === true) {
       return {
@@ -79,10 +86,12 @@ function quickReadiness(input) {
   if (operation === "run" && input.dependencies && input.dependencies.length > 0) {
     const unmet = input.dependencies.filter((d) => (input.depStatuses?.[d] ?? "missing").toLowerCase() !== "done");
     if (unmet.length > 0) {
+      const frozen = unmet.filter((d) => (input.depStatuses?.[d] ?? "").toLowerCase() === "deprecated");
+      const hint = frozen.length > 0 ? ` — ${frozen.map((d) => `${d} deprecated (frozen); re-point the edge or un-deprecate: \`spur task update ${d} todo\``).join("; ")}` : "";
       return {
         action: "blocked",
         code: "DEP",
-        reason: `quick-readiness: unmet deps — ${unmet.join(", ")} (${input.wbs})`,
+        reason: `quick-readiness: unmet deps — ${unmet.join(", ")} (${input.wbs})${hint}`,
         unmetDeps: unmet
       };
     }
@@ -165,6 +174,13 @@ function preflightTask(input) {
       action: "skip",
       code: "A7",
       reason: `dev-next: blocked — do not launch pipeline; human/handover first (${input.wbs})`
+    };
+  }
+  if (status === "deprecated") {
+    return {
+      action: "skip",
+      code: "DEPRECATED",
+      reason: `dev-next: deprecated (frozen) — un-deprecate first: spur task update ${input.wbs} todo (${input.wbs})`
     };
   }
   if (status === "todo" || status === "backlog") {
