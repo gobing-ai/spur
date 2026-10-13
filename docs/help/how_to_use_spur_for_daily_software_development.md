@@ -1,7 +1,9 @@
 # How to Use Spur for Daily Software Development
 
-> **Verified against spur `0.3.41` running on Bun `1.3.14`.** Every command and flag below
-> was captured from the live `--help` output and exercised on the real project corpus.
+> **Captured against spur `0.3.41` on Bun `1.3.14`; command surface re-checked on 2026-10-13 against
+> spur `0.4.3` on Bun `1.4.3` (Confidence: HIGH for resolution — all documented `spur <noun> <verb>`
+> pairs resolve; behaviour was not re-exercised).** Every command and flag below was captured from
+> the live `--help` output and exercised on the real project corpus.
 > For the **slash-command layer** (the `sp` plugin) layered on top of these CLI verbs —
 > `/sp:dev-plan`, `/sp:dev-run`, `/sp:dev-verify`, `/sp:dev-wrap`, the batch family
 > `/sp:dev-runall` / `/sp:dev-verifyall` / `/sp:dev-wrapall`, the
@@ -35,7 +37,7 @@ Spur owns no model-reaching path other than `spur agent run` (delegated to the i
 
 ### Prerequisites
 
-- **Bun ≥ 1.3.14** on PATH (Spur runs as `.ts` under Bun; no compiled binary needed for dev).
+- **Bun ≥ 1.4.3** on PATH (Spur runs as `.ts` under Bun; no compiled binary needed for dev).
 - At least one supported coding agent installed and authenticated (run `spur agent doctor` to verify).
 
 ### From source (this repository)
