@@ -1,5 +1,5 @@
-import { describe, expect, spyOn, test } from 'bun:test';
-import { mkdtempSync, readdirSync, readFileSync } from 'node:fs';
+import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
+import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getEnvVars, removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
@@ -176,6 +176,22 @@ function captureSink(): CommandOutput & { text: string } {
 }
 
 const ENVELOPE_ENV = 'SPUR_JSON_ENVELOPE';
+
+/**
+ * `agent doctor` reports `usage` only when the producer's snapshot file exists, so an ambient
+ * `~/.config/spur/agent-usage.json` decided whether `usage.age` was a number: present on a
+ * developer machine, absent on CI (`usage: null`, which also crashed `withoutLiveAge`). Pin the
+ * sanctioned `SPUR_AGENT_USAGE_SNAPSHOT` override to a temp snapshot so the age assertion is
+ * machine-independent. Only `agent doctor` reads it, so the other verbs are unaffected.
+ *
+ * Scoped per test rather than set once: the suite shares one process, so a leaked override also
+ * broke `defaultAgentUsageSnapshotPath`'s own default-path test in agent-usage-source.test.ts.
+ */
+const USAGE_SNAPSHOT_ENV = 'SPUR_AGENT_USAGE_SNAPSHOT';
+const USAGE_SNAPSHOT_PATH = join(mkdtempSync(join(tmpdir(), 'spur-usage-')), 'agent-usage.json');
+writeFileSync(USAGE_SNAPSHOT_PATH, JSON.stringify({ captured_at: '2026-01-01T00:00:00.000Z' }));
+beforeEach(() => setEnvVar(USAGE_SNAPSHOT_ENV, USAGE_SNAPSHOT_PATH));
+afterEach(() => removeEnvVar(USAGE_SNAPSHOT_ENV));
 
 /**
  * `agent doctor` embeds `usage.age` — a millisecond age derived from the cached timestamp at read
