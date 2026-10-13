@@ -6098,3 +6098,73 @@ Skipped: no repository-wide doc audit (§7.1 says routine wrap-up needs affected
   to the passwd entry, read the machine's `~/.config/spur/config.yaml`, and let its
   `decisions.maker: fm-local` decide an asserted maker resolution — the fallback E2E only passed on a
   machine whose global maker cannot answer. Pin `HOME` in any hermetic config-layering test.
+Wrap done. Scope respected: one file changed, inside `docs/` only.
+
+**Drift repair (task 1185, T3 sync):**
+- `docs/design/workflow-execution-economy.md` — the owning satellite for the feature-verification receipt contract and the inline-run bundle surface:
+  - Added the "Stale-consumer diagnosis (task 1185, A33)" paragraph to the receipt contract: what the widened denial names (override path, consumer script, missing export(s), entry path), the two workable remedies, the retired reinstall advice, the fail-open classification bound (`<workdir>/.spur/`), and unchanged fail-closed semantics.
+  - §2.4: one sentence noting the reciprocal consumer-side check beside the 1120 stale-bundle `resolveAppEntry` guard.
+  - Frontmatter: `updated_at` 2026-09-28 → 2026-10-12, `related` += `"1185"` (§4.3).
+- Verified claims against source: `lifecycle-adapter.ts:366/372/389`, `actions/shell.ts:191`, `consumer-compat.ts` present, `runFeatureVerification` exported in `inline-run.generated.d.mts:26`.
+- **No edits to `00`/`03`/`04_DESIGN.md`/`AGENTS.md`:** ADR-135 and `03 §12.2` assertions still hold (denial widened, not replaced; fail-closed unchanged); the satellite title and `04` index pointer are unchanged, so no ceremonial index edit (§4.5). The absent superseded-satellite row was left absent.
+- No task/feature corpus writes; `git status` shows only `M docs/design/workflow-execution-economy.md`.
+- Learnings artifact written to `.spur/run/54fbdf17-3511-4df2-8a41-8f2f6654791a-wrapup-learnings.md`.
+
+# Wrap-up learnings — run 54fbdf17
+
+## 2026-10-12 → 2026-10-13
+
+### Task 1185 (A33) — Name the consumer that requires a retired inline-run bundle export
+
+**Patterns / conventions**
+
+- A contract retirement needs guards in both directions. Task 1120 shipped the stale-*bundle* guard
+  (`plugins/sp/lib/inline-run-app.ts` `resolveAppEntry`/`loadInlineApp`); 1185 added the reciprocal
+  stale-*consumer* check — same error shape (consumer path, missing export(s), entry path, both
+  workable remedies), one layer out.
+- Guidance must only offer remedies that can work. The consumer's own message advised
+  "reinstall/upgrade @gobing-ai/spur" when the installed bundle was already current — advice that
+  cannot succeed is worse than none. The two real remedies: remove the project-layer override so the
+  bundled definition applies, or migrate the consumer to the app-owned operation
+  (`runFeatureVerification`).
+- Diagnosable stderr dies inside nested workflow runs: `spur workflow run` reports
+  `transitionsTaken: 0` plus a bare `exited with N`. Fix at the failure boundary — classify the
+  child's output and *append* the named diagnosis to the outer denial (`State "<to>" onEnter shell
+  failed (exit N)` kept verbatim), never replace it. Fail-closed semantics and golden messages stay
+  intact.
+- Classification must fail open: recognition bounded to `<workdir>/.spur/` consumers and the exact
+  compat-complaint shape, so every other failure keeps its previous message and a genuine
+  verification FAIL fabricates no consumer diagnosis.
+- Plugin code is not importable from app code (`sp-plugin-standalone`, ADR-065/130): the Design
+  placed the shared helper in `plugins/sp/lib`, but both hook points live in `packages/app`, so the
+  single shared spelling landed in `packages/app/src/workflow/consumer-compat.ts`. Record such a
+  design deviation explicitly in the task's Solution scope note.
+- Verify on a fixture, not the live downstream project: throwaway project roots under the OS tmp
+  dir, driven through the real CLI and the real `verifying` entry, pin both directions (stale
+  consumer → named diagnosis + non-`done`; migrated consumer → PASS receipt → `done`) plus the
+  genuine-FAIL distinguishability case.
+
+**Errors fixed / gotchas**
+
+- Root cause pair, both plugin-owned: (R-a) no compatibility check for a consumer over the bundle
+  surface; (R-b) the migration path was never delivered to consumers carrying a project-layer
+  `feature-verification.yaml` override (the bundled definition owns the pass end to end since the
+  receipt pass moved into the app, `efd78f058`).
+- The implement hop's diff-scope guard (0487 R1) rejected the app-side hook points as out-of-scope;
+  resolution was to widen the task's declared execution surfaces explicitly — widen, not bypass.
+- Rejected alternatives worth not re-litigating: re-exporting retired seams (reverses an accepted
+  decision, `8f51a752d`); static analysis of interpolated shell commands (cannot model shell
+  variables); a preflight duplicate of name resolution (two resolvers that can disagree make the
+  preflight a liar).
+- Deferred residuals (P3/P4): recognition bounded to `.spur/`-rooted consumers; a multi-script
+  override can name the wrong consumer (`definitionConsumerScript` takes the first); a consumer
+  emitting the 1120 guard's wording stays unclassified; a relative `workdir` silently disables
+  recognition in `projectConsumerScript`.
+
+**Doc-sync lesson**
+
+- Widening a failure surface (denial + appended named diagnosis) is a T3 non-UI boundary-behavior
+  change: sync the owning `docs/design/` satellite (`workflow-execution-economy.md` receipt
+  contract) and bump `updated_at`; leave `00`/`03` untouched when the fail-closed invariants they
+  assert (ADR-135, `03 §12.2`) are unchanged. An index pointer whose satellite title did not change
+  needs no ceremonial `04_DESIGN.md` edit.

@@ -3,8 +3,8 @@ kind: design
 title: "Workflow execution economy"
 status: accepted
 created_at: 2026-09-16
-updated_at: 2026-09-28
-related: [D62, "0867", "0868", "0872", "0873", "0876", "0877"]
+updated_at: 2026-10-12
+related: [D62, "0867", "0868", "0872", "0873", "0876", "0877", "1185"]
 tags: [system, D62, workflow]
 ---
 
@@ -105,7 +105,9 @@ through an operation that owns it. The **Node-pure** bundles stay separate and i
 (`plan-projection.generated.mjs`, which now also carries the admission and triage policy, and
 `step-profile`/`history-anatomy`/`residual-scan`/`quality-gate`): a Node-only caller never loads the
 SQLite runtime. One shared resolver (`plugins/sp/lib/inline-run-app.ts` `resolveAppEntry`) decides
-source-checkout versus staged-bundle loading for setup and dispatch alike. Retiring the exception
+source-checkout versus staged-bundle loading for setup and dispatch alike, and names a stale installed
+bundle instead of letting a missing export surface as a bare failure (1120); the reciprocal direction — a
+project-layer consumer requiring a retired export — is diagnosed app-side (1185, receipt contract below). Retiring the exception
 itself needs a separately approved owning-noun transport; it is not implied by any of the above.
 
 For source and installed setup, the selected Spur CLI's existing `workflow show --format todo --json`
@@ -343,6 +345,19 @@ layer/digest or `verificationCmd` differs from the currently resolved `feature-v
 definition — `--cmd` overrides cannot forge a contract; `sourcePath` is diagnostic only, since
 bundled and source-local CLIs resolve the same shared definition from different paths), and `stale` (digest drift: the recorded `inputDigest` no longer matches the current tree). Git failure during digest capture is
 fail-closed (0751 R1). All completion paths enforce: `feature advance`'s done hop, the engine `verifying→done` guard (`feature check --strict --as done`), and `feature sync`'s receipt-pending stop at `verifying` (1119 — sync holds a feature at `verifying` when its feature-verification receipt is missing, without persisting a BLOCKED replay).
+
+**Stale-consumer diagnosis (task 1185, A33).** A project-layer `feature-verification.yaml` override whose
+consumer script (project-rooted under `.spur/`) requires a generated-bundle export the shipped entry no
+longer provides (e.g. the retired `openInlineRunProjectDb` / `ArtifactDao`, §2.4) no longer surfaces as a
+bare `State "verifying" onEnter shell failed (exit 1)`: the denial and the nested `workflow run` failure
+append a named diagnosis — override path, consumer script, missing export(s), entry path — offering only
+the two remedies that can work (remove the override so the bundled definition applies; migrate the
+consumer to the app-owned `runFeatureVerification`), never reinstall/upgrade advice for an already-current
+bundle. Classification lives in `packages/app/src/workflow/consumer-compat.ts` and fires at the
+lifecycle-denial (`lifecycle-adapter.ts`) and nested-shell (`actions/shell.ts`) boundaries; recognition is
+bounded to `<workdir>/.spur/` consumers, so anything else keeps the previous message verbatim. Fail-closed
+semantics are unchanged: the hop is still denied, `verifying → done` still requires a bound PASS receipt,
+and a genuine verification FAIL keeps the child's own output.
 
 **Ordering and replay.** Re-running the pass overwrites both copies (start supersedes
 the feature-latest copy first; complete writes both + the coarse status). Wrapup
