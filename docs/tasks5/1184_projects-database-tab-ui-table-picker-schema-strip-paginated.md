@@ -4,7 +4,7 @@ name: Projects Database tab UI (table picker, schema strip, paginated grid, row 
 status: done
 template: feature-impl
 created_at: 2026-10-12T05:49:58.435Z
-updated_at: "2026-10-13T03:35:49.490Z"
+updated_at: "2026-10-13T03:46:09.657Z"
 feature_id: G631
 priority: P2
 tags:
@@ -104,29 +104,34 @@ Change map (one anchor per row, repo-root-relative):
 | --- | --- |
 | AC1 tab id + deep link | `apps/web/src/modules/projects/tabs.tsx:7` — `ProjectTabId` gains `'database'` so `/board/projects/database` resolves to the tab |
 | AC1 tab registration | `apps/web/src/modules/projects/tabs.tsx:21` — `PROJECT_TABS` appends `{ id: 'database', label: 'Database', component: DatabaseView }` (shell arrow-key cycle picks it up automatically) |
-| AC2 picks a table | `apps/web/src/modules/projects/DatabaseView.tsx:552` — each rail button is `data-database-table` and calls `selectTable`, writing `?table=` |
-| AC2 selection survives reload | `apps/web/src/modules/projects/DatabaseView.tsx:178` — `useDatabaseTables` reads `GET /project/database/tables`; the selected name comes from the URL via `useSearchParams` |
-| AC3 schema + exact row count | `apps/web/src/modules/projects/DatabaseView.tsx:295` — `SchemaStrip` shows name/type/NOT NULL/PK per column and `formatCount(rowCount)` |
-| AC4 server pagination | `apps/web/src/modules/projects/DatabaseView.tsx:87` — `rowsUrl` sends `page`/`pageSize` with the bounded `DATABASE_PAGE_SIZE` |
-| AC4 range + pager | `apps/web/src/modules/projects/DatabaseView.tsx:715` — `rangeLabel` footer `1–50 of N` with prev/next/go-to-page |
-| AC5 sort | `apps/web/src/modules/projects/DatabaseView.tsx:444` — `toggleSort` flips `dir` on the same column, switches column otherwise, and always resets to page 1 |
-| AC5 contains filter | `apps/web/src/modules/projects/DatabaseView.tsx:456` — `changeFilterColumn` plus `changeFilterValue` apply one column via `filterColumn`/`filter` and reset to page 1 |
-| AC6 readable cells | `apps/web/src/modules/projects/DatabaseView.tsx:260` — `GridCell` truncates text to one line with a tooltip; NULL and `BLOB · N B` are distinct muted badges |
-| AC6 row detail + JSON | `apps/web/src/modules/projects/DatabaseView.tsx:274` — `FullCell` in the detail modal, pretty-printed via `prettyJson` (`apps/web/src/modules/projects/DatabaseView.tsx:227`) |
-| AC8 named states | `apps/web/src/modules/projects/DatabaseView.tsx:341` — every failure renders `data-database-state` (loading/empty/unknown-table/unavailable/failed), never a blank panel; `blockedState` at `apps/web/src/modules/projects/DatabaseView.tsx:495` |
-| R2 URL keys | `apps/web/src/modules/projects/DatabaseView.tsx:32` — `URL_KEYS` fixes `table`/`page`/`sort`/`dir`/`fcol`/`f`; malformed values fall back to defaults |
+| AC2 picks a table | `apps/web/src/modules/projects/DatabaseView.tsx:577` — each rail button is `data-database-table` and calls `selectTable`, writing `?table=` |
+| AC2 selection survives reload | `apps/web/src/modules/projects/DatabaseView.tsx:187` — `useDatabaseTables` reads `GET /project/database/tables`; the selected name comes from the URL via `useSearchParams` |
+| AC3 schema + exact row count | `apps/web/src/modules/projects/DatabaseView.tsx:309` — `SchemaStrip` names the table and shows name/type/NOT NULL/PK per column and `formatCount(rowCount)` |
+| AC4 server pagination | `apps/web/src/modules/projects/DatabaseView.tsx:96` — `rowsUrl` sends `page`/`pageSize` with the bounded `DATABASE_PAGE_SIZE` |
+| AC4 range + pager | `apps/web/src/modules/projects/DatabaseView.tsx:740` — `rangeLabel` footer `1–50 of N` with prev/next/go-to-page; the label clamps to the last page at `apps/web/src/modules/projects/DatabaseView.tsx:228` |
+| AC5 sort | `apps/web/src/modules/projects/DatabaseView.tsx:469` — `toggleSort` flips `dir` on the same column, switches column otherwise, and always resets to page 1 |
+| AC5 contains filter | `apps/web/src/modules/projects/DatabaseView.tsx:481` — `changeFilterColumn` plus `changeFilterValue` apply one column via `filterColumn`/`filter` and reset to page 1; the value is debounced by `FILTER_DEBOUNCE_MS` (1188) |
+| AC6 readable cells | `apps/web/src/modules/projects/DatabaseView.tsx:270` — `GridCell` truncates text to one line with a tooltip, marks server-truncated values; NULL and `BLOB · N B` are distinct muted badges |
+| AC6 row detail + JSON | `apps/web/src/modules/projects/DatabaseView.tsx:288` — `FullCell` in the detail modal, pretty-printed via `prettyJson` (`apps/web/src/modules/projects/DatabaseView.tsx:237`) |
+| AC8 named states | `apps/web/src/modules/projects/DatabaseView.tsx:352` — every failure renders `data-database-state` (loading/empty/unknown-table/unavailable/failed), never a blank panel; `blockedState` at `apps/web/src/modules/projects/DatabaseView.tsx:520` |
+| R2 URL keys | `apps/web/src/modules/projects/DatabaseView.tsx:41` — `URL_KEYS` fixes `table`/`page`/`sort`/`dir`/`fcol`/`f`; malformed values fall back to defaults |
 | Tests — tabs | `apps/web/tests/modules/projects/tabs.test.ts:31` — the Database tab mounts `DatabaseView`; the frozen list is now `['fleet','inbox','database']` |
 | Tests — a `?table=` deep link shows the schema and exact row count | `apps/web/tests/modules/projects/DatabaseView.test.tsx:142` — the deep link selects the table, shows its schema and exact row count |
-| Tests — one bounded server page with prev/next | `apps/web/tests/modules/projects/DatabaseView.test.tsx:229` — fetches one bounded server page, pages with prev/next, and snaps an out-of-range page back |
-| Tests — header clicks toggle ascending/descending | `apps/web/tests/modules/projects/DatabaseView.test.tsx:287` — header clicks toggle ascending/descending and reset to page 1 |
-| Tests — a column select plus a contains input filters one column | `apps/web/tests/modules/projects/DatabaseView.test.tsx:314` — a column select plus a contains input filter one column and reset to page 1 |
+| Tests — one bounded server page with prev/next | `apps/web/tests/modules/projects/DatabaseView.test.tsx:235` — fetches one bounded server page, pages with prev/next, and snaps an out-of-range page back |
+| Tests — header clicks toggle ascending/descending | `apps/web/tests/modules/projects/DatabaseView.test.tsx:293` — header clicks toggle ascending/descending and reset to page 1 |
+| Tests — a column select plus a contains input filters one column | `apps/web/tests/modules/projects/DatabaseView.test.tsx:320` — a column select plus a contains input filter one column and reset to page 1 |
 | Tests — NULL, BLOB and long text render as distinct readable cells | `apps/web/tests/modules/projects/DatabaseView.test.tsx:390` — NULL, BLOB and long text render as distinct readable cells |
 | Tests — clicking a row opens a modal with the full value and pretty-printed JSON | `apps/web/tests/modules/projects/DatabaseView.test.tsx:425` — clicking a row opens a modal with the full value and pretty-printed JSON |
-| Tests — an unknown table is named and the picker still works | `apps/web/tests/modules/projects/DatabaseView.test.tsx:496` — an unknown table is named and the picker still works |
+| Tests — an unknown table is named and the picker still works | `apps/web/tests/modules/projects/DatabaseView.test.tsx:502` — an unknown table is named and the picker still works |
+| Tests — a server-truncated cell says the value was cut | `apps/web/tests/modules/projects/DatabaseView.test.tsx:633` — a server-truncated cell says the value was cut, an intact one does not (review finding 4) |
+| Tests — the schema strip header names the selected table | `apps/web/tests/modules/projects/DatabaseView.test.tsx:671` — the schema strip header names the selected table (review finding 2) |
+| Tests — a page past the last one is labelled as the last page | `apps/web/tests/modules/projects/DatabaseView.test.tsx:685` — a page past the last one is labelled as the last page (review finding 3) |
 | Tests — the ArrowRight step moves the cycle onto Database | `apps/web/tests/modules/projects/a11y.test.tsx:221` — ArrowRight moves the tab cycle onto Database |
 | Tests — the ArrowLeft step returns the cycle to Inbox | `apps/web/tests/modules/projects/a11y.test.tsx:228` — ArrowLeft returns the tab cycle to Inbox |
 
 Note: `apps/web/tests/modules/projects/ProjectsShell.test.tsx` and `apps/web/tests/modules/projects/a11y.test.tsx` also froze the tab count at 2; both were updated to 3 because adding the named tab changes the rendered strip.
+
+Review follow-up: finding 4 (truncated cells looked whole) is fixed by the tooltip marker at `apps/web/src/modules/projects/DatabaseView.tsx:277`; finding 2 by naming the table in the schema header; finding 3 by clamping `rangeLabel`. Finding 6 (tall tooltip for a 4 KiB value) is left as is because R6 requires the tooltip to carry the full value (pinned at `apps/web/tests/modules/projects/DatabaseView.test.tsx:422`).
 
 ### Testing
 
@@ -139,22 +144,22 @@ Note: `apps/web/tests/modules/projects/ProjectsShell.test.tsx` and `apps/web/tes
 |-------------|--------|----------|
 | R1 | MET | `apps/web/src/modules/projects/tabs.tsx:7` adds the database tab id and `apps/web/src/modules/projects/tabs.tsx:21` registers the Database tab; pinned at `apps/web/tests/modules/projects/tabs.test.ts:31`; ArrowRight/ArrowLeft cycle onto Database asserted in `apps/web/tests/modules/projects/a11y.test.tsx:217` |
 | R2 | MET | URL_KEYS `apps/web/src/modules/projects/DatabaseView.tsx:41` is table,page,sort,dir,fcol,f; picker plus reload `apps/web/tests/modules/projects/DatabaseView.test.tsx:189`; URL round trip `:343`; malformed fallback `:367` |
-| R3 | MET | SchemaStrip `apps/web/src/modules/projects/DatabaseView.tsx:308` renders name, type, NOT NULL, PK and exact row count; asserted `apps/web/tests/modules/projects/DatabaseView.test.tsx:142` |
-| R4 | MET | DATABASE_PAGE_SIZE 50 at `apps/web/src/modules/projects/DatabaseView.tsx:29`, rowsUrl `:96`, rangeLabel `:228`; asserted `apps/web/tests/modules/projects/DatabaseView.test.tsx:235`, `:272` |
+| R3 | MET | SchemaStrip `apps/web/src/modules/projects/DatabaseView.tsx:309` names the table and renders name, type, NOT NULL, PK and exact row count; asserted `apps/web/tests/modules/projects/DatabaseView.test.tsx:142` and the table-name header at `apps/web/tests/modules/projects/DatabaseView.test.tsx:671` |
+| R4 | MET | DATABASE_PAGE_SIZE 50 at `apps/web/src/modules/projects/DatabaseView.tsx:29`, rowsUrl `:96`, rangeLabel `:228` clamped to the last page; asserted `apps/web/tests/modules/projects/DatabaseView.test.tsx:235`, `:272`, `:685` |
 | R5 | MET | toggleSort `apps/web/src/modules/projects/DatabaseView.tsx:467`, aria-sort `:683`, changeFilterColumn `:479`, changeFilterValue `:491`, FILTER_DEBOUNCE_MS `:38` (1188); asserted `apps/web/tests/modules/projects/DatabaseView.test.tsx:293`, `:320`, `:597`, `:611` |
 | R6 | MET | GridCell `apps/web/src/modules/projects/DatabaseView.tsx:269` with truncated-value tooltip note `:276`, NullBadge `:252`, BlobBadge `:260`, FullCell `:287`, prettyJson `:236`; asserted `apps/web/tests/modules/projects/DatabaseView.test.tsx:390`, `:425`, `:633` |
-| R7 | MET | StatePanel `apps/web/src/modules/projects/DatabaseView.tsx:350`, stateMessage `:361`, fetchResource `:138`; all named states asserted `apps/web/tests/modules/projects/DatabaseView.test.tsx:471`, `:482`, `:488`, `:502`, `:532`, `:545`, `:558` |
-| R8 | MET | Sole UI import from the ui barrel `apps/web/src/modules/projects/DatabaseView.tsx:12`; grid uses table table-sm at `apps/web/src/modules/projects/DatabaseView.tsx:669`; apps/web/package.json unchanged since the task commit (git diff HEAD~8 --stat empty; only the root lockfile moved, for superskill) |
+| R7 | MET | StatePanel `apps/web/src/modules/projects/DatabaseView.tsx:352`, stateMessage `:363`, fetchResource `:138`; all named states asserted `apps/web/tests/modules/projects/DatabaseView.test.tsx:471`, `:482`, `:488`, `:502`, `:532`, `:545`, `:558` |
+| R8 | MET | Sole UI import from the ui barrel `apps/web/src/modules/projects/DatabaseView.tsx:12`; grid uses table table-sm at `apps/web/src/modules/projects/DatabaseView.tsx:671`; apps/web/package.json unchanged since the task commit (git diff HEAD~8 --stat empty; only the root lockfile moved, for superskill) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: R1 — The Projects module shows a Database tab with a deep link | MET | test | `apps/web/tests/modules/projects/tabs.test.ts:31`; `apps/web/tests/modules/projects/DatabaseView.test.tsx:142` deep link; `apps/web/tests/modules/projects/a11y.test.tsx:217` |
+| Scenario: R1 — The Projects module shows a Database tab with a deep link | MET | test | `apps/web/tests/modules/projects/tabs.test.ts:31`; `apps/web/tests/modules/projects/DatabaseView.test.tsx:142` deep link; `apps/web/tests/modules/projects/a11y.test.tsx:217`; live E2E: GET /board/projects/database?table=g631_probe answered 200 from this tree build |
 | Scenario: R2 — The user picks any table of the project database and the choice survives reload | MET | test | `apps/web/tests/modules/projects/DatabaseView.test.tsx:189`, `:343`, `:367` |
-| Scenario: R3 — The selected table shows its schema and exact row count | MET | test | `apps/web/tests/modules/projects/DatabaseView.test.tsx:142` |
-| Scenario: R4 — Rows are paginated on the server with a bounded page size | MET | test | `apps/web/tests/modules/projects/DatabaseView.test.tsx:235`, `:272` |
+| Scenario: R3 — The selected table shows its schema and exact row count | MET | test | `apps/web/tests/modules/projects/DatabaseView.test.tsx:142`, `:671` |
+| Scenario: R4 — Rows are paginated on the server with a bounded page size | MET | test | `apps/web/tests/modules/projects/DatabaseView.test.tsx:235`, `:272`, `:685`; live E2E .spur/run/g631-e2e.sh checks pageSize clamp and page 1e21 rejected |
 | Scenario: R5 — The user sorts by one column and filters one column by a contains match | MET | test | `apps/web/tests/modules/projects/DatabaseView.test.tsx:293`, `:320`, `:597`, `:611` |
 | Scenario: R6 — Long, null and binary cell values stay readable | MET | test | `apps/web/tests/modules/projects/DatabaseView.test.tsx:390`, `:425`, `:633` truncated affordance |
-| Scenario: R8 — The tab reuses the board table idiom without a new grid dependency | MET | command | git diff --stat 88ac88985~1 HEAD on apps/web/package.json prints nothing (exit 0), and grep of DatabaseView imports lists only react, react-router, the ui barrel and the rpc client at `apps/web/src/modules/projects/DatabaseView.tsx:10-13`; grid markup table table-sm at `apps/web/src/modules/projects/DatabaseView.tsx:669` |
+| Scenario: R8 — The tab reuses the board table idiom without a new grid dependency | MET | command | git diff --stat 88ac88985~1 HEAD on apps/web/package.json prints nothing (exit 0), and grep of DatabaseView imports lists only react, react-router, the ui barrel and the rpc client at `apps/web/src/modules/projects/DatabaseView.tsx:10-13`; grid markup table table-sm at `apps/web/src/modules/projects/DatabaseView.tsx:671` |
 | Scenario: R9 — Empty, unknown and unavailable states are named, never blank | MET | test | `apps/web/tests/modules/projects/DatabaseView.test.tsx:471`, `:482`, `:488`, `:502`, `:532`, `:545`, `:558`; server 503 `apps/server/tests/modules/database/index.test.ts:164` |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
@@ -166,7 +171,7 @@ Verdict: PASS
 
 Confidence: MEDIUM
 
-No open P1–P3: one DEFER-ed P3 and six P4 advisory rows (one ACCEPTED, five OPEN).
+No open findings: the P3 and four P4 rows are FIXED; two P4 rows are ACCEPTED.
 
 Scope: task 1184's change set only — `apps/web/src/modules/projects/DatabaseView.tsx` (new, 810 lines),
 `apps/web/src/modules/projects/tabs.tsx`, `apps/web/tests/modules/projects/{DatabaseView,tabs,ProjectsShell,a11y}.test*`,
@@ -180,15 +185,15 @@ Dimensions: functional traceability, security, efficiency, correctness, usabilit
 
 | # | Priority | Dimension | Finding | Location | Disposition |
 | --- | --- | --- | --- | --- | --- |
-| 1 | P3 (minor) | efficiency | The contains-filter input issues one server read per keystroke: `changeFilterValue` rewrites the `f` query key on every change and the rows URL is the fetch effect's dependency. Each read runs `SELECT COUNT(*)` over the filtered table plus the window select, executed synchronously on `bun:sqlite` inside the Bun server, so typing one term against `history_message` (~3.2M rows) blocks the shared event loop once per character. The two comparable server-driven filter boxes in this repo debounce 250 ms. | `apps/web/src/modules/projects/DatabaseView.tsx:468-474` (handler) and `apps/web/src/modules/projects/DatabaseView.tsx:619-626` (input) | DEFER(no AC and no frozen seam requires a debounce, and the design doc's section 5 explicitly accepts multi-second per-request scans for this read-only viewer; recorded as item 1 of the deferred browser check — if typing on `history_message` stalls the board, add the ≥250 ms debounce the sibling tabs use) |
-| 2 | P4 (advisory) | usability | The main panel never names the table it is browsing: the schema-strip header reads `Schema · N columns · M rows`, and the table name appears only as a highlighted rail button, so a deep link or reload shows schema and rows with no visible surface title. | `apps/web/src/modules/projects/DatabaseView.tsx:307-309` | OPEN |
-| 3 | P4 (advisory) | correctness | `rangeLabel` is not clamped to the last page, so a hand-typed `?page=99` renders an empty tbody with the discarded `4,901–120 of 120` in the footer for the frames before the snap-back effect rewrites the URL. Sort and filter always reset to page 1, so the only entry is a hand-typed or stale bookmarked URL. | `apps/web/src/modules/projects/DatabaseView.tsx:219-224` (label), `apps/web/src/modules/projects/DatabaseView.tsx:405-419` (snap-back) | OPEN |
-| 4 | P4 (advisory) | usability | The server's 4 KiB text cut is invisible in the grid: `GridCell` ignores `cell.truncated`, so the tooltip shows the cut text with no marker and reads as the whole value, while the untruncated value lives only in the row-detail modal. | `apps/web/src/modules/projects/DatabaseView.tsx:264-270` vs `packages/contracts/src/database.ts:16` and `packages/domain/src/dao/database-inspector.ts:95-105` | OPEN |
+| 1 | P3 (minor) | efficiency | The contains-filter input issues one server read per keystroke: `changeFilterValue` rewrites the `f` query key on every change and the rows URL is the fetch effect's dependency. Each read runs `SELECT COUNT(*)` over the filtered table plus the window select, executed synchronously on `bun:sqlite` inside the Bun server, so typing one term against `history_message` (~3.2M rows) blocks the shared event loop once per character. The two comparable server-driven filter boxes in this repo debounce 250 ms. | `apps/web/src/modules/projects/DatabaseView.tsx:468-474` (handler) and `apps/web/src/modules/projects/DatabaseView.tsx:619-626` (input) | FIXED(task 1188, commit 59c2e6013: 250 ms filter debounce; apps/web/tests/modules/projects/DatabaseView.test.tsx:597, :611) |
+| 2 | P4 (advisory) | usability | The main panel never names the table it is browsing: the schema-strip header reads `Schema · N columns · M rows`, and the table name appears only as a highlighted rail button, so a deep link or reload shows schema and rows with no visible surface title. | `apps/web/src/modules/projects/DatabaseView.tsx:307-309` | FIXED(schema header names the table; apps/web/tests/modules/projects/DatabaseView.test.tsx:671) |
+| 3 | P4 (advisory) | correctness | `rangeLabel` is not clamped to the last page, so a hand-typed `?page=99` renders an empty tbody with the discarded `4,901–120 of 120` in the footer for the frames before the snap-back effect rewrites the URL. Sort and filter always reset to page 1, so the only entry is a hand-typed or stale bookmarked URL. | `apps/web/src/modules/projects/DatabaseView.tsx:219-224` (label), `apps/web/src/modules/projects/DatabaseView.tsx:405-419` (snap-back) | FIXED(rangeLabel clamps to the last page; apps/web/tests/modules/projects/DatabaseView.test.tsx:685) |
+| 4 | P4 (advisory) | usability | The server's 4 KiB text cut is invisible in the grid: `GridCell` ignores `cell.truncated`, so the tooltip shows the cut text with no marker and reads as the whole value, while the untruncated value lives only in the row-detail modal. | `apps/web/src/modules/projects/DatabaseView.tsx:264-270` vs `packages/contracts/src/database.ts:16` and `packages/domain/src/dao/database-inspector.ts:95-105` | FIXED(commit 0aeb16dbb: tooltip marks server-truncated values; apps/web/tests/modules/projects/DatabaseView.test.tsx:633) |
 | 5 | P4 (advisory) | usability | The row-detail dialog inherits the shared `Modal` primitive's lack of focus management: opening from a row leaves focus on the `<tr>`, so `Escape` (bound on the modal container) is inert until focus moves inside, and `aria-modal="true"` is announced while focus is still outside. Same behavior as `SettingsModal` and the decisions drawer, so it is the primitive's property, not a 1184 regression. | `apps/web/src/modules/projects/DatabaseView.tsx:770-800` vs `apps/web/src/components/ui/Modal.tsx:37-58` | ACCEPTED |
-| 6 | P4 (advisory) | usability | Hovering a long text cell renders the whole cell value as one tooltip; the bubble is capped at 20 rem with normal wrapping (`apps/web/node_modules/daisyui/components/tooltip.css:1`) and `apps/web/src/styles/global.css:329-336` forces `pre-line`, so a 4 KiB value yields a very tall bubble covering the grid. The grid truncation itself is correct. | `apps/web/src/modules/projects/DatabaseView.tsx:265-269` | OPEN |
-| 7 | P4 (advisory) | traceability | `spur task check 1184` flags three `## Solution` test anchors as drifted (`L4.anchor-subject-mismatch`) after the uncommitted helper edit: the cited lines no longer name their subject. The anchors still point into the right files and tests, so only the citations are stale. | `docs/tasks5/1184_projects-database-tab-ui-table-picker-schema-strip-paginated.md` Solution map (`:136`, `:384`, `:419`) vs `apps/web/tests/modules/projects/DatabaseView.test.tsx:142`, `:390`, `:425` | OPEN |
+| 6 | P4 (advisory) | usability | Hovering a long text cell renders the whole cell value as one tooltip; the bubble is capped at 20 rem with normal wrapping (`apps/web/node_modules/daisyui/components/tooltip.css:1`) and `apps/web/src/styles/global.css:329-336` forces `pre-line`, so a 4 KiB value yields a very tall bubble covering the grid. The grid truncation itself is correct. | `apps/web/src/modules/projects/DatabaseView.tsx:265-269` | ACCEPTED(R6 requires the tooltip to carry the full value, pinned at apps/web/tests/modules/projects/DatabaseView.test.tsx:422; the full value also lives in the row-detail modal) |
+| 7 | P4 (advisory) | traceability | `spur task check 1184` flags three `## Solution` test anchors as drifted (`L4.anchor-subject-mismatch`) after the uncommitted helper edit: the cited lines no longer name their subject. The anchors still point into the right files and tests, so only the citations are stale. | `docs/tasks5/1184_projects-database-tab-ui-table-picker-schema-strip-paginated.md` Solution map (`:136`, `:384`, `:419`) vs `apps/web/tests/modules/projects/DatabaseView.test.tsx:142`, `:390`, `:425` | FIXED(Solution change map re-anchored to current lines) |
 
-No P1/P2 findings. One DEFER-ed P3 and six P4 advisory rows; no other open P1–P3.
+No P1/P2 findings. Every row is FIXED or ACCEPTED; nothing is open or deferred.
 
 ##### Functional traceability (R1–R8, AC1–AC8)
 
@@ -258,8 +263,7 @@ No P1/P2 findings. One DEFER-ed P3 and six P4 advisory rows; no other open P1–
   (`docs/design/projects-database-tab.md:82-83`), and a row that vanished between the two reads renders as
   all-`NULL` cells (`apps/web/src/modules/projects/DatabaseView.tsx:795`).
 
-Next: run the deferred browser check on `/board/projects/database?table=history_message`; if typing a filter
-stalls the board, add the ≥250 ms filter debounce recorded in finding #1.
+Next: none. The filter debounce landed in 1188 (finding #1), and findings 2, 3, 4 and 7 are fixed.
 
 ### References
 
