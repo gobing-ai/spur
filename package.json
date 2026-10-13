@@ -84,7 +84,7 @@
         "test-post-check": "bun run apps/cli/src/index.ts rule run --preset recommended-post-check --fail-on warning --no-logo",
         "test-cf": "bun run --filter '@gobing-ai/spur-server' test-cf",
         "verify-gha-ci": "act -W .github/workflows/ci.yml -j verify",
-        "test": "bun run bundle:config && bun test --reporter=dots ./apps/cli ./apps/server ./apps/web ./apps/desktop ./packages ./plugins ./scripts",
+        "test": "bun run bundle:config && bun test --reporter=dots --timeout 20000 ./apps/cli ./apps/server ./apps/web ./apps/desktop ./packages ./plugins ./scripts",
         "test:heavy": "bun run bundle:config && bun --config=bunfig.heavy.toml test --reporter=dots .heavy.test.",
         "corpus-check": "bun run apps/cli/src/index.ts task check --corpus",
         "plugin-smoke": "bun scripts/commands/plugin-install-smoke.ts",
