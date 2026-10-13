@@ -2280,6 +2280,39 @@ describe('TaskCheckService', () => {
         expect(drift.length).toBeGreaterThan(0);
     });
 
+    // ADR-137 / 1189: a deprecated task is retained-but-frozen, not live work, so the two
+    // "is this still live?" predicates must not treat it as open.
+    test('ADR-137: deprecated task under a done feature does NOT emit L4_FEATURE_TERMINAL', async () => {
+        // Before the fix, `taskTerminal` was done|cancelled only, so `spur task check` FAILED on a
+        // legitimately frozen record with a re-parent instruction that cannot be followed.
+        const content = taskFm({ status: 'deprecated', feature_id: 'F1' });
+        const { fs, path, cleanup } = seedEnv({
+            taskContent: content,
+            features: { F1: featureFm('F1', 'done') },
+        });
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+        const terminalErrors = result.findings.filter(
+            (f) => f.code === FINDING_CODES.L4_FEATURE_TERMINAL && f.severity === 'error',
+        );
+        expect(terminalErrors).toEqual([]);
+    });
+
+    test('ADR-137: a deprecated child counts as resolved work under a settled parent', async () => {
+        // The kid-side predicate is the sibling case: a frozen kid must not read as
+        // "sub-task(s) still open" and invite a close/re-parent of work that is frozen on purpose.
+        const { fs, path, cleanup } = seedEnv({
+            wbs: '0001',
+            taskContent: parentBody({ wbs: '0001', status: 'done', withRoster: true }),
+            features: { F1: featureFm('F1', 'active') },
+            extraTasks: { '0002': childBody('0001', 'deprecated') },
+        });
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+        const openKidWarnings = result.findings.filter((f) => f.message.includes('still open'));
+        expect(openKidWarnings).toEqual([]);
+    });
+
     test('roll-up: parent done with all children closed produces no drift warning', async () => {
         const { fs, path, cleanup } = seedEnv({
             wbs: '0001',

@@ -61,6 +61,56 @@ describe('checkInventoryCoverage (1004 R1)', () => {
         expect(findings.map((f) => f.message).join(' ')).not.toContain('I3');
     });
 
+    test('a [deferred: ...] marker wrapped onto a continuation line still exempts its item', () => {
+        // Observed 2026-10-13 in a real idea-pipeline run: a hand-wrapped deferral was read as an
+        // uncovered requirement (`I14 ... is not [deferred:]`), because the parser only inspected the
+        // item's own line. An inventory item is a markdown paragraph — read its continuation lines.
+        const wrapped = [
+            '## Requirement inventory',
+            '',
+            '- I1 — Capture the idea verbatim before any processing (source: "exact words")',
+            '- I2 — Allow a deferral when a requirement is explicitly out of scope',
+            '  [deferred: postponed to a follow-up feature]',
+            '',
+        ].join('\n');
+        const ac = [
+            'Feature: wrapped deferral',
+            '',
+            '  Scenario: Verbatim idea artifact persisted',
+            '    # covers: I1',
+            '    Given an operator idea',
+            '    When the run starts',
+            '    Then the idea-input artifact matches the argument text',
+            '',
+        ].join('\n');
+        expect(checkInventoryCoverage(wrapped, ac)).toEqual([]);
+    });
+
+    test('a wrapped item with no deferral marker still owes coverage', () => {
+        // Failure-sensitive control: the same wrap without the marker must still report I2, so the
+        // absorb-continuation change cannot silently exempt anything it walks over.
+        const wrapped = [
+            '## Requirement inventory',
+            '',
+            '- I1 — Capture the idea verbatim before any processing (source: "exact words")',
+            '- I2 — Allow a deferral when a requirement is explicitly out of scope',
+            '  (reason given in the next paragraph)',
+            '',
+        ].join('\n');
+        const ac = [
+            'Feature: wrapped deferral',
+            '',
+            '  Scenario: Verbatim idea artifact persisted',
+            '    # covers: I1',
+            '    Given an operator idea',
+            '    When the run starts',
+            '    Then the idea-input artifact matches the argument text',
+            '',
+        ].join('\n');
+        const findings = checkInventoryCoverage(wrapped, ac);
+        expect(findings.map((f) => f.message).join(' ')).toContain('I2');
+    });
+
     test('a missing Requirement inventory section fails closed', () => {
         const findings = checkInventoryCoverage('## Scores\n- urgency: 4\n', AC_FULL);
         expect(findings).toHaveLength(1);

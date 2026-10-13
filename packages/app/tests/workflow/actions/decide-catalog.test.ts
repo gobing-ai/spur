@@ -194,6 +194,52 @@ describe('DecideActionRunner catalog path (task 1094 R4)', () => {
         expect(Object.keys(writes)).toHaveLength(0);
     });
 
+    // 1193: the pipeline writes ${vars.taskSpecPath} from `spur task path --json`, which is
+    // absolute. Joining it with the workdir produced `<workdir><absolute>`, so the second evidence
+    // file of the shipped task-triage decide was unreadable and the action always degraded with
+    // `reason: error` — making the low/fast lane unreachable on every real run.
+    test('absolute evidence path is read as-is, not joined with the workdir', async () => {
+        const absolute = '/abs/evidence/task-spec.md';
+        const { fs, writes } = fakeFs({ [absolute]: 'task spec body' });
+        const runner = new DecideActionRunner(fs, {
+            enabled: true,
+            decisionService: async () => fakeService({ id: 'pick-lane', type: 'choice', fallback: 'slow' }, served()),
+        });
+        const result = await runner.execute({ ...catalogOptions, evidence: [absolute] }, makeContext('/repo/worktree'));
+        expect(result.ok).toBe(true);
+        const row = JSON.parse(writes['/repo/worktree/out/lane.decision.json'] ?? '{}') as Record<string, unknown>;
+        expect(row).toMatchObject({ value: 'retry', degraded: false, reason: 'accepted' });
+    });
+
+    test('relative evidence path still resolves against the workdir', async () => {
+        const { fs, writes } = fakeFs({ '/repo/worktree/notes.md': 'relative body' });
+        const runner = new DecideActionRunner(fs, {
+            enabled: true,
+            decisionService: async () => fakeService({ id: 'pick-lane', type: 'choice', fallback: 'slow' }, served()),
+        });
+        const result = await runner.execute(
+            { ...catalogOptions, evidence: ['notes.md'] },
+            makeContext('/repo/worktree'),
+        );
+        expect(result.ok).toBe(true);
+        const row = JSON.parse(writes['/repo/worktree/out/lane.decision.json'] ?? '{}') as Record<string, unknown>;
+        expect(row).toMatchObject({ value: 'retry', degraded: false });
+    });
+
+    test('an absolute resultFile is written as-is too', async () => {
+        const { fs, writes } = fakeFs();
+        const runner = new DecideActionRunner(fs, {
+            enabled: true,
+            decisionService: async () => fakeService({ id: 'pick-lane', type: 'choice', fallback: 'slow' }, served()),
+        });
+        const result = await runner.execute(
+            { ...catalogOptions, resultFile: '/abs/out/lane.decision.json' },
+            makeContext('/repo/worktree'),
+        );
+        expect(result.ok).toBe(true);
+        expect(Object.keys(writes)).toEqual(['/abs/out/lane.decision.json']);
+    });
+
     test('unreadable evidence degrades to the declared fallback row and emits rejected', async () => {
         const { fs, writes } = fakeFs();
         const { bus, rejected } = captureBus();

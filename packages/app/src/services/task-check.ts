@@ -1153,7 +1153,10 @@ export class TaskCheckService extends PlanningCheckService {
                 // correct end state — flag only when the task itself is still live
                 // (backlog/todo/wip/testing/blocked), since that genuinely needs re-parenting.
                 const featureTerminal = featureStatus === 'done' || featureStatus === 'cancelled';
-                const taskTerminal = status === 'done' || status === 'cancelled';
+                // ADR-137: `deprecated` is retained-and-frozen, not live work — the frozen record must
+                // not fail its own check under a terminal feature (it cannot be re-parented or
+                // reopened into live work anyway). The live set is the comment's own list.
+                const taskTerminal = status === 'done' || status === 'cancelled' || status === 'deprecated';
                 if (featureTerminal && !taskTerminal) {
                     const reopenGuide =
                         featureStatus === 'done'
@@ -1263,8 +1266,13 @@ export class TaskCheckService extends PlanningCheckService {
         if (kids.length === 0) return; // not a parent — inert (R3)
 
         const closed = (s: string): boolean => s === 'done' || s === 'cancelled';
+        // ADR-137: a deprecated kid is frozen work, not an open kid — it must not raise
+        // `sub-tasks still open` under a settled parent. A deprecated *parent* stays unsettled here
+        // on purpose: the freeze does not claim the parent's own work finished, so the rollup still
+        // asks the operator to close or deprecate it.
+        const kidResolved = (s: string): boolean => closed(s) || s === 'deprecated';
         const parentClosed = closed(status);
-        const openKids = kids.filter((c) => !closed(c.status));
+        const openKids = kids.filter((c) => !kidResolved(c.status));
 
         // R1a: parent done/cancelled but a kid is still open.
         if (parentClosed && openKids.length > 0) {
@@ -1285,7 +1293,7 @@ export class TaskCheckService extends PlanningCheckService {
                 code: FINDING_CODES.L4_ROLLUP_PARENT_OPEN,
                 severity: 'warning',
                 section: '',
-                message: `All ${kids.length} sub-task(s) are done/cancelled but parent is still ${status} — close the parent`,
+                message: `All ${kids.length} sub-task(s) are done/cancelled/deprecated but parent is still ${status} — close the parent`,
             });
         }
 

@@ -40,7 +40,18 @@ function parseInventory(report: string): { owing: Set<string>; deferred: Set<str
         const match = INVENTORY_ITEM_RE.exec(lines[i] ?? '');
         if (match === null) continue;
         const id = `I${match[1]}`;
-        if (/\[\s*deferred\s*:/i.test(match[2] ?? '')) deferred.add(id);
+        // An item is a markdown paragraph, not one line: a hand-wrapped or formatter-wrapped
+        // `[deferred: ...]` sits on a continuation line (observed 2026-10-13 — a deferred I14 was
+        // reported "not covered by any AC scenario and is not [deferred:]"). Absorb the following
+        // lines until the next item or heading before reading the markers.
+        const body = [match[2] ?? ''];
+        for (let j = i + 1; j < lines.length; j++) {
+            const next = lines[j] ?? '';
+            if (/^#{1,6}\s/.test(next) || INVENTORY_ITEM_RE.test(next)) break;
+            body.push(next);
+        }
+        const text = body.join('\n');
+        if (/\[\s*deferred\s*:/i.test(text)) deferred.add(id);
         else owing.add(id);
     }
     return { owing, deferred, hasSection: true };

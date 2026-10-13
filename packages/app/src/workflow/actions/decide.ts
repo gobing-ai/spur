@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import type { DecisionType } from '@gobing-ai/ts-ai-decision';
 import type { DecisionMaker } from '@gobing-ai/ts-ai-runner';
 import type { ActionResult, ActionRunContext, ActionRunner } from '@gobing-ai/ts-dual-workflow-engine';
-import type { FileSystem } from '@gobing-ai/ts-runtime';
+import { type FileSystem, isAbsolutePath, normalizeSeparators } from '@gobing-ai/ts-runtime';
 import { z } from 'zod';
 import { confidenceLevel } from '../../decision/confidence-level';
 import {
@@ -25,6 +25,22 @@ import type { WorkflowObservabilityBus } from '../observability';
  */
 
 export const DECIDE_KIND = 'decide';
+
+/**
+ * Resolve a configured evidence/resultFile path against the workflow workdir.
+ *
+ * An absolute path passes through unchanged. Joining it unconditionally produced `<workdir><absolute>`
+ * (node's `join` concatenates), which made every evidence file the pipeline writes itself —
+ * `${vars.taskSpecPath}` comes from `spur task path --json` and is absolute — unreadable, so
+ * `task-triage` degraded with `reason: error` on every real run. This mirrors the convention every
+ * peer path-consuming action already follows: `file-read.ts`, `file-read-into-var.ts`,
+ * `agent-run.ts`.
+ */
+function resolveWorkdirPath(workdir: string, path: string): string {
+    // The relative branch keeps node's `join` (unchanged behaviour, `join('.', 'out/x')` → `out/x`);
+    // only absolute inputs needed fixing.
+    return isAbsolutePath(path) ? normalizeSeparators(path) : join(workdir, path);
+}
 
 /**
  * Inline option validation (0941 R1) — the workflow-validate walker (`collectDecideViolations`,
@@ -191,9 +207,9 @@ export class DecideActionRunner implements ActionRunner {
             {
                 ...options,
                 ...(options.evidence !== undefined
-                    ? { evidence: options.evidence.map((path) => join(workdir, path)) }
+                    ? { evidence: options.evidence.map((path) => resolveWorkdirPath(workdir, path)) }
                     : {}),
-                resultFile: join(workdir, options.resultFile),
+                resultFile: resolveWorkdirPath(workdir, options.resultFile),
             },
             {
                 enabled: this.deps.enabled,
@@ -267,7 +283,10 @@ export class DecideActionRunner implements ActionRunner {
                 confidence: result.confidence,
             });
         }
-        await this.fileSystem.writeFile(join(workdir, options.resultFile), `${JSON.stringify(result, null, 2)}\n`);
+        await this.fileSystem.writeFile(
+            resolveWorkdirPath(workdir, options.resultFile),
+            `${JSON.stringify(result, null, 2)}\n`,
+        );
         return { ok: true, data: { value: result.value, decision: result } };
     }
 
@@ -347,7 +366,10 @@ export class DecideActionRunner implements ActionRunner {
             correlation: this.decisionCorrelation(context),
         };
         const writeRow = async (row: DecideResult): Promise<ActionResult> => {
-            await this.fileSystem.writeFile(join(workdir, options.resultFile), `${JSON.stringify(row, null, 2)}\n`);
+            await this.fileSystem.writeFile(
+                resolveWorkdirPath(workdir, options.resultFile),
+                `${JSON.stringify(row, null, 2)}\n`,
+            );
             return { ok: true, data: { value: row.value, decision: row } };
         };
 
@@ -427,7 +449,7 @@ export class DecideActionRunner implements ActionRunner {
         try {
             if (options.evidence !== undefined && options.evidence.length > 0) {
                 const evidence = await readDecisionEvidence(
-                    options.evidence.map((path) => join(workdir, path)),
+                    options.evidence.map((path) => resolveWorkdirPath(workdir, path)),
                     async (path) => await this.fileSystem.readFile(path),
                 );
                 instructionsText = evidence.join('\n\n');

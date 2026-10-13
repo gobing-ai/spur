@@ -18,6 +18,14 @@ Wraps the **sp:spur-dev** skill. Three jobs:
 `standard` checks only that target sections are structurally complete. It never re-checks what
 they say. Use `ready` whenever the existing content itself is in doubt.
 
+**Refine never writes `feature_id`.** It may *report* an orphan task in its result, but linking a
+task to a feature is an operator decision with a lifecycle blast radius: `spur task update <wbs>
+--feature <id>` reopens a `verifying` parent unless `--no-reopen` is passed. Route linking through
+the opt-in [feature-link helper](../skills/spur-dev/references/feature-link-helper.md) (never
+gate-time, never automatic, always confirmed) — observed 2026-10-13: the ready-preparation refine
+that `spur task create` dispatches by default linked a fresh task to `P1` on its own and demoted
+that feature `verifying → active`.
+
 ## Argument Flags
 
 | Flag | Description | Default |
