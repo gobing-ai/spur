@@ -13,6 +13,16 @@ import {
 /** Page-size cap for a browse request; larger `pageSize` values are clamped down to it. */
 export const MAX_DATABASE_PAGE_SIZE = 200;
 
+/**
+ * Largest page/offset value we forward to SQL. A larger integer still satisfies
+ * `Number.isInteger`, but it cannot be represented exactly as an integer, so the
+ * OFFSET built from it reached the driver as an unsupported bind and the route
+ * answered 500 `{"error":"datatype mismatch"}` instead of a named outcome (1186).
+ * Past this bound the request is rejected rather than clamped: clamping to page 1
+ * would answer 200 for a page the caller never asked for.
+ */
+const MAX_DATABASE_PAGE = Number.MAX_SAFE_INTEGER;
+
 /** Named failure outcomes the server module maps to HTTP statuses. */
 export type DatabaseFailure = 'unknown-table' | 'unknown-column' | 'invalid-request';
 
@@ -48,11 +58,17 @@ function trimToUndefined(value: string | undefined): string | undefined {
     return trimmed === undefined || trimmed === '' ? undefined : trimmed;
 }
 
-/** Whole numbers only; anything malformed falls back to `1` rather than failing the read. */
-function normalizePage(value: string | undefined): number {
+/**
+ * Whole numbers only; anything malformed falls back to `1` rather than failing the read.
+ * `null` means the value was a whole number this build cannot bind — see
+ * {@link MAX_DATABASE_PAGE} — which is a rejected request, not a defaultable one.
+ */
+function normalizePage(value: string | undefined): number | null {
     if (value === undefined || value === '') return 1;
     const parsed = Number(value);
-    return Number.isInteger(parsed) && parsed >= 1 ? parsed : 1;
+    if (!Number.isInteger(parsed) || parsed < 1) return 1;
+    if (parsed > MAX_DATABASE_PAGE) return null;
+    return parsed;
 }
 
 /** Default 50, clamped to `[1, MAX_DATABASE_PAGE_SIZE]`; malformed input takes the default. */
@@ -82,10 +98,18 @@ function normalizeRowQuery(params: DatabaseRowParams): DatabaseResult<DatabaseRo
         }
         dir = candidate;
     }
+    const page = normalizePage(params.page);
+    if (page === null) {
+        return {
+            ok: false,
+            outcome: 'invalid-request',
+            message: `invalid page: "${params.page}" — expected a whole number within 1..${MAX_DATABASE_PAGE}`,
+        };
+    }
     return {
         ok: true,
         value: {
-            page: normalizePage(params.page),
+            page,
             pageSize: normalizePageSize(params.pageSize),
             sort: trimToUndefined(params.sort),
             dir,
@@ -158,11 +182,11 @@ export class DatabaseBrowserService {
         if (!normalized.ok) return normalized;
         const raw = params.offset;
         const offset = raw === undefined || raw === '' ? Number.NaN : Number(raw);
-        if (!Number.isInteger(offset) || offset < 0) {
+        if (!Number.isInteger(offset) || offset < 0 || offset > MAX_DATABASE_PAGE) {
             return {
                 ok: false,
                 outcome: 'invalid-request',
-                message: `invalid offset: "${raw ?? ''}" — expected a non-negative integer`,
+                message: `invalid offset: "${raw ?? ''}" — expected a whole number within 0..${MAX_DATABASE_PAGE}`,
             };
         }
         try {

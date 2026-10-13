@@ -146,6 +146,21 @@ describe('database module error mapping', () => {
         db.close();
     });
 
+    // 1186: an integer-valued but unrepresentable page/offset used to reach SQL as an
+    // OFFSET the driver rejected, so the route answered 500 with the raw driver string
+    // (`datatype mismatch`) instead of a named outcome.
+    test('an unrepresentable page or offset maps to 400, never a 500', async () => {
+        const db = await fixtureDb();
+        const app = mountWithDb(db);
+        const page = await app.request('/api/project/database/tables/people/rows?page=1e21');
+        expect(page.status).toBe(400);
+        expect(await page.json()).toEqual({ error: 'invalid-request' });
+        const offset = await app.request('/api/project/database/tables/people/row?offset=1e21');
+        expect(offset.status).toBe(400);
+        expect(await offset.json()).toEqual({ error: 'invalid-request' });
+        db.close();
+    });
+
     test('a throwing getDb maps every route to 503 database-unavailable', async () => {
         const app = mountWithThrowingDb();
         const urls = [

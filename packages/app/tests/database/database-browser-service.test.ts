@@ -153,3 +153,44 @@ describe('DatabaseBrowserService.readRow', () => {
         db.close();
     });
 });
+
+// ── 1186: page/offset must be representable before they reach SQL ─────────────
+// `Number.isInteger(1e21)` is true, so the value passed normalisation and was bound
+// as an OFFSET the driver rejected — 500 `{"error":"datatype mismatch"}` on the route
+// instead of a named outcome. A page past the end is still legal paging; only the
+// values that cannot be represented as an integer bound are rejected.
+describe('DatabaseBrowserService page/offset representability (1186)', () => {
+    test('rejects a page above the representable integer bound', async () => {
+        const db = await fixtureDb();
+        const service = new DatabaseBrowserService(db);
+        for (const page of ['1e21', '1e300', '9007199254740992']) {
+            const result = await service.readRows('people', { page });
+            expect(result.ok, `page=${page} must be rejected`).toBe(false);
+            if (!result.ok) expect(result.outcome).toBe('invalid-request');
+        }
+        db.close();
+    });
+
+    test('rejects an offset above the representable integer bound', async () => {
+        const db = await fixtureDb();
+        const service = new DatabaseBrowserService(db);
+        for (const offset of ['1e21', '1e300', '9007199254740992']) {
+            const result = await service.readRow('people', { offset });
+            expect(result.ok, `offset=${offset} must be rejected`).toBe(false);
+            if (!result.ok) expect(result.outcome).toBe('invalid-request');
+        }
+        db.close();
+    });
+
+    test('still answers a representable page past the end with an empty page, not a clamp', async () => {
+        const db = await fixtureDb();
+        const result = await new DatabaseBrowserService(db).readRows('people', { page: '99999' });
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+            expect(result.value.rows).toEqual([]);
+            expect(result.value.total).toBe(3);
+            expect(result.value.page).toBe(99999);
+        }
+        db.close();
+    });
+});
